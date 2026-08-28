@@ -20,8 +20,8 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
-public class DockTuningFullArbitrationTest {
-    @Test public void everyDockTuningEntryRejectsWhileFullOwnsTheSurface() {
+public class SurfaceEditorFullArbitrationTest {
+    @Test public void everySurfaceEditorEntryRejectsWhileFullOwnsTheSurface() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         FullStatusBarController full = new FullStatusBarController(new ImmediateHost());
         full.restoreFullImmediate(TopStatusBarState.EXPANDED);

@@ -20,6 +20,7 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
@@ -50,6 +51,14 @@ public final class TerminalClockWidget extends View {
         "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
     private static final long FLIP_DURATION_MS = 560L;
     private static final long SECONDS_FLIP_DURATION_MS = 340L;
+    /** Period label size as a share of the seconds it stacks over — the slab's proportion. */
+    private static final float PERIOD_SCALE = .64f;
+    /** Most tracking (em) the period takes before it grows to fill the seconds' width instead. */
+    private static final float MAX_PERIOD_TRACKING = .25f;
+    /** Inset between the LCD period box and its label. */
+    private static final float BOX_PAD_DP = 3f;
+    /** Gap between the LED period block and the seconds block below it. */
+    private static final float LED_META_GAP_DP = 1.5f;
     private static final long LCD_DURATION_MS = 280L;
     private static final long TEXT_DURATION_MS = 350L;
     private static final long LED_DURATION_MS = 320L;
@@ -440,7 +449,9 @@ public final class TerminalClockWidget extends View {
                 dateRow = spacedTextWidth(mSnapshot.date, condensedMediumTypeface(), 9.2f, .31f);
                 break;
         }
-        return Math.max(timeRow, dateRow + dp(RULE_GAP_DP) + dp(24f));
+        float dateLead = TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(mStyle)
+            ? 0f : dp(RULE_GAP_DP);
+        return Math.max(timeRow, dateLead + dateRow + dp(RULE_GAP_DP) + dp(24f));
     }
 
     /** Unscaled width the FULL time band (digits plus folded meta) actually paints. */
@@ -448,18 +459,18 @@ public final class TerminalClockWidget extends View {
         switch (mStyle) {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
                 return dp(94f) + dp(6f)
-                    + metaWidth(12f, 7f, 4f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, true);
+                    + stackedMetaWidth(12f, Typeface.MONOSPACE);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
                 return spacedTextWidth(timeText(), thinTypeface(), 38f, -.02f) + dp(6f)
-                    + metaWidth(15f, 7.5f, 6f, lightTypeface(), mediumTypeface(), .18f, false);
+                    + stackedMetaWidth(15f, lightTypeface());
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
-                return dotTextWidth(timeText(), dp(3.4f)) + dp(7f) + ledMetaWidth(1.6f, 6.5f, 4f);
+                return dotTextWidth(timeText(), dp(3.4f)) + dp(7f) + ledMetaWidth(26f, 1.6f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
                 return spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + dp(5f)
-                    + metaWidth(11f, 7f, 5f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, false);
+                    + stackedMetaWidth(11f, Typeface.MONOSPACE);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
-                    + stackedMetaWidth(11f, 7f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
+                    + stackedMetaWidth(11f, mediumTypeface());
             default:
                 // 26dp cards x4 + 5.7dp intra-pair gaps x2 + 13.5dp inter-pair gap.
                 return dp(128.9f + 6.7f) + fullFlipMetaWidth();
@@ -470,23 +481,23 @@ public final class TerminalClockWidget extends View {
         switch (mStyle) {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
                 return dp(61f) + dp(5f)
-                    + metaWidth(9f, 6f, 3f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, false);
+                    + stackedMetaWidth(9f, Typeface.MONOSPACE);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
                 return spacedTextWidth(timeText(), thinTypeface(), 26f, -.02f) + dp(5f)
-                    + metaWidth(10.5f, 6.5f, 5f, lightTypeface(), mediumTypeface(), .18f, false);
+                    + stackedMetaWidth(10.5f, lightTypeface());
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
-                return dotTextWidth(timeText(), dp(2.2f)) + dp(5f) + ledMetaWidth(1.2f, 5.5f, 3f);
+                return dotTextWidth(timeText(), dp(2.2f)) + dp(5f) + ledMetaWidth(16f, 1.2f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
                 return Math.max(dp(100f),
                     spacedTextWidth(timeText(), Typeface.MONOSPACE, 18f, -.02f) + dp(4f)
-                        + metaWidth(8f, 6f, 4f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, false));
+                        + stackedMetaWidth(8f, Typeface.MONOSPACE));
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
-                    + stackedMetaWidth(9f, 6f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
+                    + stackedMetaWidth(9f, mediumTypeface());
             default:
                 // 15dp cards x4 + 1.5dp intra-pair gaps x2 + 4dp hour/minute gap.
                 return dp(67f) + dp(4f)
-                    + stackedMetaWidth(9.5f, 6.5f, Typeface.DEFAULT, mediumTypeface(), .16f);
+                    + stackedMetaWidth(9.5f, Typeface.DEFAULT);
         }
     }
 
@@ -500,26 +511,13 @@ public final class TerminalClockWidget extends View {
             + spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .16f);
     }
 
-    /** Width of the folded meta run: seconds, then the period, sharing the time baseline. */
-    private float metaWidth(float secondsDp, float periodDp, float gapDp, Typeface secondsFace,
-                            Typeface periodFace, float periodSpacing, boolean boxedPeriod) {
-        float width = spacedTextWidth(mSnapshot.ss, secondsFace, secondsDp, 0f);
-        if (mSnapshot.period.isEmpty()) return width;
-        width += dp(gapDp) + spacedTextWidth(mSnapshot.period, periodFace, periodDp, periodSpacing);
-        if (boxedPeriod) width += dp(8f);
-        return width;
-    }
 
     /**
-     * Width of the slab's stacked meta column: the wider of the seconds and the period, since they
-     * share a left edge instead of following each other along the baseline.
+     * Width of a stacked meta column: the seconds set the width and the period is tracked out (or
+     * shrunk) to match it, so the column is exactly as wide as the seconds on every face.
      */
-    private float stackedMetaWidth(float secondsDp, float periodDp, Typeface secondsFace,
-                                   Typeface periodFace, float periodSpacing) {
-        float seconds = spacedTextWidth(mSnapshot.ss, secondsFace, secondsDp, 0f);
-        if (mSnapshot.period.isEmpty()) return seconds;
-        return Math.max(seconds,
-            spacedTextWidth(mSnapshot.period, periodFace, periodDp, periodSpacing));
+    private float stackedMetaWidth(float secondsDp, Typeface secondsFace) {
+        return spacedTextWidth(mSnapshot.ss, secondsFace, secondsDp, 0f);
     }
 
     private float fullFlipMetaWidth() {
@@ -529,11 +527,20 @@ public final class TerminalClockWidget extends View {
             spacedTextWidth(mSnapshot.period, condensedBoldTypeface(), 7.8f, .1f));
     }
 
-    private float ledMetaWidth(float secondsCellDp, float periodDp, float gapDp) {
-        float width = dotTextWidth(mSnapshot.ss, dp(secondsCellDp));
-        if (mSnapshot.period.isEmpty()) return width;
-        return width + dp(gapDp)
-            + spacedTextWidth(mSnapshot.period, mediumTypeface(), periodDp, .16f);
+    /** The LED meta column is two dot-glyph rows of one cell size, so its width is the seconds'. */
+    private float ledMetaWidth(float bandDp, float secondsCellDp) {
+        return dotTextWidth(mSnapshot.ss, ledMetaCell(bandDp, secondsCellDp));
+    }
+
+    /**
+     * Cell for the LED meta column. The period stacks above the seconds as a second seven-row
+     * glyph block; where the band cannot hold two blocks at the seconds' own cell (the compact
+     * face), both shrink together so the two stay one size.
+     */
+    private float ledMetaCell(float bandDp, float secondsCellDp) {
+        float cell = dp(secondsCellDp);
+        if (mSnapshot.period.isEmpty()) return cell;
+        return Math.min(cell, (dp(bandDp) - dp(1f) - dp(LED_META_GAP_DP)) / 14f);
     }
 
     // ---- Drawing ----------------------------------------------------------
@@ -660,6 +667,14 @@ public final class TerminalClockWidget extends View {
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT.equals(mAlignment))
             return Math.max(0f, right - width);
         return 0f;
+    }
+
+    /**
+     * Left edge of a FULL-form date row. The text clears the pane edge by the same gap it leaves
+     * around its hairline, so the row reads inset on both sides rather than flush on the left.
+     */
+    private float dateRowTextX(float right, float width, float gapDp) {
+        return Math.max(dp(gapDp), alignmentDx(right, width));
     }
 
     /** Offset for the FULL time band; tape stops short of its right-pinned inline date label. */
@@ -794,7 +809,8 @@ public final class TerminalClockWidget extends View {
         // seam, so the card carries 2dp more clearance per side. Keep in step with the 128.9dp
         // row width in fullTimeRowWidth().
         float w = dp(26f), h = dp(35.5f);
-        RectF card = new RectF(x, 0f, x + w, h);
+        RectF card = mRect;
+        card.set(x, 0f, x + w, h);
         float p = progress(digit, now, FLIP_DURATION_MS);
         boolean animating = p < 1f;
 
@@ -984,13 +1000,13 @@ public final class TerminalClockWidget extends View {
     private void drawFullFlipDateRow(Canvas canvas, float top, float right) {
         Typeface face = condensedMediumTypeface();
         float textWidth = spacedTextWidth(mSnapshot.date, face, 9.2f, .31f);
-        float textX = Math.max(0f, (right - textWidth) / 2f);
+        float gap = dp(7.5f);
+        float textX = Math.max(gap, (right - textWidth) / 2f);
         drawLabel(canvas, mSnapshot.date, textX, baseline(top, dp(11.7f), face, 9.2f), 9.2f,
             face, .31f, alpha(mOnSurface, mDarkFlipStock ? .68f : .7f));
         float ruleY = top + dp(11.7f) / 2f;
         mFillPaint.setShader(null);
         mFillPaint.setColor(mRuleColor);
-        float gap = dp(7.5f);
         if (textX - gap > 0f) canvas.drawRect(0f, ruleY - .5f, textX - gap,
             ruleY + .5f, mFillPaint);
         if (textX + textWidth + gap < right) canvas.drawRect(textX + textWidth + gap,
@@ -1000,8 +1016,8 @@ public final class TerminalClockWidget extends View {
     private void drawCompactFlip(Canvas canvas, long now) {
         float digitBaseline = capCenteredBaseline(dp(24f) / 2f, condensedBoldTypeface(), 19f);
         float x = drawCompactFlipCards(canvas, now, digitBaseline);
-        drawStackedMetaColumn(canvas, x + dp(4f), dp(21f), 9.5f, 6.5f, Typeface.DEFAULT,
-            mediumTypeface(), .16f, now, FLIP_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(4f), dp(21f), 9.5f, Typeface.DEFAULT,
+            mediumTypeface(), false, now, FLIP_DURATION_MS);
     }
 
     /** Same departure-board face as {@link #drawFullFlipCards}, at compact scale. */
@@ -1018,7 +1034,8 @@ public final class TerminalClockWidget extends View {
     private float drawCompactFlipDigit(Canvas canvas, int digit, float x, float digitBaseline,
                                        long now) {
         float w = dp(15f), h = dp(24f);
-        RectF card = new RectF(x, 0f, x + w, h);
+        RectF card = mRect;
+        card.set(x, 0f, x + w, h);
         float p = progress(digit, now, FLIP_DURATION_MS);
         boolean animating = p < 1f;
 
@@ -1186,16 +1203,16 @@ public final class TerminalClockWidget extends View {
         canvas.save();
         canvas.translate(bandDx, 0f);
         float x = drawLcdDigits(canvas, now, 19f, 34f, 3f, 3f, 6f, 17f, 4f, 1.75f);
-        drawMetaRow(canvas, x + dp(6f), dp(30f), 12f, 7f, 4f, Typeface.MONOSPACE,
-            Typeface.MONOSPACE, .16f, true, now, LCD_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(6f), dp(30f), 12f, Typeface.MONOSPACE,
+            Typeface.MONOSPACE, true, now, LCD_DURATION_MS);
         canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.MONOSPACE, 9.5f, .2f);
     }
 
     private void drawCompactLcd(Canvas canvas, long now) {
         float x = drawLcdDigits(canvas, now, 12f, 22f, 2f, 2f, 5f, 11f, 2.75f, 1.25f);
-        drawMetaRow(canvas, x + dp(5f), dp(20f), 9f, 6f, 3f, Typeface.MONOSPACE, Typeface.MONOSPACE,
-            .16f, false, now, LCD_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(5f), dp(20f), 9f, Typeface.MONOSPACE,
+            Typeface.MONOSPACE, false, now, LCD_DURATION_MS);
     }
 
     private float drawLcdDigits(Canvas canvas, long now, float widthDp, float heightDp,
@@ -1288,8 +1305,8 @@ public final class TerminalClockWidget extends View {
         canvas.save();
         canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, thinTypeface(), 38f, -.02f, baseline);
-        drawMetaRow(canvas, x + dp(6f), baseline, 15f, 7.5f, 6f, lightTypeface(), mediumTypeface(),
-            .18f, false, now, TEXT_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(6f), baseline, 15f, lightTypeface(),
+            mediumTypeface(), false, now, TEXT_DURATION_MS);
         canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT, 9.5f, .22f);
     }
@@ -1297,8 +1314,8 @@ public final class TerminalClockWidget extends View {
     private void drawCompactMinimal(Canvas canvas, long now) {
         float baseline = baseline(0f, dp(22f), thinTypeface(), 26f);
         float x = drawFadingTime(canvas, now, thinTypeface(), 26f, -.02f, baseline);
-        drawMetaRow(canvas, x + dp(5f), baseline, 10.5f, 6.5f, 5f, lightTypeface(),
-            mediumTypeface(), .18f, false, now, TEXT_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(5f), baseline, 10.5f, lightTypeface(),
+            mediumTypeface(), false, now, TEXT_DURATION_MS);
     }
 
     // ---- Slab -------------------------------------------------------------
@@ -1308,8 +1325,8 @@ public final class TerminalClockWidget extends View {
         canvas.save();
         canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, Typeface.DEFAULT_BOLD, 39f, -.045f, baseline);
-        drawStackedMetaColumn(canvas, x + dp(6f), baseline, 11f, 7f, mediumTypeface(),
-            Typeface.DEFAULT_BOLD, .16f, now, TEXT_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(6f), baseline, 11f, mediumTypeface(),
+            Typeface.DEFAULT_BOLD, false, now, TEXT_DURATION_MS);
         canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT_BOLD, 8.5f, .26f);
     }
@@ -1317,8 +1334,8 @@ public final class TerminalClockWidget extends View {
     private void drawCompactSlab(Canvas canvas, long now) {
         float baseline = baseline(0f, dp(22f), Typeface.DEFAULT_BOLD, 27f);
         float x = drawFadingTime(canvas, now, Typeface.DEFAULT_BOLD, 27f, -.045f, baseline);
-        drawStackedMetaColumn(canvas, x + dp(5f), baseline, 9f, 6f, mediumTypeface(),
-            Typeface.DEFAULT_BOLD, .16f, now, TEXT_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(5f), baseline, 9f, mediumTypeface(),
+            Typeface.DEFAULT_BOLD, false, now, TEXT_DURATION_MS);
     }
 
     // ---- Tape -------------------------------------------------------------
@@ -1328,8 +1345,8 @@ public final class TerminalClockWidget extends View {
         canvas.save();
         canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, Typeface.MONOSPACE, 28f, -.02f, baseline);
-        drawMetaRow(canvas, x + dp(5f), baseline, 11f, 7f, 5f, Typeface.MONOSPACE,
-            Typeface.MONOSPACE, .16f, false, now, TEXT_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(5f), baseline, 11f, Typeface.MONOSPACE,
+            Typeface.MONOSPACE, false, now, TEXT_DURATION_MS);
         canvas.restore();
         float dateWidth = spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f);
         drawLabel(canvas, mSnapshot.date, Math.max(x + bandDx, right - dateWidth), baseline, 9f,
@@ -1343,8 +1360,8 @@ public final class TerminalClockWidget extends View {
     private void drawCompactTape(Canvas canvas, long now) {
         float baseline = baseline(0f, dp(15f), Typeface.MONOSPACE, 18f);
         float x = drawFadingTime(canvas, now, Typeface.MONOSPACE, 18f, -.02f, baseline);
-        drawMetaRow(canvas, x + dp(4f), baseline, 8f, 6f, 4f, Typeface.MONOSPACE, Typeface.MONOSPACE,
-            .16f, false, now, TEXT_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(4f), baseline, 8f, Typeface.MONOSPACE,
+            Typeface.MONOSPACE, false, now, TEXT_DURATION_MS);
         drawMinuteTrack(canvas, dp(20f), dp(100f), 1f);
     }
 
@@ -1368,12 +1385,12 @@ public final class TerminalClockWidget extends View {
         canvas.save();
         canvas.translate(bandDx, 0f);
         float x = drawLedTime(canvas, now, 3.4f);
-        drawLedMeta(canvas, now, x + dp(7f), 26f, 1.6f, 6.5f, 4f);
+        drawLedMeta(canvas, now, x + dp(7f), 26f, 1.6f);
         canvas.restore();
         float dateCell = dp(1.3f);
         int dateColor = alpha(mOnSurface, .6f);
         float dateWidth = dotTextWidth(mSnapshot.date, dateCell);
-        float textX = alignmentDx(right, dateWidth);
+        float textX = dateRowTextX(right, dateWidth, RULE_GAP_DP);
         drawLedText(canvas, mSnapshot.date, textX,
             dateTop + (dp(DATE_ROW_DP) - dateCell * 7f) / 2f, dateCell, dateColor);
         float ruleY = dateTop + dp(DATE_ROW_DP / 2f);
@@ -1383,7 +1400,7 @@ public final class TerminalClockWidget extends View {
 
     private void drawCompactLed(Canvas canvas, long now) {
         float x = drawLedTime(canvas, now, 2.2f);
-        drawLedMeta(canvas, now, x + dp(5f), 16f, 1.2f, 5.5f, 3f);
+        drawLedMeta(canvas, now, x + dp(5f), 16f, 1.2f);
     }
 
     private float drawLedTime(Canvas canvas, long now, float cellDp) {
@@ -1405,23 +1422,23 @@ public final class TerminalClockWidget extends View {
         return x - cell;
     }
 
-    /** Seconds dots and the period label sit on the time band's bottom edge, not in a column. */
-    private void drawLedMeta(Canvas canvas, long now, float x, float bandDp, float secondsCellDp,
-                             float periodDp, float gapDp) {
-        float secondsCell = dp(secondsCellDp);
-        float top = dp(bandDp) - dp(1f) - secondsCell * 7f;
+    /**
+     * Seconds dots on the time band's bottom edge, the period stacked directly above them as dot
+     * glyphs of the same cell — the same face, the same width.
+     */
+    private void drawLedMeta(Canvas canvas, long now, float x, float bandDp, float secondsCellDp) {
+        float cell = ledMetaCell(bandDp, secondsCellDp);
+        float top = dp(bandDp) - dp(1f) - cell * 7f;
         float cursor = x;
         for (int i = 0; i < 2; i++) {
             float eased = ease(secondsProgress(i, now, LED_DURATION_MS));
-            drawDotGlyph(canvas, mSnapshot.ss.charAt(i), cursor, top, secondsCell, mSecondary,
+            drawDotGlyph(canvas, mSnapshot.ss.charAt(i), cursor, top, cell, mSecondary,
                 .84f + .16f * eased, 1f + 1.3f * (1f - eased));
-            cursor += dotGlyphAdvance(secondsCell);
+            cursor += dotGlyphAdvance(cell);
         }
         if (mSnapshot.period.isEmpty()) return;
-        cursor = cursor - secondsCell + dp(gapDp);
-        drawLabel(canvas, mSnapshot.period, cursor,
-            baseline(dp(bandDp) - dp(periodDp) - dp(1f), dp(periodDp), mediumTypeface(), periodDp),
-            periodDp, mediumTypeface(), .16f, mPrimary);
+        drawLedText(canvas, mSnapshot.period, x, top - dp(LED_META_GAP_DP) - cell * 7f, cell,
+            mPrimary);
     }
 
     private void drawLedText(Canvas canvas, String text, float x, float y, float cell, int color) {
@@ -1532,62 +1549,23 @@ public final class TerminalClockWidget extends View {
 
     // ---- Shared refined grid ---------------------------------------------
 
-    /**
-     * Seconds and period folded onto the time baseline. Seconds run around 40% of the time scale in
-     * the secondary role at half strength, so they read as meta rather than as a third number.
-     */
-    private float drawMetaRow(Canvas canvas, float x, float baseline, float secondsDp,
-                              float periodDp, float gapDp, Typeface secondsFace,
-                              Typeface periodFace, float periodSpacing, boolean boxedPeriod,
-                              long now, long duration) {
-        mPaint.setTypeface(secondsFace);
-        mPaint.setLetterSpacing(0f);
-        mPaint.setTextSize(dp(secondsDp));
-        mPaint.setTextAlign(Paint.Align.LEFT);
-        float cursor = x;
-        for (int i = 0; i < 2; i++) {
-            float eased = ease(secondsProgress(i, now, duration));
-            mPaint.setColor(mSecondaryQuiet);
-            mPaint.setAlpha(Math.round(Color.alpha(mSecondaryQuiet) * eased));
-            String c = String.valueOf(mSnapshot.ss.charAt(i));
-            canvas.drawText(c, cursor, baseline + dp(4f) * (1f - eased), mPaint);
-            cursor += mPaint.measureText(c);
-        }
-        mPaint.setAlpha(255);
-        if (mSnapshot.period.isEmpty()) return cursor - x;
-        cursor += dp(gapDp);
-        float periodWidth = spacedTextWidth(mSnapshot.period, periodFace, periodDp, periodSpacing);
-        if (boxedPeriod) {
-            mPaint.setTypeface(periodFace);
-            mPaint.setTextSize(dp(periodDp));
-            mRect.set(cursor, baseline + mPaint.ascent() - dp(1.5f),
-                cursor + periodWidth + dp(6f), baseline + mPaint.descent() + dp(1.5f));
-            mFillPaint.setShader(null);
-            mFillPaint.setColor(mPrimaryLine);
-            mFillPaint.setStyle(Paint.Style.STROKE);
-            mFillPaint.setStrokeWidth(dp(1f));
-            canvas.drawRoundRect(mRect, dp(2.5f), dp(2.5f), mFillPaint);
-            mFillPaint.setStyle(Paint.Style.FILL);
-            cursor += dp(3f);
-        }
-        drawLabel(canvas, mSnapshot.period, cursor, baseline, periodDp, periodFace, periodSpacing,
-            mPrimary);
-        cursor += periodWidth + (boxedPeriod ? dp(3f) : 0f);
-        return cursor - x;
-    }
 
     /**
-     * The slab's meta as a column: seconds on the time baseline, period stacked directly above them
-     * and sharing their left edge.
+     * Meta as a column: seconds on the time baseline, period stacked directly above them, and the
+     * two exactly as wide as each other. The seconds set the width; the period is drawn at
+     * {@link #PERIOD_SCALE} of their size and tracked out to the same width (or shrunk to fit, if a
+     * face's seconds run narrower than the label). Every text face uses it; the LED matrix stacks
+     * its own dots the same way in {@link #drawLedMeta}.
      *
-     * <p>The slab's time band is its widest, so folding the period in beside the seconds pushed the
-     * meta run out past the width the widget slot hands the clock — and the period, being last, was
-     * the part the media strip clipped. Stacked, the column is only as wide as the wider of the two,
-     * and the period is inside the block instead of hanging off its end.
+     * <p>Folding the period in beside the seconds pushed the meta run out past the width the widget
+     * slot hands the clock — and the period, being last, was the part the media strip clipped.
+     * Stacked, the column is only as wide as the seconds, and the period is inside the block
+     * instead of hanging off its end. The LCD keeps its boxed period: the box spans the seconds'
+     * width with the label centred in it.
      */
     private void drawStackedMetaColumn(Canvas canvas, float x, float baseline, float secondsDp,
-                                       float periodDp, Typeface secondsFace, Typeface periodFace,
-                                       float periodSpacing, long now, long duration) {
+                                       Typeface secondsFace, Typeface periodFace,
+                                       boolean boxedPeriod, long now, long duration) {
         mPaint.setTypeface(secondsFace);
         mPaint.setLetterSpacing(0f);
         mPaint.setTextSize(dp(secondsDp));
@@ -1604,9 +1582,61 @@ public final class TerminalClockWidget extends View {
         }
         mPaint.setAlpha(255);
         if (mSnapshot.period.isEmpty()) return;
-        // Clear of the seconds' own ascent, so the two never touch at any font scale.
-        drawLabel(canvas, mSnapshot.period, x, baseline + secondsAscent - dp(2.5f), periodDp,
-            periodFace, periodSpacing, mPrimary);
+        float width = cursor - x;
+        String period = mSnapshot.period;
+        float boxPad = boxedPeriod ? dp(BOX_PAD_DP) : 0f;
+        float periodDp = secondsDp * PERIOD_SCALE;
+        float natural = spacedTextWidth(period, periodFace, periodDp, 0f);
+        float room = width - 2f * boxPad;
+        int gaps = Math.max(1, period.length() - 1);
+        if (natural > room) {
+            periodDp *= room / natural;
+            natural = room;
+        } else if (!boxedPeriod && room - natural > gaps * dp(periodDp) * MAX_PERIOD_TRACKING) {
+            // A narrow label (the monospace faces) would need more tracking than reads as one word;
+            // grow it until the cap's worth of tracking fills the width instead. Text width scales
+            // with size, so the target size follows from the width-per-pixel-of-size at the current
+            // one (both sides in px; the result is converted back to dp).
+            float widthPerPx = natural / dp(periodDp);
+            periodDp = room / (widthPerPx + gaps * MAX_PERIOD_TRACKING) / dp(1f);
+            natural = spacedTextWidth(period, periodFace, periodDp, 0f);
+        }
+        // Clear of the seconds' own ascent (and the box's stroke), so the rows never touch.
+        float gap = dp(2.5f) + (boxedPeriod ? dp(1.5f) : 0f);
+        float periodBaseline = periodBaselineAbove(baseline + secondsAscent - gap, periodFace,
+            periodDp, boxedPeriod);
+        if (boxedPeriod) {
+            mPaint.setTypeface(periodFace);
+            mPaint.setTextSize(dp(periodDp));
+            mRect.set(x, periodBaseline + mPaint.ascent() - dp(1.5f),
+                x + width, periodBaseline + mPaint.descent() + dp(1.5f));
+            mFillPaint.setShader(null);
+            mFillPaint.setColor(mPrimaryLine);
+            mFillPaint.setStyle(Paint.Style.STROKE);
+            mFillPaint.setStrokeWidth(dp(1f));
+            canvas.drawRoundRect(mRect, dp(2.5f), dp(2.5f), mFillPaint);
+            mFillPaint.setStyle(Paint.Style.FILL);
+            drawLabel(canvas, period, x + (width - natural) / 2f, periodBaseline, periodDp,
+                periodFace, 0f, mPrimary);
+            return;
+        }
+        // Letter spacing is applied half before and half after every glyph, so the tracking that
+        // makes the glyph run exactly `width` wide is spread over the gaps between glyphs, and the
+        // run starts half a gap before x.
+        float spacing = (width - natural) / (gaps * dp(periodDp));
+        drawLabel(canvas, period, x - spacing * dp(periodDp) / 2f, periodBaseline, periodDp,
+            periodFace, spacing, mPrimary);
+    }
+
+    /**
+     * Baseline for a period label that wants to sit at {@code wanted} but must keep its cap height
+     * (and box, when it has one) inside the band: the compact faces leave the label less room than
+     * its own ascent.
+     */
+    private float periodBaselineAbove(float wanted, Typeface periodFace, float periodDp,
+                                      boolean boxed) {
+        float floor = capHeight(periodFace, periodDp) + dp(.5f) + (boxed ? dp(1.5f) : 0f);
+        return Math.max(wanted, floor);
     }
 
     /** Time digits rising into place; shared by every text-drawn face. */
@@ -1640,7 +1670,7 @@ public final class TerminalClockWidget extends View {
     private void drawDateRow(Canvas canvas, float top, float right, String text, Typeface typeface,
                              float textDp, float letterSpacing) {
         float textWidth = spacedTextWidth(text, typeface, textDp, letterSpacing);
-        float textX = alignmentDx(right, textWidth);
+        float textX = dateRowTextX(right, textWidth, RULE_GAP_DP);
         drawLabel(canvas, text, textX, baseline(top, dp(DATE_ROW_DP), typeface, textDp), textDp,
             typeface, letterSpacing, mDateInk);
         float ruleY = top + dp(DATE_ROW_DP / 2f);
@@ -1759,7 +1789,8 @@ public final class TerminalClockWidget extends View {
         return centerY + capHeight(typeface, textDp) / 2f;
     }
 
-    private void updateTime(long wallTime, long animationTime) {
+    @VisibleForTesting
+    void updateTime(long wallTime, long animationTime) {
         ClockSnapshot next = snapshot(wallTime, TimeZone.getDefault(), mUseAmPm);
         char[] nextDigits = next.digits();
         char[] nextSeconds = next.secondsDigits();
@@ -1850,6 +1881,11 @@ public final class TerminalClockWidget extends View {
      * Lazy mode swaps the digits instead of folding them. The fold is the launcher's only source of
      * idle frames — a 340ms flip restarting every second on a 119Hz panel is a full-window repaint
      * about forty times a second — so switching it off is what takes the idle cost to nothing.
+     *
+     * <p>Swapping means every drawer sees its animation as already settled: the one frame a lazy
+     * tick paints must be the final pose. Left to the timestamps, that frame lands at progress 0:
+     * the seconds' ones digit sat 4dp low at near-zero alpha for the whole second, on every style
+     * but the flip.
      */
     public void setLazyMode(boolean lazy) {
         if (mLazyMode == lazy) return;
@@ -1887,13 +1923,15 @@ public final class TerminalClockWidget extends View {
         }
     }
 
-    private float progress(int digit, long now, long duration) {
-        if (mChangedAt[digit] <= 0L) return 1f;
+    @VisibleForTesting
+    float progress(int digit, long now, long duration) {
+        if (mLazyMode || mChangedAt[digit] <= 0L) return 1f;
         return clamp01((now - mChangedAt[digit]) / (float) duration);
     }
 
-    private float secondsProgress(int digit, long now, long duration) {
-        if (mSecondsChangedAt[digit] <= 0L) return 1f;
+    @VisibleForTesting
+    float secondsProgress(int digit, long now, long duration) {
+        if (mLazyMode || mSecondsChangedAt[digit] <= 0L) return 1f;
         return clamp01((now - mSecondsChangedAt[digit]) / (float) duration);
     }
 

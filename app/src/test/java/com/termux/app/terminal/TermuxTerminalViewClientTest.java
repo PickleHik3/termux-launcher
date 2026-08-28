@@ -1,7 +1,6 @@
 package com.termux.app.terminal;
 
 import android.app.Application;
-import android.content.Context;
 import android.os.Build;
 import android.view.KeyEvent;
 
@@ -9,20 +8,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
-import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -178,24 +170,11 @@ public class TermuxTerminalViewClientTest {
     }
 
     private static TermuxTerminalViewClient client(@NonNull FakeTerminalHost host) {
-        return new TermuxTerminalViewClient(context(), host, null);
-    }
-
-    private static Context context() {
-        return RuntimeEnvironment.getApplication();
+        return new TermuxTerminalViewClient(FakeTerminalHost.testContext(), host, null);
     }
 
     private static FakeTerminalHost host(String... propertyLines) throws IOException {
-        return new FakeTerminalHost(context(), properties(propertyLines));
+        return new FakeTerminalHost(FakeTerminalHost.testContext(), FakeTerminalHost.testProperties(propertyLines));
     }
 
-    private static TermuxSharedProperties properties(String... lines) throws IOException {
-        File file = File.createTempFile("termux-view-client", ".properties");
-        Files.write(file.toPath(), String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
-        return new TermuxSharedProperties(context(), "test",
-            Collections.singletonList(file.getAbsolutePath()),
-            TermuxPropertyConstants.TERMUX_APP_PROPERTIES_LIST,
-            new TermuxSharedProperties.SharedPropertiesParserClient()) {
-        };
-    }
 }

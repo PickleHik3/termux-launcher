@@ -3,10 +3,8 @@ package com.termux.app.fragments.settings.termux;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import androidx.annotation.ColorInt;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.preference.Preference;
@@ -19,15 +17,11 @@ import com.termux.launcherctl.LauncherCtlNotificationStore;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.theme.LauncherSchemeTheme;
-import com.termux.shared.data.DataUtils;
-import com.termux.shared.logger.Logger;
-import com.termux.shared.theme.ThemeUtils;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import java.util.Properties;
 
 @Keep
 public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
@@ -46,7 +40,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         if (surfaceEditor != null) {
             surfaceEditor.setOnPreferenceClickListener(preference -> {
                 Intent intent = new Intent(context, TermuxActivity.class);
-                intent.putExtra(TermuxActivity.EXTRA_DOCK_TUNING, true);
+                intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 startActivity(intent);
                 return true;
@@ -131,7 +125,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private final Runnable mDrawerSyncRunnable;
 
     private static TermuxStylePreferencesDataStore mInstance;
-    private static final String LOG_TAG = "TermuxStylePreferences";
 
     private TermuxStylePreferencesDataStore(Context context) {
         mContext = context;
@@ -217,14 +210,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherDrawerEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "extra_keys_text_all_caps":
-                // A property, not a preference: the row reads it from termux.properties, so the
-                // switch writes there and the reload picks it up like any hand edit would.
-                writeTermuxPropertyToProperties(
-                    TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS,
-                    Boolean.toString(value));
-                scheduleTermuxActivityStylingSync(false);
-                break;
             case "app_launcher_widget_pane_enabled":
                 mPreferences.setAppLauncherWidgetPaneEnabled(value);
                 // The pane is built once per activity, so it has to come back on a recreate.
@@ -272,12 +257,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherDrawerEnabled();
             case "app_launcher_widget_pane_enabled":
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
-            case "extra_keys_text_all_caps": {
-                String stored = loadTermuxProperties().getProperty(
-                    TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
-                // Absent means the documented default-true behaviour of this property.
-                return stored == null || !"false".equals(stored.trim().toLowerCase(java.util.Locale.ROOT));
-            }
             case "app_launcher_row_haptics":
                 return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":
@@ -294,11 +273,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return;
         switch (key) {
-            case "terminal_background_opacity":
-                mPreferences.setTerminalBackgroundOpacity(value);
-                syncBackgroundOverlayColor(value, null);
-                scheduleTermuxActivityStylingSync(false);
-                break;
             case "sessions_opacity":
                 mPreferences.setSessionsOpacity(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -315,8 +289,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return defValue;
         switch (key) {
-            case "terminal_background_opacity":
-                return mPreferences.getTerminalBackgroundOpacity();
             case "sessions_opacity":
                 return mPreferences.getSessionsOpacity();
             default:
@@ -415,35 +387,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         }
     }
 
-    private void syncBackgroundOverlayColor(int opacityPercent, Integer baseColorOverride) {
-        int alpha = (int) ((DataUtils.clamp(opacityPercent, 0, 100) / 100f) * 255);
-        Properties properties = loadTermuxProperties();
-        String currentValue = properties.getProperty(TermuxPropertyConstants.KEY_BACKGROUND_OVERLAY_COLOR);
-        int baseColor = baseColorOverride != null ? baseColorOverride : TermuxSharedProperties.getBackgroundOverlayInternalPropertyValueFromValue(currentValue);
-        baseColor = getMaterialSurfaceColor(baseColor);
-        int newColor = (baseColor & 0x00FFFFFF) | (alpha << 24);
-        writeTermuxPropertyToProperties(TermuxPropertyConstants.KEY_BACKGROUND_OVERLAY_COLOR,
-            String.format("#%08X", newColor));
-    }
-
-    private Properties loadTermuxProperties() {
-        return com.termux.app.settings.TermuxPropertiesFile.load(mContext);
-    }
-
     private void writeTermuxPropertyToProperties(@NonNull String propertyKey, @NonNull String propertyValue) {
         com.termux.app.settings.TermuxPropertiesFile.write(propertyKey, propertyValue);
-    }
-
-    @ColorInt
-    private int getMaterialSurfaceColor(@ColorInt int fallbackColor) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                return ThemeUtils.getSystemAttrColor(mContext, com.termux.shared.R.attr.termuxColorSurfaceBase, fallbackColor);
-            }
-            return ThemeUtils.getSystemAttrColor(mContext, com.termux.shared.R.attr.termuxColorSurfaceBase, fallbackColor);
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to resolve Material surface color", e);
-            return fallbackColor;
-        }
     }
 }

@@ -74,7 +74,8 @@ public class WidgetPickerProductionSelectionTest {
             pane = new WidgetPaneView(activity); activity.setContentView(pane);
             FakeBoundary boundary = new FakeBoundary(info);
             WidgetProviderCatalogLoader loader = new WidgetProviderCatalogLoader(boundary,
-                Runnable::run, new Handler(Looper.getMainLooper()), 2.625f);
+                Runnable::run, new Handler(Looper.getMainLooper()), activity.getResources(),
+                1024 * 1024);
             controller = new WidgetPaneController(pane, widgets, new WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return true; }
                 @Override public boolean isFullEngaged() { return fullEngaged; }

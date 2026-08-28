@@ -1,4 +1,4 @@
-package com.termux.app.terminal;
+package com.termux.app.terminal.rename;
 
 /**
  * What a rename is renaming, in the terminal's own hierarchy: a session holds windows, a window

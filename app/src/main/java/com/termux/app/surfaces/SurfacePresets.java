@@ -152,11 +152,8 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, prefs.getSurfaceMaterialIntensity());
         // After the material point, never before it: a hand-tuned triple no longer sits on any
         // point of any family's curve, and these three are the numbers that must win on apply.
-        for (SurfaceProperty property : SurfaceProperty.values()) {
-            String key = baseKeyFor(property);
-            if (key != null)
-                look.put(key, prefs.getSurfaceBaseValue(property));
-        }
+        for (SurfaceProperty property : SurfaceProperty.values())
+            look.put(property.baseKey, prefs.getSurfaceBaseValue(property));
         look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, prefs.isTerminalBorderEnabled());
         look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, prefs.getTerminalCornerRadius());
         look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, prefs.getTerminalPaneGap());
@@ -208,18 +205,6 @@ public final class SurfacePresets {
         return look;
     }
 
-    @Nullable
-    private static String baseKeyFor(@NonNull SurfaceProperty property) {
-        switch (property) {
-            case BLUR: return TERMUX_APP.KEY_SURFACE_BASE_BLUR;
-            case OPACITY: return TERMUX_APP.KEY_SURFACE_BASE_OPACITY;
-            case GRAIN: return TERMUX_APP.KEY_SURFACE_BASE_GRAIN;
-            case CORNER_RADIUS: return TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS;
-            case SIDE_GAP: return TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP;
-            default: return null;
-        }
-    }
-
     /**
      * Applies a preset in full: every surface back on Base first — a preset is a complete look,
      * so it overwrites detached overrides rather than working around them — then each named value,
@@ -254,7 +239,7 @@ public final class SurfacePresets {
                 prefs.setTerminalPaneGap(intOf(value));
                 return;
         }
-        SurfaceProperty baseProperty = basePropertyForKey(key);
+        SurfaceProperty baseProperty = SurfaceProperty.forBaseKey(key);
         if (baseProperty != null) {
             prefs.setSurfaceBaseValue(baseProperty, intOf(value));
             return;
@@ -308,25 +293,13 @@ public final class SurfacePresets {
             case TERMUX_APP.KEY_TERMINAL_PANE_GAP:
                 return prefs.getTerminalPaneGap();
         }
-        SurfaceProperty baseProperty = basePropertyForKey(key);
+        SurfaceProperty baseProperty = SurfaceProperty.forBaseKey(key);
         if (baseProperty != null)
             return prefs.getSurfaceBaseValue(baseProperty);
         SurfaceEditorRows.Row cell = overrideCellForKey(key);
         if (cell != null)
             return prefs.getSurfaceOverrideValue(cell.slot, cell.property);
         return null;
-    }
-
-    @Nullable
-    private static SurfaceProperty basePropertyForKey(@NonNull String key) {
-        switch (key) {
-            case TERMUX_APP.KEY_SURFACE_BASE_BLUR: return SurfaceProperty.BLUR;
-            case TERMUX_APP.KEY_SURFACE_BASE_OPACITY: return SurfaceProperty.OPACITY;
-            case TERMUX_APP.KEY_SURFACE_BASE_GRAIN: return SurfaceProperty.GRAIN;
-            case TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS: return SurfaceProperty.CORNER_RADIUS;
-            case TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP: return SurfaceProperty.SIDE_GAP;
-            default: return null;
-        }
     }
 
     /** The (surface, property) cell a legacy per-surface key names, via the editor's row table. */

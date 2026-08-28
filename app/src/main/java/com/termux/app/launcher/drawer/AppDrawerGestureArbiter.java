@@ -65,8 +65,8 @@ public final class AppDrawerGestureArbiter {
         public final boolean azInactive;
         /** Which way this dock's pull travels; {@link Pull#NONE} means nothing to pull from. */
         @NonNull public final Pull pull;
-        /** Dock tuning mode is off — it owns drags on the dock itself. */
-        public final boolean notDockTuning;
+        /** The surface editor is closed — it owns drags on the dock itself while up. */
+        public final boolean surfaceEditorClosed;
         /** The command palette is closed. */
         public final boolean paletteClosed;
         /** No long-press pickup and no pinned-icon drag in flight. */
@@ -78,30 +78,30 @@ public final class AppDrawerGestureArbiter {
 
         /** The portrait dock: {@code portrait} false is the landscape row that is {@code GONE}. */
         public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
-                           boolean portrait, boolean notDockTuning, boolean paletteClosed,
+                           boolean portrait, boolean surfaceEditorClosed, boolean paletteClosed,
                            boolean noActivePickup, boolean drawerIdle) {
-            this(drawerEnabled, searchEmpty, azInactive, portrait, notDockTuning, paletteClosed,
+            this(drawerEnabled, searchEmpty, azInactive, portrait, surfaceEditorClosed, paletteClosed,
                 noActivePickup, drawerIdle, true);
         }
 
         /** The portrait dock: {@code portrait} false is the landscape row that is {@code GONE}. */
         public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
-                           boolean portrait, boolean notDockTuning, boolean paletteClosed,
+                           boolean portrait, boolean surfaceEditorClosed, boolean paletteClosed,
                            boolean noActivePickup, boolean drawerIdle,
                            boolean fullStatusPaneClosed) {
             this(drawerEnabled, searchEmpty, azInactive, portrait ? Pull.DOWN : Pull.NONE,
-                notDockTuning, paletteClosed, noActivePickup, drawerIdle, fullStatusPaneClosed);
+                surfaceEditorClosed, paletteClosed, noActivePickup, drawerIdle, fullStatusPaneClosed);
         }
 
         public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
-                           @NonNull Pull pull, boolean notDockTuning, boolean paletteClosed,
+                           @NonNull Pull pull, boolean surfaceEditorClosed, boolean paletteClosed,
                            boolean noActivePickup, boolean drawerIdle,
                            boolean fullStatusPaneClosed) {
             this.drawerEnabled = drawerEnabled;
             this.searchEmpty = searchEmpty;
             this.azInactive = azInactive;
             this.pull = pull;
-            this.notDockTuning = notDockTuning;
+            this.surfaceEditorClosed = surfaceEditorClosed;
             this.paletteClosed = paletteClosed;
             this.noActivePickup = noActivePickup;
             this.drawerIdle = drawerIdle;
@@ -117,7 +117,7 @@ public final class AppDrawerGestureArbiter {
         /** @return true when every veto is clear and the drawer may claim a drag along its pull. */
         public boolean drawerEligible() {
             return drawerEnabled && searchEmpty && azInactive && pull != Pull.NONE
-                && notDockTuning && paletteClosed && noActivePickup && drawerIdle
+                && surfaceEditorClosed && paletteClosed && noActivePickup && drawerIdle
                 && fullStatusPaneClosed;
         }
     }

@@ -1,5 +1,6 @@
 package com.termux.app.launcher.drawer;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
@@ -29,7 +30,7 @@ public class AppDrawerAppCellView extends LinearLayout {
     @NonNull public final ImageView icon;
     @NonNull public final TextView label;
 
-    public AppDrawerAppCellView(@NonNull android.content.Context context) {
+    public AppDrawerAppCellView(@NonNull Context context) {
         super(context);
         setOrientation(VERTICAL);
         setGravity(Gravity.CENTER_HORIZONTAL);

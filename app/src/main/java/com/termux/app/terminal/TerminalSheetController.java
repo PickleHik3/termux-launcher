@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import android.content.Context;
 import android.graphics.PointF;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -18,7 +19,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.TermuxActivity;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import java.util.ArrayList;
@@ -44,6 +44,39 @@ import juloo.keyboard2.KeyValue;
  */
 public final class TerminalSheetController
     implements TerminalKeyEventHandler.KeyValueInterceptor {
+
+    /** What the plane needs from the activity: its views, the keyboard it is typed with, its glass. */
+    public interface Host {
+        @NonNull Context context();
+
+        @Nullable <T extends View> T findView(int viewId);
+
+        /**
+         * Two full-screen glass planes must never stack, and a sheet is the modal one: the FULL
+         * status pane and the drawer yield, the same handoff the palette makes.
+         */
+        void yieldCompetingPlanes();
+
+        /** Makes a keyboard available for typing into the sheet, if the in-app keyboard is on. */
+        void ensureInAppTypingKeyboard();
+
+        /** Claims (or releases) the in-app keyboard's single interceptor slot for the plane. */
+        void setSheetInterceptorActive(boolean active);
+
+        /** Whether a raw screen point lands on the in-app keyboard — the keys the sheet is typed with. */
+        boolean isPointOnInAppKeyboard(float rawX, float rawY);
+
+        /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
+        boolean applyWallpaperFrost(@NonNull ImageView frost);
+
+        /** Glass for a sheet card, in the same kit as the dock and the rename chip. */
+        @NonNull Drawable sheetSurface();
+
+        /** The dock's rectangle on screen; false when there is no dock laid out. */
+        boolean dockBoundsOnScreen(@NonNull Rect out);
+
+        boolean isReducedMotionEnabled();
+    }
 
     private static final long ENTER_DURATION_MS = 170L;
     private static final long EXIT_DURATION_MS = 110L;
@@ -245,18 +278,18 @@ public final class TerminalSheetController
         }
     }
 
-    @NonNull private final TermuxActivity mActivity;
+    @NonNull private final Host mHost;
     @NonNull private final List<Sheet> mStack = new ArrayList<>();
     private final float mDensity;
 
-    @Nullable private FrameLayout mHost;
+    @Nullable private FrameLayout mPlane;
     @Nullable private FrameLayout mStackHost;
     /** Set by {@link #show} for the card it is about to build; read once by {@link #buildCard}. */
     @NonNull private Placement mPendingPlacement = Placement.centered();
 
-    public TerminalSheetController(@NonNull TermuxActivity activity) {
-        mActivity = activity;
-        mDensity = activity.getResources().getDisplayMetrics().density;
+    public TerminalSheetController(@NonNull Host host) {
+        mHost = host;
+        mDensity = host.context().getResources().getDisplayMetrics().density;
     }
 
     public boolean isOpen() {
@@ -317,26 +350,19 @@ public final class TerminalSheetController
                         boolean coverPrevious, @NonNull Placement placement) {
         if (!bindViews()) return false;
         mPendingPlacement = placement;
-        if (mStack.isEmpty()) {
-            // Two full-screen glass planes must never stack, and a sheet is the modal one: the
-            // drawer and the FULL status pane yield, the same handoff the palette makes. Guarded on
-            // the open check rather than reached through the lazy accessor, so a session that never
-            // pulls the drawer down does not build one just because it opened a prompt.
-            mActivity.closeFullStatusBarImmediate();
-            if (mActivity.isAppDrawerOpen()) mActivity.getAppDrawerController().closeImmediate();
-        }
+        if (mStack.isEmpty()) mHost.yieldCompetingPlanes();
         boolean bare = placement.bare;
         View card = buildCard(title, content, fillHeight);
         if (coverPrevious && !mStack.isEmpty())
             mStack.get(mStack.size() - 1).card.setVisibility(View.GONE);
         mStackHost.addView(card);
         mStack.add(new Sheet(card, sink, onDismiss, coverPrevious, bare));
-        mHost.setVisibility(View.VISIBLE);
+        mPlane.setVisibility(View.VISIBLE);
         applyBackdropMaterial();
         // Only a sheet with somewhere for typing to land is worth summoning a keyboard for; a
         // confirmation is all buttons and would just push the terminal around.
-        if (sink != null) mActivity.ensureInAppTypingKeyboard();
-        mActivity.setTerminalSheetInterceptorActive(true);
+        if (sink != null) mHost.ensureInAppTypingKeyboard();
+        mHost.setSheetInterceptorActive(true);
         animateIn(card);
         return true;
     }
@@ -401,9 +427,9 @@ public final class TerminalSheetController
     }
 
     private void onEmptied() {
-        mActivity.setTerminalSheetInterceptorActive(false);
-        if (mHost != null) mHost.setVisibility(View.INVISIBLE);
-        ImageView frost = mActivity.findViewById(R.id.terminal_sheet_wallpaper_backdrop);
+        mHost.setSheetInterceptorActive(false);
+        if (mPlane != null) mPlane.setVisibility(View.INVISIBLE);
+        ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
         if (frost != null) {
             // Drop the full-screen frost bitmap while shut; the next show() rebuilds it.
             frost.setImageDrawable(null);
@@ -413,8 +439,8 @@ public final class TerminalSheetController
 
     private boolean bindViews() {
         if (mStackHost != null) return true;
-        FrameLayout host = mActivity.findViewById(R.id.terminal_sheet_host);
-        FrameLayout stack = mActivity.findViewById(R.id.terminal_sheet_stack);
+        FrameLayout host = mHost.findView(R.id.terminal_sheet_host);
+        FrameLayout stack = mHost.findView(R.id.terminal_sheet_stack);
         if (host == null || stack == null) return false;
         // The plane must never take focus itself; the whole point of it is that TerminalView keeps
         // the InputConnection while a sheet is up.
@@ -425,7 +451,7 @@ public final class TerminalSheetController
                     // Taps on the in-app keyboard are not "outside": the host covers the whole
                     // activity, keyboard included, and those keys are how the sheet is typed into.
                     // They must fall through unconsumed or the first keystroke closes the sheet.
-                    return !mActivity.isPointOnInAppKeyboard(event.getRawX(), event.getRawY());
+                    return !mHost.isPointOnInAppKeyboard(event.getRawX(), event.getRawY());
                 case MotionEvent.ACTION_UP:
                     // Dismissed on the finished tap, not on DOWN: a gesture-nav back swipe delivers
                     // its DOWN to the app before the system claims the gesture with ACTION_CANCEL,
@@ -436,7 +462,7 @@ public final class TerminalSheetController
                     return true;
             }
         });
-        mHost = host;
+        mPlane = host;
         mStackHost = stack;
         return true;
     }
@@ -447,8 +473,8 @@ public final class TerminalSheetController
      * RealtimeBlurView blurring real window content.
      */
     private void applyBackdropMaterial() {
-        ImageView frost = mActivity.findViewById(R.id.terminal_sheet_wallpaper_backdrop);
-        View blur = mActivity.findViewById(R.id.terminal_sheet_blur);
+        ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
+        View blur = mHost.findView(R.id.terminal_sheet_blur);
         if (allBare()) {
             // Every open card asked for no backdrop, so the plane draws nothing of its own and what
             // is behind it — the transcript a search is searching — stays exactly as it was.
@@ -459,7 +485,7 @@ public final class TerminalSheetController
             if (blur != null) blur.setVisibility(View.GONE);
             return;
         }
-        boolean frosted = frost != null && mActivity.applyCommandPaletteWallpaperFrost(frost);
+        boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
         if (blur != null) blur.setVisibility(frosted ? View.GONE : View.VISIBLE);
     }
 
@@ -488,7 +514,7 @@ public final class TerminalSheetController
             int pad = dp(STRIP_PADDING_DP);
             card.setPadding(pad, pad, pad, pad);
         } else {
-            card.setBackground(mActivity.buildTerminalSheetSurface());
+            card.setBackground(mHost.sheetSurface());
             int padding = dp(CARD_PADDING_DP);
             card.setPadding(padding, padding, padding, padding);
         }
@@ -582,7 +608,7 @@ public final class TerminalSheetController
         Rect dock = new Rect();
         int[] planeOnScreen = new int[2];
         mStackHost.getLocationOnScreen(planeOnScreen);
-        boolean haveDock = mActivity.dockBoundsOnScreen(dock) && dock.width() > 0;
+        boolean haveDock = mHost.dockBoundsOnScreen(dock) && dock.width() > 0;
 
         int width = haveDock ? dock.width() : Math.max(0, planeWidth - 2 * inset);
         if (planeWidth > 0) width = Math.min(width, planeWidth);
@@ -648,7 +674,7 @@ public final class TerminalSheetController
 
     private void animateIn(@NonNull View card) {
         card.animate().cancel();
-        if (mActivity.isReducedMotionEnabled()) {
+        if (mHost.isReducedMotionEnabled()) {
             card.setAlpha(1f);
             card.setScaleX(1f);
             card.setScaleY(1f);
@@ -667,7 +693,7 @@ public final class TerminalSheetController
         FrameLayout stack = mStackHost;
         if (stack == null) return;
         card.animate().cancel();
-        if (mActivity.isReducedMotionEnabled()) {
+        if (mHost.isReducedMotionEnabled()) {
             stack.removeView(card);
             return;
         }

@@ -11,6 +11,7 @@ import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /** Expanded row-major apps, bound through the exact common drawer cell implementation. */
@@ -67,7 +68,7 @@ public final class AppDrawerCategoryDetailAdapter
             RecyclerView.ViewHolder holder = recycler.getChildViewHolder(recycler.getChildAt(i));
             if (holder instanceof Holder) ((Holder) holder).cell.unbind();
         }
-        submit(java.util.Collections.emptyList());
+        submit(Collections.emptyList());
     }
     public int positionOfStableId(@Nullable String stableId) {
         if (stableId == null) return -1;

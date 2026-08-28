@@ -165,7 +165,7 @@ public final class SuggestionBarView extends GridLayout
      *
      * <p>The row arbitrates the touch stream — it is the only view that sees the whole gesture from
      * {@code ACTION_DOWN} — but it knows nothing about the plane. Everything the claim depends on
-     * that lives outside the row (the preference, dock tuning, the palette, the drawer's own state)
+     * that lives outside the row (the preference, the surface editor, the palette, the drawer's own state)
      * is asked for through this listener, and the claimed drag is handed straight back to
      * {@code AppDrawerController} through it.
      *
@@ -179,8 +179,8 @@ public final class SuggestionBarView extends GridLayout
         /** The {@code app_launcher_drawer_enabled} preference. */
         boolean isAppDrawerEnabled();
 
-        /** Dock tuning owns drags on the dock itself while it is up. */
-        boolean isDockTuningActive();
+        /** The surface editor owns drags on the dock itself while it is up. */
+        boolean isSurfaceEditorActive();
 
         /** The command palette is a full-screen overlay of its own; it must not stack with one. */
         boolean isCommandPaletteOpen();
@@ -2098,7 +2098,7 @@ public final class SuggestionBarView extends GridLayout
             true,
             activeAzLetter == null,
             portrait,
-            listener != null && !listener.isDockTuningActive(),
+            listener != null && !listener.isSurfaceEditorActive(),
             listener != null && !listener.isCommandPaletteOpen(),
             noActivePickup,
             listener != null && !listener.isAppDrawerEngaged(),

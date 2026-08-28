@@ -110,11 +110,7 @@ public final class DockIconCache {
 
     /** One eighth of the per-app heap, clamped into [8MB, 32MB]. */
     public static int resolveBudgetBytes(int memoryClassMb) {
-        long heapBytes = (long) Math.max(0, memoryClassMb) * 1024L * 1024L;
-        long budget = heapBytes / HEAP_DIVISOR;
-        if (budget < MIN_BYTES) budget = MIN_BYTES;
-        if (budget > MAX_BYTES) budget = MAX_BYTES;
-        return (int) budget;
+        return HeapBudget.of(memoryClassMb, HEAP_DIVISOR, MIN_BYTES, MAX_BYTES);
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.termux.app.launcher.drawer;
 
+import androidx.recyclerview.widget.RecyclerView;
+
 /** Pure drawer drag thresholds. It never reads live view state after the DOWN snapshot. */
 public final class AppDrawerDragPolicy {
     public static final float HORIZONTAL_EDGE_DP = 32f;
@@ -14,7 +16,7 @@ public final class AppDrawerDragPolicy {
         private boolean settled = true;
         public void onNavigationStarted() { settled = false; }
         public void onScrollStateChanged(int state) {
-            if (state == androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE) settled = true;
+            if (state == RecyclerView.SCROLL_STATE_IDLE) settled = true;
         }
         public boolean canDrop() { return settled; }
         public void reset() { settled = true; }

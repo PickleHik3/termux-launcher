@@ -99,6 +99,27 @@ public class ChromeRendererTest {
         assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD));
     }
 
+    /** A rebuilt nav strip or a moved dock says so alone, without dragging the other crop along. */
+    @Test
+    public void eachBackdropHasAScopeOfItsOwn() {
+        android.graphics.Rect rect = new android.graphics.Rect(0, 0, 1, 1);
+        chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, 12, false, rect);
+        chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, 12, false, rect);
+
+        chrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
+        assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
+        assertFalse(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
+
+        chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, 12, false, rect);
+        chrome.requestSync(ChromeRenderer.SCOPE_DOCK_BACKDROP);
+        assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
+        assertFalse(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
+
+        assertEquals("the pair scope is exactly the two singles",
+            ChromeRenderer.SCOPE_DOCK_BACKDROP | ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP,
+            ChromeRenderer.SCOPE_BACKDROPS);
+    }
+
     @Test
     public void droppingTheBlurCacheAlsoInvalidatesEveryFrostCutFromIt() {
         chrome.blurCache().obtain(0, wallpaperFrame);

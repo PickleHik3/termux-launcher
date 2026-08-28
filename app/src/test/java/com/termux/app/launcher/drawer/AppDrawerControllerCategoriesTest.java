@@ -41,8 +41,8 @@ public class AppDrawerControllerCategoriesTest {
         SharedPreferences raw = activity.getSharedPreferences("b5-controller", Context.MODE_PRIVATE);
         raw.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(activity, raw, null);
-        ReflectionHelpers.setField(activity, "mPreferences", preferences);
-        controller = activity.getAppDrawerController();
+        // The controller reads its preferences off its host, so no field on the activity is poked.
+        controller = new AppDrawerController(new FakeAppDrawerHost(activity, preferences));
         content = new AppDrawerContentView(activity);
         plane = new AppDrawerPlaneView(activity);
         ReflectionHelpers.setField(controller, "mContent", content);

@@ -110,7 +110,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
     /** One controller-owned channel; child bounds are pure functions of this value. */
     public void setFullExpansionProgress(float progress) {
-        float clamped = Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
+        float clamped = FullStatusBarGeometry.finiteUnit(progress);
         if (Math.abs(clamped - mFullExpansionProgress) < .0001f) return;
         mFullExpansionProgress = clamped;
         if (mClock != null) mClock.setFullPresentationProgress(clamped);
@@ -381,8 +381,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         mMediaBounds.set(result.media);
         measureExact(mClock, mClockBounds);
         if (mNotifications != null && !mNotificationBounds.isEmpty()) {
-            float p = Float.isFinite(mFullExpansionProgress)
-                ? Math.max(0f, Math.min(1f, mFullExpansionProgress)) : 0f;
+            float p = FullStatusBarGeometry.finiteUnit(mFullExpansionProgress);
             mNotifications.setHeaderInsetStart(normalHeaderInset * (1f - p));
             measureExact(mNotifications, mNotificationBounds);
         }

@@ -1,5 +1,6 @@
 package com.termux.app.launcher.folder;
 
+import android.content.Context;
 import android.view.Choreographer;
 import android.view.View;
 import android.view.WindowManager;
@@ -125,7 +126,7 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         params.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
         params.dimAmount = amount;
         WindowManager manager = (WindowManager)
-            decor.getContext().getSystemService(android.content.Context.WINDOW_SERVICE);
+            decor.getContext().getSystemService(Context.WINDOW_SERVICE);
         if (manager == null) return;
         try {
             manager.updateViewLayout(decor, params);

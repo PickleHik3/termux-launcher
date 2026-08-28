@@ -91,8 +91,9 @@ Use this language; it is what the code and the developer use.
    checksum-verified at build time (`downloadBootstraps`) or on first run. One got committed once
    and cost a force-push and a history rewrite.
 4. **Touching pong without being asked.** It is the developer's daily driver, reachable over
-   Tailscale (`adb connect 100.101.173.85:5555`, with `ANDROID_ADB_SERVER_PORT=5038` — that server
-   holds the trusted key). Ask before installing, force-stopping, or injecting input. A stray
+   Tailscale (`adb connect <device-ip>:5555`, with `ANDROID_ADB_SERVER_PORT=5038` — that server
+   holds the trusted key; the address is configured locally, not in the repo). Ask before
+   installing, force-stopping, or injecting input. A stray
    `adb input tap` once landed on the editor's edge-drag pill and silently zeroed the developer's
    side gap on every surface.
 5. **Merging `dev` into `io-vaj-package`.** VAJ is deprecated since v0.2.34-vaj: **security-critical

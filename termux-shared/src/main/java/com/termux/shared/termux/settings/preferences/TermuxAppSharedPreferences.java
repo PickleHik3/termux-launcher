@@ -1676,11 +1676,33 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** The shared properties. Not every slot has every one - see {@link #hasSurfaceProperty}. */
     public enum SurfaceProperty {
-        BLUR("blur"), OPACITY("opacity"), GRAIN("grain"),
-        CORNER_RADIUS("corner_radius"), SIDE_GAP("side_gap");
+        BLUR("blur", TERMUX_APP.KEY_SURFACE_BASE_BLUR, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR),
+        OPACITY("opacity", TERMUX_APP.KEY_SURFACE_BASE_OPACITY, TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY),
+        GRAIN("grain", TERMUX_APP.KEY_SURFACE_BASE_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN),
+        CORNER_RADIUS("corner_radius", TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS,
+            TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS),
+        SIDE_GAP("side_gap", TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP);
 
         public final String key;
-        SurfaceProperty(String key) { this.key = key; }
+        /** The preference key holding the shared Base value, and the number it ships with. */
+        public final String baseKey;
+        public final int baseDefault;
+
+        SurfaceProperty(String key, String baseKey, int baseDefault) {
+            this.key = key;
+            this.baseKey = baseKey;
+            this.baseDefault = baseDefault;
+        }
+
+        /** The property whose Base value a preference key holds, or null for any other key. */
+        @Nullable
+        public static SurfaceProperty forBaseKey(@Nullable String key) {
+            for (SurfaceProperty property : values()) {
+                if (property.baseKey.equals(key))
+                    return property;
+            }
+            return null;
+        }
     }
 
     /**
@@ -1736,34 +1758,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             setSurfaceInheriting(slot, property, true);
     }
 
-    private static String surfaceBaseKey(SurfaceProperty property) {
-        switch (property) {
-            case BLUR: return TERMUX_APP.KEY_SURFACE_BASE_BLUR;
-            case OPACITY: return TERMUX_APP.KEY_SURFACE_BASE_OPACITY;
-            case GRAIN: return TERMUX_APP.KEY_SURFACE_BASE_GRAIN;
-            case CORNER_RADIUS: return TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS;
-            default: return TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP;
-        }
-    }
-
-    private static int surfaceBaseDefault(SurfaceProperty property) {
-        switch (property) {
-            case BLUR: return TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
-            case OPACITY: return TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY;
-            case GRAIN: return TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN;
-            case CORNER_RADIUS: return TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS;
-            default: return TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP;
-        }
-    }
-
     /** The shared value for a property, before any surface's clamp is applied to it. */
     public int getSurfaceBaseValue(SurfaceProperty property) {
-        return SharedPreferenceUtils.getInt(mSharedPreferences, surfaceBaseKey(property),
-            surfaceBaseDefault(property));
+        return SharedPreferenceUtils.getInt(mSharedPreferences, property.baseKey, property.baseDefault);
     }
 
     public void setSurfaceBaseValue(SurfaceProperty property, int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, surfaceBaseKey(property), value, false);
+        SharedPreferenceUtils.setInt(mSharedPreferences, property.baseKey, value, false);
     }
 
     /** Which material family the Base triple was last set from. Display state, not a render input. */
@@ -1834,51 +1835,40 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** The surface's own stored number, ignoring inheritance. For the editor's detached rows. */
     public int getSurfaceOverrideValue(SurfaceSlot slot, SurfaceProperty property) {
+        String key = surfaceOverrideKey(slot, property);
+        int defaultValue = surfaceOverrideDefault(slot, property);
+        return key == null ? defaultValue
+            : SharedPreferenceUtils.getInt(mSharedPreferences, key, defaultValue);
+    }
+
+    /** The shipped value behind {@link #surfaceOverrideKey}, cell for cell. */
+    private static int surfaceOverrideDefault(SurfaceSlot slot, SurfaceProperty property) {
         switch (slot) {
             case KEYBOARD:
                 return property == SurfaceProperty.OPACITY
-                    ? SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
-                        TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY)
-                    : SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
-                        TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET);
+                    ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY
+                    : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET;
             case STATUS:
                 switch (property) {
-                    case BLUR: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS);
-                    case OPACITY: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_STATUS_BAR_OPACITY, TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY);
-                    case GRAIN: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN);
-                    case CORNER_RADIUS: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS);
-                    default: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
+                    case BLUR: return TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS;
+                    case OPACITY: return TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY;
+                    case GRAIN: return TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
+                    case CORNER_RADIUS: return TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS;
+                    default: return TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
                 }
             case CANVAS:
                 switch (property) {
-                    case BLUR: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS);
-                    case GRAIN: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN, TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN);
-                    default: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY,
-                        TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY);
+                    case BLUR: return TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS;
+                    case GRAIN: return TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN;
+                    default: return TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY;
                 }
             default:
                 switch (property) {
-                    case BLUR: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS);
-                    case OPACITY: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
-                    case GRAIN: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_DOCK_GLASS_GRAIN, TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN);
-                    case CORNER_RADIUS: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
-                        TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS);
-                    default: return SharedPreferenceUtils.getInt(mSharedPreferences,
-                        TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
+                    case BLUR: return TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS;
+                    case OPACITY: return TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY;
+                    case GRAIN: return TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+                    case CORNER_RADIUS: return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
+                    default: return TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
                 }
         }
     }

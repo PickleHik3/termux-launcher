@@ -59,7 +59,7 @@ public class AppDrawerFirstOpenAfterViewTypeChangeTest {
         row.layout(0, 0, WIDTH, 160);
         row.setAppDrawerGestureListener(new SuggestionBarView.AppDrawerGestureListener() {
             @Override public boolean isAppDrawerEnabled() { return true; }
-            @Override public boolean isDockTuningActive() { return false; }
+            @Override public boolean isSurfaceEditorActive() { return false; }
             @Override public boolean isCommandPaletteOpen() { return false; }
             @Override public boolean isAppDrawerEngaged() { return controller.isEngaged(); }
             @Override public void onDrawerDragBegin(float downRawY) {

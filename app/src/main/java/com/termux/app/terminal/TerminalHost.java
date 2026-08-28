@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxService;
+import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -31,7 +32,7 @@ import java.util.List;
  * those, and the one client that cannot (the dispatcher is a process-wide singleton) borrows the
  * host's through {@link #context()}.
  */
-public interface TerminalHost {
+public interface TerminalHost extends SoftKeyboardPolicy {
 
     // --- Views and session ---
 
@@ -104,17 +105,7 @@ public interface TerminalHost {
     /** The client is about to ask for the system IME, so inset handling may allow it. */
     void onSystemImeRequested();
 
-    boolean shouldDelaySoftKeyboardShowOnResume();
-
-    boolean areSoftKeyboardFlagsDisabled();
-
-    void disableSoftKeyboard(@Nullable View view);
-
-    void clearDisableSoftKeyboardFlags();
-
-    void setSoftKeyboardAlwaysHiddenFlags();
-
-    void setSoftInputModeAdjustResize();
+    // The soft-input flag group lives in SoftKeyboardPolicy.
 
     void setSoftKeyboardVisibility(@NonNull Runnable showSoftKeyboardRunnable, @Nullable View view,
                                    boolean visible);

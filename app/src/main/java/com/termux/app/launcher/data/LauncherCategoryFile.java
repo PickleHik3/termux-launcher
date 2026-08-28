@@ -3,6 +3,8 @@ package com.termux.app.launcher.data;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.TermuxConstants;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -47,9 +49,9 @@ public final class LauncherCategoryFile {
     @NonNull
     public static File defaultFile() {
         File file = new File(
-            com.termux.shared.termux.TermuxConstants.TERMUX_DATA_HOME_DIR_PATH, FILE_NAME);
+            TermuxConstants.TERMUX_DATA_HOME_DIR_PATH, FILE_NAME);
         File legacy = new File(
-            com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH, FILE_NAME);
+            TermuxConstants.TERMUX_HOME_DIR_PATH, FILE_NAME);
         if (!file.exists() && legacy.isFile()) {
             File dir = file.getParentFile();
             if (dir != null) dir.mkdirs();

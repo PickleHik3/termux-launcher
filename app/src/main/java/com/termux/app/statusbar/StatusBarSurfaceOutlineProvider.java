@@ -32,7 +32,7 @@ public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
     public void setFrame(float normalRadiusPx, float fullRadiusPx, float fullProgress) {
         this.normalRadiusPx = finiteNonNegative(normalRadiusPx);
         this.fullRadiusPx = finiteNonNegative(fullRadiusPx);
-        this.fullProgress = finiteUnit(fullProgress);
+        this.fullProgress = FullStatusBarGeometry.finiteUnit(fullProgress);
         radiusPx = this.normalRadiusPx
             + (this.fullRadiusPx - this.normalRadiusPx) * this.fullProgress;
     }
@@ -51,9 +51,5 @@ public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
 
     private static float finiteNonNegative(float value) {
         return Float.isFinite(value) ? Math.max(0f, value) : 0f;
-    }
-
-    private static float finiteUnit(float value) {
-        return Float.isFinite(value) ? Math.max(0f, Math.min(1f, value)) : 0f;
     }
 }

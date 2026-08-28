@@ -8,6 +8,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.List;
+import java.util.Locale;
 
 public class MultiBackendTaiRuntime implements TaiRuntime {
     private final LiteRtTaiRuntime liteRt;
@@ -116,14 +117,14 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     }
 
     private boolean isLiteRtEmbeddingFlatbuffer(@NonNull TaiModelSpec model) {
-        String path = model.localPath == null ? "" : model.localPath.toLowerCase(java.util.Locale.ROOT);
+        String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
         return TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend)
             && model.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
             && path.endsWith(".tflite");
     }
 
     private boolean isMnnEmbeddingModel(@NonNull TaiModelSpec model) {
-        String path = model.localPath == null ? "" : model.localPath.toLowerCase(java.util.Locale.ROOT);
+        String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
         return TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend)
             && model.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
             && path.endsWith("config.json");

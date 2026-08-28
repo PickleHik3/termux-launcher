@@ -3,13 +3,20 @@ package com.termux.app.launcher.widget;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Rect;
+import android.os.SystemClock;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.view.ViewTreeObserver;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
 
 /** Hard visual and hit boundary around one provider-owned host view. */
 public final class WidgetCellView extends FrameLayout {
@@ -48,7 +55,7 @@ public final class WidgetCellView extends FrameLayout {
     public WidgetCellView(@NonNull Context context) {
         super(context);
         gutter = Math.max(1, Math.round(2f * getResources().getDisplayMetrics().density));
-        touchSlop = android.view.ViewConfiguration.get(context).getScaledTouchSlop();
+        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setPadding(gutter, gutter, gutter, gutter);
         setClipChildren(true);
         setClipToPadding(true);
@@ -74,10 +81,10 @@ public final class WidgetCellView extends FrameLayout {
      * onCheckIsTextEditor) is reported so the activity can hand it the system IME despite the
      * terminal's custom IME orchestration; leaving the subtree reports null.
      */
-    private final android.view.ViewTreeObserver.OnGlobalFocusChangeListener globalFocusWatch =
+    private final ViewTreeObserver.OnGlobalFocusChangeListener globalFocusWatch =
         (oldFocus, newFocus) -> {
             boolean editor = newFocus != null && isDescendant(newFocus)
-                && (newFocus instanceof android.widget.EditText || newFocus.onCheckIsTextEditor());
+                && (newFocus instanceof EditText || newFocus.onCheckIsTextEditor());
             View next = editor ? newFocus : null;
             if (next != focusedEditor) {
                 focusedEditor = next;
@@ -86,7 +93,7 @@ public final class WidgetCellView extends FrameLayout {
         };
 
     private boolean isDescendant(@NonNull View view) {
-        android.view.ViewParent current = view.getParent();
+        ViewParent current = view.getParent();
         while (current != null) {
             if (current == this) return true;
             current = current.getParent();
@@ -123,11 +130,11 @@ public final class WidgetCellView extends FrameLayout {
         View current = hit;
         boolean interactive = false;
         while (current != null && current != this) {
-            if (androidx.core.view.ViewCompat.isNestedScrollingEnabled(current)) {
+            if (ViewCompat.isNestedScrollingEnabled(current)) {
                 return DownRegion.SCROLLING_PROVIDER;
             }
             interactive |= current.isClickable() || current.isLongClickable() || current.isFocusable();
-            android.view.ViewParent parent = current.getParent();
+            ViewParent parent = current.getParent();
             current = parent instanceof View ? (View) parent : null;
         }
         return interactive ? DownRegion.INTERACTIVE_PROVIDER : DownRegion.NON_INTERACTIVE_PROVIDER;
@@ -194,7 +201,7 @@ public final class WidgetCellView extends FrameLayout {
                 longPressDownX = x; longPressDownY = y;
                 longPressPending = true;
                 postDelayed(longPressFire,
-                    android.view.ViewConfiguration.getLongPressTimeout());
+                    ViewConfiguration.getLongPressTimeout());
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (longPressPending && Math.hypot(x - longPressDownX, y - longPressDownY)
@@ -219,12 +226,12 @@ public final class WidgetCellView extends FrameLayout {
         // Takeover: the provider's stream ends with CANCEL so its click/long-click can never
         // fire; the rest of this gesture belongs to the launcher as an edit drag.
         streamTakenOver = true;
-        long now = android.os.SystemClock.uptimeMillis();
+        long now = SystemClock.uptimeMillis();
         MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL,
             longPressDownX, longPressDownY, 0);
         super.dispatchTouchEvent(cancel);
         cancel.recycle();
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         longPressListener.onWidgetLongPress(lastRawX, lastRawY);
     }
 

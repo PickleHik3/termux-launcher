@@ -1,8 +1,19 @@
 package com.termux.app.launcher.drawer;
 
+import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Rect;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.os.SystemClock;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -13,6 +24,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -66,7 +78,7 @@ public final class AppDrawerCategoryView extends ViewGroup
 
     /** Where the tapped card sat: the detail content grows out of it instead of fading in flat. */
     @Nullable private Frame expandSource;
-    private final android.graphics.Rect morphClip = new android.graphics.Rect();
+    private final Rect morphClip = new Rect();
     @Nullable private AppDrawerCategoryGridMetrics metrics;
     @Nullable private Runnable frameRequestListener;
     @Nullable private Runnable popupDismissCallback;
@@ -80,7 +92,7 @@ public final class AppDrawerCategoryView extends ViewGroup
     private float headerDownY;
     private boolean headerMoved;
 
-    public AppDrawerCategoryView(@NonNull android.content.Context context,
+    public AppDrawerCategoryView(@NonNull Context context,
                                  @Nullable SuggestionBarView dock) {
         super(context);
         // The whole category host starts below the fixed search pill. Keep its overview, detail and
@@ -131,11 +143,11 @@ public final class AppDrawerCategoryView extends ViewGroup
 
         detailHeader = new TextView(context);
         detailHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f);
-        detailHeader.setTypeface(android.graphics.Typeface.create("sans-serif",
-            android.graphics.Typeface.BOLD));
+        detailHeader.setTypeface(Typeface.create("sans-serif",
+            Typeface.BOLD));
         detailHeader.setSingleLine(true);
         detailHeader.setEllipsize(TextUtils.TruncateAt.END);
-        detailHeader.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+        detailHeader.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         detailHeader.setIncludeFontPadding(false);
         detailHeader.setTextColor(dock == null ? Color.WHITE : dock.getLauncherTextColor());
         detailHeader.setClickable(true);
@@ -180,9 +192,9 @@ public final class AppDrawerCategoryView extends ViewGroup
             * getResources().getDisplayMetrics().density);
         collapseChevron.setPadding(chevronPadding, chevronPadding, chevronPadding, chevronPadding);
         collapseChevron.setColorFilter(dock == null ? Color.WHITE : dock.getLauncherTextColor());
-        android.graphics.drawable.GradientDrawable ring =
-            new android.graphics.drawable.GradientDrawable();
-        ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        GradientDrawable ring =
+            new GradientDrawable();
+        ring.setShape(GradientDrawable.OVAL);
         ring.setColor(Color.TRANSPARENT);
         ring.setStroke(Math.max(1, Math.round(
             getResources().getDisplayMetrics().density)), 0x2EFFFFFF);
@@ -197,11 +209,11 @@ public final class AppDrawerCategoryView extends ViewGroup
         // Trailing "N APPS" count, mono and quiet, per the mock's header metadata style.
         detailCount = new TextView(context);
         detailCount.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
-        detailCount.setTypeface(android.graphics.Typeface.MONOSPACE);
+        detailCount.setTypeface(Typeface.MONOSPACE);
         detailCount.setLetterSpacing(0.16f);
         detailCount.setSingleLine(true);
         detailCount.setIncludeFontPadding(false);
-        detailCount.setGravity(android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL);
+        detailCount.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         detailCount.setTextColor(halfAlpha(dock == null ? Color.WHITE
             : dock.getLauncherTextColor()));
         detailCount.setClickable(false);
@@ -210,7 +222,7 @@ public final class AppDrawerCategoryView extends ViewGroup
 
         emptyState = new TextView(context);
         emptyState.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-        emptyState.setGravity(android.view.Gravity.CENTER);
+        emptyState.setGravity(Gravity.CENTER);
         emptyState.setLineSpacing(0f, 1.25f);
         int emptyColor = dock == null ? Color.WHITE : dock.getLauncherTextColor();
         emptyState.setTextColor(emptyColor);
@@ -236,7 +248,7 @@ public final class AppDrawerCategoryView extends ViewGroup
     }
 
     private static int halfAlpha(int color) {
-        return androidx.core.graphics.ColorUtils.setAlphaComponent(color, 0x80);
+        return ColorUtils.setAlphaComponent(color, 0x80);
     }
 
     /** "Nothing here yet" over a quieter one-line explanation, per the mock's empty states. */
@@ -244,15 +256,15 @@ public final class AppDrawerCategoryView extends ViewGroup
     private CharSequence emptyStateText(int color) {
         String title = getResources().getString(R.string.app_drawer_category_empty_title);
         String body = getResources().getString(R.string.app_drawer_category_empty_body);
-        android.text.SpannableStringBuilder text =
-            new android.text.SpannableStringBuilder(title + "\n" + body);
-        int flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
-        text.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+        SpannableStringBuilder text =
+            new SpannableStringBuilder(title + "\n" + body);
+        int flags = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
+        text.setSpan(new StyleSpan(Typeface.BOLD),
             0, title.length(), flags);
-        text.setSpan(new android.text.style.RelativeSizeSpan(0.85f),
+        text.setSpan(new RelativeSizeSpan(0.85f),
             title.length() + 1, text.length(), flags);
-        text.setSpan(new android.text.style.ForegroundColorSpan(
-            androidx.core.graphics.ColorUtils.setAlphaComponent(color, 0x73)),
+        text.setSpan(new ForegroundColorSpan(
+            ColorUtils.setAlphaComponent(color, 0x73)),
             title.length() + 1, text.length(), flags);
         return text;
     }
@@ -573,7 +585,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         boolean scrollable = active != null
             && (active.canScrollVertically(-1) || active.canScrollVertically(1));
         gesturePolicy.begin(new AppDrawerCategoryGesturePolicy.Down(part, atTop, scrollable, 0L),
-            android.os.SystemClock.uptimeMillis());
+            SystemClock.uptimeMillis());
         downRawY = rawY;
         collapseStartProgress = expansion.progress();
     }
@@ -865,7 +877,7 @@ public final class AppDrawerCategoryView extends ViewGroup
      * picker.
      */
     private static int capHeightPx(@NonNull TextView view) {
-        android.graphics.Rect bounds = new android.graphics.Rect();
+        Rect bounds = new Rect();
         view.getPaint().getTextBounds("H", 0, 1, bounds);
         return bounds.height() > 0 ? bounds.height() : Math.round(view.getTextSize() * 0.71f);
     }
@@ -883,7 +895,7 @@ public final class AppDrawerCategoryView extends ViewGroup
             gapPx = Math.max(0, Math.round(metrics.itemGapPx));
         }
 
-        @Override public void getItemOffsets(@NonNull android.graphics.Rect outRect,
+        @Override public void getItemOffsets(@NonNull Rect outRect,
             @NonNull View view, @NonNull RecyclerView parent,
             @NonNull RecyclerView.State state) {
             int position = parent.getChildAdapterPosition(view);

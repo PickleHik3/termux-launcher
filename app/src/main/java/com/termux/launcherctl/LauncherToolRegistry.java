@@ -13,9 +13,11 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Shared launcher tool registry for the in-app UI surfaces: the command palette,
@@ -244,8 +246,8 @@ public final class LauncherToolRegistry {
          * The tools whose result is narrated by their own motion. One table, so the judgment
          * stays reviewable in one place instead of scattered through the registrations.
          */
-        private static final java.util.Set<String> SELF_EVIDENT_TOOLS =
-            new java.util.HashSet<>(java.util.Arrays.asList(
+        private static final Set<String> SELF_EVIDENT_TOOLS =
+            new HashSet<>(Arrays.asList(
                 TOOL_PANE_SPLIT_VERTICAL, TOOL_PANE_SPLIT_HORIZONTAL,
                 TOOL_PANE_KILL_FOCUSED, TOOL_PANE_EQUALIZE, TOOL_PANE_ROTATE,
                 TOOL_PANE_MOVE_TO_EDGE, TOOL_PANE_TOGGLE_FLOAT, TOOL_PANE_RESIZE,

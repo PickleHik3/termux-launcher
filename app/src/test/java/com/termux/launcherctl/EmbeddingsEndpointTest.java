@@ -19,6 +19,7 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
@@ -66,11 +67,11 @@ public class EmbeddingsEndpointTest {
         serverInstance.set(null, null);
         server = LauncherCtlApiServer.getInstance();
         server.start(context);
-        Thread.sleep(150);
 
         JSONObject endpoint = server.endpointSettings(context);
         port = endpoint.getInt("activePort");
         token = endpoint.getString("token");
+        awaitAnswering(port);
 
         // importModel scopes local paths to the Termux home directory, which is not a real
         // writable path on the test JVM; let fixtures import from the JVM temp dir instead.
@@ -256,6 +257,22 @@ public class EmbeddingsEndpointTest {
         JSONObject result = manager.loadModel(new JSONObject().put("model", modelId).toString());
         assertEquals("embedding_model_not_loadable", result.optString("error"));
         assertEquals(400, result.optInt("_statusCode"));
+    }
+
+    private static void awaitAnswering(int targetPort) throws Exception {
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (true) {
+            try {
+                HttpURLConnection conn = (HttpURLConnection) new URL("http://127.0.0.1:" + targetPort + "/v1/models").openConnection();
+                conn.setConnectTimeout(250);
+                conn.setReadTimeout(250);
+                conn.getResponseCode();
+                return;
+            } catch (IOException e) {
+                if (System.currentTimeMillis() >= deadline) throw e;
+                Thread.sleep(20);
+            }
+        }
     }
 
     private HttpURLConnection post(String path, JSONObject body) throws Exception {

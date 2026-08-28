@@ -38,11 +38,11 @@ import androidx.core.view.WindowInsetsCompat;
 final class AppNoticePlacement implements View.OnLayoutChangeListener {
 
     /**
-     * The chrome the chip can hang from, in order of preference. The container comes before the
-     * toolbar inside it: a screen that grows a second row under its title bar means the bottom edge
-     * moved, and the chip belongs under the whole thing.
+     * The chrome a host that names none hangs from, in order of preference. The container comes
+     * before the toolbar inside it: a screen that grows a second row under its title bar means the
+     * bottom edge moved, and the chip belongs under the whole thing.
      */
-    private static final int[] CHROME_IDS = {
+    static final int[] DEFAULT_CHROME_IDS = {
         com.termux.shared.R.id.toolbar_container,
         com.termux.shared.R.id.toolbar,
         com.termux.R.id.terminal_window_bar_host,
@@ -53,6 +53,7 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
 
     @NonNull private final ViewGroup mAnchor;
     @NonNull private final AppNoticeHostView mHost;
+    @NonNull private final int[] mChromeIds;
 
     /** The chrome we are currently listening to, so a screen that swaps it is followed. */
     @Nullable private View mChrome;
@@ -64,12 +65,23 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
      * structural anchor is left alone: there is nothing to measure and nothing to go stale.
      */
     static void attach(@NonNull ViewGroup anchor, @NonNull AppNoticeHostView host) {
-        new AppNoticePlacement(anchor, host).install();
+        attach(anchor, host, DEFAULT_CHROME_IDS);
     }
 
-    private AppNoticePlacement(@NonNull ViewGroup anchor, @NonNull AppNoticeHostView host) {
+    /**
+     * As {@link #attach(ViewGroup, AppNoticeHostView)}, hanging the chip from the first visible view
+     * among {@code chromeIds}, looked up from the anchor's root in the order given.
+     */
+    static void attach(@NonNull ViewGroup anchor, @NonNull AppNoticeHostView host,
+                       @NonNull int[] chromeIds) {
+        new AppNoticePlacement(anchor, host, chromeIds).install();
+    }
+
+    private AppNoticePlacement(@NonNull ViewGroup anchor, @NonNull AppNoticeHostView host,
+                               @NonNull int[] chromeIds) {
         mAnchor = anchor;
         mHost = host;
+        mChromeIds = chromeIds;
     }
 
     private void install() {
@@ -118,8 +130,7 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
 
     private void apply() {
         View chrome = resolveChrome();
-        int top = Math.max(insetFloor(), chromeBottom(chrome))
-            + Math.round(TOP_GAP_DP * density());
+        int top = placementTop(insetFloor(), chromeBottom(chrome), density());
         if (top == mAppliedTopPx) return;
         ViewGroup.LayoutParams params = mHost.getLayoutParams();
         if (!(params instanceof ViewGroup.MarginLayoutParams)) return;
@@ -140,25 +151,44 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
         Insets bars = insets.getInsets(WindowInsetsCompat.Type.statusBars()
             | WindowInsetsCompat.Type.displayCutout()
             | WindowInsetsCompat.Type.captionBar());
-        int[] anchorLocation = new int[2];
-        mAnchor.getLocationInWindow(anchorLocation);
-        return Math.max(0, bars.top - anchorLocation[1]);
+        return insetFloor(bars.top, anchorTopInWindow());
     }
 
     /** The chrome's bottom edge, in the anchor's own coordinates. */
     private int chromeBottom(@Nullable View chrome) {
         if (chrome == null || chrome.getVisibility() == View.GONE) return 0;
-        if (chrome.getHeight() <= 0) {
-            // Raised before the first layout pass — a settings page can raise a notice from
-            // onCreate. The declared minimum height is a good enough guess to keep the chip off
-            // the title, and the anchor's first layout corrects it.
-            return insetFloor() + chrome.getMinimumHeight();
-        }
         int[] chromeLocation = new int[2];
-        int[] anchorLocation = new int[2];
         chrome.getLocationInWindow(chromeLocation);
+        return chromeBottom(chromeLocation[1], chrome.getHeight(), chrome.getMinimumHeight(),
+            insetFloor(), anchorTopInWindow());
+    }
+
+    private int anchorTopInWindow() {
+        int[] anchorLocation = new int[2];
         mAnchor.getLocationInWindow(anchorLocation);
-        return Math.max(0, chromeLocation[1] + chrome.getHeight() - anchorLocation[1]);
+        return anchorLocation[1];
+    }
+
+    /** The bars' reach into the anchor: nothing for a screen whose content already starts below them. */
+    static int insetFloor(int barsTopPx, int anchorTopInWindowPx) {
+        return Math.max(0, barsTopPx - anchorTopInWindowPx);
+    }
+
+    /**
+     * The chrome's bottom edge in the anchor's coordinates. Raised before the first layout pass — a
+     * settings page can raise a notice from onCreate — the declared minimum height below the inset
+     * floor is a good enough guess to keep the chip off the title, and the anchor's first layout
+     * corrects it.
+     */
+    static int chromeBottom(int chromeTopInWindowPx, int chromeHeightPx, int chromeMinHeightPx,
+                            int insetFloorPx, int anchorTopInWindowPx) {
+        if (chromeHeightPx <= 0) return insetFloorPx + chromeMinHeightPx;
+        return Math.max(0, chromeTopInWindowPx + chromeHeightPx - anchorTopInWindowPx);
+    }
+
+    /** The row the pill lands in: clear of the bars and of the chrome, by a hair. */
+    static int placementTop(int insetFloorPx, int chromeBottomPx, float density) {
+        return Math.max(insetFloorPx, chromeBottomPx) + Math.round(TOP_GAP_DP * density);
     }
 
     /** The chrome this screen has, looked up afresh: screens replace their bars. */
@@ -166,7 +196,7 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
     private View resolveChrome() {
         View root = mAnchor.getRootView();
         View found = null;
-        for (int id : CHROME_IDS) {
+        for (int id : mChromeIds) {
             View candidate = root.findViewById(id);
             if (candidate != null && candidate.getVisibility() != View.GONE) {
                 found = candidate;

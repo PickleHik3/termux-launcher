@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -29,14 +30,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.UnaryOperator;
 
 /**
  * Categorizes installed apps with the on-device model and writes the assignments into
  * {@code app-categories.conf}. Runs in the foreground because a full catalogue is many inferences
  * and the user leaves Settings while it works.
  *
- * <p>Progress is published as static volatile fields rather than broadcasts: the Settings screens
- * in this repo poll on a handler, so a subscription mechanism would be dead weight.
+ * <p>Progress is published as one static snapshot rather than broadcasts: the Settings screens in
+ * this repo poll on a handler, so a subscription mechanism would be dead weight.
  */
 public final class LauncherCategorySortService extends Service {
     public static final String ACTION_SORT = "com.termux.app.launcher.action.SORT_CATEGORIES";
@@ -54,32 +56,84 @@ public final class LauncherCategorySortService extends Service {
     private static final int MAX_TOKENS = 24;
     private static final long NOTIFICATION_INTERVAL_MS = 750L;
 
-    private static volatile boolean running;
-    private static volatile int processed;
-    private static volatile int total;
-    @NonNull private static volatile String phase = LauncherCategorySortProgress.PHASE_PREPARING;
-    @Nullable private static volatile String errorMessage;
-    private static volatile boolean cancelRequested;
-    /** The last finished run's own words, kept so the settings row can report it on return. */
-    @Nullable private static volatile String outcome;
+    /**
+     * Everything a poller wants to know about the run, read together so a phase is never paired with
+     * another phase's count. Immutable; the service swaps in a fresh copy per change.
+     */
+    static final class Snapshot {
+        static final Snapshot IDLE = new Snapshot(false, 0, 0,
+            LauncherCategorySortProgress.PHASE_PREPARING, null, false, null);
+
+        final boolean running;
+        final int processed;
+        final int total;
+        /** One of the {@link LauncherCategorySortProgress} phase constants. */
+        @NonNull final String phase;
+        @Nullable final String errorMessage;
+        final boolean cancelRequested;
+        /** The last finished run's own words, kept so the settings row can report it on return. */
+        @Nullable final String outcome;
+
+        Snapshot(boolean running, int processed, int total, @NonNull String phase,
+                 @Nullable String errorMessage, boolean cancelRequested, @Nullable String outcome) {
+            this.running = running;
+            this.processed = processed;
+            this.total = total;
+            this.phase = phase;
+            this.errorMessage = errorMessage;
+            this.cancelRequested = cancelRequested;
+            this.outcome = outcome;
+        }
+
+        Snapshot withRunning(boolean value) {
+            return new Snapshot(value, processed, total, phase, errorMessage, cancelRequested, outcome);
+        }
+        Snapshot withProcessed(int value) {
+            return new Snapshot(running, value, total, phase, errorMessage, cancelRequested, outcome);
+        }
+        Snapshot withTotal(int value) {
+            return new Snapshot(running, processed, value, phase, errorMessage, cancelRequested, outcome);
+        }
+        Snapshot withPhase(@NonNull String value) {
+            return new Snapshot(running, processed, total, value, errorMessage, cancelRequested, outcome);
+        }
+        Snapshot withErrorMessage(@Nullable String value) {
+            return new Snapshot(running, processed, total, phase, value, cancelRequested, outcome);
+        }
+        Snapshot withCancelRequested(boolean value) {
+            return new Snapshot(running, processed, total, phase, errorMessage, value, outcome);
+        }
+        Snapshot withOutcome(@Nullable String value) {
+            return new Snapshot(running, processed, total, phase, errorMessage, cancelRequested, value);
+        }
+    }
+
+    @NonNull private static volatile Snapshot state = Snapshot.IDLE;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private long lastNotificationUpdateMs;
 
-    public static boolean isRunning() { return running; }
-    public static int getProcessed() { return processed; }
-    public static int getTotal() { return total; }
+    /** The current run's state in one read. */
+    @NonNull static Snapshot snapshot() { return state; }
+    public static boolean isRunning() { return state.running; }
+    public static int getProcessed() { return state.processed; }
+    public static int getTotal() { return state.total; }
     /** One of the {@link LauncherCategorySortProgress} phase constants. */
-    @NonNull public static String getPhase() { return phase; }
-    @Nullable public static String getErrorMessage() { return errorMessage; }
+    @NonNull public static String getPhase() { return state.phase; }
+    @Nullable public static String getErrorMessage() { return state.errorMessage; }
     /**
      * @return what the last finished run did, or null when none has finished in this process. Read
      *     by the settings row, which is routinely re-created after the run it started.
      */
-    @Nullable public static String getOutcome() { return outcome; }
+    @Nullable public static String getOutcome() { return state.outcome; }
 
-    public static void cancel() { cancelRequested = true; }
-    public static boolean isCancelRequested() { return cancelRequested; }
+    public static void cancel() { update(s -> s.withCancelRequested(true)); }
+    public static boolean isCancelRequested() { return state.cancelRequested; }
+
+    /** Copy-on-write under one lock: the worker's counts and a cancel from Settings must not race. */
+    private static synchronized void update(@NonNull UnaryOperator<Snapshot> change) {
+        state = change.apply(state);
+    }
 
     @Nullable
     @Override
@@ -92,29 +146,23 @@ public final class LauncherCategorySortService extends Service {
         ensureChannel();
         startForeground(NOTIFICATION_ID, buildNotification(
             getString(R.string.settings_app_drawer_category_sort_hint_preparing), 0, true, true));
-        if (intent == null || !ACTION_SORT.equals(intent.getAction()) || running) {
+        if (intent == null || !ACTION_SORT.equals(intent.getAction()) || state.running) {
             stopForeground(true);
             stopSelf(startId);
             return START_NOT_STICKY;
         }
 
-        running = true;
-        cancelRequested = false;
-        processed = 0;
-        total = 0;
-        phase = LauncherCategorySortProgress.PHASE_PREPARING;
-        errorMessage = null;
-        outcome = null;
+        update(s -> Snapshot.IDLE.withRunning(true));
         String modelId = intent.getStringExtra(EXTRA_MODEL_ID);
         executor.execute(() -> {
             try {
                 runSort(modelId);
             } catch (Throwable t) {
-                errorMessage = t.getMessage() == null ? t.toString() : t.getMessage();
-                outcome = getString(R.string.settings_app_drawer_category_sort_failed, errorMessage);
+                String error = t.getMessage() == null ? t.toString() : t.getMessage();
+                update(s -> s.withErrorMessage(error).withOutcome(
+                    getString(R.string.settings_app_drawer_category_sort_failed, error)));
             } finally {
-                running = false;
-                cancelRequested = false;
+                update(s -> s.withRunning(false).withCancelRequested(false));
                 // Order matters: drop the ongoing progress notification first, then post the
                 // result as its own dismissible one — a user who left Settings mid-run learns how
                 // it ended without going back in.
@@ -129,7 +177,7 @@ public final class LauncherCategorySortService extends Service {
     @Override
     public void onDestroy() {
         executor.shutdownNow();
-        running = false;
+        update(s -> s.withRunning(false));
         super.onDestroy();
     }
 
@@ -158,12 +206,13 @@ public final class LauncherCategorySortService extends Service {
         for (String packageName : labelByPackage.keySet()) {
             if (existing.categoryForPackage(packageName) == null) pending.add(packageName);
         }
-        total = pending.size();
+        update(s -> s.withTotal(pending.size()));
         if (pending.isEmpty()) {
             // Nothing new to classify. Loading a model to sort zero apps would burn 10-20 seconds
             // and then flash a progress bar that was never measuring anything.
-            outcome = getString(R.string.settings_app_drawer_category_sort_nothing_pending,
-                labelByPackage.size());
+            String nothingPending = getString(
+                R.string.settings_app_drawer_category_sort_nothing_pending, labelByPackage.size());
+            update(s -> s.withOutcome(nothingPending));
             new LauncherCategorySortState(this).recordRun(System.currentTimeMillis(),
                 labelByPackage.size(), LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL, modelId);
             return;
@@ -177,16 +226,16 @@ public final class LauncherCategorySortService extends Service {
         // Loading is minutes of the run on a cold runtime, and it used to happen invisibly inside
         // the first inference — which read as "stuck at 0 of N". Load it here so the phase is a
         // phase the user can see.
-        phase = LauncherCategorySortProgress.PHASE_LOADING_MODEL;
+        update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_LOADING_MODEL));
         updateProgressNotification(true);
         loadModel(manager, modelId);
-        phase = LauncherCategorySortProgress.PHASE_SORTING;
+        update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SORTING));
         int assigned = 0;
         for (String packageName : pending) {
-            if (cancelRequested) break;
+            if (state.cancelRequested) break;
             String label = labelByPackage.get(packageName);
             String slug = classify(manager, modelId, label == null ? packageName : label, packageName);
-            processed++;
+            update(s -> s.withProcessed(s.processed + 1));
             updateProgressNotification(false);
             // An unparseable reply leaves the app out of the file entirely so the drawer's built-in
             // classifier keeps handling it; it is a skip, never a fallback category.
@@ -200,7 +249,7 @@ public final class LauncherCategorySortService extends Service {
             assigned++;
         }
 
-        phase = LauncherCategorySortProgress.PHASE_SAVING;
+        update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SAVING));
         updateProgressNotification(true);
         if (assigned > 0) LauncherCategoryFile.of(merged).write(file);
 
@@ -212,9 +261,10 @@ public final class LauncherCategorySortService extends Service {
             LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL,
             modelId
         );
-        outcome = cancelRequested
+        String done = state.cancelRequested
             ? getString(R.string.settings_app_drawer_category_sort_cancelled, assigned)
             : getString(R.string.settings_app_drawer_category_sort_done, assigned, merged.size());
+        update(s -> s.withOutcome(done));
 
         provider.invalidate();
     }
@@ -265,16 +315,15 @@ public final class LauncherCategorySortService extends Service {
     }
 
     private void updateProgressNotification(boolean force) {
-        long now = android.os.SystemClock.elapsedRealtime();
-        if (!force && now - lastNotificationUpdateMs < NOTIFICATION_INTERVAL_MS) return;
-        lastNotificationUpdateMs = now;
+        long elapsed = SystemClock.elapsedRealtime();
+        if (!force && elapsed - lastNotificationUpdateMs < NOTIFICATION_INTERVAL_MS) return;
+        lastNotificationUpdateMs = elapsed;
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager == null) return;
-        int done = processed;
-        int count = total;
-        manager.notify(NOTIFICATION_ID, buildNotification(progressText(done, count),
-            LauncherCategorySortProgress.percent(phase, done, count),
-            LauncherCategorySortProgress.isIndeterminate(phase), true));
+        Snapshot now = state;
+        manager.notify(NOTIFICATION_ID, buildNotification(progressText(now),
+            LauncherCategorySortProgress.percent(now.phase, now.processed, now.total),
+            LauncherCategorySortProgress.isIndeterminate(now.phase), true));
     }
 
     /**
@@ -282,7 +331,7 @@ public final class LauncherCategorySortService extends Service {
      * race the foreground notification this service just dropped.
      */
     private void postResultNotification() {
-        String text = outcome;
+        String text = state.outcome;
         if (text == null || text.trim().isEmpty()) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager == null) return;
@@ -306,8 +355,9 @@ public final class LauncherCategorySortService extends Service {
 
     /** The same phase wording the settings row shows, so the two surfaces never disagree. */
     @NonNull
-    private String progressText(int done, int count) {
-        return getString(LauncherCategorySortProgress.hint(phase, done, count), done, count);
+    private String progressText(@NonNull Snapshot now) {
+        return getString(LauncherCategorySortProgress.hint(now.phase, now.processed, now.total),
+            now.processed, now.total);
     }
 
     private Notification buildNotification(String text, int percent, boolean indeterminate,

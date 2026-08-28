@@ -6,28 +6,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.terminal.CommandPaletteSoftKeyDecision;
-import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
-
-import juloo.keyboard2.KeyValue;
+import com.termux.app.terminal.FocuslessKeyIntake;
 
 /**
- * Three-channel intake for an inline rename, with no focus and no {@code InputConnection}.
- *
- * <p>Typing reaches a focusless surface by exactly three routes, and a surface that wires fewer
- * looks dead on somebody's keyboard:
- *
- * <ul>
- *   <li>the in-app keyboard, as resolved key values through {@link #interceptKeyValue};
- *   <li>hardware and external keyboards, as key events through {@link #handleKeyDown};
- *   <li>system IMEs, as committed text through {@link #handleCodePoint} — those send no key events
- *       at all for ordinary characters.
- * </ul>
+ * The {@link FocuslessKeyIntake} of an inline rename.
  *
  * <p>The host owns installing and restoring the in-app keyboard's interceptor slot; this class only
  * decides what a value means. Every terminating path funnels through one {@code finish}, so the
  * interceptor can never leak past the end of a rename.
  */
-public final class InlineRenameController implements TerminalKeyEventHandler.KeyValueInterceptor {
+public final class InlineRenameController extends FocuslessKeyIntake {
 
     public interface Host {
         /** Redraw the editor for the new draft. */
@@ -50,7 +38,7 @@ public final class InlineRenameController implements TerminalKeyEventHandler.Key
         return true;
     }
 
-    public boolean isActive() { return active; }
+    @Override public boolean isActive() { return active; }
 
     @Nullable public InlineRenameModel model() { return model; }
 
@@ -79,57 +67,6 @@ public final class InlineRenameController implements TerminalKeyEventHandler.Key
     }
 
     @Override
-    public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
-                                     boolean shift) {
-        if (!active) return false;
-        switch (value.getKind()) {
-            case Char:
-                if (!ctrl && !alt) insert(String.valueOf(value.getChar()));
-                break;
-            case String:
-                if (!ctrl && !alt) insert(value.getString());
-                break;
-            case Editing:
-                switch (value.getEditing()) {
-                    case SPACE_BAR: insert(" "); break;
-                    case BACKSPACE: backspace(); break;
-                    default: break;
-                }
-                break;
-            case Keyevent:
-                handleKeyCode(value.getKeyevent());
-                break;
-            case Event:
-                if (value.getEvent() == KeyValue.Event.ACTION) commit();
-                break;
-            case Slider:
-                switch (value.getSlider()) {
-                    case Cursor_left: move(-Math.max(1, value.getSliderRepeat())); break;
-                    case Cursor_right: move(Math.max(1, value.getSliderRepeat())); break;
-                    default: break;
-                }
-                break;
-            default:
-                break;
-        }
-        // Everything is swallowed while a rename is up, including strokes this editor ignores: a key
-        // that fell through to the shell would type into the terminal behind the chip.
-        return true;
-    }
-
-    /** @return true when the stroke was claimed by the active rename. */
-    public boolean handleKeyDown(int keyCode, @NonNull KeyEvent event) {
-        if (!active) return false;
-        if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
-        if (handleKeyCode(keyCode)) return true;
-        if (!event.isCtrlPressed() && !event.isAltPressed()) {
-            int unicode = event.getUnicodeChar();
-            if (unicode >= ' ') insert(new String(Character.toChars(unicode)));
-        }
-        return true;
-    }
-
-    /** @return true when the committed character was claimed by the active rename. */
     public boolean handleCodePoint(int codePoint, boolean ctrlDown) {
         CommandPaletteSoftKeyDecision.Action action =
             CommandPaletteSoftKeyDecision.decide(active, false, codePoint, ctrlDown);
@@ -144,7 +81,18 @@ public final class InlineRenameController implements TerminalKeyEventHandler.Key
         }
     }
 
-    private boolean handleKeyCode(int keyCode) {
+    /** Chords are not text: a key struck with Ctrl or Alt held is swallowed rather than inserted. */
+    @Override
+    protected void onText(@NonNull String text, boolean ctrl, boolean alt) {
+        if (!ctrl && !alt) insert(text);
+    }
+
+    @Override protected void onBackspace() { backspace(); }
+    @Override protected void onCommit() { commit(); }
+    @Override protected void onCursor(int delta) { move(delta); }
+
+    @Override
+    protected boolean handleKeyCode(int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_LEFT: move(-1); return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT: move(1); return true;

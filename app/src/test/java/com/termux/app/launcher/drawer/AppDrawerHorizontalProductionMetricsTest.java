@@ -48,9 +48,9 @@ public class AppDrawerHorizontalProductionMetricsTest {
         raw.edit().clear().commit();
         TermuxAppSharedPreferences preferences = new TermuxAppSharedPreferences(activity, raw, null);
         preferences.setAppLauncherDrawerViewType("horizontal");
-        ReflectionHelpers.setField(activity, "mPreferences", preferences);
 
-        AppDrawerController controller = new AppDrawerController(activity);
+        AppDrawerController controller =
+            new AppDrawerController(new FakeAppDrawerHost(activity, preferences));
         AppDrawerContentView content = new AppDrawerContentView(activity);
         AppDrawerPlaneView plane = new AppDrawerPlaneView(activity);
         ReflectionHelpers.setField(controller, "mContent", content);

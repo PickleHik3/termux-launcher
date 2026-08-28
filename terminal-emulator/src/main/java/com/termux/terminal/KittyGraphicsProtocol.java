@@ -654,7 +654,6 @@ final class KittyGraphicsProtocol {
         final int frameCountAtAccept = KittyImageStore.frameCount(initial);
         final int editNumber = (command.displayRows >= 1 && command.displayRows <= frameCountAtAccept)
             ? command.displayRows : 0;
-        final int estimate = (int) Math.min(Integer.MAX_VALUE, (long) initial.width * initial.height * 4L);
         // Only the count is decided here. The byte quota is settled at commit, where the pixels are
         // actually allocated and where a full quota can thin this animation instead of refusing the
         // rest of it — a queued frame holds nothing but its compressed payload, which
@@ -670,8 +669,8 @@ final class KittyGraphicsProtocol {
         // The gate above passed, so this frame now owns that slice of the quota until it commits
         // or fails. Every return below releases it exactly once; an edit replaces pixels in place
         // and so costs nothing new.
-        final boolean reservedFrameBytes = editNumber == 0;
-        if (reservedFrameBytes) store.reserveFrameBytes(initial, estimate);
+        final boolean reservedFrame = editNumber == 0;
+        if (reservedFrame) store.reserveFrame(initial);
         final int transmittedBytes = data.length;
         decodeBytesInFlight += transmittedBytes;
 
@@ -712,13 +711,13 @@ final class KittyGraphicsProtocol {
                 decodeBytesInFlight = Math.max(0, decodeBytesInFlight - transmittedBytes);
                 KittyImageStore.Entry entry = store.get(id);
                 if (decodeError != null || entry == null) {
-                    if (reservedFrameBytes) store.releaseFrameBytes(initial, estimate);
+                    if (reservedFrame) store.releaseFrame(initial);
                     reply(command, decodeError != null ? decodeError : "ENOENT:image not found",
                         true, false, id);
                     return;
                 }
                 if (!frameRectFits(entry, command.srcX, command.srcY, frameWidth, frameHeight)) {
-                    if (reservedFrameBytes) store.releaseFrameBytes(initial, estimate);
+                    if (reservedFrame) store.releaseFrame(initial);
                     reply(command, "EINVAL:frame rectangle out of bounds", true, false, id);
                     return;
                 }
@@ -732,7 +731,7 @@ final class KittyGraphicsProtocol {
                 }
                 if ((targetNumber != 0 || (command.displayColumns >= 1 && command.displayColumns <= frameCount))
                     && base == null) {
-                    if (reservedFrameBytes) store.releaseFrameBytes(initial, estimate);
+                    if (reservedFrame) store.releaseFrame(initial);
                     reply(command, "ENOENT:base frame data unavailable", true, false, id);
                     return;
                 }
@@ -770,7 +769,7 @@ final class KittyGraphicsProtocol {
                     output.postTerminalUpdate(() -> {
                         // From here the frame either takes its bytes for real or takes none, so
                         // the reservation has done its job either way.
-                        if (reservedFrameBytes) store.releaseFrameBytes(initial, estimate);
+                        if (reservedFrame) store.releaseFrame(initial);
                         KittyImageStore.Entry live = store.get(id);
                         if (finalError != null || live != entry) {
                             reply(command, finalError != null ? finalError : "ENOENT:image not found",

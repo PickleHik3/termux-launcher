@@ -50,7 +50,7 @@ public final class StatusBarResizeGeometry {
                                     int fullSurfaceHeight, int expandedRowHeight,
                                     int expandedBottomMargin) {
         int range = Math.max(1, fullSurfaceHeight - expandedSurfaceHeight);
-        float fullExpansion = finiteClamp(
+        float fullExpansion = FullStatusBarGeometry.finiteUnit(
             (surfaceHeight - expandedSurfaceHeight) / (float) range);
         // The spring-written surface height is the row's authoritative moving edge. The resolved
         // FULL target can briefly be stale while parent/accessory relayout is being delivered; it
@@ -59,10 +59,5 @@ public final class StatusBarResizeGeometry {
         int top = Math.max(0, actualSurface - Math.max(0, expandedBottomMargin)
             - Math.max(0, expandedRowHeight));
         return new Row(Math.max(0, expandedRowHeight), top, 1f, fullExpansion, 1f);
-    }
-
-    private static float finiteClamp(float value) {
-        if (Float.isNaN(value) || Float.isInfinite(value)) return 0f;
-        return Math.max(0f, Math.min(1f, value));
     }
 }

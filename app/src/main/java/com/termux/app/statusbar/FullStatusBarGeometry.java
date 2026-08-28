@@ -30,7 +30,7 @@ public final class FullStatusBarGeometry {
                                   int hostTopMargin, float progress) {
         int full = Math.max(priorHeight, resolveFullHeight(parentMeasuredHeight, parentPaddingTop,
             parentPaddingBottom, hostTopMargin));
-        float p = finiteClamp(progress);
+        float p = finiteUnit(progress);
         int height = Math.round(priorHeight + (full - priorHeight) * p);
         return new Frame(Math.max(0, Math.min(full, height)), full, p);
     }
@@ -38,11 +38,11 @@ public final class FullStatusBarGeometry {
     public static float progressForHeight(int height, int priorHeight, int fullHeight) {
         int range = fullHeight - priorHeight;
         if (range <= 0) return height >= fullHeight ? 1f : 0f;
-        return finiteClamp((height - priorHeight) / (float) range);
+        return finiteUnit((height - priorHeight) / (float) range);
     }
 
-    private static float finiteClamp(float value) {
-        if (Float.isNaN(value) || Float.isInfinite(value)) return 0f;
-        return Math.max(0f, Math.min(1f, value));
+    /** {@code value} clamped to the unit range; NaN and the infinities read as zero progress. */
+    static float finiteUnit(float value) {
+        return Float.isFinite(value) ? Math.max(0f, Math.min(1f, value)) : 0f;
     }
 }

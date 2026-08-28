@@ -4,6 +4,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.LauncherActivityInfo;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageInfo;
@@ -25,6 +26,7 @@ import com.termux.app.launcher.icon.LauncherIconStore;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -350,7 +352,7 @@ public final class LauncherAppDataProvider {
                 int category = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                     && info.applicationInfo != null
                     ? gameNormalizedCategory(info.applicationInfo)
-                    : android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED;
+                    : ApplicationInfo.CATEGORY_UNDEFINED;
                 entry = new LauncherAppEntry(ref, label, null,
                     resolvedIcon.iconPackArtwork, category, times.firstInstallEpochMs);
             }
@@ -529,10 +531,10 @@ public final class LauncherAppDataProvider {
 
     @NonNull
     static EntryMetadata readProfileMetadata(@NonNull LauncherActivityInfo activity, int sdkInt) {
-        int category = android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED;
+        int category = ApplicationInfo.CATEGORY_UNDEFINED;
         if (sdkInt >= Build.VERSION_CODES.O) {
             try {
-                android.content.pm.ApplicationInfo applicationInfo =
+                ApplicationInfo applicationInfo =
                     activity.getApplicationInfo();
                 if (applicationInfo != null) category = gameNormalizedCategory(applicationInfo);
             } catch (Throwable ignored) {
@@ -559,11 +561,11 @@ public final class LauncherAppDataProvider {
      * Pre-category-API games declare {@code FLAG_IS_GAME} instead of {@code CATEGORY_GAME}; the
      * flag is the same signal, so it fills in only when the declared category is undefined.
      */
-    static int gameNormalizedCategory(@NonNull android.content.pm.ApplicationInfo applicationInfo) {
+    static int gameNormalizedCategory(@NonNull ApplicationInfo applicationInfo) {
         int category = applicationInfo.category;
-        if (category == android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED
-            && (applicationInfo.flags & android.content.pm.ApplicationInfo.FLAG_IS_GAME) != 0)
-            return android.content.pm.ApplicationInfo.CATEGORY_GAME;
+        if (category == ApplicationInfo.CATEGORY_UNDEFINED
+            && (applicationInfo.flags & ApplicationInfo.FLAG_IS_GAME) != 0)
+            return ApplicationInfo.CATEGORY_GAME;
         return category;
     }
 
@@ -599,7 +601,7 @@ public final class LauncherAppDataProvider {
 
     // UserHandle.getIdentifier() is @SystemApi — reachable only via reflection from app code.
     // Resolve once; any failure (hidden-API policy, vendor mismatch) degrades to -1 forever.
-    @Nullable private static java.lang.reflect.Method sGetIdentifierMethod;
+    @Nullable private static Method sGetIdentifierMethod;
     private static boolean sGetIdentifierResolved;
 
     public static int userIdOf(@NonNull UserHandle userHandle) {

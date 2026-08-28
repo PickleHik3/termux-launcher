@@ -320,7 +320,6 @@ final class KittyImageStore {
         latestIdByNumber.clear();
         totalBytes = 0;
         spendFrameBytes(-totalFrameBytes);
-        pendingFrameBytes = 0;
     }
 
     long totalBytes() {
@@ -334,7 +333,6 @@ final class KittyImageStore {
     // ------------------------------------------------------------------ animation frames
 
     private long totalFrameBytes;
-    private long pendingFrameBytes;
 
     /** Frame count including the root frame, so protocol frame numbers are 1..frameCount. */
     static int frameCount(Entry entry) {
@@ -439,19 +437,17 @@ final class KittyImageStore {
         return folded.byteCount;
     }
 
-    /** Charge an accepted frame against the quota until its decode commits or fails. */
-    void reserveFrameBytes(Entry entry, int byteCount) {
-        pendingFrameBytes += byteCount;
+    /** Count an accepted frame against the per-image frame count until its decode commits or fails. */
+    void reserveFrame(Entry entry) {
         entry.pendingFrames++;
     }
 
     /**
-     * Release an accepted frame's charge. Every path out of a frame transmission — commit, decode
-     * failure, a vanished or replaced image — must release exactly once, or the quota bleeds away
-     * a frame at a time. The floors keep an intervening {@link #clear} from driving it negative.
+     * Release an accepted frame's count. Every path out of a frame transmission — commit, decode
+     * failure, a vanished or replaced image — must release exactly once, or the count bleeds away
+     * a frame at a time. The floor keeps an intervening {@link #clear} from driving it negative.
      */
-    void releaseFrameBytes(Entry entry, int byteCount) {
-        pendingFrameBytes = Math.max(0, pendingFrameBytes - byteCount);
+    void releaseFrame(Entry entry) {
         entry.pendingFrames = Math.max(0, entry.pendingFrames - 1);
     }
 
@@ -658,9 +654,5 @@ final class KittyImageStore {
 
     long totalFrameBytes() {
         return totalFrameBytes;
-    }
-
-    long pendingFrameBytes() {
-        return pendingFrameBytes;
     }
 }

@@ -2,7 +2,6 @@ package com.termux.app.chrome;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -11,8 +10,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-
-import java.io.File;
 
 /**
  * The accessory chrome: the glass, blur, frost and backdrop treatment shared by the dock, the
@@ -31,8 +28,12 @@ import java.io.File;
  */
 public final class ChromeRenderer {
 
-    /** The Activity-side slots and lookups the chrome renders into. */
-    public interface Surfaces {
+    /**
+     * The Activity-side slots and lookups the chrome renders into. It is also the blur cache's
+     * {@link WallpaperBlurCache.Source}: the wallpaper the frames are captured from is the same
+     * wallpaper the rest of the chrome reads.
+     */
+    public interface Surfaces extends WallpaperBlurCache.Source {
 
         @NonNull Context context();
 
@@ -40,9 +41,6 @@ public final class ChromeRenderer {
         @Nullable View findChromeView(int viewId);
 
         @Nullable TermuxAppSharedPreferences preferences();
-
-        /** The current configuration orientation. */
-        int orientation();
 
         float dpToPx(float dp);
 
@@ -60,23 +58,14 @@ public final class ChromeRenderer {
         /** Corner radius baked into the status bar's containing stroke, 0 when it has none. */
         float statusBarRimCornerRadiusPx();
 
-        // ---- the wallpaper the blurred frames are captured from
+        // ---- the wallpaper the blurred frames are captured from: WallpaperBlurCache.Source
 
-        @NonNull Rect wallpaperFrameRect();
-
-        boolean useManagedWallpaperSource();
-
-        int systemWallpaperId();
-
-        @NonNull File managedWallpaperExactFile();
-
-        @Nullable Bitmap captureWallpaperFrame(@NonNull Rect frameRect, @NonNull View wallpaperFrame);
-
-        /** True while a view still draws this exact frame, so it must not be recycled. */
-        boolean isWallpaperBlurFrameInUse(@Nullable Bitmap frame);
-
-        /** Chrome state outside this module that shadows the blur cache. */
-        void onWallpaperBlurCacheCleared();
+        /** Blurs a captured frame with the shared renderer; a fake overrides this to skip the blur. */
+        @Nullable
+        @Override
+        default Bitmap preBlur(@NonNull Bitmap sourceBitmap, int blurRadiusDp) {
+            return WallpaperBlurRenderer.preBlur(context(), sourceBitmap, blurRadiusDp);
+        }
 
         // ---- chrome state
 
@@ -111,11 +100,15 @@ public final class ChromeRenderer {
 
     /** Coalesced accessory re-render: one build+apply plus the FX invariants, next main-loop pass. */
     public static final int SCOPE_ACCESSORY_RENDER = 1;
+    /** Invalidates the dock/unified accessory crop alone: its geometry moved under a settled plane. */
+    public static final int SCOPE_DOCK_BACKDROP = 1 << 1;
+    /** Invalidates the under-pill nav strip's crop alone: the strip was rebuilt or re-laid out. */
+    public static final int SCOPE_NAV_STRIP_BACKDROP = 1 << 7;
     /**
      * Invalidates the dock/unified accessory crop and the under-pill nav strip's crop — what the
      * old reason-keyword path ({@code "wallpaper"}, {@code "style"}, {@code "blur"}) marked dirty.
      */
-    public static final int SCOPE_BACKDROPS = 1 << 1;
+    public static final int SCOPE_BACKDROPS = SCOPE_DOCK_BACKDROP | SCOPE_NAV_STRIP_BACKDROP;
     /** Invalidates the keyboard-local crop as well; only the paths that touched all three pass it. */
     public static final int SCOPE_KEYBOARD_BACKDROP = 1 << 2;
     /** Throws away the shared pre-blurred wallpaper frames — the most expensive thing to request. */
@@ -180,58 +173,8 @@ public final class ChromeRenderer {
             }
             requestSync(SCOPE_BACKDROPS | SCOPE_ACCESSORY_RENDER);
         };
-        mBlurCache = new WallpaperBlurCache(new WallpaperBlurCache.Source() {
-            @NonNull
-            @Override
-            public Rect wallpaperFrameRect() {
-                return surfaces.wallpaperFrameRect();
-            }
-
-            @Override
-            public boolean useManagedWallpaperSource() {
-                return surfaces.useManagedWallpaperSource();
-            }
-
-            @Override
-            public int systemWallpaperId() {
-                return surfaces.systemWallpaperId();
-            }
-
-            @NonNull
-            @Override
-            public File managedWallpaperExactFile() {
-                return surfaces.managedWallpaperExactFile();
-            }
-
-            @Override
-            public int orientation() {
-                return surfaces.orientation();
-            }
-
-            @Nullable
-            @Override
-            public Bitmap captureWallpaperFrame(@NonNull Rect frameRect, @NonNull View wallpaperFrame) {
-                return surfaces.captureWallpaperFrame(frameRect, wallpaperFrame);
-            }
-
-            @Nullable
-            @Override
-            public Bitmap preBlur(@NonNull Bitmap sourceBitmap, int blurRadiusDp) {
-                return WallpaperBlurRenderer.preBlur(surfaces.context(), sourceBitmap, blurRadiusDp);
-            }
-
-            @Override
-            public boolean isFrameInUse(@Nullable Bitmap frame) {
-                return surfaces.isWallpaperBlurFrameInUse(frame);
-            }
-
-            @Override
-            public void onCacheCleared() {
-                // Every frost crop was cut from a frame that no longer exists.
-                mLedger.markFrostDirty();
-                surfaces.onWallpaperBlurCacheCleared();
-            }
-        });
+        // Every frost crop was cut from a frame that a clear destroys.
+        mBlurCache = new WallpaperBlurCache(surfaces, mLedger::markFrostDirty);
         mGlass = new GlassSurfaceFactory(surfaces);
         mFrost = new WallpaperFrostPainter(surfaces, mBlurCache, mLedger);
     }
@@ -255,8 +198,10 @@ public final class ChromeRenderer {
         if ((scopes & SCOPE_WALLPAPER_BLUR_CACHE) != 0) {
             mBlurCache.clear();
         }
-        if ((scopes & SCOPE_BACKDROPS) != 0) {
+        if ((scopes & SCOPE_DOCK_BACKDROP) != 0) {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+        }
+        if ((scopes & SCOPE_NAV_STRIP_BACKDROP) != 0) {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
         }
         if ((scopes & SCOPE_KEYBOARD_BACKDROP) != 0) {
@@ -339,6 +284,10 @@ public final class ChromeRenderer {
 
     // ------------------------------------------------------------- collaborators
 
+    /**
+     * The per-surface "what is painted where" bookkeeping. For the render pass that installs and
+     * checks crops; a caller that only wants to say a crop went stale uses {@link #requestSync}.
+     */
     @NonNull
     public SurfaceDirtyLedger ledger() {
         return mLedger;

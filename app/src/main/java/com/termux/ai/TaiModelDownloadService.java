@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -20,6 +21,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.Set;
@@ -147,7 +149,7 @@ public final class TaiModelDownloadService extends Service {
         String status = transfer.optString("status", TaiModelStore.STATE_DOWNLOADING);
         long bytesRead = transfer.optLong("bytesRead", 0L);
         long totalBytes = transfer.optLong("totalBytes", 0L);
-        long now = android.os.SystemClock.elapsedRealtime();
+        long now = SystemClock.elapsedRealtime();
         boolean terminal = TaiModelStore.STATE_INSTALLED.equals(status)
             || TaiModelStore.STATE_FAILED.equals(status)
             || TaiModelStore.STATE_CANCELLED.equals(status);
@@ -233,7 +235,7 @@ public final class TaiModelDownloadService extends Service {
 
     private String formatPercent(long value, long total) {
         if (total <= 0) return "";
-        return String.format(java.util.Locale.US, "%.1f%%", (double) value * 100.0 / (double) total);
+        return String.format(Locale.US, "%.1f%%", (double) value * 100.0 / (double) total);
     }
 
     private String formatBytes(long bytes) {
@@ -245,6 +247,6 @@ public final class TaiModelDownloadService extends Service {
             value /= 1024.0;
             unit++;
         }
-        return String.format(java.util.Locale.US, unit == 0 ? "%.0f %s" : "%.1f %s", value, units[unit]);
+        return String.format(Locale.US, unit == 0 ? "%.0f %s" : "%.1f %s", value, units[unit]);
     }
 }

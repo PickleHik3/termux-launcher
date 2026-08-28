@@ -2,8 +2,6 @@ package com.termux.app.terminal.rename;
 
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -14,7 +12,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.terminal.TerminalNamePolicy;
-import com.termux.app.terminal.TerminalRenameTarget;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 /**
@@ -77,9 +74,6 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
 
         /** Refresh whatever surfaces show the name after a rename ends. */
         void onRenameEnded(@NonNull TerminalRenameTarget target, boolean committed);
-
-        /** Facts a suggesting backend needs about the target; null when they cannot be gathered. */
-        @Nullable TerminalRenameContext renameContext(@NonNull TerminalRenameTarget target);
     }
 
     private static final long ENTER_DURATION_MS = 180L;
@@ -89,24 +83,11 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
 
     @NonNull private final Host host;
     @NonNull private final InlineRenameController controller = new InlineRenameController();
-    @NonNull private final Handler mainHandler = new Handler(Looper.getMainLooper());
     @Nullable private TerminalRenameChipView chip;
     @Nullable private TerminalRenameTarget target;
-    @Nullable private TerminalRenameSuggestionProvider suggestionProvider;
-    /** Guards a late suggestion callback from landing in a later rename. */
-    private int suggestionGeneration;
 
     public TerminalRenameCoordinator(@NonNull Host host) {
         this.host = host;
-    }
-
-    /** Installs the backend that proposes names, or clears it with null. */
-    public void setSuggestionProvider(@Nullable TerminalRenameSuggestionProvider provider) {
-        suggestionProvider = provider;
-    }
-
-    public boolean hasSuggestionProvider() {
-        return suggestionProvider != null;
     }
 
     public boolean isActive() {
@@ -133,7 +114,6 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
             return true;
         }
         this.target = target;
-        suggestionGeneration++;
         TerminalRenameChipView view = obtainChip(container);
         int[] colors = host.chipColors();
         view.setColors(colors.length > 0 ? colors[0] : 0xFFFFFFFF,
@@ -204,40 +184,6 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
         positionChip(container, view, current);
     }
 
-    /**
-     * Asks the installed provider to propose a name for the rename in progress, and drops the
-     * proposal into the draft. No-op without a provider, so callers need not check first.
-     *
-     * @return true when a request was made.
-     */
-    public boolean requestSuggestion() {
-        TerminalRenameSuggestionProvider provider = suggestionProvider;
-        TerminalRenameTarget current = target;
-        if (provider == null || current == null || !controller.isActive()) return false;
-        TerminalRenameContext context = host.renameContext(current);
-        if (context == null) return false;
-        final int generation = suggestionGeneration;
-        provider.suggest(context, name -> mainHandler.post(() -> {
-            if (name == null || generation != suggestionGeneration || !controller.isActive()) return;
-            controller.setDraft(TerminalNamePolicy.normalize(name, context.maxCodePoints));
-            redraw();
-        }));
-        return true;
-    }
-
-    /**
-     * Applies a name to a target with no editor at all — the path a suggesting backend uses when it
-     * is naming things on its own rather than filling in a chip.
-     */
-    public boolean applyDirectly(@NonNull TerminalRenameTarget target, @Nullable String name) {
-        return host.applyName(target, name);
-    }
-
-    @Nullable
-    public TerminalRenameContext contextFor(@NonNull TerminalRenameTarget target) {
-        return host.renameContext(target);
-    }
-
     // ------------------------------------------------------------------ InlineRenameController.Host
 
     @Override
@@ -253,7 +199,6 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
     public void onRenameEnded(boolean committed, @Nullable String committedName) {
         TerminalRenameTarget ended = target;
         target = null;
-        suggestionGeneration++;
         host.installRenameInterceptor(null);
         hideChip();
         if (ended == null) return;

@@ -264,25 +264,25 @@ public class KittyImageStoreTest extends TestCase {
         store.reserve(1, 0, 8, 8, 256);
         KittyImageStore.Entry entry = store.get(1);
         int half = (int) (KittyImageStore.MAX_FRAME_BYTES / 2);
-        store.reserveFrameBytes(entry, half);
-        store.reserveFrameBytes(entry, half);
-        store.reserveFrameBytes(entry, half);
-        assertEquals(3L * half, store.pendingFrameBytes());
+        store.reserveFrame(entry);
+        store.reserveFrame(entry);
+        store.reserveFrame(entry);
+        assertEquals(3, entry.pendingFrames);
         assertEquals("nothing has committed yet", 0, store.totalFrameBytes());
         assertFalse("a queued frame holds its payload, not its pixels",
             store.wouldExceedFrameBytes(half));
 
         // The commits settle it, and the third one no longer fits.
-        store.releaseFrameBytes(entry, half);
+        store.releaseFrame(entry);
         store.addFrame(entry, null, half, 40);
-        store.releaseFrameBytes(entry, half);
+        store.releaseFrame(entry);
         store.addFrame(entry, null, half, 40);
         assertEquals(2L * half, store.totalFrameBytes());
         assertTrue(store.wouldExceedFrameBytes(1));
 
         // A failure releases without committing, so the count comes back.
-        store.releaseFrameBytes(entry, half);
-        assertEquals(0, store.pendingFrameBytes());
+        store.releaseFrame(entry);
+        assertEquals(0, entry.pendingFrames);
     }
 
     public void testFoldingWalksTheAnimationInsteadOfEatingItsFront() {
@@ -355,9 +355,9 @@ public class KittyImageStoreTest extends TestCase {
         KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
         store.reserve(1, 0, 2, 2, 16);
         KittyImageStore.Entry entry = store.get(1);
-        for (int i = 0; i < KittyImageStore.MAX_FRAMES_PER_IMAGE; i++) store.reserveFrameBytes(entry, 16);
+        for (int i = 0; i < KittyImageStore.MAX_FRAMES_PER_IMAGE; i++) store.reserveFrame(entry);
         assertTrue("frames in flight fill the count too", store.wouldExceedFrameLimits(entry, 16));
-        store.releaseFrameBytes(entry, 16);
+        store.releaseFrame(entry);
         assertFalse(store.wouldExceedFrameLimits(entry, 16));
     }
 
@@ -365,11 +365,11 @@ public class KittyImageStoreTest extends TestCase {
         KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
         store.reserve(1, 0, 8, 8, 256);
         KittyImageStore.Entry entry = store.get(1);
-        store.reserveFrameBytes(entry, 4096);
+        store.reserveFrame(entry);
         store.clear();
         // The decode that was in flight during the clear still lands and releases.
-        store.releaseFrameBytes(entry, 4096);
-        assertEquals(0, store.pendingFrameBytes());
+        store.releaseFrame(entry);
+        assertEquals(0, entry.pendingFrames);
         store.reserve(2, 0, 8, 8, 256);
         assertFalse("a cleared store starts from a clean quota",
             store.wouldExceedFrameLimits(store.get(2), (int) KittyImageStore.MAX_FRAME_BYTES));
