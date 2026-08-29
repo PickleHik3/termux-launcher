@@ -14,6 +14,8 @@ import android.view.WindowManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.R;
+import com.termux.app.notice.AppNotice;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.view.KeyboardUtils;
@@ -21,6 +23,9 @@ import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,12 +42,9 @@ public final class TermuxInAppKeyboard {
         "com.termux.app.terminal.inappkeyboard.VISIBLE";
     private static final String STATE_SELECTED_LAYOUT =
         "com.termux.app.terminal.inappkeyboard.SELECTED_LAYOUT";
-    static final String LAYOUT_MAIN = "main";
+    static final String LAYOUT_MAIN = LauncherKeyboardLayouts.LAYOUT_MAIN;
     static final String LAYOUT_NUMERIC = "numeric";
     static final String LAYOUT_GREEK_MATH = "greekmath";
-    private static final String[] LAYOUT_IDS = {
-        LAYOUT_MAIN, LAYOUT_NUMERIC, LAYOUT_GREEK_MATH
-    };
 
     public enum ShowReason {
         FIRST_ENABLE,
@@ -73,6 +75,8 @@ public final class TermuxInAppKeyboard {
     private KeyboardData mMainKeyboardData;
     private KeyboardData mNumericKeyboardData;
     private KeyboardData mGreekMathKeyboardData;
+    /** Parsed bundled text layouts, keyed by catalogue id. Dropped whenever extra keys move. */
+    private final Map<String, KeyboardData> mTextLayoutCache = new HashMap<>();
     private View.OnFocusChangeListener mSystemImeFocusListener;
     private TerminalKeyEventHandler.KeyValueInterceptor mKeyValueInterceptor;
 
@@ -89,6 +93,12 @@ public final class TermuxInAppKeyboard {
     private float mPreAdjustKeyMarginScale = 1f;
     private float mPreAdjustKeyCornerRadiusDp = -1f;
     private String mSelectedLayoutId = LAYOUT_MAIN;
+    /** The hot-swap ring, in cycle order. Never empty; {@code [main]} until preferences load. */
+    @NonNull
+    private List<String> mLayoutRing = java.util.Collections.singletonList(LAYOUT_MAIN);
+    /** Where the ring stands. A modal pad can be on screen over it without moving it. */
+    @NonNull
+    private String mActiveTextLayoutId = LAYOUT_MAIN;
     private String mAppliedConfigSignature;
     /**
      * Material source-role signature the currently rendered palette was built from. Only ever
@@ -158,9 +168,11 @@ public final class TermuxInAppKeyboard {
         mKeyMarginScale = mPreferences.getInAppKeyboardKeyMarginScale();
         mKeyCornerRadiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
         mKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
+        reloadLayoutRing(false);
+        mSelectedLayoutId = mActiveTextLayoutId;
         if (state != null) {
             mSelectedLayoutId = normalizeLayoutId(
-                state.getString(STATE_SELECTED_LAYOUT, LAYOUT_MAIN));
+                state.getString(STATE_SELECTED_LAYOUT, mActiveTextLayoutId));
             if (mEnabled && state.containsKey(STATE_VISIBLE))
                 mVisible = state.getBoolean(STATE_VISIBLE);
             else if (mEnabled)
@@ -219,6 +231,7 @@ public final class TermuxInAppKeyboard {
         mMainKeyboardData = null;
         mNumericKeyboardData = null;
         mGreekMathKeyboardData = null;
+        mTextLayoutCache.clear();
         mSystemImeFocusListener = null;
         mAttachedSession = null;
         mLayoutLoader = null;
@@ -274,6 +287,10 @@ public final class TermuxInAppKeyboard {
             mEnabled = true;
             mVisible = true;
             mLastShowReason = ShowReason.FIRST_ENABLE;
+            // The ring may have been edited while the keyboard was off; render the layout it
+            // ends on rather than the one this instance was created with.
+            reloadLayoutRing(false);
+            mSelectedLayoutId = mActiveTextLayoutId;
             suppressSystemIme();
             showInternal();
         } else if (enabled) {
@@ -283,6 +300,7 @@ public final class TermuxInAppKeyboard {
                 onExtraKeysChanged();
             }
             refreshPalette();
+            reloadLayoutRing(true);
             if (!mHeightAdjusting) {
                 applyHeightScale(mPreferences.getInAppKeyboardHeightScale());
                 applyKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
@@ -540,9 +558,9 @@ public final class TermuxInAppKeyboard {
         return mKeyboardView.getEffectiveKeyCornerRadiusPx() / Math.max(0.0001f, density);
     }
 
-    /** Switches to the custom/default text layout without recreating the renderer. */
+    /** Returns from a modal pad to the text layout the ring is on. */
     public void requestTextLayout() {
-        selectLayout(LAYOUT_MAIN);
+        selectLayout(mActiveTextLayoutId);
     }
 
     public void requestNumericLayout() {
@@ -553,12 +571,77 @@ public final class TermuxInAppKeyboard {
         selectLayout(LAYOUT_GREEK_MATH);
     }
 
+    /**
+     * The next text layout in the user's ring. Upstream's {@code switch_forward} key means this,
+     * and so does the {@code keyboard.cycle_layout} action.
+     */
     public void requestForwardLayout() {
-        selectRelativeLayout(1);
+        cycleTextLayout(1);
     }
 
     public void requestBackwardLayout() {
-        selectRelativeLayout(-1);
+        cycleTextLayout(-1);
+    }
+
+    /** The ring in cycle order, for the palette's per-layout rows and the Settings picker. */
+    @NonNull
+    public List<String> getLayoutRing() {
+        return mLayoutRing;
+    }
+
+    /** The text layout the ring is on, even while a modal pad is the one on screen. */
+    @NonNull
+    public String getActiveTextLayoutId() {
+        return mActiveTextLayoutId;
+    }
+
+    /**
+     * Steps the ring and swaps the keyboard under the user's thumbs, announcing where it landed.
+     *
+     * <p>A ring of one is the unconfigured default, and a key bound to cycling would otherwise
+     * look broken on it, so that case says where to add layouts instead of doing nothing.
+     *
+     * @return whether the layout actually changed
+     */
+    public boolean cycleTextLayout(int delta) {
+        if (!mEnabled || mDestroyed)
+            return false;
+        if (mLayoutRing.size() < 2) {
+            AppNotice.show(requireContainer().getContext(),
+                requireContainer().getContext().getString(R.string.keyboard_layout_ring_single),
+                false);
+            return false;
+        }
+        String next = LauncherKeyboardLayouts.cycle(mLayoutRing, mActiveTextLayoutId, delta);
+        boolean moved = !next.equals(mActiveTextLayoutId);
+        selectTextLayout(next, true);
+        return moved;
+    }
+
+    /**
+     * Moves the ring onto {@code layoutId} and renders it. Any catalogued layout is accepted,
+     * not just a ring member: a binding or a palette row may name a layout the ring does not
+     * carry, and refusing it would be a dead key with no way to see why.
+     *
+     * @return false when nothing in the catalogue answers to that id, so a caller can say so
+     */
+    public boolean selectTextLayout(@NonNull String layoutId, boolean announce) {
+        if (!mEnabled || mDestroyed)
+            return false;
+        if (!LAYOUT_MAIN.equals(layoutId) && LauncherKeyboardLayouts.find(
+                requireContainer().getResources(), layoutId) == null)
+            return false;
+        boolean moved = !layoutId.equals(mActiveTextLayoutId)
+            || !layoutId.equals(mSelectedLayoutId);
+        mActiveTextLayoutId = layoutId;
+        mPreferences.setInAppKeyboardActiveLayout(layoutId);
+        selectLayout(layoutId);
+        if (announce && moved) {
+            AppNotice.show(requireContainer().getContext(),
+                LauncherKeyboardLayouts.labelFor(
+                    requireContainer().getResources(), layoutId), false);
+        }
+        return true;
     }
 
     /**
@@ -889,6 +972,29 @@ public final class TermuxInAppKeyboard {
         mKeyboardView.setKeyColorOverrides(scheme.resolvedOverrides());
     }
 
+    /**
+     * Re-reads the ring from preferences. When the layout in use is no longer in it — the user
+     * removed it in Settings — the ring restarts at its first entry, so the keyboard is never
+     * left on a layout its own list no longer carries.
+     *
+     * @param applyToView whether a moved ring should also swap what is on screen; false while
+     *        the keyboard is still being built, where the caller renders once at the end
+     */
+    private void reloadLayoutRing(boolean applyToView) {
+        android.content.res.Resources resources = requireContainer().getResources();
+        mLayoutRing = LauncherKeyboardLayouts.parseSelection(resources,
+            mPreferences.getInAppKeyboardLayouts());
+        String stored = mPreferences.getInAppKeyboardActiveLayout();
+        String active = mLayoutRing.contains(stored) ? stored : mLayoutRing.get(0);
+        if (active.equals(mActiveTextLayoutId))
+            return;
+        mActiveTextLayoutId = active;
+        // A modal pad keeps its place; it picks the new ring position up when it returns to text.
+        if (applyToView && !LAYOUT_NUMERIC.equals(mSelectedLayoutId)
+            && !LAYOUT_GREEK_MATH.equals(mSelectedLayoutId))
+            selectLayout(active);
+    }
+
     private void recheckLayout() {
         if (!mEnabled || mDestroyed || mLayoutLoader == null)
             return;
@@ -903,17 +1009,6 @@ public final class TermuxInAppKeyboard {
             }
             requestIntrinsicSizeGeometrySync();
         });
-    }
-
-    private void selectRelativeLayout(int delta) {
-        int selectedIndex = 0;
-        for (int i = 0; i < LAYOUT_IDS.length; i++) {
-            if (LAYOUT_IDS[i].equals(mSelectedLayoutId)) {
-                selectedIndex = i;
-                break;
-            }
-        }
-        selectLayout(LAYOUT_IDS[(selectedIndex + delta + LAYOUT_IDS.length) % LAYOUT_IDS.length]);
     }
 
     private void selectLayout(String layoutId) {
@@ -1081,13 +1176,36 @@ public final class TermuxInAppKeyboard {
                 if (mGreekMathKeyboardData == null)
                     mGreekMathKeyboardData = loadBundledLayout(juloo.keyboard2.R.xml.greekmath);
                 return mGreekMathKeyboardData;
-            default:
+            case LAYOUT_MAIN:
                 if (mMainKeyboardData == null && mLayoutLoader != null)
                     mMainKeyboardData = mLayoutLoader.getLastKnownGood();
                 if (mMainKeyboardData == null)
                     mMainKeyboardData = loadBundledLayout(juloo.keyboard2.R.xml.termux_launcher_qwerty);
                 return mMainKeyboardData;
+            default:
+                return getBundledTextLayoutData(layoutId);
         }
+    }
+
+    /**
+     * A catalogued layout, parsed once and kept. Parsing is a small bundled XML resource on the
+     * main thread — the same cost the numeric and Greek/math pads already pay when first shown —
+     * so a swap lands in the frame it was asked for instead of a frame later.
+     */
+    @Nullable
+    private KeyboardData getBundledTextLayoutData(String layoutId) {
+        KeyboardData cached = mTextLayoutCache.get(layoutId);
+        if (cached != null)
+            return cached;
+        LauncherKeyboardLayouts.Layout layout = LauncherKeyboardLayouts.find(
+            requireContainer().getResources(), layoutId);
+        if (layout == null || layout.xmlResId == 0)
+            return getLayoutData(LAYOUT_MAIN);
+        KeyboardData data = loadBundledLayout(layout.xmlResId);
+        if (data == null)
+            return getLayoutData(LAYOUT_MAIN);
+        mTextLayoutCache.put(layoutId, data);
+        return data;
     }
 
     private KeyboardData loadBundledLayout(int resourceId) {
@@ -1100,12 +1218,16 @@ public final class TermuxInAppKeyboard {
             requireContainer().getResources());
     }
 
-    private static String normalizeLayoutId(String layoutId) {
-        for (String knownId : LAYOUT_IDS) {
-            if (knownId.equals(layoutId))
-                return knownId;
-        }
-        return LAYOUT_MAIN;
+    /** Any modal pad, any catalogued text layout, or — for anything else — where the ring is. */
+    @NonNull
+    private String normalizeLayoutId(@Nullable String layoutId) {
+        if (LAYOUT_NUMERIC.equals(layoutId) || LAYOUT_GREEK_MATH.equals(layoutId)
+            || LAYOUT_MAIN.equals(layoutId))
+            return layoutId;
+        if (layoutId != null && LauncherKeyboardLayouts.find(
+                requireContainer().getResources(), layoutId) != null)
+            return layoutId;
+        return mActiveTextLayoutId;
     }
 
     private void resetInputPipeline() {

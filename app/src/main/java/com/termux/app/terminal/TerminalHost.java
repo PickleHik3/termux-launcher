@@ -110,6 +110,21 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     void setSoftKeyboardVisibility(@NonNull Runnable showSoftKeyboardRunnable, @Nullable View view,
                                    boolean visible);
 
+    /** Whether the launcher's embedded keyboard — not the system IME — is the input method. */
+    boolean isInAppKeyboardEnabled();
+
+    /**
+     * Steps the in-app keyboard's layout ring, answering whether it actually moved. A ring of
+     * one says so on screen rather than moving.
+     */
+    boolean cycleInAppKeyboardLayout(int delta);
+
+    /** Switches the in-app keyboard to a catalogued layout; false when no such layout exists. */
+    boolean selectInAppKeyboardLayout(@NonNull String layoutId);
+
+    /** The layout id the ring stands on, or {@code main} while there is no keyboard. */
+    @NonNull String activeInAppKeyboardLayout();
+
     // --- Keybind hints ---
 
     boolean isKeybindHintPopupVisible();

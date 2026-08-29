@@ -220,6 +220,7 @@ public final class TerminalCommandPaletteController
         mEntries.clear();
         mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
+        mEntries.addAll(TerminalCommandPalette.buildKeyboardLayoutEntries(mActivity));
         if (mEntries.isEmpty()) {
             AppNotice.show(mActivity, R.string.palette_empty, false);
             return;

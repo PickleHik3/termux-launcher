@@ -72,6 +72,7 @@ public final class LauncherToolRegistry {
     public static final String CATEGORY_WINDOW = "window";
     public static final String CATEGORY_PANE = "pane";
     public static final String CATEGORY_TERMINAL = "terminal";
+    public static final String CATEGORY_KEYBOARD = "keyboard";
     public static final String CATEGORY_CLIPBOARD = "clipboard";
     public static final String CATEGORY_APPEARANCE = "appearance";
     public static final String CATEGORY_APP = "app";
@@ -92,6 +93,15 @@ public final class LauncherToolRegistry {
 
         /** Whether the terminal currently holds selected text. */
         boolean hasSelectedText();
+
+        /**
+         * Whether the launcher's embedded keyboard is the input method in use. Defaults to
+         * false, so a context built while nothing is attached reports the keyboard actions
+         * unavailable rather than promising a keyboard that is not on screen.
+         */
+        default boolean isInAppKeyboardEnabled() {
+            return false;
+        }
     }
 
     /** Whether an action can run right now, and why not when it cannot. */
@@ -389,6 +399,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_SESSION_PREVIOUS = "session.previous";
     public static final String TOOL_SESSION_CLOSE_CURRENT = "session.close_current";
     public static final String TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD = "terminal.toggle_soft_keyboard";
+    public static final String TOOL_KEYBOARD_CYCLE_LAYOUT = "keyboard.cycle_layout";
+    public static final String TOOL_KEYBOARD_SELECT_LAYOUT = "keyboard.select_layout";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -678,6 +690,25 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_toggle_soft_keyboard, R.string.tool_desc_terminal_toggle_soft_keyboard,
             Binding.all("ctrl+alt+k"), REQUIRES_SESSION);
+        // Layout hot-swap. Unbound by default on purpose: cycling is only useful once the user
+        // has put a second layout in the ring, and a default chord would spend one of the few
+        // free Ctrl+Alt letters on an action most installs never reach for.
+        addUi(map, TOOL_KEYBOARD_CYCLE_LAYOUT,
+            "Move the in-app keyboard to the next layout in the user's cycle.",
+            schemaObject()
+                .withEnum("direction", new String[]{"forward", "backward"}, false, "forward")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_cycle_layout,
+            R.string.tool_desc_keyboard_cycle_layout, null, REQUIRES_IN_APP_KEYBOARD);
+        addUi(map, TOOL_KEYBOARD_SELECT_LAYOUT,
+            "Switch the in-app keyboard to a layout by catalogue id, e.g. latn_dvorak.",
+            schemaObject()
+                .withString("layout", "Layout id, or 'main' for the launcher's own layout", true)
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_select_layout,
+            R.string.tool_desc_keyboard_select_layout, null, REQUIRES_IN_APP_KEYBOARD);
         addUi(map, TOOL_TERMINAL_TOGGLE_TOOLBAR,
             "Show or hide the dock.",
             schemaEmpty(),
@@ -1141,6 +1172,11 @@ public final class LauncherToolRegistry {
             : Availability.unavailable(R.string.palette_unavailable_no_selection);
 
     /** Actions that act on the focused shell. */
+    private static final AvailabilityPredicate REQUIRES_IN_APP_KEYBOARD = context ->
+        context.isInAppKeyboardEnabled()
+            ? Availability.available()
+            : Availability.unavailable(R.string.palette_unavailable_no_in_app_keyboard);
+
     private static final AvailabilityPredicate REQUIRES_SESSION = context ->
         context.hasCurrentSession()
             ? Availability.available()

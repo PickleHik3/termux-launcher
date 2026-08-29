@@ -555,6 +555,38 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS = "__default__";
 
+        /**
+         * Defines the key for the comma-joined ids of the text layouts the in-app keyboard
+         * hot-swaps between, in cycle order. {@code main} is the launcher's own layout — the
+         * user's {@code ~/.termux/keyboard/layout.xml} when it exists, the bundled QWERTY
+         * otherwise — and every other id names a bundled layout resource.
+         */
+        /**
+         * Defines the key for the id of the search engine the launcher hands web queries to.
+         * {@code custom} reads its URL template from {@link #KEY_WEB_SEARCH_CUSTOM_URL}.
+         */
+        public static final String KEY_WEB_SEARCH_ENGINE = "web_search_engine";
+
+        public static final String DEFAULT_WEB_SEARCH_ENGINE = "duckduckgo";
+
+        /** A user-supplied search URL with one {@code %s} where the encoded query goes. */
+        public static final String KEY_WEB_SEARCH_CUSTOM_URL = "web_search_custom_url";
+
+        public static final String DEFAULT_WEB_SEARCH_CUSTOM_URL = "";
+
+        public static final String KEY_IN_APP_KEYBOARD_LAYOUTS = "in_app_keyboard_layouts";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_LAYOUTS = "main";
+
+        /**
+         * Defines the key for the layout the hot-swap ring is currently on, so a swap survives
+         * a process restart the way the rest of the keyboard's state does.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_ACTIVE_LAYOUT =
+            "in_app_keyboard_active_layout";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_ACTIVE_LAYOUT = "main";
+
         /** Defines the persisted height scale for the in-app keyboard. */
         public static final String KEY_IN_APP_KEYBOARD_HEIGHT_SCALE = "in_app_keyboard_height_scale";
 
