@@ -42,7 +42,7 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 - Termux as the actual Android home launcher
 - Kitty graphics support (use timg package `timg -pk foo.jpg/gif`)
 - Sixel image drawing in terminal
-- Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser
+- Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser, ** Ctrl + Alt ** is the default keybind.
 - Kitty keyboard protocol, safe hyperlinks and advanced font shaping
 - TUI-tuned touch, unlike stock Termux: drags scroll mouse-aware apps, taps click, and a brief press-and-hold turns the finger into a held mouse button — drag vim selections or resize tmux/TUI panes by touch
 - Searchable terminal command palette, tmux-style leader key, modal keymaps, and on-screen key hints
