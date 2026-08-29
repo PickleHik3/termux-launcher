@@ -12,10 +12,9 @@ replaced without warning.
 | `~/.termux/termux-launcher-bindings.conf` | yes, if absent | Key bindings, chords, modal keymaps, launching Android apps from a chord |
 | `~/.termux/fonts.conf` | yes, if absent | Terminal faces, symbol maps, fallback chain, ligatures, OpenType features, variable axes, box drawing, cell metrics |
 | `~/.termux/termux.properties` | yes, if absent | `TERM`, volume and back keys, extra keys, cursor, scrollback, margins, colours, app behaviour |
-| `~/.termux/bookmarks.txt` | yes, if absent | Bookmarks the command palette offers behind its `?` prefix |
 | `~/.termux/keyboard/layout.xml` | no — copy it yourself | In-app keyboard layout, including the space bar's swipe slots |
 
-The four seeded files arrive with every directive commented out, so a fresh
+The three seeded files arrive with every directive commented out, so a fresh
 install behaves exactly as it did before they existed. Uncomment what you want.
 They are written only when missing, so your edits survive app updates.
 
@@ -49,20 +48,6 @@ the bundled keyboard layout, so creating it should be your decision.
 
     mkdir -p ~/.termux/keyboard
     cp ~/.termux/launcher/examples/keyboard-layout.xml ~/.termux/keyboard/layout.xml
-
-## Bookmarks
-
-`bookmarks.txt` is one bookmark per line — a name, a tab (or two or more spaces),
-then the address:
-
-    github          https://github.com
-    Nix packages    https://search.nixos.org/packages
-    news.ycombinator.com
-
-Open the command palette, type `?`, and they appear alongside the pages you have
-opened from the launcher before. Only `http` and `https` addresses are kept, and
-a line the parser cannot read costs you only that line. There is nothing to
-reload: the palette re-reads the file whenever it opens.
 
 ## Applying changes
 

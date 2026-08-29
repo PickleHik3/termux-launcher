@@ -248,47 +248,6 @@ the local API now serves TAI and the separate `/v1/apps/launch` route. Workspace
 `workspace.list`, `workspace.delete`) and the parameterized pane actions (`pane.layout`,
 `pane.move_to_edge`) remain reachable from custom key bindings.
 
-### Search the web, and open pages, from the palette
-
-The palette answers web questions behind a prefix. Type `?` — or `go ` if that reads better —
-and the ledger becomes a web ledger:
-
-```text
-❯ ?nixos generations
-  WEB
-   Open search.nixos.org            (only when what you typed is an address)
-   Nix packages · search.nixos.org  (a bookmark)
-   nixos generations · duckduckgo.com   (something you searched before)
-   Search DuckDuckGo for "nixos generations"
-```
-
-An address is opened, a phrase is searched, and everything lands in your default browser — the
-launcher has no web view of its own. Anything typed without the prefix still reaches the
-launcher's own actions and your installed apps, unchanged.
-
-What the rows are drawn from:
-
-- **Bookmarks** live in `~/.termux/bookmarks.txt`: one per line, a name, a tab (or two spaces),
-  then the address. Comments start with `#`, a line that is only an address is named after its
-  host, and a broken line costs you only that line. The file is re-read whenever the palette
-  opens, so there is nothing to reload.
-- **History** is the launcher's own: Android gives no app the browser's history, so what is
-  offered back is the pages this launcher opened, ranked by how often you go to them.
-- **The search row** uses the engine in Settings ▸ Launcher ▸ Web search — DuckDuckGo by default,
-  or a custom URL template with `%s` where the query goes, which is how you point it at a
-  self-hosted SearxNG or any site's own search.
-
-Both halves are ordinary registry actions, so they bind like anything else:
-
-```text
-map --label "Nix packages" ctrl+alt+n web.open https://search.nixos.org/packages
-map ctrl+alt+shift+s web.search
-```
-
-Only `http` and `https` addresses are opened. Anything else — `intent://`, `content://`,
-`file://` — is refused rather than handed to `ACTION_VIEW`, because a palette row is not a place
-to aim an intent at the rest of the system.
-
 ## Configuration files that ship with the app
 
 The launcher installs its own configuration examples, so nothing has to be written from scratch:
@@ -298,11 +257,10 @@ The launcher installs its own configuration examples, so nothing has to be writt
 | `~/.termux/termux-launcher-bindings.conf` | On install, only when absent | Bindings, chords, modal keymaps, launching apps from a chord |
 | `~/.termux/fonts.conf` | On install, only when absent | Faces, symbol maps, shaping, features, axes, cell metrics |
 | `~/.termux/termux.properties` | On install, only when absent | `TERM`, volume and back keys, extra keys, cursor, scrollback, margins, colours, app behaviour |
-| `~/.termux/bookmarks.txt` | On install, only when absent | Bookmarks the command palette offers behind `?` |
 | `~/.termux/keyboard/layout.xml` | Never — copy it yourself | In-app keyboard layout and space-bar swipe slots |
 | `~/.termux/launcher/examples/` | Refreshed at every app start | Pristine copies of all of the above, plus a `README.md` |
 
-The four seeded files arrive with every directive commented out, so a fresh install behaves exactly
+The three seeded files arrive with every directive commented out, so a fresh install behaves exactly
 as it did before they existed — uncomment what you want. They are written only when missing, so app
 updates never overwrite your edits. To start over, copy the file back from
 `~/.termux/launcher/examples/`.

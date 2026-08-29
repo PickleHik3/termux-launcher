@@ -76,7 +76,6 @@ public final class LauncherToolRegistry {
     public static final String CATEGORY_CLIPBOARD = "clipboard";
     public static final String CATEGORY_APPEARANCE = "appearance";
     public static final String CATEGORY_APP = "app";
-    public static final String CATEGORY_WEB = "web";
     /** Installed Android apps, contributed by the palette rather than by tools. */
     public static final String CATEGORY_APPS = "apps";
 
@@ -429,8 +428,6 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
     public static final String TOOL_APP_LAUNCH = "app.launch";
-    public static final String TOOL_WEB_SEARCH = "web.search";
-    public static final String TOOL_WEB_OPEN = "web.open";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
@@ -1004,23 +1001,6 @@ public final class LauncherToolRegistry {
         // "no prompt marks" at execution time rather than being greyed out.
         // A diagnostic, so it is bound to nothing by default: an inspector that needs a chord to open
         // cannot report that chord's own events.
-        // The web actions leave the launcher for the user's own browser, which is why they are
-        // MEDIUM like app.launch rather than LOW like the in-app navigation around them.
-        addUi(map, TOOL_WEB_SEARCH,
-            "Search the web for a phrase with the user's chosen engine, in their default browser.",
-            schemaObject()
-                .withString("query", "What to search for", true)
-                .build(),
-            ToolRisk.MEDIUM, false, ToolExecutor.TERMINAL,
-            CATEGORY_WEB, R.string.tool_web_search, R.string.tool_desc_web_search, null);
-        addUi(map, TOOL_WEB_OPEN,
-            "Open a web page in the user's default browser. http and https only.",
-            schemaObject()
-                .withString("url", "The address to open, e.g. example.com/path", true)
-                .withString("title", "What to call this page in the palette later", false)
-                .build(),
-            ToolRisk.MEDIUM, false, ToolExecutor.TERMINAL,
-            CATEGORY_WEB, R.string.tool_web_open, R.string.tool_desc_web_open, null);
         addUi(map, TOOL_APP_KEY_INSPECTOR,
             "Open or close the key inspector overlay, which reports each key event and the bytes it sends.",
             schemaEmpty(),

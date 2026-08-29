@@ -26,14 +26,13 @@ public class TermuxLauncherConfigInstallerTest {
         Context context = ApplicationProvider.getApplicationContext();
         File home = home("fresh");
 
-        // Six examples plus four seeded live files.
-        assertEquals(10, TermuxLauncherConfigInstaller.install(context, home));
+        // Five examples plus three seeded live files.
+        assertEquals(8, TermuxLauncherConfigInstaller.install(context, home));
 
         File examples = new File(home, TermuxLauncherConfigInstaller.EXAMPLES_RELATIVE_PATH);
         assertTrue(new File(examples, "README.md").isFile());
         assertTrue(new File(examples, "termux-launcher-bindings.conf").isFile());
         assertTrue(new File(examples, "fonts.conf").isFile());
-        assertTrue(new File(examples, "bookmarks.txt").isFile());
         assertTrue(new File(examples, "keyboard-layout.xml").isFile());
         assertTrue(new File(examples, "termux.properties").isFile());
 
@@ -59,13 +58,12 @@ public class TermuxLauncherConfigInstallerTest {
     public void seededFilesActivateNothingAndUserEditsSurvive() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
         File home = home("edits");
-        assertEquals(10, TermuxLauncherConfigInstaller.install(context, home));
+        assertEquals(8, TermuxLauncherConfigInstaller.install(context, home));
 
         // The one directive the seed may activate: tap-to-open URLs is this fork's default for
         // fresh installs. Anything else live in a seeded file is behavior slipped in unreviewed.
         String allowedLive = "terminal-onclick-url-open = true";
-        for (String name : new String[] {"termux-launcher-bindings.conf", "fonts.conf",
-            "bookmarks.txt", "termux.properties"}) {
+        for (String name : new String[] {"termux-launcher-bindings.conf", "fonts.conf", "termux.properties"}) {
             for (String line : readFile(new File(home, name)).split("\n", -1)) {
                 assertTrue(name + " ships an active directive: " + line,
                     line.trim().isEmpty() || line.trim().startsWith("#")
@@ -106,8 +104,8 @@ public class TermuxLauncherConfigInstallerTest {
         assertTrue(secondary.getParentFile().mkdirs());
         writeFile(secondary, "terminal-cursor-style = block\n");
 
-        // Six examples plus only three of the four seeded files.
-        assertEquals(9, TermuxLauncherConfigInstaller.install(context, home));
+        // Five examples plus only two of the three seeded files.
+        assertEquals(7, TermuxLauncherConfigInstaller.install(context, home));
 
         assertFalse(new File(home, "termux.properties").exists());
         assertEquals("terminal-cursor-style = block\n", readFile(secondary));

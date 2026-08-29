@@ -221,10 +221,6 @@ public final class TerminalCommandPaletteController
         mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildKeyboardLayoutEntries(mActivity));
-        // Bookmarks are a file the user edits outside the app, so every open re-reads it — a
-        // stat when it has not moved, and a redraw only when it has.
-        com.termux.app.launcher.web.LauncherBookmarksStore.getInstance(mActivity)
-            .refreshAsync(this::onBookmarksLoaded);
         if (mEntries.isEmpty()) {
             AppNotice.show(mActivity, R.string.palette_empty, false);
             return;
@@ -554,36 +550,10 @@ public final class TerminalCommandPaletteController
         }
     }
 
-    /**
-     * The Web section, shown only behind its prefix. It replaces the ledger rather than joining
-     * it: once the query starts with {@code ?}, every row the user can mean is a web row, and
-     * mixing app rows in would only push the address they typed further down.
-     */
-    private void buildWebRows(@NonNull List<CommandPaletteView.Row> rows,
-                              @NonNull String webQuery) {
-        rows.add(CommandPaletteView.Row.category(
-            upper(TerminalCommandPalette.categoryLabel(mActivity,
-                LauncherToolRegistry.CATEGORY_WEB))));
-        mRowEntries.add(null);
-        List<CommandPaletteFilter.Entry> entries =
-            TerminalCommandPalette.buildWebEntries(mActivity, webQuery);
-        if (entries.isEmpty()) {
-            rows.add(CommandPaletteView.Row.notice(mActivity.getString(R.string.palette_web_hint)));
-            mRowEntries.add(null);
-            return;
-        }
-        for (CommandPaletteFilter.Entry entry : entries) addEntryRow(rows, entry);
-    }
-
     private void buildListRows(@NonNull List<CommandPaletteView.Row> rows) {
         // Search-first: with nothing typed the palette is only its search box and the keycap
         // strip, and it grows the ledger once there is something to narrow — or once ↓ asks for
         // the whole catalogue.
-        String webQuery = TerminalCommandPalette.webQueryFor(mQuery);
-        if (webQuery != null) {
-            buildWebRows(rows, webQuery);
-            return;
-        }
         if (!mListRevealed && mQuery.trim().isEmpty()) return;
         List<CommandPaletteFilter.Entry> ranked =
             new ArrayList<>(CommandPaletteFilter.filterAndRank(mEntries, mQuery));
@@ -641,13 +611,6 @@ public final class TerminalCommandPaletteController
         for (CommandPaletteFilter.Entry entry : mRowEntries) if (entry != null) count++;
         return mActivity.getResources().getQuantityString(R.plurals.palette_meta_results,
             count, count);
-    }
-
-    /** A bookmarks file that finished loading while the palette is open redraws it in place. */
-    private void onBookmarksLoaded() {
-        if (!mOpen || mView == null) return;
-        if (TerminalCommandPalette.webQueryFor(mQuery) == null) return;
-        rebuildRows();
     }
 
     private void clampFocus() {

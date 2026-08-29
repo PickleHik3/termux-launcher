@@ -356,34 +356,6 @@
     <string name="app_drawer_search_no_results_title">No apps matched</string>
     <string name="app_drawer_search_no_results_body">Try a shorter word, or search the web instead.</string>
     <string name="app_drawer_page_description">Page %1$d of %2$d</string>
-    <string name="settings_web_header">Web search</string>
-    <string name="settings_web_engine_title">Search engine</string>
-    <string name="settings_web_custom_url_title">Custom search URL</string>
-    <string name="settings_web_custom_url_summary" formatted="false">Used when the engine is Custom. Put %s where the query goes, e.g. https://searx.example/search?q=%s</string>
-    <string name="settings_web_bookmarks_title">Bookmarks</string>
-    <string name="settings_web_bookmarks_summary">Edit ~/.termux/bookmarks.txt — one per line: name, a tab, then the address. Reach them in the command palette with ?</string>
-    <string-array name="settings_web_search_engine_entries">
-        <item>DuckDuckGo</item>
-        <item>Google</item>
-        <item>Bing</item>
-        <item>Brave Search</item>
-        <item>Startpage</item>
-        <item>Ecosia</item>
-        <item>Wikipedia</item>
-        <item>YouTube</item>
-        <item>Custom</item>
-    </string-array>
-    <string-array name="settings_web_search_engine_values">
-        <item>duckduckgo</item>
-        <item>google</item>
-        <item>bing</item>
-        <item>brave</item>
-        <item>startpage</item>
-        <item>ecosia</item>
-        <item>wikipedia</item>
-        <item>youtube</item>
-        <item>custom</item>
-    </string-array>
     <string name="settings_launcher_search_header">Search</string>
     <string name="settings_app_search_prefix_title">App search prefix</string>
     <string name="settings_app_search_prefix_summary">Type this character in the terminal to start app search.</string>
@@ -1260,14 +1232,6 @@
     <string name="palette_category_apps">Apps</string>
     <string name="palette_category_sessions">Sessions</string>
     <string name="palette_category_keyboard">Keyboard</string>
-    <string name="palette_category_web">Web</string>
-    <string name="palette_web_open_row">Open %1$s</string>
-    <string name="palette_web_open_subtitle">Opens in your default browser</string>
-    <string name="palette_web_bookmark_subtitle">Bookmark · %1$s</string>
-    <string name="palette_web_history_subtitle">Visited before · %1$s</string>
-    <string name="palette_web_search_row">Search %1$s for “%2$s”</string>
-    <string name="palette_web_search_subtitle">Opens in your default browser</string>
-    <string name="palette_web_hint">Type an address to open it, or words to search. Bookmarks live in ~/.termux/bookmarks.txt</string>
     <string name="palette_keyboard_layout_active">Current layout</string>
     <string name="palette_keyboard_layout_row">Layout: %1$s</string>
     <string name="palette_app_row_subtitle">%1$s · hold to bind a key</string>
@@ -1321,8 +1285,6 @@
     <string name="tool_session_clone_current">Clone session with CWD</string>
     <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
     <string name="tool_keyboard_cycle_layout">Cycle keyboard layout</string>
-    <string name="tool_web_search">Search the web</string>
-    <string name="tool_web_open">Open a web page</string>
     <string name="tool_keyboard_select_layout">Switch keyboard layout</string>
     <string name="tool_terminal_toggle_toolbar">Toggle dock</string>
     <string name="tool_terminal_font_size_increase">Increase font size</string>
@@ -1400,8 +1362,6 @@
     <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
     <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
     <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
-    <string name="tool_desc_web_search">Search with your chosen engine in your default browser. In the palette, type ? followed by what you are looking for.</string>
-    <string name="tool_desc_web_open">Open an address in your default browser. In the palette, type ? followed by the address.</string>
     <string name="tool_desc_keyboard_cycle_layout">Move to the next layout in the in-app keyboard\'s cycle.</string>
     <string name="tool_desc_keyboard_select_layout">Switch the in-app keyboard to a named layout.</string>
     <string name="tool_desc_terminal_toggle_toolbar">Show or hide the dock.</string>

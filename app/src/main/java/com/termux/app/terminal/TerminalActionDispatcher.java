@@ -116,8 +116,6 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
     public static final String TOOL_APP_LAUNCH = "app.launch";
-    public static final String TOOL_WEB_SEARCH = "web.search";
-    public static final String TOOL_WEB_OPEN = "web.open";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
@@ -232,8 +230,6 @@ public final class TerminalActionDispatcher {
             case TOOL_APP_OPEN_SETTINGS:
             case TOOL_APP_OPEN_LOOK_AND_FEEL:
             case TOOL_APP_OPEN_APPS_BAR:
-            case TOOL_WEB_SEARCH:
-            case TOOL_WEB_OPEN:
             case TOOL_APP_COMMAND_PALETTE:
             case TOOL_APP_LAUNCH:
             case TOOL_APP_KEY_INSPECTOR:
@@ -673,28 +669,6 @@ public final class TerminalActionDispatcher {
                     LauncherUsageStatsStore.getInstance(host.context())
                         .recordLaunch(app.appRef.stableId());
                     return ok().put("package", app.appRef.packageName).put("label", app.label);
-                }
-                case TOOL_WEB_SEARCH: {
-                    String query = arguments.optString("query", "").trim();
-                    if (query.isEmpty()) return error(400, "bad_request", "Missing 'query'");
-                    String opened = com.termux.app.launcher.web.LauncherWebOpener.search(
-                        host.context(), query);
-                    if (opened == null)
-                        return error(500, "execution_failed", "No browser could take the search");
-                    return ok().put("url", opened);
-                }
-                case TOOL_WEB_OPEN: {
-                    String url = arguments.optString("url", "").trim();
-                    if (url.isEmpty()) return error(400, "bad_request", "Missing 'url'");
-                    String normalized =
-                        com.termux.app.launcher.web.LauncherWebLinks.normalizeUrl(url);
-                    if (normalized == null)
-                        return error(400, "bad_request", "Not an http or https address: " + url);
-                    String title = arguments.optString("title", "").trim();
-                    if (!com.termux.app.launcher.web.LauncherWebOpener.open(host.context(),
-                            normalized, title.isEmpty() ? null : title))
-                        return error(500, "execution_failed", "No browser could open the page");
-                    return ok().put("url", normalized);
                 }
                 case TOOL_APP_KEY_INSPECTOR:
                     return ok().put("keyInspectorOpen", host.toggleKeyInspector());

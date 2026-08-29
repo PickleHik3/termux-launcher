@@ -62,8 +62,8 @@ public class LauncherToolRegistryTest {
         // session.rename when the rename vocabulary was straightened out, then by extrakeys.edit,
         // the row editor's in-terminal entry, then by terminal.select_at_cursor and
         // terminal.select_all, which gave selection an entry point outside a long-press, and
-        // finally by the keyboard layout pair and the two web actions.
-        assertEquals(69, registry.getUiTools().size());
+        // finally by the keyboard layout pair.
+        assertEquals(67, registry.getUiTools().size());
     }
 
     @Test
@@ -466,7 +466,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void terminalActions_groupByCategory() {
         java.util.Map<String, List<LauncherToolRegistry.ToolMetadata>> grouped = registry.getUiToolsByCategory();
-        assertEquals(10, grouped.size());
+        assertEquals(9, grouped.size());
         // Exact per-group counts churn with every added action; assert the
         // invariant instead: every grouped tool is a UI tool and vice versa.
         int total = 0;

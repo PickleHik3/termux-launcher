@@ -9,10 +9,6 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
-import com.termux.app.launcher.web.LauncherBookmarksStore;
-import com.termux.app.launcher.web.LauncherWebLinks;
-import com.termux.app.launcher.web.LauncherWebOpener;
-import com.termux.app.launcher.web.LauncherWebVisitStats;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -24,11 +20,8 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Row sources for the command palette, and its entry point.
@@ -221,123 +214,6 @@ public final class TerminalCommandPalette {
             null);
     }
 
-    /** Rows shown per section of the web mode, so one prefix cannot flood the ledger. */
-    private static final int WEB_BOOKMARK_ROWS = 6;
-    private static final int WEB_HISTORY_ROWS = 6;
-
-    /**
-     * The text the user typed after a web prefix, or null when this is an ordinary query.
-     *
-     * <p>Two prefixes, both forgiving: {@code ?} is the fast one under the thumb, {@code go }
-     * is the one people guess. Web rows are prefix-triggered rather than always present because
-     * the palette's first job is the launcher's own actions, and a "search the web" row on
-     * every query would sit in front of them for nothing.
-     */
-    @Nullable
-    static String webQueryFor(@NonNull String rawQuery) {
-        String query = rawQuery;
-        if (query.startsWith("?")) return query.substring(1).trim();
-        String lower = query.toLowerCase(Locale.US);
-        if (lower.startsWith("go ")) return query.substring(3).trim();
-        return null;
-    }
-
-    /**
-     * The Web section for {@code query}: the address it names, the bookmarks and previously
-     * visited pages it matches, and a search with the user's engine as the last resort.
-     *
-     * <p>Order is deliberate. What the user typed is treated as an address first, because an
-     * address typed in full is unambiguous; a bookmark beats history because the user named it
-     * themselves; searching comes last because it is the one row that is always available and
-     * so the one that must never displace a better answer.
-     */
-    @NonNull
-    static List<CommandPaletteFilter.Entry> buildWebEntries(@NonNull TermuxActivity activity,
-                                                            @NonNull String query) {
-        List<CommandPaletteFilter.Entry> entries = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-
-        String direct = LauncherWebLinks.normalizeUrl(query);
-        if (direct != null) {
-            entries.add(webOpenEntry(activity,
-                activity.getString(R.string.palette_web_open_row, LauncherWebLinks.labelFor(direct)),
-                activity.getString(R.string.palette_web_open_subtitle), direct, null));
-            seen.add(direct);
-        }
-
-        String needle = query.toLowerCase(Locale.US);
-        int bookmarks = 0;
-        for (LauncherBookmarksStore.Bookmark bookmark
-            : LauncherBookmarksStore.getInstance(activity).snapshot()) {
-            if (bookmarks == WEB_BOOKMARK_ROWS) break;
-            if (!needle.isEmpty()
-                && !bookmark.name.toLowerCase(Locale.US).contains(needle)
-                && !bookmark.url.toLowerCase(Locale.US).contains(needle)) continue;
-            if (!seen.add(bookmark.url)) continue;
-            entries.add(webOpenEntry(activity, bookmark.name,
-                activity.getString(R.string.palette_web_bookmark_subtitle,
-                    LauncherWebLinks.labelFor(bookmark.url)),
-                bookmark.url, bookmark.name));
-            bookmarks++;
-        }
-
-        for (LauncherWebVisitStats.Visit visit
-            : LauncherWebVisitStats.getInstance(activity).rank(query, WEB_HISTORY_ROWS)) {
-            if (!seen.add(visit.url)) continue;
-            entries.add(webOpenEntry(activity, visit.title,
-                activity.getString(R.string.palette_web_history_subtitle,
-                    LauncherWebLinks.labelFor(visit.url)),
-                visit.url, visit.title));
-        }
-
-        if (!query.isEmpty()) {
-            JSONObject arguments = new JSONObject();
-            try {
-                arguments.put("query", query);
-            } catch (JSONException ignored) {
-            }
-            entries.add(new CommandPaletteFilter.Entry(
-                LauncherToolRegistry.TOOL_WEB_SEARCH,
-                activity.getString(R.string.palette_web_search_row,
-                    LauncherWebOpener.engine(activity).label, query),
-                activity.getString(R.string.palette_web_search_subtitle),
-                LauncherToolRegistry.CATEGORY_WEB,
-                Collections.<String>emptyList(),
-                true,
-                null,
-                false,
-                LauncherToolRegistry.ToolRisk.MEDIUM,
-                arguments));
-        }
-        return entries;
-    }
-
-    /** One {@code web.open} row, carrying its own address so the tool needs no prompt. */
-    @NonNull
-    private static CommandPaletteFilter.Entry webOpenEntry(@NonNull TermuxActivity activity,
-                                                           @NonNull String title,
-                                                           @NonNull String subtitle,
-                                                           @NonNull String url,
-                                                           @Nullable String name) {
-        JSONObject arguments = new JSONObject();
-        try {
-            arguments.put("url", url);
-            if (name != null && !name.isEmpty()) arguments.put("title", name);
-        } catch (JSONException ignored) {
-        }
-        return new CommandPaletteFilter.Entry(
-            LauncherToolRegistry.TOOL_WEB_OPEN,
-            title,
-            subtitle,
-            LauncherToolRegistry.CATEGORY_WEB,
-            Collections.<String>emptyList(),
-            true,
-            null,
-            false,
-            LauncherToolRegistry.ToolRisk.MEDIUM,
-            arguments);
-    }
-
     /**
      * One row per layout in the in-app keyboard's ring, so hot-swapping is reachable by name
      * rather than only by cycling. Each row runs {@code keyboard.select_layout} with its own id,
@@ -521,7 +397,6 @@ public final class TerminalCommandPalette {
             case LauncherToolRegistry.CATEGORY_CLIPBOARD: return context.getString(R.string.palette_category_clipboard);
             case LauncherToolRegistry.CATEGORY_APPEARANCE: return context.getString(R.string.palette_category_appearance);
             case LauncherToolRegistry.CATEGORY_APP: return context.getString(R.string.palette_category_app);
-            case LauncherToolRegistry.CATEGORY_WEB: return context.getString(R.string.palette_category_web);
             case LauncherToolRegistry.CATEGORY_APPS: return context.getString(R.string.palette_category_apps);
             case CATEGORY_SESSIONS: return context.getString(R.string.palette_category_sessions);
             default: return category;
