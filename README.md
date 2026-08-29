@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **This project is entirely vibe-coded.**
-> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been rock-solid so far. It also does not appear to have any noticeable impact on battery life.
+> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been rock-solid so far. It also does not appear to have any noticeable impact on battery life, uses about ~350mb of RAM at idle.
 
 > [!CAUTION]
 > The native AI backends—**Google LiteRT** and **Alibaba MNN**—are highly experimental. Be mindful of your device’s available RAM and processor capabilities when selecting models.
