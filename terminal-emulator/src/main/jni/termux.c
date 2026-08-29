@@ -1,5 +1,4 @@
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <jni.h>
 #include <signal.h>
@@ -15,30 +14,6 @@
 #ifdef __APPLE__
 # define LACKS_PTSNAME_R
 #endif
-
-static int path_starts_with(char const* path, char const* prefix)
-{
-    if (path == NULL || prefix == NULL) return 0;
-    size_t prefix_len = strlen(prefix);
-    return strncmp(path, prefix, prefix_len) == 0;
-}
-
-static char const* find_system_linker()
-{
-    static const char* candidates[] = {
-        "/apex/com.android.runtime/bin/linker64",
-        "/apex/com.android.runtime/bin/linker",
-        "/system/bin/linker64",
-        "/system/bin/linker",
-        NULL
-    };
-
-    for (int i = 0; candidates[i] != NULL; i++) {
-        if (access(candidates[i], X_OK) == 0) return candidates[i];
-    }
-
-    return NULL;
-}
 
 static int throw_runtime_exception(JNIEnv* env, char const* message)
 {
@@ -131,24 +106,6 @@ static int create_subprocess(JNIEnv* env,
             fflush(stderr);
         }
         execvp(cmd, argv);
-        if (errno == EACCES) {
-            char const* prefix = getenv("PREFIX");
-            if (prefix != NULL && path_starts_with(cmd, prefix)) {
-                char const* linker = find_system_linker();
-                if (linker != NULL) {
-                    int argc = 0;
-                    while (argv != NULL && argv[argc] != NULL) argc++;
-
-                    char** wrapped_argv = (char**) calloc((size_t) argc + 3, sizeof(char*));
-                    if (wrapped_argv != NULL) {
-                        wrapped_argv[0] = (char*) linker;
-                        wrapped_argv[1] = (char*) cmd;
-                        for (int i = 0; i < argc; i++) wrapped_argv[i + 2] = argv[i];
-                        execv(linker, wrapped_argv);
-                    }
-                }
-            }
-        }
         // Show terminal output about failing exec() call:
         char* error_message;
         if (asprintf(&error_message, "exec(\"%s\")", cmd) == -1) error_message = "exec()";
