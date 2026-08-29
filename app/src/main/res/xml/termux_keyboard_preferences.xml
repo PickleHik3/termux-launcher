@@ -68,6 +68,12 @@
             app:summary="@string/termux_in_app_keyboard_custom_layout_summary"
             app:title="@string/termux_in_app_keyboard_custom_layout_title" />
         <Preference
+            app:key="in_app_keyboard_layouts"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardLayoutsFragment"
+            app:persistent="false"
+            app:summary="@string/settings_keyboard_layouts_summary"
+            app:title="@string/settings_keyboard_layouts_title" />
+        <Preference
             app:key="keyboard_docs_layouts"
             app:summary="@string/termux_keyboard_docs_layouts_summary"
             app:title="@string/settings_layout_documentation_title" />

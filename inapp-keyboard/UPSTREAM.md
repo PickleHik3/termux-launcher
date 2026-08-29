@@ -34,8 +34,26 @@ dictionaries and native `cdict`, suggestions/candidates, autocapitalisation,
 emoji, clipboard history, voice switching, direct-boot state, fold/window
 tracking, layout editor UI, numeric-editor inference,
 split/landscape modifiers, panes, and their resources. It also excludes
-`res/layout/keyboard.xml`, `res/xml/split_middle_column.xml`, settings/method
-resources, and generated layout-picker metadata.
+`res/layout/keyboard.xml`, `res/xml/split_middle_column.xml`, and
+settings/method resources.
+
+## Generated layout catalogue
+
+`res/values/layouts.xml` lists every named layout in `res/xml` — its id, its
+display name, and its resource id — for the launcher's layout picker and its
+hot-swap ring. It is generated, not hand-written:
+
+```sh
+python3 inapp-keyboard/tools/gen_layouts.py
+```
+
+`tools/gen_layouts.py` is adapted from upstream's `gen_layouts.py`, which reads
+`srcs/layouts` and emits `pref_layout_*`. Ours reads the copied resources and
+emits `inapp_layout_values`, `inapp_layout_entries` and `inapp_layout_ids`, with
+no `system` or `custom` pseudo entries: the launcher owns those, and its own
+"launcher layout" entry stands for `~/.termux/keyboard/layout.xml`. Rerun it
+after adding, removing, or renaming a layout — `LauncherKeyboardLayoutsTest`
+fails when the catalogue has gone stale.
 
 ## Local adaptations
 
@@ -105,9 +123,10 @@ resources, and generated layout-picker metadata.
    upstream copyright/license headers.
 3. Reapply the adaptations listed above, including the curated bottom row and
    parser limits. Do not import stripped packages or build generators.
-4. Replace the reviewed files, update this document's commit and path list,
-   and inspect the final diff for input-method, editor-connection, window, or
-   native dependencies.
+4. Replace the reviewed files, rerun `tools/gen_layouts.py` so the catalogue
+   matches the layouts that arrived, update this document's commit and path
+   list, and inspect the final diff for input-method, editor-connection,
+   window, or native dependencies.
 5. Run `./gradlew :inapp-keyboard:assembleDebug
    :inapp-keyboard:testDebugUnitTest --console=plain` and the forbidden-import
    grep documented in the project design before merging.

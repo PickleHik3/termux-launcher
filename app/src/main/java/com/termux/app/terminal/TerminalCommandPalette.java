@@ -215,6 +215,47 @@ public final class TerminalCommandPalette {
     }
 
     /**
+     * One row per layout in the in-app keyboard's ring, so hot-swapping is reachable by name
+     * rather than only by cycling. Each row runs {@code keyboard.select_layout} with its own id,
+     * which is also what makes a layout bindable from the config file
+     * ({@code map ctrl+alt+d keyboard.select_layout latn_dvorak}).
+     *
+     * <p>Empty while the in-app keyboard is off or the ring holds a single layout: with nothing
+     * to swap to, a section listing the one layout already on screen is noise.
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildKeyboardLayoutEntries(
+        @NonNull TermuxActivity activity) {
+        List<String> ring = activity.inAppKeyboardLayoutRing();
+        if (!activity.isInAppKeyboardEnabled() || ring.size() < 2) return Collections.emptyList();
+        String active = activity.activeInAppKeyboardLayoutId();
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(ring.size());
+        for (String layoutId : ring) {
+            JSONObject arguments = new JSONObject();
+            try {
+                arguments.put("layout", layoutId);
+            } catch (JSONException ignored) {
+            }
+            String label = com.termux.app.terminal.inappkeyboard.LauncherKeyboardLayouts
+                .labelFor(activity.getResources(), layoutId);
+            entries.add(new CommandPaletteFilter.Entry(
+                LauncherToolRegistry.TOOL_KEYBOARD_SELECT_LAYOUT,
+                activity.getString(R.string.palette_keyboard_layout_row, label),
+                layoutId.equals(active)
+                    ? activity.getString(R.string.palette_keyboard_layout_active)
+                    : activity.getString(R.string.tool_desc_keyboard_select_layout),
+                LauncherToolRegistry.CATEGORY_KEYBOARD,
+                Collections.<String>emptyList(),
+                true,
+                null,
+                false,
+                LauncherToolRegistry.ToolRisk.LOW,
+                arguments));
+        }
+        return entries;
+    }
+
+    /**
      * App rows for the current query, built from the provider's warm cache only —
      * the palette must never block the main thread on a PackageManager sweep.
      * Without a query the rows are usage-ranked, so the apps actually used land on
@@ -315,6 +356,9 @@ public final class TerminalCommandPalette {
     @Nullable
     static String promptableArgument(@NonNull LauncherToolRegistry.ToolMetadata tool) {
         if (LauncherToolRegistry.TOOL_APP_LAUNCH.equals(tool.name)) return null;
+        // Same reason as app.launch: the Keyboard section already supplies a row per layout, and
+        // asking the user to type a catalogue id would be the worse of the two ways in.
+        if (LauncherToolRegistry.TOOL_KEYBOARD_SELECT_LAYOUT.equals(tool.name)) return null;
         JSONArray required = tool.schema.optJSONArray("required");
         if (required == null || required.length() != 1) return null;
         String name = required.optString(0, "");
@@ -349,6 +393,7 @@ public final class TerminalCommandPalette {
             case LauncherToolRegistry.CATEGORY_WINDOW: return context.getString(R.string.palette_category_window);
             case LauncherToolRegistry.CATEGORY_PANE: return context.getString(R.string.palette_category_pane);
             case LauncherToolRegistry.CATEGORY_TERMINAL: return context.getString(R.string.palette_category_terminal);
+            case LauncherToolRegistry.CATEGORY_KEYBOARD: return context.getString(R.string.palette_category_keyboard);
             case LauncherToolRegistry.CATEGORY_CLIPBOARD: return context.getString(R.string.palette_category_clipboard);
             case LauncherToolRegistry.CATEGORY_APPEARANCE: return context.getString(R.string.palette_category_appearance);
             case LauncherToolRegistry.CATEGORY_APP: return context.getString(R.string.palette_category_app);

@@ -6,8 +6,10 @@
   ~/.termux/keyboard/layout.xml.
 
   Slots: key1 NW, key2 NE, key3 SW, key4 SE, key5 W, key6 E, key7 N, key8 S.
-  North was the keyboard's own layout-switch gesture; the palette takes it, and switch_forward /
-  switch_backward stay reachable on the diagonals if you want them back.
+  North was the keyboard's own layout-switch gesture; the palette takes it. switch_backward keeps
+  the space bar's south swipe and now steps the layout ring the user picked in
+  Settings > Keyboard > Layouts, which is what it means upstream; the numeric and Greek/math pads
+  keep their own slots on the Ctrl cap.
 -->
 <row height="0.95">
   <key width="1.7" role="action" key0="ctrl" key1="loc switch_greekmath" key2="loc meta" key4="switch_numeric"/>
