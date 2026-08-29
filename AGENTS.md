@@ -65,7 +65,7 @@ Use this language; it is what the code and the developer use.
 - **the developer / the user** — the maintainer you are talking to, who also uses the launcher as
   their daily driver and is often testing your change on their own phone while you work.
 - **edition** — one shipped applicationId: `com.termux` (main), `com.termux.launcher.nix` (Nix),
-  `io.vaj.tl` (VAJ, deprecated).
+  `io.vaj.tl` (VAJ).
 - **pong** — the developer's Nothing Phone 2 (A065, Android 16), the real device of record.
 - **surface** — one themable chrome region: Dock, Keyboard, Status, Canvas. Modelled as
   `SurfaceSlot` × `SurfaceProperty` (blur, opacity, grain, corner radius, side gap).
@@ -96,11 +96,11 @@ Use this language; it is what the code and the developer use.
    installing, force-stopping, or injecting input. A stray
    `adb input tap` once landed on the editor's edge-drag pill and silently zeroed the developer's
    side gap on every surface.
-5. **Merging `dev` into `io-vaj-package`.** VAJ is deprecated since v0.2.34-vaj: **security-critical
-   fixes only**, and the default answer is to skip it entirely. A dev merge once clobbered the VAJ
-   identity in `app/build.gradle` (the v0.2.31 hotfix). If you ever do merge, diff `app/build.gradle`
-   against the previous `-vaj` tag before tagging; the workflow's manifest guard is the backstop,
-   not the check.
+5. **Merging `dev` into an edition branch.** A dev merge once clobbered the VAJ identity in
+   `app/build.gradle` (the v0.2.31 hotfix): applicationId, manifest placeholders and ABI rules are
+   the only thing an edition branch owns, and a merge that takes `dev`'s side of that file silently
+   ships the wrong app. Diff `app/build.gradle` against the previous edition tag before tagging;
+   the workflow's manifest guard is the backstop, not the check.
 
 ## Hit every surface
 
@@ -247,12 +247,18 @@ All development happens on `dev`. Editions receive features exclusively by mergi
   prerelease. Backed by the PickleHik3/nix-on-droid fork, branch `launcher-nix`; bootstrap zips live
   on the `nix-bootstrap` tag. Companion apps (TLNix API/Styling) release from their `nix-pkg`
   branches via `github_release_build.yml` with `nix-v*` tags.
-- `io-vaj-package` — the VAJ edition (`io.vaj.tl`), tag `vX.Y.Z-vaj`. **Deprecated since
-  v0.2.34-vaj (2026-08-10): security-critical fixes only.** See hazard 5.
+- `io-vaj-package` — the VAJ edition (`io.vaj.tl`), tag `vX.Y.Z-vaj`. Packages come from the VAJ
+  apt repository (`repo.pathayam.xyz`). It carried a security-only deprecation from v0.2.34-vaj to
+  v0.2.36-vaj; that ended with v0.2.37-vaj and the edition ships normally again.
 
-Per edition: bump `versionName` (it **must** equal the tag minus `v` or CI aborts), merge `dev`,
-push, tag, `gh release create --notes-file …`, then dispatch `attach_debug_apks_to_release.yml` with
-the tag. `versionCode` stays **1020** for upstream parity — never change it.
+**Every release ships all three editions.** A cut is not finished when `main` is tagged — `dev`
+goes to `nix-edition` and `io-vaj-package` in the same pass, each with its own tag, notes and APK
+run. Do not ask which editions to release; releasing one is the thing that needs a reason.
+
+Per edition: bump `versionName` (it **must** equal the tag minus `v` or CI aborts, so it carries the
+`-nix` / `-vaj` suffix too), merge `dev`, push, tag, `gh release create --notes-file …`, then
+dispatch `attach_debug_apks_to_release.yml` with the tag. `versionCode` stays **1020** for upstream
+parity — never change it.
 
 Release notes live at `project-docs/release-notes-v<version>.md` and are the **only** changelog.
 There is no `CHANGELOG.md` — it was deleted after v0.2.35-a as a second hand-maintained history that
