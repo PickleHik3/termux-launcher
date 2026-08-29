@@ -41,6 +41,9 @@ final class TermuxLauncherConfigInstaller {
 
     private static final String PROPERTIES_FILE_NAME = "termux.properties";
 
+    /** The palette's bookmark list; all comments as shipped, so seeding it adds no bookmarks. */
+    private static final String BOOKMARKS_FILE_NAME = "bookmarks.txt";
+
     /**
      * The other path Termux reads properties from, relative to {@code ~}. See
      * {@link TermuxConstants#TERMUX_PROPERTIES_SECONDARY_FILE_PATH}.
@@ -53,6 +56,7 @@ final class TermuxLauncherConfigInstaller {
         "termux-launcher-bindings.conf",
         "fonts.conf",
         "keyboard-layout.xml",
+        BOOKMARKS_FILE_NAME,
         PROPERTIES_FILE_NAME
     };
 
@@ -60,6 +64,7 @@ final class TermuxLauncherConfigInstaller {
     private static final String[][] SEEDED_FILES = {
         {"termux-launcher-bindings.conf", "termux-launcher-bindings.conf"},
         {"fonts.conf", "fonts.conf"},
+        {BOOKMARKS_FILE_NAME, BOOKMARKS_FILE_NAME},
         {PROPERTIES_FILE_NAME, PROPERTIES_FILE_NAME}
     };
 

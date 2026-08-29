@@ -377,11 +377,73 @@ public class TermuxInAppKeyboardTest {
         assertEquals(TermuxInAppKeyboard.LAYOUT_GREEK_MATH,
             mController.getSelectedLayoutId());
         assertEquals('θ', centerKey((Keyboard2View) mHost.attachedView, 0, 0).getChar());
+        // The pads are reached by their own keys, and left by the text key; cycling walks the
+        // user's layout ring, which is a single layout until they add to it in Settings.
+        mController.requestTextLayout();
+        assertEquals(TermuxInAppKeyboard.LAYOUT_MAIN, mController.getSelectedLayoutId());
         mController.requestForwardLayout();
         assertEquals(TermuxInAppKeyboard.LAYOUT_MAIN, mController.getSelectedLayoutId());
+    }
+
+    @Test
+    public void cyclingWalksTheConfiguredLayoutRingAndRemembersWhereItStopped() throws Exception {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mPreferences.setInAppKeyboardLayouts("main,latn_dvorak,latn_colemak");
+        mController.onCreate(null);
+        assertEquals(TermuxInAppKeyboard.LAYOUT_MAIN, mController.getActiveTextLayoutId());
+
+        assertTrue(mController.cycleTextLayout(1));
+        assertEquals("latn_dvorak", mController.getActiveTextLayoutId());
+        assertEquals("latn_dvorak", mController.getSelectedLayoutId());
+        assertEquals("latn_dvorak", mPreferences.getInAppKeyboardActiveLayout());
+
         mController.requestBackwardLayout();
-        assertEquals(TermuxInAppKeyboard.LAYOUT_GREEK_MATH,
-            mController.getSelectedLayoutId());
+        assertEquals(TermuxInAppKeyboard.LAYOUT_MAIN, mController.getActiveTextLayoutId());
+        mController.requestBackwardLayout();
+        assertEquals("latn_colemak", mController.getActiveTextLayoutId());
+
+        // A pad on top of the ring does not move it, and the text key comes back to it.
+        mController.requestNumericLayout();
+        assertEquals("latn_colemak", mController.getActiveTextLayoutId());
+        mController.requestTextLayout();
+        assertEquals("latn_colemak", mController.getSelectedLayoutId());
+
+        // Where the ring stopped survives the process, which is what the preference is for.
+        Bundle state = new Bundle();
+        mController.onSaveInstanceState(state);
+        mController.onDestroy();
+        mHost = new FakeHost(mActivity);
+        mController = newController();
+        mController.onCreate(null);
+        assertEquals("latn_colemak", mController.getActiveTextLayoutId());
+    }
+
+    @Test
+    public void aLayoutRemovedFromTheRingStopsBeingTheOneInUse() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mPreferences.setInAppKeyboardLayouts("main,latn_dvorak");
+        mController.onCreate(null);
+        mController.cycleTextLayout(1);
+        assertEquals("latn_dvorak", mController.getActiveTextLayoutId());
+
+        mPreferences.setInAppKeyboardLayouts("main");
+        mController.onPreferencesReloaded();
+        assertEquals(TermuxInAppKeyboard.LAYOUT_MAIN, mController.getActiveTextLayoutId());
+        assertEquals(TermuxInAppKeyboard.LAYOUT_MAIN, mController.getSelectedLayoutId());
+        // Nothing to cycle to: the ring says so rather than pretending to move.
+        assertFalse(mController.cycleTextLayout(1));
+    }
+
+    @Test
+    public void selectingByIdAcceptsOnlyCataloguedLayouts() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        assertTrue(mController.selectTextLayout("latn_dvorak", false));
+        assertEquals("latn_dvorak", mController.getActiveTextLayoutId());
+        assertFalse(mController.selectTextLayout("latn_atlantean", false));
+        assertEquals("latn_dvorak", mController.getActiveTextLayoutId());
+        // The pads are not text layouts, so they are not reachable this way either.
+        assertFalse(mController.selectTextLayout(TermuxInAppKeyboard.LAYOUT_NUMERIC, false));
     }
 
     @Test

@@ -945,6 +945,73 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return normalizeInAppKeyboardExtraKeys(value);
     }
 
+    /** The id of the search engine web queries go to; the engine table owns the fallback. */
+    public String getWebSearchEngine() {
+        return SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_WEB_SEARCH_ENGINE,
+            TERMUX_APP.DEFAULT_WEB_SEARCH_ENGINE,
+            true
+        );
+    }
+
+    public void setWebSearchEngine(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_WEB_SEARCH_ENGINE,
+            value == null || value.isEmpty() ? TERMUX_APP.DEFAULT_WEB_SEARCH_ENGINE : value,
+            false);
+    }
+
+    /** A search URL template with one {@code %s}, used only while the engine is {@code custom}. */
+    public String getWebSearchCustomUrl() {
+        return SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_WEB_SEARCH_CUSTOM_URL,
+            TERMUX_APP.DEFAULT_WEB_SEARCH_CUSTOM_URL,
+            true
+        );
+    }
+
+    public void setWebSearchCustomUrl(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_WEB_SEARCH_CUSTOM_URL,
+            value == null ? TERMUX_APP.DEFAULT_WEB_SEARCH_CUSTOM_URL : value, false);
+    }
+
+    /** Comma-joined layout ids of the hot-swap ring, unvalidated; the keyboard host owns the catalog. */
+    public String getInAppKeyboardLayouts() {
+        return SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_LAYOUTS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_LAYOUTS,
+            true
+        );
+    }
+
+    public void setInAppKeyboardLayouts(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_LAYOUTS,
+            value == null || value.isEmpty()
+                ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_LAYOUTS : value, false);
+    }
+
+    /** The layout the ring is on. Falls back to the first selected layout when it is stale. */
+    public String getInAppKeyboardActiveLayout() {
+        return SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_ACTIVE_LAYOUT,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_ACTIVE_LAYOUT,
+            true
+        );
+    }
+
+    public void setInAppKeyboardActiveLayout(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_ACTIVE_LAYOUT,
+            value == null || value.isEmpty()
+                ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_ACTIVE_LAYOUT : value, false);
+    }
+
     public void setInAppKeyboardExtraKeys(String value) {
         SharedPreferenceUtils.setString(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_EXTRA_KEYS,

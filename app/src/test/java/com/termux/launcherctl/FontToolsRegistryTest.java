@@ -90,6 +90,6 @@ public class FontToolsRegistryTest {
         // Appearance already exists; a one-tool section would read as a bug in the palette.
         assertTrue(registry.getUiToolsByCategory()
             .containsKey(LauncherToolRegistry.CATEGORY_APPEARANCE));
-        assertEquals(8, registry.getUiToolsByCategory().size());
+        assertEquals(10, registry.getUiToolsByCategory().size());
     }
 }

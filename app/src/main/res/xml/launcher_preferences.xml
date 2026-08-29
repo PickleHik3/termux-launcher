@@ -89,6 +89,26 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/settings_web_header">
+        <ListPreference
+            app:key="web_search_engine"
+            app:title="@string/settings_web_engine_title"
+            app:entries="@array/settings_web_search_engine_entries"
+            app:entryValues="@array/settings_web_search_engine_values"
+            app:defaultValue="duckduckgo"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="web_search_custom_url"
+            app:title="@string/settings_web_custom_url_title"
+            app:summary="@string/settings_web_custom_url_summary"
+            android:inputType="textUri" />
+        <Preference
+            app:key="web_bookmarks_file"
+            app:persistent="false"
+            app:title="@string/settings_web_bookmarks_title"
+            app:summary="@string/settings_web_bookmarks_summary" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_launcher_search_header">
         <EditTextPreference
             app:key="app_launcher_input_char"

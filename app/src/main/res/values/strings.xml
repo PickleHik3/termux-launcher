@@ -356,6 +356,34 @@
     <string name="app_drawer_search_no_results_title">No apps matched</string>
     <string name="app_drawer_search_no_results_body">Try a shorter word, or search the web instead.</string>
     <string name="app_drawer_page_description">Page %1$d of %2$d</string>
+    <string name="settings_web_header">Web search</string>
+    <string name="settings_web_engine_title">Search engine</string>
+    <string name="settings_web_custom_url_title">Custom search URL</string>
+    <string name="settings_web_custom_url_summary" formatted="false">Used when the engine is Custom. Put %s where the query goes, e.g. https://searx.example/search?q=%s</string>
+    <string name="settings_web_bookmarks_title">Bookmarks</string>
+    <string name="settings_web_bookmarks_summary">Edit ~/.termux/bookmarks.txt — one per line: name, a tab, then the address. Reach them in the command palette with ?</string>
+    <string-array name="settings_web_search_engine_entries">
+        <item>DuckDuckGo</item>
+        <item>Google</item>
+        <item>Bing</item>
+        <item>Brave Search</item>
+        <item>Startpage</item>
+        <item>Ecosia</item>
+        <item>Wikipedia</item>
+        <item>YouTube</item>
+        <item>Custom</item>
+    </string-array>
+    <string-array name="settings_web_search_engine_values">
+        <item>duckduckgo</item>
+        <item>google</item>
+        <item>bing</item>
+        <item>brave</item>
+        <item>startpage</item>
+        <item>ecosia</item>
+        <item>wikipedia</item>
+        <item>youtube</item>
+        <item>custom</item>
+    </string-array>
     <string name="settings_launcher_search_header">Search</string>
     <string name="settings_app_search_prefix_title">App search prefix</string>
     <string name="settings_app_search_prefix_summary">Type this character in the terminal to start app search.</string>
@@ -721,6 +749,21 @@
                 <string name="termux_in_app_keyboard_custom_layout_title">Custom layout</string>
                 <string name="termux_in_app_keyboard_custom_layout_summary">Load your own layout from ~/.termux/keyboard/layout.xml</string>
                 <string name="termux_keyboard_docs_layouts_summary">How to write your own layout.xml</string>
+                <string name="settings_keyboard_layouts_title">Layouts</string>
+                <string name="settings_keyboard_layouts_summary">Choose the layouts the keyboard cycles through</string>
+                <string name="settings_keyboard_layout_main">Launcher layout (layout.xml, else QWERTY)</string>
+                <string name="settings_keyboard_layouts_instructions">The keyboard cycles through these in order. Bind a key to “Cycle keyboard layout”, put a switch_forward key in your layout.xml, or pick one from the command palette.</string>
+                <string name="settings_keyboard_layouts_in_cycle">In the cycle</string>
+                <string name="settings_keyboard_layouts_available">All layouts</string>
+                <string name="settings_keyboard_layouts_search_hint">Search layouts</string>
+                <string name="settings_keyboard_layouts_add">Add %1$s to the cycle</string>
+                <string name="settings_keyboard_layouts_remove">Remove %1$s from the cycle</string>
+                <string name="settings_keyboard_layouts_move_up">Move %1$s earlier</string>
+                <string name="settings_keyboard_layouts_move_down">Move %1$s later</string>
+                <string name="settings_keyboard_layouts_full">The cycle holds at most %1$d layouts</string>
+                <string name="settings_keyboard_layouts_last">At least one layout has to stay in the cycle</string>
+                <string name="settings_keyboard_layouts_none_match">No layout matches “%1$s”</string>
+                <string name="keyboard_layout_ring_single">Only one layout is in the cycle — add more in Settings ▸ Keyboard ▸ Layouts</string>
                 <string name="termux_keyboard_docs_keys_summary">Every key name and value you can use in a layout</string>
                 <string-array name="termux_in_app_keyboard_theme_entries">
                     <item>System</item>
@@ -1208,6 +1251,17 @@
     <string name="palette_category_app">App</string>
     <string name="palette_category_apps">Apps</string>
     <string name="palette_category_sessions">Sessions</string>
+    <string name="palette_category_keyboard">Keyboard</string>
+    <string name="palette_category_web">Web</string>
+    <string name="palette_web_open_row">Open %1$s</string>
+    <string name="palette_web_open_subtitle">Opens in your default browser</string>
+    <string name="palette_web_bookmark_subtitle">Bookmark · %1$s</string>
+    <string name="palette_web_history_subtitle">Visited before · %1$s</string>
+    <string name="palette_web_search_row">Search %1$s for “%2$s”</string>
+    <string name="palette_web_search_subtitle">Opens in your default browser</string>
+    <string name="palette_web_hint">Type an address to open it, or words to search. Bookmarks live in ~/.termux/bookmarks.txt</string>
+    <string name="palette_keyboard_layout_active">Current layout</string>
+    <string name="palette_keyboard_layout_row">Layout: %1$s</string>
     <string name="palette_app_row_subtitle">%1$s · hold to bind a key</string>
     <string name="palette_capture_notice">Press a key combination for %1$s · ⏎ save · ⌫ clear · esc cancel</string>
     <string name="palette_capture_placeholder">waiting for a key</string>
@@ -1258,6 +1312,10 @@
     <string name="tool_session_panel">Sessions panel</string>
     <string name="tool_session_clone_current">Clone session with CWD</string>
     <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
+    <string name="tool_keyboard_cycle_layout">Cycle keyboard layout</string>
+    <string name="tool_web_search">Search the web</string>
+    <string name="tool_web_open">Open a web page</string>
+    <string name="tool_keyboard_select_layout">Switch keyboard layout</string>
     <string name="tool_terminal_toggle_toolbar">Toggle dock</string>
     <string name="tool_terminal_font_size_increase">Increase font size</string>
     <string name="tool_terminal_font_size_decrease">Decrease font size</string>
@@ -1334,6 +1392,10 @@
     <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
     <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
     <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
+    <string name="tool_desc_web_search">Search with your chosen engine in your default browser. In the palette, type ? followed by what you are looking for.</string>
+    <string name="tool_desc_web_open">Open an address in your default browser. In the palette, type ? followed by the address.</string>
+    <string name="tool_desc_keyboard_cycle_layout">Move to the next layout in the in-app keyboard\'s cycle.</string>
+    <string name="tool_desc_keyboard_select_layout">Switch the in-app keyboard to a named layout.</string>
     <string name="tool_desc_terminal_toggle_toolbar">Show or hide the dock.</string>
     <string name="tool_desc_terminal_font_size_increase">Make the terminal text larger.</string>
     <string name="tool_desc_terminal_font_size_decrease">Make the terminal text smaller.</string>
@@ -1461,6 +1523,7 @@
     <string name="sessions_panel_new">New session</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
+    <string name="palette_unavailable_no_in_app_keyboard">Unavailable: the in-app keyboard is off</string>
 
     <!-- Terminal fonts: catalog, downloader and picker -->
     <string name="settings_fonts_header">Terminal font</string>

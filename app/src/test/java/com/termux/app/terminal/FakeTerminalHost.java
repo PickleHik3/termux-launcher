@@ -299,6 +299,30 @@ class FakeTerminalHost implements TerminalHost {
         record("finishActivityIfNotFinishing");
     }
 
+    boolean inAppKeyboardEnabled;
+    String inAppKeyboardLayout = "main";
+
+    @Override public boolean isInAppKeyboardEnabled() {
+        return inAppKeyboardEnabled;
+    }
+
+    @Override public boolean cycleInAppKeyboardLayout(int delta) {
+        record("cycleInAppKeyboardLayout:" + delta);
+        return inAppKeyboardEnabled;
+    }
+
+    @Override public boolean selectInAppKeyboardLayout(@NonNull String layoutId) {
+        record("selectInAppKeyboardLayout:" + layoutId);
+        if (!inAppKeyboardEnabled) return false;
+        inAppKeyboardLayout = layoutId;
+        return true;
+    }
+
+    @NonNull
+    @Override public String activeInAppKeyboardLayout() {
+        return inAppKeyboardLayout;
+    }
+
     @Override public void runOnUiThread(@NonNull Runnable runnable) {
         runnable.run();
     }
