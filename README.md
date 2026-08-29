@@ -2,7 +2,14 @@
 
 > [!WARNING]
 > **This project is entirely vibe-coded.**
-> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, uses about ~350mb of RAM at idle.
+> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, and uses about ~350 MB of RAM at idle.
+
+> [!CAUTION]
+> **Security review wanted**
+>
+> I’ve made several security-review passes over the codebase using LLMs (FABLE), i would have considered it enough if it continued to be just my launcher, but now that there are others using it, i would really appreciate if an actual developer can have a quick look at the code.
+>
+> I’m actively looking for someone with Android, Termux, or application-security experience who would be willing to review the project. If you spot anything security-related, please open an issue or discussion.
 
 > [!IMPORTANT]
 > **This is an independent fork.** Termux Launcher is not affiliated with, endorsed by, or
