@@ -1584,4 +1584,10 @@
     <string name="onboarding_page_three_footer">Long-press the terminal to restyle the dock, keys and status bar</string>
 
 
+    <!-- VAJ edition (io.vaj.tl) demo notice, shown once after the update that changes its wording. -->
+    <string name="vaj_demo_notice_title">A note on this edition\'s packages</string>
+    <string name="vaj_demo_notice_message">Thank you for trying out the launcher. This is the demo edition, and it uses my own manually managed pkg repository - i update it when i can and cannot promise more than that, which in this wild west of CVE\'s we are in is not ideal. If you want a repository you can rely on, install either the nix version or the normal (com.termux) version. Everything else about the launcher is the same.</string>
+    <string name="vaj_demo_notice_open_guide">Switching editions</string>
+    <string name="vaj_demo_notice_dismiss">Dismiss</string>
+    <string name="vaj_demo_notice_do_not_show_again">Do not show this again</string>
 </resources>

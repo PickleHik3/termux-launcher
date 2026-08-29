@@ -108,6 +108,7 @@ import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.LockAccessibilityService;
 import com.termux.app.launcher.TerminalAppSearchKeyDecision;
 import com.termux.app.onboarding.FirstLaunchOnboarding;
+import com.termux.app.onboarding.VajDemoNotice;
 import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
@@ -940,7 +941,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
             contentView.post(() -> FirstLaunchOnboarding.showIfNeeded(this, forceOnboarding,
-                this::startFirstRunPermissionChain));
+                () -> {
+                    startFirstRunPermissionChain();
+                    VajDemoNotice.showIfNeeded(this);
+                }));
         }
     }
 
