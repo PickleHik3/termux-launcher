@@ -101,6 +101,8 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
     public static final String TOOL_PANE_RENAME = "pane.rename";
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
+    public static final String TOOL_KEYBOARD_CYCLE_LAYOUT = "keyboard.cycle_layout";
+    public static final String TOOL_KEYBOARD_SELECT_LAYOUT = "keyboard.select_layout";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
@@ -200,6 +202,8 @@ public final class TerminalActionDispatcher {
             case TOOL_SESSION_PREVIOUS:
             case TOOL_SESSION_CLOSE_CURRENT:
             case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
+            case TOOL_KEYBOARD_CYCLE_LAYOUT:
+            case TOOL_KEYBOARD_SELECT_LAYOUT:
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
@@ -258,6 +262,7 @@ public final class TerminalActionDispatcher {
         final boolean splits = host != null && host.isSplitPanesEnabled();
         final boolean session = host != null && host.currentSession() != null;
         final boolean selection = host != null && hasSelectedText(host);
+        final boolean inAppKeyboard = host != null && host.isInAppKeyboardEnabled();
         return new LauncherToolRegistry.ActionContext() {
             @Override
             public boolean isSplitPanesEnabled() {
@@ -272,6 +277,11 @@ public final class TerminalActionDispatcher {
             @Override
             public boolean hasSelectedText() {
                 return selection;
+            }
+
+            @Override
+            public boolean isInAppKeyboardEnabled() {
+                return inAppKeyboard;
             }
         };
     }
@@ -802,6 +812,26 @@ public final class TerminalActionDispatcher {
                         selectView.startTextSelectionAtCursor();
                     }
                     return ok().put("selecting", selectView.isSelectingText());
+                }
+
+                case TOOL_KEYBOARD_CYCLE_LAYOUT: {
+                    String direction = arguments.optString("direction", "forward");
+                    if (!"forward".equals(direction) && !"backward".equals(direction))
+                        return error(400, "bad_request", "'direction' must be forward or backward");
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    boolean moved = host.cycleInAppKeyboardLayout("backward".equals(direction) ? -1 : 1);
+                    return ok().put("moved", moved)
+                        .put("layout", host.activeInAppKeyboardLayout());
+                }
+                case TOOL_KEYBOARD_SELECT_LAYOUT: {
+                    String layout = arguments.optString("layout", "").trim();
+                    if (layout.isEmpty()) return error(400, "bad_request", "Missing 'layout'");
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    if (!host.selectInAppKeyboardLayout(layout))
+                        return error(404, "not_found", "No keyboard layout named '" + layout + "'");
+                    return ok().put("layout", host.activeInAppKeyboardLayout());
                 }
 
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:

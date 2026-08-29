@@ -6988,6 +6988,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mInAppKeyboard != null && mInAppKeyboard.isEnabled();
     }
 
+    /** The in-app keyboard's layout ring, in cycle order; empty while there is no keyboard. */
+    @NonNull
+    public java.util.List<String> inAppKeyboardLayoutRing() {
+        return mInAppKeyboard == null
+            ? java.util.Collections.emptyList() : mInAppKeyboard.getLayoutRing();
+    }
+
+    /** The layout the ring stands on, even while a modal pad is the one on screen. */
+    @NonNull
+    public String activeInAppKeyboardLayoutId() {
+        return mInAppKeyboard == null
+            ? com.termux.app.terminal.inappkeyboard.LauncherKeyboardLayouts.LAYOUT_MAIN
+            : mInAppKeyboard.getActiveTextLayoutId();
+    }
+
     public void suppressSystemImeForInAppKeyboard() {
         if (isInAppKeyboardEnabled())
             mInAppKeyboard.suppressSystemIme();
@@ -12703,6 +12718,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                         @Nullable View view, boolean visible) {
             KeyboardUtils.setSoftKeyboardVisibility(showSoftKeyboardRunnable, TermuxActivity.this,
                 view, visible);
+        }
+
+        @Override public boolean isInAppKeyboardEnabled() {
+            return mInAppKeyboard != null && mInAppKeyboard.isEnabled();
+        }
+
+        @Override public boolean cycleInAppKeyboardLayout(int delta) {
+            return mInAppKeyboard != null && mInAppKeyboard.cycleTextLayout(delta);
+        }
+
+        @Override public boolean selectInAppKeyboardLayout(@NonNull String layoutId) {
+            return mInAppKeyboard != null && mInAppKeyboard.selectTextLayout(layoutId, true);
+        }
+
+        @NonNull
+        @Override public String activeInAppKeyboardLayout() {
+            return mInAppKeyboard == null
+                ? com.termux.app.terminal.inappkeyboard.LauncherKeyboardLayouts.LAYOUT_MAIN
+                : mInAppKeyboard.getActiveTextLayoutId();
         }
 
         @Override public boolean isKeybindHintPopupVisible() {

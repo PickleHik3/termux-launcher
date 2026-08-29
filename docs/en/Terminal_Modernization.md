@@ -428,6 +428,32 @@ over the keyboard's layout-switch gesture and `switch_forward` is dropped, while
 the cursor sliders. Override the whole row by writing your own space bar key into
 `~/.termux/keyboard/layout.xml` — that file is the single place swipe actions are configured.
 
+### Hot-swap keyboard layouts
+
+The app ships every Unexpected-Keyboard layout — ninety-one of them, from QWERTY and Dvorak to
+Arabic PC and Dubeolsik. Settings ▸ Keyboard ▸ Layouts picks which ones the keyboard cycles
+through and in what order; the top of that screen is the cycle, the searchable list below it is
+the catalogue. The first entry, **Launcher layout**, is your own `~/.termux/keyboard/layout.xml`
+when that file exists and the bundled QWERTY when it does not, so a custom layout is one member
+of the ring like any other.
+
+Nothing is bound to cycling by default — a ring of one layout has nothing to cycle — so pick how
+to reach it:
+
+```text
+map ctrl+alt+l keyboard.cycle_layout                    # next layout
+map ctrl+alt+shift+l keyboard.cycle_layout direction=backward   # previous
+map --label Dvorak ctrl+alt+d keyboard.select_layout latn_dvorak
+```
+
+On a keyboard key, the same actions are `tool:keyboard.cycle_layout` in any slot, and the
+keyboard's own `switch_forward` / `switch_backward` keys — the space bar's south swipe in the
+shipped bottom row — now step the ring too. In the palette, the Keyboard section lists the ring
+by name once it holds more than one layout, so a layout can be reached by typing its name. Each
+swap says where it landed, and the numeric and Greek/math pads are unchanged: they are not in the
+ring, they keep their own keys on the Ctrl cap, and the text key returns to whichever layout the
+ring is on.
+
 ### Modal keymaps
 
 A root key can enter a named mode. The mode can time out, decide what an unknown key does, and stay

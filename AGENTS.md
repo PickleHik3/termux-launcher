@@ -65,7 +65,7 @@ Use this language; it is what the code and the developer use.
 - **the developer / the user** — the maintainer you are talking to, who also uses the launcher as
   their daily driver and is often testing your change on their own phone while you work.
 - **edition** — one shipped applicationId: `com.termux` (main), `com.termux.launcher.nix` (Nix),
-  `io.vaj.tl` (VAJ).
+  `io.vaj.tl` (VAJ, the demo edition).
 - **pong** — the developer's Nothing Phone 2 (A065, Android 16), the real device of record.
 - **surface** — one themable chrome region: Dock, Keyboard, Status, Canvas. Modelled as
   `SurfaceSlot` × `SurfaceProperty` (blur, opacity, grain, corner radius, side gap).
@@ -260,9 +260,12 @@ All development happens on `dev`. Editions receive features exclusively by mergi
   prerelease. Backed by the PickleHik3/nix-on-droid fork, branch `launcher-nix`; bootstrap zips live
   on the `nix-bootstrap` tag. Companion apps (TLNix API/Styling) release from their `nix-pkg`
   branches via `github_release_build.yml` with `nix-v*` tags.
-- `io-vaj-package` — the VAJ edition (`io.vaj.tl`), tag `vX.Y.Z-vaj`. Packages come from the VAJ
-  apt repository (`repo.pathayam.xyz`). It carried a security-only deprecation from v0.2.34-vaj to
-  v0.2.36-vaj; that ended with v0.2.37-vaj and the edition ships normally again.
+- `io-vaj-package` — the VAJ edition (`io.vaj.tl`), tag `vX.Y.Z-vaj`. **The demo edition, and the
+  least recommended one to install.** Its packages come from the developer's own apt repository
+  (`repo.pathayam.xyz`), which is updated sometimes, with no promises. The security-only freeze it
+  carried from v0.2.34-vaj to v0.2.36-vaj is over — it gets every release like the others — but
+  "not frozen" is not "supported", and nothing should describe it as maintained, revived or
+  production-ready.
 
 **Every release ships all three editions.** A cut is not finished when `main` is tagged — `dev`
 goes to `nix-edition` and `io-vaj-package` in the same pass, each with its own tag, notes and APK
@@ -272,6 +275,12 @@ Per edition: bump `versionName` (it **must** equal the tag minus `v` or CI abort
 `-nix` / `-vaj` suffix too), merge `dev`, push, tag, `gh release create --notes-file …`, then
 dispatch `attach_debug_apks_to_release.yml` with the tag. `versionCode` stays **1020** for upstream
 parity — never change it.
+
+A **hotfix** that must not claim a new version carries semver build metadata instead:
+`v0.2.37+hotfix1`, `v0.2.37-nix+hotfix1`, `v0.2.37-vaj+hotfix1`, with `versionName` matching as
+usual. Build metadata is ignored in semver precedence, so the tag compares equal to the release it
+patches — which also means **a hotfix ships fixes only**. A feature under a `+hotfix` tag is a
+feature under a version that sorts equal to the one before it; cut a real version for that.
 
 Release notes live at `project-docs/release-notes-v<version>.md` and are the **only** changelog.
 There is no `CHANGELOG.md` — it was deleted after v0.2.35-a as a second hand-maintained history that
