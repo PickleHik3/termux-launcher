@@ -12,10 +12,15 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Calendar;
 import java.util.TimeZone;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -110,5 +115,39 @@ public class TerminalClockWidgetTest {
         widget.setLazyMode(false);
         widget.updateTime(wall + 3_000L, 4_000L);
         assertEquals(0f, widget.secondsProgress(1, 4_000L, 340L), 0f);
+    }
+
+    /**
+     * Every FULL-form style must place its time band with the shared alignment offset. Flip drew
+     * its own hardcoded centre instead, so the alignment control did nothing while the flip style
+     * was on. The offset lands inside a private draw method, which Robolectric cannot rasterize
+     * to check, so the guard reads the source the way FullStatusBarGlassTest does.
+     */
+    @Test
+    public void everyFullStyleTranslatesTheTimeBandByTheAlignmentOffset() throws Exception {
+        String source = read("app/src/main/java/com/termux/app/terminal/TerminalClockWidget.java");
+        for (String method : new String[] {"drawFullLcd", "drawFullMinimal", "drawFullSlab",
+            "drawFullTape", "drawFullLed", "drawFullFlip"}) {
+            assertTrue(method + " must offset its time band by the alignment",
+                body(source, method).contains("canvas.translate(bandDx, 0f)"));
+        }
+        // The flip date row is its own, so it needs its own guard against re-centering.
+        assertTrue("drawFullFlipDateRow must place its date by the alignment",
+            body(source, "drawFullFlipDateRow").contains("dateRowTextX("));
+    }
+
+    /** The source of {@code method}, from its signature to the first line that closes it. */
+    private static String body(String source, String method) {
+        int start = source.indexOf("private void " + method + "(");
+        assertTrue(method + " not found", start >= 0);
+        int end = source.indexOf("\n    }\n", start);
+        assertTrue(method + " has no end", end > start);
+        return source.substring(start, end);
+    }
+
+    private static String read(String relative) throws Exception {
+        Path path = Paths.get(relative);
+        if (!Files.exists(path)) path = Paths.get("..").resolve(relative);
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }
 }
