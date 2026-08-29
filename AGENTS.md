@@ -276,6 +276,12 @@ Per edition: bump `versionName` (it **must** equal the tag minus `v` or CI abort
 dispatch `attach_debug_apks_to_release.yml` with the tag. `versionCode` stays **1020** for upstream
 parity — never change it.
 
+A **hotfix** that must not claim a new version carries semver build metadata instead:
+`v0.2.37+hotfix1`, `v0.2.37-nix+hotfix1`, `v0.2.37-vaj+hotfix1`, with `versionName` matching as
+usual. Build metadata is ignored in semver precedence, so the tag compares equal to the release it
+patches — which also means **a hotfix ships fixes only**. A feature under a `+hotfix` tag is a
+feature under a version that sorts equal to the one before it; cut a real version for that.
+
 Release notes live at `project-docs/release-notes-v<version>.md` and are the **only** changelog.
 There is no `CHANGELOG.md` — it was deleted after v0.2.35-a as a second hand-maintained history that
 duplicated the notes and drifted from them. The technical record is `git log`: commit bodies carry
