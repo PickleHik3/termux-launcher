@@ -1,6 +1,6 @@
-# Changelog — v0.2.37-vaj+hotfix1
+# Changelog — v0.2.38-vaj
 
-The VAJ edition of the [v0.2.37+hotfix1 release](https://github.com/PickleHik3/termux-launcher/releases/tag/v0.2.37%2Bhotfix1) — the same hotfix, plus the edition notes below.
+The VAJ edition of the [v0.2.38 release](https://github.com/PickleHik3/termux-launcher/releases/tag/v0.2.38) — the same changes, plus the edition notes below.
 
 ## Edition notes
 
