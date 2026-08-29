@@ -2360,6 +2360,12 @@ public final class SurfaceEditorController {
     private static final float SURFACE_TUNING_DISABLED_ALPHA = 0.38f;
     /** Length of the slide when a section needs the card a different height. */
     private static final long SURFACE_TUNING_RESIZE_DURATION_MS = 140L;
+    /**
+     * The shortest slider region the editor will show. Roughly the presets strip plus one control:
+     * enough that the card is still an editor when the room between its anchors has gone, at which
+     * point it overlaps the terminal above it instead of emptying out (issue #20).
+     */
+    private static final float SURFACE_EDITOR_MIN_SCROLL_DP = 132f;
     /** Card opacity while a peeking control is being dragged. */
     private static final float SURFACE_TUNING_PEEK_ALPHA = 0.28f;
     private static final long SURFACE_TUNING_PEEK_OUT_MS = 90;
@@ -2820,8 +2826,15 @@ public final class SurfaceEditorController {
         View headerRow = mHost.findView(R.id.dock_tuning_header_row);
         View actions = mHost.findView(R.id.surface_tuning_actions);
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+        View controls = mHost.findView(R.id.dock_tuning_controls);
+        int parentHeight = controls != null && controls.getParent() instanceof View
+            ? ((View) controls.getParent()).getHeight() : 0;
         long signature = mHost.statusBarInsetTop();
-        signature = mixAnchor(signature, stack != null ? stack.getTop() : -1);
+        signature = mixAnchor(signature, parentHeight);
+        // The stack's contribution has to be the same reading adjustSurfaceEditorCardHeight()
+        // sizes against, or a lift or a hide that changes the height will not look like a move.
+        signature = mixAnchor(signature,
+            stack != null ? surfaceEditorStackTopPx(stack, parentHeight) : -1);
         signature = mixAnchor(signature, headerRow != null ? headerRow.getHeight() : -1);
         signature = mixAnchor(signature, actions != null ? actions.getHeight() : -1);
         signature = mixAnchor(signature, overlay != null ? overlay.getWidth() : -1);
@@ -2867,6 +2880,14 @@ public final class SurfaceEditorController {
      * anchors themselves moving — hiding the in-app keyboard frees hundreds of pixels, and the card
      * spends them. Header and the action row stay on screen at every size; the peek-on-drag fade is
      * what keeps the surfaces themselves visible while a slider moves.
+     *
+     * <p>Both anchors are read defensively, because the span they describe is not always real. The
+     * stack is laid out only while it is visible — every dock row switched off, or the in-app
+     * keyboard put away in favour of the system one, and it goes {@code GONE} carrying a stale or
+     * never-set {@code getTop()} — and while the dock rides above the system IME on insets it is
+     * moved by translation, which {@code getTop()} does not report. Either read alone would size
+     * the card against a bottom edge that is not where the stack is. A span that still comes out
+     * too short after all that is handled by the metrics floor rather than by collapsing the body.
      */
     private void adjustSurfaceEditorCardHeight() {
         if (!mSurfaceEditorOpen)
@@ -2909,13 +2930,40 @@ public final class SurfaceEditorController {
         }
         int topLimit = statusBottom + Math.round(dpToPx(6));
         int cardMarginBottom = Math.round(dpToPx(10));
-        int availableCard = (stack.getTop() - cardMarginBottom) - topLimit;
+        int parentHeight = controls.getParent() instanceof View
+            ? ((View) controls.getParent()).getHeight() : 0;
+        // Nothing to measure against yet; the pass that gives the parent a height calls back.
+        if (parentHeight <= 0)
+            return;
+        int stackTop = surfaceEditorStackTopPx(stack, parentHeight);
+        int availableCard = (stackTop - cardMarginBottom) - topLimit;
         // Chrome outside the scroll region: card top/bottom padding (10 + 12), the action row's top
         // margin (6), plus the measured header and action row.
         int chrome = Math.round(dpToPx(10 + 12 + 6)) + headerRow.getHeight()
             + actions.getHeight();
-        int target = SurfaceEditorCardMetrics.scrollHeightPx(availableCard, chrome);
+        // The card's bottom edge is fixed at the stack, so the tallest it can be without its header
+        // leaving the top of the parent is everything above that edge. Overlapping the window bar
+        // and the seam below it is what the floor buys; overlapping the status bar is not.
+        int maxScroll = stackTop - cardMarginBottom - chrome;
+        int target = SurfaceEditorCardMetrics.scrollHeightPx(availableCard, chrome,
+            Math.round(dpToPx(SURFACE_EDITOR_MIN_SCROLL_DP)), maxScroll);
         setSurfaceEditorScrollHeight(scroll, target);
+    }
+
+    /**
+     * Where the accessory stack's top edge is, in the card parent's coordinate space.
+     *
+     * <p>{@code getTop()} is the laid-out position and nothing else: a {@code GONE} stack was
+     * skipped by the last layout pass and reports wherever it was before that (zero, if it has
+     * never been shown), and the inset-driven dock lift moves the stack with a translation that
+     * leaves {@code getTop()} untouched. A hidden stack occupies no room at all, so the card runs
+     * to the parent's bottom edge — the same place {@code layout_alignWithParentIfMissing} puts
+     * the card itself.
+     */
+    private static int surfaceEditorStackTopPx(@NonNull View stack, int parentHeight) {
+        if (stack.getVisibility() != View.VISIBLE || stack.getHeight() <= 0)
+            return parentHeight;
+        return stack.getTop() + Math.round(stack.getTranslationY());
     }
 
     /**
