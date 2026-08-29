@@ -199,7 +199,6 @@ public final class TerminalClockWidget extends View {
 
     /**
      * Horizontal placement of the FULL-form time band and date text; compact forms ignore it.
-     * The flip FULL face is the departure-board exception and keeps both independently centered.
      */
     public void setAlignment(@Nullable String alignment) {
         String normalized = isKnownAlignment(alignment)
@@ -781,12 +780,10 @@ public final class TerminalClockWidget extends View {
     // ---- Split-flap -------------------------------------------------------
 
     private void drawFullFlip(Canvas canvas, long now, float dateTop, float right, float bandDx) {
-        // The departure-board spec deliberately ignores alignment for the flip FULL face.
         float digitBaseline = capCenteredBaseline(dp(35.5f) / 2f,
             condensedBoldTypeface(), 30.5f);
-        float timeWidth = fullTimeRowWidth();
         canvas.save();
-        canvas.translate(Math.max(0f, (right - timeWidth) / 2f), 0f);
+        canvas.translate(bandDx, 0f);
         float x = drawFullFlipCards(canvas, now, digitBaseline);
         drawFullFlipMetaColumn(canvas, x + dp(6.7f), digitBaseline, now);
         canvas.restore();
@@ -1001,7 +998,9 @@ public final class TerminalClockWidget extends View {
         Typeface face = condensedMediumTypeface();
         float textWidth = spacedTextWidth(mSnapshot.date, face, 9.2f, .31f);
         float gap = dp(7.5f);
-        float textX = Math.max(gap, (right - textWidth) / 2f);
+        // The rule fills whatever the date does not, so it stays a departure-board row at any
+        // alignment: flanked when centered, one long run to the side the date has left free.
+        float textX = dateRowTextX(right, textWidth, 7.5f);
         drawLabel(canvas, mSnapshot.date, textX, baseline(top, dp(11.7f), face, 9.2f), 9.2f,
             face, .31f, alpha(mOnSurface, mDarkFlipStock ? .68f : .7f));
         float ruleY = top + dp(11.7f) / 2f;
