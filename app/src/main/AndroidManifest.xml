@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Every package joining the sharedUserId below must target sdk 28 or lower. Android picks the
+     SELinux domain for the whole shared user from the highest target sdk among its members, and
+     only untrusted_app_25/untrusted_app_27 may execute files under the app data directory, so one
+     member built against a newer sdk stops the app from running anything in $PREFIX. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="internalOnly"

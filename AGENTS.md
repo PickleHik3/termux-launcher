@@ -237,6 +237,19 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
   its own layout must be added to the exemption list or it renders as a plain row.
 - Terminal padding (`getHorizontalContentOffset` centering, `mFontLineSpacingAndAscent` top offset)
   is intentional. Leave it.
+- **`targetSdkVersion` stays 28, on every edition and every companion app.** Android only leaves
+  the `untrusted_app_25`/`untrusted_app_27` SELinux domains allowed to execute files under an app's
+  own data directory; from sdk 29 the app lands in `untrusted_app` and the kernel denies
+  `execute_no_trans` on everything in `$PREFIX`. The domain is computed from the **highest**
+  target sdk in the whole `sharedUserId` group and is remembered until every member is uninstalled
+  — so a single companion app (`…api`, `…styling`, any plugin) built against a newer sdk bricks
+  the launcher it ships beside, and a plain reinstall does not undo it. `TermuxInstaller` detects
+  the restricted domain and names the offending packages; it does not work around it.
+- **No exec fallback via the system linker.** Running an unexecutable binary through
+  `/apex/com.android.runtime/bin/linker64` was tried (8ea87965) and removed: it turns a clean
+  "cannot exec my own files" into an opaque exit 126 deep in the bootstrap second stage, it cannot
+  work for `#!` scripts at all, and the prefix was deleted before anyone could read the evidence.
+  Exec failures must surface where they happen.
 
 ## Branches and releases
 
