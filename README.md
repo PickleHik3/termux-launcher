@@ -2,7 +2,14 @@
 
 > [!WARNING]
 > **This project is entirely vibe-coded.**
-> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, uses about ~350mb of RAM at idle.
+> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, and uses about ~350 MB of RAM at idle.
+
+> [!CAUTION]
+> **Security review wanted**
+>
+> I’ve made several security-review passes over the codebase using LLMs (FABLE), i would have considered it enough if it continued to be just my launcher, but now that there are others using it, i would really appreciate if an actual developer can have a quick look at the code.
+>
+> I’m actively looking for someone with Android, Termux, or application-security experience who would be willing to review the project. If you spot anything security-related, please open an issue or discussion.
 
 > [!IMPORTANT]
 > **This is an independent fork.** Termux Launcher is not affiliated with, endorsed by, or
@@ -35,7 +42,7 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 - Termux as the actual Android home launcher
 - Kitty graphics support (use timg package `timg -pk foo.jpg/gif`)
 - Sixel image drawing in terminal
-- Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser
+- Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser, **Ctrl + Alt** is the default keybind.
 - Kitty keyboard protocol, safe hyperlinks and advanced font shaping
 - TUI-tuned touch, unlike stock Termux: drags scroll mouse-aware apps, taps click, and a brief press-and-hold turns the finger into a held mouse button — drag vim selections or resize tmux/TUI panes by touch
 - Searchable terminal command palette, tmux-style leader key, modal keymaps, and on-screen key hints
