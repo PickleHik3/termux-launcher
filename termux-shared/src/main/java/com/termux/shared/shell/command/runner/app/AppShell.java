@@ -23,7 +23,6 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -42,12 +41,6 @@ public final class AppShell {
     private final AppShellClient mAppShellClient;
 
     private static final String LOG_TAG = "AppShell";
-    private static final String[] SYSTEM_LINKER_PATHS = {
-        "/apex/com.android.runtime/bin/linker64",
-        "/apex/com.android.runtime/bin/linker",
-        "/system/bin/linker64",
-        "/system/bin/linker"
-    };
 
     private AppShell(@NonNull final Process process, @NonNull final ExecutionCommand executionCommand, final AppShellClient appShellClient) {
         this.mProcess = process;
@@ -119,22 +112,9 @@ public final class AppShell {
         try {
             process = Runtime.getRuntime().exec(commandArray, environmentArray, new File(executionCommand.workingDirectory));
         } catch (IOException e) {
-            String[] wrappedCommandArray = getSystemLinkerWrappedCommand(commandArray, environment, e);
-            if (wrappedCommandArray == null) {
-                executionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), currentPackageContext.getString(R.string.error_failed_to_execute_app_shell_command, executionCommand.getCommandIdAndLabelLogString()), e);
-                AppShell.processAppShellResult(null, executionCommand);
-                return null;
-            }
-
-            try {
-                Logger.logWarn(LOG_TAG, "Direct exec failed for \"" + commandArray[0] + "\" due to permission denied; retrying via system linker \"" + wrappedCommandArray[0] + "\"");
-                process = Runtime.getRuntime().exec(wrappedCommandArray, environmentArray, new File(executionCommand.workingDirectory));
-            } catch (IOException e2) {
-                e2.addSuppressed(e);
-                executionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), currentPackageContext.getString(R.string.error_failed_to_execute_app_shell_command, executionCommand.getCommandIdAndLabelLogString()), e2);
-                AppShell.processAppShellResult(null, executionCommand);
-                return null;
-            }
+            executionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), currentPackageContext.getString(R.string.error_failed_to_execute_app_shell_command, executionCommand.getCommandIdAndLabelLogString()), e);
+            AppShell.processAppShellResult(null, executionCommand);
+            return null;
         }
         final AppShell appShell = new AppShell(process, executionCommand, appShellClient);
         if (isSynchronous) {
@@ -157,37 +137,6 @@ public final class AppShell {
             }.start();
         }
         return appShell;
-    }
-
-    @Nullable
-    private static String[] getSystemLinkerWrappedCommand(@NonNull String[] commandArray, @NonNull HashMap<String, String> environment, @NonNull IOException execException) {
-        if (commandArray.length == 0) return null;
-
-        String exceptionMessage = execException.getMessage();
-        if (exceptionMessage == null || !exceptionMessage.contains("Permission denied")) return null;
-
-        String command = commandArray[0];
-        String prefix = environment.get("PREFIX");
-        if (prefix == null || prefix.isEmpty()) return null;
-        if (!(command.startsWith(prefix + "/") || command.equals(prefix))) return null;
-
-        String systemLinker = getSystemLinkerPath();
-        if (systemLinker == null) return null;
-
-        String[] wrappedCommandArray = new String[commandArray.length + 1];
-        wrappedCommandArray[0] = systemLinker;
-        System.arraycopy(commandArray, 0, wrappedCommandArray, 1, commandArray.length);
-        Logger.logVerboseExtended(LOG_TAG, "Wrapped command for system linker exec: " + Arrays.toString(wrappedCommandArray));
-        return wrappedCommandArray;
-    }
-
-    @Nullable
-    private static String getSystemLinkerPath() {
-        for (String path : SYSTEM_LINKER_PATHS) {
-            File linker = new File(path);
-            if (linker.canExecute()) return path;
-        }
-        return null;
     }
 
     /**
