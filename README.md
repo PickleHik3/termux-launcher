@@ -2,10 +2,7 @@
 
 > [!WARNING]
 > **This project is entirely vibe-coded.**
-> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been rock-solid so far. It also does not appear to have any noticeable impact on battery life, uses about ~350mb of RAM at idle.
-
-> [!CAUTION]
-> The native AI backends—**Google LiteRT** and **Alibaba MNN**—are highly experimental. Be mindful of your device’s available RAM and processor capabilities when selecting models.
+> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, uses about ~350mb of RAM at idle.
 
 > [!IMPORTANT]
 > **This is an independent fork.** Termux Launcher is not affiliated with, endorsed by, or
@@ -16,20 +13,17 @@
 > package name with official Termux and **replaces it** on the device; the other editions install
 > side by side. Termux is a trademark of its respective owners.
 
-Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app) and [termux-monet](https://github.com/Termux-Monet/termux-monet).
-
-**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md)
-
-> **Three editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The new **`com.termux.launcher.nix`** build swaps APT for the **[Nix](https://nixos.org) package manager**: it installs side-by-side with a stock Termux and pulls prebuilt packages straight from the official `nixpkgs` binary cache — see [Nix package management](docs/en/Nix_Package_Management.md). The **`io.vaj.tl`** build is a legacy **demo edition** on a small hand-maintained APT repository, kept only for preview installs. See [Editions](#editions).
-
 <p align="center">
   <img src="screenshots/banner.png" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
 </p>
 
+**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md)
+
+
 ## About
 
-Designed to be a Terminal/TUI Android home launcher.
-What started out as me just wanting sixel image drawing in [TEL](https://github.com/t-e-l/tel) spiralled out of scope to what this project is today.
+Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app) and [termux-monet](https://github.com/Termux-Monet/termux-monet).
+What started out as me just wanting sixel image drawing in [TEL](https://github.com/t-e-l/tel) spiraled out of scope to what this project is today.
 All credits go to the amazing developers and contributors of Termux, TEL, and Termux:Monet.
 
 <p align="center">
@@ -39,9 +33,10 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 ## Features
 
 - Termux as the actual Android home launcher
+- Kitty graphics support (use timg package `timg -pk foo.jpg/gif`)
 - Sixel image drawing in terminal
 - Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser
-- Kitty keyboard/graphics protocols, safe hyperlinks, prompt navigation, and advanced font shaping
+- Kitty keyboard protocol, safe hyperlinks and advanced font shaping
 - TUI-tuned touch, unlike stock Termux: drags scroll mouse-aware apps, taps click, and a brief press-and-hold turns the finger into a held mouse button — drag vim selections or resize tmux/TUI panes by touch
 - Searchable terminal command palette, tmux-style leader key, modal keymaps, and on-screen key hints
 - Scrollback search with vim-style copy mode over the transcript
@@ -51,11 +46,12 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 - Built-in terminal keyboard by default on fresh installs, with Android keyboard and no-keyboard options
 - Launch Android apps from the shell with `launcherctl launch`
 - `tai` shell command and OpenAI/Ollama-compatible localhost API for on-device LLM inference and model management
-- Cloned/work-profile app discovery where Android exposes launcher profiles
 - On-device LLM backends using Google's LiteRT and Alibaba's MNN
-- Optional Shizuku integration for screen lock and privileged status helpers
+- Optional Shizuku integration for screen lock and showing CPU usage in status bar
 
 ## Editions
+
+> **Three editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. If you want to install it alongside your existing termux install, choose either **`com.termux.launcher.nix`** or **`io.vaj.tl`**.
 
 Every release ships the same launcher built from the same source; the editions differ only in Android package identity and the package ecosystem they use.
 
@@ -69,9 +65,7 @@ Every release ships the same launcher built from the same source; the editions d
 | Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a, x86_64 — bootstrap downloaded on first run | arm64-v8a (aarch64) only, bootstrap downloaded on first run |
 | Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) (plain tags) | [TLNix:API](https://github.com/PickleHik3/termux-api/releases/tag/nix-v0.53.1) / [TLNix:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/nix-v0.32.2) (`nix-v*` tags) | same forks, `-vaj` tagged releases |
 
-Pick the **Termux edition** for the classic Termux experience — the launcher as your Termux, fully compatible with the upstream Termux package ecosystem. Pick the **Nix edition** if you want the entire `nixpkgs` collection, declarative configs, and rollbacks next to an existing Termux install — it is built on a [Nix-on-Droid](https://github.com/nix-community/nix-on-droid)-style environment; new to Nix? start with the [beginner's guide](docs/en/Nix_Getting_Started.md), then the [package management reference](docs/en/Nix_Package_Management.md). The **VAJ edition is a legacy demo**: it predates the Nix edition as the side-by-side option and is kept only for preview installs.
-
-> ⚠️ **The VAJ demo edition is being deprecated.** It has been security-fixes-only since `v0.2.34-vaj`. It runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set; keeping its crucial packages updated is no longer sustainable, and packages that stop receiving security updates are a liability rather than a feature. Move to the Nix edition instead — the **[VAJ to Nix migration guide](docs/en/VAJ_To_Nix_Migration.md)** covers backing up the home directory, installing the Nix build side by side, restoring your files, and replacing APT packages from `nixpkgs`. If the Nix edition does not cover a specific need, [open an issue](https://github.com/PickleHik3/termux-launcher/issues).
+> ⚠️ **The VAJ edition is to be considered as just a demo.**. It runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set; keeping its crucial packages updated is hard for me, pkg updates may come or may not. Nix edition is suggested if you want to use it along with official termux-app — the **[VAJ to Nix migration guide](docs/en/VAJ_To_Nix_Migration.md)** may help. for the curious among you, this is a [pathayam](https://commons.wikimedia.org/wiki/File:Exhibits_at_Koyikkal_Palace_Museum_Nedumangad_162.jpg), the sketchy URL is because i am just reusing my personal domain for homelab which was never supposed to see the light of day :(. 
 
 Companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with any edition. Nix-edition companions ship as `nix-v*` tagged releases (TLNix:API, TLNix:Styling).
 
@@ -91,18 +85,18 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 ### Quick start script
 
-[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the showcase shell. It offers everything (fish, Oh My Posh with wallpaper Material colors, zoxide, eza, Neovim + AstroNvim, and the showcase binaries — sigye, the animated-logo fastfetch, kitten), just the shell essentials, or one item at a time. Every config it replaces gets a timestamped `.bak` first, and nothing under `~/.termux` comes from the script: the app seeds those files itself and ships the extra keys row and keyboard layout as built-in defaults:
+[`setup-launcher`](docs/en/examples/setup-launcher) install my personal shell setup (fish, Oh My Posh with wallpaper Material colors, zoxide, eza, Neovim + AstroNvim, and the binaries — sigye, the animated-logo fastfetch, kitten). Every config it replaces gets a timestamped `.bak` first.
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher
 sh setup-launcher
 ```
 
-Fonts are not part of the script — the in-app font picker (**Settings › Terminal › Font**) downloads and wires up curated families, Nerd Font builds included.
+Its highly recommended that you use the in-app font picker (**Settings › Terminal › Font**) to install a nerd font since it will configure it properly for seamless font rendering using kitty protocol related features.
 
 ## Documentation
 
-**User documentation lives on the [website](https://picklehik3.github.io/termux-launcher-site/)** — getting started, the launcher tour, terminal and multiplexer guides, fonts, keybindings, extra keys, notifications, backups, and the Nix edition pages, kept current with each release.
+**User documentation lives on the [website](https://picklehik3.github.io/termux-launcher-site/)**
 
 In-repo references:
 
