@@ -4,10 +4,15 @@ import android.app.Activity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Process;
 import android.system.Os;
+import android.text.TextUtils;
 import android.util.Pair;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.view.WindowManager;
 import com.termux.R;
 import com.termux.shared.file.FileUtils;
@@ -20,6 +25,7 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.errors.Error;
 import com.termux.shared.android.PackageUtils;
+import com.termux.shared.android.SELinuxUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
@@ -96,6 +102,17 @@ final class TermuxInstaller {
             Logger.logError(LOG_TAG, bootstrapErrorMessage);
             sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
             MessageDialogUtils.exitAppWithErrorMessage(activity, activity.getString(R.string.bootstrap_error_title), bootstrapErrorMessage);
+            return;
+        }
+        // Android assigns the SELinux domain from the highest target sdk version in the app's
+        // sharedUserId group and remembers it until every member is uninstalled, so the app can be
+        // put in a domain that forbids executing anything under $PREFIX even though it targets
+        // sdk 28 itself. Check before touching the prefix: the bootstrap would extract fine and
+        // then fail deep inside its second stage, and the prefix would be deleted with it.
+        String restrictedDomain = getRestrictedSELinuxDomain();
+        if (restrictedDomain != null) {
+            Logger.logError(LOG_TAG, "isFilesDirectoryAccessible: " + isFilesDirectoryAccessible);
+            showExecRestrictedErrorDialog(activity, restrictedDomain);
             return;
         }
         if (!isFilesDirectoryAccessible) {
@@ -234,6 +251,15 @@ final class TermuxInstaller {
                         executionCommand.backgroundCustomLogLevel = Logger.LOG_LEVEL_NORMAL;
                         AppShell appShell = AppShell.execute(activity, executionCommand, null, new TermuxShellEnvironment(), null, true);
                         if (appShell == null || !executionCommand.isSuccessful() || executionCommand.resultData.exitCode != 0) {
+                            // If the domain flipped while the bootstrap was being installed, the prefix is
+                            // intact and only unexecutable. Keep it: deleting it destroys the evidence and
+                            // makes every retry download the bootstrap again to fail the same way.
+                            String domain = getRestrictedSELinuxDomain();
+                            if (domain != null) {
+                                Logger.logError(LOG_TAG, "Keeping the termux prefix directory, the second stage could not be executed in the restricted SELinux domain \"" + domain + "\".");
+                                showExecRestrictedErrorDialog(activity, domain);
+                                return;
+                            }
                             // Delete prefix directory as otherwise when app is restarted, the broken prefix directory would be used and logged into
                             error = FileUtils.deleteFile("termux prefix directory", TERMUX_PREFIX_DIR_PATH, true);
                             if (error != null)
@@ -261,6 +287,76 @@ final class TermuxInstaller {
                 }
             }
         }.start();
+    }
+
+    /**
+     * Report that SELinux forbids the app from executing anything it installs, and exit.
+     * <p>
+     * This is not offered a retry: nothing the app can do changes the domain it was assigned, and
+     * the "try again" of {@link #showBootstrapErrorDialog} would delete the prefix that is intact
+     * and only unexecutable.
+     */
+    private static void showExecRestrictedErrorDialog(@NonNull Activity activity, @NonNull String domain) {
+        String message = activity.getString(R.string.bootstrap_error_exec_restricted_message,
+            MarkdownUtils.getMarkdownCodeForString(domain, false),
+            getSharedUidPackagesBlockingExecution(activity));
+        Logger.logError(LOG_TAG, message);
+        sendBootstrapCrashReportNotification(activity, message);
+        activity.runOnUiThread(() -> {
+            try {
+                MessageDialogUtils.exitAppWithErrorMessage(activity, activity.getString(R.string.bootstrap_error_title), message);
+            } catch (WindowManager.BadTokenException e) {
+                // Activity already dismissed - ignore.
+            }
+        });
+    }
+
+    /**
+     * Get the SELinux domain the app is running in if that domain forbids executing files under the
+     * app data directory, which makes every binary under {@code $PREFIX} unrunnable.
+     *
+     * @return Returns the domain, or {@code null} if execution is not restricted.
+     */
+    @Nullable
+    private static String getRestrictedSELinuxDomain() {
+        String seContext = SELinuxUtils.getContext();
+        if (!SELinuxUtils.isAppDataFileExecutionRestricted(Build.VERSION.SDK_INT, seContext))
+            return null;
+        return SELinuxUtils.getDomain(seContext);
+    }
+
+    /**
+     * Get a markdown list of the installed packages that share the app's user id and target a sdk
+     * version that puts the whole shared user in a restricted SELinux domain, which is what causes
+     * {@link #getRestrictedSELinuxDomain()} to be non-null in the first place.
+     *
+     * @return Returns the list, or an empty {@link String} if there is nothing to name.
+     */
+    @NonNull
+    private static String getSharedUidPackagesBlockingExecution(@NonNull Context context) {
+        String[] packageNames;
+        try {
+            packageNames = context.getPackageManager().getPackagesForUid(Process.myUid());
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to get the packages sharing the app user id", e);
+            return "";
+        }
+        if (packageNames == null || packageNames.length < 2)
+            return "";
+        List<String> culprits = new ArrayList<>();
+        for (String packageName : packageNames) {
+            if (context.getPackageName().equals(packageName))
+                continue;
+            ApplicationInfo applicationInfo = PackageUtils.getApplicationInfoForPackage(context, packageName);
+            if (applicationInfo == null)
+                continue;
+            int targetSdk = PackageUtils.getTargetSDKForPackage(applicationInfo);
+            if (targetSdk >= Build.VERSION_CODES.Q)
+                culprits.add("- " + MarkdownUtils.getMarkdownCodeForString(packageName, false) + " (target sdk " + targetSdk + ")");
+        }
+        if (culprits.isEmpty())
+            return "";
+        return "\n\n" + context.getString(R.string.bootstrap_error_exec_restricted_shared_uid_packages) + "\n" + TextUtils.join("\n", culprits);
     }
 
     public static void showBootstrapErrorDialog(Activity activity, Runnable whenDone, String message) {
