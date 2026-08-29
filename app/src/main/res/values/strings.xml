@@ -388,6 +388,14 @@
     <string name="bootstrap_error_not_primary_user_message">&TERMUX_APP_NAME; can only be run as the primary user.
         \nBootstrap binaries compiled for &TERMUX_APP_NAME; have hardcoded $PREFIX path and cannot be installed
         under any path other than:\n%1$s.</string>
+    <string name="bootstrap_error_exec_restricted_message">Android is running &TERMUX_APP_NAME; in the
+        restricted SELinux domain %1$s, which does not allow it to run the programs it installs.
+        Nothing under $PREFIX can be executed while it stays in that domain.
+        \n\nUninstall &TERMUX_APP_NAME; completely and install it again — reinstalling over the top is
+        not enough. The domain is decided when the app is installed and is kept until every app
+        sharing its user id has been removed.%2$s</string>
+    <string name="bootstrap_error_exec_restricted_shared_uid_packages">These installed apps share its
+        user id and target a newer Android version, which is what puts it in that domain:</string>
     <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; cannot be installed on
         portable/external/removable sd card on your device.
         \nBootstrap binaries compiled for &TERMUX_APP_NAME; have hardcoded $PREFIX path and cannot be installed
