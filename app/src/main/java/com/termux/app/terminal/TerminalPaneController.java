@@ -347,8 +347,122 @@ public class TerminalPaneController {
         // A window opened while another is focused starts at that pane's zoom level.
         ((Leaf) w.root).fontSize =
             inheritableFontSize(mActiveWindow == null ? null : mActiveWindow.active);
+        w.layoutPolicy = mDefaultLayoutPolicy;
         mWindows.add(w);
         return w;
+    }
+
+    // --- Behaviour preferences ---
+
+    /** Retained layout every new window starts under, or null for manual management. */
+    @Nullable private String mDefaultLayoutPolicy;
+    /**
+     * focus.nvim-style growth: the focused pane takes {@link #FOCUS_GROW_SHARE} of every split on
+     * its path to the root, so whichever pane the user taps (or an agent focuses) becomes the big
+     * one and the rest slide aside.
+     */
+    private boolean mFocusGrowEnabled;
+    static final float FOCUS_GROW_SHARE = 0.7f;
+    @Nullable private ValueAnimator mFocusGrowAnimator;
+
+    /**
+     * The layout new windows are born under. Windows still at one unmanaged pane adopt it too, so
+     * flipping the setting on takes effect in the tab you are looking at; anything the user has
+     * already shaped is left alone.
+     */
+    public void setDefaultLayoutPolicy(@Nullable String layout) {
+        mDefaultLayoutPolicy = isKnownLayout(layout) ? layout : null;
+        if (mDefaultLayoutPolicy == null) return;
+        for (Window w : mWindows) {
+            if (w.layoutPolicy == null && w.root instanceof Leaf && w.floating.isEmpty()) {
+                w.layoutPolicy = mDefaultLayoutPolicy;
+            }
+        }
+    }
+
+    /** Turn focus growth on (the focused pane grows now) or off (every divider goes back to 1:1). */
+    public void setFocusGrowEnabled(boolean enabled) {
+        if (mFocusGrowEnabled == enabled) return;
+        mFocusGrowEnabled = enabled;
+        if (mFocusGrowAnimator != null) mFocusGrowAnimator.cancel();
+        if (mActiveWindow == null) return;
+        if (enabled) {
+            applyFocusGrowth(true);
+        } else {
+            for (Window w : mWindows) if (w.root != null) equalizeNode(w.root);
+            render();
+            mHost.onTreesChanged();
+        }
+    }
+
+    public boolean isFocusGrowEnabled() {
+        return mFocusGrowEnabled;
+    }
+
+    /**
+     * Re-weight the splits between the focused pane and the root so the focused side holds
+     * {@link #FOCUS_GROW_SHARE}. Splits off that path keep their ratios. A float or a maximized
+     * pane needs no room made for it, so those leave the tree alone. With {@code animate} the
+     * dividers ease over, with PTY resizing held until they settle — one reflow, not sixty.
+     */
+    private void applyFocusGrowth(boolean animate) {
+        if (!mFocusGrowEnabled || mActiveWindow == null || mActiveWindow.active == null) return;
+        Leaf active = mActiveWindow.active;
+        if (mMaximizedLeaf != null || mActiveWindow.floating.contains(active)) return;
+        final List<Split> splits = new ArrayList<>();
+        final List<Float> fromA = new ArrayList<>();
+        final List<Float> toA = new ArrayList<>();
+        Node node = active;
+        for (Split parent = node.parent; parent != null; node = parent, parent = parent.parent) {
+            float total = parent.weightA + parent.weightB;
+            float target = parent.a == node ? total * FOCUS_GROW_SHARE : total * (1f - FOCUS_GROW_SHARE);
+            if (Math.abs(target - parent.weightA) < 0.001f) continue;
+            splits.add(parent);
+            fromA.add(parent.weightA);
+            toA.add(target);
+        }
+        if (splits.isEmpty()) return;
+        if (mFocusGrowAnimator != null) mFocusGrowAnimator.cancel();
+        boolean live = true;
+        for (Split split : splits) live &= mSplitLayouts.containsKey(split);
+        if (!animate || !live || !arePaneAnimationsEnabled()) {
+            for (int i = 0; i < splits.size(); i++) setSplitWeightA(splits.get(i), toA.get(i));
+            if (live) {
+                for (Split split : splits) applyWeightsToRenderedLayout(split);
+                refreshPaneSizes();
+            }
+            return;
+        }
+        beginHostSurfaceResize();
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(PANE_MOVE_MS);
+        animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
+        animator.addUpdateListener(animation -> {
+            float t = (float) animation.getAnimatedValue();
+            for (int i = 0; i < splits.size(); i++) {
+                setSplitWeightA(splits.get(i), fromA.get(i) + (toA.get(i) - fromA.get(i)) * t);
+                applyWeightsToRenderedLayout(splits.get(i));
+            }
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                for (int i = 0; i < splits.size(); i++) {
+                    setSplitWeightA(splits.get(i), toA.get(i));
+                    applyWeightsToRenderedLayout(splits.get(i));
+                }
+                if (mFocusGrowAnimator == animation) mFocusGrowAnimator = null;
+                finishHostSurfaceResizeKeepingBottom();
+                mHost.onTreesChanged();
+            }
+        });
+        mFocusGrowAnimator = animator;
+        animator.start();
+    }
+
+    private static void setSplitWeightA(@NonNull Split split, float weightA) {
+        float total = split.weightA + split.weightB;
+        split.weightA = weightA;
+        split.weightB = total - weightA;
     }
 
     /**
@@ -741,6 +855,7 @@ public class TerminalPaneController {
             if (mMaximizedLeaf != null) mMaximizedLeaf = leaf;
             bringFloatToFront(mActiveWindow, leaf);
             updateActiveBorders();
+            applyFocusGrowth(true);
             focusActiveView();
             mHost.onActivePaneChanged();
         }
@@ -1907,6 +2022,10 @@ public class TerminalPaneController {
     private void render() {
         // A re-render invalidates the geometry a running divider reveal was easing toward.
         cancelSplitReveal();
+        // Weights first, so the tree is built already grown; the pane-move animation carries the
+        // frames from where they were.
+        if (mFocusGrowAnimator != null) mFocusGrowAnimator.cancel();
+        applyFocusGrowth(false);
         captureMoveOrigins();
         mHostView.removeAllViews();
         mSplitLayouts.clear();
@@ -3167,6 +3286,7 @@ public class TerminalPaneController {
             if (leaf == null || mActiveWindow == null || mActiveWindow.active == leaf) return;
             mActiveWindow.active = leaf;
             updateActiveBorders();
+            applyFocusGrowth(true);
             focusActiveView();
             mHost.onActivePaneChanged();
         }

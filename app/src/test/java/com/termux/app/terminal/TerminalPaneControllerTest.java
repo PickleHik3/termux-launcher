@@ -495,6 +495,61 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void focusGrow_givesTheFocusedPaneTheLargerShareAlongItsPathAndUndoesOnDisable() {
+        android.provider.Settings.Global.putFloat(
+            RuntimeEnvironment.getApplication().getContentResolver(),
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.VERTICAL));   // top / bottom, focus bottom
+        assertTrue(controller.split(LinearLayout.HORIZONTAL)); // bottom: left / right, focus right
+        TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
+        TerminalPaneController.Split lower = (TerminalPaneController.Split) root.b;
+        assertEquals(1f, root.weightA, 0f);
+
+        controller.setFocusGrowEnabled(true);
+        // Focus is bottom-right: the lower half grows, and inside it the right pane grows.
+        assertEquals(0.6f, root.weightA, 0.001f);   // total 2 * 0.3
+        assertEquals(1.4f, root.weightB, 0.001f);
+        assertEquals(0.6f, lower.weightA, 0.001f);
+        assertEquals(1.4f, lower.weightB, 0.001f);
+
+        TerminalSession top = ((TerminalPaneController.Leaf) root.a).session;
+        controller.focusSession(top);
+        assertEquals(1.4f, root.weightA, 0.001f);
+        assertEquals(0.6f, root.weightB, 0.001f);
+        // The lower split is off the focused path and keeps its ratio.
+        assertEquals(0.6f, lower.weightA, 0.001f);
+
+        controller.setFocusGrowEnabled(false);
+        assertEquals(1f, root.weightA, 0f);
+        assertEquals(1f, root.weightB, 0f);
+        assertEquals(1f, lower.weightA, 0f);
+        assertEquals(1f, lower.weightB, 0f);
+    }
+
+    @Test
+    public void defaultLayoutPolicy_appliesToNewWindowsAndLoneUnmanagedOnes() {
+        TerminalPaneController controller = newSplittingController();
+        TerminalPaneController.Window lone = controller.newWindow(terminal());
+        PaneFixture shaped = fourPaneFixture(controller);
+        assertEquals(null, lone.layoutPolicy);
+
+        controller.setDefaultLayoutPolicy(TerminalPaneController.LAYOUT_DWINDLE);
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, lone.layoutPolicy);
+        assertEquals("a hand-shaped window is left alone", null, shaped.window.layoutPolicy);
+        TerminalPaneController.Window fresh = controller.newWindow(terminal());
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, fresh.layoutPolicy);
+
+        controller.setDefaultLayoutPolicy("spiral");
+        assertEquals(null, controller.newWindow(terminal()).layoutPolicy);
+        assertEquals("switching the default off does not strip windows", TerminalPaneController.LAYOUT_DWINDLE, fresh.layoutPolicy);
+    }
+
+    @Test
     public void handShapingClearsPolicy_soALaterSplitKeepsTheUserTopology() {
         PaneFixture fixture = splittableFourPaneFixture();
 
