@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **This project is entirely vibe-coded.**
-> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, and uses about ~350 MB of RAM at idle.
+> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, and uses about ~350 MB of RAM at idle (for reference, something like smart launcher uses about 250 on fresh install).
 
 > [!CAUTION]
 > **Security review wanted**
