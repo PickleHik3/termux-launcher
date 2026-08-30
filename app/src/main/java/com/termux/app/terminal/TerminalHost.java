@@ -256,6 +256,29 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     boolean moveFocusedPaneToEdge(@NonNull String edge);
 
+    // --- Panes opened through the local API ---
+
+    /**
+     * Open a new pane in the current window running {@code command} (argv; empty for a plain
+     * shell) through the user's login shell, or null when no pane can be added (no session,
+     * terminal limit reached, service not ready). The shell stays behind once the command exits.
+     */
+    @Nullable default TerminalSession openCommandPane(@NonNull List<String> command,
+                                                      @Nullable String cwd, @Nullable String title,
+                                                      boolean focus) {
+        return null;
+    }
+
+    /** The windows of the current session, in tab order. */
+    @NonNull default List<TerminalPaneController.Window> currentSessionWindows() {
+        return java.util.Collections.emptyList();
+    }
+
+    /** The shell whose {@link TerminalSession#mHandle} is {@code id}, in any session, or null. */
+    @Nullable default TerminalSession findPaneById(@NonNull String id) {
+        return null;
+    }
+
     // --- Shells ---
 
     /** The service holding every live shell, or null while it is not bound. */

@@ -63,7 +63,8 @@ public class TerminalActionDispatcherTest {
             "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar",
             "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
-            "pane.next_layout", "pane.toggle_float"};
+            "pane.next_layout", "pane.toggle_float",
+            "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
         }

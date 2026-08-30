@@ -249,9 +249,11 @@ still destructive and should only be used after saving anything important.
 ## Terminal actions and the palette
 
 Terminal commands share the internal action registry used by the command palette, the action sheet,
-and key bindings. Remote action execution over HTTP was removed together with the agent endpoints;
-the local API now serves TAI and the separate `/v1/apps/launch` route. Workspace tools
-(`workspace.save`, `workspace.load`,
+and key bindings. General remote action execution over HTTP was removed together with the agent
+endpoints; the local API serves TAI, the separate `/v1/apps/launch` route, and the pane routes
+(`/v1/panes`, `launcherctl pane …`) through which a process in a shell can open a pane of its own,
+type into it, read it back and close it — but only panes it opened itself; see
+[LauncherCtl API](LauncherCtl_API.md#panes). Workspace tools (`workspace.save`, `workspace.load`,
 `workspace.list`, `workspace.delete`) and the parameterized pane actions (`pane.layout`,
 `pane.move_to_edge`) remain reachable from custom key bindings.
 

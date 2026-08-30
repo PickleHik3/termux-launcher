@@ -15,6 +15,7 @@ import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
+import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalRenderMetrics;
 import com.termux.view.TerminalView;
 
@@ -72,6 +73,19 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_ROTATE = "pane.rotate";
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
+    public static final String TOOL_PANE_SPLIT = "pane.split";
+    /** Panes opened and driven through the local API (agents, scripts); see AgentPaneRegistry. */
+    public static final String TOOL_PANE_OPEN = "pane.open";
+    public static final String TOOL_PANE_LIST = "pane.list";
+    public static final String TOOL_PANE_FOCUS = "pane.focus";
+    public static final String TOOL_PANE_CLOSE = "pane.close";
+    public static final String TOOL_PANE_WRITE = "pane.write";
+    public static final String TOOL_PANE_READ = "pane.read";
+    /** Most transcript lines one pane.read returns; enough to see a screen and its recent past. */
+    static final int PANE_READ_MAX_LINES = 500;
+    static final int PANE_READ_DEFAULT_LINES = 60;
+    /** Most bytes one pane.write may type; a paste, not a file transfer. */
+    static final int PANE_WRITE_MAX_BYTES = 16 * 1024;
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_WINDOW_NEW = "window.new";
     public static final String TOOL_WINDOW_CLOSE = "window.close";
@@ -190,6 +204,12 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_MOVE_TO_EDGE:
             case TOOL_PANE_NEXT_LAYOUT:
             case TOOL_PANE_TOGGLE_FLOAT:
+            case TOOL_PANE_OPEN:
+            case TOOL_PANE_LIST:
+            case TOOL_PANE_FOCUS:
+            case TOOL_PANE_CLOSE:
+            case TOOL_PANE_WRITE:
+            case TOOL_PANE_READ:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
             case TOOL_WINDOW_NEXT:
@@ -458,6 +478,138 @@ public final class TerminalActionDispatcher {
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     if (!host.cyclePaneLayout()) return noSession(toolName);
                     return ok().put("layout", host.activePaneLayoutPolicy());
+                }
+
+                case TOOL_PANE_OPEN: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    List<String> command = new java.util.ArrayList<>();
+                    Object rawCommand = arguments.opt("command");
+                    if (rawCommand instanceof JSONArray) {
+                        JSONArray array = (JSONArray) rawCommand;
+                        for (int i = 0; i < array.length(); i++) {
+                            if (!(array.get(i) instanceof String)) {
+                                return error(400, "bad_request", "'command' must be an array of strings");
+                            }
+                            command.add(array.getString(i));
+                        }
+                    } else if (rawCommand instanceof String) {
+                        // A command line rather than argv: hand it to sh so quoting and pipes work.
+                        String line = ((String) rawCommand).trim();
+                        if (!line.isEmpty()) {
+                            command.add("sh");
+                            command.add("-c");
+                            command.add(line);
+                        }
+                    } else if (rawCommand != null && rawCommand != JSONObject.NULL) {
+                        return error(400, "bad_request", "'command' must be a string or an array of strings");
+                    }
+                    String cwd = arguments.optString("cwd", "").trim();
+                    String title = arguments.optString("title", "").trim();
+                    boolean focus = arguments.optBoolean("focus", true);
+                    TerminalSession opened = host.openCommandPane(command,
+                        cwd.isEmpty() ? null : cwd, title.isEmpty() ? null : title, focus);
+                    if (opened == null) {
+                        return error(409, "pane_open_failed",
+                            "No pane could be opened: there is no active terminal session, or the terminal limit is reached");
+                    }
+                    AgentPaneRegistry.getInstance().register(opened.mHandle,
+                        arguments.optString("tag", "").trim(), command);
+                    return ok().put("pane", paneRecord(host, opened));
+                }
+                case TOOL_PANE_LIST: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    TerminalPaneController controller = host.paneController();
+                    JSONArray windows = new JSONArray();
+                    List<String> live = new java.util.ArrayList<>();
+                    List<TerminalPaneController.Window> sessionWindows = host.currentSessionWindows();
+                    int windowIndex = 0;
+                    for (TerminalPaneController.Window window : sessionWindows) {
+                        JSONObject record = new JSONObject();
+                        record.put("index", windowIndex);
+                        record.put("id", window.id);
+                        String windowName = controller == null ? null : controller.windowName(window);
+                        record.put("name", windowName == null ? JSONObject.NULL : windowName);
+                        record.put("current", windowIndex == host.currentWindowIndex());
+                        TerminalSession focused = controller == null ? null : controller.windowActiveSession(window);
+                        record.put("focusedPane", focused == null ? JSONObject.NULL : focused.mHandle);
+                        JSONArray panes = new JSONArray();
+                        if (controller != null) {
+                            for (TerminalSession shell : controller.shellsOf(window)) {
+                                live.add(shell.mHandle);
+                                panes.put(paneRecord(host, shell));
+                            }
+                        }
+                        record.put("panes", panes);
+                        windows.put(record);
+                        windowIndex++;
+                    }
+                    // Only the shells shown in this session are known here, so prune against every
+                    // shell the service still runs instead — an agent's pane in another session
+                    // must not be forgotten just because the user switched away from it.
+                    if (host.service() != null) {
+                        live.clear();
+                        for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
+                                : host.service().getTermuxSessions()) {
+                            TerminalSession shell = termuxSession.getTerminalSession();
+                            if (shell != null) live.add(shell.mHandle);
+                        }
+                        AgentPaneRegistry.getInstance().prune(live);
+                    }
+                    TerminalSession active = host.currentSession();
+                    String layout = host.activePaneLayoutPolicy();
+                    return ok().put("windows", windows)
+                        .put("activePane", active == null ? JSONObject.NULL : active.mHandle)
+                        .put("layout", layout == null ? JSONObject.NULL : layout);
+                }
+                case TOOL_PANE_FOCUS: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    TerminalSession target = paneArgument(host, arguments);
+                    if (target == null) return paneNotFound(arguments);
+                    if (!host.activateSessionInPanes(target)) {
+                        return error(409, "pane_not_shown", "That pane is not in any window");
+                    }
+                    return ok().put("pane", paneRecord(host, target));
+                }
+                case TOOL_PANE_CLOSE: {
+                    TerminalSession target = paneArgument(host, arguments);
+                    if (target == null) return paneNotFound(arguments);
+                    JSONObject refused = requireOwned(target, toolName);
+                    if (refused != null) return refused;
+                    target.finishIfRunning();
+                    AgentPaneRegistry.getInstance().forget(target.mHandle);
+                    return ok().put("id", target.mHandle).put("closed", true);
+                }
+                case TOOL_PANE_WRITE: {
+                    TerminalSession target = paneArgument(host, arguments);
+                    if (target == null) return paneNotFound(arguments);
+                    JSONObject refused = requireOwned(target, toolName);
+                    if (refused != null) return refused;
+                    if (!arguments.has("text")) return error(400, "bad_request", "Missing 'text'");
+                    String text = arguments.optString("text", "");
+                    if (arguments.optBoolean("enter", false)) text += "\r";
+                    byte[] bytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    if (bytes.length > PANE_WRITE_MAX_BYTES) {
+                        return error(413, "text_too_long",
+                            "'text' may be at most " + PANE_WRITE_MAX_BYTES + " bytes per call");
+                    }
+                    if (!target.isRunning()) {
+                        return error(409, "pane_not_running", "The shell in that pane has exited");
+                    }
+                    target.write(bytes, 0, bytes.length);
+                    return ok().put("id", target.mHandle).put("bytes", bytes.length);
+                }
+                case TOOL_PANE_READ: {
+                    TerminalSession target = paneArgument(host, arguments);
+                    if (target == null) return paneNotFound(arguments);
+                    JSONObject refused = requireOwned(target, toolName);
+                    if (refused != null) return refused;
+                    int lines = arguments.optInt("lines", PANE_READ_DEFAULT_LINES);
+                    lines = Math.max(1, Math.min(PANE_READ_MAX_LINES, lines));
+                    String transcript = target.getEmulator() == null ? ""
+                        : target.getEmulator().getScreen().getTranscriptTextWithoutJoinedLines();
+                    return ok().put("id", target.mHandle)
+                        .put("text", lastLines(transcript, lines))
+                        .put("running", target.isRunning());
                 }
                 case TOOL_PANE_EQUALIZE:
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
@@ -1060,6 +1212,87 @@ public final class TerminalActionDispatcher {
         List<LauncherAppEntry> ranked =
             LauncherRankingEngine.filterAndRank(apps, query, APP_MATCH_TOLERANCE);
         return ranked.isEmpty() ? null : ranked.get(0);
+    }
+
+    /** The pane named by {@code id}, or null when it is missing or names no live shell. */
+    @Nullable
+    private static TerminalSession paneArgument(@NonNull TerminalHost host, @NonNull JSONObject arguments) {
+        String id = arguments.optString("id", "").trim();
+        return id.isEmpty() ? null : host.findPaneById(id);
+    }
+
+    @NonNull
+    private static JSONObject paneNotFound(@NonNull JSONObject arguments) {
+        if (!arguments.has("id") || arguments.optString("id", "").trim().isEmpty()) {
+            return error(400, "bad_request", "Missing 'id'");
+        }
+        return error(404, "pane_not_found", "No pane with id " + arguments.optString("id", ""));
+    }
+
+    /**
+     * Null when the API opened {@code session} itself; otherwise the refusal. Typing into, reading
+     * and closing are reserved for panes the caller opened, so the token never reaches the user's
+     * own shells.
+     */
+    @Nullable
+    private static JSONObject requireOwned(@NonNull TerminalSession session, @NonNull String toolName) {
+        if (AgentPaneRegistry.getInstance().isOwned(session.mHandle)) return null;
+        return error(403, "not_owned",
+            "'" + toolName + "' only applies to panes opened through pane.open");
+    }
+
+    @NonNull
+    static JSONObject paneRecord(@NonNull TerminalHost host, @NonNull TerminalSession session) throws JSONException {
+        JSONObject record = new JSONObject();
+        record.put("id", session.mHandle);
+        String title = session.getTitle();
+        record.put("title", title == null ? JSONObject.NULL : title);
+        String name = session.mSessionName;
+        record.put("name", name == null ? JSONObject.NULL : name);
+        String cwd = session.getCwd();
+        record.put("cwd", cwd == null ? JSONObject.NULL : cwd);
+        record.put("pid", session.getPid());
+        record.put("running", session.isRunning());
+        if (session.getEmulator() != null) {
+            record.put("columns", session.getEmulator().mColumns);
+            record.put("rows", session.getEmulator().mRows);
+        }
+        record.put("focused", host.currentSession() == session);
+        AgentPaneRegistry.Record owned = AgentPaneRegistry.getInstance().get(session.mHandle);
+        if (owned == null) {
+            record.put("agent", JSONObject.NULL);
+        } else {
+            JSONObject agent = new JSONObject();
+            agent.put("tag", owned.tag);
+            agent.put("command", new JSONArray(owned.command));
+            agent.put("openedAt", owned.openedAtEpochMs);
+            record.put("agent", agent);
+        }
+        return record;
+    }
+
+    /** The last {@code count} lines of {@code text}, with trailing blank lines dropped. */
+    @NonNull
+    static String lastLines(@NonNull String text, int count) {
+        int end = text.length();
+        while (end > 0 && (text.charAt(end - 1) == '\n' || text.charAt(end - 1) == ' ')) end--;
+        if (end == 0) return "";
+        int start = end;
+        int seen = 0;
+        while (start > 0) {
+            int previous = text.lastIndexOf('\n', start - 1);
+            seen++;
+            if (seen == count) {
+                start = previous + 1;
+                break;
+            }
+            if (previous < 0) {
+                start = 0;
+                break;
+            }
+            start = previous;
+        }
+        return text.substring(start, end);
     }
 
     @NonNull

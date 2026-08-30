@@ -10303,45 +10303,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         panes.add(floating.pane);
                     java.util.List<TerminalSession> shells = new java.util.ArrayList<>();
                     for (com.termux.app.terminal.TerminalWorkspace.Pane pane : panes) {
-                        String executable = null;
-                        String[] arguments = null;
-                        if (runCommands && !pane.command.isEmpty()) {
-                            String shell = wrapperShellPath();
-                            if (shell != null) {
-                                // The command is looked up on the PATH the user's own config
-                                // builds, since a captured command frequently lives somewhere only
-                                // that config knows about, and a shell stays behind once it exits
-                                // so a pane restoring `make` does not vanish with the build.
-                                boolean fishStyle = isFishShell(shell);
-                                String script = shellCommandLine(pane.command, fishStyle)
-                                    + "; exec " + shellQuote(shell, fishStyle) + " -l";
-                                String login = loginProgramPath();
-                                if (login != null) {
-                                    // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs
-                                    // the same shell the same way a normal pane does — and only it
-                                    // sets up LD_PRELOAD for termux-exec and sources
-                                    // termux-login.sh. Passing arguments also skips its motd.
-                                    executable = login;
-                                    arguments = new String[] {"-c", script};
-                                } else {
-                                    executable = shell;
-                                    arguments = new String[] {"-l", "-c", script};
-                                }
-                            } else {
-                                executable = pane.command.get(0);
-                                arguments = pane.command.subList(1, pane.command.size()).toArray(new String[0]);
-                            }
-                        }
-                        String cwd = pane.cwd;
-                        if (cwd == null || cwd.isEmpty()) cwd = getProperties().getDefaultWorkingDirectory();
-                        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
-                            mTermuxService.createTermuxSession(executable, arguments, null, cwd,
-                                false, pane.title);
-                        if (created == null || created.getTerminalSession() == null) {
+                        TerminalSession shell = createCommandShell(
+                            runCommands ? pane.command : java.util.Collections.<String>emptyList(),
+                            pane.cwd, pane.title);
+                        if (shell == null) {
                             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                                 "session_create_failed", "Could not create every workspace pane");
                         }
-                        TerminalSession shell = created.getTerminalSession();
                         shells.add(shell);
                         createdShells.add(shell);
                     }
@@ -12349,6 +12317,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return createShellForCwd(cwd, null);
     }
 
+    /**
+     * A shell that first runs {@code command} (argv; empty for a plain shell) and then stays behind
+     * as the user's login shell, the way a restored workspace pane does. Null when the service is
+     * not ready or the terminal limit is reached. Shared by workspace restore and the pane API.
+     */
+    @Nullable TerminalSession createCommandShell(@NonNull java.util.List<String> command,
+                                                 @Nullable String cwd, @Nullable String title) {
+        if (mTermuxService == null) return null;
+        if (mTermuxService.getTermuxSessionsSize()
+                >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
+            return null;
+        }
+        String executable = null;
+        String[] arguments = null;
+        if (!command.isEmpty()) {
+            String shell = wrapperShellPath();
+            if (shell != null) {
+                // The command is looked up on the PATH the user's own config builds, since a
+                // captured command frequently lives somewhere only that config knows about, and a
+                // shell stays behind once it exits so a pane restoring `make` does not vanish with
+                // the build.
+                boolean fishStyle = isFishShell(shell);
+                String script = shellCommandLine(command, fishStyle)
+                    + "; exec " + shellQuote(shell, fishStyle) + " -l";
+                String login = loginProgramPath();
+                if (login != null) {
+                    // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs the same shell
+                    // the same way a normal pane does — and only it sets up LD_PRELOAD for
+                    // termux-exec and sources termux-login.sh. Passing arguments also skips its motd.
+                    executable = login;
+                    arguments = new String[] {"-c", script};
+                } else {
+                    executable = shell;
+                    arguments = new String[] {"-l", "-c", script};
+                }
+            } else {
+                executable = command.get(0);
+                arguments = command.subList(1, command.size()).toArray(new String[0]);
+            }
+        }
+        if (cwd == null || cwd.isEmpty()) cwd = getProperties().getDefaultWorkingDirectory();
+        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
+            mTermuxService.createTermuxSession(executable, arguments, null, cwd, false,
+                title == null || title.isEmpty() ? null : title);
+        return created == null ? null : created.getTerminalSession();
+    }
+
     @Nullable TerminalSession createShellForCwd(@Nullable String cwd, @Nullable String sessionName) {
         if (mTermuxService == null) return null;
         if (mTermuxService.getTermuxSessionsSize()
@@ -12935,6 +12950,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean rotatePaneLayout(boolean clockwise) {
             return TermuxActivity.this.rotatePaneLayout(clockwise);
+        }
+
+        @Override @Nullable public TerminalSession openCommandPane(
+                @NonNull java.util.List<String> command, @Nullable String cwd,
+                @Nullable String title, boolean focus) {
+            if (!isSplitPanesEnabled() || mPaneController == null
+                || mPaneController.getActiveSession() == null) return null;
+            TerminalSession shell = createCommandShell(command, cwd, title);
+            if (shell == null) return null;
+            boolean[] added = {false};
+            runWithoutNotices(() -> added[0] = mPaneController.addPane(shell, focus));
+            if (!added[0]) {
+                mTermuxService.killTermuxSession(shell);
+                return null;
+            }
+            return shell;
+        }
+
+        @Override @NonNull public java.util.List<com.termux.app.terminal.TerminalPaneController.Window>
+                currentSessionWindows() {
+            return mCurrentWSession == null
+                ? java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>emptyList()
+                : new java.util.ArrayList<>(mCurrentWSession.windows);
+        }
+
+        @Override @Nullable public TerminalSession findPaneById(@NonNull String id) {
+            if (mTermuxService == null) return null;
+            for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
+                    : mTermuxService.getTermuxSessions()) {
+                TerminalSession session = termuxSession.getTerminalSession();
+                if (session != null && id.equals(session.mHandle)) return session;
+            }
+            return null;
         }
 
         @Override public boolean moveFocusedPaneToEdge(@NonNull String edge) {
