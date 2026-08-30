@@ -449,7 +449,7 @@ public final class TerminalActionDispatcher {
                     String layout = arguments.optString("layout", "");
                     if (!isPaneLayout(layout)) {
                         return error(400, "bad_request",
-                            "Invalid 'layout'; expected stack, grid, tall, fat, horizontal, or vertical");
+                            "Invalid 'layout'; expected stack, grid, dwindle, tall, fat, horizontal, or vertical");
                     }
                     if (!host.applyPaneLayout(layout)) return noSession(toolName);
                     return ok().put("layout", layout);
@@ -1011,6 +1011,7 @@ public final class TerminalActionDispatcher {
     private static boolean isPaneLayout(@NonNull String layout) {
         return TerminalPaneController.LAYOUT_STACK.equals(layout)
             || TerminalPaneController.LAYOUT_GRID.equals(layout)
+            || TerminalPaneController.LAYOUT_DWINDLE.equals(layout)
             || TerminalPaneController.LAYOUT_TALL.equals(layout)
             || TerminalPaneController.LAYOUT_FAT.equals(layout)
             || TerminalPaneController.LAYOUT_HORIZONTAL.equals(layout)

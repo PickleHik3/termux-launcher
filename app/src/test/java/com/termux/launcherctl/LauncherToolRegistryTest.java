@@ -199,7 +199,7 @@ public class LauncherToolRegistryTest {
         assertNotNull(equalize);
         assertNotNull(rotate);
         assertNotNull(move);
-        assertEquals(6, layout.schema.optJSONObject("properties")
+        assertEquals(7, layout.schema.optJSONObject("properties")
             .optJSONObject("layout").optJSONArray("enum").length());
         assertEquals("layout", layout.schema.optJSONArray("required").optString(0));
         assertEquals(4, move.schema.optJSONObject("properties")

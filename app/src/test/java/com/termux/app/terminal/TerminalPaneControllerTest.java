@@ -30,6 +30,7 @@ import org.robolectric.util.ReflectionHelpers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -256,6 +257,7 @@ public class TerminalPaneControllerTest {
             TerminalPaneController.nextLayoutAfter("spiral"));
 
         String[] expected = {
+            TerminalPaneController.LAYOUT_DWINDLE,
             TerminalPaneController.LAYOUT_TALL,
             TerminalPaneController.LAYOUT_FAT,
             TerminalPaneController.LAYOUT_HORIZONTAL,
@@ -280,6 +282,9 @@ public class TerminalPaneControllerTest {
 
         assertTrue(fixture.controller.nextLayout());
         assertEquals(TerminalPaneController.LAYOUT_GRID, fixture.controller.activeLayoutPolicy());
+
+        assertTrue(fixture.controller.nextLayout());
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, fixture.controller.activeLayoutPolicy());
 
         assertTrue(fixture.controller.nextLayout());
         assertEquals(TerminalPaneController.LAYOUT_TALL, fixture.controller.activeLayoutPolicy());
@@ -308,6 +313,185 @@ public class TerminalPaneControllerTest {
         assertFalse(fixture.controller.shellsOf(fixture.window).contains(closed));
         assertAllSplitsHaveOrientation(fixture.window.root, LinearLayout.VERTICAL);
         assertEquals(TerminalPaneController.LAYOUT_VERTICAL, fixture.controller.activeLayoutPolicy());
+    }
+
+    @Test
+    public void dwindle_splitsAlongTheLongerSideOfTheFocusedPaneAndSurvivesCloses() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
+
+        // The caller asked for side by side; a portrait pane stacks regardless.
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
+        assertEquals(LinearLayout.VERTICAL, root.orientation);
+        assertTrue(root.b instanceof TerminalPaneController.Leaf);
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
+
+        // The new (focused) pane is 600x500: wider than tall, so its split goes side by side.
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.VERTICAL));
+        root = (TerminalPaneController.Split) window.root;
+        assertEquals(LinearLayout.VERTICAL, root.orientation);
+        TerminalPaneController.Split lower = (TerminalPaneController.Split) root.b;
+        assertEquals(LinearLayout.HORIZONTAL, lower.orientation);
+
+        // 300x500 stacks again.
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        lower = (TerminalPaneController.Split) ((TerminalPaneController.Split) window.root).b;
+        assertEquals(LinearLayout.VERTICAL, ((TerminalPaneController.Split) lower.b).orientation);
+        assertEquals(4, controller.shellsOf(window).size());
+
+        // Closing collapses the tree in place; nothing is rebuilt and the policy stays.
+        TerminalSession closed = controller.shellsOf(window).get(3);
+        assertEquals(TerminalPaneController.FINISHED_PANE, controller.onSessionFinished(closed));
+        root = (TerminalPaneController.Split) window.root;
+        assertEquals(LinearLayout.VERTICAL, root.orientation);
+        assertEquals(LinearLayout.HORIZONTAL, ((TerminalPaneController.Split) root.b).orientation);
+        assertTrue(((TerminalPaneController.Split) root.b).b instanceof TerminalPaneController.Leaf);
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
+    }
+
+    @Test
+    public void dwindle_keepsDraggedDividersAcrossSplits() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
+        assertTrue(controller.split(LinearLayout.VERTICAL));
+        TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
+        root.weightA = 1.5f;
+        root.weightB = 0.5f;
+
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.VERTICAL));
+        assertSame(root, window.root);
+        assertEquals(1.5f, root.weightA, 0f);
+        assertEquals(0.5f, root.weightB, 0f);
+
+        // A keyboard resize hand-shapes the other layouts out of management; dwindle keeps every
+        // ratio anyway, so it stays dwindle and the next split still follows the aspect rule.
+        assertTrue(controller.resizeActive(android.view.KeyEvent.KEYCODE_DPAD_UP));
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
+        layoutHost(host, 600, 1000);
+        // Whatever shape the resize left the focused pane in, the split must follow its aspect,
+        // not the requested axis — so ask for both and expect the aspect's answer each time.
+        android.view.View frame = (android.view.View) controller.getViewForSession(
+            controller.getActiveSession()).getParent();
+        int expected = DwindleTilingPolicy.splitOrientationFor(frame.getWidth(), frame.getHeight());
+        assertTrue(controller.split(expected == LinearLayout.HORIZONTAL
+            ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL));
+        assertEquals(expected, window.active.parent.orientation);
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
+    }
+
+    @Test
+    public void dwindle_switchingIntoItLaysExistingPanesOutAsIfSpawnedOneByOne() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        PaneFixture fixture = fourPaneFixture(newSplittingController(host));
+        layoutHost(host, 600, 1000);
+        List<TerminalSession> original = new java.util.ArrayList<>(fixture.sessions);
+
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
+        TerminalPaneController.Split root = (TerminalPaneController.Split) fixture.window.root;
+        assertEquals(LinearLayout.VERTICAL, root.orientation);
+        assertTrue(root.a instanceof TerminalPaneController.Leaf);
+        TerminalPaneController.Split second = (TerminalPaneController.Split) root.b;
+        assertEquals(LinearLayout.HORIZONTAL, second.orientation);
+        assertTrue(second.a instanceof TerminalPaneController.Leaf);
+        TerminalPaneController.Split third = (TerminalPaneController.Split) second.b;
+        assertEquals(LinearLayout.VERTICAL, third.orientation);
+        assertEquals(original, fixture.controller.shellsOf(fixture.window));
+
+        // Re-applying to an already dwindle-managed window leaves the tree alone.
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
+        assertSame(root, fixture.window.root);
+    }
+
+    @Test
+    public void dwindle_droppingAPaneTakesHalfOfTheTargetInsteadOfSwapping() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        PaneFixture fixture = fourPaneFixture(newSplittingController(host));
+        layoutHost(host, 600, 1000);
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
+        TerminalPaneController.Split root = (TerminalPaneController.Split) fixture.window.root;
+        TerminalPaneController.Leaf top = (TerminalPaneController.Leaf) root.a;
+        TerminalPaneController.Split lower = (TerminalPaneController.Split) root.b;
+        TerminalPaneController.Leaf lowerLeft = (TerminalPaneController.Leaf) lower.a;
+        TerminalSession movedShell = lowerLeft.session;
+        TerminalSession targetShell = top.session;
+
+        // Drop the lower-left pane onto the top pane's upper half. The top pane is 600x500 (wider
+        // than tall), so under dwindle it splits side by side... but the finger picks the half
+        // along that axis: x < centre means the moved pane lands on the left.
+        RectF targetRect = new RectF(0, 0, 600, 500);
+        boolean retiled = ReflectionHelpers.callInstanceMethod(fixture.controller, "retileDroppedPane",
+            ReflectionHelpers.ClassParameter.from(TerminalPaneController.Leaf.class, lowerLeft),
+            ReflectionHelpers.ClassParameter.from(TerminalPaneController.Leaf.class, top),
+            ReflectionHelpers.ClassParameter.from(RectF.class, targetRect),
+            ReflectionHelpers.ClassParameter.from(float.class, 100f),
+            ReflectionHelpers.ClassParameter.from(float.class, 250f));
+        assertTrue(retiled);
+
+        root = (TerminalPaneController.Split) fixture.window.root;
+        assertEquals(LinearLayout.VERTICAL, root.orientation);
+        TerminalPaneController.Split upper = (TerminalPaneController.Split) root.a;
+        assertEquals(LinearLayout.HORIZONTAL, upper.orientation);
+        assertSame(movedShell, ((TerminalPaneController.Leaf) upper.a).session);
+        assertSame(targetShell, ((TerminalPaneController.Leaf) upper.b).session);
+        // The vacated split collapsed: the lower region is what used to be lower.b.
+        assertSame(lower.b, root.b);
+        assertEquals(4, fixture.controller.shellsOf(fixture.window).size());
+        assertSame(movedShell, fixture.controller.getActiveSession());
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, fixture.controller.activeLayoutPolicy());
+    }
+
+    @Test
+    public void focusDirection_reportsWhetherFocusMoved_soUnusedArrowsReachTheShell() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        // One pane: every direction is the shell's.
+        assertFalse(controller.focusDirection(android.view.KeyEvent.KEYCODE_DPAD_LEFT));
+        assertFalse(controller.focusDirection(android.view.KeyEvent.KEYCODE_DPAD_DOWN));
+
+        assertTrue(controller.split(LinearLayout.VERTICAL)); // top / bottom, focus on the bottom
+        layoutHost(host, 600, 1000);
+        TerminalSession bottom = controller.getActiveSession();
+        assertFalse("nothing below the bottom pane",
+            controller.focusDirection(android.view.KeyEvent.KEYCODE_DPAD_DOWN));
+        assertFalse("nothing beside a full-width pane",
+            controller.focusDirection(android.view.KeyEvent.KEYCODE_DPAD_LEFT));
+        assertSame(bottom, controller.getActiveSession());
+        assertTrue(controller.focusDirection(android.view.KeyEvent.KEYCODE_DPAD_UP));
+        assertNotSame(bottom, controller.getActiveSession());
+    }
+
+    @Test
+    public void splitAuto_followsTheFocusedPanesAspectUnderAnyLayout() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        // Unmanaged portrait window: stacks.
+        assertTrue(controller.splitAuto());
+        assertEquals(LinearLayout.VERTICAL, ((TerminalPaneController.Split) window.root).orientation);
+        assertEquals(null, controller.activeLayoutPolicy());
+        // The new bottom pane is 600x500, wider than tall: side by side.
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.splitAuto());
+        assertEquals(LinearLayout.HORIZONTAL, window.active.parent.orientation);
+        assertEquals(3, controller.shellsOf(window).size());
     }
 
     @Test
@@ -844,6 +1028,17 @@ public class TerminalPaneControllerTest {
     }
 
     private static TerminalPaneController newSplittingController() {
+        return newSplittingController(new FrameLayout(RuntimeEnvironment.getApplication()));
+    }
+
+    /** Measure and lay the host out at a size, so every pane frame gets real bounds. */
+    private static void layoutHost(@NonNull FrameLayout host, int width, int height) {
+        host.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(height, android.view.View.MeasureSpec.EXACTLY));
+        host.layout(0, 0, width, height);
+    }
+
+    private static TerminalPaneController newSplittingController(@NonNull FrameLayout hostView) {
         Context context = RuntimeEnvironment.getApplication();
         return new TerminalPaneController(new TerminalPaneController.Host() {
             @Override public TerminalSession createShell(String cwd) { return terminal(); }
@@ -852,7 +1047,7 @@ public class TerminalPaneControllerTest {
             @Override public void onActivePaneChanged() {}
             @Override public void onTreesChanged() {}
             @Override public String defaultCwd() { return "/"; }
-        }, new FrameLayout(context), LayoutInflater.from(context));
+        }, hostView, LayoutInflater.from(context));
     }
 
     private static PaneFixture fourPaneFixture() {

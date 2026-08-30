@@ -131,14 +131,21 @@ The following layouts act on the current window without restarting any shell:
 |---|---|
 | `stack` | Maximize the focused pane while keeping the other panes alive and hidden |
 | `grid` | Arrange panes in near-square, equally divided rows |
+| `dwindle` | Tile like Hyprland: each new pane halves the focused pane along its longer side, and a pane dragged onto another takes the half it is dropped on |
 | `tall` | Put a half-width master pane on the left and stack the rest on the right |
 | `fat` | Put a half-height master pane on top and arrange the rest below |
 | `horizontal` | Put every pane side by side at equal width |
 | `vertical` | Put every pane in one top-to-bottom column at equal height |
 
 `Ctrl+Alt+l`, **Next pane layout** in the palette, and `pane.next_layout` all cycle the window
-through `grid`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window with no
-layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
+through `grid`, `dwindle`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window
+with no layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
+
+`dwindle` is the one layout that grows rather than rearranges: it never rebuilds the tree, so the
+dividers you drag stay where you put them, a closed pane simply hands its space back to its
+neighbour, and dragging a pane's move handle onto another pane shows which half it will take before
+you let go. The first split of a portrait window stacks; a pane wider than it is tall splits side by
+side.
 
 The palette also exposes **Equalize panes** and clockwise **Rotate panes**. Choosing a specific
 layout by name and moving the focused pane to an edge remain available through custom key bindings.

@@ -559,7 +559,7 @@ public final class LauncherToolRegistry {
         add(map, TOOL_PANE_LAYOUT,
             "Arrange the current window using an automatic pane layout.",
             schemaObject()
-                .withEnum("layout", new String[]{"stack", "grid", "tall", "fat", "horizontal", "vertical"},
+                .withEnum("layout", new String[]{"stack", "grid", "dwindle", "tall", "fat", "horizontal", "vertical"},
                     true, "grid")
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
