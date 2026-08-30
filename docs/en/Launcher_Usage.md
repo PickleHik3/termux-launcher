@@ -135,9 +135,10 @@ Use the palette for these actions, or the default hardware-keyboard shortcuts:
 
 | Action | Shortcut |
 |---|---|
+| New pane (splits along the longer side) | `Ctrl+Alt+Enter` |
 | Split side by side | `Ctrl+Alt+v` |
 | Split top and bottom | `Ctrl+Alt+h` |
-| Focus a neighboring pane | `Ctrl+Arrow` |
+| Focus a neighboring pane | `Alt+Arrow` (passed to the shell when there is no pane that way) |
 | Resize the focused pane | `Ctrl+Alt+Shift+Arrow` |
 | New window | `Ctrl+Alt+c` |
 | Previous/next window | `Ctrl+Alt+[` / `Ctrl+Alt+]`, `Ctrl+Alt+Left` / `Ctrl+Alt+Right` |

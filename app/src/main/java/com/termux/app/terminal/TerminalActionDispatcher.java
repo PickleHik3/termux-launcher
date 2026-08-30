@@ -195,6 +195,7 @@ public final class TerminalActionDispatcher {
             case TOOL_EXTRA_KEYS_EDIT:
             case TOOL_PANE_SPLIT_VERTICAL:
             case TOOL_PANE_SPLIT_HORIZONTAL:
+            case TOOL_PANE_SPLIT:
             case TOOL_PANE_FOCUS_DIRECTION:
             case TOOL_PANE_RESIZE:
             case TOOL_PANE_KILL_FOCUSED:
@@ -448,6 +449,11 @@ public final class TerminalActionDispatcher {
                     return doSplit(host, LinearLayout.HORIZONTAL, "vertical");
                 case TOOL_PANE_SPLIT_HORIZONTAL:
                     return doSplit(host, LinearLayout.VERTICAL, "horizontal");
+                case TOOL_PANE_SPLIT: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    host.splitCurrentPaneAuto();
+                    return ok().put("split", "auto");
+                }
 
                 case TOOL_PANE_FOCUS_DIRECTION: {
                     Integer keyCode = directionToKeyCode(arguments.optString("direction", ""));

@@ -947,12 +947,16 @@ public class TerminalPaneController {
         return FINISHED_PANE;
     }
 
-    /** Focus the pane nearest to the active one in the arrow direction (KeyEvent.KEYCODE_DPAD_*). */
+    /**
+     * Focus the pane nearest to the active one in the arrow direction (KeyEvent.KEYCODE_DPAD_*).
+     * Returns whether focus moved: false with a single pane or no pane in that direction, so the
+     * binding can hand the stroke on to the shell instead of swallowing a key that did nothing.
+     */
     public boolean focusDirection(int keyCode) {
         TerminalView active = getActivePaneView();
-        if (active == null) return true;
+        if (active == null) return false;
         List<TerminalView> views = getVisiblePaneViews();
-        if (views.size() < 2) return true;
+        if (views.size() < 2) return false;
         int[] a = center(active);
         TerminalView best = null;
         int bestScore = Integer.MAX_VALUE;
@@ -967,16 +971,16 @@ public class TerminalPaneController {
                 case android.view.KeyEvent.KEYCODE_DPAD_RIGHT: match = dx > 0; primary = dx;  secondary = Math.abs(dy); break;
                 case android.view.KeyEvent.KEYCODE_DPAD_UP:    match = dy < 0; primary = -dy; secondary = Math.abs(dx); break;
                 case android.view.KeyEvent.KEYCODE_DPAD_DOWN:  match = dy > 0; primary = dy;  secondary = Math.abs(dx); break;
-                default: return true;
+                default: return false;
             }
             if (!match) continue;
             int score = primary + secondary * 2;
             if (score < bestScore) { bestScore = score; best = v; }
         }
-        if (best != null) {
-            TerminalSession s = best.getCurrentSession();
-            if (s != null) focusSession(s);
-        }
+        if (best == null) return false;
+        TerminalSession s = best.getCurrentSession();
+        if (s == null) return false;
+        focusSession(s);
         return true;
     }
 

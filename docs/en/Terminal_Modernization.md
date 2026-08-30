@@ -69,9 +69,10 @@ produced by the current keyboard layout.
 
 | Shortcut | Split panes enabled | Compatibility mode |
 |---|---|---|
+| `Ctrl+Alt+Enter` | New pane: split the focused pane along its longer side | Sent to the shell if unclaimed |
 | `Ctrl+Alt+v` | Split vertically (side by side) | Paste |
 | `Ctrl+Alt+h` | Split horizontally (stacked) | Sent to the shell if unclaimed |
-| `Ctrl+Arrow` | Focus the pane in that direction | Sent to the shell if unclaimed |
+| `Alt+Arrow` | Focus the pane in that direction | Sent to the shell when no pane lies that way |
 | `Ctrl+Alt+Left` / `Ctrl+Alt+Right` | Previous/next window | Opens or closes the session drawer |
 | `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | Previous/next session | Previous/next session |
 | `Ctrl+Alt+Shift+Arrow` | Resize the focused pane | Sent to the shell if unclaimed |

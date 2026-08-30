@@ -12249,9 +12249,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         runWithoutNotices(() -> mPaneController.split(orientation));
     }
 
+    /** Split the focused pane along its longer side (Ctrl+Alt+Enter): a new terminal, no axis asked. */
+    void splitCurrentPaneAuto() {
+        if (!isSplitPanesEnabled() || mPaneController == null) return;
+        if (mTermuxService == null || mPaneController.getActiveSession() == null) {
+            showSessionSwitchIndicator(getString(R.string.msg_no_session_to_split));
+            return;
+        }
+        runWithoutNotices(() -> mPaneController.splitAuto());
+    }
+
     /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
     boolean focusPaneDirection(int keyCode) {
-        return mPaneController == null || mPaneController.focusDirection(keyCode);
+        return mPaneController != null && mPaneController.focusDirection(keyCode);
     }
 
     /** Adjust the split ratio toward the arrow direction (Ctrl+Alt+Shift+arrow). */
@@ -12918,6 +12928,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void splitCurrentPane(int orientation) {
             TermuxActivity.this.splitCurrentPane(orientation);
+        }
+
+        @Override public void splitCurrentPaneAuto() {
+            TermuxActivity.this.splitCurrentPaneAuto();
         }
 
         @Override public boolean focusPaneDirection(int keyCode) {

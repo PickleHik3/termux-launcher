@@ -1258,6 +1258,7 @@
     </plurals>
 
     <!-- Terminal action titles, shown in the command palette -->
+    <string name="tool_pane_split">New pane</string>
     <string name="tool_pane_split_vertical">Split pane vertically</string>
     <string name="tool_pane_split_horizontal">Split pane horizontally</string>
     <string name="tool_pane_focus_direction">Move pane focus</string>
@@ -1322,6 +1323,7 @@
     <string name="tool_session_rename_prompt">Rename session…</string>
     <string name="tool_pane_rename_prompt">Rename pane…</string>
     <!-- Palette subtitles -->
+    <string name="tool_desc_pane_split">Split the focused pane along its longer side, no direction to choose.</string>
     <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
     <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>

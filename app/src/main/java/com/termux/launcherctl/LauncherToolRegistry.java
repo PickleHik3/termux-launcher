@@ -376,6 +376,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
     public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
     public static final String TOOL_EXTRA_KEYS_EDIT = "extrakeys.edit";
+    public static final String TOOL_PANE_SPLIT = "pane.split";
     public static final String TOOL_PANE_SPLIT_VERTICAL = "pane.split_vertical";
     public static final String TOOL_PANE_SPLIT_HORIZONTAL = "pane.split_horizontal";
     public static final String TOOL_PANE_FOCUS_DIRECTION = "pane.focus_direction";
@@ -518,6 +519,15 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_workspace_save_prompt,
             R.string.tool_desc_workspace_save_prompt, null, REQUIRES_SPLITS);
+        // The tiling-WM "new terminal" chord (Mod+Enter): the user asks for a pane, the layout
+        // picks the axis — the focused pane's longer side, which is what dwindle does anyway.
+        addUi(map, TOOL_PANE_SPLIT,
+            "Open a new pane by splitting the focused pane along its longer side.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_split, R.string.tool_desc_pane_split,
+            Collections.singletonList(Binding.of("ctrl+alt+enter", BindingCondition.SPLITS_ON)),
+            REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_SPLIT_VERTICAL,
             "Split the focused pane into two panes side by side.",
             schemaEmpty(),
@@ -540,10 +550,13 @@ public final class LauncherToolRegistry {
             // Ctrl+Left/Right no longer reaches the shell's word-wise cursor movement while split
             // panes are on.
             CATEGORY_PANE, R.string.tool_pane_focus_direction, 0, Arrays.asList(
-                Binding.of("ctrl+left", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+right", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+up", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+down", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+                // Alt, not Ctrl: Ctrl+Arrow is word motion in every line editor and most TUIs,
+                // Alt+Arrow is claimed by far less. And the action yields the stroke to the shell
+                // whenever there is no pane in that direction, so a lone pane costs nothing.
+                Binding.of("alt+left", BindingCondition.SPLITS_ON),
+                Binding.of("alt+right", BindingCondition.SPLITS_ON),
+                Binding.of("alt+up", BindingCondition.SPLITS_ON),
+                Binding.of("alt+down", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_RESIZE,
             "Grow the focused pane toward a direction.",
             schemaObject()

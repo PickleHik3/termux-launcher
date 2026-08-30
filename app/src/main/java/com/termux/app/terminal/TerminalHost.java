@@ -236,6 +236,8 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     @Nullable TerminalPaneController paneController();
 
     void splitCurrentPane(int orientation);
+    /** Split the focused pane along its longer side, no direction asked. */
+    default void splitCurrentPaneAuto() {}
 
     boolean focusPaneDirection(int keyCode);
 

@@ -44,7 +44,7 @@ public class LauncherToolRegistryTest {
 
     @Test
     public void terminalActions_areRegisteredWithUiMetadata() {
-        String[] terminalTools = {"terminal.state", "pane.split_vertical", "pane.split_horizontal",
+        String[] terminalTools = {"terminal.state", "pane.split", "pane.split_vertical", "pane.split_horizontal",
             "pane.focus_direction", "pane.resize", "pane.kill_focused", "window.new", "window.close",
             "window.next", "window.previous", "session.new", "session.next", "session.previous",
             "session.close_current", "session.browser", "session.panel", "session.clone_current",
@@ -63,7 +63,7 @@ public class LauncherToolRegistryTest {
         // the row editor's in-terminal entry, then by terminal.select_at_cursor and
         // terminal.select_all, which gave selection an entry point outside a long-press, and
         // finally by the keyboard layout pair.
-        assertEquals(67, registry.getUiTools().size());
+        assertEquals(68, registry.getUiTools().size());
     }
 
     @Test
@@ -525,12 +525,13 @@ public class LauncherToolRegistryTest {
         assertEquals("ctrl+alt+down", registry.getTool("session.next").defaultBindings.get(1).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
             registry.getTool("session.next").defaultBindings.get(1).condition);
-        // The three navigation levels, each on its own chord: Ctrl+Arrow inside the window,
-        // prefixed arrows across windows and sessions, digits for direct picks.
+        // The three navigation levels, each on its own chord: Alt+Arrow inside the window (never
+        // Ctrl+Arrow, which is word motion in every line editor), prefixed arrows across windows
+        // and sessions, digits for direct picks.
         for (LauncherToolRegistry.Binding binding
                 : registry.getTool("pane.focus_direction").defaultBindings)
-            assertTrue(binding.stroke, binding.stroke.startsWith("ctrl+")
-                && !binding.stroke.startsWith("ctrl+alt+"));
+            assertTrue(binding.stroke, binding.stroke.startsWith("alt+")
+                && !binding.stroke.contains("ctrl"));
         assertEquals(9, registry.getTool("window.select").defaultBindings.size());
         assertEquals(18, registry.getTool("session.activate_by_index").defaultBindings.size());
         // No default binding anywhere names a keyboard gesture any more.
