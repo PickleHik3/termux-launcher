@@ -1275,8 +1275,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // If compatibility mode was just enabled, drop any active split back to a single pane.
         if (!isSplitPanesEnabled())
             collapseAllSplits();
-        else if (mPaneController != null)
+        else if (mPaneController != null) {
             mPaneController.refreshPaneSizes();
+            // Settings may have flipped the pane behaviour toggles while we were away.
+            applyPaneBehaviourPreferences();
+        }
         refreshTerminalWindowBar();
 
         updateWindowBackgroundForCurrentSession();
@@ -6648,6 +6651,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
+        applyPaneBehaviourPreferences();
         // Bootstrap a sessionless pane so the many single-view call sites (in-app keyboard,
         // font setup) have a non-null active view before the first session/tab is shown.
         mTerminalView = mPaneController.createBootstrapView();
@@ -12247,6 +12251,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // No notice on success: the new pane is the feedback. The refusal above still speaks,
         // because nothing visible happens when there is no shell to split.
         runWithoutNotices(() -> mPaneController.split(orientation));
+    }
+
+    /** Push the Sessions-and-panes behaviour toggles into the pane controller. */
+    private void applyPaneBehaviourPreferences() {
+        if (mPaneController == null || getPreferences() == null) return;
+        mPaneController.setDefaultLayoutPolicy(getPreferences().isDwindleDefaultLayoutEnabled()
+            ? com.termux.app.terminal.TerminalPaneController.LAYOUT_DWINDLE : null);
+        mPaneController.setFocusGrowEnabled(getPreferences().isFocusedPaneGrowsEnabled());
     }
 
     /** Split the focused pane along its longer side (Ctrl+Alt+Enter): a new terminal, no axis asked. */

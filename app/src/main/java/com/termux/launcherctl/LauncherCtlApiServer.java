@@ -4,6 +4,7 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
@@ -543,6 +544,12 @@ public class LauncherCtlApiServer {
             } else if ("POST".equals(request.method) && "/v1/apps/launch".equals(request.path)) {
                 return jsonResponse(runAppLaunch(context, request.body));
             } else if (request.path.startsWith("/v1/panes")) {
+                if (!TermuxAppSharedPreferences.build(context).isAgentPanesEnabled()) {
+                    JSONObject error = jsonError("panes_api_disabled",
+                        "Pane access for scripts is switched off in Settings > Terminal & Status > Sessions and panes");
+                    error.put("_statusCode", 403);
+                    return jsonResponse(error);
+                }
                 return jsonResponse(runPaneRequest(request));
             } else if ("POST".equals(request.method) && "/v1/auth/rotate".equals(request.path)) {
                 return jsonResponse(rotateAuthToken(context, false));

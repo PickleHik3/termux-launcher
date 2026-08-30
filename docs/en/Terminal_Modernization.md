@@ -142,6 +142,11 @@ The following layouts act on the current window without restarting any shell:
 through `grid`, `dwindle`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window
 with no layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
 
+**Automatic tiling** in Settings → Terminal & Status → Sessions and panes makes `dwindle` the layout
+every new window starts under. **Focused pane grows** (same section) gives the focused pane 70% of
+every split on its way to the window edge, animated, whichever layout is in use — tap a pane and it
+becomes the big one.
+
 `dwindle` is the one layout that grows rather than rearranges: it never rebuilds the tree, so the
 dividers you drag stay where you put them, a closed pane simply hands its space back to its
 neighbour, and dragging a pane's move handle onto another pane shows which half it will take before

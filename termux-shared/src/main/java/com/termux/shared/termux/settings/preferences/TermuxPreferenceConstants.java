@@ -721,6 +721,18 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SHOW_KEY_HINTS = "show_key_hints";
         public static final boolean DEFAULT_SHOW_KEY_HINTS = true;
 
+        /** New windows start under the dwindle layout (Hyprland-style automatic tiling). */
+        public static final String KEY_DWINDLE_DEFAULT_LAYOUT = "pane_dwindle_default";
+        public static final boolean DEFAULT_DWINDLE_DEFAULT_LAYOUT = false;
+
+        /** focus.nvim-style: the focused pane takes most of the room, the rest slide aside. */
+        public static final String KEY_FOCUSED_PANE_GROWS = "pane_focus_grows";
+        public static final boolean DEFAULT_FOCUSED_PANE_GROWS = false;
+
+        /** Whether the local API (`launcherctl pane`, /v1/panes) may open and drive panes. */
+        public static final String KEY_AGENT_PANES_ENABLED = "pane_agent_api";
+        public static final boolean DEFAULT_AGENT_PANES_ENABLED = true;
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 
