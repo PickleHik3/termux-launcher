@@ -224,6 +224,7 @@ public final class KeybindHintModel {
      * actually bound are dropped rather than shown as a lie.
      */
     private static final String[][] STRIP_BASE = {
+        {"enter", "new pane"},
         {"v h", "split"},
         {"c", "new window"},
         {"x", "close window"},
