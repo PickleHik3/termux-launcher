@@ -1,6 +1,11 @@
 # In-app Unexpected-Keyboard design
 
-Status: implementation design; no production code is included in this document.
+Status: delivered. This is the design record for the shipped `:inapp-keyboard` module and its
+launcher-side host — the decisions and their reasons, not a proposal. Local deviations from the
+vendored upstream snapshot are tracked in
+[`../inapp-keyboard/UPSTREAM.md`](../inapp-keyboard/UPSTREAM.md), which is authoritative for what
+the module's code actually differs on. A study of what could still be added is
+[`plans/keyboard-mis-input-correction.md`](plans/keyboard-mis-input-correction.md).
 
 Source baseline reviewed:
 

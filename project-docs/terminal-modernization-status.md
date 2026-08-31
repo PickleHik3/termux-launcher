@@ -21,9 +21,9 @@ scope.
 | Fonts and shaping | Native-font compatibility, four real faces, grapheme-aware Canvas shaping, symbol maps (named or not), ordered `fallback_font` chain, ligature policy, OpenType features, variable axes, bounded metrics, geometric box/block/braille/Powerline rendering, `fonts.d` drop-in autoload, and the in-app font picker | [`plans/fonts-and-shaping.md`](plans/fonts-and-shaping.md) |
 | Robustness and observability | Parser size limits and fuzzing, renderer/window timing, allocation/GC counters, and a non-focusable key inspector | [`plans/kitty-protocol-features.md`](plans/kitty-protocol-features.md) |
 
-The original feasibility study is
-[`../../../kitty-to-termux-launcher-feasibility-study.md`](../../../kitty-to-termux-launcher-feasibility-study.md).
-The one authoritative list of unfinished work is [`plans/backlog.md`](plans/backlog.md).
+The original Kitty feasibility study that started this work was never checked in, and its phase
+numbering survives only as the "Phase N" labels in the records below. This file is the overview it
+used to be; the one authoritative list of unfinished work is [`plans/backlog.md`](plans/backlog.md).
 
 ## User contracts
 
