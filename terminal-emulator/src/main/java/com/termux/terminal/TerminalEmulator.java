@@ -785,6 +785,12 @@ public final class TerminalEmulator {
         } else if (columns < 2 || rows < 2) {
             throw new IllegalArgumentException("rows=" + rows + ", columns=" + columns);
         }
+        // Bottom anchoring exists so a prompt parked against the bottom edge stays on that edge as
+        // the screen grows. A cursor higher up means there is no such prompt — after a
+        // transcript-wiping clear it sits at the top — and anchoring then would float it
+        // mid-screen over rows of fresh blank padding, where every other terminal keeps it
+        // top-anchored. Judged against the pre-resize screen, before mRows moves.
+        keepCursorAtBottom &= mCursorRow >= mRows - 2;
         if (mRows != rows) {
             mRows = rows;
             mTopMargin = 0;

@@ -209,4 +209,21 @@ public class ResizeTest extends TerminalTestCase {
 		resize(5, rows).assertLinesAre("ＱＲ ", "     ", "     ", "     ");
 	}
 
+	/** The bottom-anchored resize the host surfaces use: it may only anchor an actual bottom prompt. */
+	public void testBottomAnchoredResizeAnchorsOnlyAPromptNearTheBottomEdge() {
+		final int cols = 3;
+		// A prompt parked against the bottom edge keeps its distance from that edge as rows arrive.
+		withTerminalSized(cols, 3).enterString("\r\n\r\n$ ").assertCursorAt(2, 2);
+		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		assertInvariants();
+		assertCursorAt(4, 2);
+
+		// A cursor at the top — the screen was just cleared, transcript and all — stays
+		// top-anchored like any terminal, rather than floating mid-screen over blank padding.
+		withTerminalSized(cols, 3).enterString("x\033[2J\033[3J\033[H$ ").assertCursorAt(0, 2);
+		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		assertInvariants();
+		assertCursorAt(0, 2);
+	}
+
 }
