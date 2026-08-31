@@ -2106,18 +2106,20 @@ public final class TerminalView extends View {
     }
 
     /**
-     * How far down the grid is drawn, anchoring it to the view's bottom edge.
+     * How far down the grid is drawn, anchoring it to the edge the content lives against.
      *
-     * <p>Rows are integral, so up to a line of the view's height is left over. Anchored to the
-     * top, that leftover strands the prompt visibly above the pane's bottom border — and how much
-     * varies with every pixel of pane height. Anchored to the bottom, the last row's cells end
-     * flush with the view (the pane frame's corner clearance is outside this view), the prompt
-     * sits a constant distance off the border, and the leftover joins the slack that already sits
-     * above the first row's cells (the renderer starts them {@code mFontLineSpacingAndAscent}
-     * down), where it reads as headroom.
+     * <p>Rows are integral, so up to a line of the view's height is left over, and it has to sit
+     * somewhere. On the normal buffer the prompt is the content's live edge, so the grid anchors
+     * to the bottom: the last row's cells end flush with the view (the pane frame's corner
+     * clearance is outside this view), the prompt sits a constant distance off the border, and the
+     * leftover joins the slack that already sits above the first row's cells (the renderer starts
+     * them {@code mFontLineSpacingAndAscent} down), where it reads as headroom. On the alternate
+     * buffer a full-screen app has drawn its own frame from row 0, so the grid anchors to the top
+     * and the leftover returns to the bottom, under the app's last row — anchoring such an app to
+     * the bottom would instead float its top border below the pane's arc.
      */
     public float getVerticalContentOffset() {
-        if (mEmulator == null || mRenderer == null) {
+        if (mEmulator == null || mRenderer == null || mEmulator.isAlternateBufferActive()) {
             return 0f;
         }
         float contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
