@@ -1068,11 +1068,7 @@
                 <string name="termux_surface_editor_pill_title">%1$s ▾</string>
                 <string name="termux_surface_editor_pill_title_description">Editing %1$s. Tap to edit a different surface.</string>
                 <string name="termux_surface_editor_property_title">%1$s · %2$s ▾</string>
-                <string name="termux_surface_editor_surface_picker_title">Edit surface</string>
                 <string name="termux_surface_editor_property_picker_title">Property</string>
-                <string name="termux_surface_editor_more_title">%1$s</string>
-                <string name="termux_surface_editor_fine_title">%1$s look</string>
-                <string name="termux_surface_editor_looks_title">Looks</string>
                 <string name="termux_surface_editor_all_surfaces">All surfaces</string>
                 <string name="termux_surface_editor_all_surfaces_summary">Moves every surface that has no value of its own.</string>
                 <string name="termux_surface_editor_reset_all">Reset all surfaces</string>

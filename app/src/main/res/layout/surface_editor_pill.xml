@@ -61,18 +61,17 @@
             android:visibility="gone" />
 
         <!-- Complete looks, plus the shared layer and Reset. Presets are chosen rarely, so they do
-             not hold the top of the editor permanently. -->
-        <TextView
+             not hold the top of the editor permanently; they expand into the card's own panel. -->
+        <ImageView
             android:id="@+id/surface_editor_pill_looks"
-            android:layout_width="wrap_content"
+            android:layout_width="40dp"
             android:layout_height="36dp"
-            android:background="?attr/selectableItemBackground"
-            android:gravity="center"
-            android:minWidth="52dp"
-            android:paddingHorizontal="8dp"
-            android:text="@string/termux_surface_editor_looks"
-            android:textColor="?attr/termuxColorPrimary"
-            android:textSize="14sp" />
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/termux_surface_editor_looks"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_symbol_palette"
+            app:tint="?attr/termuxColorPrimary" />
 
         <TextView
             android:id="@+id/surface_editor_pill_done"
@@ -199,17 +198,16 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
+            <ImageView
                 android:id="@+id/surface_editor_pill_look_fine"
-                android:layout_width="wrap_content"
+                android:layout_width="40dp"
                 android:layout_height="34dp"
-                android:background="?attr/selectableItemBackground"
-                android:gravity="center"
-                android:minWidth="52dp"
-                android:paddingHorizontal="6dp"
-                android:text="@string/termux_surface_editor_fine"
-                android:textColor="?attr/termuxColorPrimary"
-                android:textSize="13sp" />
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/termux_surface_editor_fine"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_symbol_tune"
+                app:tint="?attr/termuxColorPrimary" />
 
             <Space
                 android:layout_width="0dp"
@@ -329,4 +327,15 @@
         android:maxLines="2"
         android:textColor="?attr/termuxColorOnSurfaceVariant"
         android:textSize="12.5sp" />
+
+    <!-- The card's one expansion. Everything that used to open as a dialog over the pill — the
+         Looks page, the raw Fine triple, a surface's ⋯ extras, the surface list — expands here
+         instead, so the editor is a single card that grows and shrinks rather than a stack of
+         windows. Filled and height-capped in code; taller content scrolls inside it. -->
+    <FrameLayout
+        android:id="@+id/surface_editor_pill_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:visibility="gone" />
 </LinearLayout>
