@@ -7600,8 +7600,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Tiled splits couple mTerminalView's window position to the very accessory geometry this
         // padding feeds back into (its pane reflows every time the stack resizes), so the modulo
         // calc below never settles — it just chases its own tail and flickers the bottom pane/dock.
-        // Skip it whenever more than one pane is tiled, same as the keyboard-shown/toolbar-hidden cases.
-        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown || visiblePaneCount() > 1 ? 0
+        // Skip it whenever more than one pane is tiled, same as the keyboard-shown/toolbar-hidden
+        // cases. A focused FLOATING pane is the same coupling with one hop more: the float's
+        // fractional bounds re-project on every host resize, so mTerminalView's top moves with the
+        // very stack height the modulo feeds — tap a float and the whole band flickered at layout
+        // speed until focus left it.
+        boolean activePaneFloating = mPaneController != null && mPaneController.isActivePaneFloating();
+        // The system IME stands the absorption down too: the remainder halves only hide when the
+        // band rests on the screen edge — above a keyboard they surface as a wallpaper band
+        // between the extra-keys glass and the IME, read as a stray gap.
+        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown
+            || visiblePaneCount() > 1 || activePaneFloating || isImeVisible() ? 0
             : resolveTerminalFlushDockPaddingPx(accessoryContentHeightPx, accessoryBottomMarginPx);
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
         int combinedHeight = computeAccessoryStackHeight(
