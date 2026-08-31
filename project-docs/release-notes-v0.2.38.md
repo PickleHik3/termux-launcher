@@ -35,3 +35,10 @@ their work, and a shortcut that opens a pane without asking which way to split.
 - **`Alt+Arrow` moves between panes** (it was `Ctrl+Arrow`, which stole word
   jumps from the shell and editors). When there is no pane in that direction
   the key goes to the shell as usual, and `Ctrl+Arrow` is the shell's again.
+
+## Fixes
+
+- Images sent over the kitty graphics protocol now render whatever their size —
+  `kitten icat` used to print a wall of text instead of a picture once the image
+  data grew past a few kilobytes. Oversized or malformed graphics data is now
+  discarded cleanly instead of ever appearing as text.
