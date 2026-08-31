@@ -7663,7 +7663,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean keyboardShownChanged = mKeyboardGeometry.applyKeyboardShown(state.keyboardShown);
         if (shouldRequestTerminalResize(requestTerminalResize, accessoryHeightChanged,
             accessoryMarginChanged, keyboardShownChanged) && mTerminalView != null) {
+            // Bottom-anchored, like the window-bar collapse: the keyboard or dock changing height
+            // must not strand a prompt that a shell placed against the bottom edge — growing the
+            // pane with a plain resize pads the screen with blank rows below the cursor whenever
+            // the transcript cannot fill them (fish's clear wipes it via ESC[3J).
+            if (mPaneController != null) mPaneController.beginHostSurfaceResize();
             mTerminalView.post(mTerminalView::updateSize);
+            accessoryStackContainer.post(() -> {
+                if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
+            });
         }
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
