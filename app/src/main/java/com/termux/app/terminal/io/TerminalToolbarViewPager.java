@@ -92,9 +92,12 @@ public class TerminalToolbarViewPager {
                 editText.setOnFocusChangeListener((view, hasFocus) -> {
                     if (hasFocus) {
                         mActivity.beginTerminalToolbarExternalTextInput(editText);
-                    } else {
+                    } else if (mActivity.hasWindowFocus()) {
                         mActivity.endTerminalToolbarExternalTextInput();
                     }
+                    // Focus lost while the window itself is unfocused is lifecycle churn (screen
+                    // off, keyguard) — ending external input there suppresses an IME that cannot
+                    // be hidden yet, stranding it on screen. onResume restores the state instead.
                 });
                 if (mSavedTextInput != null) {
                     editText.setText(mSavedTextInput);

@@ -12559,6 +12559,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          * scratchpad re-adopt its shell after a hide or an activity restart instead of piling
          * up fresh ones.
          */
+        @Override public boolean shouldTerminalTakeFocus() {
+            return mInAppKeyboard == null || !mInAppKeyboard.isExternalTextInputActive();
+        }
+
         @Override @Nullable public TerminalSession findIdleShellByName(@NonNull String name) {
             if (mTermuxService == null || mPaneController == null) return null;
             for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession

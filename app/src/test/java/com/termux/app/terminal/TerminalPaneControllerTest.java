@@ -550,6 +550,31 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void renderKeepsFocusOffTheTerminalWhileTheHostForbidsIt() {
+        // While a launcher-owned text field owns the system IME, a render pass stealing focus is
+        // what stranded the keyboard on screen after screen-off/on; the host can forbid it.
+        Context context = RuntimeEnvironment.getApplication();
+        final boolean[] allowFocus = {false};
+        TerminalPaneController controller = new TerminalPaneController(new TerminalPaneController.Host() {
+            @Override public TerminalSession createShell(String cwd) { return terminal(); }
+            @Override public void configurePaneView(TerminalView view) {}
+            @Override public void removeShell(TerminalSession session) {}
+            @Override public void onActivePaneChanged() {}
+            @Override public void onTreesChanged() {}
+            @Override public String defaultCwd() { return "/"; }
+            @Override public boolean shouldTerminalTakeFocus() { return allowFocus[0]; }
+        }, new FrameLayout(context), LayoutInflater.from(context));
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        assertFalse(controller.getVisiblePaneViews().get(0).isFocused());
+
+        allowFocus[0] = true;
+        controller.showWindow(window);
+        // Robolectric views cannot take real window focus, but the request reaches the view.
+        assertTrue(controller.getVisiblePaneViews().get(0).isFocusable());
+    }
+
+    @Test
     public void handShapingClearsPolicy_soALaterSplitKeepsTheUserTopology() {
         PaneFixture fixture = splittableFourPaneFixture();
 

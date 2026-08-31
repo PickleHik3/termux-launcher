@@ -198,6 +198,14 @@ public class TerminalPaneController {
         @Nullable default TerminalSession findIdleShellByName(@NonNull String name) {
             return null;
         }
+        /**
+         * Whether a render/focus pass may move keyboard focus onto the terminal view. False while
+         * a launcher-owned text field owns the system IME: stealing its focus mid-lifecycle is what
+         * used to strand the system keyboard on screen after the screen turned off and on.
+         */
+        default boolean shouldTerminalTakeFocus() {
+            return true;
+        }
     }
 
     /** Supplies durable metadata for a pane while its tree is being snapshotted. */
@@ -2978,6 +2986,7 @@ public class TerminalPaneController {
     }
 
     private void focusActiveView() {
+        if (!mHost.shouldTerminalTakeFocus()) return;
         TerminalView v = getActivePaneView();
         if (v != null && !v.isFocused()) v.requestFocus();
     }
