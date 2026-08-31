@@ -111,6 +111,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         /** The search asked for a system IME while the terminal keeps focus. */
         void requestSearchKeyboard();
+        /** Dismiss the system IME: the drawer is taking the screen and must not open under it. */
+        void hideSystemKeyboard();
+        /** The drawer is gone; an IME it dismissed on the way in comes back. */
+        void restoreSystemKeyboard();
     }
 
     /**
@@ -131,6 +135,22 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private static final float STIFFNESS = 420f;
     private static final float DAMPING = 41f;
+    /**
+     * Closing runs on a stiffer spring: the same 420/41 that makes opening land softly reads as a
+     * crawl on the way out — a critically damped spring spends its last hundred milliseconds
+     * creeping through the final few percent, and a dismissal should feel decisive.
+     */
+    /**
+     * Closing is not a spring at all: a spring's exponential tail is a crawl through the last few
+     * percent however it is tuned, and a dismissal should read as one decisive motion. The plane
+     * exits on a fixed-length accelerating curve — it leaves at the speed of the release and speeds
+     * up into the dock, ending dead on zero with no tail — scaled by how far it has to travel so a
+     * barely-open plane doesn't take the full ride.
+     */
+    private static final long CLOSE_ANIM_FULL_TRAVEL_MS = 220L;
+    private static final long CLOSE_ANIM_MIN_MS = 100L;
+    private static final android.view.animation.Interpolator CLOSE_ANIM_CURVE =
+        new android.view.animation.PathInterpolator(0.4f, 0f, 1f, 1f);
 
     private static final float MIN_TRAVEL_DP = 120f;
     private static final float MAX_TRAVEL_DP = 260f;
@@ -144,11 +164,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private static final float ROW_FADE_END = 0.26f;
 
     /** Below this the closing spring is close enough to shut to tear the plane down. */
-    private static final float CLOSED_EPSILON = 0.002f;
+    /**
+     * Where a closing plane is done: ~0.6% of the travel is under a dozen pixels, already inside
+     * the dock glass, and cutting there is what makes the close end decisively — the spring tail
+     * below this line is pure crawl.
+     */
+    private static final float CLOSED_EPSILON = 0.006f;
 
     private final Host mHost;
     private final float mDensity;
     private final Spring mProgress = new Spring(0f, STIFFNESS, DAMPING);
+    /** True while the plane is exiting on the timed curve instead of the spring. */
+    private boolean mCloseTimeAnim;
+    private long mCloseAnimStartNanos;
+    private float mCloseAnimStartValue;
     /**
      * The search keyboard's reveal, {@code k ∈ [0,1]}. A second, independent transition: the drawer
      * is already open and {@code p} pinned at 1 when a keystroke brings the keyboard up
@@ -284,7 +313,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // drawer; anything between is a plane caught mid-settle, which continues from there rather
         // than snapping to an end.
         mGrabProgress = mProgress.value;
+        mCloseTimeAnim = false;
         mEngaged = true;
+        // With the embedded keyboard the IME can never be up here; with the system keyboard it
+        // stayed open across the drawer, covering the grid until dismissed by hand.
+        mHost.hideSystemKeyboard();
         applyFrame(mProgress.value);
         // The rope needs frames for the whole drag, not just for the release: its anchor is a
         // function of p, so the chain has to be integrated while the finger is moving or the letters
@@ -375,6 +408,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // typed into a drawer that is on its way out.
         applyContentOpenState();
         retargetReveal();
+        mCloseTimeAnim = !open;
+        mCloseAnimStartNanos = 0L;
         mProgress.target = open ? 1f : 0f;
         // Progress runs with the finger when opening and against it when closing, so the injected
         // velocity is negated in the closing direction. Feeding the raw sign there makes a hard
@@ -539,7 +574,26 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mLastFrameTimeNanos = frameTimeNanos;
         dt = Spring.clampDelta(dt);
         boolean reducedMotion = isReducedMotion();
-        boolean moving = mProgress.tick(reducedMotion, dt);
+        boolean moving;
+        if (mCloseTimeAnim && !mDragging) {
+            if (mCloseAnimStartNanos == 0L) {
+                mCloseAnimStartNanos = frameTimeNanos;
+                mCloseAnimStartValue = Math.max(0f, mProgress.value);
+            }
+            long durationMs = Math.max(CLOSE_ANIM_MIN_MS,
+                (long) (CLOSE_ANIM_FULL_TRAVEL_MS * mCloseAnimStartValue));
+            float t = Math.min(1f, (frameTimeNanos - mCloseAnimStartNanos) / (durationMs * 1e6f));
+            if (reducedMotion) t = 1f;
+            mProgress.value = mCloseAnimStartValue * (1f - CLOSE_ANIM_CURVE.getInterpolation(t));
+            mProgress.vel = 0f;
+            moving = t < 1f;
+            if (!moving) {
+                mCloseTimeAnim = false;
+                mProgress.value = 0f;
+            }
+        } else {
+            moving = mProgress.tick(reducedMotion, dt);
+        }
         // The reveal rides this loop rather than one of its own: the plane's bottom edge and the
         // keyboard's top are the same edge to the eye, and two Choreographer callbacks would show
         // them a frame apart.
@@ -1212,6 +1266,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         } finally {
             mEngaged = false;
             mHost.flushPendingAccessoryGeometry();
+            mHost.restoreSystemKeyboard();
         }
     }
 

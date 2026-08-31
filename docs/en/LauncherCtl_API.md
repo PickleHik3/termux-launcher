@@ -1,13 +1,13 @@
 # LauncherCtl API (Local AI Endpoint)
 
 ## Overview
-LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the on-device Termux AI (TAI) runtime, and one app-launch route. It is not a general device-control or agent bridge.
+LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the on-device Termux AI (TAI) runtime, one app-launch route, and the pane routes that let a process in a shell open and drive a terminal pane of its own. It is not a general device-control or agent bridge.
 
 - Server: in app process, isolated from native model work which runs in `:tai_runtime`.
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
 - Auth: bearer token from `~/.launcherctl/token`, or `X-Api-Key: <token>` header. The token can be made optional for localhost (see [Auth](#auth)).
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`. The launcher app installs both when `TermuxActivity` starts.
+- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>` and `launcherctl pane …`. The launcher app installs both when `TermuxActivity` starts.
 - Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
 `tai` uses this authenticated server for the local Termux AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
@@ -127,7 +127,79 @@ launcherctl launch maps
 launcherctl launch com.example.maps
 ```
 
-`launcherctl` has no other command. Use `tai` for model and inference commands.
+`launcherctl`'s other command is `pane`, below. Use `tai` for model and inference commands.
+
+### Panes
+
+These routes exist so that something running inside a shell — an AI coding agent, a build, a
+script — can open a pane of its own to show its work in, the way it would open a browser tab, and
+drive that pane while the user watches. Every route runs as one terminal action on the UI thread
+and needs the terminal to be in the foreground (otherwise HTTP 409 `activity_not_running`).
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/v1/panes` | List the windows and panes of the current session |
+| POST | `/v1/panes` | Open a new pane in the current window |
+| POST | `/v1/panes/{id}/focus` | Switch to the pane's window and focus it |
+| POST | `/v1/panes/{id}/write` | Type text into a pane opened through this API |
+| GET | `/v1/panes/{id}/text?lines=N` | Read the last `N` transcript lines of a pane opened through this API |
+| POST | `/v1/panes/{id}/close` | Close a pane opened through this API |
+
+**Ownership is the security boundary.** Opening a pane marks it as owned by the API; `write`,
+`text` and `close` answer HTTP 403 `not_owned` for any other pane, including every shell the user
+opened by hand. `GET /v1/panes` and `focus` work on all panes. The token therefore buys a pane, not
+the user's shells — which is why these routes could come back after the general remote-action
+endpoints were removed.
+
+`POST /v1/panes` takes:
+
+```json
+{"command": ["kitten", "icat", "out.png"], "cwd": "/data/data/com.termux/files/home/proj",
+ "title": "preview", "focus": false, "tag": "claude-code"}
+```
+
+- `command` — an argv array, or a string that is run through `sh -c`. Omit it for a plain shell.
+  The command runs through the user's login shell (so their `PATH` applies) and the shell stays
+  behind when the command exits, exactly like a restored workspace pane.
+- `cwd` — defaults to the home directory. `title` — the session name shown on the pane.
+- `focus` — default `true`; `false` leaves the keyboard where the user has it.
+- `tag` — a free-form label (agent name, task id) that `GET /v1/panes` reports back.
+
+Under the `dwindle` pane layout the new pane halves the focused pane along its longer side; under
+the other layouts it splits along the window's longer side and the retained layout re-tiles.
+
+Every pane record looks like:
+
+```json
+{"id": "6d3f…", "title": "~/proj", "name": "preview", "cwd": "/data/data/com.termux/files/home/proj",
+ "pid": 12345, "running": true, "columns": 80, "rows": 24, "focused": false,
+ "agent": {"tag": "claude-code", "command": ["kitten", "icat", "out.png"], "openedAt": 1756569600000}}
+```
+
+`agent` is `null` for panes the user opened. `GET /v1/panes` returns
+`{"windows": [{"index", "id", "name", "current", "focusedPane", "panes": […]}], "activePane", "layout"}`.
+`write` takes `{"text": "…", "enter": true}` (at most 16 KiB per call; `enter` appends a carriage
+return) and answers 409 `pane_not_running` once the shell has exited. `text` accepts `lines` from 1
+to 500 (default 60). An unknown id is HTTP 404 `pane_not_found`; a pane that could not be opened
+(no session, terminal limit reached, compatibility mode on) is HTTP 409.
+
+Rate limits per minute: list 240, open 30, focus 120, write 240, text 240, close 60.
+
+The shell client wraps all of this:
+
+```sh
+id=$(launcherctl pane open --title preview --no-focus -- kitten icat out.png \
+     | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+launcherctl pane write "$id" --enter 'make test'
+launcherctl pane read "$id" --lines 40
+launcherctl pane list
+launcherctl pane focus "$id"
+launcherctl pane close "$id"
+```
+
+`launcherctl pane write` reads the text from its arguments, or from stdin when none are given.
+Every `pane` command prints the server's JSON body and exits 1 on an HTTP error, so the error code
+(`not_owned`, `pane_not_found`, …) is always visible to the caller.
 
 ### OpenAI-compatible
 

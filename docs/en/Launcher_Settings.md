@@ -79,6 +79,14 @@ Use this section for terminal geometry and the top row:
 - **Split-pane controls:** enable native windows, panes, and their tmux-style shortcuts. Turning this
   off returns to single-pane compatibility behavior and closes secondary panes, so finish their work
   first.
+- **Automatic tiling:** new windows start in the `dwindle` layout — every new pane halves the focused
+  one along its longer side, a dragged pane takes the half you drop it on. Off by default; any window
+  can still pick a layout with `Ctrl+Alt+L`.
+- **Focused pane grows:** the pane you tap (or focus with `Alt+Arrow`, or an agent focuses) takes
+  most of the room and the others slide aside, focus.nvim-style. Tap between an agent's pane and the
+  pane it drives to switch which one is big. Turning it off puts every divider back to 1:1.
+- **Let scripts open panes:** whether `launcherctl pane …` and the `/v1/panes` routes of the local
+  API may open and drive panes. On by default; off answers those routes with 403.
 - **Clock style** and **Use 12-hour time**.
 - **CPU usage**, **Memory usage**, and **Weather** status cards.
 - **Media and pinned notifications** and their essential notification rules.

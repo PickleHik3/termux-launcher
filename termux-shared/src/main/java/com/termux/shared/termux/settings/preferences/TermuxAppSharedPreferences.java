@@ -407,6 +407,33 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SHOW_KEY_HINTS, value, false);
     }
 
+    public boolean isDwindleDefaultLayoutEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_DWINDLE_DEFAULT_LAYOUT, TERMUX_APP.DEFAULT_DWINDLE_DEFAULT_LAYOUT);
+    }
+
+    public void setDwindleDefaultLayoutEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_DWINDLE_DEFAULT_LAYOUT, value, false);
+    }
+
+    public boolean isFocusedPaneGrowsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FOCUSED_PANE_GROWS, TERMUX_APP.DEFAULT_FOCUSED_PANE_GROWS);
+    }
+
+    public void setFocusedPaneGrowsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FOCUSED_PANE_GROWS, value, false);
+    }
+
+    public boolean isAgentPanesEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_AGENT_PANES_ENABLED, TERMUX_APP.DEFAULT_AGENT_PANES_ENABLED);
+    }
+
+    public void setAgentPanesEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_AGENT_PANES_ENABLED, value, false);
+    }
+
     public boolean isStatusWidgetCpuEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_CPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);

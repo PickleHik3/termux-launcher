@@ -693,6 +693,13 @@ public final class TermuxInAppKeyboard {
             mKeyboardView.fadeOutLaunchWave();
     }
 
+    private static void hideSystemImeViaInsets(Activity activity) {
+        if (activity.getWindow() == null) return;
+        androidx.core.view.WindowCompat.getInsetsController(activity.getWindow(),
+                activity.getWindow().getDecorView())
+            .hide(androidx.core.view.WindowInsetsCompat.Type.ime());
+    }
+
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */
     public void suppressSystemIme() {
         if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
@@ -705,6 +712,10 @@ public final class TermuxInAppKeyboard {
             if (terminalView == null || activity == null)
                 return;
 
+            // Hide through the insets API first: it works at the window level, so it still
+            // lands when no view is served — the IMM hide alone fails there, and setting
+            // ALT_FOCUSABLE_IM before a successful hide strands the IME on screen for good.
+            hideSystemImeViaInsets(activity);
             KeyboardUtils.hideSoftKeyboard(activity, terminalView);
             KeyboardUtils.setDisableSoftKeyboardFlags(activity);
             int softInputMode = activity.getWindow().getAttributes().softInputMode;
@@ -716,6 +727,7 @@ public final class TermuxInAppKeyboard {
             if (mSystemImeFocusListener == null) {
                 mSystemImeFocusListener = (view, hasFocus) -> {
                     if (hasFocus) {
+                        hideSystemImeViaInsets(activity);
                         KeyboardUtils.hideSoftKeyboard(activity, terminalView);
                         KeyboardUtils.setDisableSoftKeyboardFlags(activity);
                     }

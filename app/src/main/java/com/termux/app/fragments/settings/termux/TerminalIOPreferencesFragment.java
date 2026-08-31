@@ -81,6 +81,15 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "show_key_hints":
                 mPreferences.setShowKeyHintsEnabled(value);
                 break;
+            case "pane_dwindle_default":
+                mPreferences.setDwindleDefaultLayoutEnabled(value);
+                break;
+            case "pane_focus_grows":
+                mPreferences.setFocusedPaneGrowsEnabled(value);
+                break;
+            case "pane_agent_api":
+                mPreferences.setAgentPanesEnabled(value);
+                break;
             case "status_widget_cpu":
                 mPreferences.setStatusWidgetCpuEnabled(value);
                 break;
@@ -116,6 +125,12 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isTopPaneClockAmPmEnabled();
             case "show_key_hints":
                 return mPreferences.isShowKeyHintsEnabled();
+            case "pane_dwindle_default":
+                return mPreferences.isDwindleDefaultLayoutEnabled();
+            case "pane_focus_grows":
+                return mPreferences.isFocusedPaneGrowsEnabled();
+            case "pane_agent_api":
+                return mPreferences.isAgentPanesEnabled();
             case "status_widget_cpu":
                 return mPreferences.isStatusWidgetCpuEnabled();
             case "status_widget_ram":

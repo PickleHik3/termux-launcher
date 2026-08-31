@@ -1275,8 +1275,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // If compatibility mode was just enabled, drop any active split back to a single pane.
         if (!isSplitPanesEnabled())
             collapseAllSplits();
-        else if (mPaneController != null)
+        else if (mPaneController != null) {
             mPaneController.refreshPaneSizes();
+            // Settings may have flipped the pane behaviour toggles while we were away.
+            applyPaneBehaviourPreferences();
+        }
         refreshTerminalWindowBar();
 
         updateWindowBackgroundForCurrentSession();
@@ -6648,6 +6651,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
+        applyPaneBehaviourPreferences();
         // Bootstrap a sessionless pane so the many single-view call sites (in-app keyboard,
         // font setup) have a non-null active view before the first session/tab is shown.
         mTerminalView = mPaneController.createBootstrapView();
@@ -7596,8 +7600,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Tiled splits couple mTerminalView's window position to the very accessory geometry this
         // padding feeds back into (its pane reflows every time the stack resizes), so the modulo
         // calc below never settles — it just chases its own tail and flickers the bottom pane/dock.
-        // Skip it whenever more than one pane is tiled, same as the keyboard-shown/toolbar-hidden cases.
-        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown || visiblePaneCount() > 1 ? 0
+        // Skip it whenever more than one pane is tiled, same as the keyboard-shown/toolbar-hidden
+        // cases. A focused FLOATING pane is the same coupling with one hop more: the float's
+        // fractional bounds re-project on every host resize, so mTerminalView's top moves with the
+        // very stack height the modulo feeds — tap a float and the whole band flickered at layout
+        // speed until focus left it.
+        boolean activePaneFloating = mPaneController != null && mPaneController.isActivePaneFloating();
+        // The system IME stands the absorption down too: the remainder halves only hide when the
+        // band rests on the screen edge — above a keyboard they surface as a wallpaper band
+        // between the extra-keys glass and the IME, read as a stray gap.
+        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown
+            || visiblePaneCount() > 1 || activePaneFloating || isImeVisible() ? 0
             : resolveTerminalFlushDockPaddingPx(accessoryContentHeightPx, accessoryBottomMarginPx);
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
         int combinedHeight = computeAccessoryStackHeight(
@@ -8630,6 +8643,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void setInterceptorActive(boolean active) {
             setAppDrawerInterceptorActive(active);
+        }
+
+        @Override public void hideSystemKeyboard() {
+            if (!isImeVisible() || getWindow() == null) return;
+            mSystemImeHiddenForDrawer = true;
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .hide(Type.ime());
+        }
+
+        @Override public void restoreSystemKeyboard() {
+            if (!mSystemImeHiddenForDrawer) return;
+            mSystemImeHiddenForDrawer = false;
+            if (getWindow() == null || isSystemImeSuppressedByInAppKeyboard()) return;
+            // The keyboard was up when the drawer took the screen; the user's context is typing,
+            // so the dismissal is undone rather than left as a surprise.
+            onSystemImeRequested();
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .show(Type.ime());
         }
 
         @Override public void requestSearchKeyboard() {
@@ -10303,45 +10334,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         panes.add(floating.pane);
                     java.util.List<TerminalSession> shells = new java.util.ArrayList<>();
                     for (com.termux.app.terminal.TerminalWorkspace.Pane pane : panes) {
-                        String executable = null;
-                        String[] arguments = null;
-                        if (runCommands && !pane.command.isEmpty()) {
-                            String shell = wrapperShellPath();
-                            if (shell != null) {
-                                // The command is looked up on the PATH the user's own config
-                                // builds, since a captured command frequently lives somewhere only
-                                // that config knows about, and a shell stays behind once it exits
-                                // so a pane restoring `make` does not vanish with the build.
-                                boolean fishStyle = isFishShell(shell);
-                                String script = shellCommandLine(pane.command, fishStyle)
-                                    + "; exec " + shellQuote(shell, fishStyle) + " -l";
-                                String login = loginProgramPath();
-                                if (login != null) {
-                                    // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs
-                                    // the same shell the same way a normal pane does — and only it
-                                    // sets up LD_PRELOAD for termux-exec and sources
-                                    // termux-login.sh. Passing arguments also skips its motd.
-                                    executable = login;
-                                    arguments = new String[] {"-c", script};
-                                } else {
-                                    executable = shell;
-                                    arguments = new String[] {"-l", "-c", script};
-                                }
-                            } else {
-                                executable = pane.command.get(0);
-                                arguments = pane.command.subList(1, pane.command.size()).toArray(new String[0]);
-                            }
-                        }
-                        String cwd = pane.cwd;
-                        if (cwd == null || cwd.isEmpty()) cwd = getProperties().getDefaultWorkingDirectory();
-                        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
-                            mTermuxService.createTermuxSession(executable, arguments, null, cwd,
-                                false, pane.title);
-                        if (created == null || created.getTerminalSession() == null) {
+                        TerminalSession shell = createCommandShell(
+                            runCommands ? pane.command : java.util.Collections.<String>emptyList(),
+                            pane.cwd, pane.title);
+                        if (shell == null) {
                             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                                 "session_create_failed", "Could not create every workspace pane");
                         }
-                        TerminalSession shell = created.getTerminalSession();
                         shells.add(shell);
                         createdShells.add(shell);
                     }
@@ -12281,9 +12280,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         runWithoutNotices(() -> mPaneController.split(orientation));
     }
 
+    /** Push the Sessions-and-panes behaviour toggles into the pane controller. */
+    private void applyPaneBehaviourPreferences() {
+        if (mPaneController == null || getPreferences() == null) return;
+        mPaneController.setDefaultLayoutPolicy(getPreferences().isDwindleDefaultLayoutEnabled()
+            ? com.termux.app.terminal.TerminalPaneController.LAYOUT_DWINDLE : null);
+        mPaneController.setFocusGrowEnabled(getPreferences().isFocusedPaneGrowsEnabled());
+    }
+
+    /** Split the focused pane along its longer side (Ctrl+Alt+Enter): a new terminal, no axis asked. */
+    void splitCurrentPaneAuto() {
+        if (!isSplitPanesEnabled() || mPaneController == null) return;
+        if (mTermuxService == null || mPaneController.getActiveSession() == null) {
+            showSessionSwitchIndicator(getString(R.string.msg_no_session_to_split));
+            return;
+        }
+        runWithoutNotices(() -> mPaneController.splitAuto());
+    }
+
     /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
     boolean focusPaneDirection(int keyCode) {
-        return mPaneController == null || mPaneController.focusDirection(keyCode);
+        return mPaneController != null && mPaneController.focusDirection(keyCode);
     }
 
     /** Adjust the split ratio toward the arrow direction (Ctrl+Alt+Shift+arrow). */
@@ -12347,6 +12364,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Create a shell in {@code cwd} (or the default) via the service; null on failure. */
     @Nullable TerminalSession createShellForCwd(@Nullable String cwd) {
         return createShellForCwd(cwd, null);
+    }
+
+    /**
+     * A shell that first runs {@code command} (argv; empty for a plain shell) and then stays behind
+     * as the user's login shell, the way a restored workspace pane does. Null when the service is
+     * not ready or the terminal limit is reached. Shared by workspace restore and the pane API.
+     */
+    @Nullable TerminalSession createCommandShell(@NonNull java.util.List<String> command,
+                                                 @Nullable String cwd, @Nullable String title) {
+        if (mTermuxService == null) return null;
+        if (mTermuxService.getTermuxSessionsSize()
+                >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
+            return null;
+        }
+        String executable = null;
+        String[] arguments = null;
+        if (!command.isEmpty()) {
+            String shell = wrapperShellPath();
+            if (shell != null) {
+                // The command is looked up on the PATH the user's own config builds, since a
+                // captured command frequently lives somewhere only that config knows about, and a
+                // shell stays behind once it exits so a pane restoring `make` does not vanish with
+                // the build.
+                boolean fishStyle = isFishShell(shell);
+                String script = shellCommandLine(command, fishStyle)
+                    + "; exec " + shellQuote(shell, fishStyle) + " -l";
+                String login = loginProgramPath();
+                if (login != null) {
+                    // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs the same shell
+                    // the same way a normal pane does — and only it sets up LD_PRELOAD for
+                    // termux-exec and sources termux-login.sh. Passing arguments also skips its motd.
+                    executable = login;
+                    arguments = new String[] {"-c", script};
+                } else {
+                    executable = shell;
+                    arguments = new String[] {"-l", "-c", script};
+                }
+            } else {
+                executable = command.get(0);
+                arguments = command.subList(1, command.size()).toArray(new String[0]);
+            }
+        }
+        if (cwd == null || cwd.isEmpty()) cwd = getProperties().getDefaultWorkingDirectory();
+        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
+            mTermuxService.createTermuxSession(executable, arguments, null, cwd, false,
+                title == null || title.isEmpty() ? null : title);
+        return created == null ? null : created.getTerminalSession();
     }
 
     @Nullable TerminalSession createShellForCwd(@Nullable String cwd, @Nullable String sessionName) {
@@ -12522,6 +12586,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          * scratchpad re-adopt its shell after a hide or an activity restart instead of piling
          * up fresh ones.
          */
+        @Override public boolean shouldTerminalTakeFocus() {
+            return mInAppKeyboard == null || !mInAppKeyboard.isExternalTextInputActive();
+        }
+
         @Override @Nullable public TerminalSession findIdleShellByName(@NonNull String name) {
             if (mTermuxService == null || mPaneController == null) return null;
             for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
@@ -12905,6 +12973,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.splitCurrentPane(orientation);
         }
 
+        @Override public void splitCurrentPaneAuto() {
+            TermuxActivity.this.splitCurrentPaneAuto();
+        }
+
         @Override public boolean focusPaneDirection(int keyCode) {
             return TermuxActivity.this.focusPaneDirection(keyCode);
         }
@@ -12935,6 +13007,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean rotatePaneLayout(boolean clockwise) {
             return TermuxActivity.this.rotatePaneLayout(clockwise);
+        }
+
+        @Override @Nullable public TerminalSession openCommandPane(
+                @NonNull java.util.List<String> command, @Nullable String cwd,
+                @Nullable String title, boolean focus) {
+            if (!isSplitPanesEnabled() || mPaneController == null
+                || mPaneController.getActiveSession() == null) return null;
+            TerminalSession shell = createCommandShell(command, cwd, title);
+            if (shell == null) return null;
+            boolean[] added = {false};
+            runWithoutNotices(() -> added[0] = mPaneController.addPane(shell, focus));
+            if (!added[0]) {
+                mTermuxService.killTermuxSession(shell);
+                return null;
+            }
+            return shell;
+        }
+
+        @Override @NonNull public java.util.List<com.termux.app.terminal.TerminalPaneController.Window>
+                currentSessionWindows() {
+            return mCurrentWSession == null
+                ? java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>emptyList()
+                : new java.util.ArrayList<>(mCurrentWSession.windows);
+        }
+
+        @Override @Nullable public TerminalSession findPaneById(@NonNull String id) {
+            if (mTermuxService == null) return null;
+            for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
+                    : mTermuxService.getTermuxSessions()) {
+                TerminalSession session = termuxSession.getTerminalSession();
+                if (session != null && id.equals(session.mHandle)) return session;
+            }
+            return null;
         }
 
         @Override public boolean moveFocusedPaneToEdge(@NonNull String edge) {
@@ -13776,6 +13881,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mAccessoryLayoutChangeListener = null;
     }
+
+    /** The drawer dismissed a visible system IME on engage; restored when the drawer goes. */
+    private boolean mSystemImeHiddenForDrawer;
 
     private boolean isImeVisible() {
         View content = findViewById(android.R.id.content);

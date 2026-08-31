@@ -8,6 +8,8 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.SystemClock;
 
+import androidx.annotation.Nullable;
+
 import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -45,6 +47,239 @@ final class KittyGraphicsProtocol {
         this.output = output;
     }
 
+    /** beginStream: feed the payload through {@link #streamFeed}; finish or abort ends it. */
+    static final int STREAM_UPLOAD = 0;
+    /** beginStream: keep buffering the whole APC string and hand it to {@link #accept} at ST. */
+    static final int STREAM_BUFFER = 1;
+    /** beginStream: the command was refused (and answered); discard the payload up to ST. */
+    static final int STREAM_REJECT = 2;
+
+    @Nullable private Upload streamUpload;
+    @Nullable private Command streamCommand;
+    private boolean streamOpen;
+    private int streamAccumulator;
+    private int streamBits;
+    private int streamUseful;
+    private boolean streamPadding;
+
+    /**
+     * Start a streamed direct transmission for one APC whose control data ended at ';'. Streaming
+     * exists because real clients (kitten icat among them) send a whole image as ONE unchunked APC,
+     * far past any sane bound on a buffered escape string: the payload is base64-decoded as it
+     * arrives, into the same accumulation buffer a chunked upload uses, so one image costs its
+     * decoded bytes once — never a string copy of the encoded stream.
+     */
+    int beginStream(String controlData) {
+        Command command;
+        try {
+            command = Command.parse(controlData);
+        } catch (IllegalArgumentException e) {
+            reply(null, "EINVAL:" + printable(e.getMessage()), true, true);
+            return STREAM_REJECT;
+        }
+        switch (command.action) {
+            // Payload-less or small-payload commands keep the buffered path so accept() can run
+            // them whole at ST; only pixel transmissions are worth streaming.
+            case 'd': case 'q': case 'p': case 'a': case 'c':
+                return STREAM_BUFFER;
+        }
+        Upload target = uploadTargetFor(command);
+        if (target == null) return STREAM_REJECT;
+        streamUpload = target;
+        streamCommand = command;
+        streamOpen = true;
+        streamAccumulator = 0;
+        streamBits = 0;
+        streamUseful = 0;
+        streamPadding = false;
+        return STREAM_UPLOAD;
+    }
+
+    /** Feed one payload code point; false once the stream failed (the caller then absorbs to ST). */
+    boolean streamFeed(int c) {
+        if (!streamOpen) return false;
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') return true;
+        if (c == '=') {
+            streamPadding = true;
+            return true;
+        }
+        if (streamPadding || c < 0 || c > 127) return streamFail("EINVAL:invalid base64 payload");
+        int value = base64Value((char) c);
+        if (value < 0) return streamFail("EINVAL:invalid base64 payload");
+        streamAccumulator = (streamAccumulator << 6) | value;
+        streamBits += 6;
+        streamUseful++;
+        if (streamBits >= 8) {
+            streamBits -= 8;
+            if (streamUpload.data.size() >= MAX_TRANSMITTED_BYTES)
+                return streamFail("ENOSPC:image exceeds transmission limit");
+            streamUpload.data.write((streamAccumulator >> streamBits) & 0xff);
+        }
+        return true;
+    }
+
+    /** Bulk variant for a run of plain ASCII payload bytes; the emulator's hot path. */
+    boolean streamFeed(byte[] buffer, int offset, int length) {
+        if (!streamOpen) return false;
+        ByteArrayOutputStream data = streamUpload.data;
+        int accumulator = streamAccumulator;
+        int bits = streamBits;
+        for (int i = offset; i < offset + length; i++) {
+            char c = (char) (buffer[i] & 0xff);
+            if (c == ' ') continue;
+            if (c == '=') {
+                streamPadding = true;
+                continue;
+            }
+            int value;
+            if (streamPadding || (value = base64Value(c)) < 0) {
+                streamAccumulator = accumulator;
+                streamBits = bits;
+                return streamFail("EINVAL:invalid base64 payload");
+            }
+            accumulator = (accumulator << 6) | value;
+            bits += 6;
+            streamUseful++;
+            if (bits >= 8) {
+                bits -= 8;
+                if (data.size() >= MAX_TRANSMITTED_BYTES) {
+                    streamAccumulator = accumulator;
+                    streamBits = bits;
+                    return streamFail("ENOSPC:image exceeds transmission limit");
+                }
+                data.write((accumulator >> bits) & 0xff);
+            }
+        }
+        streamAccumulator = accumulator;
+        streamBits = bits;
+        return true;
+    }
+
+    /** The ST arrived: validate the base64 tail and dispatch exactly as a buffered chunk would. */
+    void finishStream() {
+        if (!streamOpen) return;
+        if ((streamUseful & 3) == 1
+            || (streamBits > 0 && (streamAccumulator & ((1 << streamBits) - 1)) != 0)) {
+            streamFail("EINVAL:invalid base64 payload");
+            return;
+        }
+        Upload target = streamUpload;
+        Command command = streamCommand;
+        clearStream();
+        if (command.more) {
+            upload = target;
+            return;
+        }
+        upload = null;
+        if (target.command.action == 'f') {
+            submitFrame(target.command, target.data.toByteArray());
+        } else if (target.command.format == 100) {
+            submitPng(target.command, target.data.toByteArray());
+        } else {
+            submitRaw(target.command, target.data.toByteArray());
+        }
+    }
+
+    /**
+     * The sequence was cancelled (CAN/SUB, or a terminal reset) mid-payload. Silent, like the
+     * buffered path dropping its string — but a continuation target already holds partial bytes,
+     * so the whole chunked upload is dropped rather than left corrupt.
+     */
+    void abortStream() {
+        if (!streamOpen) return;
+        if (upload == streamUpload) upload = null;
+        clearStream();
+    }
+
+    private boolean streamFail(String status) {
+        if (upload == streamUpload) upload = null;
+        Command command = streamCommand;
+        clearStream();
+        reply(command, status, true, false);
+        return false;
+    }
+
+    private void clearStream() {
+        streamUpload = null;
+        streamCommand = null;
+        streamOpen = false;
+    }
+
+    /**
+     * The upload one payload-carrying command appends to: the in-flight chunked upload for a
+     * continuation, a fresh one for a validated new transmission, or null when the command was
+     * refused (already answered) — the pre-payload half of {@link #accept}, shared with streaming.
+     */
+    @Nullable
+    private Upload uploadTargetFor(Command command) {
+        if (upload != null) {
+            if (command.isContinuation()) return upload;
+            Upload abandoned = upload;
+            upload = null;
+            reply(abandoned.command, "EINVAL:chunk upload interrupted", true, false);
+        }
+        if (command.action == 'p') {
+            handlePlacement(command);
+            return null;
+        }
+        if (command.action == 'a') {
+            handleAnimationControl(command);
+            return null;
+        }
+        if (command.action == 'c') {
+            handleCompose(command);
+            return null;
+        }
+        if (command.action != 'T' && command.action != 't' && command.action != 'f') {
+            reply(command, "ENOSYS:unsupported action", true, false);
+            return null;
+        }
+        if (command.placeholder != 0 && command.placeholder != 1) {
+            reply(command, "EINVAL:unsupported unicode placeholder mode", true, false);
+            return null;
+        }
+        if (command.placeholder == 1 && command.action != 'T') {
+            reply(command, "EINVAL:U is only valid for display commands", true, false);
+            return null;
+        }
+        if (command.medium != 'd') {
+            reply(command, "ENOSYS:only direct transmission is supported", true, false);
+            return null;
+        }
+        if (command.format != 100 && command.format != 24 && command.format != 32) {
+            reply(command, "ENOSYS:unsupported image format", true, false);
+            return null;
+        }
+        if (command.format != 100) {
+            if (command.width <= 0 || command.height <= 0) {
+                reply(command, "EINVAL:raw pixel data requires s and v", true, false);
+                return null;
+            }
+            if ((long) command.width * command.height * 4L > MAX_DECODED_BYTES) {
+                reply(command, "ENOSPC:decoded image exceeds session limit", true, false);
+                return null;
+            }
+        }
+        if (command.compression != 0 && command.compression != 'z') {
+            reply(command, "ENOSYS:unsupported compression", true, false);
+            return null;
+        }
+        if (command.action == 'f') {
+            // Frame data needs an existing image, and a raw frame's rectangle is checkable now.
+            KittyImageStore.Entry entry = store.get(store.resolveId(command.imageId, command.number));
+            if (entry == null) {
+                reply(command, "ENOENT:image not found", true, false);
+                return null;
+            }
+            if (command.format != 100
+                && !frameRectFits(entry, command.srcX, command.srcY, command.width, command.height)) {
+                reply(command, "EINVAL:frame rectangle out of bounds", true, false);
+                return null;
+            }
+        }
+        return new Upload(command);
+    }
+
     void accept(String apc) {
         if (apc == null || apc.length() < 2 || apc.charAt(0) != 'G') return;
         // The payload, and therefore the ';' separator, is optional: a control-only command is well
@@ -70,77 +305,9 @@ final class KittyGraphicsProtocol {
             handleQuery(command, payload);
             return;
         }
-        if (upload != null) {
-            if (!command.isContinuation()) {
-                Upload abandoned = upload;
-                upload = null;
-                reply(abandoned.command, "EINVAL:chunk upload interrupted", true, false);
-            } else {
-                appendChunk(upload, command, payload);
-                return;
-            }
-        }
-        if (command.action == 'p') {
-            handlePlacement(command);
-            return;
-        }
-        if (command.action == 'a') {
-            handleAnimationControl(command);
-            return;
-        }
-        if (command.action == 'c') {
-            handleCompose(command);
-            return;
-        }
-        if (command.action != 'T' && command.action != 't' && command.action != 'f') {
-            reply(command, "ENOSYS:unsupported action", true, false);
-            return;
-        }
-        if (command.placeholder != 0 && command.placeholder != 1) {
-            reply(command, "EINVAL:unsupported unicode placeholder mode", true, false);
-            return;
-        }
-        if (command.placeholder == 1 && command.action != 'T') {
-            reply(command, "EINVAL:U is only valid for display commands", true, false);
-            return;
-        }
-        if (command.medium != 'd') {
-            reply(command, "ENOSYS:only direct transmission is supported", true, false);
-            return;
-        }
-        if (command.format != 100 && command.format != 24 && command.format != 32) {
-            reply(command, "ENOSYS:unsupported image format", true, false);
-            return;
-        }
-        if (command.format != 100) {
-            if (command.width <= 0 || command.height <= 0) {
-                reply(command, "EINVAL:raw pixel data requires s and v", true, false);
-                return;
-            }
-            if ((long) command.width * command.height * 4L > MAX_DECODED_BYTES) {
-                reply(command, "ENOSPC:decoded image exceeds session limit", true, false);
-                return;
-            }
-        }
-        if (command.compression != 0 && command.compression != 'z') {
-            reply(command, "ENOSYS:unsupported compression", true, false);
-            return;
-        }
-        if (command.action == 'f') {
-            // Frame data needs an existing image, and a raw frame's rectangle is checkable now.
-            KittyImageStore.Entry entry = store.get(store.resolveId(command.imageId, command.number));
-            if (entry == null) {
-                reply(command, "ENOENT:image not found", true, false);
-                return;
-            }
-            if (command.format != 100
-                && !frameRectFits(entry, command.srcX, command.srcY, command.width, command.height)) {
-                reply(command, "EINVAL:frame rectangle out of bounds", true, false);
-                return;
-            }
-        }
-        Upload next = new Upload(command);
-        appendChunk(next, command, payload);
+        Upload target = uploadTargetFor(command);
+        if (target == null) return;
+        appendChunk(target, command, payload);
     }
 
     private static boolean frameRectFits(KittyImageStore.Entry entry, int x, int y, int w, int h) {

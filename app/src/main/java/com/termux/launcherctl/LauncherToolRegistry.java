@@ -376,6 +376,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
     public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
     public static final String TOOL_EXTRA_KEYS_EDIT = "extrakeys.edit";
+    public static final String TOOL_PANE_SPLIT = "pane.split";
     public static final String TOOL_PANE_SPLIT_VERTICAL = "pane.split_vertical";
     public static final String TOOL_PANE_SPLIT_HORIZONTAL = "pane.split_horizontal";
     public static final String TOOL_PANE_FOCUS_DIRECTION = "pane.focus_direction";
@@ -387,6 +388,12 @@ public final class LauncherToolRegistry {
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
+    public static final String TOOL_PANE_OPEN = "pane.open";
+    public static final String TOOL_PANE_LIST = "pane.list";
+    public static final String TOOL_PANE_FOCUS = "pane.focus";
+    public static final String TOOL_PANE_CLOSE = "pane.close";
+    public static final String TOOL_PANE_WRITE = "pane.write";
+    public static final String TOOL_PANE_READ = "pane.read";
     public static final String TOOL_WINDOW_NEW = "window.new";
     public static final String TOOL_WINDOW_CLOSE = "window.close";
     public static final String TOOL_WINDOW_NEXT = "window.next";
@@ -512,6 +519,15 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_workspace_save_prompt,
             R.string.tool_desc_workspace_save_prompt, null, REQUIRES_SPLITS);
+        // The tiling-WM "new terminal" chord (Mod+Enter): the user asks for a pane, the layout
+        // picks the axis — the focused pane's longer side, which is what dwindle does anyway.
+        addUi(map, TOOL_PANE_SPLIT,
+            "Open a new pane by splitting the focused pane along its longer side.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_split, R.string.tool_desc_pane_split,
+            Collections.singletonList(Binding.of("ctrl+alt+enter", BindingCondition.SPLITS_ON)),
+            REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_SPLIT_VERTICAL,
             "Split the focused pane into two panes side by side.",
             schemaEmpty(),
@@ -534,10 +550,13 @@ public final class LauncherToolRegistry {
             // Ctrl+Left/Right no longer reaches the shell's word-wise cursor movement while split
             // panes are on.
             CATEGORY_PANE, R.string.tool_pane_focus_direction, 0, Arrays.asList(
-                Binding.of("ctrl+left", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+right", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+up", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+down", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+                // Alt, not Ctrl: Ctrl+Arrow is word motion in every line editor and most TUIs,
+                // Alt+Arrow is claimed by far less. And the action yields the stroke to the shell
+                // whenever there is no pane in that direction, so a lone pane costs nothing.
+                Binding.of("alt+left", BindingCondition.SPLITS_ON),
+                Binding.of("alt+right", BindingCondition.SPLITS_ON),
+                Binding.of("alt+up", BindingCondition.SPLITS_ON),
+                Binding.of("alt+down", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_RESIZE,
             "Grow the focused pane toward a direction.",
             schemaObject()
@@ -559,7 +578,7 @@ public final class LauncherToolRegistry {
         add(map, TOOL_PANE_LAYOUT,
             "Arrange the current window using an automatic pane layout.",
             schemaObject()
-                .withEnum("layout", new String[]{"stack", "grid", "tall", "fat", "horizontal", "vertical"},
+                .withEnum("layout", new String[]{"stack", "grid", "dwindle", "tall", "fat", "horizontal", "vertical"},
                     true, "grid")
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
@@ -581,6 +600,46 @@ public final class LauncherToolRegistry {
             "Move the focused pane to an outer edge of the current window.",
             schemaObject()
                 .withEnum("edge", new String[]{"left", "right", "up", "down"}, true, "left")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        // The pane API for agents and scripts (`launcherctl pane …`, /v1/panes). Not in the palette:
+        // every one of them takes an argument the palette cannot ask for, and they exist so a
+        // process in a shell can show its work in a pane of its own, not for a finger.
+        add(map, TOOL_PANE_OPEN,
+            "Open a new pane in the current window, optionally running a command through the user's login shell. The pane is owned by the caller: only panes opened this way can be written to, read or closed through the API.",
+            schemaObject()
+                .withString("command", "Command line (run via sh -c) or, as a JSON array, an argv; omit for a plain shell.", false)
+                .withString("cwd", "Working directory; defaults to the user's home.", false)
+                .withString("title", "Session name shown on the pane.", false)
+                .withBoolean("focus", "Give the new pane keyboard focus.", false, true)
+                .withString("tag", "Free-form label identifying the opener (agent name, task id).", false)
+                .build(),
+            ToolRisk.MEDIUM, false, ToolExecutor.TERMINAL);
+        add(map, TOOL_PANE_LIST,
+            "List the windows and panes of the current session with their ids, titles, working directories and which were opened through the API.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        add(map, TOOL_PANE_FOCUS,
+            "Bring a pane to the front by id: switch to its window and focus it.",
+            schemaObject().withString("id", "Pane id from pane.list or pane.open.", true).build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        add(map, TOOL_PANE_CLOSE,
+            "Close a pane the API opened, by id.",
+            schemaObject().withString("id", "Pane id from pane.open.", true).build(),
+            ToolRisk.MEDIUM, false, ToolExecutor.TERMINAL);
+        add(map, TOOL_PANE_WRITE,
+            "Type text into a pane the API opened.",
+            schemaObject()
+                .withString("id", "Pane id from pane.open.", true)
+                .withString("text", "Text to type, at most 16 KiB per call.", true)
+                .withBoolean("enter", "Press Enter after the text.", false, false)
+                .build(),
+            ToolRisk.MEDIUM, false, ToolExecutor.TERMINAL);
+        add(map, TOOL_PANE_READ,
+            "Read the last lines of a pane the API opened.",
+            schemaObject()
+                .withString("id", "Pane id from pane.open.", true)
+                .withInteger("lines", "How many transcript lines, newest last.", 1, 500, 60, false)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
         // Takes no argument, so unlike pane.layout this one can live in the palette and on a

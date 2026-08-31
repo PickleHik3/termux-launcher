@@ -67,6 +67,13 @@ public class TerminalPaneController {
     public static final String LAYOUT_FAT = "fat";
     public static final String LAYOUT_HORIZONTAL = "horizontal";
     public static final String LAYOUT_VERTICAL = "vertical";
+    /**
+     * Hyprland-style automatic tiling: every new pane halves the pane it was split from along that
+     * pane's longer side, and a pane dragged onto another halves the target the same way. Unlike
+     * the other layouts it is incremental — the tree is never rebuilt from the pane list, so the
+     * shape the user grew (and every divider they dragged) survives each split and close.
+     */
+    public static final String LAYOUT_DWINDLE = "dwindle";
 
     /**
      * Cycle order for {@link #nextLayout()}. Deliberately not the documentation's listing order:
@@ -74,7 +81,8 @@ public class TerminalPaneController {
      * unmanaged window lands. It sits last instead.
      */
     private static final String[] LAYOUT_CYCLE = {
-        LAYOUT_GRID, LAYOUT_TALL, LAYOUT_FAT, LAYOUT_HORIZONTAL, LAYOUT_VERTICAL, LAYOUT_STACK};
+        LAYOUT_GRID, LAYOUT_DWINDLE, LAYOUT_TALL, LAYOUT_FAT, LAYOUT_HORIZONTAL, LAYOUT_VERTICAL,
+        LAYOUT_STACK};
 
     public static final String EDGE_LEFT = "left";
     public static final String EDGE_RIGHT = "right";
@@ -189,6 +197,14 @@ public class TerminalPaneController {
         /** An existing, not-currently-displayed shell with this session name, or null. */
         @Nullable default TerminalSession findIdleShellByName(@NonNull String name) {
             return null;
+        }
+        /**
+         * Whether a render/focus pass may move keyboard focus onto the terminal view. False while
+         * a launcher-owned text field owns the system IME: stealing its focus mid-lifecycle is what
+         * used to strand the system keyboard on screen after the screen turned off and on.
+         */
+        default boolean shouldTerminalTakeFocus() {
+            return true;
         }
     }
 
@@ -339,8 +355,122 @@ public class TerminalPaneController {
         // A window opened while another is focused starts at that pane's zoom level.
         ((Leaf) w.root).fontSize =
             inheritableFontSize(mActiveWindow == null ? null : mActiveWindow.active);
+        w.layoutPolicy = mDefaultLayoutPolicy;
         mWindows.add(w);
         return w;
+    }
+
+    // --- Behaviour preferences ---
+
+    /** Retained layout every new window starts under, or null for manual management. */
+    @Nullable private String mDefaultLayoutPolicy;
+    /**
+     * focus.nvim-style growth: the focused pane takes {@link #FOCUS_GROW_SHARE} of every split on
+     * its path to the root, so whichever pane the user taps (or an agent focuses) becomes the big
+     * one and the rest slide aside.
+     */
+    private boolean mFocusGrowEnabled;
+    static final float FOCUS_GROW_SHARE = 0.7f;
+    @Nullable private ValueAnimator mFocusGrowAnimator;
+
+    /**
+     * The layout new windows are born under. Windows still at one unmanaged pane adopt it too, so
+     * flipping the setting on takes effect in the tab you are looking at; anything the user has
+     * already shaped is left alone.
+     */
+    public void setDefaultLayoutPolicy(@Nullable String layout) {
+        mDefaultLayoutPolicy = isKnownLayout(layout) ? layout : null;
+        if (mDefaultLayoutPolicy == null) return;
+        for (Window w : mWindows) {
+            if (w.layoutPolicy == null && w.root instanceof Leaf && w.floating.isEmpty()) {
+                w.layoutPolicy = mDefaultLayoutPolicy;
+            }
+        }
+    }
+
+    /** Turn focus growth on (the focused pane grows now) or off (every divider goes back to 1:1). */
+    public void setFocusGrowEnabled(boolean enabled) {
+        if (mFocusGrowEnabled == enabled) return;
+        mFocusGrowEnabled = enabled;
+        if (mFocusGrowAnimator != null) mFocusGrowAnimator.cancel();
+        if (mActiveWindow == null) return;
+        if (enabled) {
+            applyFocusGrowth(true);
+        } else {
+            for (Window w : mWindows) if (w.root != null) equalizeNode(w.root);
+            render();
+            mHost.onTreesChanged();
+        }
+    }
+
+    public boolean isFocusGrowEnabled() {
+        return mFocusGrowEnabled;
+    }
+
+    /**
+     * Re-weight the splits between the focused pane and the root so the focused side holds
+     * {@link #FOCUS_GROW_SHARE}. Splits off that path keep their ratios. A float or a maximized
+     * pane needs no room made for it, so those leave the tree alone. With {@code animate} the
+     * dividers ease over, with PTY resizing held until they settle — one reflow, not sixty.
+     */
+    private void applyFocusGrowth(boolean animate) {
+        if (!mFocusGrowEnabled || mActiveWindow == null || mActiveWindow.active == null) return;
+        Leaf active = mActiveWindow.active;
+        if (mMaximizedLeaf != null || mActiveWindow.floating.contains(active)) return;
+        final List<Split> splits = new ArrayList<>();
+        final List<Float> fromA = new ArrayList<>();
+        final List<Float> toA = new ArrayList<>();
+        Node node = active;
+        for (Split parent = node.parent; parent != null; node = parent, parent = parent.parent) {
+            float total = parent.weightA + parent.weightB;
+            float target = parent.a == node ? total * FOCUS_GROW_SHARE : total * (1f - FOCUS_GROW_SHARE);
+            if (Math.abs(target - parent.weightA) < 0.001f) continue;
+            splits.add(parent);
+            fromA.add(parent.weightA);
+            toA.add(target);
+        }
+        if (splits.isEmpty()) return;
+        if (mFocusGrowAnimator != null) mFocusGrowAnimator.cancel();
+        boolean live = true;
+        for (Split split : splits) live &= mSplitLayouts.containsKey(split);
+        if (!animate || !live || !arePaneAnimationsEnabled()) {
+            for (int i = 0; i < splits.size(); i++) setSplitWeightA(splits.get(i), toA.get(i));
+            if (live) {
+                for (Split split : splits) applyWeightsToRenderedLayout(split);
+                refreshPaneSizes();
+            }
+            return;
+        }
+        beginHostSurfaceResize();
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(PANE_MOVE_MS);
+        animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
+        animator.addUpdateListener(animation -> {
+            float t = (float) animation.getAnimatedValue();
+            for (int i = 0; i < splits.size(); i++) {
+                setSplitWeightA(splits.get(i), fromA.get(i) + (toA.get(i) - fromA.get(i)) * t);
+                applyWeightsToRenderedLayout(splits.get(i));
+            }
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                for (int i = 0; i < splits.size(); i++) {
+                    setSplitWeightA(splits.get(i), toA.get(i));
+                    applyWeightsToRenderedLayout(splits.get(i));
+                }
+                if (mFocusGrowAnimator == animation) mFocusGrowAnimator = null;
+                finishHostSurfaceResizeKeepingBottom();
+                mHost.onTreesChanged();
+            }
+        });
+        mFocusGrowAnimator = animator;
+        animator.start();
+    }
+
+    private static void setSplitWeightA(@NonNull Split split, float weightA) {
+        float total = split.weightA + split.weightB;
+        split.weightA = weightA;
+        split.weightB = total - weightA;
     }
 
     /**
@@ -733,6 +863,7 @@ public class TerminalPaneController {
             if (mMaximizedLeaf != null) mMaximizedLeaf = leaf;
             bringFloatToFront(mActiveWindow, leaf);
             updateActiveBorders();
+            applyFocusGrowth(true);
             focusActiveView();
             mHost.onActivePaneChanged();
         }
@@ -769,19 +900,66 @@ public class TerminalPaneController {
      *
      * @return true when a pane was actually added, so the caller can say so.
      */
+    /**
+     * Split the focused pane without being told an axis: along its longer side, the dwindle rule,
+     * whatever layout the window is under. This is the "new terminal" key — the user asks for a
+     * pane, not for a direction — and a retained layout re-tiles afterwards as it always does.
+     */
+    public boolean splitAuto() {
+        if (mActiveWindow == null || mActiveWindow.active == null) return false;
+        Leaf anchor = mActiveWindow.active;
+        if (mActiveWindow.floating.contains(anchor)) anchor = firstLeaf(mActiveWindow.root);
+        return split(dwindleOrientationFor(anchor));
+    }
+
     public boolean split(int orientation) {
         if (mActiveWindow == null || mActiveWindow.active == null) return false;
-        mMaximizedLeaf = null;
-        Leaf oldLeaf = mActiveWindow.active;
-        // A floating pane shares no divider, so splitting while one is focused splits the tiled
-        // area instead of corrupting the tree with a leaf that lives outside it.
-        if (mActiveWindow.floating.contains(oldLeaf)) oldLeaf = firstLeaf(mActiveWindow.root);
+        Leaf oldLeaf = splitAnchor(mActiveWindow);
         String cwd = oldLeaf.session.getCwd();
         TerminalSession newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
         if (newSession == null) return false;
+        insertPane(oldLeaf, newSession, orientation, true);
+        return true;
+    }
 
+    /**
+     * Show an already-created shell as a new pane of the active window, split off the focused pane
+     * the way {@link #split} would. Under dwindle the axis follows the pane's longer side; otherwise
+     * it follows the host's, since the caller (the local API, on behalf of an agent) has no key to
+     * express a direction with. {@code focus} false leaves the user's focus where it is, so a pane
+     * an agent opens to show its work does not steal the keyboard.
+     */
+    public boolean addPane(@NonNull TerminalSession session, boolean focus) {
+        if (mActiveWindow == null || mActiveWindow.active == null) return false;
+        for (Window w : mWindows) for (Leaf leaf : allLeavesOf(w)) if (leaf.session == session) return false;
+        Leaf oldLeaf = splitAnchor(mActiveWindow);
+        int orientation = isDwindleManaged(mActiveWindow)
+            ? dwindleOrientationFor(oldLeaf)
+            : DwindleTilingPolicy.splitOrientationFor(mHostView.getWidth(), mHostView.getHeight());
+        insertPane(oldLeaf, session, orientation, focus);
+        return true;
+    }
+
+    /**
+     * The tiled leaf a new pane splits off: the focused one, or the tree's first leaf while a float
+     * is focused — a floating pane shares no divider, so splitting it would corrupt the tree with a
+     * leaf that lives outside it.
+     */
+    @NonNull
+    private Leaf splitAnchor(@NonNull Window window) {
+        mMaximizedLeaf = null;
+        Leaf oldLeaf = window.active;
+        if (window.floating.contains(oldLeaf)) oldLeaf = firstLeaf(window.root);
+        return oldLeaf;
+    }
+
+    private void insertPane(@NonNull Leaf oldLeaf, @NonNull TerminalSession newSession,
+                            int orientation, boolean focus) {
         Leaf newLeaf = new Leaf(newSession);
         newLeaf.fontSize = inheritableFontSize(oldLeaf);
+        // Dwindle decides the axis itself: the caller's orientation is whatever key or button was
+        // pressed, but under this policy a pane always halves along its longer side.
+        if (isDwindleManaged(mActiveWindow)) orientation = dwindleOrientationFor(oldLeaf);
         Split split = new Split();
         split.orientation = orientation;
         split.a = oldLeaf;
@@ -795,7 +973,7 @@ public class TerminalPaneController {
         } else {
             if (split.parent.a == oldLeaf) split.parent.a = split; else split.parent.b = split;
         }
-        mActiveWindow.active = newLeaf;
+        if (focus) mActiveWindow.active = newLeaf;
         // Captured before the re-render detaches it: the divider reveal needs the pane's surface
         // as it looked while it still owned the whole region the split is about to share.
         Bitmap revealSnapshot = captureSplitRevealSnapshot(oldLeaf.session);
@@ -816,7 +994,6 @@ public class TerminalPaneController {
         }, 250);
         mHost.onActivePaneChanged();
         mHost.onTreesChanged();
-        return true;
     }
 
     /** Drop a finished shell's pane. Returns one of FINISHED_*. */
@@ -893,12 +1070,16 @@ public class TerminalPaneController {
         return FINISHED_PANE;
     }
 
-    /** Focus the pane nearest to the active one in the arrow direction (KeyEvent.KEYCODE_DPAD_*). */
+    /**
+     * Focus the pane nearest to the active one in the arrow direction (KeyEvent.KEYCODE_DPAD_*).
+     * Returns whether focus moved: false with a single pane or no pane in that direction, so the
+     * binding can hand the stroke on to the shell instead of swallowing a key that did nothing.
+     */
     public boolean focusDirection(int keyCode) {
         TerminalView active = getActivePaneView();
-        if (active == null) return true;
+        if (active == null) return false;
         List<TerminalView> views = getVisiblePaneViews();
-        if (views.size() < 2) return true;
+        if (views.size() < 2) return false;
         int[] a = center(active);
         TerminalView best = null;
         int bestScore = Integer.MAX_VALUE;
@@ -913,16 +1094,16 @@ public class TerminalPaneController {
                 case android.view.KeyEvent.KEYCODE_DPAD_RIGHT: match = dx > 0; primary = dx;  secondary = Math.abs(dy); break;
                 case android.view.KeyEvent.KEYCODE_DPAD_UP:    match = dy < 0; primary = -dy; secondary = Math.abs(dx); break;
                 case android.view.KeyEvent.KEYCODE_DPAD_DOWN:  match = dy > 0; primary = dy;  secondary = Math.abs(dx); break;
-                default: return true;
+                default: return false;
             }
             if (!match) continue;
             int score = primary + secondary * 2;
             if (score < bestScore) { bestScore = score; best = v; }
         }
-        if (best != null) {
-            TerminalSession s = best.getCurrentSession();
-            if (s != null) focusSession(s);
-        }
+        if (best == null) return false;
+        TerminalSession s = best.getCurrentSession();
+        if (s == null) return false;
+        focusSession(s);
         return true;
     }
 
@@ -951,7 +1132,9 @@ public class TerminalPaneController {
         float min = total * 0.18f;
         target.weightA = Math.max(min, Math.min(total - min, target.weightA));
         target.weightB = total - target.weightA;
-        clearLayoutPolicy(mActiveWindow);
+        // A resized divider is hand-shaping a rebuilt layout would throw away, so those go manual.
+        // Dwindle never rebuilds — it keeps every ratio — so under it a resize is just a resize.
+        if (!isDwindleManaged(mActiveWindow)) clearLayoutPolicy(mActiveWindow);
 
         // Held-key repeat fires this far faster than render()'s full removeAllViews()/rebuild can
         // keep up with, which is what read as flashing: touch-drag stays smooth because it only
@@ -1076,6 +1259,17 @@ public class TerminalPaneController {
 
         Node root;
         switch (layout) {
+            case LAYOUT_DWINDLE:
+                // Incremental: once a window is dwindle-managed, split() and close already leave the
+                // tree in the shape this policy wants, so a reapply must not rebuild it (that would
+                // throw away every divider the user dragged). Only the switch into dwindle lays the
+                // existing panes out afresh, as if they had been spawned one after another.
+                if (LAYOUT_DWINDLE.equals(window.layoutPolicy)) {
+                    if (window == mActiveWindow) mMaximizedLeaf = null;
+                    return true;
+                }
+                root = buildDwindle(leaves);
+                break;
             case LAYOUT_GRID:
                 root = buildGrid(leaves);
                 break;
@@ -1526,8 +1720,10 @@ public class TerminalPaneController {
             && findLeafIn(window.root, window.active.session) != null
             ? window.active : firstLeaf(window.root);
         Split split = new Split();
-        split.orientation = mHostView.getWidth() >= mHostView.getHeight()
-            ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL;
+        split.orientation = isDwindleManaged(window)
+            ? dwindleOrientationFor(anchor)
+            : mHostView.getWidth() >= mHostView.getHeight()
+                ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL;
         split.a = anchor;
         split.b = leaf;
         split.parent = anchor.parent;
@@ -1653,6 +1849,89 @@ public class TerminalPaneController {
         return joinEvenly(rowNodes, LinearLayout.VERTICAL);
     }
 
+    /**
+     * Lay {@code leaves} out as dwindle would have grown them: pane {@code i+1} halves pane
+     * {@code i} along the longer side of the region pane {@code i} holds at that point. Regions are
+     * simulated from the host's size, so switching a portrait window into dwindle stacks first and
+     * a landscape one splits side by side first.
+     */
+    @NonNull
+    private Node buildDwindle(@NonNull List<Leaf> leaves) {
+        Leaf first = leaves.get(0);
+        first.parent = null;
+        if (leaves.size() == 1) return first;
+        int[] orientations = DwindleTilingPolicy.spiralOrientations(
+            leaves.size(), mHostView.getWidth(), mHostView.getHeight());
+        Node root = first;
+        Leaf tail = first;
+        for (int i = 1; i < leaves.size(); i++) {
+            Leaf next = leaves.get(i);
+            Split split = new Split();
+            split.orientation = orientations[i - 1];
+            split.a = tail;
+            split.b = next;
+            split.parent = tail.parent;
+            if (split.parent == null) root = split;
+            else if (split.parent.a == tail) split.parent.a = split;
+            else split.parent.b = split;
+            tail.parent = split;
+            next.parent = split;
+            tail = next;
+        }
+        return root;
+    }
+
+    private static boolean isDwindleManaged(@Nullable Window window) {
+        return window != null && LAYOUT_DWINDLE.equals(window.layoutPolicy);
+    }
+
+    /**
+     * The axis dwindle splits {@code leaf} on: its longer side as currently laid out, or the
+     * host's when the pane has no frame yet (a freshly restored window before its first layout).
+     */
+    private int dwindleOrientationFor(@NonNull Leaf leaf) {
+        Rect bounds = boundsInHost(mPaneFrames.get(leaf.session));
+        if (bounds == null || bounds.isEmpty()) {
+            return DwindleTilingPolicy.splitOrientationFor(mHostView.getWidth(), mHostView.getHeight());
+        }
+        return DwindleTilingPolicy.splitOrientationFor(bounds.width(), bounds.height());
+    }
+
+    /**
+     * Re-tile {@code source} into the half of {@code target} the finger let go over, instead of
+     * swapping the two shells. The target is halved along its longer side (the same rule a split
+     * follows), so dragging is just another way of growing the dwindle tree. Both panes must be
+     * tiled leaves of the active window; the moved pane keeps focus, as in Hyprland.
+     */
+    private boolean retileDroppedPane(@NonNull Leaf source, @NonNull Leaf target,
+                                      @NonNull RectF targetRect, float x, float y) {
+        if (mActiveWindow == null || source == target || source.parent == null
+            || mActiveWindow.floating.contains(source) || mActiveWindow.floating.contains(target)) {
+            return false;
+        }
+        int side = DwindleTilingPolicy.dropSideFor(targetRect, x, y);
+        // Detach first: when source and target are siblings the detach promotes target upward,
+        // and the new split must attach where target ends up, not where it was.
+        detachLeaf(mActiveWindow, source);
+        Split split = new Split();
+        split.orientation = DwindleTilingPolicy.orientationForSide(side);
+        boolean sourceFirst = DwindleTilingPolicy.droppedFirst(side);
+        split.a = sourceFirst ? source : target;
+        split.b = sourceFirst ? target : source;
+        split.parent = target.parent;
+        if (split.parent == null) {
+            mActiveWindow.root = split;
+        } else if (split.parent.a == target) {
+            split.parent.a = split;
+        } else {
+            split.parent.b = split;
+        }
+        source.parent = split;
+        target.parent = split;
+        mActiveWindow.active = source;
+        return true;
+    }
+
     @NonNull
     private Node buildMasterLayout(@NonNull List<Leaf> leaves, int masterOrientation,
                                    int remainderOrientation) {
@@ -1751,6 +2030,10 @@ public class TerminalPaneController {
     private void render() {
         // A re-render invalidates the geometry a running divider reveal was easing toward.
         cancelSplitReveal();
+        // Weights first, so the tree is built already grown; the pane-move animation carries the
+        // frames from where they were.
+        if (mFocusGrowAnimator != null) mFocusGrowAnimator.cancel();
+        applyFocusGrowth(false);
         captureMoveOrigins();
         mHostView.removeAllViews();
         mSplitLayouts.clear();
@@ -2703,6 +2986,7 @@ public class TerminalPaneController {
     }
 
     private void focusActiveView() {
+        if (!mHost.shouldTerminalTakeFocus()) return;
         TerminalView v = getActivePaneView();
         if (v != null && !v.isFocused()) v.requestFocus();
     }
@@ -2781,6 +3065,7 @@ public class TerminalPaneController {
         private final RectF mHandleRect = new RectF();
         /** Scratch for pane rects read while drawing, and one for the control-tab geometry pass. */
         private final RectF mDrawPaneRect = new RectF();
+        private final RectF mDrawDropHalfRect = new RectF();
         private final RectF mGlowClipRect = new RectF();
         private final RectF mGlowBorderRect = new RectF();
         private final RectF mGeometryPaneRect = new RectF();
@@ -2932,7 +3217,18 @@ public class TerminalPaneController {
                         Leaf target = mMoveTarget;
                         resetTouchState();
                         if (source != null && target != null && source != target) {
-                            swapPanePositions(source, target);
+                            RectF targetRect = isDwindleManaged(mActiveWindow)
+                                ? paneRect(target) : null;
+                            if (targetRect != null
+                                && retileDroppedPane(source, target, targetRect, x, y)) {
+                                mControlLeaf = source;
+                                render();
+                                showControls(source);
+                                mHost.onActivePaneChanged();
+                                mHost.onTreesChanged();
+                            } else {
+                                swapPanePositions(source, target);
+                            }
                         } else {
                             showControls(source);
                         }
@@ -2999,6 +3295,7 @@ public class TerminalPaneController {
             if (leaf == null || mActiveWindow == null || mActiveWindow.active == leaf) return;
             mActiveWindow.active = leaf;
             updateActiveBorders();
+            applyFocusGrowth(true);
             focusActiveView();
             mHost.onActivePaneChanged();
         }
@@ -3287,10 +3584,24 @@ public class TerminalPaneController {
             if (mMovingLeaf != null && mMoveTarget != null && mMoveTarget != mMovingLeaf) {
                 RectF target = paneRect(mMoveTarget, mDrawPaneRect);
                 if (target != null) {
-                    mPaint.setStyle(Paint.Style.STROKE);
-                    mPaint.setStrokeWidth(dp(3));
-                    mPaint.setColor(ColorUtils.setAlphaComponent(tertiary, 220));
-                    canvas.drawRect(target, mPaint);
+                    if (isDwindleManaged(mActiveWindow)) {
+                        // Under dwindle the drop does not swap, it takes half the target: show
+                        // which half, so the finger can steer it before letting go.
+                        int side = DwindleTilingPolicy.dropSideFor(target, mHandleX, mHandleY);
+                        DwindleTilingPolicy.halfFor(target, side, mDrawDropHalfRect);
+                        mPaint.setStyle(Paint.Style.FILL);
+                        mPaint.setColor(ColorUtils.setAlphaComponent(tertiary, 56));
+                        canvas.drawRect(mDrawDropHalfRect, mPaint);
+                        mPaint.setStyle(Paint.Style.STROKE);
+                        mPaint.setStrokeWidth(dp(3));
+                        mPaint.setColor(ColorUtils.setAlphaComponent(tertiary, 220));
+                        canvas.drawRect(mDrawDropHalfRect, mPaint);
+                    } else {
+                        mPaint.setStyle(Paint.Style.STROKE);
+                        mPaint.setStrokeWidth(dp(3));
+                        mPaint.setColor(ColorUtils.setAlphaComponent(tertiary, 220));
+                        canvas.drawRect(target, mPaint);
+                    }
                 }
             }
             if (mControlsShown && mControlLeaf != null && mControlProgress > 0f) {

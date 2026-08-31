@@ -43,6 +43,12 @@
     <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
     <string name="settings_show_key_hints_title">Show key hints</string>
     <string name="settings_show_key_hints_summary">Show a hint strip while Ctrl+Alt is held. When off, the ? key lights up instead — press it for the full list.</string>
+    <string name="settings_pane_dwindle_default_title">Automatic tiling</string>
+    <string name="settings_pane_dwindle_default_summary">New windows tile like Hyprland: each new pane halves the focused one along its longer side, and a dragged pane takes the half you drop it on. Any window can still switch layouts with Ctrl+Alt+L.</string>
+    <string name="settings_pane_focus_grows_title">Focused pane grows</string>
+    <string name="settings_pane_focus_grows_summary">The pane you tap takes most of the room and the others slide aside, so you can watch an agent work in one pane and its output in another by tapping between them.</string>
+    <string name="settings_pane_agent_api_title">Let scripts open panes</string>
+    <string name="settings_pane_agent_api_summary">Programs in your shell — AI agents, builds, scripts — may open panes of their own with launcherctl pane and drive only those. When off, the pane routes of the local API answer 403.</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_style_title">Clock style</string>
     <string name="settings_clock_alignment_title">Clock alignment</string>
@@ -1258,6 +1264,7 @@
     </plurals>
 
     <!-- Terminal action titles, shown in the command palette -->
+    <string name="tool_pane_split">New pane</string>
     <string name="tool_pane_split_vertical">Split pane vertically</string>
     <string name="tool_pane_split_horizontal">Split pane horizontally</string>
     <string name="tool_pane_focus_direction">Move pane focus</string>
@@ -1322,6 +1329,7 @@
     <string name="tool_session_rename_prompt">Rename session…</string>
     <string name="tool_pane_rename_prompt">Rename pane…</string>
     <!-- Palette subtitles -->
+    <string name="tool_desc_pane_split">Split the focused pane along its longer side, no direction to choose.</string>
     <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
     <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>

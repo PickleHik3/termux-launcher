@@ -279,6 +279,17 @@ public class KeybindHintModelTest {
     }
 
     @Test
+    public void stripLeadsWithTheNewPaneChipAsAnEnterGlyph() {
+        List<KeybindHintModel.StripChip> chips = KeybindHintModel.stripChips(
+            hints("enter", "pane.split", "v", "pane.split_vertical"), false);
+        assertEquals(2, chips.size());
+        assertEquals("⏎", chips.get(0).caps);
+        assertEquals("new pane", chips.get(0).label);
+        assertEquals("enter", chips.get(0).colorToken);
+        assertEquals("split", chips.get(1).label);
+    }
+
+    @Test
     public void stripIsEmptyWhenNothingCuratedIsBound() {
         assertTrue(KeybindHintModel.stripChips(hints("q", "terminal.thing"), false).isEmpty());
         assertTrue(KeybindHintModel.stripChips(none(), false).isEmpty());

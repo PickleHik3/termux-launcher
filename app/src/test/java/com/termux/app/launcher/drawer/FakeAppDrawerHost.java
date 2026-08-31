@@ -59,5 +59,16 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         interceptorActive = active;
     }
 
+    public int hideSystemKeyboardCalls;
+    public int restoreSystemKeyboardCalls;
+
+    @Override public void restoreSystemKeyboard() {
+        restoreSystemKeyboardCalls++;
+    }
+
+    @Override public void hideSystemKeyboard() {
+        hideSystemKeyboardCalls++;
+    }
+
     @Override public void requestSearchKeyboard() { }
 }

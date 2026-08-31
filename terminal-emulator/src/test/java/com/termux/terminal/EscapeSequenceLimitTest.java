@@ -22,9 +22,23 @@ public class EscapeSequenceLimitTest extends TerminalTestCase {
         assertTrue(mTerminal.getScreen().getTranscriptText().contains("VISIBLE"));
     }
 
-    public void testOversizedApcIsAbortedAndPlainTextResumes() {
+    public void testOversizedApcIsAbsorbedThroughItsTerminatorWithoutLeaking() {
+        // Deliberate contract change: an oversized APC used to abort at the cap and print its
+        // remainder as text — which is how a big kitty graphics payload became a wall of base64.
+        // Now the remainder is swallowed up to the String Terminator, the way xterm and kitty
+        // treat overlong string sequences, and plain text resumes only after it.
         withTerminalSized(20, 3);
-        enterString("\033_" + repeat('x', TerminalEmulator.MAX_STRING_SEQUENCE_LENGTH + 1) + "VISIBLE");
+        enterString("\033_" + repeat('x', TerminalEmulator.MAX_STRING_SEQUENCE_LENGTH + 1)
+            + "HIDDEN\033\\VISIBLE");
+        assertFalse(mTerminal.getScreen().getTranscriptText().contains("HIDDEN"));
+        assertFalse(mTerminal.getScreen().getTranscriptText().contains("x"));
+        assertTrue(mTerminal.getScreen().getTranscriptText().contains("VISIBLE"));
+    }
+
+    public void testOversizedApcCancelledByCanStillRecovers() {
+        withTerminalSized(20, 3);
+        enterString("\033_" + repeat('x', TerminalEmulator.MAX_STRING_SEQUENCE_LENGTH + 1)
+            + '\030' + "VISIBLE");
         assertTrue(mTerminal.getScreen().getTranscriptText().contains("VISIBLE"));
     }
 
