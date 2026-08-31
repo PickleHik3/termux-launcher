@@ -245,13 +245,13 @@ public final class SurfaceEditorController {
         final View header;
         final TextView title;
         final TextView dirty;
-        final View looks;
+        final TextView looks;
         final TextView done;
         final TextView close;
         final ChipGroup chips;
         final View look;
         final MaterialButtonToggleGroup material;
-        final View fine;
+        final TextView fine;
         final MaterialButtonToggleGroup shape;
         final View row;
         final TextView property;
@@ -504,6 +504,10 @@ public final class SurfaceEditorController {
         // Before the first layout pass has chosen a shape, so the pill's first frame is never drawn
         // as bare text over the wallpaper.
         pill.root.setBackground(buildPillBackground(false));
+        // The title is the surface switcher; an outlined capsule is what says so before a touch.
+        pill.title.setBackground(buildSelectorBackground());
+        setLeadingIcon(pill.looks, R.drawable.ic_symbol_palette);
+        setLeadingIcon(pill.fine, R.drawable.ic_symbol_tune);
         pill.title.setOnClickListener(view -> togglePanel(PANEL_SURFACES));
         pill.property.setOnClickListener(view -> showPropertyPicker());
         pill.looks.setOnClickListener(view -> togglePanel(PANEL_LOOKS));
@@ -545,6 +549,9 @@ public final class SurfaceEditorController {
             if (control.read(prefs()) == (checked ? 1 : 0))
                 return;
             writeControl(mSelectedSlot, control, checked ? 1 : 0);
+            // The border decides whether the terminal's blur and grain rows exist at all, so an
+            // open Fine panel restates too.
+            syncOpenPanel();
             syncPill();
         });
         pill.material.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
@@ -566,6 +573,8 @@ public final class SurfaceEditorController {
                 return;
             prefs().setAppLauncherDockStyle(style);
             applySurfaceEditorStructuralPreview();
+            // Docked or Floating decides which margin rows exist, on the chips and in the panels.
+            syncOpenPanel();
             syncPill();
         });
     }
@@ -610,11 +619,30 @@ public final class SurfaceEditorController {
         return SurfaceEditorProperties.find(mSelectedSlot, mOpenControlId.get(mSelectedSlot));
     }
 
-    /** Rebuilds the chip row from the table, plus the trailing ⋯ where a surface has more. */
+    /** The editable set behind the chip row, folded to one number so restates can skip a rebuild. */
+    private long chipAvailabilitySignature(@NonNull SurfaceSlot slot) {
+        long signature = slot.ordinal();
+        for (Control control : SurfaceEditorProperties.chips(slot))
+            signature = signature * 31 + (isAvailable(slot, control) ? 1 : 0);
+        return signature;
+    }
+
+    /** What the chip row is currently built for; rebuilt when the editable set moves. */
+    private long mShownChipSignature = Long.MIN_VALUE;
+
+    /**
+     * Rebuilds the chip row from the table, plus the trailing ⋯ where a surface has more. Only
+     * editable properties render: a chip whose control the current state makes inert — the dock's
+     * margin while it sits flush in Docked — is left out rather than shown dead, and comes back
+     * the moment the state that hid it changes.
+     */
     private void rebuildChips(@NonNull Pill pill, @NonNull SurfaceSlot slot) {
+        mShownChipSignature = chipAvailabilitySignature(slot);
         pill.chips.removeAllViews();
         LayoutInflater inflater = LayoutInflater.from(mHost.context());
         for (Control control : SurfaceEditorProperties.chips(slot)) {
+            if (!isAvailable(slot, control))
+                continue;
             Chip chip = (Chip) inflater.inflate(
                 R.layout.surface_editor_pill_chip, pill.chips, false);
             chip.setId(View.generateViewId());
@@ -662,7 +690,20 @@ public final class SurfaceEditorController {
                 R.string.termux_surface_editor_pill_title_description, slotName));
         }
 
+        // A structural change (dock style, terminal border) can add or remove chips: only editable
+        // properties render, so the row is rebuilt whenever the editable set moves — and an open
+        // control that just left the row falls back to the surface's first chip.
+        long chipSignature = chipAvailabilitySignature(mSelectedSlot);
+        if (chipSignature != mShownChipSignature) {
+            mShownChipSignature = chipSignature;
+            rebuildChips(pill, mSelectedSlot);
+        }
         Control control = openControl();
+        if (control != null && !isAvailable(mSelectedSlot, control)) {
+            mOpenControlId.remove(mSelectedSlot);
+            openControl(openControlId(mSelectedSlot), false);
+            control = openControl();
+        }
         if (control == null)
             return;
 
@@ -690,15 +731,18 @@ public final class SurfaceEditorController {
 
         boolean look = control.kind == Kind.LOOK;
         boolean toggle = control.kind == Kind.SWITCH;
+        boolean shape = control.kind == Kind.SHAPE;
         pill.look.setVisibility(look && mLayoutMode != Mode.ONE_ROW ? View.VISIBLE : View.GONE);
-        pill.slider.setVisibility(toggle ? View.GONE : View.VISIBLE);
+        pill.slider.setVisibility(toggle || shape ? View.GONE : View.VISIBLE);
         pill.toggle.setVisibility(toggle ? View.VISIBLE : View.GONE);
         if (look)
             syncLookMaterial(pill);
 
         boolean available = isAvailable(mSelectedSlot, control);
         int shown = shownValueOf(mSelectedSlot, control);
-        if (toggle) {
+        if (shape) {
+            setValueText(pill, "");
+        } else if (toggle) {
             pill.toggle.setText(control.labelRes);
             if (pill.toggle.isChecked() != (shown != 0))
                 pill.toggle.setChecked(shown != 0);
@@ -848,14 +892,17 @@ public final class SurfaceEditorController {
      * Whether a control can act at all right now.
      *
      * <p>Docked surfaces are flush with the screen edges by definition, so their margin has no
-     * number to give; the terminal's glass has nothing to live inside until its border is on. In
-     * both cases the control renders, dimmed, with a dash and a sentence saying why — a frozen
-     * number would read as stuck rather than inert, and hiding the control loses the way back.
+     * number to give; the terminal's glass has nothing to live inside until its border is on. A
+     * control the state makes inert does not render at all — a dead slider is clutter, not
+     * signage — and the control that re-enables it (the dock's Style, the terminal's Border) is
+     * standing on the same card, so the way back stays visible.
      */
-    private boolean isAvailable(@NonNull SurfaceSlot slot, @NonNull Control control) {
-        if (control.cell != null && control.cell.property == SurfaceProperty.SIDE_GAP)
-            return mHost.isFloatingDock();
+    private boolean isAvailable(@Nullable SurfaceSlot slot, @NonNull Control control) {
         if (SurfaceEditorProperties.ID_BASE_GAP.equals(control.id))
+            return mHost.isFloatingDock();
+        if (slot == null)
+            return true;
+        if (control.cell != null && control.cell.property == SurfaceProperty.SIDE_GAP)
             return mHost.isFloatingDock();
         if (SurfaceEditorProperties.ID_TERMINAL_RADIUS.equals(control.id))
             return !mHost.isFloatingDock();
@@ -1279,11 +1326,12 @@ public final class SurfaceEditorController {
         return glassId;
     }
 
-    /** Shape is the dock's own decision, so its segments only render inside the dock's Look. */
+    /** Shape is the dock's own decision; its segments fill the open row while Style is the chip. */
     private void syncShapeGroup(@NonNull Pill pill) {
-        boolean dock = mSelectedSlot == SurfaceSlot.DOCK;
-        pill.shape.setVisibility(dock ? View.VISIBLE : View.GONE);
-        if (!dock || prefs() == null)
+        Control control = openControl();
+        boolean shown = control != null && control.kind == Kind.SHAPE;
+        pill.shape.setVisibility(shown ? View.VISIBLE : View.GONE);
+        if (!shown || prefs() == null)
             return;
         int buttonId = mHost.isFloatingDock()
             ? R.id.surface_editor_pill_shape_floating : R.id.surface_editor_pill_shape_docked;
@@ -1319,7 +1367,7 @@ public final class SurfaceEditorController {
         pill.header.setVisibility(oneRow ? View.GONE : View.VISIBLE);
         pill.chips.setVisibility(oneRow ? View.GONE : View.VISIBLE);
         pill.property.setVisibility(oneRow ? View.VISIBLE : View.GONE);
-        pill.title.setTextSize(TypedValue.COMPLEX_UNIT_SP, full ? 17 : 16);
+        pill.title.setTextSize(TypedValue.COMPLEX_UNIT_SP, full ? 15 : 14);
         pill.value.setTextSize(TypedValue.COMPLEX_UNIT_SP, oneRow ? 13.5f : 15);
         pill.value.setMinWidth(dp(oneRow ? 42 : 54));
         pill.done.setMinWidth(dp(oneRow ? 56 : 66));
@@ -1349,6 +1397,35 @@ public final class SurfaceEditorController {
     /** What the full shape measures, near enough to choose a mode before it is laid out. */
     private static final float FULL_PILL_HEIGHT_DP = 172f;
     private static final float COMPACT_PILL_HEIGHT_DP = 130f;
+
+    /** The outlined capsule the surface switcher wears, so the title reads as tappable. */
+    @NonNull
+    private Drawable buildSelectorBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0);
+        background.setCornerRadius(dpToPx(18));
+        background.setStroke(Math.max(1, dp(1)), mHost.themeColor(
+            com.termux.shared.R.attr.termuxColorOutlineVariant,
+            R.color.termux_outline_variant));
+        return background;
+    }
+
+    /**
+     * A small tinted glyph before a text action's label. Every editor action carries both: a bare
+     * glyph asks the user to guess, and a bare word buries the action in the reading order.
+     */
+    private void setLeadingIcon(@NonNull TextView view, int drawableRes) {
+        Drawable icon = androidx.core.content.ContextCompat.getDrawable(
+            mHost.context(), drawableRes);
+        if (icon == null)
+            return;
+        icon = icon.mutate();
+        icon.setTint(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary));
+        int size = dp(17);
+        icon.setBounds(0, 0, size, size);
+        view.setCompoundDrawablesRelative(icon, null, null, null);
+    }
 
     @NonNull
     private Drawable buildPillBackground(boolean oneRow) {
@@ -2060,9 +2137,15 @@ public final class SurfaceEditorController {
 
     /** The one-row shape's ▾, which does the chip row's job when there is no room for chips. */
     private void showPropertyPicker() {
-        final List<Control> controls = new ArrayList<>(
-            SurfaceEditorProperties.chips(mSelectedSlot));
-        controls.addAll(SurfaceEditorProperties.more(mSelectedSlot));
+        final List<Control> controls = new ArrayList<>();
+        for (Control control : SurfaceEditorProperties.chips(mSelectedSlot)) {
+            if (isAvailable(mSelectedSlot, control))
+                controls.add(control);
+        }
+        for (Control control : SurfaceEditorProperties.more(mSelectedSlot)) {
+            if (isAvailable(mSelectedSlot, control))
+                controls.add(control);
+        }
         CharSequence[] names = new CharSequence[controls.size()];
         for (int i = 0; i < controls.size(); i++)
             names[i] = controlLabel(controls.get(i));
@@ -2312,15 +2395,17 @@ public final class SurfaceEditorController {
         Runnable sync = () -> {
             if (prefs() == null)
                 return;
-            boolean available = slot == null || isAvailable(slot, control);
+            // A row the state makes inert leaves the panel rather than rendering dead; it comes
+            // back through the same sync when the state that hid it changes.
+            boolean available = isAvailable(slot, control);
+            if ((rowView.getVisibility() == View.VISIBLE) != available)
+                rowView.setVisibility(available ? View.VISIBLE : View.GONE);
+            if (!available)
+                return;
             int shown = slot == null ? sheetValueOf(control) : shownValueOf(slot, control);
             if (slider.getProgress() != shown)
                 slider.setProgress(shown);
-            slider.setEnabled(available);
-            slider.setAlpha(available ? 1f : SURFACE_TUNING_DISABLED_ALPHA);
-            value.setText(available ? valueText(control, shown)
-                : getString(R.string.termux_surface_tuning_value_not_applicable));
-            value.setAlpha(available ? 1f : SURFACE_TUNING_DISABLED_ALPHA);
+            value.setText(valueText(control, shown));
             if (slot == null || control.cell == null) {
                 chip.setVisibility(View.INVISIBLE);
                 return;
@@ -2415,10 +2500,14 @@ public final class SurfaceEditorController {
         ViewGroup rows = content.findViewById(R.id.surface_editor_looks_rows);
         MaterialButtonToggleGroup material =
             content.findViewById(R.id.surface_editor_looks_material);
-        View save = content.findViewById(R.id.surface_editor_looks_save);
-        View reset = content.findViewById(R.id.surface_editor_looks_reset);
+        TextView save = content.findViewById(R.id.surface_editor_looks_save);
+        TextView reset = content.findViewById(R.id.surface_editor_looks_reset);
         if (presets == null || rows == null || material == null)
             return;
+        if (save != null)
+            setLeadingIcon(save, R.drawable.ic_symbol_save);
+        if (reset != null)
+            setLeadingIcon(reset, R.drawable.ic_symbol_restart);
         into.addView(content);
 
         buildPresetsStrip(context, presets);

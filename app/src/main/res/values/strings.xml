@@ -1044,8 +1044,8 @@
                 <string name="termux_surface_preset_applied">%1$s applied</string>
                 <string name="termux_surface_preset_saved">Look saved as Custom</string>
                 <string name="termux_surface_preset_custom_empty">No saved look yet</string>
-                <string name="termux_surface_preset_custom_empty_hint">Save the look you have now under Looks, and it lands here.</string>
-                <string name="termux_surface_editor_save_look">Save this look as Custom</string>
+                <string name="termux_surface_preset_custom_empty_hint">Tap Save look under Presets, and the look you have now lands here.</string>
+                <string name="termux_surface_editor_save_look">Save look</string>
                 <!-- Subtitle on the "applied" notice chip, whose tap undoes the preset. -->
                 <string name="termux_surface_preset_undo_hint">Tap to undo</string>
                 <string name="termux_surface_preset_card_description">%1$s preset</string>
@@ -1056,10 +1056,11 @@
                 <string name="termux_surface_editor_look">Look</string>
                 <!-- Chip names: read at a glance beside three others, so the short noun. The sheet
                      rows keep the full label ("Corner radius", "Margin"). -->
+                <string name="termux_surface_editor_chip_style">Style</string>
                 <string name="termux_surface_editor_chip_corners">Corners</string>
                 <string name="termux_surface_editor_chip_gap">Gap</string>
-                <string name="termux_surface_editor_fine">Fine</string>
-                <string name="termux_surface_editor_looks">Looks</string>
+                <string name="termux_surface_editor_fine">Fine-tune</string>
+                <string name="termux_surface_editor_looks">Presets</string>
                 <string name="termux_surface_editor_close">✕</string>
                 <string name="termux_surface_editor_more">⋯</string>
                 <string name="termux_surface_editor_more_description">More %1$s settings</string>
@@ -1071,7 +1072,7 @@
                 <string name="termux_surface_editor_property_picker_title">Property</string>
                 <string name="termux_surface_editor_all_surfaces">All surfaces</string>
                 <string name="termux_surface_editor_all_surfaces_summary">Moves every surface that has no value of its own.</string>
-                <string name="termux_surface_editor_reset_all">Reset all surfaces</string>
+                <string name="termux_surface_editor_reset_all">Reset all</string>
                 <string name="termux_surface_editor_key_radius">Key radius</string>
                 <string name="termux_surface_editor_wallpaper_dim">Wallpaper dim</string>
                 <!-- Said in place, per property, instead of counting overrides somewhere else:

@@ -6,6 +6,7 @@ import androidx.annotation.StringRes;
 
 import com.termux.R;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -70,7 +71,9 @@ public final class SurfaceEditorProperties {
         /** On or off. */
         SWITCH,
         /** A row that opens something which picks for itself. */
-        PICKER
+        PICKER,
+        /** The dock's Docked / Floating segmented pair, drawn by the pill's own shape group. */
+        SHAPE
     }
 
     /** How a control's number is read out. */
@@ -173,6 +176,7 @@ public final class SurfaceEditorProperties {
     }
 
     public static final String ID_LOOK = "look";
+    public static final String ID_STYLE = "style";
     public static final String ID_CORNERS = "corners";
     public static final String ID_GAP = "gap";
     public static final String ID_SIZE = "size";
@@ -209,6 +213,14 @@ public final class SurfaceEditorProperties {
     static {
         CHIPS.put(SurfaceSlot.DOCK, Collections.unmodifiableList(Arrays.asList(
             look(),
+            // Docked or Floating is the dock's first decision, so it stands as its own chip
+            // rather than riding inside Look; the pill's shape group draws it. Writes go through
+            // that group, which is why this control carries a reader only.
+            own(ID_STYLE, R.string.termux_surface_editor_chip_style, Kind.SHAPE, Unit.NONE, 1,
+                prefs -> SegmentedPillPreference.VALUE_ROUNDED
+                    .equals(prefs.getAppLauncherDockStyle()) ? 1 : 0,
+                null,
+                PREVIEW_GEOMETRY | PREVIEW_SURFACES),
             cell(ID_CORNERS, SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS,
                 R.string.termux_surface_editor_chip_corners,
                 PREVIEW_GEOMETRY | PREVIEW_SURFACES),

@@ -33,17 +33,19 @@
 
         <!-- Pins the live look into the Custom slot. Its own action rather than a side effect of
              Done: Done commits the edit, which happens every time the editor closes, and a pin
-             that every exit overwrote would not be a pin. -->
-        <ImageView
+             that every exit overwrote would not be a pin. Icon set in code. -->
+        <TextView
             android:id="@+id/surface_editor_looks_save"
-            android:layout_width="40dp"
+            android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/termux_surface_editor_save_look"
-            android:padding="8dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_symbol_save"
-            app:tint="?attr/termuxColorPrimary" />
+            android:background="?attr/selectableItemBackground"
+            android:drawablePadding="5dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingHorizontal="8dp"
+            android:text="@string/termux_surface_editor_save_look"
+            android:textColor="?attr/termuxColorPrimary"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <FrameLayout
@@ -69,16 +71,19 @@
             android:textSize="11sp"
             android:textStyle="bold" />
 
-        <ImageView
+        <!-- Icon set in code. -->
+        <TextView
             android:id="@+id/surface_editor_looks_reset"
-            android:layout_width="40dp"
+            android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/termux_surface_editor_reset_all"
-            android:padding="8dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_symbol_restart"
-            app:tint="?attr/termuxColorPrimary" />
+            android:background="?attr/selectableItemBackground"
+            android:drawablePadding="5dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingHorizontal="8dp"
+            android:text="@string/termux_surface_editor_reset_all"
+            android:textColor="?attr/termuxColorPrimary"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <TextView

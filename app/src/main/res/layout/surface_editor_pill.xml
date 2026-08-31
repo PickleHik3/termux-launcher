@@ -33,18 +33,24 @@
         android:orientation="horizontal">
 
         <!-- The surface being edited, and the way to reach one that is off screen. Tapping the
-             surface itself is the primary gesture; this is the reachable equivalent. -->
+             surface itself is the primary gesture; this is the reachable equivalent, wearing an
+             outlined-selector background (set in code) so it reads as tappable. -->
         <TextView
             android:id="@+id/surface_editor_pill_title"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
             android:ellipsize="end"
             android:gravity="center_vertical"
             android:maxLines="1"
+            android:maxWidth="150dp"
+            android:paddingHorizontal="12dp"
             android:textColor="?attr/termuxColorOnSurface"
-            android:textSize="17sp" />
+            android:textSize="15sp" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
 
         <!-- The editor writes through to preferences so the preview is live, so "unsaved" is
              tracked against the snapshot taken on entry rather than a draft buffer. -->
@@ -62,16 +68,19 @@
 
         <!-- Complete looks, plus the shared layer and Reset. Presets are chosen rarely, so they do
              not hold the top of the editor permanently; they expand into the card's own panel. -->
-        <ImageView
+        <TextView
             android:id="@+id/surface_editor_pill_looks"
-            android:layout_width="40dp"
+            android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/termux_surface_editor_looks"
-            android:padding="8dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_symbol_palette"
-            app:tint="?attr/termuxColorPrimary" />
+            android:background="?attr/selectableItemBackground"
+            android:drawablePadding="5dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingHorizontal="8dp"
+            android:text="@string/termux_surface_editor_looks"
+            android:textColor="?attr/termuxColorPrimary"
+            android:textSize="13sp" />
 
         <TextView
             android:id="@+id/surface_editor_pill_done"
@@ -191,70 +200,20 @@
                 app:autoSizeTextType="uniform" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+        <!-- The raw glass triple behind Look, unfolding into the card's panel. -->
+        <TextView
+            android:id="@+id/surface_editor_pill_look_fine"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
             android:layout_marginTop="2dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:id="@+id/surface_editor_pill_look_fine"
-                android:layout_width="40dp"
-                android:layout_height="34dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/termux_surface_editor_fine"
-                android:padding="8dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_symbol_tune"
-                app:tint="?attr/termuxColorPrimary" />
-
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <!-- Docked and Floating resolve the dock's geometry differently and always have; the
-                 choice is the dock's own, which is why it lives inside the dock's Look. -->
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/surface_editor_pill_shape"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:visibility="gone"
-                app:selectionRequired="true"
-                app:singleSelection="true">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/surface_editor_pill_shape_docked"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:maxLines="1"
-                    android:minHeight="32dp"
-                    android:minWidth="0dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="@string/termux_app_launcher_dock_style_default"
-                    android:textSize="11sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/surface_editor_pill_shape_floating"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:maxLines="1"
-                    android:minHeight="32dp"
-                    android:minWidth="0dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="@string/termux_app_launcher_dock_style_rounded"
-                    android:textSize="11sp" />
-            </com.google.android.material.button.MaterialButtonToggleGroup>
-        </LinearLayout>
+            android:background="?attr/selectableItemBackground"
+            android:drawablePadding="5dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingHorizontal="8dp"
+            android:text="@string/termux_surface_editor_fine"
+            android:textColor="?attr/termuxColorPrimary"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- The one open row. Whichever chip is active points this at its own value; the pill may lose
@@ -294,6 +253,58 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:visibility="gone" />
+
+        <!-- The Style chip's control: Docked and Floating resolve the dock's geometry differently
+             and always have. Fills the open row while that chip is selected. -->
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/surface_editor_pill_shape"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:visibility="gone"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/surface_editor_pill_shape_docked"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:maxLines="1"
+                android:minHeight="34dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="@string/termux_app_launcher_dock_style_default"
+                android:textSize="12sp"
+                app:autoSizeMaxTextSize="12sp"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeStepGranularity="0.5sp"
+                app:autoSizeTextType="uniform" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/surface_editor_pill_shape_floating"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:maxLines="1"
+                android:minHeight="34dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="@string/termux_app_launcher_dock_style_rounded"
+                android:textSize="12sp"
+                app:autoSizeMaxTextSize="12sp"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeStepGranularity="0.5sp"
+                app:autoSizeTextType="uniform" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
 
         <TextView
             android:id="@+id/surface_editor_pill_value"
