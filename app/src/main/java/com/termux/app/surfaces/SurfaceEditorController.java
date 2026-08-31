@@ -1289,6 +1289,12 @@ public final class SurfaceEditorController {
 
     /** Keeps the header badge in step with the snapshot. Cheap enough to call on every preview. */
     private void updateSurfaceEditorDirtyBadge() {
+        // The dirty test re-derives the whole editor state signature — too much for every tick of
+        // a drag, and the badge is under the peek fade anyway. Settled once on release.
+        if (mSliderDragActive) {
+            mDirtyBadgeDeferred = true;
+            return;
+        }
         View badge = mHost.findView(R.id.surface_tuning_dirty_badge);
         if (badge == null)
             return;
@@ -2305,11 +2311,16 @@ public final class SurfaceEditorController {
             triple[SurfaceMaterials.OPACITY]);
         prefs().setSurfaceBaseValue(SurfaceProperty.GRAIN,
             triple[SurfaceMaterials.GRAIN]);
-        // Everything still following Base moves with it; the coalesced preview pass restates the
-        // editor UI once per frame. The blur curve moves a whole dp only every few intensity
-        // ticks, and only a tick that actually moved it may throw away the pre-blurred wallpaper.
-        requestSurfaceEditorPreview(triple[SurfaceMaterials.BLUR] != previousBlur
-            ? TUNING_PREVIEW_ALL : TUNING_PREVIEW_ALL_BUT_BLUR);
+        // Everything still following Base moves with it. The macro never moves radius or margin,
+        // so geometry stays out of its ticks. The blur curve moves a whole dp only every few
+        // intensity ticks — and mid-drag even those don't re-blur the wallpaper (the frame the
+        // editor can least afford); the release settles the blur once, like geometry.
+        int scopes = TUNING_PREVIEW_GLASS | TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD;
+        if (triple[SurfaceMaterials.BLUR] != previousBlur) {
+            if (mSliderDragActive) mDragTouchedBlur = true;
+            else scopes |= TUNING_PREVIEW_BLUR;
+        }
+        requestSurfaceEditorPreview(scopes);
     }
 
     /**
@@ -3088,6 +3099,10 @@ public final class SurfaceEditorController {
     private boolean mSliderDragActive;
     /** Whether the active drag previewed geometry, so the release knows to commit it. */
     private boolean mDragTouchedGeometry;
+    /** Whether the active drag moved a blur input it did not preview, owed one re-blur on release. */
+    private boolean mDragTouchedBlur;
+    /** Whether a drag skipped dirty-badge updates, owed one restatement on release. */
+    private boolean mDirtyBadgeDeferred;
 
     private void requestSurfaceEditorPreview(int scopes) {
         if (mSliderDragActive && (scopes & TUNING_PREVIEW_GEOMETRY) != 0)
@@ -3129,7 +3144,9 @@ public final class SurfaceEditorController {
             mLastPreviewBlurSignature = blurSignature;
         }
         mHost.applyGlassPreview(blurChanged);
-        if (mSurfaceEditorOpen) syncSurfaceInheritanceUi();
+        // Mid-drag the card sits faded at peek alpha, so restating its chips, badges and follower
+        // sliders every frame is CPU spent on pixels nobody can read; the release restates once.
+        if (mSurfaceEditorOpen && !mSliderDragActive) syncSurfaceInheritanceUi();
         updateSurfaceEditorDirtyBadge();
     }
 
@@ -3271,10 +3288,19 @@ public final class SurfaceEditorController {
                 mDragTouchedGeometry = false;
                 requestSurfaceEditorPreview(TUNING_PREVIEW_GEOMETRY_COMMIT);
             }
+            // A blur input the drag moved without previewing settles here, once.
+            if (mDragTouchedBlur) {
+                mDragTouchedBlur = false;
+                requestSurfaceEditorPreview(TUNING_PREVIEW_BLUR);
+            }
             // The per-tick syncs skip the preset-match walk and the reattach-all row while the
             // thumb is down; one full restatement here squares the strip with where the drag ended.
             if (mSurfaceEditorOpen)
                 syncSurfaceInheritanceUi();
+            if (mDirtyBadgeDeferred) {
+                mDirtyBadgeDeferred = false;
+                updateSurfaceEditorDirtyBadge();
+            }
             mDragEchoLabel = null;
             mDragEchoValue = null;
             setSurfaceTuningCardPeek(false);
