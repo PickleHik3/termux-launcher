@@ -198,6 +198,17 @@ before you hand work over. CI owns the rest.
 - Compile-check any API claim before you rely on it. `UserHandle.getIdentifier` looks public and is
   `@SystemApi`; a worker asserted otherwise and was wrong.
 
+## User-facing text
+
+Settings entries, dialogs, hints, notices — every string a user can see is product copy, not an
+engineering note. Write it the way a polished 2026 app would: a short title and one sentence that
+says what the user gets. No implementation mechanism, no window-manager or protocol names, no HTTP
+codes, no keybind lore, and never a recap of the design discussion that produced the feature.
+"Arrange panes automatically as you open and move them", not "tiles like Hyprland: each new pane
+halves the focused one along its longer side". If a string seems to need a paragraph, the setting
+is doing too much. The deeper detail belongs in `docs/en/`, where curious users are already sent —
+and in the commit body, where the next agent will look.
+
 ## Coding style
 
 Follow `.editorconfig`: UTF-8, LF, final newline, four spaces (two for YAML). Standard Java
