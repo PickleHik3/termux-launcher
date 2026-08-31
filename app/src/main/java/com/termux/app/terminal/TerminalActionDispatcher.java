@@ -571,10 +571,14 @@ public final class TerminalActionDispatcher {
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     TerminalSession target = paneArgument(host, arguments);
                     if (target == null) return paneNotFound(arguments);
-                    if (!host.activateSessionInPanes(target)) {
+                    // activateSessionInPanes reports whether focus CHANGED, so a redundant focus on
+                    // the already-focused pane returns false. Only a pane that is genuinely not on
+                    // screen afterwards is a refusal.
+                    boolean changed = host.activateSessionInPanes(target);
+                    if (!changed && host.currentSession() != target) {
                         return error(409, "pane_not_shown", "That pane is not in any window");
                     }
-                    return ok().put("pane", paneRecord(host, target));
+                    return ok().put("pane", paneRecord(host, target)).put("changed", changed);
                 }
                 case TOOL_PANE_CLOSE: {
                     TerminalSession target = paneArgument(host, arguments);
