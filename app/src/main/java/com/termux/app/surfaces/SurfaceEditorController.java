@@ -413,7 +413,7 @@ public final class SurfaceEditorController {
             scrollToSlotGroup(deepLinkSlot);
 
         blur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
                 if (fromUser) {
                     writeSurfaceRow(seekBar, progress);
@@ -422,7 +422,7 @@ public final class SurfaceEditorController {
             }
         });
         opacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
                     writeSurfaceRow(seekBar, progress);
@@ -431,7 +431,7 @@ public final class SurfaceEditorController {
             }
         });
         grain.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
                     writeSurfaceRow(seekBar, progress);
@@ -440,7 +440,7 @@ public final class SurfaceEditorController {
             }
         });
         dockRadius.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 dockRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
                 if (fromUser) {
                     writeSurfaceRow(seekBar, progress);
@@ -450,7 +450,7 @@ public final class SurfaceEditorController {
         });
         terminal.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
             R.string.termux_surface_tuning_peek_terminal_opacity) {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
                     peekReadout(terminalValue.getText());
@@ -471,7 +471,7 @@ public final class SurfaceEditorController {
         if (terminalGlassBlur != null) {
             terminalGlassBlur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
                 R.string.termux_surface_tuning_peek_terminal_blur) {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                     if (terminalGlassBlurValue != null) terminalGlassBlurValue.setText(
                         getString(R.string.termux_dock_tuning_value_dp, progress));
                     if (fromUser) {
@@ -485,7 +485,7 @@ public final class SurfaceEditorController {
         if (terminalGlassGrain != null) {
             terminalGlassGrain.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
                 R.string.termux_surface_tuning_peek_terminal_grain) {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                     if (terminalGlassGrainValue != null) terminalGlassGrainValue.setText(
                         getString(R.string.termux_dock_tuning_value_percent, progress));
                     if (fromUser) {
@@ -499,7 +499,7 @@ public final class SurfaceEditorController {
         if (terminalGap != null) {
             terminalGap.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
                 R.string.termux_surface_tuning_peek_terminal_gap) {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                     if (terminalGapValue != null) terminalGapValue.setText(
                         getString(R.string.termux_dock_tuning_value_dp, progress));
                     if (fromUser) {
@@ -518,7 +518,7 @@ public final class SurfaceEditorController {
         if (wallpaperOpacity != null) {
             wallpaperOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
                 R.string.termux_surface_tuning_peek_wallpaper_opacity) {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                     if (wallpaperOpacityValue != null) wallpaperOpacityValue.setText(
                         getString(R.string.termux_dock_tuning_value_percent, progress));
                     if (fromUser) {
@@ -531,7 +531,7 @@ public final class SurfaceEditorController {
         }
         size.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
             R.string.termux_surface_tuning_peek_dock_size) {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 int index = Math.max(0, Math.min(DockLayoutPolicy.sizePresetCount() - 1, progress));
                 sizeValue.setText(dockSizePresetLabel(index));
                 if (fromUser) {
@@ -543,7 +543,7 @@ public final class SurfaceEditorController {
         });
         icons.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
             R.string.termux_surface_tuning_peek_dock_icons) {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 int count = Math.max(1, progress);
                 iconsValue.setText(Integer.toString(count));
                 if (fromUser) {
@@ -556,7 +556,7 @@ public final class SurfaceEditorController {
         keyboardColors.setOnClickListener(view -> mHost.openKeyboardColors());
         keyboardHeight.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
             R.string.termux_surface_tuning_peek_keyboard_height) {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 keyboardHeightValue.setText(getString(R.string.termux_dock_tuning_value_percent,
                     progress));
                 if (!fromUser) return;
@@ -577,11 +577,13 @@ public final class SurfaceEditorController {
                     TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE));
             }
         });
-        keyboardSpacing.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+        keyboardSpacing.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
+            R.string.termux_surface_tuning_keyboard_spacing) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 keyboardSpacingValue.setText(getString(R.string.termux_dock_tuning_value_percent,
                     progress));
                 if (!fromUser) return;
+                peekReadout(keyboardSpacingValue.getText());
                 float margin = keyboardEditorValue(progress,
                     TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
                     TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
@@ -598,11 +600,13 @@ public final class SurfaceEditorController {
                     TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
             }
         });
-        keyboardRadius.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+        keyboardRadius.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
+            R.string.termux_dock_tuning_radius) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 keyboardRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
                     Math.round(progress / 10f)));
                 if (!fromUser) return;
+                peekReadout(keyboardRadiusValue.getText());
                 if (keyboard() != null)
                     keyboard().previewSurfaceEditorKeyCornerRadiusDp(progress / 10f);
                 prefs().setInAppKeyboardKeyCornerRadiusDp(progress / 10f);
@@ -614,12 +618,14 @@ public final class SurfaceEditorController {
                 prefs().setInAppKeyboardKeyCornerRadiusDp(seekBar.getProgress() / 10f);
             }
         });
-        keyboardKeyOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+        keyboardKeyOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
+            R.string.termux_surface_tuning_keyboard_key_opacity) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 keyboardKeyOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
                     progress));
                 // Scoped preview: repaints only the keyboard view, never the glass pipeline.
                 if (!fromUser) return;
+                peekReadout(keyboardKeyOpacityValue.getText());
                 if (keyboard() != null)
                     keyboard().previewSurfaceEditorKeyOpacity(progress);
                 prefs().setInAppKeyboardKeyOpacity(progress);
@@ -632,7 +638,7 @@ public final class SurfaceEditorController {
             }
         });
         keyboardBgOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 keyboardBgOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
                     progress));
                 // The render path reads this pref, so write-then-re-render is the live preview.
@@ -1086,7 +1092,7 @@ public final class SurfaceEditorController {
     private void bindStatusSeekBar(SeekBar seekBar, TextView valueView, boolean dp,
                                    int previewScopes) {
         seekBar.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar bar, int progress, boolean fromUser) {
                 valueView.setText(getString(dp ? R.string.termux_dock_tuning_value_dp
                     : R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
@@ -1155,12 +1161,14 @@ public final class SurfaceEditorController {
         SeekBar slider = mHost.findView(R.id.dock_tuning_terminal_radius_slider);
         if (slider == null)
             return;
-        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
+            R.string.termux_dock_tuning_radius) {
+            @Override void onSliderChanged(SeekBar bar, int progress, boolean fromUser) {
                 TextView value = mHost.findView(R.id.dock_tuning_terminal_radius_value);
                 if (value != null)
                     value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
                 if (fromUser && prefs() != null) {
+                    peekReadout(getString(R.string.termux_dock_tuning_value_dp, progress));
                     prefs().setTerminalCornerRadius(progress);
                     // The radius reshapes the terminal's field, its frame line and its pane clip
                     // together, so it needs the surface re-apply, not just the border pass.
@@ -1524,14 +1532,16 @@ public final class SurfaceEditorController {
         SeekBar slider = mHost.findView(R.id.surface_tuning_status_indicator_radius_slider);
         if (slider == null)
             return;
-        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
+            R.string.termux_surface_tuning_indicator_radius) {
+            @Override void onSliderChanged(SeekBar bar, int progress, boolean fromUser) {
                 TextView value =
                     mHost.findView(R.id.surface_tuning_status_indicator_radius_value);
                 if (value != null)
                     value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
                 if (!fromUser || prefs() == null)
                     return;
+                peekReadout(getString(R.string.termux_dock_tuning_value_dp, progress));
                 prefs().setStatusIndicatorCornerRadius(progress);
                 // The bar restyles both chips from one place, so they cannot drift apart.
                 mHost.refreshTerminalWindowBar();
@@ -1752,6 +1762,19 @@ public final class SurfaceEditorController {
                 R.plurals.termux_surface_tuning_followers_some, detached, detached));
     }
 
+    /** The label a Base slider announces over the surface while it peeks. */
+    @StringRes
+    private static int basePeekLabel(SurfaceProperty property) {
+        switch (property) {
+            case BLUR: return R.string.termux_dock_tuning_blur;
+            case OPACITY: return R.string.termux_dock_tuning_opacity;
+            case GRAIN: return R.string.termux_dock_tuning_grain;
+            case CORNER_RADIUS: return R.string.termux_dock_tuning_radius;
+            case SIDE_GAP: return R.string.termux_surface_tuning_edges;
+            default: return 0;
+        }
+    }
+
     private void bindOrSyncBaseSlider(int sliderId, int valueId,
                                       SurfaceProperty property,
                                       boolean dp, int max) {
@@ -1763,13 +1786,17 @@ public final class SurfaceEditorController {
             surfaceEditorSliderValue(null, property, prefs().getSurfaceBaseValue(property))));
         if (slider.getTag(R.id.surface_tuning_base_panel) == null) {
             slider.setTag(R.id.surface_tuning_base_panel, Boolean.TRUE);
-            slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+            slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
+                basePeekLabel(property)) {
+                @Override void onSliderChanged(SeekBar bar, int progress, boolean fromUser) {
                     if (value != null) value.setText(getString(dp
                         ? R.string.termux_dock_tuning_value_dp
                         : R.string.termux_dock_tuning_value_percent, progress));
                     if (!fromUser || prefs() == null)
                         return;
+                    peekReadout(getString(dp
+                        ? R.string.termux_dock_tuning_value_dp
+                        : R.string.termux_dock_tuning_value_percent, progress));
                     prefs().setSurfaceBaseValue(property, progress);
                     // Everything still following Base moves with it — but radius and margin never
                     // touch the blur, and the coalesced preview pass restates the editor UI once
@@ -2236,10 +2263,12 @@ public final class SurfaceEditorController {
                 return;
             applyMaterialMacro(materialForButton(checkedId), prefs().getSurfaceMaterialIntensity());
         });
-        intensity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+        intensity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
+            R.string.termux_surface_tuning_material_intensity) {
+            @Override void onSliderChanged(SeekBar bar, int progress, boolean fromUser) {
                 if (!fromUser || prefs() == null)
                     return;
+                peekReadout(getString(R.string.termux_dock_tuning_value_percent, progress));
                 applyMaterialMacro(prefs().getSurfaceMaterial(), progress);
             }
         });
@@ -2494,7 +2523,7 @@ public final class SurfaceEditorController {
         if (slider == null)
             return;
         slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+            @Override void onSliderChanged(SeekBar bar, int progress, boolean fromUser) {
                 TextView value = mHost.findView(row.valueId);
                 if (value != null)
                     value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
@@ -3171,10 +3200,11 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * Base for every editor slider. A slider whose surface sits underneath the card - or whose drag
-     * moves the card, because the card is anchored above the accessory stack - passes a label and
-     * "peeks": the card fades while the thumb is down so the thing being edited stays visible, and
-     * the value it is changing is echoed over the surface instead.
+     * Base for every editor slider. Every slider "peeks": the card fades while the thumb is down,
+     * because what it is editing is always a surface the card would otherwise cover or crowd, and
+     * the value being changed is echoed over the surface instead. A shared row's echo comes free
+     * from the same table that wires it; a slider with its own label passes it here and echoes its
+     * own value text through {@link #peekReadout}.
      *
      * <p>Subclasses that override the tracking callbacks must call through, or the card never fades
      * back in.
@@ -3191,7 +3221,20 @@ public final class SurfaceEditorController {
             this.peekLabelRes = peekLabelRes;
         }
 
-        /** Echoes the value over the surface while the card is faded. No-op for non-peek sliders. */
+        /** The slider moved; same contract as {@code onProgressChanged}. */
+        abstract void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser);
+
+        @Override public final void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            onSliderChanged(seekBar, progress, fromUser);
+            if (fromUser && peekLabelRes == 0) {
+                SurfaceEditorRows.Row row = SurfaceEditorRows.forSlider(seekBar.getId());
+                TextView value = row == null ? null : mHost.findView(row.valueId);
+                if (row != null && value != null)
+                    setSurfaceTuningPeekReadout(getString(row.labelRes), value.getText());
+            }
+        }
+
+        /** Echoes the value over the surface while the card is faded. No-op for table-row sliders. */
         final void peekReadout(CharSequence value) {
             if (peekLabelRes != 0)
                 setSurfaceTuningPeekReadout(getString(peekLabelRes), value);
@@ -3200,7 +3243,7 @@ public final class SurfaceEditorController {
         @Override public void onStartTrackingTouch(SeekBar seekBar) {
             mSliderDragActive = true;
             mDragTouchedGeometry = false;
-            if (peekLabelRes != 0) setSurfaceTuningCardPeek(true);
+            setSurfaceTuningCardPeek(true);
         }
 
         @Override public void onStopTrackingTouch(SeekBar seekBar) {
@@ -3215,7 +3258,7 @@ public final class SurfaceEditorController {
             // thumb is down; one full restatement here squares the strip with where the drag ended.
             if (mSurfaceEditorOpen)
                 syncSurfaceInheritanceUi();
-            if (peekLabelRes != 0) setSurfaceTuningCardPeek(false);
+            setSurfaceTuningCardPeek(false);
         }
     }
 }
