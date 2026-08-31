@@ -2410,10 +2410,18 @@ public final class SurfaceEditorController {
         if (controls == null || !mSurfaceEditorOpen)
             return;
         controls.animate().cancel();
+        // The whole drag happens behind a translucent card, and the thumb invalidates it on every
+        // moved pixel. A hardware layer for the duration turns each of those frames into a cached-
+        // texture composite instead of an offscreen alpha pass over the full control tree.
+        if (peek && controls.getLayerType() != View.LAYER_TYPE_HARDWARE)
+            controls.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         controls.animate()
             .alpha(peek ? SURFACE_TUNING_PEEK_ALPHA : 1f)
             .setDuration(peek ? SURFACE_TUNING_PEEK_OUT_MS : SURFACE_TUNING_PEEK_IN_MS)
             .setInterpolator(Motion.settle())
+            .withEndAction(() -> {
+                if (!peek) controls.setLayerType(View.LAYER_TYPE_NONE, null);
+            })
             .start();
         if (!peek) hideSurfaceTuningPeekReadout();
     }
@@ -2423,7 +2431,10 @@ public final class SurfaceEditorController {
         TextView readout = mHost.findView(R.id.surface_tuning_peek_readout);
         if (readout == null || !mSurfaceEditorOpen)
             return;
-        readout.setText(getString(R.string.termux_surface_tuning_peek_readout, label, value));
+        String text = getString(R.string.termux_surface_tuning_peek_readout, label, value);
+        // setText on the wrap_content pill costs a layout pass; repeated ticks at one value don't.
+        if (!text.contentEquals(readout.getText()))
+            readout.setText(text);
         if (readout.getVisibility() != View.VISIBLE) {
             readout.setAlpha(0f);
             readout.setVisibility(View.VISIBLE);
@@ -3221,17 +3232,18 @@ public final class SurfaceEditorController {
             this.peekLabelRes = peekLabelRes;
         }
 
+        /** This drag's table echo, resolved once on touch-down — a drag ticks far too often to
+         *  pay a row lookup and a view-tree walk per moved pixel. */
+        private String mDragEchoLabel;
+        private TextView mDragEchoValue;
+
         /** The slider moved; same contract as {@code onProgressChanged}. */
         abstract void onSliderChanged(SeekBar seekBar, int progress, boolean fromUser);
 
         @Override public final void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
             onSliderChanged(seekBar, progress, fromUser);
-            if (fromUser && peekLabelRes == 0) {
-                SurfaceEditorRows.Row row = SurfaceEditorRows.forSlider(seekBar.getId());
-                TextView value = row == null ? null : mHost.findView(row.valueId);
-                if (row != null && value != null)
-                    setSurfaceTuningPeekReadout(getString(row.labelRes), value.getText());
-            }
+            if (fromUser && mDragEchoValue != null)
+                setSurfaceTuningPeekReadout(mDragEchoLabel, mDragEchoValue.getText());
         }
 
         /** Echoes the value over the surface while the card is faded. No-op for table-row sliders. */
@@ -3243,6 +3255,11 @@ public final class SurfaceEditorController {
         @Override public void onStartTrackingTouch(SeekBar seekBar) {
             mSliderDragActive = true;
             mDragTouchedGeometry = false;
+            if (peekLabelRes == 0) {
+                SurfaceEditorRows.Row row = SurfaceEditorRows.forSlider(seekBar.getId());
+                mDragEchoLabel = row == null ? null : getString(row.labelRes);
+                mDragEchoValue = row == null ? null : mHost.findView(row.valueId);
+            }
             setSurfaceTuningCardPeek(true);
         }
 
@@ -3258,6 +3275,8 @@ public final class SurfaceEditorController {
             // thumb is down; one full restatement here squares the strip with where the drag ended.
             if (mSurfaceEditorOpen)
                 syncSurfaceInheritanceUi();
+            mDragEchoLabel = null;
+            mDragEchoValue = null;
             setSurfaceTuningCardPeek(false);
         }
     }
