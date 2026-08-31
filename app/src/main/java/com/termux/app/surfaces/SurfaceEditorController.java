@@ -3101,6 +3101,8 @@ public final class SurfaceEditorController {
     private boolean mDragTouchedGeometry;
     /** Whether the active drag moved a blur input it did not preview, owed one re-blur on release. */
     private boolean mDragTouchedBlur;
+    /** Whether the active drag skipped the full keyboard reload, owed one on release. */
+    private boolean mDragTouchedKeyboard;
     /** Whether a drag skipped dirty-badge updates, owed one restatement on release. */
     private boolean mDirtyBadgeDeferred;
 
@@ -3132,8 +3134,12 @@ public final class SurfaceEditorController {
             mHost.refreshTerminalWindowBar();
             mHost.applySessionsSurfaceBackground();
         }
-        if ((scopes & TUNING_PREVIEW_KEYBOARD) != 0 && keyboard() != null)
-            keyboard().onPreferencesReloaded();
+        // A full keyboard reload re-parses the layout ring; mid-drag its backdrop is already kept
+        // live by the glass pass, so the reload waits for the release like geometry does.
+        if ((scopes & TUNING_PREVIEW_KEYBOARD) != 0 && keyboard() != null) {
+            if (mSliderDragActive) mDragTouchedKeyboard = true;
+            else keyboard().onPreferencesReloaded();
+        }
         // A BLUR request only really re-blurs when a blur input moved: the blur slider ticks far
         // more often than its integer value changes, and Undo/preset restores ask broadly. The
         // resolved per-surface radii are the whole input set, so comparing them is exact.
@@ -3292,6 +3298,10 @@ public final class SurfaceEditorController {
             if (mDragTouchedBlur) {
                 mDragTouchedBlur = false;
                 requestSurfaceEditorPreview(TUNING_PREVIEW_BLUR);
+            }
+            if (mDragTouchedKeyboard) {
+                mDragTouchedKeyboard = false;
+                requestSurfaceEditorPreview(TUNING_PREVIEW_KEYBOARD);
             }
             // The per-tick syncs skip the preset-match walk and the reattach-all row while the
             // thumb is down; one full restatement here squares the strip with where the drag ended.

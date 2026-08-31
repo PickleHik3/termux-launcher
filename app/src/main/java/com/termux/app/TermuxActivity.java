@@ -5818,6 +5818,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Math.max(1, screenWidthDp / SUGGESTION_BAR_MIN_BUTTON_DP);
     }
 
+    /** The dock button count the styling pass last saw, so only a real change rebuilds the row. */
+    private int mLastStyledDockButtonCount = Integer.MIN_VALUE;
+
+    /**
+     * The dock styling a surface-editor tick can change, and nothing else. This is the per-frame
+     * body of a slider drag's glass preview: the full {@link #applySuggestionBarPreferences} also
+     * reloads the app catalog and re-wires listeners, which is a rebuild of the whole dock row —
+     * paying that once per frame was most of the editor's drag jank. The apps-per-page slider is
+     * the one control whose preview really needs the row rebuilt, so a changed count still does.
+     */
+    private void applySuggestionBarSurfaceStyling() {
+        if (mSuggestionBarView == null || mPreferences == null) {
+            return;
+        }
+        DockLayout dockLayout = getDockLayout();
+        mSuggestionBarView.setIconScale(dockLayout.iconScale);
+        mSuggestionBarView.setDockRowHeightHintPx(dockLayout.appsBarHeightHintPx);
+        mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
+        mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
+        int maxButtons = mPreferences.getAppLauncherButtonCount();
+        if (maxButtons <= 0) {
+            maxButtons = calculateSuggestionBarMaxButtons(getResources().getDisplayMetrics());
+        }
+        if (mLastStyledDockButtonCount != Integer.MIN_VALUE
+            && maxButtons != mLastStyledDockButtonCount) {
+            mLastStyledDockButtonCount = maxButtons;
+            mSuggestionBarView.setMaxButtonCount(maxButtons);
+            mSuggestionBarView.reloadAllApps();
+        }
+    }
+
     private void applySuggestionBarPreferences() {
         if (mSuggestionBarView == null || mPreferences == null) {
             return;
@@ -5841,16 +5874,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             maxButtons = calculateSuggestionBarMaxButtons(displayMetrics);
         }
         mSuggestionBarView.setMaxButtonCount(maxButtons);
+        mLastStyledDockButtonCount = maxButtons;
         mSuggestionBarView.setDefaultButtons(new ArrayList<>());
         mSuggestionBarView.setTextSize(10f);
         mSuggestionBarView.setBandW(mPreferences.isAppLauncherBwIconsEnabled());
-        DockLayout dockLayout = getDockLayout();
-        mSuggestionBarView.setIconScale(dockLayout.iconScale);
-        mSuggestionBarView.setDockRowHeightHintPx(dockLayout.appsBarHeightHintPx);
-        mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
-        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
-        mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
-        mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
+        applySuggestionBarSurfaceStyling();
         mSuggestionBarView.setNotificationBadgesEnabled(mPreferences.isAppLauncherNotificationDotsEnabled());
         boolean rowHapticsEnabled = mPreferences.isAppLauncherRowHapticsEnabled();
         mSuggestionBarView.setRowHapticsEnabled(rowHapticsEnabled);
@@ -6788,7 +6816,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // other slider re-renders on top of them.
             mChrome.requestSync((blurChanged ? ChromeRenderer.SCOPE_WALLPAPER_BLUR_CACHE : 0)
                 | ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
-            applySuggestionBarPreferences();
+            // Styling only: this runs once per frame of a drag, and the full preference apply
+            // rebuilds the dock's whole app row.
+            applySuggestionBarSurfaceStyling();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         }
 
