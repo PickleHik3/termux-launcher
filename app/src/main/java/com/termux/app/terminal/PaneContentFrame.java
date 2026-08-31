@@ -19,10 +19,9 @@ import com.termux.R;
  * arc, which is how a prompt that paints its own background to the very edge came out clipped.
  *
  * <p>So the shape and its clearance are set together, from one radius: the glass keeps filling the
- * whole slab and the terminal is laid out inside the arc's depth on the sides and the top — the
- * bottom already carries the terminal's own slack (see {@link #onMeasure}). The clearance is spent
- * as the child's margin rather than as this frame's padding, because the frame's other child is
- * the glass backdrop and it must still reach the corners the terminal now stays out of.
+ * whole slab and the terminal is laid out inside the arc's depth. The clearance is spent as the
+ * child's margin rather than as this frame's padding, because the frame's other child is the glass
+ * backdrop and it must still reach the corners the terminal now stays out of.
  */
 public class PaneContentFrame extends FrameLayout {
 
@@ -82,13 +81,10 @@ public class PaneContentFrame extends FrameLayout {
      * measured against it — so the pane lays out once at its cleared size and the PTY is told one
      * size, not the flush one and then the inset one.
      *
-     * <p>The bottom edge is left flush on purpose. TerminalView anchors its rows to the top and
-     * sizes them as {@code (height - mFontLineSpacingAndAscent) / mFontLineSpacing}, so at least a
-     * line's descent of slack — plus the integral-row remainder — already sits under the last row's
-     * background, clear of the arc. Charging the inset there again pays twice, and when the height
-     * loss crossed a row boundary it cost a whole extra row of gap between the prompt and the
-     * pane's bottom edge. The top row sits flush at y = 0 and gets no such slack, so the top keeps
-     * the full clearance.
+     * <p>The margin is the same on all four edges: the terminal bottom-anchors its grid
+     * ({@code TerminalView.getVerticalContentOffset()}), so its last row ends flush with the
+     * view's bottom edge and this inset is exactly the arc clearance there, just as on the sides.
+     * The integral-row leftover sits above the first row instead, where it reads as headroom.
      */
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -97,11 +93,11 @@ public class PaneContentFrame extends FrameLayout {
                 MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec));
             MarginLayoutParams params = (MarginLayoutParams) mContent.getLayoutParams();
             if (params.leftMargin != inset || params.topMargin != inset
-                || params.rightMargin != inset || params.bottomMargin != 0) {
+                || params.rightMargin != inset || params.bottomMargin != inset) {
                 params.leftMargin = inset;
                 params.topMargin = inset;
                 params.rightMargin = inset;
-                params.bottomMargin = 0;
+                params.bottomMargin = inset;
             }
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
