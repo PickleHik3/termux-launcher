@@ -220,7 +220,7 @@ repository-wide formatter: match the surrounding code.
   interface or a deep module (`TerminalHost`, `ChromeRenderer`, `DockLayoutPolicy`,
   `SurfaceEditorController.Host`, …), not a new public method on the activity. That interface
   accreted 326 public methods once; the extraction is what stopped it.
-- Keep geometry and policy **pure and tested** (`DockLayoutPolicy`, `SurfaceEditorCardMetrics`,
+- Keep geometry and policy **pure and tested** (`DockLayoutPolicy`, `SurfaceEditorPillMetrics`,
   `AzScrubGesture`, `PaneShape`), with the view layer dumb enough to just apply the answer.
 - Comments describe how a thing is used and move when the code moves. Do not annotate every line.
 - Inferred types over ceremony. Do not preserve complexity because it already exists, and do not

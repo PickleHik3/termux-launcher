@@ -24,9 +24,11 @@ public class SurfaceEditorRowsTest {
                 SurfaceEditorRows.Row row = SurfaceEditorRows.forCell(slot, property);
                 if (TermuxAppSharedPreferences.hasSurfaceProperty(slot, property)) {
                     assertNotNull(slot + "/" + property, row);
-                    assertSame(row, SurfaceEditorRows.forSlider(row.sliderId));
                     assertNotNull(row.read);
                     assertNotNull(row.write);
+                    // The footnote names the property in words, so a cell without a noun would
+                    // render "'s own  · ↺ to match Base".
+                    assertTrue(slot + "/" + property + " has no footnote noun", row.nounRes != 0);
                 } else {
                     assertNull(slot + "/" + property, row);
                 }
@@ -35,22 +37,22 @@ public class SurfaceEditorRowsTest {
     }
 
     @Test
-    public void everySlotHasAPageWithDistinctViews() {
+    public void everySlotHasAPageNamingIt() {
         Set<Integer> seen = new HashSet<>();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             SurfaceEditorRows.Page page = SurfaceEditorRows.page(slot);
             assertSame(slot, page.slot);
-            assertTrue(seen.add(page.chipId));
-            assertTrue(seen.add(page.groupId));
-            assertTrue(seen.add(page.reattachId));
+            assertTrue("two surfaces share a name", seen.add(page.labelRes));
             assertEquals(page.labelRes, SurfaceEditorRows.slotLabel(slot));
         }
     }
 
     @Test
     public void theRadiusTracksShareTheEditorCeiling() {
-        // editorRadius caps the resolved sentinel to this; both capsule surfaces run to 40dp.
-        assertEquals(40, SurfaceEditorRows.forCell(SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS).max);
-        assertEquals(40, SurfaceEditorRows.forCell(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS).max);
+        // The pill caps a resolved sentinel to this; both capsule surfaces run to 40dp.
+        assertEquals(40,
+            SurfaceEditorRows.forCell(SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS).max);
+        assertEquals(40,
+            SurfaceEditorRows.forCell(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS).max);
     }
 }
