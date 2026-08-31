@@ -293,10 +293,19 @@ usual. Build metadata is ignored in semver precedence, so the tag compares equal
 patches — which also means **a hotfix ships fixes only**. A feature under a `+hotfix` tag is a
 feature under a version that sorts equal to the one before it; cut a real version for that.
 
-Release notes live at `project-docs/release-notes-v<version>.md` and are the **only** changelog.
-There is no `CHANGELOG.md` — it was deleted after v0.2.35-a as a second hand-maintained history that
-duplicated the notes and drifted from them. The technical record is `git log`: commit bodies carry
-the mechanism, the measurements and the reasoning, which is where a reader who wants that should be
+Release notes are the **only** changelog, and they live in exactly one place at a time:
+
+- While a release is being written, its notes are `project-docs/release-notes-v<version>.md` — one
+  file, so `gh release create --notes-file` can point at it.
+- **Once every edition of that version is published, move the notes into
+  `project-docs/release-notes.md`** (newest first, `## v<version>`, the per-edition notes folded
+  into a closing `### Editions` list) and delete the per-version file. Moving, never copying: the
+  earlier split into eleven files, and the `CHANGELOG.md` deleted after v0.2.35-a, both failed the
+  same way — a second hand-maintained history that duplicated the notes and drifted from them.
+
+Entries in `release-notes.md` are kept as they shipped and are not revised afterwards; an old entry
+describes its own release, not today. The technical record is `git log`: commit bodies carry the
+mechanism, the measurements and the reasoning, which is where a reader who wants that should be
 sent. Write the notes from the commit range (`git log v<previous>..dev`), not from another document.
 
 The notes are for someone holding the phone. One line per item, saying what they can now do or what
@@ -308,14 +317,16 @@ Config paths appear only because people type them.
 seams, performance internals, and any defect that was introduced and fixed inside the same release
 cycle. A reader must never learn that something was briefly broken between two tags.
 
-Since v0.2.35 they are split by edition and the split is the point:
+Editions are a section, not a file. The notes for a version are one document:
 
-- `release-notes-v<version>.md` is the whole changelog and ships with the `com.termux` release.
-  Group under `## New` / `## Changes` / `## Fixes` (and `## Security` when a review is behind it),
-  with `###` sub-headings per surface under `## New` (App Drawer, Widgets Page, Keybinds, Terminal,
-  Launcher, Extra Keys).
-- `release-notes-v<version>-vaj.md` and `-nix.md` carry **only** what is exclusive to that edition
-  and link back to the main notes. Do not restate the shared notes.
+- The body is the whole changelog and ships with the `com.termux` release. Group under `## New` /
+  `## Changes` / `## Fixes` (and `## Security` when a review is behind it), with `###` sub-headings
+  per surface under `## New` (App Drawer, Widgets Page, Keybinds, Terminal, Launcher, Extra Keys).
+- A closing `## Editions` list carries **only** what is exclusive to the Nix or VAJ build. Do not
+  restate the shared notes there. When an edition has nothing exclusive, say so — a reader must be
+  able to tell "nothing was exclusive" from "nobody wrote it down".
+- Cutting the `-nix` and `-vaj` releases: pass the same notes file, or an extract of it, to
+  `gh release create`. There is no separate per-edition file to write.
 
 ## Commits, PRs and work artifacts
 
