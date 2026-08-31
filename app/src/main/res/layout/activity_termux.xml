@@ -766,6 +766,21 @@
                     android:layout_marginEnd="4dp"
                     android:alpha="0.5"
                     android:background="@drawable/surface_tuning_gesture_pill" />
+
+                <!-- Advertises the clock dropdown: touching the status bar while it is already
+                     selected unfolds the clock faces. Not clickable itself — the group's own tap
+                     handler is the one place that decides. -->
+                <TextView
+                    android:id="@+id/surface_tuning_status_clock_handle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:alpha="0.75"
+                    android:importantForAccessibility="no"
+                    android:text="@string/termux_surface_tuning_clock_chevron"
+                    android:textColor="?attr/termuxColorPrimary"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
             </FrameLayout>
 
             <FrameLayout

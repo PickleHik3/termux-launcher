@@ -23,10 +23,10 @@ import java.util.function.ToIntFunction;
 /**
  * What each surface offers the editor's pill, as data.
  *
- * <p>The pill shows one property at a time: a chip row names the few a surface is usually tuned by,
- * and a trailing ⋯ chip opens the rest in a sheet. This table is both lists, per surface, plus
- * everything a single control needs to render and write itself — so a property moves between the
- * chip row and the sheet by moving one entry, and a new one is an entry rather than a layout.
+ * <p>The pill shows one property at a time, and the chip row names everything the surface offers —
+ * every control is one visible tap away, with no second level of navigation behind a ⋯. This table
+ * is that list, per surface, plus everything a single control needs to render and write itself, so
+ * a new property is an entry rather than a layout.
  *
  * <p>Two kinds of control live here side by side. Most are cells of the inheritance model and carry
  * their {@link SurfaceEditorRows.Row}, which owns their clamp and their link to Base. The rest —
@@ -64,7 +64,7 @@ public final class SurfaceEditorProperties {
 
     /** How a control draws itself in the pill's one open row. */
     public enum Kind {
-        /** The material macro: a Solid / Glass / Frost family, one intensity, and Fine underneath. */
+        /** The material macro: a Solid / Glass / Frost family, one intensity, the raw triple under it. */
         LOOK,
         /** A number on a track. */
         SLIDER,
@@ -172,7 +172,17 @@ public final class SurfaceEditorProperties {
                                @Nullable ToIntFunction<TermuxAppSharedPreferences> read,
                                @Nullable ObjIntConsumer<TermuxAppSharedPreferences> write,
                                int previewScopes) {
-        return new Control(id, labelRes, 0, kind, unit, max, null, read, write, previewScopes);
+        return own(id, labelRes, 0, kind, unit, max, read, write, previewScopes);
+    }
+
+    /** The same, for a control whose chip wants a shorter noun than its full label. */
+    private static Control own(@NonNull String id, @StringRes int labelRes,
+                               @StringRes int chipLabelRes, Kind kind, Unit unit, int max,
+                               @Nullable ToIntFunction<TermuxAppSharedPreferences> read,
+                               @Nullable ObjIntConsumer<TermuxAppSharedPreferences> write,
+                               int previewScopes) {
+        return new Control(id, labelRes, chipLabelRes, kind, unit, max, null, read, write,
+            previewScopes);
     }
 
     public static final String ID_LOOK = "look";
@@ -214,8 +224,8 @@ public final class SurfaceEditorProperties {
         CHIPS.put(SurfaceSlot.DOCK, Collections.unmodifiableList(Arrays.asList(
             look(),
             // Docked or Floating is the dock's first decision, so it stands as its own chip
-            // rather than riding inside Look; the pill's shape group draws it. Writes go through
-            // that group, which is why this control carries a reader only.
+            // rather than riding inside Material; the pill's shape group draws it. Writes go
+            // through that group, which is why this control carries a reader only.
             own(ID_STYLE, R.string.termux_surface_editor_chip_style, Kind.SHAPE, Unit.NONE, 1,
                 prefs -> SegmentedPillPreference.VALUE_ROUNDED
                     .equals(prefs.getAppLauncherDockStyle()) ? 1 : 0,
@@ -233,37 +243,18 @@ public final class SurfaceEditorProperties {
                     prefs.getAppLauncherBarHeightScale()),
                 (prefs, value) -> prefs.setAppLauncherBarHeightScale(
                     DockLayoutPolicy.sizePreset(value)),
+                PREVIEW_GEOMETRY),
+            own(ID_APPS, R.string.termux_dock_tuning_icons,
+                R.string.termux_surface_editor_chip_apps, Kind.SLIDER, Unit.COUNT, 20,
+                TermuxAppSharedPreferences::getAppLauncherButtonCount,
+                (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
                 PREVIEW_GEOMETRY))));
 
         CHIPS.put(SurfaceSlot.KEYBOARD, Collections.unmodifiableList(Arrays.asList(
             look(),
             cell(ID_GAP, SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
                 R.string.termux_surface_editor_chip_gap,
-                PREVIEW_GEOMETRY | PREVIEW_SURFACES))));
-
-        CHIPS.put(SurfaceSlot.STATUS, Collections.unmodifiableList(Arrays.asList(
-            look(),
-            cell(ID_CORNERS, SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS,
-                R.string.termux_surface_editor_chip_corners,
                 PREVIEW_GEOMETRY | PREVIEW_SURFACES),
-            cell(ID_GAP, SurfaceSlot.STATUS, SurfaceProperty.SIDE_GAP,
-                R.string.termux_surface_editor_chip_gap,
-                PREVIEW_GEOMETRY | PREVIEW_SURFACES))));
-
-        CHIPS.put(SurfaceSlot.CANVAS, Collections.unmodifiableList(Arrays.asList(
-            look(),
-            own(ID_BORDER, R.string.termux_dock_tuning_terminal_border, Kind.SWITCH, Unit.NONE, 1,
-                prefs -> prefs.isTerminalBorderEnabled() ? 1 : 0,
-                (prefs, value) -> prefs.setTerminalBorderEnabled(value != 0),
-                PREVIEW_ALL | PREVIEW_GEOMETRY_COMMIT))));
-
-        MORE.put(SurfaceSlot.DOCK, Collections.unmodifiableList(Collections.singletonList(
-            own(ID_APPS, R.string.termux_dock_tuning_icons, Kind.SLIDER, Unit.COUNT, 20,
-                TermuxAppSharedPreferences::getAppLauncherButtonCount,
-                (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
-                PREVIEW_GEOMETRY))));
-
-        MORE.put(SurfaceSlot.KEYBOARD, Collections.unmodifiableList(Arrays.asList(
             own(ID_KEYBOARD_HEIGHT, R.string.termux_surface_tuning_keyboard_height, Kind.SLIDER,
                 Unit.PERCENT, 100,
                 prefs -> SurfaceEditorController.keyboardEditorProgress(
@@ -297,10 +288,18 @@ public final class SurfaceEditorProperties {
                 TermuxAppSharedPreferences::getInAppKeyboardKeyOpacity,
                 TermuxAppSharedPreferences::setInAppKeyboardKeyOpacity,
                 0),
-            own(ID_KEYBOARD_COLORS, R.string.settings_keyboard_colors_title, Kind.PICKER,
+            own(ID_KEYBOARD_COLORS, R.string.settings_keyboard_colors_title,
+                R.string.termux_surface_editor_chip_colors, Kind.PICKER,
                 Unit.NONE, 0, null, null, 0))));
 
-        MORE.put(SurfaceSlot.STATUS, Collections.unmodifiableList(Arrays.asList(
+        CHIPS.put(SurfaceSlot.STATUS, Collections.unmodifiableList(Arrays.asList(
+            look(),
+            cell(ID_CORNERS, SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS,
+                R.string.termux_surface_editor_chip_corners,
+                PREVIEW_GEOMETRY | PREVIEW_SURFACES),
+            cell(ID_GAP, SurfaceSlot.STATUS, SurfaceProperty.SIDE_GAP,
+                R.string.termux_surface_editor_chip_gap,
+                PREVIEW_GEOMETRY | PREVIEW_SURFACES),
             own(ID_CLOCK, R.string.termux_surface_tuning_clock, Kind.PICKER, Unit.NONE, 0,
                 null, null, 0),
             own(ID_CHIP_RADIUS, R.string.termux_surface_tuning_indicator_radius, Kind.SLIDER,
@@ -309,18 +308,24 @@ public final class SurfaceEditorProperties {
                 TermuxAppSharedPreferences::setStatusIndicatorCornerRadius,
                 0))));
 
-        MORE.put(SurfaceSlot.CANVAS, Collections.unmodifiableList(Arrays.asList(
-            own(ID_TERMINAL_RADIUS, R.string.termux_dock_tuning_radius, Kind.SLIDER, Unit.DP, 40,
+        CHIPS.put(SurfaceSlot.CANVAS, Collections.unmodifiableList(Arrays.asList(
+            look(),
+            own(ID_BORDER, R.string.termux_dock_tuning_terminal_border, Kind.SWITCH, Unit.NONE, 1,
+                prefs -> prefs.isTerminalBorderEnabled() ? 1 : 0,
+                (prefs, value) -> prefs.setTerminalBorderEnabled(value != 0),
+                PREVIEW_ALL | PREVIEW_GEOMETRY_COMMIT),
+            own(ID_TERMINAL_RADIUS, R.string.termux_dock_tuning_radius,
+                R.string.termux_surface_editor_chip_corners, Kind.SLIDER, Unit.DP, 40,
                 TermuxAppSharedPreferences::getTerminalCornerRadius,
                 TermuxAppSharedPreferences::setTerminalCornerRadius,
                 PREVIEW_SURFACES),
-            own(ID_TERMINAL_GAP, R.string.termux_dock_tuning_terminal_inner_padding, Kind.SLIDER,
-                Unit.DP, 24,
+            own(ID_TERMINAL_GAP, R.string.termux_dock_tuning_terminal_inner_padding,
+                R.string.termux_surface_editor_chip_padding, Kind.SLIDER, Unit.DP, 24,
                 TermuxAppSharedPreferences::getTerminalPaneGap,
                 TermuxAppSharedPreferences::setTerminalPaneGap,
                 PREVIEW_SURFACES),
-            own(ID_WALLPAPER, R.string.termux_surface_editor_wallpaper_dim, Kind.SLIDER,
-                Unit.PERCENT, 100,
+            own(ID_WALLPAPER, R.string.termux_surface_editor_wallpaper_dim,
+                R.string.termux_surface_editor_chip_wallpaper, Kind.SLIDER, Unit.PERCENT, 100,
                 TermuxAppSharedPreferences::getWallpaperBackdropDim,
                 TermuxAppSharedPreferences::setWallpaperBackdropDim,
                 PREVIEW_SURFACES))));
@@ -383,13 +388,17 @@ public final class SurfaceEditorProperties {
         return CHIPS.get(slot);
     }
 
-    /** What that surface's ⋯ sheet holds; empty where there is nothing behind the chips. */
+    /**
+     * Controls behind the chip row. Empty for every surface since the chips took the whole table —
+     * a control is either a visible chip or it is not in the product — but the accessor stays so
+     * the reachability tests keep sweeping both levels.
+     */
     @NonNull
     public static List<Control> more(@NonNull SurfaceSlot slot) {
         return MORE.get(slot);
     }
 
-    /** The raw glass triple behind that surface's Look, for its Fine sheet. */
+    /** The raw glass triple behind that surface's Material, drawn under its intensity row. */
     @NonNull
     public static List<Control> fine(@NonNull SurfaceSlot slot) {
         return FINE.get(slot);

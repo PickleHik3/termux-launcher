@@ -1053,17 +1053,18 @@
                 <string name="termux_surface_preset_current_look">Current look</string>
 
                 <!-- The attached pill. One surface at a time, one property at a time. -->
-                <string name="termux_surface_editor_look">Look</string>
+                <string name="termux_surface_editor_look">Material</string>
                 <!-- Chip names: read at a glance beside three others, so the short noun. The sheet
                      rows keep the full label ("Corner radius", "Margin"). -->
                 <string name="termux_surface_editor_chip_style">Style</string>
+                <string name="termux_surface_editor_chip_apps">Apps</string>
+                <string name="termux_surface_editor_chip_colors">Colors</string>
+                <string name="termux_surface_editor_chip_padding">Padding</string>
+                <string name="termux_surface_editor_chip_wallpaper">Wallpaper</string>
                 <string name="termux_surface_editor_chip_corners">Corners</string>
                 <string name="termux_surface_editor_chip_gap">Gap</string>
-                <string name="termux_surface_editor_fine">Fine-tune</string>
                 <string name="termux_surface_editor_looks">Presets</string>
                 <string name="termux_surface_editor_close">✕</string>
-                <string name="termux_surface_editor_more">⋯</string>
-                <string name="termux_surface_editor_more_description">More %1$s settings</string>
                 <string name="termux_surface_editor_select_description">Edit %1$s</string>
                 <!-- Title of the pill: the surface it is editing, with the way to pick another. -->
                 <string name="termux_surface_editor_pill_title">%1$s ▾</string>
@@ -1079,8 +1080,8 @@
                      whether this number is the surface's own or the shared one, and the way over. -->
                 <string name="termux_surface_editor_footnote_own">%1$s’s own %2$s · ↺ to match Base (%3$s)</string>
                 <string name="termux_surface_editor_footnote_base">Following Base · move it and this becomes %1$s’s own</string>
-                <string name="termux_surface_editor_footnote_look_own">%1$s has its own look · ↺ to match Base</string>
-                <string name="termux_surface_editor_footnote_look_base">Following Base · move it and %1$s gets a look of its own</string>
+                <string name="termux_surface_editor_footnote_look_own">%1$s has its own material · ↺ to match Base</string>
+                <string name="termux_surface_editor_footnote_look_base">Following Base · move it and %1$s gets a material of its own</string>
                 <string name="termux_surface_editor_noun_blur">blur</string>
                 <string name="termux_surface_editor_noun_opacity">opacity</string>
                 <string name="termux_surface_editor_noun_grain">grain</string>

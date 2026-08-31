@@ -251,7 +251,6 @@ public final class SurfaceEditorController {
         final ChipGroup chips;
         final View look;
         final MaterialButtonToggleGroup material;
-        final TextView fine;
         final MaterialButtonToggleGroup shape;
         final View row;
         final TextView property;
@@ -260,6 +259,11 @@ public final class SurfaceEditorController {
         final TextView value;
         final TextView reset;
         final TextView footnote;
+        final View clock;
+        final TerminalClockWidget clockPreview;
+        final TextView clockChevron;
+        final LinearLayout faces;
+        final LinearLayout fineRows;
         final ViewGroup panel;
 
         /** Last text pushed into each read-out; a restate that changes nothing skips its layout. */
@@ -279,7 +283,6 @@ public final class SurfaceEditorController {
             chips = root.findViewById(R.id.surface_editor_pill_chips);
             look = root.findViewById(R.id.surface_editor_pill_look);
             material = root.findViewById(R.id.surface_editor_pill_material);
-            fine = root.findViewById(R.id.surface_editor_pill_look_fine);
             shape = root.findViewById(R.id.surface_editor_pill_shape);
             row = root.findViewById(R.id.surface_editor_pill_row);
             property = root.findViewById(R.id.surface_editor_pill_property);
@@ -288,6 +291,11 @@ public final class SurfaceEditorController {
             value = root.findViewById(R.id.surface_editor_pill_value);
             reset = root.findViewById(R.id.surface_editor_pill_reset);
             footnote = root.findViewById(R.id.surface_editor_pill_footnote);
+            clock = root.findViewById(R.id.surface_editor_pill_clock);
+            clockPreview = root.findViewById(R.id.surface_editor_pill_clock_preview);
+            clockChevron = root.findViewById(R.id.surface_editor_pill_clock_chevron);
+            faces = root.findViewById(R.id.surface_editor_pill_faces);
+            fineRows = root.findViewById(R.id.surface_editor_pill_fine_rows);
             panel = root.findViewById(R.id.surface_editor_pill_panel);
         }
 
@@ -295,7 +303,8 @@ public final class SurfaceEditorController {
             return title != null && chips != null && slider != null && value != null
                 && reset != null && footnote != null && done != null && row != null
                 && look != null && material != null && toggle != null && property != null
-                && panel != null;
+                && clock != null && clockPreview != null && clockChevron != null
+                && faces != null && fineRows != null && panel != null;
         }
     }
 
@@ -507,11 +516,10 @@ public final class SurfaceEditorController {
         // The title is the surface switcher; an outlined capsule is what says so before a touch.
         pill.title.setBackground(buildSelectorBackground());
         setLeadingIcon(pill.looks, R.drawable.ic_symbol_palette);
-        setLeadingIcon(pill.fine, R.drawable.ic_symbol_tune);
         pill.title.setOnClickListener(view -> togglePanel(PANEL_SURFACES));
         pill.property.setOnClickListener(view -> showPropertyPicker());
         pill.looks.setOnClickListener(view -> togglePanel(PANEL_LOOKS));
-        pill.fine.setOnClickListener(view -> togglePanel(PANEL_FINE));
+        pill.clock.setOnClickListener(view -> toggleClockFaces());
         pill.done.setOnClickListener(view -> exitSurfaceEditor());
         // Done is the only commit. The ✕ and the back press both route through the unsaved-changes
         // gate, so the two agree with each other without the close glyph silently throwing work
@@ -594,11 +602,10 @@ public final class SurfaceEditorController {
         boolean changed = mSelectedSlot != slot;
         mSelectedSlot = slot;
         rebuildChips(pill, slot);
+        buildFineRows(pill, slot);
         openControl(openControlId(slot), false);
-        // The ⋯ and Fine panels hold one surface's rows, so a new pick rebuilds them in place —
-        // or closes them, for a surface with nothing to fill them with. Looks is global and stays.
-        if (changed && (mOpenPanel == PANEL_MORE || mOpenPanel == PANEL_FINE))
-            openPanel(mOpenPanel);
+        if (changed)
+            collapseClockFaces(pill);
         syncPill();
         positionSelectionRing(animate && changed);
         parkPill(animate && changed);
@@ -648,18 +655,13 @@ public final class SurfaceEditorController {
             chip.setId(View.generateViewId());
             chip.setText(control.chipLabelRes);
             chip.setTag(control.id);
+            if (SurfaceEditorProperties.ID_KEYBOARD_COLORS.equals(control.id)) {
+                // Leaves the editor for its own screen, so it acts rather than opening a row.
+                chip.setCheckable(false);
+                chip.setOnClickListener(view -> mHost.openKeyboardColors());
+            }
             pill.chips.addView(chip);
         }
-        if (SurfaceEditorProperties.more(slot).isEmpty())
-            return;
-        Chip more = (Chip) inflater.inflate(R.layout.surface_editor_pill_chip, pill.chips, false);
-        more.setId(View.generateViewId());
-        more.setText(R.string.termux_surface_editor_more);
-        more.setCheckable(false);
-        more.setContentDescription(getString(R.string.termux_surface_editor_more_description,
-            getString(SurfaceEditorRows.slotLabel(slot))));
-        more.setOnClickListener(view -> togglePanel(PANEL_MORE));
-        pill.chips.addView(more);
     }
 
     /** Opens one property in the pill's single row. */
@@ -732,15 +734,28 @@ public final class SurfaceEditorController {
         boolean look = control.kind == Kind.LOOK;
         boolean toggle = control.kind == Kind.SWITCH;
         boolean shape = control.kind == Kind.SHAPE;
+        boolean clock = SurfaceEditorProperties.ID_CLOCK.equals(control.id);
         pill.look.setVisibility(look && mLayoutMode != Mode.ONE_ROW ? View.VISIBLE : View.GONE);
-        pill.slider.setVisibility(toggle || shape ? View.GONE : View.VISIBLE);
+        pill.slider.setVisibility(toggle || shape || clock ? View.GONE : View.VISIBLE);
         pill.toggle.setVisibility(toggle ? View.VISIBLE : View.GONE);
+        pill.clock.setVisibility(clock ? View.VISIBLE : View.GONE);
+        // The raw triple stands under Material's intensity row, but only where the full shape has
+        // the room for it; the macro alone still covers the tighter shapes.
+        boolean fineRows = look && mLayoutMode == Mode.FULL
+            && pill.fineRows.getChildCount() > 0;
+        pill.fineRows.setVisibility(fineRows ? View.VISIBLE : View.GONE);
+        if (!clock)
+            collapseClockFaces(pill);
         if (look)
             syncLookMaterial(pill);
+        if (clock)
+            syncClockRow(pill);
+        for (Runnable sync : mFineRowSyncs)
+            sync.run();
 
         boolean available = isAvailable(mSelectedSlot, control);
         int shown = shownValueOf(mSelectedSlot, control);
-        if (shape) {
+        if (shape || clock) {
             setValueText(pill, "");
         } else if (toggle) {
             pill.toggle.setText(control.labelRes);
@@ -1326,6 +1341,67 @@ public final class SurfaceEditorController {
         return glassId;
     }
 
+    /** The raw glass triple's row restatements; rebuilt with the rows on every surface pick. */
+    @NonNull private List<Runnable> mFineRowSyncs = new ArrayList<>();
+
+    /**
+     * Regenerates the blur/opacity/grain rows under Material for one surface. They stand on the
+     * card rather than behind a tap, so moving the macro shows exactly which numbers it moves.
+     */
+    private void buildFineRows(@NonNull Pill pill, @NonNull SurfaceSlot slot) {
+        pill.fineRows.removeAllViews();
+        List<Runnable> syncs = new ArrayList<>();
+        mFineRowSyncs = syncs;
+        for (Control control : SurfaceEditorProperties.fine(slot))
+            addControlRow(mHost.context(), pill.fineRows, control, slot, syncs);
+    }
+
+    /** The clock row: the live face at the pane's own compact size, and the dropdown triangle. */
+    private void syncClockRow(@NonNull Pill pill) {
+        if (prefs() == null)
+            return;
+        applyClockPreview(pill.clockPreview, prefs().getTopPaneClockStyle());
+        pill.clock.setContentDescription(getString(
+            R.string.termux_surface_tuning_clock_row_description,
+            getString(clockStyleLabel(prefs().getTopPaneClockStyle()))));
+    }
+
+    /** The clock row's ▾: unfolds the six faces right under the row, like the dropdown it is. */
+    private void toggleClockFaces() {
+        Pill pill = mPill;
+        if (pill == null || prefs() == null)
+            return;
+        if (mLayoutMode == Mode.ONE_ROW) {
+            // No room to unfold anything at this size; the picker dialog does the dropdown's job.
+            showClockFacePicker();
+            return;
+        }
+        if (pill.faces.getVisibility() == View.VISIBLE) {
+            collapseClockFaces(pill);
+            return;
+        }
+        buildClockFaces(mHost.context(), pill.faces);
+        pill.faces.setVisibility(View.VISIBLE);
+        pill.clockChevron.setRotation(180f);
+    }
+
+    private void collapseClockFaces(@NonNull Pill pill) {
+        if (pill.faces.getVisibility() != View.GONE)
+            pill.faces.setVisibility(View.GONE);
+        if (pill.clockChevron.getRotation() != 0f)
+            pill.clockChevron.setRotation(0f);
+    }
+
+    /** Touching the status bar while it is already selected asks about the thing it shows. */
+    private void openClockDropdown() {
+        Pill pill = mPill;
+        if (pill == null)
+            return;
+        openControl(SurfaceEditorProperties.ID_CLOCK, true);
+        if (pill.faces.getVisibility() != View.VISIBLE)
+            toggleClockFaces();
+    }
+
     /** Shape is the dock's own decision; its segments fill the open row while Style is the chip. */
     private void syncShapeGroup(@NonNull Pill pill) {
         Control control = openControl();
@@ -1350,8 +1426,13 @@ public final class SurfaceEditorController {
         if (pill == null)
             return;
         int[] region = pillRegion();
+        // The full shape grows by the raw triple while Material is open, so the room check has to
+        // ask for that too — degrading beats a card pinned over the surface it is editing.
+        Control open = openControl();
+        int fullExtraDp = open != null && open.kind == Kind.LOOK
+            ? FINE_ROW_HEIGHT_DP * SurfaceEditorProperties.fine(mSelectedSlot).size() : 0;
         Mode mode = SurfaceEditorPillMetrics.modeFor(region[1] - region[0],
-            dp(FULL_PILL_HEIGHT_DP + 2 * SURFACE_EDITOR_STANDOFF_DP),
+            dp(FULL_PILL_HEIGHT_DP + fullExtraDp + 2 * SURFACE_EDITOR_STANDOFF_DP),
             dp(COMPACT_PILL_HEIGHT_DP + 2 * SURFACE_EDITOR_STANDOFF_DP));
         if (mode == mLayoutMode && !force)
             return;
@@ -1359,8 +1440,10 @@ public final class SurfaceEditorController {
         boolean oneRow = mode == Mode.ONE_ROW;
         boolean full = mode == Mode.FULL;
         // One row cannot afford an expansion; the panel's jobs fall back to the property dropdown.
-        if (oneRow)
+        if (oneRow) {
             closePanel();
+            collapseClockFaces(pill);
+        }
         pill.root.setBackground(buildPillBackground(oneRow));
         int vertical = dp(oneRow ? 4 : full ? 12 : 10);
         pill.root.setPadding(dp(14), vertical, dp(10), vertical);
@@ -1397,6 +1480,8 @@ public final class SurfaceEditorController {
     /** What the full shape measures, near enough to choose a mode before it is laid out. */
     private static final float FULL_PILL_HEIGHT_DP = 172f;
     private static final float COMPACT_PILL_HEIGHT_DP = 130f;
+    /** One generated raw-triple row, as the layout mode's estimate. */
+    private static final int FINE_ROW_HEIGHT_DP = 36;
 
     /** The outlined capsule the surface switcher wears, so the title reads as tappable. */
     @NonNull
@@ -1759,8 +1844,14 @@ public final class SurfaceEditorController {
         group.setContentDescription(getString(R.string.termux_surface_editor_select_description,
             getString(SurfaceEditorRows.slotLabel(slot))));
         group.setOnClickListener(view -> {
-            if (mSelectedSlot != slot)
+            if (mSelectedSlot != slot) {
                 selectSurface(slot, true);
+                return;
+            }
+            // Touching the selected status bar again unfolds the clock's faces — the ▾ riding the
+            // bar's bottom edge is this gesture's signage.
+            if (slot == SurfaceSlot.STATUS)
+                openClockDropdown();
         });
         group.setOnTouchListener((view, event) -> {
             if (!mSurfaceEditorOpen || prefs() == null)
@@ -1966,6 +2057,8 @@ public final class SurfaceEditorController {
         boolean sideDrag = mHost.isFloatingDock();
         setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_pill_left, sideDrag);
         setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_pill_right, sideDrag);
+        // The clock dropdown's signage, riding the status bar's bottom edge.
+        setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_clock_handle, true);
         setSurfaceTuningSidePillVisible(R.id.surface_tuning_dock_pill_left, sideDrag);
         setSurfaceTuningSidePillVisible(R.id.surface_tuning_dock_pill_right, sideDrag);
         setSurfaceTuningSidePillVisible(R.id.surface_tuning_keyboard_pill_left, sideDrag);
@@ -2166,17 +2259,15 @@ public final class SurfaceEditorController {
 
     // --------------------------------------------------------------------------------- the panel
     //
-    // The card's one expansion, where everything that once opened as a dialog window over the pill
-    // now unfolds in place: the rest of one surface's own controls (⋯), the raw triple behind its
-    // Look (Fine), the complete looks with the shared layer under them, and the surface list. One
+    // The card's one expansion: the complete presets with the shared layer under them, and the
+    // surface list behind the title. Everything a single surface owns stands on the card itself —
+    // its chips name the whole table — so the panel holds only what is not one surface's. One
     // panel at a time, toggled by the control that owns it, height-capped to the room the region
     // leaves so the card never grows past the surfaces it is editing — taller content scrolls
     // inside it. Everything in it writes live exactly like the pill's own row.
 
     private static final int PANEL_NONE = 0;
     private static final int PANEL_LOOKS = 1;
-    private static final int PANEL_MORE = 2;
-    private static final int PANEL_FINE = 3;
     private static final int PANEL_SURFACES = 4;
 
     private int mOpenPanel = PANEL_NONE;
@@ -2207,26 +2298,6 @@ public final class SurfaceEditorController {
             case PANEL_LOOKS:
                 buildLooksPanel(context, content, syncs);
                 break;
-            case PANEL_MORE: {
-                List<Control> controls = SurfaceEditorProperties.more(mSelectedSlot);
-                if (controls.isEmpty()) {
-                    closePanel();
-                    return;
-                }
-                for (Control control : controls)
-                    addControlRow(context, content, control, mSelectedSlot, syncs);
-                break;
-            }
-            case PANEL_FINE: {
-                List<Control> controls = SurfaceEditorProperties.fine(mSelectedSlot);
-                if (controls.isEmpty()) {
-                    closePanel();
-                    return;
-                }
-                for (Control control : controls)
-                    addControlRow(context, content, control, mSelectedSlot, syncs);
-                break;
-            }
             case PANEL_SURFACES:
                 buildSurfacesPanel(context, content);
                 break;
@@ -2338,58 +2409,6 @@ public final class SurfaceEditorController {
         TextView value = rowView.findViewById(R.id.surface_editor_row_value);
         TextView chip = rowView.findViewById(R.id.surface_editor_row_chip);
         label.setText(controlLabel(control));
-
-        if (control.kind == Kind.PICKER) {
-            slider.setVisibility(View.GONE);
-            value.setVisibility(View.GONE);
-            chip.setText(R.string.termux_surface_tuning_clock_chevron);
-            chip.setTextColor(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                R.color.termux_primary));
-            rowView.setClickable(true);
-            rowView.setFocusable(true);
-            into.addView(rowView);
-            if (SurfaceEditorProperties.ID_KEYBOARD_COLORS.equals(control.id)) {
-                // Leaves the editor for its own screen, so the panel does not stay behind it.
-                rowView.setOnClickListener(view -> {
-                    closePanel();
-                    mHost.openKeyboardColors();
-                });
-                return;
-            }
-            if (!SurfaceEditorProperties.ID_CLOCK.equals(control.id))
-                return;
-            // The clock row draws the live face rather than naming it; the editor collapses the
-            // status pane on entry, so this is the only place the choice can be seen while it is
-            // being made. The row unfolds the six faces right under itself — in the card, like
-            // everything else.
-            TerminalClockWidget preview = new TerminalClockWidget(context, null);
-            preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            ((ViewGroup) rowView).addView(preview, 1,
-                new LinearLayout.LayoutParams(0, dp(28), 1f));
-            Runnable sync = () -> {
-                if (prefs() == null)
-                    return;
-                applyClockPreview(preview, prefs().getTopPaneClockStyle());
-                rowView.setContentDescription(getString(
-                    R.string.termux_surface_tuning_clock_row_description,
-                    getString(clockStyleLabel(prefs().getTopPaneClockStyle()))));
-            };
-            syncs.add(sync);
-            sync.run();
-            LinearLayout faces = new LinearLayout(context);
-            faces.setOrientation(LinearLayout.VERTICAL);
-            faces.setVisibility(View.GONE);
-            into.addView(faces);
-            rowView.setOnClickListener(view -> {
-                if (faces.getVisibility() == View.VISIBLE) {
-                    faces.setVisibility(View.GONE);
-                    return;
-                }
-                buildClockFaces(context, faces);
-                faces.setVisibility(View.VISIBLE);
-            });
-            return;
-        }
 
         slider.setMax(control.max);
         Runnable sync = () -> {
@@ -3183,6 +3202,7 @@ public final class SurfaceEditorController {
         // One place re-reads face, alignment, 12-hour and lazy mode onto the live widget.
         mHost.refreshTerminalWindowBar();
         syncOpenPanel();
+        syncPill();
         updateSurfaceEditorDirtyBadge();
     }
 
@@ -3357,6 +3377,8 @@ public final class SurfaceEditorController {
         mSurfaceEditorEntrySignature = null;
         mSurfaceEditorRevert = null;
         closePanel();
+        if (mPill != null)
+            collapseClockFaces(mPill);
         mSurfaceEditorOpen = false;
         setSurfaceTuningGestureOverlayVisible(false);
         unregisterSurfaceEditorLayoutListener();

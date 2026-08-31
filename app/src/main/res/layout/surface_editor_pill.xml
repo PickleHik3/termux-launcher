@@ -121,9 +121,9 @@
         app:singleLine="false"
         app:singleSelection="true" />
 
-    <!-- Look: the glass triple said as one decision. Blur, opacity and grain are still editable
-         raw, behind Fine, but they are no longer the first thing the editor shows — which is the
-         change that removed the scrolling. -->
+    <!-- Material: the glass triple said as one decision — a family and an intensity, with the raw
+         blur, opacity and grain rows drawn right under it (surface_editor_pill_fine_rows), so
+         nothing about a surface's material hides behind a second tap. -->
     <LinearLayout
         android:id="@+id/surface_editor_pill_look"
         android:layout_width="match_parent"
@@ -200,20 +200,6 @@
                 app:autoSizeTextType="uniform" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
-        <!-- The raw glass triple behind Look, unfolding into the card's panel. -->
-        <TextView
-            android:id="@+id/surface_editor_pill_look_fine"
-            android:layout_width="wrap_content"
-            android:layout_height="34dp"
-            android:layout_marginTop="2dp"
-            android:background="?attr/selectableItemBackground"
-            android:drawablePadding="5dp"
-            android:gravity="center"
-            android:maxLines="1"
-            android:paddingHorizontal="8dp"
-            android:text="@string/termux_surface_editor_fine"
-            android:textColor="?attr/termuxColorPrimary"
-            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- The one open row. Whichever chip is active points this at its own value; the pill may lose
@@ -253,6 +239,36 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:visibility="gone" />
+
+        <!-- The Clock chip's control: the live face itself with a dropdown triangle, the way a
+             2026 selector reads. Tapping it unfolds the faces right below the row. -->
+        <LinearLayout
+            android:id="@+id/surface_editor_pill_clock"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <com.termux.app.terminal.TerminalClockWidget
+                android:id="@+id/surface_editor_pill_clock_preview"
+                android:layout_width="0dp"
+                android:layout_height="30dp"
+                android:layout_weight="1"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/surface_editor_pill_clock_chevron"
+                android:layout_width="30dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:text="@string/termux_surface_tuning_clock_chevron"
+                android:textColor="?attr/termuxColorPrimary"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <!-- The Style chip's control: Docked and Floating resolve the dock's geometry differently
              and always have. Fills the open row while that chip is selected. -->
@@ -329,6 +345,23 @@
             android:textColor="?attr/termuxColorPrimary"
             android:textSize="15sp" />
     </LinearLayout>
+
+    <!-- The Clock chip's unfolded faces, right under the row that names them. -->
+    <LinearLayout
+        android:id="@+id/surface_editor_pill_faces"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone" />
+
+    <!-- The raw glass triple, standing under Material's intensity row so every number the macro
+         moves is on the same card it is moved from. Rows generated per surface. -->
+    <LinearLayout
+        android:id="@+id/surface_editor_pill_fine_rows"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/surface_editor_pill_footnote"
