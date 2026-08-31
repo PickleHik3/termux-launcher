@@ -8645,6 +8645,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setAppDrawerInterceptorActive(active);
         }
 
+        @Override public void hideSystemKeyboard() {
+            if (!isImeVisible() || getWindow() == null) return;
+            mSystemImeHiddenForDrawer = true;
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .hide(Type.ime());
+        }
+
+        @Override public void restoreSystemKeyboard() {
+            if (!mSystemImeHiddenForDrawer) return;
+            mSystemImeHiddenForDrawer = false;
+            if (getWindow() == null || isSystemImeSuppressedByInAppKeyboard()) return;
+            // The keyboard was up when the drawer took the screen; the user's context is typing,
+            // so the dismissal is undone rather than left as a surprise.
+            onSystemImeRequested();
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .show(Type.ime());
+        }
+
         @Override public void requestSearchKeyboard() {
             requestAppDrawerSearchKeyboard();
         }
@@ -13863,6 +13881,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mAccessoryLayoutChangeListener = null;
     }
+
+    /** The drawer dismissed a visible system IME on engage; restored when the drawer goes. */
+    private boolean mSystemImeHiddenForDrawer;
 
     private boolean isImeVisible() {
         View content = findViewById(android.R.id.content);

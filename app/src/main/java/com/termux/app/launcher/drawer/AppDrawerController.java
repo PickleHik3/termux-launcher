@@ -111,6 +111,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         /** The search asked for a system IME while the terminal keeps focus. */
         void requestSearchKeyboard();
+        /** Dismiss the system IME: the drawer is taking the screen and must not open under it. */
+        void hideSystemKeyboard();
+        /** The drawer is gone; an IME it dismissed on the way in comes back. */
+        void restoreSystemKeyboard();
     }
 
     /**
@@ -309,7 +313,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // drawer; anything between is a plane caught mid-settle, which continues from there rather
         // than snapping to an end.
         mGrabProgress = mProgress.value;
+        mCloseTimeAnim = false;
         mEngaged = true;
+        // With the embedded keyboard the IME can never be up here; with the system keyboard it
+        // stayed open across the drawer, covering the grid until dismissed by hand.
+        mHost.hideSystemKeyboard();
         applyFrame(mProgress.value);
         // The rope needs frames for the whole drag, not just for the release: its anchor is a
         // function of p, so the chain has to be integrated while the finger is moving or the letters
@@ -1258,6 +1266,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         } finally {
             mEngaged = false;
             mHost.flushPendingAccessoryGeometry();
+            mHost.restoreSystemKeyboard();
         }
     }
 
