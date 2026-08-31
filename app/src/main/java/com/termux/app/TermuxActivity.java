@@ -112,6 +112,7 @@ import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -1611,7 +1612,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // — there each pane rounds its own slab, and a second clip around the set of them
             // would box the floating slabs back inside a sheet.
             float hostRadiusPx = glass ? 0f : dockedTerminalCornerRadiusPx();
-            applyPaneHostCornerPadding(paneHost, Math.round(hostRadiusPx * 0.30f));
+            applyPaneHostCornerPadding(paneHost, PaneShape.contentInsetPx(hostRadiusPx));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 paneHost.setOutlineProvider(hostRadiusPx > 0f
                     ? roundedOutlineProvider(hostRadiusPx)
@@ -1640,13 +1641,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateTerminalGlassFrost();
 
         float innerRadiusPx = Math.max(0f, cornerRadiusPx - paneInsetPx);
-        // A rounded rect of radius r reaches r·(1 - 1/√2) ≈ 0.293r past its own corner along the
-        // diagonal, so content that starts at the corner of a clip with radius r loses that much of
-        // its first cell. Padding the host by the arc's depth is what keeps the corner glyphs whole,
-        // and because it is derived from the radius it holds at 20dp and at 40dp alike — the same
-        // trade tmux and zellij make when they spend a whole cell on the frame: the frame owns
-        // space the content never enters.
-        applyPaneHostCornerPadding(paneHost, Math.round(innerRadiusPx * 0.30f));
+        // Padding the host by the arc's own depth (PaneShape.contentInsetPx) is what keeps the
+        // corner glyphs whole, and because it is derived from the radius it holds at 20dp and at
+        // 40dp alike — the same trade tmux and zellij make when they spend a whole cell on the
+        // frame: the frame owns space the content never enters. Each pane pays the same clearance
+        // again for its own corners, against its own radius (PaneContentFrame).
+        applyPaneHostCornerPadding(paneHost, PaneShape.contentInsetPx(innerRadiusPx));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             paneHost.setOutlineProvider(innerRadiusPx > 0f

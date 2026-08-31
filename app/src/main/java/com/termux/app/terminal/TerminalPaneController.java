@@ -132,7 +132,10 @@ public class TerminalPaneController {
     private static final int FLOAT_PILL_BUTTON_DP = 44;
     /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
     private static final int FLOAT_ELEVATION_DP = 4;
-    /** Matches pane_active_border.xml's corner radius, so the content clip and its border ring agree. */
+    /**
+     * Matches pane_active_border.xml's corner radius, so the content clip and its border ring
+     * agree. Also the radius a tiled pane wears while that stroke is its frame.
+     */
     private static final int FLOAT_CORNER_RADIUS_DP = 6;
     /** How far the resize glow reaches in from the pane's edge. */
     private static final float GLOW_DEPTH_DP = 12f;
@@ -290,7 +293,7 @@ public class TerminalPaneController {
     /** All live windows (across every session). */
     private final List<Window> mWindows = new ArrayList<>();
     /** Cached pane frames + terminal views, keyed by shell session (reused across re-renders). */
-    private final Map<TerminalSession, FrameLayout> mPaneFrames = new HashMap<>();
+    private final Map<TerminalSession, PaneContentFrame> mPaneFrames = new HashMap<>();
     private final Map<TerminalSession, TerminalView> mPaneViews = new HashMap<>();
     /** Live border drawable + focus state per pane, so a focus flip can crossfade and a
      *  redundant re-render can leave a mid-flight crossfade untouched instead of snapping it. */
@@ -2135,7 +2138,7 @@ public class TerminalPaneController {
         mMoveOrigins.clear();
         if (!arePaneAnimationsEnabled()) return;
         int[] location = new int[2];
-        for (Map.Entry<TerminalSession, FrameLayout> entry : mPaneFrames.entrySet()) {
+        for (Map.Entry<TerminalSession, PaneContentFrame> entry : mPaneFrames.entrySet()) {
             FrameLayout frame = entry.getValue();
             if (!canAnimateView(frame)) continue;
             frame.getLocationOnScreen(location);
@@ -2684,8 +2687,6 @@ public class TerminalPaneController {
             if (backdrop == null) continue;
             if (!glass) {
                 backdrop.setVisibility(View.GONE);
-                frame.setClipToOutline(false);
-                frame.setOutlineProvider(ViewOutlineProvider.BOUNDS);
                 releasePanePlank(frame);
                 continue;
             }
@@ -2698,20 +2699,10 @@ public class TerminalPaneController {
                 mSurfaceStyle.paneGlassGrainLayer(), paneRadiusPx,
                 mSurfaceStyle.paneGlassFrostFilter());
             backdrop.setVisibility(View.VISIBLE);
-            // The terminal paints rectangular cell backgrounds; without the clip they poke past
-            // the slab's rounded corners exactly as they did past the float's.
-            final float requestedRadiusPx = radiusPx;
-            frame.setOutlineProvider(new ViewOutlineProvider() {
-                @Override public void getOutline(View view, Outline outline) {
-                    // Re-capped here as well as above: a drag on a split divider resizes the frame
-                    // without going back through applyPaneGlass, and the outline is asked again.
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
-                        PaneShape.radiusForBounds(requestedRadiusPx,
-                            view.getWidth(), view.getHeight()));
-                }
-            });
-            frame.setClipToOutline(true);
         }
+        // The clip that keeps the terminal's rectangular cell backgrounds from poking past the
+        // slab's corners is part of the pane's shape, which updateActiveBorders owns for every
+        // pane, glass or not — it runs on every render, and this does not.
         updateActiveBorders();
     }
 
@@ -2746,9 +2737,9 @@ public class TerminalPaneController {
     }
 
     private FrameLayout paneFrameFor(TerminalSession session) {
-        FrameLayout frame = mPaneFrames.get(session);
+        PaneContentFrame frame = mPaneFrames.get(session);
         if (frame == null) {
-            frame = (FrameLayout) mInflater.inflate(R.layout.view_terminal_pane, mHostView, false);
+            frame = (PaneContentFrame) mInflater.inflate(R.layout.view_terminal_pane, mHostView, false);
             TerminalView view = frame.findViewById(R.id.terminal_view);
             if (mHostSurfaceResizeDepth > 0) view.setTerminalSizeUpdatesPaused(true);
             mHost.configurePaneView(view);
@@ -2833,17 +2824,25 @@ public class TerminalPaneController {
         }
         for (TerminalView v : views) {
             TerminalSession paneSession = v.getCurrentSession();
-            FrameLayout frame = mPaneFrames.get(paneSession);
+            PaneContentFrame frame = mPaneFrames.get(paneSession);
             if (frame == null) continue;
             boolean floating = floatingSessions.contains(paneSession);
-            if (!split && mMaximizedLeaf == null && !floating && !paneGlassActive()) {
+            // The pane's shape, and with it the clearance the terminal is laid out inside: the
+            // glass slab's radius, the float's card, or the focus stroke's own arc. Only glass
+            // clips here — a float clips on its own wrapper and a stroke does not clip at all —
+            // but all three round the same corners over the same cells.
+            boolean glassShape = paneGlassActive();
+            float shapeRadiusPx = glassShape ? paneGlassRadiusPx()
+                : (floating || split || mMaximizedLeaf != null) ? dp(FLOAT_CORNER_RADIUS_DP) : 0f;
+            frame.setPaneShape(shapeRadiusPx, glassShape);
+            if (!split && mMaximizedLeaf == null && !floating && !glassShape) {
                 PaneBorderState gone = mBorderStates.remove(paneSession);
                 if (gone != null && gone.animator != null) gone.animator.cancel();
                 frame.setForeground(null);
                 continue;
             }
             boolean isActive = paneSession == activeSession;
-            boolean glass = paneGlassActive();
+            boolean glass = glassShape;
             // Same Material primary hue for every pane, but the focused pane's border is at full
             // strength while the rest are dimmed — an unambiguous, theme-proof focus cue. On glass
             // the stroke gives way to the shared lit rim, which is the slab's own edge; a drawn
