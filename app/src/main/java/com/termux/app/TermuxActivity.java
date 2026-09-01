@@ -4940,6 +4940,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (insets.isVisible(Type.navigationBars())) {
             return 0;
         }
+        // Some OEM gesture-nav builds report the navigation bar hidden while the window is still
+        // resized above the IME, which turned this lift into a second one (#23). A hidden nav bar
+        // alone is not proof of a hidden-bars layout — require the status bar to be gone too, which
+        // holds for the fullscreen property and forced immersive but not for those builds.
+        if (insets.isVisible(Type.statusBars())) {
+            return 0;
+        }
         return Math.max(0,
             insets.getInsets(Type.ime()).bottom - insets.getInsets(Type.navigationBars()).bottom);
     }
