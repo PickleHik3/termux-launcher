@@ -538,6 +538,17 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_KEY_SOUND_ENABLED = false;
 
         /**
+         * Defines the key for whether the built-in keyboard learns where the user's taps land
+         * and nudges presses near a key boundary onto the key they usually mean. Off by
+         * default: it is the home screen's keyboard, and the model is learned from the user's
+         * own typing, so it has to be asked for.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_TAP_CORRECTION =
+            "in_app_keyboard_tap_correction";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_TAP_CORRECTION = false;
+
+        /**
          * Defines the key for the absolute path of a user-imported label font file,
          * or an empty string for the system default typeface.
          */

@@ -1,6 +1,9 @@
 # Correcting mis-taps on the in-app keyboard — feasibility
 
-Status: study only, nothing implemented. Written 2026-08-31 at the developer's request: "add
+Status: stage 1 implemented 2026-09-01 (`TapModel`, `TapModelStore`, `TapCorrectionController`
+in `app/.../terminal/inappkeyboard/`, hook in `Keyboard2View.TapResolver`; setting "Learn where
+you tap", off by default, with "Forget learned taps"). See "Implementation notes" at the end for
+where the build departed from this study. Written 2026-08-31 at the developer's request: "add
 something like the Gboard or iOS keyboard has, where the keyboard fixes users' slight mis-inputs",
 noting that the in-app keyboard has no autocorrect and no dictionary, and asking whether a heatmap
 over the user's own typing history could get there instead.
@@ -192,3 +195,28 @@ Feasible, worth doing, and smaller than it looks — provided it stays a *tap* m
 already there (`getKeyAtPosition`, `TouchFx`, `isSwipe`), the vendored module needs one narrow
 host hook, and the supervision signal is free. The dictionary half of "autocorrect" is closed by
 the terminal itself and should be recorded as closed rather than reattempted.
+
+## Implementation notes (2026-09-01, stage 1)
+
+Checked against the code before building; four points of the study needed correcting.
+
+- **`isSwipe` is not the tap verdict.** `Pointers.onTouchDown` fires `onPointerDown(value, false)`
+  for every press at touch-down, before any movement; the swipe arrives later as a second
+  `onPointerDown(…, true)` and `onPointerUp` carries no flag. The observer therefore reads
+  `TouchFx.swiped` in the view's `ACTION_UP` branch, not the pointer callbacks.
+- **`getKeyAtPosition` is shared with the colour-editor paint path.** Correction wraps the
+  `ACTION_DOWN` call site only; painting a key colour is never corrected.
+- **Observations are recorded against the raw static-grid key**, never the corrected key, so the
+  model cannot train on its own output and drift to the cap.
+- **Stage 1 already learns the boundary, not the centre.** Per-key centroids are kept, but the
+  decision uses the mean of the two keys' shrunk biases for each pair, so the boundary between two
+  keys is one line seen from either side (no crossover band, no gap). Stage 2 becomes "add a
+  supervised update to that same pair estimate", not a rewrite.
+- **The multi-touch rule was relaxed** to "both the raw key and the corrected key must be plain
+  character keys". Ctrl held on one thumb and a letter tapped with the other is exactly where a
+  correction helps, and the character-only guard already excludes every modifier and action key
+  in either direction.
+
+Parameters: shrinkage n/(n+20), cap 0.3 of the narrower key along each axis, statistics halved
+when a key reaches 400 taps, store bounded to 8 layout×geometry entries (LRU), written 5 s after
+the last tap and on stop. Off means off: disabled, nothing is corrected and nothing is recorded.

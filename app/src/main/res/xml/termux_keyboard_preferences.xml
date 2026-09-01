@@ -91,6 +91,18 @@
             app:title="@string/settings_supported_keys_title" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:key="keyboard_typing" app:title="@string/settings_typing_header">
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_tap_correction"
+            app:title="@string/settings_keyboard_tap_correction_title"
+            app:summary="@string/settings_keyboard_tap_correction_summary"
+            android:defaultValue="false" />
+        <Preference
+            app:key="in_app_keyboard_tap_correction_reset"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_tap_correction_reset_title" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:key="keyboard_feedback" app:title="@string/settings_feedback_header">
         <SwitchPreferenceCompat
             app:key="in_app_keyboard_haptics_enabled"

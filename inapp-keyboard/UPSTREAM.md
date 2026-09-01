@@ -16,7 +16,8 @@ under GPL-3.0.
   `ComposeKeyData.java`, `Gesture.java`, `KeyModifier.java`, `KeyValue.java`,
   `KeyValueParser.java`, `Keyboard2View.java`, `KeyboardData.java`,
   `LayoutModifier.java`, `Logs.java`, `Modmap.java`, `Pointers.java`,
-  `Theme.java`, `Utils.java`, and `VibratorCompat.java`.
+  `Theme.java`, `Utils.java`, and `VibratorCompat.java`. `TapGeometry.java` is
+  a local addition with no upstream counterpart.
 - All 90 XML layouts from `srcs/layouts/`, copied as ordinary resources under
   `src/main/res/xml/`.
 - `res/xml/bottom_row.xml`, `number_row.xml`, `number_row_no_symbols.xml`,
@@ -112,6 +113,17 @@ fails when the catalogue has gone stale.
   of a global config; locale/method extra keys and the always-added `CONFIG`
   key are not ported.
 - Stateful suggestion labels have no global provider and render empty.
+- Tap correction hook (local addition): `Keyboard2View.TapResolver` plus
+  `setTapResolver`, and the new file `TapGeometry.java`. At `ACTION_DOWN` the
+  view resolves the static grid as upstream does, then lets the host resolver
+  move the press to another key index before `Pointers.onTouchDown`; the raw
+  point still reaches `Pointers`, so swipe directions are unchanged. At
+  `ACTION_UP` the resolver is told the raw key, the down point and whether
+  `TouchFx.swiped` fired. `TouchFx` gained a `rawKey` field for that. The
+  colour-editor paint path (`paintKeyAt`) never consults the resolver. The
+  model itself lives in the launcher
+  (`app/.../terminal/inappkeyboard/TapModel`, `TapModelStore`,
+  `TapCorrectionController`); the module holds no learning logic.
 - Logging, utilities, and haptics are reduced to the retained embedded needs.
 
 ## Refresh procedure

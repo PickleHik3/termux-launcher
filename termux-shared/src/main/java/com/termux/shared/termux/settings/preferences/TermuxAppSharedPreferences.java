@@ -914,6 +914,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED, value, false);
     }
 
+    /** Whether the built-in keyboard learns the user's tap offsets and corrects near-miss presses. */
+    public boolean isInAppKeyboardTapCorrectionEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TAP_CORRECTION,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_TAP_CORRECTION);
+    }
+
+    public void setInAppKeyboardTapCorrectionEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TAP_CORRECTION, value, false);
+    }
+
     public boolean isInAppKeyboardKeySoundEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED,

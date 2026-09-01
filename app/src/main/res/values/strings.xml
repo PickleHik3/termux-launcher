@@ -196,6 +196,15 @@
     <string name="settings_layout_documentation_title">Layout documentation</string>
     <string name="settings_supported_keys_title">Supported key values</string>
     <string name="settings_feedback_header">Feedback</string>
+    <string name="settings_typing_header">Typing</string>
+    <string name="settings_keyboard_tap_correction_title">Learn where you tap</string>
+    <string name="settings_keyboard_tap_correction_summary">Nudge presses toward the key you usually mean, based on your own typing.</string>
+    <string name="settings_keyboard_tap_correction_reset_title">Forget learned taps</string>
+    <string name="settings_keyboard_tap_correction_reset_summary_none">Nothing learned yet.</string>
+    <plurals name="settings_keyboard_tap_correction_reset_summary">
+        <item quantity="one">Learned from %1$d tap.</item>
+        <item quantity="other">Learned from %1$d taps.</item>
+    </plurals>
     <string name="settings_haptic_feedback_title">Haptic feedback</string>
     <string name="settings_keypress_sound_title">Keypress sound</string>
     <string name="settings_keyboard_credits_header">Keyboard credits</string>

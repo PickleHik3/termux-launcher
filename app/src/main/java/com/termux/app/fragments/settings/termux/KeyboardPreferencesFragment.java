@@ -26,6 +26,8 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
+import com.termux.app.terminal.inappkeyboard.TapCorrectionController;
+import com.termux.app.terminal.inappkeyboard.TapModelStore;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -57,6 +59,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_CREDITS_PLAY = "keyboard_credits_play";
     private static final String KEY_DOCS_LAYOUTS = "keyboard_docs_layouts";
     private static final String KEY_DOCS_KEYS = "keyboard_docs_keys";
+    private static final String KEY_TAP_CORRECTION_RESET = "in_app_keyboard_tap_correction_reset";
 
     private static final String UPSTREAM_GITHUB_URL =
         "https://github.com/Julow/Unexpected-Keyboard";
@@ -127,6 +130,18 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         bindLinkPreference(KEY_DOCS_KEYS, DOCS_KEYS_URL);
         bindLinkPreference(KEY_CREDITS_GITHUB, UPSTREAM_GITHUB_URL);
         bindLinkPreference(KEY_CREDITS_PLAY, UPSTREAM_PLAY_URL);
+        Preference tapReset = findPreference(KEY_TAP_CORRECTION_RESET);
+        if (tapReset != null) {
+            refreshTapCorrectionSummary(tapReset);
+            tapReset.setOnPreferenceClickListener(preference -> {
+                TapModelStore.delete(TapCorrectionController.modelFile(context));
+                refreshTapCorrectionSummary(preference);
+                // The running keyboard holds its own copy; it re-reads the file on the way back.
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
+                return true;
+            });
+        }
+
         Preference customLayout = findPreference("in_app_keyboard_custom_layout");
         if (customLayout != null) customLayout.setOnPreferenceClickListener(preference -> {
             validateCustomLayout();
@@ -134,6 +149,18 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         });
 
         SettingsLayoutUtils.applyScreenLayout(this);
+    }
+
+    private void refreshTapCorrectionSummary(Preference preference) {
+        Context context = getContext();
+        if (context == null) return;
+        int taps = Math.round(
+            TapModelStore.load(TapCorrectionController.modelFile(context)).totalTaps());
+        if (taps <= 0)
+            preference.setSummary(R.string.settings_keyboard_tap_correction_reset_summary_none);
+        else
+            preference.setSummary(getResources().getQuantityString(
+                R.plurals.settings_keyboard_tap_correction_reset_summary, taps, taps));
     }
 
     private void validateCustomLayout() {
@@ -436,6 +463,10 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_key_sound_enabled":
                 mPreferences.setInAppKeyboardKeySoundEnabled(value);
                 break;
+            case "in_app_keyboard_tap_correction":
+                mPreferences.setInAppKeyboardTapCorrectionEnabled(value);
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+                break;
             case "app_launcher_extra_keys_row_enabled":
                 mPreferences.setAppLauncherExtraKeysRowEnabled(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(
@@ -468,6 +499,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardHapticsEnabled();
             case "in_app_keyboard_key_sound_enabled":
                 return mPreferences.isInAppKeyboardKeySoundEnabled();
+            case "in_app_keyboard_tap_correction":
+                return mPreferences.isInAppKeyboardTapCorrectionEnabled();
             case "app_launcher_extra_keys_row_enabled":
                 return mPreferences.isAppLauncherExtraKeysRowEnabled();
             case "extra_keys_text_all_caps": {
