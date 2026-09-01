@@ -1167,6 +1167,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, value);
     }
 
+    /** Extra air under the last key row, in dp, inside the keyboard's own surface. */
+    public int getInAppKeyboardBottomPadding() {
+        return clampInAppKeyboardBottomPadding(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING));
+    }
+
+    public void setInAppKeyboardBottomPadding(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            clampInAppKeyboardBottomPadding(value), false);
+    }
+
+    public static int clampInAppKeyboardBottomPadding(int value) {
+        return DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING);
+    }
+
     public int getInAppKeyboardKeyOpacity() {
         return clampInAppKeyboardKeyOpacity(SharedPreferenceUtils.getInt(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY,

@@ -493,6 +493,23 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
     }
 
     @Override
+    public void putInt(String key, int value) {
+        if (mPreferences == null || !"in_app_keyboard_bottom_padding".equals(key))
+            return;
+        mPreferences.setInAppKeyboardBottomPadding(value);
+        // The keyboard is laid out by the activity, not by this screen, so the change lands when
+        // the user goes back to it — the same route the extra-keys row toggle takes.
+        TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+    }
+
+    @Override
+    public int getInt(String key, int defValue) {
+        if (mPreferences == null || !"in_app_keyboard_bottom_padding".equals(key))
+            return defValue;
+        return mPreferences.getInAppKeyboardBottomPadding();
+    }
+
+    @Override
     public void putString(String key, @Nullable String value) {
         if (mPreferences == null || key == null)
             return;

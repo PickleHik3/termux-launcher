@@ -3545,6 +3545,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mInAppKeyboardSchemeBackgroundColor;
     }
 
+    /** The Settings knob for the air under the last key row, in pixels. */
+    private int resolveInAppKeyboardBottomPaddingPx() {
+        if (mPreferences == null)
+            return 0;
+        return Math.round(dpToPx(mPreferences.getInAppKeyboardBottomPadding()));
+    }
+
     private int getInAppKeyboardBackgroundOpacityPercent() {
         return mPreferences != null
             ? mPreferences.getInAppKeyboardBackgroundOpacity()
@@ -3630,6 +3637,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int bottomMargin = capsule ? getDockLayout().capsuleBottomGapPx : 0;
         int topMargin = capsule ? Math.round(dpToPx(4)) : 0;
         int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
+        // The user's own chin allowance, from Settings. Padding inside the slab rather than a
+        // margin under it, so the material still runs to the screen edge and only the keys move up.
+        int innerBottomPadding = innerPadding + resolveInAppKeyboardBottomPaddingPx();
         ViewGroup.LayoutParams layoutParams = surfaceHost.getLayoutParams();
         if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
@@ -3647,8 +3657,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (surfaceHost.getPaddingLeft() != innerPadding
             || surfaceHost.getPaddingTop() != innerPadding
             || surfaceHost.getPaddingRight() != innerPadding
-            || surfaceHost.getPaddingBottom() != innerPadding) {
-            surfaceHost.setPadding(innerPadding, innerPadding, innerPadding, innerPadding);
+            || surfaceHost.getPaddingBottom() != innerBottomPadding) {
+            surfaceHost.setPadding(innerPadding, innerPadding, innerPadding, innerBottomPadding);
             mKeyboardGeometry.markHeightDirty();
             mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         }

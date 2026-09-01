@@ -180,6 +180,8 @@
     <string name="settings_keyboard_colors_title">Keyboard colors</string>
     <string name="settings_keyboard_colors_summary">Edit keyboard colors with a persistent live preview.</string>
     <string name="settings_typeface_title">Typeface</string>
+    <string name="settings_keyboard_bottom_padding_title">Space under the keys</string>
+    <string name="settings_keyboard_bottom_padding_summary">Lift the bottom key row away from the edge of the screen.</string>
     <string name="settings_layout_header">Layout</string>
     <string name="settings_extra_keys_title">Extra keys</string>
     <string name="settings_extra_keys_summary">Choose keys to add to the built-in keyboard.</string>

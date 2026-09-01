@@ -636,6 +636,22 @@ public final class TermuxPreferenceConstants {
         public static final float MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 24.0f;
 
         /**
+         * Defines the extra air in dp under the last key row, inside the keyboard's own surface.
+         * The slab keeps its bounds, so the material still runs to the screen edge; only the keys
+         * move up — which is what clears a gesture bar without leaving a bare strip under the
+         * glass. Lives in Settings rather than the surface editor: it is a fit against one
+         * device's chin, not part of a look.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_BOTTOM_PADDING =
+            "in_app_keyboard_bottom_padding";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING = 0;
+
+        public static final int MIN_IN_APP_KEYBOARD_BOTTOM_PADDING = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_BOTTOM_PADDING = 48;
+
+        /**
          * Defines the absolute key cap opacity in percent (0 = invisible caps, 100 = fully
          * opaque), or -1 to keep the keyboard theme's own key translucency. Unlike the theme
          * value, this is independent of the surface/glass opacity stack.

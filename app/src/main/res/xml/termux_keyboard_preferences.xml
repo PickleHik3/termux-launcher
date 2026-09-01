@@ -56,6 +56,13 @@
         <Preference
             app:key="in_app_keyboard_font"
             app:title="@string/settings_typeface_title" />
+        <SeekBarPreference
+            app:key="in_app_keyboard_bottom_padding"
+            app:title="@string/settings_keyboard_bottom_padding_title"
+            app:summary="@string/settings_keyboard_bottom_padding_summary"
+            app:showSeekBarValue="true"
+            android:max="48"
+            android:defaultValue="0" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_layout" app:title="@string/settings_layout_header">
