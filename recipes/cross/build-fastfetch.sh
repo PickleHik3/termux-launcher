@@ -53,8 +53,12 @@ fi
 #
 # termux-pwd-polyfill.h is force-included for the same class of reason: the stock NDK's getpwuid()
 # reports pw_dir="/data" for an app uid, and Fastfetch trusts passwd over $HOME, so without it the
-# binary never finds ~/.config/fastfetch and quietly falls back to the built-in ASCII logo.
-echo "Configuring..."
+# binary never finds ~/.config/fastfetch and quietly falls back to the built-in ASCII logo. Its
+# prefix and home have to be handed to it explicitly, or a build for another edition would resolve
+# the home directory to the default one, which is not this edition's.
+POLYFILL_FLAGS="-DTERMUX_POLYFILL_PREFIX=\\\"$TERMUX_PREFIX\\\" -DTERMUX_POLYFILL_HOME=\\\"$TERMUX_HOME\\\""
+
+echo "Configuring for $TERMUX_PREFIX..."
 PKG_CONFIG_SYSROOT_DIR="$TL_SYSROOT" \
 PKG_CONFIG_LIBDIR="$PREFIX_IN_SYSROOT/lib/pkgconfig" \
 cmake -S "$source_dir" -B "$TL_BUILD_DIR/build" -G Ninja \
@@ -66,8 +70,8 @@ cmake -S "$source_dir" -B "$TL_BUILD_DIR/build" -G Ninja \
     -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
     -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
     -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
-    -DCMAKE_C_FLAGS="-I$PREFIX_IN_SYSROOT/include -include $PWD_POLYFILL" \
-    -DCMAKE_CXX_FLAGS="-I$PREFIX_IN_SYSROOT/include -include $PWD_POLYFILL" \
+    -DCMAKE_C_FLAGS="-I$PREFIX_IN_SYSROOT/include -include $PWD_POLYFILL $POLYFILL_FLAGS" \
+    -DCMAKE_CXX_FLAGS="-I$PREFIX_IN_SYSROOT/include -include $PWD_POLYFILL $POLYFILL_FLAGS" \
     -DCMAKE_EXE_LINKER_FLAGS="-L$PREFIX_IN_SYSROOT/lib -landroid-glob -Wl,-rpath,$TERMUX_PREFIX/lib" \
     -DTARGET_DIR_HOME="$TERMUX_HOME" \
     -DTARGET_DIR_ROOT="$TERMUX_PREFIX" \

@@ -21,6 +21,10 @@
 # download would own the shell forever. Unpublished binaries are skipped, not
 # installed unpinned.
 #
+# fastfetch is published once per launcher edition: it resolves its libraries
+# through a RUNPATH baked in at link time, so the build for one edition's install
+# prefix does not start under another's. The edition is read from $PREFIX below.
+#
 # Maintainers: after editing any template run
 #   docs/en/examples/update-setup-launcher-digests.sh [dir-with-built-binaries]
 # commit the tables, then move TEMPLATES_REF to the release tag.
@@ -31,7 +35,7 @@ TEMPLATES_REF="${TERMUX_LAUNCHER_REF:-v0.2.35}"
 RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/$TEMPLATES_REF/docs/en/examples}"
 # Pinned separately from TEMPLATES_REF: these are other people's software on
 # their own release schedule.
-BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.08.25}"
+BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.09.01}"
 BINARIES_BASE="${TERMUX_LAUNCHER_BINARIES_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries/$BINARIES_REF/bin}"
 
 # --- BEGIN DIGESTS (generated: update-setup-launcher-digests.sh) ---
@@ -49,9 +53,10 @@ expected_digest() {
 # --- BEGIN BINARY DIGESTS (generated: update-setup-launcher-digests.sh) ---
 expected_binary_digest() {
     case "$1" in
-        fastfetch)   echo f176e7a18ab62d9b5efc1e48bea2f323dc20e7123a0f3a0a063a9184600a7751 ;;
-        kitten)      echo 274ff935007bd6aa28dd7ef71439b52e10c2d7e0641f4413fd959508a74bf8c7 ;;
-        sigye)       echo be095e85f54c2a462b924ce21916a6586580713785ab5efc79b63050eead5eea ;;
+        fastfetch)               echo f176e7a18ab62d9b5efc1e48bea2f323dc20e7123a0f3a0a063a9184600a7751 ;;
+        fastfetch-io.vaj.tl)     echo c18b26b915351b9ab3a4a0bec09a692111886c3618d4064cf119b055dd45ece1 ;;
+        kitten)                  echo 274ff935007bd6aa28dd7ef71439b52e10c2d7e0641f4413fd959508a74bf8c7 ;;
+        sigye)                   echo be095e85f54c2a462b924ce21916a6586580713785ab5efc79b63050eead5eea ;;
         *) echo "" ;;
     esac
 }
@@ -60,6 +65,18 @@ expected_binary_digest() {
 FISH_CONFIG="${FISH_CONFIG:-$HOME/.config/fish/config.fish}"
 OMP_DIR="${OMP_DIR:-$HOME/.config/ohmyposh}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
+# The app exports PREFIX; $HOME is the fallback for a shell started without it.
+PREFIX="${PREFIX:-${HOME%/files/home}/files/usr}"
+
+# The asset holding the fastfetch build for this edition's prefix, or "" when
+# none is published for it.
+fastfetch_asset() {
+    case "$PREFIX" in
+        /data/data/com.termux/files/usr) echo fastfetch ;;
+        /data/data/io.vaj.tl/files/usr)  echo fastfetch-io.vaj.tl ;;
+        *) echo "" ;;
+    esac
+}
 
 log() { printf '%s\n' "$*"; }
 warn() { printf 'setup-launcher: %s\n' "$*" >&2; }
@@ -146,16 +163,20 @@ fetch_once() {
     fi
 }
 
-# fetch_binary <name> — a release asset into ~/.local/bin, or a skip.
+# fetch_binary <name> [asset] — a release asset into ~/.local/bin, or a skip.
+# The asset defaults to the installed name and differs only for the per-edition
+# builds, which carry the package name of the edition they were linked for.
 fetch_binary() {
     name="$1"
-    expected=$(expected_binary_digest "$name")
+    asset="${2:-$1}"
+    expected=$(expected_binary_digest "$asset")
     if [ -z "$expected" ]; then
-        warn "$name is not published for $BINARIES_REF — skipping it.
-  Build it yourself with recipes/cross/build-$name.sh (see docs/en/Building_Terminal_Showcase_Tools.md)."
+        warn "$asset is not published for $BINARIES_REF — skipping it.
+  Build it yourself with TERMUX_PREFIX=$PREFIX recipes/cross/build-$name.sh
+  (see docs/en/Building_Terminal_Showcase_Tools.md)."
         return 0
     fi
-    download "$BINARIES_BASE/$name-aarch64" "$BIN_DIR/$name" "$expected"
+    download "$BINARIES_BASE/$asset-aarch64" "$BIN_DIR/$name" "$expected"
     chmod +x "$BIN_DIR/$name"
 }
 
@@ -255,9 +276,17 @@ item_fastfetch() {
     # Links libandroid-glob (or it will not start) and dlopens the rest (or there
     # is no image logo, only ASCII art).
     install_pkg imagemagick chafa libandroid-glob zlib
-    fetch_binary fastfetch
-    if [ -x "$BIN_DIR/fastfetch" ] &&
-       ! "$BIN_DIR/fastfetch" --list-features 2>/dev/null | grep -qx imagemagick7; then
+    asset=$(fastfetch_asset)
+    if [ -z "$asset" ]; then
+        warn "no fastfetch build is published for the prefix $PREFIX — skipping it.
+  Build one with TERMUX_PREFIX=$PREFIX recipes/cross/build-fastfetch.sh
+  (see docs/en/Building_Terminal_Showcase_Tools.md)."
+        return 0
+    fi
+    fetch_binary fastfetch "$asset"
+    # Nothing below applies to a skipped install.
+    [ -x "$BIN_DIR/fastfetch" ] || return 0
+    if ! "$BIN_DIR/fastfetch" --list-features 2>/dev/null | grep -qx imagemagick7; then
         warn "fastfetch reports no imagemagick7 support — the GIF logo will not render."
     fi
     # The logo is placed as Unicode-placeholder cells, so the shell prompt clears

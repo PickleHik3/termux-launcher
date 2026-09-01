@@ -9,12 +9,13 @@ NDK plus a sysroot assembled with `dpkg-deb -x`.
 
 | Script | Produces | Toolchain |
 |---|---|---|
-| `termux-sysroot.sh` | `sysroot/` from published Termux `.deb`s | curl, dpkg-deb, python3 |
+| `termux-sysroot.sh` | `sysroot/` from published `.deb`s, from any edition's repository | curl, python3, dpkg-deb or ar+bsdtar |
 | `build-fastfetch.sh` | patched Fastfetch with animated Kitty graphics | NDK + CMake + Ninja |
 | `build-sigye.sh` | patched Sigye clock | rustup `aarch64-linux-android` + NDK |
 | `build-kitten.sh` | kitty's standalone `kitten` client | Go + python3 |
 
-If you only want the binaries, they are published for `aarch64` at
+`fastfetch` is built once per launcher edition — see below. If you only want the binaries, they are
+published for `aarch64` at
 [termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries) and
 `setup-launcher` installs them with a pinned digest. Build them yourself when you want to audit
 the result, target another prefix, or move a pin.
@@ -29,6 +30,34 @@ cd /some/scratch/dir
 
 Each script honours `TL_NDK`, `TL_SYSROOT`, `TL_OUT` and `TL_BUILD_DIR`. Sources are pinned to the
 same commits as the on-device recipes and carry the same patches.
+
+## One build per launcher edition
+
+The editions install under different package names, so their prefixes differ:
+`/data/data/com.termux/files/usr` and `/data/data/io.vaj.tl/files/usr`. That matters for `fastfetch`
+alone: it links `libandroid-glob`, `dlopen`s the image libraries through its own `RUNPATH`, and gets
+its home directory and login shell from `termux-pwd-polyfill.h`. All three are fixed at link time,
+so a build for one prefix does not start under another — the linker cannot find
+`libandroid-glob.so` and the process dies before `main`.
+
+Build the other editions by pointing both scripts at that edition's repository and prefix. The
+sysroot has to come from the edition's own repository rather than a relocated copy of another,
+because the absolute paths inside the packaged `.pc` files name the prefix they were built for:
+
+```sh
+TL_SYSROOT=$PWD/sysroot-vaj TL_CACHE=$PWD/debs-vaj \
+    TL_TERMUX_REPO=https://repo.pathayam.xyz ./termux-sysroot.sh
+TL_SYSROOT=$PWD/sysroot-vaj TL_OUT=$PWD/out-vaj \
+    TERMUX_PREFIX=/data/data/io.vaj.tl/files/usr \
+    TERMUX_HOME=/data/data/io.vaj.tl/files/home ./build-fastfetch.sh
+```
+
+The result is uploaded as `fastfetch-<package name>-aarch64` (`fastfetch-io.vaj.tl-aarch64`), beside
+the unsuffixed `com.termux` asset. `setup-launcher` reads `$PREFIX` to pick between them, and skips
+the item with a build hint for a prefix nothing is published for.
+
+`sigye` and `kitten` are prefix-independent — no `RUNPATH`, no absolute prefix anywhere in either
+binary — so one build of each serves every edition.
 
 ## Why `kitten` is here and not in `../termux`
 
@@ -80,6 +109,11 @@ Built 2026-08-16 on a Linux host with NDK r27c (27.2.12479018), Go 1.26.5, Rust 
 | `sigye` | 6.1 MB | Bionic only |
 | `kitten` | 25.7 MB (android/arm64) | Android's linker only — no `DT_NEEDED` entries |
 
+The VAJ-edition `fastfetch` (`fastfetch-io.vaj.tl-aarch64`) was built 2026-09-01 with NDK
+29.0.14206865 against a sysroot from `repo.pathayam.xyz`, 1.7 MB stripped, same dependencies. It is
+verified statically only — `RUNPATH`, every baked `/data/data/...` string, and the polyfill check all
+name `io.vaj.tl` — and has not been run on a device yet.
+
 Device-verified 2026-08-16 on Pong (A065, Android 16), running inside the launcher's terminal:
 
 - `kitten icat` and `kitten icat --unicode-placeholder` both render, exit 0, no stderr.
@@ -96,6 +130,7 @@ Device-verified 2026-08-16 on Pong (A065, Android 16), running inside the launch
 - Configured for `android-24` to match Termux's own package. At that API level Bionic has no
   `pthread_timedjoin_np`, so CMake reports `networking timeout will not work`. Termux's packaged
   build has the same gap.
+- The binary is edition-specific; see "One build per launcher edition" above.
 - ImageMagick and Chafa are loaded with `dlopen` at run time, not linked. The binary therefore runs
   without them, but image logos need `pkg install imagemagick chafa`. A bootstrap wipe removes
   those libraries while leaving the binary in `~/.local/bin` — image logos then fail even though
