@@ -161,6 +161,48 @@ no Docker image and no `termux-packages` checkout are involved.
 Host-built binaries are still unverified until they run on a device. Install them the same way the
 on-device recipes do, into `~/.local/bin`.
 
+### One build per launcher edition
+
+Fastfetch is the exception to build once, install anywhere. It links `libandroid-glob` and
+`dlopen`s ImageMagick and Chafa, finding all of them through a `RUNPATH` written at link time, and
+the passwd polyfill bakes in the home directory and login shell as well. A binary built for one
+edition's install prefix does not start under another's:
+
+```
+CANNOT LINK EXECUTABLE "fastfetch": library "libandroid-glob.so" not found
+```
+
+So pass the edition's prefix to both scripts. Take the sysroot from that edition's own repository
+rather than relocating another one — the absolute paths inside the packaged `.pc` files carry the
+prefix they were built for:
+
+```sh
+TL_SYSROOT=$PWD/sysroot-vaj TL_CACHE=$PWD/debs-vaj \
+    TL_TERMUX_REPO=https://repo.pathayam.xyz recipes/cross/termux-sysroot.sh
+TL_SYSROOT=$PWD/sysroot-vaj TL_OUT=$PWD/out-vaj \
+    TERMUX_PREFIX=/data/data/io.vaj.tl/files/usr \
+    TERMUX_HOME=/data/data/io.vaj.tl/files/home recipes/cross/build-fastfetch.sh
+```
+
+`readelf -d out-vaj/fastfetch | grep RUNPATH` must name the prefix you asked for, and every
+`/data/data/...` string in the binary must too:
+
+```sh
+strings -a out-vaj/fastfetch | grep -o "/data/data/[^\"]*" | sort -u
+```
+
+The build fails outright if the polyfill did not take the prefix, because a binary that keeps the
+default one would resolve the home directory to another edition's.
+
+`setup-launcher` installs the asset matching the edition it runs in — `fastfetch-aarch64` for
+`com.termux`, `fastfetch-io.vaj.tl-aarch64` for `io.vaj.tl` — and skips the item with a build hint
+when nothing is published for that prefix.
+
+Nothing else needs this. Building on the phone is edition-correct by construction:
+`recipes/termux/fastfetch/build.sh` uses the running edition's own toolchain and prefix. `sigye` and
+`kitten` carry neither a `RUNPATH` nor any absolute prefix, so one build of each serves every
+edition.
+
 ## Recipe controls and troubleshooting
 
 Both scripts support these environment variables:

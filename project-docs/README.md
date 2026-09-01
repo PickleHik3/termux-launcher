@@ -40,6 +40,7 @@ task-oriented guide is [`../docs/en/Terminal_Modernization.md`](../docs/en/Termi
 | | |
 |---|---|
 | [`plans/keyboard-mis-input-correction.md`](plans/keyboard-mis-input-correction.md) | Whether the in-app keyboard can fix mis-taps without a dictionary. Nothing implemented. |
+| [`plans/nix-edition-vanilla-study.md`](plans/nix-edition-vanilla-study.md) | Whether the Nix edition could track upstream nix-on-droid and ship only the launcher's extras. What the fork actually carries, what going vanilla would cost new and existing users, and why it was declined on 2026-09-01. Nothing implemented. |
 | [`plans/pane-wall-x11-study.md`](plans/pane-wall-x11-study.md) | The pane wall: home-screen pane, terminal area, embedded X11 pane. Why termux-x11 gets forked and bundled, and why the wall is an outer container, not a new leaf type. Nothing implemented. |
 
 ## Release notes
