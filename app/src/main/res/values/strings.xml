@@ -44,11 +44,11 @@
     <string name="settings_show_key_hints_title">Show key hints</string>
     <string name="settings_show_key_hints_summary">Show a hint strip while Ctrl+Alt is held. When off, the ? key lights up instead — press it for the full list.</string>
     <string name="settings_pane_dwindle_default_title">Automatic tiling</string>
-    <string name="settings_pane_dwindle_default_summary">Arrange panes automatically as you open and move them.</string>
-    <string name="settings_pane_focus_grows_title">Focused pane grows</string>
-    <string name="settings_pane_focus_grows_summary">The pane you select grows to take most of the screen.</string>
-    <string name="settings_pane_agent_api_title">Let scripts open panes</string>
-    <string name="settings_pane_agent_api_summary">Lets programs running in your shell open and control panes of their own.</string>
+    <string name="settings_pane_dwindle_default_summary">Tiles panes automatically: each new pane splits the one it opened from.</string>
+    <string name="settings_pane_focus_grows_title">Spotlight the active pane</string>
+    <string name="settings_pane_focus_grows_summary">The pane you are working in takes most of the screen and the rest shrink aside.</string>
+    <string name="settings_pane_agent_api_title">Let programs and agents control panes</string>
+    <string name="settings_pane_agent_api_summary">Programs you run can open, switch and close panes on their own.</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_style_title">Clock style</string>
     <string name="settings_clock_alignment_title">Clock alignment</string>
