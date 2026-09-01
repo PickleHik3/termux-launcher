@@ -114,8 +114,16 @@ Open-Meteo attribution.
 - **Hide the on-screen keyboard:** hide it while a physical keyboard is connected.
 - **Customize keyboard appearance:** live size, spacing, radius, and color tuning.
 - **Theme**, **Keyboard colors**, and **Typeface**.
+- **Edit extra keys:** the terminal key row, previewed as it will look. Add common keys
+  such as CTRL with one tap, search for any other key or launcher action, drag keys to
+  reorder them, give a key a swipe-up action and a label, and start from presets including
+  the classic Termux row. Page two of the row is edited on the same screen.
 - **Extra keys:** choose editing and navigation keys shown on the built-in layout.
 - **Custom layout:** load `~/.termux/keyboard/layout.xml`.
+- **Learn where you tap:** off by default. The keyboard learns where your taps land on each key
+  and nudges presses near a boundary toward the key you usually mean. Only letters, digits and
+  punctuation are ever moved; Enter, Backspace, Ctrl and the other action keys are not. **Forget
+  learned taps** clears what it has learned. It stores per-key averages only, never what you typed.
 - **Layout documentation** and **Supported key values**.
 - **Haptic feedback** and **Keypress sound**.
 

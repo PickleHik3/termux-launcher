@@ -91,16 +91,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
         refreshThemeEntries();
 
-        Preference editRow = findPreference("edit_extra_keys_row");
-        if (editRow != null) editRow.setOnPreferenceClickListener(preference -> {
-            // Edited over the live terminal, so the row on screen is the row being changed.
-            Intent intent = new Intent(context, TermuxActivity.class);
-            intent.putExtra(TermuxActivity.EXTRA_EDIT_EXTRA_KEYS, true);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-            return true;
-        });
-
         Preference customizeSurface = findPreference("customize_keyboard_surface");
         if (customizeSurface != null) customizeSurface.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, TermuxActivity.class);

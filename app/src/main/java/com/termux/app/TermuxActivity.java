@@ -6738,12 +6738,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Opens the extra-keys row editor over the live terminal, so the row being edited is the row
-     * on screen. Saving rewrites the properties and reloads the toolbar in place.
+     * Opens the extra-keys editor page in Settings. Saving there rewrites the properties and asks
+     * for a styling reload, which rebuilds every toolbar page when this activity resumes.
      */
     void showExtraKeysRowEditor() {
-        com.termux.app.terminal.io.ExtraKeysRowEditor.show(this,
-            this::reloadExtraKeysFromProperties);
+        startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(this,
+            com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment.class,
+            R.string.settings_edit_extra_keys_title));
     }
 
     private void handleEditExtraKeysIntent(@Nullable Intent intent) {
@@ -14211,6 +14212,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void reloadActivityStyling(boolean recreateActivity) {
         if (mProperties != null) {
             reloadProperties();
+            // Every page, not just the first: the editor in Settings may have added or emptied
+            // a page, and the pager only learns that from a rebuild.
+            reloadExtraKeysFromProperties();
             if (mExtraKeysView != null) {
                 mExtraKeysView.setButtonTextAllCaps(mProperties.shouldExtraKeysTextBeAllCaps());
                 applyExtraKeysFeedbackAccent(mExtraKeysView);

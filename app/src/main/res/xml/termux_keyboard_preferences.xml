@@ -6,6 +6,7 @@
         <Preference
             app:key="edit_extra_keys_row"
             app:persistent="false"
+            app:fragment="com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment"
             app:title="@string/settings_edit_extra_keys_title"
             app:summary="@string/settings_edit_extra_keys_summary" />
         <SwitchPreferenceCompat

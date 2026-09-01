@@ -214,6 +214,11 @@ public final class ExtraKeyActionPicker {
             }
         }
 
+        // The row's modifier toggles are not terminal key codes, so they were unreachable here
+        // except by typing the name and choosing "send as text" (issue #22).
+        renderNamedKeys(results, context.getString(R.string.settings_extra_keys_action_modifiers),
+            ExtraKeysPresets.MODIFIER_KEYS, needle, pick);
+
         List<String> keys = new ArrayList<>(
             ExtraKeysConstants.PRIMARY_KEY_CODES_FOR_STRINGS.keySet());
         // Natural order so F1..F9 precede F10..F12 (F-11).
@@ -228,6 +233,9 @@ public final class ExtraKeyActionPicker {
             results.addView(entry(key, null,
                 () -> pick.onPicked(new ExtraKeysLayoutModel.Key(key))));
         }
+
+        renderNamedKeys(results, context.getString(R.string.settings_extra_keys_action_row_keys),
+            ExtraKeysPresets.ROW_KEYS, needle, pick);
 
         Map<String, List<LauncherToolRegistry.ToolMetadata>> grouped =
             LauncherToolRegistry.getInstance().getUiToolsByCategory();
@@ -259,6 +267,22 @@ public final class ExtraKeyActionPicker {
 
         if (results.getChildCount() == 0) {
             results.addView(header(context.getString(R.string.settings_extra_keys_action_no_match)));
+        }
+    }
+
+    /** A titled group of plain key names, written only when at least one matches the search. */
+    private void renderNamedKeys(@NonNull LinearLayout results, @NonNull String title,
+                                 @NonNull String[] names, @NonNull String needle,
+                                 @NonNull OnPicked pick) {
+        boolean headerWritten = false;
+        for (String name : names) {
+            if (!matches(name, needle)) continue;
+            if (!headerWritten) {
+                results.addView(header(title));
+                headerWritten = true;
+            }
+            results.addView(entry(name, null,
+                () -> pick.onPicked(new ExtraKeysLayoutModel.Key(name))));
         }
     }
 
