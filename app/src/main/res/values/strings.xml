@@ -1077,6 +1077,7 @@
 
                 <!-- The card's header. The heading names what is being edited, and while that is
                      a surface it is also the way back to the shared layer. -->
+                <string name="termux_surface_editor_tap_hint">Tap any part of the screen to style just that part.</string>
                 <string name="termux_surface_editor_title_back_description">%1$s. Tap to go back to all surfaces.</string>
                 <string name="termux_surface_editor_action_chevron">›</string>
                 <string name="termux_surface_editor_select_description">Edit %1$s</string>

@@ -255,6 +255,7 @@ public final class SurfaceEditorController {
         final ImageView done;
         final ImageView close;
         final ViewGroup presets;
+        final TextView tapHint;
         final View pills;
         final MaterialButtonToggleGroup shape;
         final MaterialButtonToggleGroup material;
@@ -273,6 +274,7 @@ public final class SurfaceEditorController {
             done = root.findViewById(R.id.surface_editor_pill_done);
             close = root.findViewById(R.id.surface_editor_pill_close);
             presets = root.findViewById(R.id.surface_editor_pill_presets);
+            tapHint = root.findViewById(R.id.surface_editor_pill_tap_hint);
             pills = root.findViewById(R.id.surface_editor_pill_pills);
             shape = root.findViewById(R.id.surface_editor_pill_shape);
             material = root.findViewById(R.id.surface_editor_pill_material);
@@ -281,8 +283,8 @@ public final class SurfaceEditorController {
 
         boolean complete() {
             return header != null && title != null && save != null && reset != null && done != null
-                && close != null && presets != null && pills != null && shape != null
-                && material != null && rowsHost != null;
+                && close != null && presets != null && tapHint != null && pills != null
+                && shape != null && material != null && rowsHost != null;
         }
     }
 
@@ -567,6 +569,10 @@ public final class SurfaceEditorController {
             return;
         boolean changed = mSelectedSlot != slot;
         mSelectedSlot = slot;
+        // Acting on the hint is what retires it: the sentence has done its job and must not be
+        // there to read a second time.
+        if (slot != null && prefs() != null && !prefs().isSurfaceEditorTapHintSeen())
+            prefs().setSurfaceEditorTapHintSeen(true);
         // Status is the one surface whose content is hidden by the shape the editor holds it in on
         // entry, so selecting it opens it back up — the clock has to be visible to be chosen.
         applyStatusPaneForSelection(changed);
@@ -804,6 +810,10 @@ public final class SurfaceEditorController {
         int sharedVisibility = shared ? View.VISIBLE : View.GONE;
         if (panel.presets.getVisibility() != sharedVisibility)
             panel.presets.setVisibility(sharedVisibility);
+        int hintVisibility = shared && !prefs().isSurfaceEditorTapHintSeen()
+            ? View.VISIBLE : View.GONE;
+        if (panel.tapHint.getVisibility() != hintVisibility)
+            panel.tapHint.setVisibility(hintVisibility);
         if (panel.pills.getVisibility() != sharedVisibility)
             panel.pills.setVisibility(sharedVisibility);
         if (shared) {

@@ -756,6 +756,13 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_FOCUSED_PANE_GROWS = "pane_focus_grows";
         public static final boolean DEFAULT_FOCUSED_PANE_GROWS = false;
 
+        /**
+         * Cleared once the user has picked a surface in the editor: until then the card carries a
+         * line saying the surfaces are touchable, and after that it never does again.
+         */
+        public static final String KEY_SURFACE_EDITOR_TAP_HINT_SEEN = "surface_editor_tap_hint_seen";
+        public static final boolean DEFAULT_SURFACE_EDITOR_TAP_HINT_SEEN = false;
+
         /** Whether the local API (`launcherctl pane`, /v1/panes) may open and drive panes. */
         public static final String KEY_AGENT_PANES_ENABLED = "pane_agent_api";
         public static final boolean DEFAULT_AGENT_PANES_ENABLED = true;

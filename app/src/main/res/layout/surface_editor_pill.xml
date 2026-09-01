@@ -92,6 +92,21 @@
             android:scaleType="fitCenter" />
     </LinearLayout>
 
+    <!-- Said once, and only until the user acts on it: the outlines breathing on the home screen
+         are the invitation, and this is the sentence for anyone who does not read a pulse as one.
+         Gone for good the first time a surface is picked. -->
+    <TextView
+        android:id="@+id/surface_editor_pill_tap_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:layout_marginEnd="6dp"
+        android:lineSpacingExtra="1sp"
+        android:text="@string/termux_surface_editor_tap_hint"
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <!-- Complete looks, one tap each, filled in code. The shared layer only: a preset writes every
          surface, which is not an answer to a question asked while editing one of them. -->
     <FrameLayout
