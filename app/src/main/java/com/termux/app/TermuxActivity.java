@@ -3404,14 +3404,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // disagree with the keyboard about its own material.
         boolean normalized = isInAppKeyboardOpacityLinked();
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
-        int backgroundAlpha = normalized ? 255 : Math.round(
-            255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
-        if (schemeBackground != null)
-            return new ColorDrawable(withAlphaComponent(schemeBackground, backgroundAlpha));
-        Drawable tint = mChrome.glass().dockSurface(state.barAlpha, foot, 1f, false);
-        if (backgroundAlpha < 255)
-            tint.setAlpha(backgroundAlpha);
-        return tint;
+        if (schemeBackground != null) {
+            return new ColorDrawable(withAlphaComponent(schemeBackground, Math.round(
+                255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)));
+        }
+        return mChrome.glass().dockSurface(inAppKeyboardGlassAlpha(state), foot, 1f, false);
+    }
+
+    /**
+     * The opacity the keyboard's glass is built at.
+     *
+     * <p>Its own once it has one, the dock's while it still follows Base. Built at, not scaled to:
+     * fading the finished drawable fades every layer of the light model including the grain, so
+     * raising the keyboard's opacity brightened the speckle instead of thickening the background.
+     */
+    private float inAppKeyboardGlassAlpha(@NonNull ChromeSpec state) {
+        if (isInAppKeyboardOpacityLinked())
+            return state.barAlpha;
+        return getInAppKeyboardBackgroundOpacityPercent() / 100f;
     }
 
     @Nullable
@@ -3716,14 +3726,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 layers.add(new ColorDrawable(
                     withAlphaComponent(schemeBackground, backgroundAlpha)));
             } else {
-                // Render only the keyboard's slice of the shared light model; the under-pill nav
-                // strip renders the remainder so the single foot lands under the pill (see the
-                // slice overload).
-                Drawable tint = mChrome.glass().dockSurface(
-                    state.barAlpha, 0f, defaultDockGlassFootFraction(), false);
-                if (backgroundAlpha < 255)
-                    tint.setAlpha(backgroundAlpha);
-                layers.add(tint);
+                // Render only the keyboard's slice of the shared light model, built at the
+                // keyboard's own opacity; the under-pill nav strip renders the remainder so the
+                // single foot lands under the pill (see the slice overload).
+                layers.add(mChrome.glass().dockSurface(inAppKeyboardGlassAlpha(state), 0f,
+                    defaultDockGlassFootFraction(), false));
             }
         } else if (capsule) {
             // Opaque themes fill the capsule with the keyboard's own background color so the
