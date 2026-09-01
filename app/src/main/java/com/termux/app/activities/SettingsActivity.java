@@ -154,7 +154,12 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
      * its constructor or {@code onCreate}) falls back to the root screen.
      */
     static boolean isAllowedInitialFragment(@NonNull Class<?> candidate) {
-        if (!PreferenceFragmentCompat.class.isAssignableFrom(candidate)) return false;
+        // Any fragment from the settings package, not only a preference screen: the keyboard's
+        // colour editor is a plain Fragment, and requiring PreferenceFragmentCompat here quietly
+        // bounced every deep link to it back to the root page. The package prefix is the guard
+        // that matters — this activity is exported, so the class name in the Intent is
+        // attacker-controlled, and nothing outside the settings screens may be instantiated.
+        if (!Fragment.class.isAssignableFrom(candidate)) return false;
         String name = candidate.getName();
         return name.startsWith(SETTINGS_FRAGMENT_PACKAGE_PREFIX)
             || name.startsWith(SettingsActivity.class.getName() + "$");
