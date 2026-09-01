@@ -93,6 +93,17 @@ if ! grep -qa "$TERMUX_PREFIX/bin/login" "$TL_OUT/fastfetch"; then
     exit 1
 fi
 
+# A cross-built binary cannot be run here, so the Kitty logo check in the on-device recipe has no
+# host equivalent. What can be checked is that the patch's depth normalisation survived a rebase:
+# ImageMagick is dlopened and every symbol resolved by name, so the string is in the binary exactly
+# when the call is. Without it a logo that is not already 8-bit transmits the wrong number of bytes
+# and the terminal drops it in silence.
+if ! grep -qa "SetImageDepth" "$TL_OUT/fastfetch"; then
+    echo "error: SetImageDepth is missing from the build — Kitty logos that are not 8-bit per" >&2
+    echo "       channel would be dropped by the terminal without an error" >&2
+    exit 1
+fi
+
 echo
 echo "Built: $TL_OUT/fastfetch"
 "$TL_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d "$TL_OUT/fastfetch" |
