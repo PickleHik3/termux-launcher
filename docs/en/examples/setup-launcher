@@ -39,7 +39,7 @@ expected_digest() {
     case "$1" in
         aliens-material.omp.json) echo 87ce6bfdb16335fc543d3c974f19632503f0e803de73e728de8a265ac03da148 ;;
         conf.d-personal.fish)     echo d950402c7b896d34e7fb9e310f6ceef93fbbd0e7e86e6a5743fda80b251f4c7a ;;
-        config.fish)              echo 9e977847efd4410075282d686441faa4bb9524e2eb5aecbb3031317d5b857de0 ;;
+        config.fish)              echo 56f1d75cc73a1027eb9f70efb1873d109d79c2e654e36a3c2cadd44c5b3f19d0 ;;
         setup-nvim)               echo 33f102c400dd706d6bf7fb46eeb363a94899d861c36c36286afaa6a951e48295 ;;
         *) echo "" ;;
     esac
