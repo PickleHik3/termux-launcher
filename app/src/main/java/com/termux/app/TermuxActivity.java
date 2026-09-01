@@ -6829,6 +6829,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         }
 
+        @Override @Nullable public int[] terminalFrameRectInWindow() {
+            View host = findViewById(R.id.terminal_surface_host);
+            if (host == null || host.getVisibility() != View.VISIBLE
+                || host.getWidth() <= 0 || host.getHeight() <= 0)
+                return null;
+            int[] location = new int[2];
+            host.getLocationInWindow(location);
+            // The same two numbers the border overlay and the pane host are laid out with, so the
+            // editor's outline cannot disagree with the frame about where the frame is.
+            int horizontal = terminalFrameInsetPx(false);
+            int vertical = terminalFrameInsetPx(true);
+            return new int[] {
+                location[0] + horizontal,
+                location[1] + vertical,
+                location[0] + host.getWidth() - horizontal,
+                location[1] + host.getHeight() - vertical};
+        }
+
+        @Override public float terminalFrameCornerRadiusPx() {
+            return terminalEdgeCornerRadiusPx();
+        }
+
         @Override public void openKeyboardColors() {
             startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
                 KeyboardColorSchemeFragment.class, R.string.settings_keyboard_colors_title));

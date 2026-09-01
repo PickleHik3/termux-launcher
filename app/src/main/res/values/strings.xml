@@ -1046,110 +1046,62 @@
                 <string name="termux_surface_preset_custom_empty">No saved look yet</string>
                 <string name="termux_surface_preset_custom_empty_hint">Tap Save look under Presets, and the look you have now lands here.</string>
                 <string name="termux_surface_editor_save_look">Save look</string>
+                <!-- The header's ↺: back to how everything looked when the editor was opened. Held
+                     down, it goes all the way back to the shipped defaults instead. -->
+                <string name="termux_surface_editor_revert">Undo changes. Hold to reset everything.</string>
+                <string name="termux_surface_editor_reset_done">Everything back to defaults</string>
                 <!-- Subtitle on the "applied" notice chip, whose tap undoes the preset. -->
                 <string name="termux_surface_preset_undo_hint">Tap to undo</string>
                 <string name="termux_surface_preset_card_description">%1$s preset</string>
                 <string name="termux_surface_preset_apply_action">apply this look</string>
                 <string name="termux_surface_preset_current_look">Current look</string>
 
-                <!-- The attached pill. One surface at a time, one property at a time. -->
-                <string name="termux_surface_editor_look">Material</string>
-                <!-- Chip names: read at a glance beside three others, so the short noun. The sheet
-                     rows keep the full label ("Corner radius", "Margin"). -->
-                <string name="termux_surface_editor_chip_style">Style</string>
-                <string name="termux_surface_editor_chip_apps">Apps</string>
-                <string name="termux_surface_editor_chip_colors">Colors</string>
-                <string name="termux_surface_editor_chip_padding">Padding</string>
-                <string name="termux_surface_editor_chip_wallpaper">Wallpaper</string>
-                <string name="termux_surface_editor_chip_corners">Corners</string>
-                <string name="termux_surface_editor_chip_gap">Gap</string>
-                <string name="termux_surface_editor_looks">Presets</string>
-                <string name="termux_surface_editor_close">✕</string>
+                <!-- The card's header. The heading names what is being edited, and while that is
+                     a surface it is also the way back to the shared layer. -->
+                <string name="termux_surface_editor_title_back_description">%1$s. Tap to go back to all surfaces.</string>
+                <string name="termux_surface_editor_action_chevron">›</string>
                 <string name="termux_surface_editor_select_description">Edit %1$s</string>
-                <!-- Title of the pill: the surface it is editing, with the way to pick another. -->
-                <string name="termux_surface_editor_pill_title">%1$s ▾</string>
-                <string name="termux_surface_editor_pill_title_description">Editing %1$s. Tap to edit a different surface.</string>
-                <string name="termux_surface_editor_property_title">%1$s · %2$s ▾</string>
-                <string name="termux_surface_editor_property_picker_title">Property</string>
-                <string name="termux_surface_editor_all_surfaces">All surfaces</string>
-                <string name="termux_surface_editor_all_surfaces_summary">Moves every surface that has no value of its own.</string>
-                <string name="termux_surface_editor_reset_all">Reset all</string>
                 <string name="termux_surface_editor_key_radius">Key radius</string>
-                <string name="termux_surface_editor_wallpaper_dim">Wallpaper dim</string>
-                <!-- Said in place, per property, instead of counting overrides somewhere else:
-                     whether this number is the surface's own or the shared one, and the way over. -->
-                <string name="termux_surface_editor_footnote_own">%1$s’s own %2$s · ↺ to match Base (%3$s)</string>
-                <string name="termux_surface_editor_footnote_base">Following Base · move it and this becomes %1$s’s own</string>
-                <string name="termux_surface_editor_footnote_look_own">%1$s has its own material · ↺ to match Base</string>
-                <string name="termux_surface_editor_footnote_look_base">Following Base · move it and %1$s gets a material of its own</string>
-                <string name="termux_surface_editor_noun_blur">blur</string>
-                <string name="termux_surface_editor_noun_opacity">opacity</string>
-                <string name="termux_surface_editor_noun_grain">grain</string>
-                <string name="termux_surface_editor_noun_corners">corners</string>
-                <string name="termux_surface_editor_noun_gap">margin</string>
-                <!-- Shown where a control cannot act: a docked surface is flush with the screen by
-                     definition, so its margin has no number to give. -->
-                <string name="termux_surface_editor_unavailable_gap">Docked surfaces sit flush with the screen edges.</string>
-                <string name="termux_surface_editor_unavailable_border">Turn the terminal border on to give the glass an edge to live inside.</string>
+                <!-- The keyboard's slab, as against its key caps, which are the row below it. -->
+                <string name="termux_surface_editor_background_opacity">BG opacity</string>
+                <string name="termux_surface_editor_wallpaper_dim">Wallpaper</string>
 
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>
-                <string name="termux_surface_tuning_material_intensity">Intensity</string>
-                <string name="termux_surface_tuning_material_custom">Custom</string>
-                <!-- The link chip on a shared row: a tick while the surface follows Base, an
-                     undo glyph once it has its own value. -->
-                <string name="termux_surface_tuning_link_inherited">✓</string>
+                <!-- Only rendered once a surface has taken a value of its own; tapping it puts
+                     the row back on the shared layer. -->
                 <string name="termux_surface_tuning_link_detached">↺</string>
-                <string name="termux_surface_tuning_link_inherited_description">Following Base. Move this control to give %1$s its own value.</string>
                 <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Base again.</string>
-                <!-- The fold between the global controls and the per-surface groups, one of
-                     which shows at a time behind the surface pills. -->
-                <!-- The clock row in the editor's Status group. The pane's clock is the one
-                     thing in that group that is a look rather than a number, so the row shows the
-                     face itself and hides the six of them behind one tap. -->
-                <string name="termux_surface_tuning_clock">Clock</string>
                 <!-- One shape for the two chips on the status row: the sessions indicator and the
                      window pills. Content inside the bar, not a surface, so it has its own knob. -->
                 <string name="termux_surface_tuning_indicator_radius">Chip radius</string>
                 <string name="termux_surface_tuning_clock_chevron">▾</string>
-                <string name="termux_surface_tuning_clock_picker_title">Clock face</string>
-                <string name="termux_surface_tuning_clock_row_description">Clock face: %1$s. Tap to change.</string>
+                <string name="termux_surface_tuning_clock_open">Change the clock face</string>
                 <string name="termux_surface_tuning_clock_face_description">%1$s clock face</string>
                 <string name="termux_surface_tuning_clock_selected">✓</string>
-                <string name="termux_surface_tuning_clock_elsewhere">Alignment and 12-hour time stay in Settings, under Terminal and status.</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>
                 <string name="termux_surface_tuning_terminal">Terminal</string>
-                <string name="termux_surface_tuning_keyboard_height">Height</string>
-                <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
-                <string name="termux_surface_tuning_keyboard_key_opacity">Keys opacity</string>
+                <string name="termux_surface_tuning_keyboard_spacing">Key spacing</string>
+                <string name="termux_surface_tuning_keyboard_key_opacity">Key opacity</string>
                 <string name="termux_surface_tuning_edges">Margin</string>
-                <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
                 <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
-                <string name="termux_dock_tuning_radius">Corner radius</string>
+                <string name="termux_dock_tuning_radius">Corners</string>
                 <string name="termux_dock_tuning_size">Size</string>
-                <string name="termux_dock_tuning_icons">Apps per page</string>
+                <string name="termux_dock_tuning_icons">Apps</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
-                <string name="termux_dock_tuning_terminal_border">Border</string>
-                <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
-                <!-- Docked spends the same knob on the terminal's outer air as well as the gap
-                     between panes, so there it is a margin. Floating insets the frame from the
-                     capsule instead, and the knob only gaps the panes. -->
-                <string name="termux_dock_tuning_terminal_margin">Margin</string>
+                <string name="termux_dock_tuning_terminal_border">Frame</string>
                 <string name="termux_dock_tuning_done">Done</string>
                 <string name="termux_dock_tuning_cancel">Close</string>
-                <string name="termux_surface_tuning_value_not_applicable">—</string>
                 <string name="termux_surface_tuning_peek_readout">%1$s · %2$s</string>
-                <!-- Fully qualified names for the peek echo. The card's own 88dp label column is
-                     too narrow for these, and there the section heading disambiguates anyway. -->
-                <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
+                <!-- The peek echo names the control in full; the card's own label column is too
+                     narrow for that, and there the heading disambiguates anyway. -->
                 <string name="termux_surface_tuning_peek_keyboard_height">Keyboard height</string>
-                <string name="termux_surface_tuning_unsaved_badge">Unsaved</string>
                 <string name="termux_surface_tuning_unsaved_title">Unsaved changes</string>
                 <string name="termux_surface_tuning_unsaved_message">Discard them and put every surface back to how it looked when you opened the editor, or save and close?</string>
                 <string name="termux_surface_tuning_unsaved_discard">Discard</string>

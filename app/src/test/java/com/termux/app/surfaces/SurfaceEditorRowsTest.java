@@ -26,9 +26,7 @@ public class SurfaceEditorRowsTest {
                     assertNotNull(slot + "/" + property, row);
                     assertNotNull(row.read);
                     assertNotNull(row.write);
-                    // The footnote names the property in words, so a cell without a noun would
-                    // render "'s own  · ↺ to match Base".
-                    assertTrue(slot + "/" + property + " has no footnote noun", row.nounRes != 0);
+                    assertTrue(slot + "/" + property + " has no label", row.labelRes != 0);
                 } else {
                     assertNull(slot + "/" + property, row);
                 }

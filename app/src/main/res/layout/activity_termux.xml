@@ -767,19 +767,21 @@
                     android:alpha="0.5"
                     android:background="@drawable/surface_tuning_gesture_pill" />
 
-                <!-- Advertises the clock dropdown: touching the status bar while it is already
-                     selected unfolds the clock faces. Not clickable itself — the group's own tap
-                     handler is the one place that decides. -->
+                <!-- The clock's own control, parked beside the live clock in code while the
+                     status bar is the surface being edited. Clickable in its own right: a child
+                     takes the touch before the group's select-and-drag handler sees it. -->
                 <TextView
                     android:id="@+id/surface_tuning_status_clock_handle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center_horizontal"
-                    android:alpha="0.75"
-                    android:importantForAccessibility="no"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="top|start"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
                     android:text="@string/termux_surface_tuning_clock_chevron"
                     android:textColor="?attr/termuxColorPrimary"
-                    android:textSize="12sp"
+                    android:textSize="13sp"
                     android:visibility="gone" />
             </FrameLayout>
 
@@ -809,22 +811,6 @@
                     android:layout_marginEnd="4dp"
                     android:alpha="0.5"
                     android:background="@drawable/surface_tuning_gesture_pill" />
-
-                <FrameLayout
-                    android:id="@+id/surface_tuning_dock_height_handle"
-                    android:layout_width="72dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="top|center_horizontal"
-                    android:clickable="true"
-                    android:contentDescription="@string/termux_surface_tuning_dock_height_handle"
-                    android:focusable="true">
-
-                    <View
-                        android:layout_width="32dp"
-                        android:layout_height="4dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/surface_tuning_gesture_pill" />
-                </FrameLayout>
             </FrameLayout>
 
             <FrameLayout
@@ -864,6 +850,7 @@
                     android:focusable="true">
 
                     <View
+                        android:id="@+id/surface_tuning_keyboard_height_grip"
                         android:layout_width="32dp"
                         android:layout_height="4dp"
                         android:layout_gravity="center"
@@ -871,12 +858,39 @@
                 </FrameLayout>
             </FrameLayout>
 
-            <!-- Which surface the pill is editing. Positioned in code to the selected surface's own
-                 rect — not to a capture group, which overhangs it — and drawn as an accent hairline
-                 inside a soft glow. This, rather than the pill's position, is what identifies the
-                 target; the pill deliberately never covers the surface it edits. -->
+            <!-- One outline per surface the editor can act on, positioned in code to that
+                 surface's own rect — not to its capture group, which overhangs it, and a ring drawn
+                 on that would sit a finger's width above the thing it identifies.
+
+                 With nothing picked they are all drawn and breathe together, which is the whole
+                 invitation to touch one. With a surface picked its outline alone stands, steady,
+                 and is what identifies the target; the card's own position never has to. -->
             <View
-                android:id="@+id/surface_editor_selection_ring"
+                android:id="@+id/surface_editor_ring_status"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:importantForAccessibility="no"
+                android:visibility="gone" />
+
+            <View
+                android:id="@+id/surface_editor_ring_dock"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:importantForAccessibility="no"
+                android:visibility="gone" />
+
+            <View
+                android:id="@+id/surface_editor_ring_keyboard"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:importantForAccessibility="no"
+                android:visibility="gone" />
+
+            <View
+                android:id="@+id/surface_editor_ring_canvas"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_gravity="top"

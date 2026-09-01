@@ -9,6 +9,7 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -16,67 +17,80 @@ import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The pill's control table. What matters here is coverage and reachability: the editor is the only
- * home in the app for most of these, so a property that falls out of both the chip row and the ⋯
- * sheet is a feature that has left the product.
+ * The editor's control table. Two things matter here and nothing else does.
+ *
+ * <p>Coverage and reachability: the editor is the only home in the app for most of these, so a
+ * property that falls off every panel is a feature that has left the product. And order: the whole
+ * design rests on the five shared rows reading down in the same sequence on every surface, so that
+ * a property is always found in the same place relative to its neighbours.
  */
 public class SurfaceEditorPropertiesTest {
 
-    @Test
-    public void everySurfaceLeadsWithLookAndOffersNothingTwice() {
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            List<Control> chips = SurfaceEditorProperties.chips(slot);
-            assertFalse(slot + " offers no chips", chips.isEmpty());
-            assertSame(slot + " does not lead with Look", Kind.LOOK, chips.get(0).kind);
+    /** Every panel there is: the shared layer, then one per surface. */
+    private static List<List<Control>> panels() {
+        List<List<Control>> panels = new ArrayList<>();
+        panels.add(SurfaceEditorProperties.global());
+        for (SurfaceSlot slot : SurfaceSlot.values())
+            panels.add(SurfaceEditorProperties.panel(slot));
+        return panels;
+    }
 
+    @Test
+    public void everyPanelReadsDownInTheSharedOrder() {
+        for (List<Control> panel : panels()) {
+            int previous = Integer.MIN_VALUE;
+            for (Control control : panel) {
+                int rank = SurfaceEditorProperties.rankOf(control.id);
+                assertTrue(control.id + " is out of the shared order", rank >= previous);
+                previous = rank;
+            }
+        }
+    }
+
+    @Test
+    public void noPanelIsEmptyAndNoneOffersAnythingTwice() {
+        for (List<Control> panel : panels()) {
+            assertFalse("a panel offers nothing", panel.isEmpty());
             Set<String> ids = new HashSet<>();
-            for (Control control : chips)
-                assertTrue(slot + " repeats chip " + control.id, ids.add(control.id));
-            for (Control control : SurfaceEditorProperties.more(slot))
-                assertTrue(slot + " repeats " + control.id + " in its sheet", ids.add(control.id));
+            for (Control control : panel)
+                assertTrue(control.id + " is repeated", ids.add(control.id));
         }
     }
 
     @Test
-    public void everyGlassCellIsReachableUnderThatSurfacesFine() {
-        // Look folds blur, opacity and grain into one decision, so Fine is the only place the raw
-        // numbers survive. A cell missing from it cannot be set by hand at all.
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            Set<SurfaceProperty> fine = new HashSet<>();
-            for (Control control : SurfaceEditorProperties.fine(slot)) {
-                assertNotNull(slot + "/" + control.id + " is not a cell", control.cell);
-                fine.add(control.cell.property);
-            }
-            for (SurfaceProperty property
-                    : new SurfaceProperty[] {SurfaceProperty.BLUR, SurfaceProperty.OPACITY,
-                        SurfaceProperty.GRAIN}) {
-                assertEquals(slot + "/" + property + " reachability",
-                    TermuxAppSharedPreferences.hasSurfaceProperty(slot, property),
-                    fine.contains(property));
-            }
-        }
+    public void theSharedLayerLeadsWithTheGlassTripleAndEndsWithTheWallpaper() {
+        List<String> ids = new ArrayList<>();
+        for (Control control : SurfaceEditorProperties.global())
+            ids.add(control.id);
+        assertEquals(Arrays.asList(
+            SurfaceEditorProperties.ID_ALL_OPACITY,
+            SurfaceEditorProperties.ID_ALL_BLUR,
+            SurfaceEditorProperties.ID_ALL_GRAIN,
+            SurfaceEditorProperties.ID_ALL_CORNERS,
+            SurfaceEditorProperties.ID_ALL_MARGIN,
+            SurfaceEditorProperties.ID_WALLPAPER), ids);
     }
 
     @Test
-    public void everyGeometryCellIsReachableAsAChip() {
-        // Corner radius and side gap are chips rather than sheet rows: they are what a surface is
-        // usually tuned by, and the design puts them on the pill for every surface that owns them.
+    public void everyGlassCellASurfaceOwnsIsOnItsPanel() {
+        // The editor is the only place these numbers can be set by hand; a cell missing from its
+        // surface's panel cannot be set at all.
         for (SurfaceSlot slot : SurfaceSlot.values()) {
-            Set<SurfaceProperty> chipped = new HashSet<>();
-            for (Control control : SurfaceEditorProperties.chips(slot)) {
+            Set<SurfaceProperty> present = new HashSet<>();
+            for (Control control : SurfaceEditorProperties.panel(slot)) {
                 if (control.cell != null)
-                    chipped.add(control.cell.property);
+                    present.add(control.cell.property);
             }
-            for (SurfaceProperty property
-                    : new SurfaceProperty[] {SurfaceProperty.CORNER_RADIUS,
-                        SurfaceProperty.SIDE_GAP}) {
-                assertEquals(slot + "/" + property + " reachability",
-                    TermuxAppSharedPreferences.hasSurfaceProperty(slot, property),
-                    chipped.contains(property));
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (!TermuxAppSharedPreferences.hasSurfaceProperty(slot, property))
+                    continue;
+                // The canvas has no capsule radius and no screen-edge gap of its own; what it does
+                // have is a terminal corner radius and a pane gap, which are not cascade cells.
+                assertTrue(slot + "/" + property + " is on no panel", present.contains(property));
             }
         }
     }
@@ -85,30 +99,43 @@ public class SurfaceEditorPropertiesTest {
     public void everyControlTheEditorAloneOwnsHasAHome() {
         // These live nowhere else in the app: no settings screen carries them. Losing one from the
         // table deletes it from the product, so the list is spelled out rather than derived.
-        List<String> mustExist = new ArrayList<>();
-        mustExist.add(SurfaceEditorProperties.ID_SIZE);
-        mustExist.add(SurfaceEditorProperties.ID_APPS);
-        mustExist.add(SurfaceEditorProperties.ID_BORDER);
-        mustExist.add(SurfaceEditorProperties.ID_KEYBOARD_HEIGHT);
-        mustExist.add(SurfaceEditorProperties.ID_KEYBOARD_SPACING);
-        mustExist.add(SurfaceEditorProperties.ID_KEYBOARD_KEY_RADIUS);
-        mustExist.add(SurfaceEditorProperties.ID_KEYBOARD_KEY_OPACITY);
-        mustExist.add(SurfaceEditorProperties.ID_KEYBOARD_COLORS);
-        mustExist.add(SurfaceEditorProperties.ID_CLOCK);
-        mustExist.add(SurfaceEditorProperties.ID_CHIP_RADIUS);
-        mustExist.add(SurfaceEditorProperties.ID_TERMINAL_RADIUS);
-        mustExist.add(SurfaceEditorProperties.ID_TERMINAL_GAP);
-        mustExist.add(SurfaceEditorProperties.ID_WALLPAPER);
+        List<String> mustExist = Arrays.asList(
+            SurfaceEditorProperties.ID_SIZE,
+            SurfaceEditorProperties.ID_APPS,
+            SurfaceEditorProperties.ID_BORDER,
+            SurfaceEditorProperties.ID_KEYBOARD_SPACING,
+            SurfaceEditorProperties.ID_KEYBOARD_KEY_RADIUS,
+            SurfaceEditorProperties.ID_KEYBOARD_KEY_OPACITY,
+            SurfaceEditorProperties.ID_KEYBOARD_COLORS,
+            SurfaceEditorProperties.ID_CHIP_RADIUS,
+            SurfaceEditorProperties.ID_WALLPAPER);
 
         Set<String> reachable = new HashSet<>();
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (Control control : SurfaceEditorProperties.chips(slot))
-                reachable.add(control.id);
-            for (Control control : SurfaceEditorProperties.more(slot))
+        for (List<Control> panel : panels()) {
+            for (Control control : panel)
                 reachable.add(control.id);
         }
         for (String id : mustExist)
-            assertTrue(id + " is reachable from no surface", reachable.contains(id));
+            assertTrue(id + " is reachable from no panel", reachable.contains(id));
+    }
+
+    @Test
+    public void theTerminalOwnsItsFrameItsRadiusAndItsMarginOutsideTheCascade() {
+        Control corners = SurfaceEditorProperties.find(SurfaceSlot.CANVAS,
+            SurfaceEditorProperties.ID_CORNERS);
+        Control margin = SurfaceEditorProperties.find(SurfaceSlot.CANVAS,
+            SurfaceEditorProperties.ID_MARGIN);
+        Control frame = SurfaceEditorProperties.find(SurfaceSlot.CANVAS,
+            SurfaceEditorProperties.ID_BORDER);
+        assertNotNull(corners);
+        assertNotNull(margin);
+        assertNotNull(frame);
+        // Not cascade cells: the canvas is the room the other surfaces are inset from, so it has no
+        // Base radius or gap to follow, and its two numbers are its own.
+        assertNull(corners.cell);
+        assertNull(margin.cell);
+        assertEquals(Kind.SWITCH, frame.kind);
+        assertEquals(SurfaceEditorProperties.MAX_TERMINAL_MARGIN_DP, margin.max);
     }
 
     @Test
@@ -117,7 +144,7 @@ public class SurfaceEditorPropertiesTest {
         // way down, before it knows whether the gesture is a tap or a drag. The canvas has no such
         // cell — it is the room the others are inset from — and reaching for it there took the home
         // screen down mid-touch. Anything walking to SIDE_GAP must tolerate this being absent.
-        assertEquals(null, SurfaceEditorRows.forCell(SurfaceSlot.CANVAS, SurfaceProperty.SIDE_GAP));
+        assertNull(SurfaceEditorRows.forCell(SurfaceSlot.CANVAS, SurfaceProperty.SIDE_GAP));
         for (SurfaceSlot slot
                 : new SurfaceSlot[] {SurfaceSlot.DOCK, SurfaceSlot.KEYBOARD, SurfaceSlot.STATUS})
             assertNotNull(slot + " lost its margin",
@@ -125,23 +152,26 @@ public class SurfaceEditorPropertiesTest {
     }
 
     @Test
-    public void theSharedLayerCarriesItsThreeRows() {
-        Set<String> ids = new HashSet<>();
-        for (Control control : SurfaceEditorProperties.base())
-            ids.add(control.id);
-        assertTrue(ids.contains(SurfaceEditorProperties.ID_BASE_INTENSITY));
-        assertTrue(ids.contains(SurfaceEditorProperties.ID_BASE_CORNERS));
-        assertTrue(ids.contains(SurfaceEditorProperties.ID_BASE_GAP));
+    public void theKeyboardShowsOnlyTheGlassItActuallyOwns() {
+        // It renders the dock's material — one blurred backdrop, one grain, the dock capsule's
+        // shape — so a blur or grain row on its panel would be a number controlling nothing.
+        assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_OPACITY));
+        assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_MARGIN));
+        assertNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_BLUR));
+        assertNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_GRAIN));
+        assertNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_CORNERS));
     }
 
     @Test
     public void everySliderHasAUsableTrackAndEveryCellItsRowsCeiling() {
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            List<Control> all = new ArrayList<>(SurfaceEditorProperties.chips(slot));
-            all.addAll(SurfaceEditorProperties.more(slot));
-            all.addAll(SurfaceEditorProperties.fine(slot));
-            for (Control control : all) {
-                if (control.kind == Kind.PICKER)
+        for (List<Control> panel : panels()) {
+            for (Control control : panel) {
+                if (control.kind != Kind.SLIDER)
                     continue;
                 assertTrue(control.id + " has no track", control.max > 0);
                 if (control.cell != null)
@@ -152,19 +182,17 @@ public class SurfaceEditorPropertiesTest {
     }
 
     @Test
-    public void findReachesChipsSheetRowsAndFineAlike() {
+    public void findAnswersForTheSharedLayerAndForOneSurfaceAlike() {
+        assertNotNull(SurfaceEditorProperties.find(null,
+            SurfaceEditorProperties.ID_ALL_CORNERS));
         assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.DOCK,
             SurfaceEditorProperties.ID_CORNERS));
         assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.DOCK,
             SurfaceEditorProperties.ID_APPS));
-        assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.DOCK,
-            SurfaceEditorProperties.ID_FINE_BLUR));
-        // The keyboard owns opacity and a side gap, and nothing else in the glass triple.
-        assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
-            SurfaceEditorProperties.ID_FINE_OPACITY));
-        assertEquals(null, SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
-            SurfaceEditorProperties.ID_FINE_BLUR));
-        assertEquals(null, SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
-            SurfaceEditorProperties.ID_CORNERS));
+        // A surface's rows are its own: the dock does not answer for the shared layer's.
+        assertNull(SurfaceEditorProperties.find(SurfaceSlot.DOCK,
+            SurfaceEditorProperties.ID_ALL_CORNERS));
+        assertNull(SurfaceEditorProperties.find(SurfaceSlot.STATUS,
+            SurfaceEditorProperties.ID_APPS));
     }
 }

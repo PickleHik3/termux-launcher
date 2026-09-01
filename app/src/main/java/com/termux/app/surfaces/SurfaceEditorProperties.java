@@ -6,7 +6,6 @@ import androidx.annotation.StringRes;
 
 import com.termux.R;
 import com.termux.app.dock.DockLayoutPolicy;
-import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -21,17 +20,22 @@ import java.util.function.ObjIntConsumer;
 import java.util.function.ToIntFunction;
 
 /**
- * What each surface offers the editor's pill, as data.
+ * What the editor's panel shows, as data: one ordered list per target.
  *
- * <p>The pill shows one property at a time, and the chip row names everything the surface offers —
- * every control is one visible tap away, with no second level of navigation behind a ⋯. This table
- * is that list, per surface, plus everything a single control needs to render and write itself, so
- * a new property is an entry rather than a layout.
+ * <p>There are five targets — the shared layer the editor opens on, and one per surface — and each
+ * is a flat list of rows that are all on screen at once. No chips, no second level, no "one open
+ * property": a surface's whole table stands on its card.
  *
- * <p>Two kinds of control live here side by side. Most are cells of the inheritance model and carry
+ * <p>The order is the same list everywhere, and it is the point of {@link #RANK}: opacity, blur,
+ * grain, corners, margin, then whatever else that surface owns. A row the current state makes inert
+ * — a docked surface's margin, the terminal's glass with no frame around it — is dropped rather than
+ * drawn dead, and the rows below it close up into its place, so the same property is always found in
+ * the same position relative to its neighbours.
+ *
+ * <p>Two kinds of row live here side by side. Most are cells of the inheritance model and carry
  * their {@link SurfaceEditorRows.Row}, which owns their clamp and their link to Base. The rest —
- * dock size, apps per page, the keyboard's own key metrics, the terminal's frame — are outside the
- * cascade by design and carry their own accessors instead; they have no link and no footnote.
+ * dock size, apps per page, the keyboard's key metrics, the terminal's frame, the wallpaper — are
+ * outside the cascade by design and carry their own accessors instead.
  *
  * <p>Pure data, no views and no {@code Context}.
  */
@@ -62,21 +66,17 @@ public final class SurfaceEditorProperties {
      */
     public static final int PREVIEW_ALL_BUT_BLUR = PREVIEW_ALL & ~PREVIEW_BLUR;
 
-    /** How a control draws itself in the pill's one open row. */
+    /** How a row draws itself. */
     public enum Kind {
-        /** The material macro: a Solid / Glass / Frost family, one intensity, the raw triple under it. */
-        LOOK,
-        /** A number on a track. */
+        /** A number on a track — almost everything. */
         SLIDER,
         /** On or off. */
         SWITCH,
-        /** A row that opens something which picks for itself. */
-        PICKER,
-        /** The dock's Docked / Floating segmented pair, drawn by the pill's own shape group. */
-        SHAPE
+        /** A labelled row that leaves the editor for a screen of its own. */
+        ACTION
     }
 
-    /** How a control's number is read out. */
+    /** How a row's number is read out. */
     public enum Unit {
         DP,
         /** Stored in tenths of a dp, so the track is fine enough to find a shape by eye. */
@@ -90,17 +90,10 @@ public final class SurfaceEditorProperties {
         NONE
     }
 
-    /** One thing the pill can have open. */
+    /** One row on the panel. */
     public static final class Control {
-        /** Stable across a session; the chip the user left a surface on is remembered by this. */
         @NonNull public final String id;
         @StringRes public final int labelRes;
-        /**
-         * The name the chip row uses. A chip is read at a glance next to three others, so it wants
-         * the short noun — "Corners", not "Corner radius" — while a sheet row, with a whole line to
-         * itself, wants the full one. Where the two agree this is just {@link #labelRes}.
-         */
-        @StringRes public final int chipLabelRes;
         public final Kind kind;
         public final Unit unit;
         public final int max;
@@ -110,15 +103,13 @@ public final class SurfaceEditorProperties {
         @Nullable private final ObjIntConsumer<TermuxAppSharedPreferences> write;
         public final int previewScopes;
 
-        private Control(@NonNull String id, @StringRes int labelRes, @StringRes int chipLabelRes,
-                        Kind kind, Unit unit, int max,
+        private Control(@NonNull String id, @StringRes int labelRes, Kind kind, Unit unit, int max,
                         @Nullable SurfaceEditorRows.Row cell,
                         @Nullable ToIntFunction<TermuxAppSharedPreferences> read,
                         @Nullable ObjIntConsumer<TermuxAppSharedPreferences> write,
                         int previewScopes) {
             this.id = id;
             this.labelRes = labelRes;
-            this.chipLabelRes = chipLabelRes == 0 ? labelRes : chipLabelRes;
             this.kind = kind;
             this.unit = unit;
             this.max = max;
@@ -126,12 +117,6 @@ public final class SurfaceEditorProperties {
             this.read = read;
             this.write = write;
             this.previewScopes = previewScopes;
-        }
-
-        /** The footnote's lowercase noun for this control, or 0 where it has no link to explain. */
-        @StringRes
-        public int nounRes() {
-            return cell == null ? 0 : cell.nounRes;
         }
 
         public int read(@NonNull TermuxAppSharedPreferences prefs) {
@@ -150,121 +135,192 @@ public final class SurfaceEditorProperties {
         }
     }
 
-    /** A cell of the inheritance model, taking its clamp and ceiling from the row table. */
-    private static Control cell(@NonNull String id, @NonNull SurfaceSlot slot,
-                                @NonNull SurfaceProperty property, int previewScopes) {
-        return cell(id, slot, property, 0, previewScopes);
+    // ------------------------------------------------------------------------------------- ids
+
+    /** The five rows every surface shares, named the same everywhere so the order can be shared. */
+    public static final String ID_OPACITY = "opacity";
+    public static final String ID_BLUR = "blur";
+    public static final String ID_GRAIN = "grain";
+    public static final String ID_CORNERS = "corners";
+    public static final String ID_MARGIN = "margin";
+
+    public static final String ID_SIZE = "size";
+    public static final String ID_APPS = "apps";
+    public static final String ID_KEYBOARD_KEY_RADIUS = "keyboard_key_radius";
+    public static final String ID_KEYBOARD_KEY_OPACITY = "keyboard_key_opacity";
+    public static final String ID_KEYBOARD_SPACING = "keyboard_spacing";
+    public static final String ID_KEYBOARD_COLORS = "keyboard_colors";
+    public static final String ID_CHIP_RADIUS = "chip_radius";
+    public static final String ID_BORDER = "border";
+    public static final String ID_WALLPAPER = "wallpaper";
+
+    /**
+     * The shared layer's rows. Same five names with an {@code all_} prefix, because they are the
+     * same five decisions taken once for everything rather than a different set of controls.
+     */
+    public static final String ID_ALL_OPACITY = "all_opacity";
+    public static final String ID_ALL_BLUR = "all_blur";
+    public static final String ID_ALL_GRAIN = "all_grain";
+    public static final String ID_ALL_CORNERS = "all_corners";
+    public static final String ID_ALL_MARGIN = "all_margin";
+
+    /**
+     * The one order every panel is drawn in. Anything unranked sorts after the shared five, in the
+     * order its surface declares it — the surface's own extras, which no other surface has to line
+     * up with.
+     */
+    private static final List<String> RANK = Collections.unmodifiableList(Arrays.asList(
+        ID_OPACITY, ID_ALL_OPACITY,
+        ID_BLUR, ID_ALL_BLUR,
+        ID_GRAIN, ID_ALL_GRAIN,
+        ID_CORNERS, ID_ALL_CORNERS,
+        ID_MARGIN, ID_ALL_MARGIN));
+
+    /** Where a row sorts, for the tests that hold every panel to the shared order. */
+    public static int rankOf(@NonNull String id) {
+        int index = RANK.indexOf(id);
+        return index < 0 ? RANK.size() : index;
     }
 
+    // -------------------------------------------------------------------------------- builders
+
+    /** A cell of the inheritance model, taking its clamp and ceiling from the row table. */
     private static Control cell(@NonNull String id, @NonNull SurfaceSlot slot,
-                                @NonNull SurfaceProperty property, @StringRes int chipLabelRes,
+                                @NonNull SurfaceProperty property, @StringRes int labelRes,
                                 int previewScopes) {
         SurfaceEditorRows.Row row = SurfaceEditorRows.forCell(slot, property);
         if (row == null)
             throw new IllegalArgumentException("no row for " + slot + "/" + property);
-        return new Control(id, row.labelRes, chipLabelRes, Kind.SLIDER,
-            row.dp ? Unit.DP : Unit.PERCENT, row.max, row, null, null, previewScopes);
+        return new Control(id, labelRes, Kind.SLIDER, row.dp ? Unit.DP : Unit.PERCENT, row.max,
+            row, null, null, previewScopes);
     }
 
-    /** A control outside the cascade: its own accessors, no link and no footnote. */
+    /** A control outside the cascade: its own accessors, and no link to Base. */
     private static Control own(@NonNull String id, @StringRes int labelRes, Kind kind, Unit unit,
                                int max,
                                @Nullable ToIntFunction<TermuxAppSharedPreferences> read,
                                @Nullable ObjIntConsumer<TermuxAppSharedPreferences> write,
                                int previewScopes) {
-        return own(id, labelRes, 0, kind, unit, max, read, write, previewScopes);
+        return new Control(id, labelRes, kind, unit, max, null, read, write, previewScopes);
     }
 
-    /** The same, for a control whose chip wants a shorter noun than its full label. */
-    private static Control own(@NonNull String id, @StringRes int labelRes,
-                               @StringRes int chipLabelRes, Kind kind, Unit unit, int max,
-                               @Nullable ToIntFunction<TermuxAppSharedPreferences> read,
-                               @Nullable ObjIntConsumer<TermuxAppSharedPreferences> write,
-                               int previewScopes) {
-        return new Control(id, labelRes, chipLabelRes, kind, unit, max, null, read, write,
-            previewScopes);
+    private static boolean floating(@NonNull TermuxAppSharedPreferences prefs) {
+        return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED.equals(prefs.getAppLauncherDockStyle());
     }
 
-    public static final String ID_LOOK = "look";
-    public static final String ID_STYLE = "style";
-    public static final String ID_CORNERS = "corners";
-    public static final String ID_GAP = "gap";
-    public static final String ID_SIZE = "size";
-    public static final String ID_BORDER = "border";
-    public static final String ID_APPS = "apps";
-    public static final String ID_KEYBOARD_HEIGHT = "keyboard_height";
-    public static final String ID_KEYBOARD_SPACING = "keyboard_spacing";
-    public static final String ID_KEYBOARD_KEY_RADIUS = "keyboard_key_radius";
-    public static final String ID_KEYBOARD_KEY_OPACITY = "keyboard_key_opacity";
-    public static final String ID_KEYBOARD_COLORS = "keyboard_colors";
-    public static final String ID_CLOCK = "clock";
-    public static final String ID_CHIP_RADIUS = "chip_radius";
-    public static final String ID_TERMINAL_RADIUS = "terminal_radius";
-    public static final String ID_TERMINAL_GAP = "terminal_gap";
-    public static final String ID_WALLPAPER = "wallpaper";
-    /** Raw blur, opacity and grain for one surface, behind Look's Fine. */
-    public static final String ID_FINE_BLUR = "fine_blur";
-    public static final String ID_FINE_OPACITY = "fine_opacity";
-    public static final String ID_FINE_GRAIN = "fine_grain";
+    // ------------------------------------------------------------------------------ the panels
 
-    /** Look is the same control on every surface: the family and intensity of that surface's glass. */
-    private static Control look() {
-        return own(ID_LOOK, R.string.termux_surface_editor_look, Kind.LOOK, Unit.PERCENT, 100,
-            null, null, PREVIEW_GLASS | PREVIEW_SURFACES | PREVIEW_KEYBOARD);
-    }
+    /** The shared margin's ceiling while Floating, where it is the surfaces' own screen-edge gap. */
+    public static final int MAX_ALL_MARGIN_DP = 48;
+    /** The terminal's own margin ceiling, which the shared margin never writes past. */
+    public static final int MAX_TERMINAL_MARGIN_DP = 24;
 
-    private static final EnumMap<SurfaceSlot, List<Control>> CHIPS =
-        new EnumMap<>(SurfaceSlot.class);
-    private static final EnumMap<SurfaceSlot, List<Control>> MORE =
-        new EnumMap<>(SurfaceSlot.class);
-    private static final EnumMap<SurfaceSlot, List<Control>> FINE =
+    /**
+     * The shared layer, which is what the editor opens on.
+     *
+     * <p>Its three glass rows are Base's own blur, opacity and grain — the same numbers the
+     * Solid / Glass / Frost pill writes as a set, so moving one by hand simply leaves the pill with
+     * no family to claim. Corners and margin are compound on purpose: the two questions a user
+     * actually has here are "how round is everything" and "how much air is there", and answering
+     * them one surface at a time is what the shared layer exists to avoid.
+     */
+    private static final List<Control> GLOBAL = Collections.unmodifiableList(Arrays.asList(
+        own(ID_ALL_OPACITY, R.string.termux_dock_tuning_opacity, Kind.SLIDER, Unit.PERCENT, 100,
+            prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY),
+            (prefs, value) -> prefs.setSurfaceBaseValue(SurfaceProperty.OPACITY, value),
+            PREVIEW_GLASS | PREVIEW_SURFACES | PREVIEW_KEYBOARD),
+        own(ID_ALL_BLUR, R.string.termux_dock_tuning_blur, Kind.SLIDER, Unit.DP, 30,
+            prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.BLUR),
+            (prefs, value) -> prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, value),
+            PREVIEW_BLUR | PREVIEW_SURFACES | PREVIEW_KEYBOARD),
+        own(ID_ALL_GRAIN, R.string.termux_dock_tuning_grain, Kind.SLIDER, Unit.PERCENT, 100,
+            prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN),
+            (prefs, value) -> prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, value),
+            PREVIEW_GLASS | PREVIEW_SURFACES | PREVIEW_KEYBOARD),
+        // Docked rounds the terminal by its own knob, so the shared radius has to carry it there
+        // too or "round everything" would leave one square hole in the middle of the screen.
+        // Floating derives the terminal's shape from the dock capsule, which this already moved.
+        own(ID_ALL_CORNERS, R.string.termux_dock_tuning_radius, Kind.SLIDER, Unit.DP, 40,
+            prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS),
+            (prefs, value) -> {
+                prefs.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, value);
+                if (!floating(prefs))
+                    prefs.setTerminalCornerRadius(value);
+            },
+            PREVIEW_ALL_BUT_BLUR),
+        // One number for all the air on screen. Docked surfaces are flush with the screen edges by
+        // definition, so there it is the terminal's own margin alone; Floating spends it on both.
+        own(ID_ALL_MARGIN, R.string.termux_surface_tuning_edges, Kind.SLIDER, Unit.DP,
+            MAX_ALL_MARGIN_DP,
+            prefs -> floating(prefs)
+                ? prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP)
+                : prefs.getTerminalPaneGap(),
+            (prefs, value) -> {
+                if (floating(prefs))
+                    prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, value);
+                prefs.setTerminalPaneGap(Math.min(MAX_TERMINAL_MARGIN_DP, value));
+            },
+            PREVIEW_ALL_BUT_BLUR),
+        own(ID_WALLPAPER, R.string.termux_surface_editor_wallpaper_dim, Kind.SLIDER, Unit.PERCENT,
+            100,
+            TermuxAppSharedPreferences::getWallpaperBackdropDim,
+            TermuxAppSharedPreferences::setWallpaperBackdropDim,
+            PREVIEW_SURFACES)));
+
+    private static final EnumMap<SurfaceSlot, List<Control>> PANELS =
         new EnumMap<>(SurfaceSlot.class);
 
     static {
-        CHIPS.put(SurfaceSlot.DOCK, Collections.unmodifiableList(Arrays.asList(
-            look(),
-            // Docked or Floating is the dock's first decision, so it stands as its own chip
-            // rather than riding inside Material; the pill's shape group draws it. Writes go
-            // through that group, which is why this control carries a reader only.
-            own(ID_STYLE, R.string.termux_surface_editor_chip_style, Kind.SHAPE, Unit.NONE, 1,
-                prefs -> SegmentedPillPreference.VALUE_ROUNDED
-                    .equals(prefs.getAppLauncherDockStyle()) ? 1 : 0,
-                null,
-                PREVIEW_GEOMETRY | PREVIEW_SURFACES),
+        PANELS.put(SurfaceSlot.DOCK, panel(
+            cell(ID_OPACITY, SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+                R.string.termux_dock_tuning_opacity,
+                PREVIEW_GLASS | PREVIEW_SURFACES),
+            cell(ID_BLUR, SurfaceSlot.DOCK, SurfaceProperty.BLUR,
+                R.string.termux_dock_tuning_blur,
+                PREVIEW_BLUR | PREVIEW_SURFACES),
+            cell(ID_GRAIN, SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
+                R.string.termux_dock_tuning_grain,
+                PREVIEW_GLASS | PREVIEW_SURFACES),
             cell(ID_CORNERS, SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS,
-                R.string.termux_surface_editor_chip_corners,
+                R.string.termux_dock_tuning_radius,
                 PREVIEW_GEOMETRY | PREVIEW_SURFACES),
-            cell(ID_GAP, SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP,
-                R.string.termux_surface_editor_chip_gap,
+            cell(ID_MARGIN, SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP,
+                R.string.termux_surface_tuning_edges,
                 PREVIEW_GEOMETRY | PREVIEW_SURFACES),
+            own(ID_APPS, R.string.termux_dock_tuning_icons, Kind.SLIDER, Unit.COUNT, 20,
+                TermuxAppSharedPreferences::getAppLauncherButtonCount,
+                (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
+                PREVIEW_GEOMETRY),
             own(ID_SIZE, R.string.termux_dock_tuning_size, Kind.SLIDER, Unit.DOCK_SIZE,
                 DockLayoutPolicy.sizePresetCount() - 1,
                 prefs -> DockLayoutPolicy.nearestSizePresetIndex(
                     prefs.getAppLauncherBarHeightScale()),
                 (prefs, value) -> prefs.setAppLauncherBarHeightScale(
                     DockLayoutPolicy.sizePreset(value)),
-                PREVIEW_GEOMETRY),
-            own(ID_APPS, R.string.termux_dock_tuning_icons,
-                R.string.termux_surface_editor_chip_apps, Kind.SLIDER, Unit.COUNT, 20,
-                TermuxAppSharedPreferences::getAppLauncherButtonCount,
-                (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
-                PREVIEW_GEOMETRY))));
+                PREVIEW_GEOMETRY)));
 
-        CHIPS.put(SurfaceSlot.KEYBOARD, Collections.unmodifiableList(Arrays.asList(
-            look(),
-            cell(ID_GAP, SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
-                R.string.termux_surface_editor_chip_gap,
+        // The keyboard renders the dock's material — one blurred backdrop, one grain, the dock
+        // capsule's shape — so it owns an opacity and a margin and nothing else of the glass. Its
+        // height is the drag handle on its own top edge rather than a row here.
+        PANELS.put(SurfaceSlot.KEYBOARD, panel(
+            // "BG opacity", not "Opacity": the keys have an opacity of their own two rows down,
+            // and this one is the slab behind them.
+            cell(ID_OPACITY, SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
+                R.string.termux_surface_editor_background_opacity,
+                PREVIEW_SURFACES | PREVIEW_KEYBOARD),
+            cell(ID_MARGIN, SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
+                R.string.termux_surface_tuning_edges,
                 PREVIEW_GEOMETRY | PREVIEW_SURFACES),
-            own(ID_KEYBOARD_HEIGHT, R.string.termux_surface_tuning_keyboard_height, Kind.SLIDER,
-                Unit.PERCENT, 100,
-                prefs -> SurfaceEditorController.keyboardEditorProgress(
-                    prefs.getInAppKeyboardHeightScale(),
-                    TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                    TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE),
-                (prefs, value) -> prefs.setInAppKeyboardHeightScale(
-                    SurfaceEditorController.keyboardEditorValue(value,
-                        TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                        TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE)),
+            // A tenth of a dp per step, so the track is fine enough to find a key shape by eye.
+            own(ID_KEYBOARD_KEY_RADIUS, R.string.termux_surface_editor_key_radius, Kind.SLIDER,
+                Unit.DP_TENTHS, 240,
+                prefs -> Math.round(prefs.getInAppKeyboardKeyCornerRadiusDp() * 10f),
+                (prefs, value) -> prefs.setInAppKeyboardKeyCornerRadiusDp(value / 10f),
+                0),
+            own(ID_KEYBOARD_KEY_OPACITY, R.string.termux_surface_tuning_keyboard_key_opacity,
+                Kind.SLIDER, Unit.PERCENT, 100,
+                TermuxAppSharedPreferences::getInAppKeyboardKeyOpacity,
+                TermuxAppSharedPreferences::setInAppKeyboardKeyOpacity,
                 0),
             own(ID_KEYBOARD_SPACING, R.string.termux_surface_tuning_keyboard_spacing, Kind.SLIDER,
                 Unit.PERCENT, 100,
@@ -277,146 +333,93 @@ public final class SurfaceEditorProperties {
                         TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
                         TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE)),
                 0),
-            // A tenth of a dp per step, so the track is fine enough to find a key shape by eye.
-            own(ID_KEYBOARD_KEY_RADIUS, R.string.termux_surface_editor_key_radius, Kind.SLIDER,
-                Unit.DP_TENTHS, 240,
-                prefs -> Math.round(prefs.getInAppKeyboardKeyCornerRadiusDp() * 10f),
-                (prefs, value) -> prefs.setInAppKeyboardKeyCornerRadiusDp(value / 10f),
-                0),
-            own(ID_KEYBOARD_KEY_OPACITY, R.string.termux_surface_tuning_keyboard_key_opacity,
-                Kind.SLIDER, Unit.PERCENT, 100,
-                TermuxAppSharedPreferences::getInAppKeyboardKeyOpacity,
-                TermuxAppSharedPreferences::setInAppKeyboardKeyOpacity,
-                0),
-            own(ID_KEYBOARD_COLORS, R.string.settings_keyboard_colors_title,
-                R.string.termux_surface_editor_chip_colors, Kind.PICKER,
-                Unit.NONE, 0, null, null, 0))));
+            own(ID_KEYBOARD_COLORS, R.string.settings_keyboard_colors_title, Kind.ACTION,
+                Unit.NONE, 0, null, null, 0)));
 
-        CHIPS.put(SurfaceSlot.STATUS, Collections.unmodifiableList(Arrays.asList(
-            look(),
+        PANELS.put(SurfaceSlot.STATUS, panel(
+            cell(ID_OPACITY, SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
+                R.string.termux_dock_tuning_opacity,
+                PREVIEW_GLASS | PREVIEW_SURFACES),
+            cell(ID_BLUR, SurfaceSlot.STATUS, SurfaceProperty.BLUR,
+                R.string.termux_dock_tuning_blur,
+                PREVIEW_BLUR | PREVIEW_SURFACES),
+            cell(ID_GRAIN, SurfaceSlot.STATUS, SurfaceProperty.GRAIN,
+                R.string.termux_dock_tuning_grain,
+                PREVIEW_GLASS | PREVIEW_SURFACES),
             cell(ID_CORNERS, SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS,
-                R.string.termux_surface_editor_chip_corners,
+                R.string.termux_dock_tuning_radius,
                 PREVIEW_GEOMETRY | PREVIEW_SURFACES),
-            cell(ID_GAP, SurfaceSlot.STATUS, SurfaceProperty.SIDE_GAP,
-                R.string.termux_surface_editor_chip_gap,
+            cell(ID_MARGIN, SurfaceSlot.STATUS, SurfaceProperty.SIDE_GAP,
+                R.string.termux_surface_tuning_edges,
                 PREVIEW_GEOMETRY | PREVIEW_SURFACES),
-            own(ID_CLOCK, R.string.termux_surface_tuning_clock, Kind.PICKER, Unit.NONE, 0,
-                null, null, 0),
             own(ID_CHIP_RADIUS, R.string.termux_surface_tuning_indicator_radius, Kind.SLIDER,
                 Unit.DP, TERMUX_APP.MAX_STATUS_INDICATOR_CORNER_RADIUS,
                 TermuxAppSharedPreferences::getStatusIndicatorCornerRadius,
                 TermuxAppSharedPreferences::setStatusIndicatorCornerRadius,
-                0))));
+                0)));
 
-        CHIPS.put(SurfaceSlot.CANVAS, Collections.unmodifiableList(Arrays.asList(
-            look(),
-            own(ID_BORDER, R.string.termux_dock_tuning_terminal_border, Kind.SWITCH, Unit.NONE, 1,
-                prefs -> prefs.isTerminalBorderEnabled() ? 1 : 0,
-                (prefs, value) -> prefs.setTerminalBorderEnabled(value != 0),
-                PREVIEW_ALL | PREVIEW_GEOMETRY_COMMIT),
-            own(ID_TERMINAL_RADIUS, R.string.termux_dock_tuning_radius,
-                R.string.termux_surface_editor_chip_corners, Kind.SLIDER, Unit.DP, 40,
+        PANELS.put(SurfaceSlot.CANVAS, panel(
+            cell(ID_OPACITY, SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
+                R.string.termux_dock_tuning_opacity,
+                PREVIEW_SURFACES),
+            cell(ID_BLUR, SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
+                R.string.termux_dock_tuning_blur,
+                PREVIEW_BLUR | PREVIEW_SURFACES),
+            cell(ID_GRAIN, SurfaceSlot.CANVAS, SurfaceProperty.GRAIN,
+                R.string.termux_dock_tuning_grain,
+                PREVIEW_GLASS | PREVIEW_SURFACES),
+            own(ID_CORNERS, R.string.termux_dock_tuning_radius, Kind.SLIDER, Unit.DP, 40,
                 TermuxAppSharedPreferences::getTerminalCornerRadius,
                 TermuxAppSharedPreferences::setTerminalCornerRadius,
                 PREVIEW_SURFACES),
-            own(ID_TERMINAL_GAP, R.string.termux_dock_tuning_terminal_inner_padding,
-                R.string.termux_surface_editor_chip_padding, Kind.SLIDER, Unit.DP, 24,
+            own(ID_MARGIN, R.string.termux_surface_tuning_edges, Kind.SLIDER, Unit.DP,
+                MAX_TERMINAL_MARGIN_DP,
                 TermuxAppSharedPreferences::getTerminalPaneGap,
                 TermuxAppSharedPreferences::setTerminalPaneGap,
                 PREVIEW_SURFACES),
-            own(ID_WALLPAPER, R.string.termux_surface_editor_wallpaper_dim,
-                R.string.termux_surface_editor_chip_wallpaper, Kind.SLIDER, Unit.PERCENT, 100,
-                TermuxAppSharedPreferences::getWallpaperBackdropDim,
-                TermuxAppSharedPreferences::setWallpaperBackdropDim,
-                PREVIEW_SURFACES))));
-
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            List<Control> fine = new ArrayList<>(3);
-            addFine(fine, slot, SurfaceProperty.BLUR, ID_FINE_BLUR, PREVIEW_BLUR | PREVIEW_SURFACES);
-            addFine(fine, slot, SurfaceProperty.OPACITY, ID_FINE_OPACITY,
-                PREVIEW_SURFACES | PREVIEW_KEYBOARD);
-            addFine(fine, slot, SurfaceProperty.GRAIN, ID_FINE_GRAIN, PREVIEW_SURFACES);
-            FINE.put(slot, Collections.unmodifiableList(fine));
-            if (!MORE.containsKey(slot))
-                MORE.put(slot, Collections.emptyList());
-            if (!CHIPS.containsKey(slot))
-                CHIPS.put(slot, Collections.unmodifiableList(
-                    Collections.singletonList(look())));
-        }
+            // Last, and a switch rather than a number: it is the frame the glass above it lives
+            // inside, so the rows it enables read down into it rather than out of it.
+            own(ID_BORDER, R.string.termux_dock_tuning_terminal_border, Kind.SWITCH, Unit.NONE, 1,
+                prefs -> prefs.isTerminalBorderEnabled() ? 1 : 0,
+                (prefs, value) -> prefs.setTerminalBorderEnabled(value != 0),
+                PREVIEW_ALL | PREVIEW_GEOMETRY_COMMIT)));
     }
 
-    private static void addFine(@NonNull List<Control> into, @NonNull SurfaceSlot slot,
-                                @NonNull SurfaceProperty property, @NonNull String id, int scopes) {
-        if (SurfaceEditorRows.forCell(slot, property) != null)
-            into.add(cell(id, slot, property, scopes));
+    /** Sorts one surface's declared rows into the shared order and freezes them. */
+    private static List<Control> panel(Control... controls) {
+        List<Control> ordered = new ArrayList<>(Arrays.asList(controls));
+        // A stable sort, so two unranked extras keep the order the surface declared them in.
+        Collections.sort(ordered,
+            (left, right) -> Integer.compare(rankOf(left.id), rankOf(right.id)));
+        return Collections.unmodifiableList(ordered);
     }
 
-    public static final String ID_BASE_INTENSITY = "base_intensity";
-    public static final String ID_BASE_CORNERS = "base_corners";
-    public static final String ID_BASE_GAP = "base_gap";
-
-    /**
-     * The shared layer's own rows, for the Looks sheet.
-     *
-     * <p>Base is not a surface, so it is not on the pill: nothing on screen would wear its ring, and
-     * "change everything" is the question the Looks sheet is already there to answer. The intensity
-     * row is the material macro rather than a plain number — the editor intercepts its write — and
-     * the two geometry rows move every surface that still follows them.
-     */
-    private static final List<Control> BASE = Collections.unmodifiableList(Arrays.asList(
-        own(ID_BASE_INTENSITY, R.string.termux_surface_tuning_material_intensity, Kind.SLIDER,
-            Unit.PERCENT, 100,
-            TermuxAppSharedPreferences::getSurfaceMaterialIntensity, null,
-            PREVIEW_GLASS | PREVIEW_SURFACES | PREVIEW_KEYBOARD),
-        own(ID_BASE_CORNERS, R.string.termux_dock_tuning_radius, Kind.SLIDER, Unit.DP, 40,
-            prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS),
-            (prefs, value) -> prefs.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, value),
-            PREVIEW_ALL_BUT_BLUR),
-        own(ID_BASE_GAP, R.string.termux_surface_tuning_edges, Kind.SLIDER, Unit.DP, 48,
-            prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP),
-            (prefs, value) -> prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, value),
-            PREVIEW_ALL_BUT_BLUR)));
-
+    /** The shared layer's rows, which is what the editor opens on. */
     @NonNull
-    public static List<Control> base() {
-        return BASE;
+    public static List<Control> global() {
+        return GLOBAL;
     }
 
-    /** The chips one surface puts on the pill, in order. */
+    /** One surface's rows, in the shared order. */
     @NonNull
-    public static List<Control> chips(@NonNull SurfaceSlot slot) {
-        return CHIPS.get(slot);
+    public static List<Control> panel(@NonNull SurfaceSlot slot) {
+        return PANELS.get(slot);
     }
 
-    /**
-     * Controls behind the chip row. Empty for every surface since the chips took the whole table —
-     * a control is either a visible chip or it is not in the product — but the accessor stays so
-     * the reachability tests keep sweeping both levels.
-     */
+    /** The rows of one target: a surface's, or the shared layer's for a null slot. */
     @NonNull
-    public static List<Control> more(@NonNull SurfaceSlot slot) {
-        return MORE.get(slot);
+    public static List<Control> rowsFor(@Nullable SurfaceSlot slot) {
+        return slot == null ? global() : panel(slot);
     }
 
-    /** The raw glass triple behind that surface's Material, drawn under its intensity row. */
-    @NonNull
-    public static List<Control> fine(@NonNull SurfaceSlot slot) {
-        return FINE.get(slot);
-    }
-
-    /** The chip or sheet control with this id on that surface, or null. */
+    /** The row with this id on that target, or null. */
     @Nullable
-    public static Control find(@NonNull SurfaceSlot slot, @Nullable String id) {
+    public static Control find(@Nullable SurfaceSlot slot, @Nullable String id) {
         if (id == null)
             return null;
-        for (Control control : chips(slot)) {
-            if (control.id.equals(id)) return control;
-        }
-        for (Control control : more(slot)) {
-            if (control.id.equals(id)) return control;
-        }
-        for (Control control : fine(slot)) {
-            if (control.id.equals(id)) return control;
+        for (Control control : rowsFor(slot)) {
+            if (control.id.equals(id))
+                return control;
         }
         return null;
     }

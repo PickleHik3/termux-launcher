@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A row that leaves the editor for a screen of its own — the keyboard's colours. The chevron is
+     what says the tap goes somewhere rather than changing a value in place. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="36dp"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/surface_editor_row_label"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?attr/termuxColorOnSurface"
+        android:textSize="12.5sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:importantForAccessibility="no"
+        android:paddingEnd="6dp"
+        android:text="@string/termux_surface_editor_action_chevron"
+        android:textColor="?attr/termuxColorPrimary"
+        android:textSize="14sp" />
+</LinearLayout>

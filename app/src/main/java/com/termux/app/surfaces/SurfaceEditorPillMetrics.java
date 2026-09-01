@@ -3,19 +3,17 @@ package com.termux.app.surfaces;
 /**
  * Where the surface editor's pill parks, and how many rows it can afford there.
  *
- * <p>The pill carries one property at a time and sits next to the surface it edits, never on top of
- * it: the standoff from its surface is constant, so the pill rides the dock's lift and the
+ * <p>The card sits next to the surface it edits, never on top of it: the standoff from its surface is constant, so the pill rides the dock's lift and the
  * keyboard's reveal instead of being placed against whatever else is on screen. Everything else
  * falls out of clamping that one offset inside the terminal region — a keyboard whose only free
  * neighbour is occupied by the dock pushes the pill above the dock without anybody deciding that
  * case, and a surface with no room on its own side ends up on the other one.
  *
- * <p>The shape degrades with the room. A system IME on a cramped phone can collapse the band
- * between the anchors below anything the full pill needs (issue #20), and the answer is fewer rows
- * rather than a clipped or empty editor: the chip row and the footnote go, then the chip row's
- * replacement dropdown moves inline, but the slider never does. One row is always affordable
- * because the floor here is unconditional — {@link Mode#ONE_ROW} is what a region too short for
- * even that still gets.
+ * <p>The body gives way with the room. A system IME on a cramped phone can collapse the band
+ * between the anchors below anything the card's whole list needs (issue #20), and the answer is a
+ * shorter scrolling body rather than a clipped card or a card pinned over the surfaces bounding it:
+ * {@link #bodyCapPx} is that height, and it has a floor, so a region too short for anything still
+ * leaves a usable strip of list.
  *
  * <p>Pure arithmetic on pixels, no views, so the cases that matter — keyboard up, keyboard down, a
  * top-anchored surface, a squeezed screen — are testable without inflating the editor.
@@ -23,16 +21,6 @@ package com.termux.app.surfaces;
 public final class SurfaceEditorPillMetrics {
 
     private SurfaceEditorPillMetrics() {}
-
-    /** How much of itself the pill can draw in the room it has. */
-    public enum Mode {
-        /** Title, chips, the open property's slider and the inheritance footnote. */
-        FULL,
-        /** The same without the footnote, at tighter padding — the common keyboard-up case. */
-        COMPACT,
-        /** Surface, property dropdown, slider, value and Done on one row. */
-        ONE_ROW
-    }
 
     /**
      * Where the pill's top edge goes, in the same coordinate space as every argument.
@@ -61,32 +49,37 @@ public final class SurfaceEditorPillMetrics {
     }
 
     /**
-     * Where the pill's top edge goes for a surface that <em>is</em> the region — the canvas.
+     * Where the pill's top edge goes for a target that <em>is</em> the region — the shared layer,
+     * and the canvas.
      *
-     * <p>The other three are bands with a free side to sit beside. The canvas is the free side, so
-     * there is no edge to stand off from and the honest answer is the middle of it: parking the
-     * canvas's pill against the bottom of its own region would read as belonging to the dock.
+     * <p>Against the region's foot rather than centred in it. The other three targets are bands
+     * with a free side to sit beside; these two have the whole terminal, and the useful thing to do
+     * with it is leave as much of it in one piece as possible. Centring cut the free room into two
+     * thin strips with the card between them, and neither strip read as "the terminal, touch it" —
+     * which is the one gesture the shared layer exists to invite.
      */
-    public static int parkCenteredTopPx(int pillHeightPx, int regionTopPx, int regionBottomPx) {
-        int centered = regionTopPx + (((regionBottomPx - regionTopPx) - pillHeightPx) / 2);
-        return Math.max(regionTopPx, centered);
+    public static int parkRegionFootTopPx(int pillHeightPx, int standoffPx, int regionTopPx,
+                                          int regionBottomPx) {
+        return Math.max(regionTopPx, regionBottomPx - standoffPx - pillHeightPx);
     }
 
     /**
-     * The tallest shape that fits, leaving the standoff free at both ends so the pill never lands
-     * flush against the surfaces bounding its region.
+     * How tall the card's scrolling body may grow, leaving the standoff free at both ends so the
+     * card never lands flush against the surfaces bounding its region.
      *
-     * @param regionHeightPx  the band between the anchors
-     * @param fullHeightPx    what {@link Mode#FULL} measures
-     * @param compactHeightPx what {@link Mode#COMPACT} measures
-     * @return the mode to draw; {@link Mode#ONE_ROW} when neither of the others fits, including
-     *         when the region cannot hold one row either
+     * <p>Clamped at both ends and deliberately: the ceiling stops a short list's card from filling
+     * the screen on a tablet, and the floor keeps a usable strip of list on a phone whose region a
+     * system IME has squeezed to nothing. Below the floor the card is allowed to be the taller of
+     * the two — a card that overhangs its region by a few dp is still usable, and one measured to
+     * zero is not.
+     *
+     * @param regionHeightPx the band between the anchors
+     * @param chromeHeightPx what the card spends on everything that is not the body
+     * @param standoffPx     the gap the card leaves at each end of the region
      */
-    public static Mode modeFor(int regionHeightPx, int fullHeightPx, int compactHeightPx) {
-        if (regionHeightPx >= fullHeightPx)
-            return Mode.FULL;
-        if (regionHeightPx >= compactHeightPx)
-            return Mode.COMPACT;
-        return Mode.ONE_ROW;
+    public static int bodyCapPx(int regionHeightPx, int chromeHeightPx, int standoffPx,
+                                int minCapPx, int maxCapPx) {
+        int available = regionHeightPx - chromeHeightPx - (2 * standoffPx);
+        return Math.max(minCapPx, Math.min(maxCapPx, available));
     }
 }

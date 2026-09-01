@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One shared surface-editor row: label, slider, value read-out, link chip. Inflated once per
-     SurfaceEditorRows entry; the inflating code re-ids the slider, value and chip to the row's
-     historical view ids, so everything that looks controls up by id is untouched by generation. -->
+<!-- One slider row on the surface editor's panel: label, track, number, and the link back to Base
+     where the row has one. Every row on every panel is this layout, so a shared row and a surface's
+     own row read as the same control. Generated per entry in SurfaceEditorProperties. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="36dp"
@@ -10,12 +10,12 @@
 
     <TextView
         android:id="@+id/surface_editor_row_label"
-        android:layout_width="88dp"
+        android:layout_width="84dp"
         android:layout_height="wrap_content"
         android:ellipsize="end"
         android:maxLines="1"
         android:textColor="?attr/termuxColorOnSurface"
-        android:textSize="12sp" />
+        android:textSize="12.5sp" />
 
     <SeekBar
         android:id="@+id/surface_editor_row_slider"
@@ -26,17 +26,24 @@
 
     <TextView
         android:id="@+id/surface_editor_row_value"
-        android:layout_width="48dp"
+        android:layout_width="46dp"
         android:layout_height="wrap_content"
-        android:gravity="center"
+        android:ellipsize="end"
+        android:gravity="end|center_vertical"
+        android:maxLines="1"
         android:textColor="?attr/termuxColorOnSurfaceVariant"
-        android:textSize="11sp" />
+        android:textSize="11.5sp" />
 
+    <!-- Only rendered once this surface has taken its own value: tapping it puts the row back on
+         the shared layer. Invisible while the row still follows Base, which is the quiet default. -->
     <TextView
         android:id="@+id/surface_editor_row_chip"
-        android:layout_width="30dp"
+        android:layout_width="28dp"
         android:layout_height="28dp"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:gravity="center"
-        android:textSize="11sp" />
+        android:text="@string/termux_surface_tuning_link_detached"
+        android:textColor="?attr/termuxColorPrimary"
+        android:textSize="12sp"
+        android:visibility="invisible" />
 </LinearLayout>

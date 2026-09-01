@@ -1,6 +1,5 @@
 package com.termux.app.surfaces;
 
-import com.termux.app.surfaces.SurfaceEditorPillMetrics.Mode;
 
 import org.junit.Test;
 
@@ -62,25 +61,31 @@ public class SurfaceEditorPillMetricsTest {
     }
 
     @Test
-    public void theCanvasCentresInItsOwnRegion() {
-        assertEquals(REGION_TOP + ((800 - PILL) / 2),
-            SurfaceEditorPillMetrics.parkCenteredTopPx(PILL, REGION_TOP, REGION_BOTTOM));
+    public void aRegionWideTargetParksAtTheRegionsFoot() {
+        // The shared layer and the canvas own the whole terminal, so the card goes to the bottom of
+        // it and the free room stays in one piece above — the block the user touches to pick the
+        // terminal. One standoff clear of whatever bounds the region below.
+        assertEquals(REGION_BOTTOM - STANDOFF - PILL,
+            SurfaceEditorPillMetrics.parkRegionFootTopPx(PILL, STANDOFF, REGION_TOP, REGION_BOTTOM));
     }
 
     @Test
-    public void centringNeverPlacesThePillAboveTheRegion() {
-        assertEquals(500, SurfaceEditorPillMetrics.parkCenteredTopPx(PILL, 500, 560));
+    public void footParkingNeverPlacesThePillAboveTheRegion() {
+        assertEquals(500,
+            SurfaceEditorPillMetrics.parkRegionFootTopPx(PILL, STANDOFF, 500, 560));
     }
 
     @Test
-    public void theShapeDegradesWithTheRoomAndNeverBelowOneRow() {
-        assertEquals(Mode.FULL, SurfaceEditorPillMetrics.modeFor(400, 200, 150));
-        assertEquals(Mode.FULL, SurfaceEditorPillMetrics.modeFor(200, 200, 150));
-        assertEquals(Mode.COMPACT, SurfaceEditorPillMetrics.modeFor(199, 200, 150));
-        assertEquals(Mode.COMPACT, SurfaceEditorPillMetrics.modeFor(150, 200, 150));
-        assertEquals(Mode.ONE_ROW, SurfaceEditorPillMetrics.modeFor(149, 200, 150));
-        // Issue #20: a system IME can collapse the band to nothing. One row is still the answer.
-        assertEquals(Mode.ONE_ROW, SurfaceEditorPillMetrics.modeFor(0, 200, 150));
-        assertEquals(Mode.ONE_ROW, SurfaceEditorPillMetrics.modeFor(-40, 200, 150));
+    public void theBodyGivesWayWithTheRoomAndNeverBelowItsFloor() {
+        // Room to spare: the body takes what is left after the card's own chrome and the standoffs.
+        assertEquals(500 - 200 - (2 * STANDOFF),
+            SurfaceEditorPillMetrics.bodyCapPx(500, 200, STANDOFF, 80, 360));
+        // A tall list is capped rather than filling the screen.
+        assertEquals(360, SurfaceEditorPillMetrics.bodyCapPx(4000, 200, STANDOFF, 80, 360));
+        // Issue #20: a system IME can collapse the band to nothing. A usable strip of list is
+        // still the answer — a body measured to zero is not.
+        assertEquals(80, SurfaceEditorPillMetrics.bodyCapPx(220, 200, STANDOFF, 80, 360));
+        assertEquals(80, SurfaceEditorPillMetrics.bodyCapPx(0, 200, STANDOFF, 80, 360));
+        assertEquals(80, SurfaceEditorPillMetrics.bodyCapPx(-40, 200, STANDOFF, 80, 360));
     }
 }

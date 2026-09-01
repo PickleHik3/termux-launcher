@@ -19,9 +19,9 @@ import java.util.function.ToIntFunction;
  * Every (surface, property) cell that participates in inheritance, as data.
  *
  * <p>One row per cell, tying it to the label and unit it announces, the ceiling its track runs to,
- * and the preference accessors that own its clamp. The editor's pill carries a single slider and
- * points it at whichever cell the active chip names, so this table is what makes a new surface or
- * property a row here rather than a control anywhere.
+ * and the preference accessors that own its clamp. {@link SurfaceEditorProperties} builds the
+ * editor's panels out of these, so a new surface or property is an entry here rather than a control
+ * anywhere.
  *
  * <p>Each surface also has one {@link Page}, which is only its user-facing name — the tab row the
  * pages used to select is gone: a surface is picked by touching it.
@@ -37,8 +37,6 @@ public final class SurfaceEditorRows {
         public final SurfaceSlot slot;
         public final SurfaceProperty property;
         @StringRes public final int labelRes;
-        /** The lowercase noun the inheritance footnote calls this property by. */
-        @StringRes public final int nounRes;
         /** dp rather than percent; drives which value format the row prints. */
         public final boolean dp;
         public final int max;
@@ -48,13 +46,12 @@ public final class SurfaceEditorRows {
         public final ObjIntConsumer<TermuxAppSharedPreferences> write;
 
         Row(SurfaceSlot slot, SurfaceProperty property, @StringRes int labelRes,
-            @StringRes int nounRes, boolean dp, int max,
+            boolean dp, int max,
             ToIntFunction<TermuxAppSharedPreferences> read,
             ObjIntConsumer<TermuxAppSharedPreferences> write) {
             this.slot = slot;
             this.property = property;
             this.labelRes = labelRes;
-            this.nounRes = nounRes;
             this.dp = dp;
             this.max = max;
             this.read = read;
@@ -86,74 +83,74 @@ public final class SurfaceEditorRows {
 
     private static final List<Row> ROWS = Collections.unmodifiableList(Arrays.asList(
         new Row(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, R.string.termux_surface_editor_noun_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 30,
             TermuxAppSharedPreferences::getExtraKeysBlurRadius,
             TermuxAppSharedPreferences::setExtraKeysBlurRadius),
         new Row(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            R.string.termux_dock_tuning_opacity, R.string.termux_surface_editor_noun_opacity,
+            R.string.termux_dock_tuning_opacity,
             false, 100,
             TermuxAppSharedPreferences::getAppBarOpacity,
             TermuxAppSharedPreferences::setAppBarOpacity),
         new Row(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
-            R.string.termux_dock_tuning_grain, R.string.termux_surface_editor_noun_grain,
+            R.string.termux_dock_tuning_grain,
             false, 100,
             TermuxAppSharedPreferences::getDockGlassGrain,
             TermuxAppSharedPreferences::setDockGlassGrain),
         new Row(SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS,
-            R.string.termux_dock_tuning_radius, R.string.termux_surface_editor_noun_corners,
+            R.string.termux_dock_tuning_radius,
             true, 40,
             TermuxAppSharedPreferences::getAppLauncherDockCornerRadius,
             TermuxAppSharedPreferences::setAppLauncherDockCornerRadius),
         new Row(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP,
-            R.string.termux_surface_tuning_edges, R.string.termux_surface_editor_noun_gap, true, 48,
+            R.string.termux_surface_tuning_edges, true, 48,
             TermuxAppSharedPreferences::getDockHorizontalInset,
             TermuxAppSharedPreferences::setDockHorizontalInset),
 
         new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            R.string.termux_dock_tuning_opacity, R.string.termux_surface_editor_noun_opacity,
+            R.string.termux_dock_tuning_opacity,
             false, 100,
             TermuxAppSharedPreferences::getInAppKeyboardBackgroundOpacity,
             TermuxAppSharedPreferences::setInAppKeyboardBackgroundOpacity),
         new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
-            R.string.termux_surface_tuning_edges, R.string.termux_surface_editor_noun_gap, true, 48,
+            R.string.termux_surface_tuning_edges, true, 48,
             TermuxAppSharedPreferences::getInAppKeyboardHorizontalInset,
             TermuxAppSharedPreferences::setInAppKeyboardHorizontalInset),
 
         new Row(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, R.string.termux_surface_editor_noun_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 30,
             TermuxAppSharedPreferences::getStatusBarBlurRadius,
             TermuxAppSharedPreferences::setStatusBarBlurRadius),
         new Row(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
-            R.string.termux_dock_tuning_opacity, R.string.termux_surface_editor_noun_opacity,
+            R.string.termux_dock_tuning_opacity,
             false, 100,
             TermuxAppSharedPreferences::getStatusBarOpacity,
             TermuxAppSharedPreferences::setStatusBarOpacity),
         new Row(SurfaceSlot.STATUS, SurfaceProperty.GRAIN,
-            R.string.termux_dock_tuning_grain, R.string.termux_surface_editor_noun_grain,
+            R.string.termux_dock_tuning_grain,
             false, 100,
             TermuxAppSharedPreferences::getStatusBarGrain,
             TermuxAppSharedPreferences::setStatusBarGrain),
         new Row(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS,
-            R.string.termux_dock_tuning_radius, R.string.termux_surface_editor_noun_corners,
+            R.string.termux_dock_tuning_radius,
             true, 40,
             TermuxAppSharedPreferences::getStatusBarCornerRadius,
             TermuxAppSharedPreferences::setStatusBarCornerRadius),
         new Row(SurfaceSlot.STATUS, SurfaceProperty.SIDE_GAP,
-            R.string.termux_surface_tuning_edges, R.string.termux_surface_editor_noun_gap, true, 48,
+            R.string.termux_surface_tuning_edges, true, 48,
             TermuxAppSharedPreferences::getStatusBarHorizontalInset,
             TermuxAppSharedPreferences::setStatusBarHorizontalInset),
 
         new Row(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, R.string.termux_surface_editor_noun_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 30,
             TermuxAppSharedPreferences::getTerminalGlassBlurRadius,
             TermuxAppSharedPreferences::setTerminalGlassBlurRadius),
         new Row(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN,
-            R.string.termux_dock_tuning_grain, R.string.termux_surface_editor_noun_grain,
+            R.string.termux_dock_tuning_grain,
             false, 100,
             TermuxAppSharedPreferences::getTerminalGlassGrain,
             TermuxAppSharedPreferences::setTerminalGlassGrain),
         new Row(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
-            R.string.termux_dock_tuning_terminal, R.string.termux_surface_editor_noun_opacity,
+            R.string.termux_dock_tuning_terminal,
             false, 100,
             TermuxAppSharedPreferences::getTerminalBackgroundOpacity,
             TermuxAppSharedPreferences::setTerminalBackgroundOpacity)
@@ -175,11 +172,6 @@ public final class SurfaceEditorRows {
     @NonNull
     public static Page page(@NonNull SurfaceSlot slot) {
         return PAGES.get(slot);
-    }
-
-    @NonNull
-    public static Iterable<Page> pages() {
-        return PAGES.values();
     }
 
     /** The user-facing name of a surface. */

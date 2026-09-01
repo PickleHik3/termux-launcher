@@ -14,13 +14,21 @@ public final class SurfaceEditorPresetPreview {
 
     private SurfaceEditorPresetPreview() {}
 
-    public static final int CARD_WIDTH_DP = 72;
-    public static final int CARD_HEIGHT_DP = 120;
+    public static final int CARD_WIDTH_DP = 48;
+    public static final int CARD_HEIGHT_DP = 80;
     /** The card's own clip corner. */
-    public static final float CARD_CORNER_DP = 9f;
+    public static final float CARD_CORNER_DP = 6f;
 
     /** The device width the preset's dp values are scaled down from. */
     private static final float REFERENCE_WIDTH_DP = 360f;
+
+    /**
+     * The card height the band constants below are drawn against. They are absolute rather than
+     * fractions because that is how the mock was laid out by eye; {@link #cardScale()} is what
+     * keeps the bands in proportion when the card itself is resized, so shrinking the strip is one
+     * constant rather than six.
+     */
+    private static final float REFERENCE_CARD_HEIGHT_DP = 120f;
 
     private static final float STATUS_TOP_DP = 4f;
     private static final float STATUS_HEIGHT_DP = 7f;
@@ -34,11 +42,21 @@ public final class SurfaceEditorPresetPreview {
         return CARD_WIDTH_DP / REFERENCE_WIDTH_DP;
     }
 
+    /** How much of a reference-card dp survives at the card's current height. */
+    private static float cardScale() {
+        return CARD_HEIGHT_DP / REFERENCE_CARD_HEIGHT_DP;
+    }
+
+    /** One of the mock's vertical bands, in pixels at the card's current height. */
+    private static int bandPx(float referenceDp, float density) {
+        return Math.round(referenceDp * cardScale() * density);
+    }
+
     /** The status pill band. It floats with the side gap in both dock styles. */
     public static int[] statusInsets(int widthPx, int heightPx, float density, int sideGapDp) {
         int side = Math.round(Math.max(2f, sideGapDp * presetScale()) * density);
-        int top = Math.round(STATUS_TOP_DP * density);
-        int bottom = heightPx - top - Math.round(STATUS_HEIGHT_DP * density);
+        int top = bandPx(STATUS_TOP_DP, density);
+        int bottom = heightPx - top - bandPx(STATUS_HEIGHT_DP, density);
         return new int[] {side, top, side, Math.max(0, bottom)};
     }
 
@@ -51,9 +69,9 @@ public final class SurfaceEditorPresetPreview {
                                        int paneGapDp, int terminalRadiusDp) {
         int margin = terminalRadiusDp > 0
             ? Math.round(Math.max(1f, paneGapDp * presetScale()) * density) : 0;
-        int top = Math.round(TERMINAL_TOP_DP * density) + margin;
+        int top = bandPx(TERMINAL_TOP_DP, density) + margin;
         int bottomEdge = bottomSlabTopPx(heightPx, density)
-            - Math.round(TERMINAL_BOTTOM_GAP_DP * density) - margin;
+            - bandPx(TERMINAL_BOTTOM_GAP_DP, density) - margin;
         return new int[] {margin, top, margin, Math.max(0, heightPx - bottomEdge)};
     }
 
@@ -65,12 +83,12 @@ public final class SurfaceEditorPresetPreview {
                                          int sideGapDp, boolean floating) {
         int side = floating
             ? Math.round(Math.max(2f, sideGapDp * presetScale()) * density) : 0;
-        int bottom = floating ? Math.round(FLOATING_BOTTOM_AIR_DP * density) : 0;
+        int bottom = floating ? bandPx(FLOATING_BOTTOM_AIR_DP, density) : 0;
         return new int[] {side, bottomSlabTopPx(heightPx, density) - bottom, side, bottom};
     }
 
     private static int bottomSlabTopPx(int heightPx, float density) {
-        return heightPx - Math.round((BOTTOM_SLAB_HEIGHT_DP + FLOATING_BOTTOM_AIR_DP) * density);
+        return heightPx - bandPx(BOTTOM_SLAB_HEIGHT_DP + FLOATING_BOTTOM_AIR_DP, density);
     }
 
     /** A glass surface's corner on the mock: scaled in Floating, square where Docked is flush. */
