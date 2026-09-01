@@ -7711,13 +7711,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The embedded keyboard is an ordinary bottom child. Root/decor inset policy already keeps
         // it above navigation bars, so a floating-dock gap must not be inserted beneath it.
         if (state.keyboardShown)
-            return mImeLiftPx;
-        // The capsule floats, so it keeps its bottom gap even when the keyboard is up — otherwise it
-        // sits flush against the keyboard. Non-capsule styles stay flush.
-        if (!isRoundedDockStyle()) {
-            return mImeLiftPx;
-        }
-        return mImeLiftPx + getDockLayout().capsuleBottomGapPx;
+            return 0;
+        // The system IME is already handled by adjustResize: terminal_root_container is resized
+        // above the keyboard. Adding mImeLiftPx here moves the accessory stack a second time.
+        // Keep only the capsule's visual gap; non-capsule docks remain flush.
+        return isRoundedDockStyle() ? getDockLayout().capsuleBottomGapPx : 0;
     }
 
     // Kept for test compatibility and to preserve existing RelativeLayout params in-place.
