@@ -31,11 +31,11 @@
 
 set -eu
 
-TEMPLATES_REF="${TERMUX_LAUNCHER_REF:-v0.2.35}"
+TEMPLATES_REF="${TERMUX_LAUNCHER_REF:-v0.2.39}"
 RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/$TEMPLATES_REF/docs/en/examples}"
 # Pinned separately from TEMPLATES_REF: these are other people's software on
 # their own release schedule.
-BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.09.01}"
+BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.09.02}"
 BINARIES_BASE="${TERMUX_LAUNCHER_BINARIES_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries/$BINARIES_REF/bin}"
 
 # --- BEGIN DIGESTS (generated: update-setup-launcher-digests.sh) ---
