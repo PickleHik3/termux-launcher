@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tag key on a window pill: the WindowItem whose marks its text currently carries. -->
+    <item name="terminal_window_tab_state" type="id" />
+</resources>

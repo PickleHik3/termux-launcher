@@ -449,7 +449,7 @@
 
     <string name="settings_lazy_mode_header">Battery</string>
     <string name="settings_lazy_mode_title">Lazy mode</string>
-    <string name="settings_lazy_mode_summary">Stop the idle animation: the clock swaps its digits instead of folding them, a working window\'s rim stays lit instead of breathing, the CPU/memory readings sample three times less often, and the weather icon rests on its last frame. Nothing repaints while you are only looking at the screen.\n\nWorth turning on — this is planned to become the default, so please report anything that looks stuck or stale with it.</string>
+    <string name="settings_lazy_mode_summary">Stop the idle animation: the clock swaps its digits instead of folding them, a working window\'s ring turns in steps instead of spinning, the CPU/memory readings sample three times less often, and the weather icon rests on its last frame. Nothing repaints while you are only looking at the screen.\n\nWorth turning on — this is planned to become the default, so please report anything that looks stuck or stale with it.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
@@ -629,6 +629,8 @@
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
                 <string name="termux_window_tab_busy_content_description">working</string>
                 <string name="termux_window_tab_attention_content_description">waiting for you</string>
+                <string name="termux_window_tab_progress_content_description">%1$d%% done</string>
+                <string name="termux_window_tab_done_content_description">finished</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
                 <string name="termux_top_pane_media_content_description">Media playback controls</string>

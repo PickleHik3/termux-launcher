@@ -482,6 +482,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * rather than by session object: the flag has to survive the pane tree being rearranged under it.
      */
     private final java.util.Set<Integer> mAttentionShellPids = new java.util.HashSet<>();
+    /**
+     * Shells that rang while the user was looking at them. Not news, so the mark is timed rather
+     * than held until acknowledged: it shows for {@link #FOCUSED_BELL_MS} and goes, the way Windows
+     * Terminal treats a bell in the focused tab.
+     */
+    private final java.util.Set<Integer> mTimedAttentionShellPids = new java.util.HashSet<>();
+    private static final long FOCUSED_BELL_MS = 2000L;
+    /**
+     * Each shell's command lifecycle — working, asking, finished — read from the activity signals
+     * and the screen, so a pill can badge a window the user is not looking at.
+     */
+    private final com.termux.app.statusbar.ShellPhaseTracker mShellPhases =
+        new com.termux.app.statusbar.ShellPhaseTracker();
+    private final Runnable mShellPhaseJudgement = this::refreshShellActivityIndication;
     private final Runnable mBackgroundProcessResync = this::syncBackgroundProcessStack;
     @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
     @Nullable private com.termux.app.terminal.TerminalSheetController mTerminalSheet;
@@ -11403,15 +11417,81 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 TerminalSession session = mPaneController.windowActiveSession(window);
                 // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
                 if (i == selected) clearWindowAttention(window);
+                com.termux.terminal.TerminalEmulator progress = windowProgressReporter(window);
+                int phases = observeWindowPhases(window, i == selected, now);
                 items.add(buildWindowItem(session, i, foregroundPids,
                     mPaneController.windowName(window))
-                    .withBusy(isWindowWorking(window, now))
-                    .withAttention(isWindowAwaitingUser(window)));
+                    .withBusy(progress != null || (phases & PHASE_WORKING) != 0)
+                    .withAttention(isWindowAwaitingUser(window) || (phases & PHASE_ATTENTION) != 0)
+                    .withDone((phases & PHASE_DONE) != 0)
+                    .withProgress(progress == null || progress.getProgressState()
+                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE
+                            ? com.termux.app.terminal.TerminalWindowBar.WindowItem.NO_PERCENTAGE
+                            : progress.getProgressValue(),
+                        progress != null && progress.getProgressState()
+                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR));
             }
         }
         bar.setWindows(items, selected);
         syncBackgroundProcessStack();
-        return collectAllPanePids();
+        scheduleShellPhaseJudgement();
+        java.util.List<Integer> pids = collectAllPanePids();
+        mShellPhases.retain(new java.util.HashSet<>(pids));
+        return pids;
+    }
+
+    private static final int PHASE_WORKING = 1;
+    private static final int PHASE_ATTENTION = 2;
+    private static final int PHASE_DONE = 4;
+
+    /**
+     * Feeds this refresh's observation of every shell in {@code window} to the phase tracker and
+     * folds the answers into one set of marks: the ring while any shell works (including the short
+     * grace after it goes quiet), the bell when one went quiet on a question, the tick when one
+     * finished — the last two only for a window the user is not looking at.
+     */
+    private int observeWindowPhases(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, boolean seen,
+            long nowMs) {
+        if (mPaneController == null) return 0;
+        int marks = 0;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            int pid = shell.getPid();
+            if (pid <= 0) continue;
+            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
+            com.termux.app.statusbar.ShellPhaseTracker.Phase phase = mShellPhases.observe(pid, nowMs,
+                isShellWorking(shell, nowMs), info != null, info != null && info.idle,
+                () -> screenLooksLikeQuestion(shell), seen);
+            switch (phase) {
+                case WORKING: marks |= PHASE_WORKING; break;
+                case ATTENTION: marks |= PHASE_ATTENTION; break;
+                case DONE: marks |= PHASE_DONE; break;
+                default: break;
+            }
+        }
+        return marks;
+    }
+
+    /** Read once per quiet spell, when the tracker has to tell asking from finished. */
+    private static boolean screenLooksLikeQuestion(@NonNull TerminalSession shell) {
+        com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+        if (emulator == null) return false;
+        String screen = emulator.getScreen().getSelectedText(0, 0, emulator.mColumns,
+            emulator.mRows - 1, true, false);
+        return com.termux.app.statusbar.ShellAttentionCues.looksLikeQuestion(screen);
+    }
+
+    /**
+     * One refresh at the moment the soonest quiet command has to be judged waiting or finished,
+     * rather than polling while nothing changes.
+     */
+    private void scheduleShellPhaseJudgement() {
+        mShellActivityHandler.removeCallbacks(mShellPhaseJudgement);
+        long now = android.os.SystemClock.uptimeMillis();
+        long due = mShellPhases.nextJudgementMs(now);
+        if (due < 0L) return;
+        mShellActivityHandler.postDelayed(mShellPhaseJudgement, Math.max(50L, due - now) + 20L);
     }
 
     @NonNull
@@ -11479,15 +11559,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * shells, editors, and agent CLIs already ring when a command finishes or a prompt needs an
      * answer, so no cooperation from the program is required.
      *
-     * <p>A bell from the window the user is already in is not news, and is dropped.
+     * <p>A bell from the window the user is already in is not news: its pill shows the bell for a
+     * couple of seconds and drops it on its own, instead of holding it until acknowledged.
      */
     void noteShellAttention(@NonNull TerminalSession session) {
         int pid = session.getPid();
         if (pid < 1 || mPaneController == null) return;
         if (mCurrentWSession != null
-            && mPaneController.shellsOf(mCurrentWSession.currentWindow()).contains(session)) return;
+            && mPaneController.shellsOf(mCurrentWSession.currentWindow()).contains(session)) {
+            if (mTimedAttentionShellPids.add(pid)) refreshTerminalWindowBar();
+            mShellActivityHandler.postDelayed(() -> {
+                if (mTimedAttentionShellPids.remove(pid)) refreshTerminalWindowBar();
+            }, FOCUSED_BELL_MS);
+            return;
+        }
         if (!mAttentionShellPids.add(pid)) return;
         refreshTerminalWindowBar();
+    }
+
+    /**
+     * The emulator in {@code window} that is reporting progress (OSC 9;4), or null when none is.
+     * The first reporting shell wins: a window's pill has one ring.
+     */
+    @Nullable
+    private com.termux.terminal.TerminalEmulator windowProgressReporter(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null) return null;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+            if (emulator != null && emulator.getProgressState()
+                != com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NONE) return emulator;
+        }
+        return null;
     }
 
     void clearShellAttention(int shellPid) {
@@ -11496,59 +11599,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void clearWindowAttention(
             @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
-        if (mPaneController == null || mAttentionShellPids.isEmpty()) return;
+        if (mPaneController == null) return;
         for (TerminalSession shell : mPaneController.shellsOf(window)) {
             mAttentionShellPids.remove(shell.getPid());
+            mShellPhases.markSeen(shell.getPid());
         }
     }
 
     private boolean isWindowAwaitingUser(
             @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
-        if (mPaneController == null || mAttentionShellPids.isEmpty()) return false;
+        if (mPaneController == null) return false;
+        if (mAttentionShellPids.isEmpty() && mTimedAttentionShellPids.isEmpty()) return false;
         for (TerminalSession shell : mPaneController.shellsOf(window)) {
-            if (mAttentionShellPids.contains(shell.getPid())) return true;
+            int pid = shell.getPid();
+            if (mAttentionShellPids.contains(pid) || mTimedAttentionShellPids.contains(pid))
+                return true;
         }
         return false;
     }
 
     /**
-     * Whether any shell in {@code window} has a command actively working in it — an agent thinking, a
-     * build compiling — as opposed to merely having something on screen.
+     * Whether {@code shell} has a command actively working in it this instant — an agent thinking, a
+     * build compiling — as opposed to merely sitting at a prompt. The phase tracker adds the memory:
+     * the grace after a quiet spell, and what the quiet turned out to mean.
      *
-     * <p>The signal is the foreground process group's CPU use between the resolver's polls. That is
-     * what separates the three states that all look identical to an output-only signal: a shell
-     * echoing what is being typed at it, a TUI sitting there repainting its clock once a second, and
-     * an agent actually working. Only the last of the three burns CPU.
+     * <p>Two signals, either of which counts once the foreground is not the shell itself: the
+     * foreground process group's CPU use between the resolver's polls, and sustained output. CPU was
+     * the only signal for a while, because output alone cannot tell a shell echoing keystrokes from
+     * a command printing; but an agent waiting on the network burns no CPU while its spinner keeps
+     * redrawing, and the ring going out mid-task read as the indicator failing. So output counts
+     * too, gated by the foreground being a command rather than the shell (which is what rules out
+     * the echo) and by the input grace below (which rules out the keystrokes themselves). The price
+     * is that a full-screen program repainting a clock reads as working; a running program is
+     * working in the sense tmux's monitor-activity means, and that is the sense the ring shows.
      *
      * <p>Input silences the indication outright: while the user is typing, the pane is being
      * interacted with, not working in the background, whatever its process spends on rendering the
      * keystrokes.
      *
-     * <p>Where no CPU reading is available — no privileged backend, an unreadable procfs, or simply
-     * the first poll of a newly started command — the pane falls back to sustained output activity,
-     * excluding full-screen (alternate buffer) applications, since a repainting TUI is exactly what
-     * that fallback cannot tell apart from work. A reading that exists and is below the threshold is
-     * final, though: that is the answer, not a gap to be filled in.
+     * <p>Where no foreground reading is available — no privileged backend, an unreadable procfs — the
+     * output signal stands alone, and there the alternate screen is excluded, since without knowing
+     * what is in the foreground a repainting TUI cannot be told from a shell.
      */
-    private boolean isWindowWorking(
-            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, long nowMs) {
-        if (mPaneController == null) return false;
-        for (TerminalSession shell : mPaneController.shellsOf(window)) {
-            int pid = shell.getPid();
-            if (pid <= 0) continue;
-            long lastWrite = shell.getLastWriteUptimeMs();
-            if (lastWrite > 0L && nowMs - lastWrite < SHELL_INPUT_GRACE_MS) continue;
-            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
-                mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
-            if (info != null && info.idle) continue;          // the shell itself has the terminal
-            if (info != null) {
-                if (info.working) return true;
-                if (info.cpuFraction >= 0d) continue;         // measured, and it is not working
-            }
-            if (isFullScreenApplication(shell)) continue;
-            if (mShellActivityTracker.isWorking(pid, nowMs)) return true;
-        }
-        return false;
+    private boolean isShellWorking(@NonNull TerminalSession shell, long nowMs) {
+        int pid = shell.getPid();
+        if (pid <= 0) return false;
+        long lastWrite = shell.getLastWriteUptimeMs();
+        if (lastWrite > 0L && nowMs - lastWrite < SHELL_INPUT_GRACE_MS) return false;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
+        if (info != null && info.idle) return false;          // the shell itself has the terminal
+        if (info != null && info.working) return true;
+        if (info == null && isFullScreenApplication(shell)) return false;
+        return mShellActivityTracker.isWorking(pid, nowMs);
     }
 
     /** Whether {@code shell} has a full-screen application on the alternate screen buffer. */
