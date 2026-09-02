@@ -477,11 +477,17 @@
                 android:focusable="false"
                 android:visibility="gone" />
 
+            <!-- The dock rows hang off each other down to the extra-keys pager, which hangs off
+                 the keyboard container. Every link in that chain can be gone at once (extra keys
+                 off, keyboard closed), and a row whose whole anchor chain is gone falls back to the
+                 parent's bottom — without that it has no vertical rule left and lands at the top of
+                 the stack, with the rows above it pushed up out of the dock. -->
             <FrameLayout
                 android:id="@+id/apps_bar_viewpager"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_above="@+id/apps_bar_indicator_band"
+                android:layout_alignWithParentIfMissing="true"
                 android:visibility="gone">
 
                 <!-- Transform host owned solely by the dock plank physics: the icon row tilts and
@@ -500,6 +506,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="3dp"
                 android:layout_above="@+id/apps_bar_az_row"
+                android:layout_alignWithParentIfMissing="true"
                 android:visibility="gone" />
 
             <com.termux.app.AzScrubRowView
@@ -507,6 +514,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="19dp"
                 android:layout_above="@+id/terminal_toolbar_view_pager"
+                android:layout_alignWithParentIfMissing="true"
                 android:gravity="center_vertical"
                 android:textColor="?attr/termuxColorOnSurfaceVariant"
                 android:elevation="10dp"
