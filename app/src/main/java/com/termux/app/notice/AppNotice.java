@@ -137,6 +137,25 @@ public final class AppNotice {
             AppNoticeHostView.HOLD_UNDO_MS, undo, false, hint);
     }
 
+    /**
+     * Names the action a key or a palette entry just ran, for a beat. The same pill as every other
+     * notice — it used to be its own chip in the terminal's top-trailing corner, the one message in
+     * the app that landed somewhere else — but fleeting: it replaces a hint already showing rather
+     * than queueing behind it, and it yields to any real notice.
+     */
+    public static void hint(@Nullable Context context, @Nullable CharSequence label) {
+        if (context == null || TextUtils.isEmpty(label)) return;
+        AppNoticeItem item = new AppNoticeItem(AppNoticeItem.Kind.INFO, label, null, null,
+            AppNoticeHostView.HOLD_HINT_MS, null, false, null, true);
+        Context appContext = context.getApplicationContext();
+        Activity fromContext = activityOf(context);
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            deliver(appContext, fromContext, item);
+        } else {
+            MAIN.post(() -> deliver(appContext, fromContext, item));
+        }
+    }
+
     public static void error(@Nullable Context context, @Nullable CharSequence message) {
         raise(context, AppNoticeItem.Kind.ERROR, message, null, null, true);
     }
@@ -185,6 +204,8 @@ public final class AppNotice {
         Activity activity = usable(fromContext) ? fromContext : current();
         AppNoticeHostView host = usable(activity) ? hostFor(activity) : null;
         if (host == null) {
+            // A read-out of what a key did is meaningless once the window it happened in is gone.
+            if (item.fleeting) return;
             // No window of ours to draw into. A stock toast is bottom-centre and unthemed, but it
             // is the only surface left, and losing the message outright would be worse.
             CharSequence text = TextUtils.isEmpty(item.sub)

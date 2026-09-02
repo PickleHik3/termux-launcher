@@ -1979,63 +1979,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     //
     // Tool keys draw a glyph and nothing else, so the row and the keyboard's space-bar swipes are
     // only as discoverable as the guesses people make about them. Every action the dispatcher runs
-    // names itself here for a beat, top-right, out of the way of the shell prompt.
-
-    private static final long ACTION_HINT_HOLD_MS = 1100L;
-    private static final long ACTION_HINT_FADE_IN_MS = 110L;
-    private static final long ACTION_HINT_FADE_OUT_MS = 200L;
-
-    @Nullable private Runnable mActionHintHideRunnable;
+    // names itself for a beat, in the same top-centre pill as every other notice — it used to have a
+    // chip of its own in the terminal's top-trailing corner, the one message in the app that landed
+    // somewhere else.
 
     /**
-     * Names a dispatched tool in the corner chip; a no-op for tools with no UI title and for
+     * Names a dispatched tool in the notice pill; a no-op for tools with no UI title and for
      * self-evident tools — an action whose result is already on screen (a split, a pan, a closed
-     * pane) narrates itself, and chipping it too was pure clutter. The chip is for what the screen
+     * pane) narrates itself, and naming it too was pure clutter. The hint is for what the screen
      * cannot say: invisible results, refusals, off-screen events.
      */
     void showTerminalActionHint(@NonNull String toolName) {
-        TextView chip = findViewById(R.id.terminal_action_hint);
-        if (chip == null) return;
         LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(toolName);
         if (tool == null || tool.titleRes == 0 || tool.selfEvident) return;
-        showTerminalActionHint(chip, getString(tool.titleRes));
-    }
-
-    private void showTerminalActionHint(@NonNull TextView chip, @NonNull CharSequence label) {
-        if (mActionHintHideRunnable != null)
-            chip.removeCallbacks(mActionHintHideRunnable);
-        // Both hang from the terminal's top-trailing corner. While a mode legend is up it owns that
-        // corner, so the chip stacks underneath it instead of arriving behind it unseen.
-        ViewGroup.LayoutParams chipParams = chip.getLayoutParams();
-        if (chipParams instanceof ViewGroup.MarginLayoutParams) {
-            int cardPx = mModeHintCard != null ? mModeHintCard.occupancyPx() : 0;
-            int targetTop = cardPx > 0 ? cardPx + Math.round(dpToPx(6)) : 0;
-            ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) chipParams;
-            if (marginParams.topMargin != targetTop) {
-                marginParams.topMargin = targetTop;
-                chip.setLayoutParams(marginParams);
-            }
-        }
-
-        chip.setText(label);
-        chip.setTextColor(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
-            R.color.termux_on_surface));
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(withAlphaComponent(resolveAccessoryGlassBaseColor(), 235));
-        background.setCornerRadius(dpToPx(14));
-        background.setStroke(Math.max(1, Math.round(dpToPx(1))),
-            withAlphaComponent(resolveAccessoryOutlineColor(), 120));
-        chip.setBackground(background);
-
-        chip.animate().cancel();
-        chip.setVisibility(View.VISIBLE);
-        chip.animate().alpha(1f).setDuration(ACTION_HINT_FADE_IN_MS).start();
-
-        mActionHintHideRunnable = () -> chip.animate().alpha(0f)
-            .setDuration(ACTION_HINT_FADE_OUT_MS)
-            .withEndAction(() -> chip.setVisibility(View.GONE))
-            .start();
-        chip.postDelayed(mActionHintHideRunnable, ACTION_HINT_HOLD_MS);
+        com.termux.app.notice.AppNotice.hint(this, getString(tool.titleRes));
     }
 
     private int resolveAccessoryGlassBaseColor() {

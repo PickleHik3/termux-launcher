@@ -307,30 +307,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:visibility="gone" />
-
-                    <!-- Names the action a key just ran. Tool keys draw a glyph, so what a swipe
-                         or a cap actually does is otherwise only discoverable by trying it. Not
-                         clickable: it is a read-out, never a target. Lives in the terminal surface
-                         so it shares one flush top row with the session-switch chip in the
-                         leading corner — it used to hang from the activity root with a status-bar
-                         inset, a different coordinate system, and the two chips never lined up. -->
-                    <TextView
-                        android:id="@+id/terminal_action_hint"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="top|end"
-                        android:layout_marginEnd="10dp"
-                        android:paddingLeft="14dp"
-                        android:paddingTop="7dp"
-                        android:paddingRight="14dp"
-                        android:paddingBottom="7dp"
-                        android:textSize="12sp"
-                        android:singleLine="true"
-                        android:clickable="false"
-                        android:focusable="false"
-                        android:elevation="6dp"
-                        android:alpha="0"
-                        android:visibility="gone" />
                 </FrameLayout>
             </LinearLayout>
 
