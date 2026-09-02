@@ -6,6 +6,7 @@
         <Preference
             app:key="edit_extra_keys_row"
             app:persistent="false"
+            app:fragment="com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment"
             app:title="@string/settings_edit_extra_keys_title"
             app:summary="@string/settings_edit_extra_keys_summary" />
         <SwitchPreferenceCompat
@@ -56,6 +57,13 @@
         <Preference
             app:key="in_app_keyboard_font"
             app:title="@string/settings_typeface_title" />
+        <SeekBarPreference
+            app:key="in_app_keyboard_bottom_padding"
+            app:title="@string/settings_keyboard_bottom_padding_title"
+            app:summary="@string/settings_keyboard_bottom_padding_summary"
+            app:showSeekBarValue="true"
+            android:max="48"
+            android:defaultValue="0" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_layout" app:title="@string/settings_layout_header">
@@ -81,6 +89,18 @@
             app:key="keyboard_docs_keys"
             app:summary="@string/termux_keyboard_docs_keys_summary"
             app:title="@string/settings_supported_keys_title" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="keyboard_typing" app:title="@string/settings_typing_header">
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_tap_correction"
+            app:title="@string/settings_keyboard_tap_correction_title"
+            app:summary="@string/settings_keyboard_tap_correction_summary"
+            android:defaultValue="false" />
+        <Preference
+            app:key="in_app_keyboard_tap_correction_reset"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_tap_correction_reset_title" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_feedback" app:title="@string/settings_feedback_header">

@@ -431,6 +431,45 @@ public class AppDrawerContentViewTest {
         assertFalse(content.clearQueryIfPresent());
     }
 
+    @Test
+    public void aCataloguePushLeavesARequestedKeyboardUp() {
+        content.requestSearchKeyboard();
+        assertEquals(1f, content.getRevealFraction(), 0.001f);
+
+        // The provider's warm-up callback, a beat after the open: same list, nothing typed.
+        search.setCatalogue(apps(APP_COUNT));
+        assertEquals(1f, content.getRevealFraction(), 0.001f);
+
+        // Emptying a query is still what lets it go.
+        type("a");
+        assertTrue(content.clearQueryIfPresent());
+        assertEquals(0f, content.getRevealFraction(), 0.001f);
+    }
+
+    @Test
+    public void theTextFieldAndTheSearchStayInStep() {
+        content.setTextFieldSearch(true);
+        AppDrawerSearchInputView field = content.searchInput();
+
+        // The keyboard typed, autocorrected or swiped a word into the field: the search follows.
+        field.setText("app 1");
+        assertTrue(content.hasQuery());
+        assertEquals("app 1", search.query());
+
+        // The pill's clear emptied the search: the field is emptied with it, without echoing back.
+        assertTrue(content.clearQueryIfPresent());
+        assertEquals("", String.valueOf(field.getText()));
+        assertFalse(content.hasQuery());
+
+        // Off again: the field is left empty and the key stream owns the search once more.
+        field.setText("cam");
+        assertEquals("cam", search.query());
+        content.setTextFieldSearch(false);
+        assertEquals("", String.valueOf(field.getText()));
+        field.setText("ignored");
+        assertEquals("cam", search.query());
+    }
+
     // ------------------------------------------------------------------ plumbing
 
 

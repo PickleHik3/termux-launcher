@@ -49,6 +49,27 @@ public final class ChromePolicy {
     }
 
     /**
+     * Where the keyboard's "space under the keys" allowance lands, as a bottom margin under the
+     * surface. Floating, the glass is a capsule that has to wrap the keys, so the allowance is a
+     * taller gap under it and the whole surface lifts; padding there would leave an empty band of
+     * glass below the last key row. Docked, the surface owns no gap at all.
+     */
+    public static int keyboardChinBottomMarginPx(boolean capsule, int capsuleBottomGapPx,
+                                                 int chinPx) {
+        return capsule ? capsuleBottomGapPx + Math.max(0, chinPx) : 0;
+    }
+
+    /**
+     * The same allowance as bottom padding inside the surface. Docked, the slab runs to the screen
+     * edge, so the allowance goes here and only the keys move up — the material still reaches the
+     * edge. Floating, it has gone into the margin above, and only the capsule's own inner padding
+     * is left.
+     */
+    public static int keyboardChinBottomPaddingPx(boolean capsule, int innerPaddingPx, int chinPx) {
+        return innerPaddingPx + (capsule ? 0 : Math.max(0, chinPx));
+    }
+
+    /**
      * True when the scheme's background color or the opacity slider repaints the surface.
      *
      * <p>"Match all surfaces" outranks both. An edited keyboard scheme sets a background swatch,

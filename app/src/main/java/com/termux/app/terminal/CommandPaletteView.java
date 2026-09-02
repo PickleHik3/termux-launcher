@@ -220,7 +220,6 @@ public final class CommandPaletteView extends View {
     private int mMeta;
     private int mChipFill;
     private int mCapLabel;
-    private int mConfirmation;
 
     private float mRadius;
     private float mBodyAlpha;
@@ -242,9 +241,6 @@ public final class CommandPaletteView extends View {
     /** Prompt drawn at the head of the argument row; capture mode replaces the default. */
     @NonNull private String mArgumentPrompt = DEFAULT_ARGUMENT_PROMPT;
     private String mArgumentValue = "";
-    @Nullable private String mConfirmationText;
-    private float mConfirmationLeft;
-    private float mConfirmationBaseline;
     private float mScrollOffset;
 
     private final float mTouchSlop;
@@ -301,9 +297,6 @@ public final class CommandPaletteView extends View {
         mOnSurfaceVariant = InAppKeyboardPaletteFactory.ensureContrast(onSurfaceVariant, overGlass);
         mMeta = ColorUtils.setAlphaComponent(mOnSurfaceVariant, 212);
         mPrimary = InAppKeyboardPaletteFactory.ensureContrast(mPrimary, overGlass);
-        mConfirmation = InAppKeyboardPaletteFactory.ensureContrast(
-            MaterialColors.getColor(context, com.google.android.material.R.attr.colorTertiary,
-                mPrimary), overGlass);
 
         // Keycaps use the keyboard's chip recipe, so their labels are checked against the
         // chip composited over the glass rather than over the glass alone.
@@ -401,17 +394,6 @@ public final class CommandPaletteView extends View {
      * palette has collapsed — the handoff prints it at the prompt, but writing into the shell
      * would land in whatever the user is composing, so it is drawn over the terminal instead.
      */
-    public void setConfirmation(@Nullable String text, float left, float baselineY) {
-        mConfirmationText = text;
-        mConfirmationLeft = left;
-        mConfirmationBaseline = baselineY;
-        invalidate();
-    }
-
-    public boolean hasConfirmation() {
-        return mConfirmationText != null;
-    }
-
     /**
      * Height the current content wants, before the host clamps it. Includes the chrome rows so
      * the caller can target the height spring directly.
@@ -453,17 +435,12 @@ public final class CommandPaletteView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (mConfirmationText != null && mProgress <= 0.01f) {
-            drawConfirmation(canvas);
-            return;
-        }
         if (mFrame.isEmpty() || mProgress <= 0.001f) return;
 
         drawSurface(canvas);
         if (mBodyAlpha > 0.004f) drawBody(canvas);
         drawRim(canvas);
         if (mStripAlpha > 0.004f) drawStrip(canvas);
-        if (mConfirmationText != null) drawConfirmation(canvas);
     }
 
     // The spec's `0 18px 40px` drop shadow used to be faked with three concentric black rounded
@@ -857,16 +834,6 @@ public final class CommandPaletteView extends View {
             mCapRects.add(new RectF(x, top, x + width, top + capHeight));
             x += width + dp(CAP_GAP) * scale;
         }
-    }
-
-    private void drawConfirmation(@NonNull Canvas canvas) {
-        String text = mConfirmationText;
-        if (text == null) return;
-        mMono.setTextSize(dp(SIZE_ROW));
-        mMono.setLetterSpacing(0f);
-        mMono.setColor(mConfirmation);
-        canvas.drawText(ellipsize(mMono, text, getWidth() - mConfirmationLeft - dp(ROW_PAD_LEFT)),
-            mConfirmationLeft, mConfirmationBaseline, mMono);
     }
 
     private void drawHairline(@NonNull Canvas canvas, float y, @ColorInt int color, int alpha) {

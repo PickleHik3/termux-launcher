@@ -22,6 +22,12 @@ public abstract class TerminalTestCase extends TestCase {
 		public final List<String> clipboardPuts = new ArrayList<>();
 		public int bellsRung = 0;
 		public int colorsChanged = 0;
+		public final List<String[]> notifications = new ArrayList<>();
+
+		@Override
+		public void onNotification(String title, String body) {
+			notifications.add(new String[] {title, body});
+		}
 
 		@Override
 		public void write(byte[] data, int offset, int count) {

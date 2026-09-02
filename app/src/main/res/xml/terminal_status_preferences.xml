@@ -35,6 +35,24 @@
             app:summary="@string/settings_show_key_hints_summary"
             app:dependency="split_pane_controls"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="pane_dwindle_default"
+            app:title="@string/settings_pane_dwindle_default_title"
+            app:summary="@string/settings_pane_dwindle_default_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="pane_focus_grows"
+            app:title="@string/settings_pane_focus_grows_title"
+            app:summary="@string/settings_pane_focus_grows_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="pane_agent_api"
+            app:title="@string/settings_pane_agent_api_title"
+            app:summary="@string/settings_pane_agent_api_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_lazy_mode_header">

@@ -501,6 +501,10 @@ class FakeTerminalHost implements TerminalHost {
         return null;
     }
 
+    @Override public void splitCurrentPaneAuto() {
+        record("splitCurrentPaneAuto");
+    }
+
     @Override public void splitCurrentPane(int orientation) {
         record("splitCurrentPane");
         lastSplitOrientation = orientation;

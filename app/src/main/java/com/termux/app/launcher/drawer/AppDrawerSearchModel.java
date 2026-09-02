@@ -80,6 +80,21 @@ public final class AppDrawerSearchModel {
      *
      * @return true when there was anything to empty
      */
+    /**
+     * Replaces the whole query, as a text field reports it after the keyboard has edited it: a
+     * committed word, an autocorrection, a swipe. The caret is clamped into the new text.
+     *
+     * @return true when either the text or the caret moved
+     */
+    public boolean replace(@NonNull String text, int caret) {
+        int clamped = Math.max(0, Math.min(caret, text.length()));
+        if (text.contentEquals(mQuery) && clamped == mCaret) return false;
+        mQuery.setLength(0);
+        mQuery.append(text);
+        mCaret = clamped;
+        return true;
+    }
+
     public boolean clear() {
         if (mQuery.length() == 0) {
             mCaret = 0;

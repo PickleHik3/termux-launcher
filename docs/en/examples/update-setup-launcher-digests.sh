@@ -10,9 +10,12 @@
 #   update-setup-launcher-digests.sh path/to/dist    templates + showcase binaries
 #
 # The optional directory holds the release assets, named exactly as they are
-# uploaded: sigye-aarch64, fastfetch-aarch64, kitten-aarch64. Build them with
-# recipes/cross/*. Without it the binary table is emptied, and setup-launcher
-# then skips those items with a message instead of installing them unverified.
+# uploaded: sigye-aarch64, fastfetch-aarch64, kitten-aarch64, plus one
+# fastfetch-<package name>-aarch64 per further edition — fastfetch is linked
+# against the install prefix, so each edition needs its own build. Build them
+# with recipes/cross/*. Without the directory the binary table is emptied, and
+# setup-launcher then skips those items with a message instead of installing them
+# unverified.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,9 +30,11 @@ files=(
     setup-nvim
 )
 
-# Keep in sync with the binaries setup-launcher offers.
+# Keep in sync with the binaries setup-launcher offers, per-edition builds
+# included: the names here are asset names, not installed names.
 binaries=(
     fastfetch
+    fastfetch-io.vaj.tl
     kitten
     sigye
 )
@@ -52,7 +57,7 @@ for name in "${binaries[@]}"; do
         continue
     fi
     digest="$(sha256sum "$path" | cut -d' ' -f1)"
-    binary_table+="$(printf '        %-12s echo %s ;;\n' "$name)" "$digest")"$'\n'
+    binary_table+="$(printf '        %-24s echo %s ;;\n' "$name)" "$digest")"$'\n'
 done
 binary_table+=$'        *) echo "" ;;\n    esac\n}\n# --- END BINARY DIGESTS ---'
 

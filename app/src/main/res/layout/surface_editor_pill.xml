@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The surface editor's card. Parked in the free room between the launcher's own chrome, never
+     over the surface it is editing, and not on screen at all until asked for: the editor rests as
+     the outlines plus surface_editor_float.xml, and the card is what either of those opens.
+
+     The floating palette opens it on the shared layer: the presets, the two style pills, and the
+     handful of numbers that move everything at once. Touching a surface on the home screen opens it
+     on that surface — or slides it there if it is already up — and swaps the body for that surface's
+     own rows: same rows, same order, the inapplicable ones dropped.
+
+     Nothing here is a second level: the header's glyphs are the whole chrome, and the body is a
+     plain list that scrolls inside its own cap when a raised keyboard shortens the room (issue #20).
+
+     The fill is deliberately opaque rather than glass. The editor draws on top of the very surfaces
+     it tunes; a translucent panel over them left neither edge reading as belonging to anything, and
+     it cost the frame an extra realtime blur exactly while the user was judging one. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/surface_editor_pill"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="top"
+    android:layout_marginStart="10dp"
+    android:layout_marginEnd="10dp"
+    android:elevation="6dp"
+    android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="6dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:id="@+id/surface_editor_pill_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <!-- Names what the card is showing: the surface's own name once one is picked, and on the
+             shared layer the same palette glyph that opened it, with no words — the strip below
+             says what it is. Set in code. -->
+        <TextView
+            android:id="@+id/surface_editor_pill_title"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:drawablePadding="6dp"
+            android:ellipsize="end"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:textColor="?attr/termuxColorOnSurface"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- Save and revert only exist once there is something to save or revert; the two of them
+             appearing together is also how the card says the edit is unsaved. Icons set in code. -->
+        <ImageView
+            android:id="@+id/surface_editor_pill_save"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/termux_surface_editor_save_look"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/surface_editor_pill_reset"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/termux_surface_editor_revert"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
+
+        <!-- Done is the only commit. ✕ only puts the card away, back to the outlines and the
+             floating pill; nothing is lost by it, so it asks nothing. -->
+        <ImageView
+            android:id="@+id/surface_editor_pill_done"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/dock_tuning_done_pill"
+            android:contentDescription="@string/termux_dock_tuning_done"
+            android:padding="6dp"
+            android:scaleType="fitCenter" />
+
+        <ImageView
+            android:id="@+id/surface_editor_pill_close"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/termux_surface_editor_hide_panel"
+            android:padding="7dp"
+            android:scaleType="fitCenter" />
+    </LinearLayout>
+
+
+    <!-- Complete looks, one tap each, filled in code. The shared layer only: a preset writes every
+         surface, which is not an answer to a question asked while editing one of them. -->
+    <FrameLayout
+        android:id="@+id/surface_editor_pill_presets"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <!-- The two decisions that shape everything: how the surfaces sit, and what they are made of.
+         Docked / Floating is the shorter of the two because it is the smaller question. -->
+    <LinearLayout
+        android:id="@+id/surface_editor_pill_pills"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/surface_editor_pill_shape"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="5"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/surface_editor_pill_shape_docked"
+                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                android:text="@string/termux_app_launcher_dock_style_default" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/surface_editor_pill_shape_floating"
+                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                android:text="@string/termux_app_launcher_dock_style_rounded" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <Space
+            android:layout_width="6dp"
+            android:layout_height="1dp" />
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/surface_editor_pill_material"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="6"
+            app:selectionRequired="false"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/surface_editor_pill_material_solid"
+                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                android:text="@string/termux_surface_tuning_material_solid" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/surface_editor_pill_material_glass"
+                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                android:text="@string/termux_surface_tuning_material_glass" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/surface_editor_pill_material_frost"
+                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                android:text="@string/termux_surface_tuning_material_frost" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+    </LinearLayout>
+
+    <!-- The rows of whatever the card is showing. A scroller is added here in code so its height
+         can be capped to the room the region has left; the card must never grow past the surfaces
+         bounding it, and a list too tall for the room scrolls rather than pushing them off. -->
+    <FrameLayout
+        android:id="@+id/surface_editor_pill_rows_host"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+</LinearLayout>

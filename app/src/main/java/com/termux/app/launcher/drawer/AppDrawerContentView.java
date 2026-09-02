@@ -122,6 +122,7 @@ public final class AppDrawerContentView extends FrameLayout
     private static final float RESULTS_LABEL_BAND_DP = 24f;
 
     private final AppDrawerSearchPillView mPill;
+    private final AppDrawerSearchInputView mInput;
     private final TextView mResultsLabel;
     private final TextView mNoResults;
     private final RecyclerView mGrid;
@@ -195,6 +196,8 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private RecyclerView mGestureRecycler;
     @Nullable private View mOverpullSurface;
     private boolean mSearchRevealRequested;
+    /** True while the Android-keyboard search's text field, not the key stream, owns the query. */
+    private boolean mTextFieldSearch;
     private float mDownRawY;
     private float mLastRawY;
     private float mOverpullRawPx;
@@ -265,13 +268,33 @@ public final class AppDrawerContentView extends FrameLayout
         setClipChildren(false);
         setClipToPadding(false);
 
-        mPill = new AppDrawerSearchPillView(context);
-        mPill.setCallbacks(this);
         LayoutParams pillParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             Math.round(AppDrawerSearchPillView.HEIGHT_DP * mDensity));
         pillParams.leftMargin = dp(PILL_MARGIN_H_DP);
         pillParams.rightMargin = dp(PILL_MARGIN_H_DP);
         pillParams.topMargin = dp(PILL_MARGIN_TOP_DP);
+        // Under the pill, in the pill's own rectangle: the pill stays what is tapped and what is
+        // seen, the field is only what the Android keyboard types into.
+        mInput = new AppDrawerSearchInputView(context);
+        mInput.setListener(new AppDrawerSearchInputView.Listener() {
+            @Override public void onQueryEdited(@NonNull String text, int caret) {
+                AppDrawerSearchController search = mSearch;
+                if (search != null && mTextFieldSearch) search.replaceQuery(text, caret);
+            }
+
+            @Override public void onSearchAction() {
+                launchFirstResult();
+            }
+
+            @Override public void onDismissAction() {
+                AppDrawerSearchController search = mSearch;
+                if (search != null) search.requestDismiss();
+            }
+        });
+        addView(mInput, new LayoutParams(pillParams));
+
+        mPill = new AppDrawerSearchPillView(context);
+        mPill.setCallbacks(this);
         addView(mPill, pillParams);
 
         mAdapter = new AppDrawerAppsAdapter(dock);
@@ -599,6 +622,33 @@ public final class AppDrawerContentView extends FrameLayout
 
     public boolean isInteractive() {
         return mInteractive;
+    }
+
+    /**
+     * Switches the query's owner. With the Android-keyboard search on, the hidden text field takes
+     * the keyboard's edits and the search follows it; off, the field is emptied and left unfocused,
+     * and the key stream drives the search as before. Set per open, before the field is focused.
+     */
+    public void setTextFieldSearch(boolean enabled) {
+        if (mTextFieldSearch == enabled) return;
+        mTextFieldSearch = enabled;
+        AppDrawerSearchController search = mSearch;
+        if (enabled) {
+            mInput.mirror(search == null ? "" : search.query(), search == null ? 0 : search.caret());
+        } else {
+            if (mInput.hasFocus()) mInput.clearFocus();
+            mInput.mirror("", 0);
+        }
+    }
+
+    public boolean isTextFieldSearch() {
+        return mTextFieldSearch;
+    }
+
+    /** The field the host focuses and shows the Android keyboard for. */
+    @NonNull
+    public AppDrawerSearchInputView searchInput() {
+        return mInput;
     }
 
     /** Columns, cell and icon size. Re-resolved per open, never cached across configurations. */
@@ -953,6 +1003,9 @@ public final class AppDrawerContentView extends FrameLayout
     private void applyResults(@NonNull List<LauncherAppEntry> results, boolean queryChanged) {
         AppDrawerSearchController search = mSearch;
         mPill.setQuery(search == null ? "" : search.query(), search == null ? 0 : search.caret());
+        if (mTextFieldSearch) {
+            mInput.mirror(search == null ? "" : search.query(), search == null ? 0 : search.caret());
+        }
         // An empty-query result is the one canonical sorted catalogue. Classifying here keeps
         // package refreshes, direct search-controller fixtures and query-clear all on the same
         // atomic model path; ranked non-empty results never replace the category model.
@@ -988,7 +1041,10 @@ public final class AppDrawerContentView extends FrameLayout
             mPolicy.disarm();
             stopOverpullSpring();
         }
-        if (!hasQuery()) mSearchRevealRequested = false;
+        // Only a query that was just emptied lets the keyboard go. A catalogue push with nothing
+        // typed arrives here too — the provider's warm-up callback lands a beat after every open —
+        // and a keyboard asked for on the open, or by a pill tap, must survive it.
+        if (queryChanged && !hasQuery()) mSearchRevealRequested = false;
         notifyRevealTarget();
     }
 
@@ -1317,8 +1373,18 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override
     public void onSearchPillTapped() {
-        // The pill is the only thing on screen that says "type here", and with the plane covering
-        // the keyboard band there is otherwise nowhere for the first keystroke to come from.
+        requestSearchKeyboard();
+    }
+
+    /**
+     * Brings the keyboard up for the search, as a pill tap does. The pill is the only thing on
+     * screen that says "type here", and with the plane covering the keyboard band there is
+     * otherwise nowhere for the first keystroke to come from.
+     *
+     * <p>Also the drawer's keyboard-on-open preference, which asks for this on the frame the open
+     * is committed rather than waiting for the tap.
+     */
+    public void requestSearchKeyboard() {
         mSearchRevealRequested = true;
         notifyRevealTarget();
         Runnable request = mKeyboardRequestListener;

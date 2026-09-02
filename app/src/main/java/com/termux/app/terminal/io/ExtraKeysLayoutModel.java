@@ -152,6 +152,12 @@ public final class ExtraKeysLayoutModel {
         rows.add(bounded, new ArrayList<>(keys));
     }
 
+    /** Swaps in a whole new row order, as the editor's list hands back after a drag. */
+    public void replaceRows(@NonNull List<List<Key>> newRows) {
+        rows.clear();
+        for (List<Key> row : newRows) rows.add(new ArrayList<>(row));
+    }
+
     /** Drops rows that ended up empty; a page of nothing serializes to {@code []}. */
     public void pruneEmptyRows() {
         rows.removeIf(List::isEmpty);

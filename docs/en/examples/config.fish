@@ -88,13 +88,17 @@ set -q TERMUX_MATERIAL_TERTIARY_CONTAINER; or set -gx TERMUX_MATERIAL_TERTIARY_C
 set -q TERMUX_MATERIAL_ON_TERTIARY_CONTAINER; or set -gx TERMUX_MATERIAL_ON_TERTIARY_CONTAINER "#C1E8FB"
 set -q TERMUX_MATERIAL_ON_ERROR_CONTAINER; or set -gx TERMUX_MATERIAL_ON_ERROR_CONTAINER "#F9DEDC"
 
-# Keep the prompt near the bottom of the screen after clearing.
+# Keep the prompt on the bottom of the screen after clearing. Parking on the
+# last row works for any prompt height: a one-line prompt fills it exactly, and
+# a taller one scrolls the freshly cleared (blank) screen up to fit. Parking a
+# row higher assumed a two-line prompt and left a one-line theme hovering over
+# a permanently blank bottom row.
 function __move_cursor_to_bottom
     if type -q tput
         set -l lines (tput lines 2>/dev/null)
 
         if string match -rq '^[0-9]+$' -- "$lines"; and test "$lines" -gt 1
-            command tput cup (math "$lines - 2") 0 2>/dev/null
+            command tput cup (math "$lines - 1") 0 2>/dev/null
         end
     end
 end

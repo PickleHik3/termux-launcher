@@ -138,11 +138,11 @@ public class TerminalWindowBarTest {
     }
 
     /**
-     * Attention is a separate state from busy and outranks it: a window waiting on the user is not
-     * working. Both drive the same breath, so either one alone has to start it.
+     * A window that rang gets a bell after its label, as a Windows Terminal tab does. The bell is a
+     * static mark — nothing about it needs frames — and the pill view is reused, not re-inflated.
      */
     @Test
-    public void attentionOnlyChange_reachesTheStripAndStartsTheBreath() {
+    public void attentionOnlyChange_appendsTheBellWithoutAnimatingOrReinflating() {
         TerminalWindowBar bar = attachedBar();
         java.util.List<TerminalWindowBar.WindowItem> idle = Arrays.asList(
             new TerminalWindowBar.WindowItem("home", "home"),
@@ -155,18 +155,105 @@ public class TerminalWindowBarTest {
         bar.setWindows(Arrays.asList(idle.get(0), idle.get(1).withAttention(true)), 0);
 
         assertSame(second, tabs.getChildAt(1));
-        assertTrue(bar.isBusyAnimationRunning());
+        assertFalse(bar.isBusyAnimationRunning());
+        assertEquals("work " + TerminalWindowBar.BELL_GLYPH,
+            ((TextView) tabs.getChildAt(1)).getText().toString());
+        assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertTrue(tabs.getChildAt(1).getContentDescription().toString().contains("waiting for you"));
+
+        // The way out: acknowledged, the bell goes and the label is itself again.
+        bar.setWindows(idle, 0);
+        assertEquals("work", ((TextView) tabs.getChildAt(1)).getText().toString());
     }
 
     @Test
-    public void attentionOutranksBusyOnTheSameWindow() {
+    public void attentionAndBusyAreIndependentMarksOnTheSameWindow() {
         TerminalWindowBar.WindowItem both = new TerminalWindowBar.WindowItem("home", "home")
             .withBusy(true).withAttention(true);
         assertTrue(both.busy);
         assertTrue(both.attention);
-        // withBusy/withAttention compose rather than overwrite, so the strip can decide which rim
-        // wins; the pill must not end up with the working state silently erased.
+        // withBusy/withAttention compose rather than overwrite: a window can be working and asking
+        // at once, and gets both the ring and the bell.
         assertSame(both, both.withAttention(true));
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(both), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        CharSequence text = ((TextView) tabs.getChildAt(0)).getText();
+        assertTrue(text.toString().endsWith(" " + TerminalWindowBar.BELL_GLYPH));
+        assertEquals(1, ((android.text.Spanned) text)
+            .getSpans(0, text.length(), android.text.style.ReplacementSpan.class).length);
+        assertTrue(bar.isBusyAnimationRunning());
+    }
+
+    /** A command that finished unseen leaves a tick; a bell outranks it, and a visit clears it. */
+    @Test
+    public void doneAppendsATickThatABellOutranks() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("build", "build");
+        bar.setWindows(Arrays.asList(item.withDone(true)), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        assertEquals("build " + TerminalWindowBar.DONE_GLYPH,
+            ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("finished"));
+        assertFalse(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(item.withDone(true).withAttention(true)), 0);
+        assertEquals("build " + TerminalWindowBar.BELL_GLYPH,
+            ((TextView) tabs.getChildAt(0)).getText().toString());
+
+        bar.setWindows(Arrays.asList(item), 0);
+        assertEquals("build", ((TextView) tabs.getChildAt(0)).getText().toString());
+    }
+
+    /**
+     * The ring takes the place of the process glyph, as Windows Terminal hides a tab's icon behind
+     * its progress ring: the span sits on the leading glyph run and nowhere else.
+     */
+    @Test
+    public void busyRingReplacesTheLeadingProcessGlyph() {
+        String label = new String(Character.toChars(0xF023A)) + " home";
+        assertEquals(2, TerminalWindowBar.leadingGlyphEnd(label));
+        assertEquals(1, TerminalWindowBar.leadingGlyphEnd("\uE795 1"));
+        assertEquals(0, TerminalWindowBar.leadingGlyphEnd("home"));
+        assertEquals(0, TerminalWindowBar.leadingGlyphEnd(""));
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem(label, "fish in home", true)), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.text.Spanned text = (android.text.Spanned) ((TextView) tabs.getChildAt(0)).getText();
+        android.text.style.ReplacementSpan[] rings =
+            text.getSpans(0, text.length(), android.text.style.ReplacementSpan.class);
+        assertEquals(1, rings.length);
+        assertEquals(0, text.getSpanStart(rings[0]));
+        assertEquals(2, text.getSpanEnd(rings[0]));
+        // The label itself is untouched: the ring is a span, not a substitution.
+        assertEquals(label, text.toString());
+    }
+
+    /**
+     * A shell that reports a percentage gets a filling ring rather than a turning one, so nothing
+     * needs frames — and the number is spoken, since the ring cannot be.
+     */
+    @Test
+    public void reportedProgressDrawsAStillRingAndIsSpoken() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("\uE795 build", "build")
+            .withBusy(true).withProgress(42, false);
+        bar.setWindows(Arrays.asList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+
+        assertFalse(bar.isBusyAnimationRunning());
+        String description = tabs.getChildAt(0).getContentDescription().toString();
+        assertTrue(description, description.contains("working"));
+        assertTrue(description, description.contains("42% done"));
+
+        // Progress-only movement is an activity change: it must reach the pill without re-inflating.
+        android.view.View first = tabs.getChildAt(0);
+        bar.setWindows(Arrays.asList(item.withProgress(43, false)), 0);
+        assertSame(first, tabs.getChildAt(0));
+        assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("43% done"));
+        assertSame(item, item.withProgress(42, false));
     }
 
     @Test
@@ -188,6 +275,8 @@ public class TerminalWindowBarTest {
         assertSame(first, tabs.getChildAt(0));
         assertTrue(bar.isBusyAnimationRunning());
         assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("working"));
+        // A bare label has no glyph for the ring to stand in for, so one is put in front of it.
+        assertEquals("\u25cf home", ((TextView) tabs.getChildAt(0)).getText().toString());
         // The reuse path has to refresh descriptions too, or the second pill keeps a stale one.
         assertFalse(tabs.getChildAt(1).getContentDescription().toString().contains("working"));
     }

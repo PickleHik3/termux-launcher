@@ -9,8 +9,20 @@
 #   ./termux-sysroot.sh [package ...]
 #
 # With no arguments it installs the default set needed by the recipes in this directory. The
-# sysroot is written to $TL_SYSROOT (default ./sysroot) and keeps Termux's absolute layout,
+# sysroot is written to $TL_SYSROOT (default ./sysroot) and keeps the packages' absolute layout,
 # so the prefix inside it is $TL_SYSROOT/data/data/com.termux/files/usr.
+#
+# For an edition that installs under another package name, point TL_TERMUX_REPO at that edition's
+# repository instead of relocating this one: the .deb files, and the absolute paths inside their
+# .pc files, carry the prefix they were built for. The VAJ edition's repository, for example:
+#
+#   TL_SYSROOT=$PWD/sysroot-vaj TL_CACHE=$PWD/debs-vaj \
+#       TL_TERMUX_REPO=https://repo.pathayam.xyz ./termux-sysroot.sh
+#
+# then pass that sysroot and prefix to the build script:
+#
+#   TL_SYSROOT=$PWD/sysroot-vaj TERMUX_PREFIX=/data/data/io.vaj.tl/files/usr \
+#       TERMUX_HOME=/data/data/io.vaj.tl/files/home ./build-fastfetch.sh
 set -euo pipefail
 
 TL_SYSROOT=${TL_SYSROOT:-"$PWD/sysroot"}
@@ -28,9 +40,20 @@ DEFAULT_PACKAGES=(
     dbus pulseaudio libelf ocl-icd opencl-headers
 )
 
-for tool in curl dpkg-deb python3; do
+for tool in curl python3; do
     command -v "$tool" >/dev/null 2>&1 || { echo "error: missing required tool: $tool" >&2; exit 1; }
 done
+
+# dpkg-deb is the obvious extractor but is not installed everywhere (no dpkg on Arch, for one).
+# A .deb is an ar archive holding data.tar.*, so ar plus a tar that reads xz is a full substitute.
+if command -v dpkg-deb >/dev/null 2>&1; then
+    extract_deb() { dpkg-deb -x "$1" "$2"; }
+elif command -v ar >/dev/null 2>&1 && command -v bsdtar >/dev/null 2>&1; then
+    extract_deb() { ar p "$1" "$(ar t "$1" | grep '^data\.tar')" | bsdtar -xf - -C "$2"; }
+else
+    echo "error: no way to extract .deb files — install dpkg, or binutils and libarchive" >&2
+    exit 1
+fi
 
 mkdir -p "$TL_SYSROOT" "$TL_CACHE"
 
@@ -64,10 +87,15 @@ PY
     fi
     deb="$TL_CACHE/$(basename "$filename")"
     [ -f "$deb" ] || curl -fsS --max-time 300 "$TL_TERMUX_REPO/$filename" -o "$deb"
-    dpkg-deb -x "$deb" "$TL_SYSROOT"
+    extract_deb "$deb" "$TL_SYSROOT"
     echo "installed $package"
 done
 
 echo
 echo "Sysroot ready: $TL_SYSROOT"
-echo "Termux prefix inside it: $TL_SYSROOT/data/data/com.termux/files/usr"
+for prefix in "$TL_SYSROOT"/data/data/*/files/usr; do
+    # An if, not an &&: an unmatched glob must not fail the script under set -e.
+    if [ -d "$prefix" ]; then
+        echo "Prefix inside it: $prefix"
+    fi
+done

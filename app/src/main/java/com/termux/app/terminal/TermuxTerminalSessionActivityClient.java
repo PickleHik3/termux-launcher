@@ -330,6 +330,28 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
+     * A terminal notification is a bell with words: the window is marked the same way, and the
+     * message itself is shown — from any window, since unlike a bell it says something.
+     */
+    @Override
+    public void onNotification(@NonNull TerminalSession session, String title, String body) {
+        mHost.noteShellAttention(session);
+        if (!mHost.isVisible())
+            return;
+        String where = toToastTitle(session);
+        String headline = title != null && !title.trim().isEmpty() ? title.trim()
+            : (where == null || where.isEmpty() ? null
+                : mContext.getString(R.string.notice_shell_wants_attention, where));
+        String detail = body == null ? "" : body.trim();
+        if (headline == null && detail.isEmpty())
+            return;
+        AppNotice.shell(mContext, headline == null ? detail : headline,
+            headline == null || detail.isEmpty() ? null : detail,
+            "\uf0f3" /* nf-fa-bell */, true,
+            session == mHost.currentSession() ? null : () -> setCurrentSession(session));
+    }
+
+    /**
      * A bell from a shell the user is not looking at gets a notice they can act on: it is drawn in
      * the attention accent, and tapping it goes to that pane or window.
      *

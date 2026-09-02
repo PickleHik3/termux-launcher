@@ -3,6 +3,8 @@ package com.termux.launcherctl;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
@@ -541,6 +543,14 @@ public class LauncherCtlApiServer {
                     "Ollama registry operations do not map to LiteRT-LM/MNN packages; use the model import flow in settings."));
             } else if ("POST".equals(request.method) && "/v1/apps/launch".equals(request.path)) {
                 return jsonResponse(runAppLaunch(context, request.body));
+            } else if (request.path.startsWith("/v1/panes")) {
+                if (!TermuxAppSharedPreferences.build(context).isAgentPanesEnabled()) {
+                    JSONObject error = jsonError("panes_api_disabled",
+                        "Pane access for scripts is switched off in Settings > Terminal & Status > Sessions and panes");
+                    error.put("_statusCode", 403);
+                    return jsonResponse(error);
+                }
+                return jsonResponse(runPaneRequest(request));
             } else if ("POST".equals(request.method) && "/v1/auth/rotate".equals(request.path)) {
                 return jsonResponse(rotateAuthToken(context, false));
             } else if ("GET".equals(request.method) && "/v1/ai/status".equals(request.path)) {
@@ -671,6 +681,107 @@ public class LauncherCtlApiServer {
      * has years of tmux configs and shell binds behind it, so app launching stays addressable
      * from the shell while everything else that was agent/MCP-shaped remains gone.
      */
+    /**
+     * The pane routes, for agents and scripts that want a pane of their own to show their work in:
+     * {@code GET /v1/panes}, {@code POST /v1/panes}, {@code POST /v1/panes/{id}/focus|close|write}
+     * and {@code GET /v1/panes/{id}/text}. Each is one terminal action run on the UI thread, and
+     * the dispatcher enforces that write, text and close only reach panes opened through this API
+     * — the token buys a pane, never the user's shells.
+     */
+    private JSONObject runPaneRequest(HttpRequest request) throws JSONException {
+        String toolName = paneToolFor(request.method, request.path);
+        if (toolName == null) {
+            JSONObject error = jsonError("not_found", "Unknown pane endpoint");
+            error.put("_statusCode", 404);
+            return error;
+        }
+        JSONObject arguments;
+        if (request.body == null || request.body.trim().isEmpty()) {
+            arguments = new JSONObject();
+        } else {
+            try {
+                arguments = new JSONObject(request.body);
+            } catch (JSONException e) {
+                JSONObject error = jsonError("bad_request", "Request body must be a JSON object");
+                error.put("_statusCode", 400);
+                return error;
+            }
+        }
+        String id = paneIdFrom(request.path);
+        if (id != null) arguments.put("id", id);
+        for (Map.Entry<String, String> parameter : queryParameters(request.query).entrySet()) {
+            if (!arguments.has(parameter.getKey())) {
+                arguments.put(parameter.getKey(), parameter.getValue());
+            }
+        }
+        com.termux.app.terminal.TerminalActionDispatcher dispatcher =
+            com.termux.app.terminal.TerminalActionDispatcher.getInstance();
+        if (!dispatcher.isAttached()) {
+            JSONObject error = jsonError("activity_not_running",
+                "The terminal is not in the foreground, so panes cannot be driven right now");
+            error.put("_statusCode", 409);
+            return error;
+        }
+        return dispatcher.execute(toolName, arguments);
+    }
+
+    /** The terminal action a pane route maps to, or null for a path that is not a pane route. */
+    @Nullable
+    static String paneToolFor(@NonNull String method, @NonNull String path) {
+        if ("/v1/panes".equals(path)) {
+            if ("GET".equals(method)) return com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_LIST;
+            if ("POST".equals(method)) return com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_OPEN;
+            return null;
+        }
+        String[] parts = path.split("/");
+        // "", "v1", "panes", "<id>", "<action>"
+        if (parts.length != 5 || parts[3].isEmpty()) return null;
+        switch (parts[4]) {
+            case "focus":
+                return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_FOCUS : null;
+            case "close":
+                return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_CLOSE : null;
+            case "write":
+                return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_WRITE : null;
+            case "text":
+                return "GET".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_READ : null;
+            default:
+                return null;
+        }
+    }
+
+    @Nullable
+    static String paneIdFrom(@NonNull String path) {
+        String[] parts = path.split("/");
+        return parts.length == 5 && !parts[3].isEmpty() ? parts[3] : null;
+    }
+
+    /** Rate-limit key for a request; pane routes share one bucket per action across ids. */
+    @NonNull
+    static String rateLimitKey(@NonNull String method, @NonNull String path) {
+        String id = path.startsWith("/v1/panes/") ? paneIdFrom(path) : null;
+        if (id != null) path = path.replace("/" + id + "/", "/*/");
+        return method + ":" + path;
+    }
+
+    @NonNull
+    static Map<String, String> queryParameters(@Nullable String query) {
+        Map<String, String> parameters = new HashMap<>();
+        if (query == null || query.isEmpty()) return parameters;
+        for (String pair : query.split("&")) {
+            if (pair.isEmpty()) continue;
+            int equals = pair.indexOf('=');
+            String key = equals < 0 ? pair : pair.substring(0, equals);
+            String value = equals < 0 ? "" : pair.substring(equals + 1);
+            try {
+                parameters.put(java.net.URLDecoder.decode(key, "UTF-8"),
+                    java.net.URLDecoder.decode(value, "UTF-8"));
+            } catch (java.io.UnsupportedEncodingException | IllegalArgumentException ignored) {
+            }
+        }
+        return parameters;
+    }
+
     private JSONObject runAppLaunch(Context context, String body) throws JSONException {
         JSONObject request = body != null && !body.isEmpty() ? new JSONObject(body) : new JSONObject();
         String query = request.optString("query", "").trim();
@@ -875,7 +986,7 @@ public class LauncherCtlApiServer {
     }
 
     private SimpleRateLimiter rateLimiterFor(HttpRequest request) {
-        return rateLimiters.get(request.method + ":" + request.path);
+        return rateLimiters.get(rateLimitKey(request.method, request.path));
     }
 
     private static HttpResponse withRateLimitHeaders(HttpResponse response, SimpleRateLimiter limiter, long retryAfterSeconds) {
@@ -1142,6 +1253,12 @@ public class LauncherCtlApiServer {
         rateLimiters.clear();
         rateLimiters.put("POST:/v1/apps/launch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/auth/rotate", new SimpleRateLimiter(5, 60_000));
+        rateLimiters.put("GET:/v1/panes", new SimpleRateLimiter(240, 60_000));
+        rateLimiters.put("POST:/v1/panes", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/panes/*/focus", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/v1/panes/*/close", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/panes/*/write", new SimpleRateLimiter(240, 60_000));
+        rateLimiters.put("GET:/v1/panes/*/text", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/models", new SimpleRateLimiter(120, 60_000));
@@ -1512,8 +1629,10 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "esac\n";
 
-        // launcherctl survives the agent/MCP strip as a launch-only client: `launcherctl launch`
-        // is what old tmux configs and shell binds call, and keeping it working costs one route.
+        // launcherctl is the shell companion: `launcherctl launch` for tmux configs and shell binds,
+        // and `launcherctl pane …` so a process in a shell — an agent, a build, a script — can open
+        // a pane of its own to show its work in and drive it. Everything else was stripped with the
+        // agent/MCP endpoints and stays gone.
         String launcherctlScript =
             "#!" + TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh\n" +
             "set -eu\n" +
@@ -1523,18 +1642,117 @@ public class LauncherCtlApiServer {
             "\n" +
             "Usage:\n" +
             "  launcherctl launch <app name, package, or activity>\n" +
+            "  launcherctl pane open [--cwd DIR] [--title NAME] [--tag TAG] [--no-focus] [--] [CMD ARGS...]\n" +
+            "  launcherctl pane list\n" +
+            "  launcherctl pane focus <id>\n" +
+            "  launcherctl pane write <id> [--enter] <text> | launcherctl pane write <id> [--enter] < file\n" +
+            "  launcherctl pane read <id> [--lines N]\n" +
+            "  launcherctl pane close <id>\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl launch whatsapp\n" +
             "  launcherctl launch io.vaj.tl.api\n" +
+            "  id=$(launcherctl pane open --title preview --no-focus -- kitten icat out.png | sed -n 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/p')\n" +
+            "  launcherctl pane write \"$id\" --enter 'make test'\n" +
+            "  launcherctl pane read \"$id\" --lines 40\n" +
             "\n" +
-            "The agent, MCP, and device-control commands were removed; app launching is the one\n" +
-            "command kept for tmux configs and shell binds. For local AI, use: tai --help\n" +
+            "A pane opened here belongs to the opener: write, read and close only work on panes\n" +
+            "opened through this command; list and focus work on every pane. Output is JSON.\n" +
+            "For local AI, use: tai --help\n" +
             "EOF\n" +
             "}\n" +
             "LAUNCHERCTL_DIR=\"$HOME/.launcherctl\"\n" +
             "TOKEN_FILE=\"$LAUNCHERCTL_DIR/token\"\n" +
             "ENDPOINT_FILE=\"$LAUNCHERCTL_DIR/endpoint\"\n" +
+            "need_server() {\n" +
+            "  if [ ! -r \"$TOKEN_FILE\" ] || [ ! -r \"$ENDPOINT_FILE\" ]; then\n" +
+            "    echo \"launcherctl: missing $TOKEN_FILE or $ENDPOINT_FILE; start Termux Launcher first\" >&2\n" +
+            "    exit 1\n" +
+            "  fi\n" +
+            "  TOKEN=$(cat \"$TOKEN_FILE\")\n" +
+            "  BASE=$(sed -n '1p' \"$ENDPOINT_FILE\")\n" +
+            "}\n" +
+            "# JSON string literal (with quotes) from stdin; handles backslash, quote, tab, newline.\n" +
+            "json_str() {\n" +
+            "  printf '\"'\n" +
+            "  sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g; s/\\t/\\\\t/g; s/\\r/\\\\r/g' | sed ':a;N;$!ba;s/\\n/\\\\n/g' | tr -d '\\n'\n" +
+            "  printf '\"'\n" +
+            "}\n" +
+            "api() {\n" +
+            "  # api METHOD PATH [BODY]: prints the JSON body, exits 1 on an HTTP error so the\n" +
+            "  # error code in that body (not_owned, pane_not_found, ...) is never swallowed.\n" +
+            "  need_server\n" +
+            "  if [ \"$#\" -ge 3 ]; then\n" +
+            "    out=$(curl -sS --connect-timeout 2 --max-time 15 -X \"$1\" -w '\\n%{http_code}' \\\n" +
+            "      -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \\\n" +
+            "      --data \"$3\" \"$BASE$2\")\n" +
+            "  else\n" +
+            "    out=$(curl -sS --connect-timeout 2 --max-time 15 -X \"$1\" -w '\\n%{http_code}' \\\n" +
+            "      -H \"Authorization: Bearer $TOKEN\" \"$BASE$2\")\n" +
+            "  fi\n" +
+            "  code=$(printf '%s\\n' \"$out\" | tail -n 1)\n" +
+            "  printf '%s\\n' \"$out\" | sed '$d'\n" +
+            "  [ \"$code\" -lt 400 ] 2>/dev/null\n" +
+            "}\n" +
+            "pane_cmd() {\n" +
+            "  sub=\"${1:-}\"\n" +
+            "  [ -n \"$sub\" ] && shift || { print_help >&2; exit 2; }\n" +
+            "  case \"$sub\" in\n" +
+            "    open)\n" +
+            "      cwd= title= tag= focus=true\n" +
+            "      while [ \"$#\" -gt 0 ]; do\n" +
+            "        case \"$1\" in\n" +
+            "          --cwd) cwd=\"$2\"; shift 2 ;;\n" +
+            "          --title) title=\"$2\"; shift 2 ;;\n" +
+            "          --tag) tag=\"$2\"; shift 2 ;;\n" +
+            "          --no-focus) focus=false; shift ;;\n" +
+            "          --) shift; break ;;\n" +
+            "          -*) echo \"launcherctl pane open: unknown option $1\" >&2; exit 2 ;;\n" +
+            "          *) break ;;\n" +
+            "        esac\n" +
+            "      done\n" +
+            "      body=\"{\\\"focus\\\":$focus\"\n" +
+            "      [ -n \"$cwd\" ] && body=\"$body,\\\"cwd\\\":$(printf '%s' \"$cwd\" | json_str)\"\n" +
+            "      [ -n \"$title\" ] && body=\"$body,\\\"title\\\":$(printf '%s' \"$title\" | json_str)\"\n" +
+            "      [ -n \"$tag\" ] && body=\"$body,\\\"tag\\\":$(printf '%s' \"$tag\" | json_str)\"\n" +
+            "      if [ \"$#\" -gt 0 ]; then\n" +
+            "        argv=\n" +
+            "        for a in \"$@\"; do\n" +
+            "          argv=\"$argv${argv:+,}$(printf '%s' \"$a\" | json_str)\"\n" +
+            "        done\n" +
+            "        body=\"$body,\\\"command\\\":[$argv]\"\n" +
+            "      fi\n" +
+            "      api POST /v1/panes \"$body}\"\n" +
+            "      ;;\n" +
+            "    list|ls)\n" +
+            "      api GET /v1/panes\n" +
+            "      ;;\n" +
+            "    focus|close)\n" +
+            "      [ \"$#\" -ge 1 ] || { echo \"usage: launcherctl pane $sub <id>\" >&2; exit 2; }\n" +
+            "      api POST \"/v1/panes/$1/$sub\" '{}'\n" +
+            "      ;;\n" +
+            "    write)\n" +
+            "      [ \"$#\" -ge 1 ] || { echo \"usage: launcherctl pane write <id> [--enter] <text>\" >&2; exit 2; }\n" +
+            "      id=\"$1\"; shift\n" +
+            "      enter=false\n" +
+            "      if [ \"${1:-}\" = \"--enter\" ]; then enter=true; shift; fi\n" +
+            "      if [ \"$#\" -gt 0 ]; then text=$(printf '%s' \"$*\" | json_str); else text=$(json_str); fi\n" +
+            "      api POST \"/v1/panes/$id/write\" \"{\\\"text\\\":$text,\\\"enter\\\":$enter}\"\n" +
+            "      ;;\n" +
+            "    read)\n" +
+            "      [ \"$#\" -ge 1 ] || { echo \"usage: launcherctl pane read <id> [--lines N]\" >&2; exit 2; }\n" +
+            "      id=\"$1\"; shift\n" +
+            "      lines=60\n" +
+            "      if [ \"${1:-}\" = \"--lines\" ]; then lines=\"$2\"; shift 2; fi\n" +
+            "      api GET \"/v1/panes/$id/text?lines=$lines\"\n" +
+            "      ;;\n" +
+            "    *)\n" +
+            "      echo \"launcherctl pane: unknown command: $sub\" >&2\n" +
+            "      print_help >&2\n" +
+            "      exit 2\n" +
+            "      ;;\n" +
+            "  esac\n" +
+            "}\n" +
             "cmd=\"${1:-help}\"\n" +
             "case \"$cmd\" in\n" +
             "  -h|--help|help)\n" +
@@ -1543,20 +1761,19 @@ public class LauncherCtlApiServer {
             "  launch)\n" +
             "    shift || true\n" +
             "    [ \"$#\" -gt 0 ] || { echo \"usage: launcherctl launch <app name or package>\" >&2; exit 2; }\n" +
-            "    if [ ! -r \"$TOKEN_FILE\" ] || [ ! -r \"$ENDPOINT_FILE\" ]; then\n" +
-            "      echo \"launcherctl: missing $TOKEN_FILE or $ENDPOINT_FILE; start Termux Launcher first\" >&2\n" +
-            "      exit 1\n" +
-            "    fi\n" +
-            "    TOKEN=$(cat \"$TOKEN_FILE\")\n" +
-            "    BASE=$(sed -n '1p' \"$ENDPOINT_FILE\")\n" +
+            "    need_server\n" +
             "    QUERY=$(printf '%s' \"$*\" | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g')\n" +
             "    curl -fsS --connect-timeout 2 --max-time 10 -X POST \\\n" +
             "      -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \\\n" +
             "      --data \"{\\\"query\\\":\\\"$QUERY\\\"}\" \"$BASE/v1/apps/launch\"\n" +
             "    ;;\n" +
+            "  pane)\n" +
+            "    shift || true\n" +
+            "    pane_cmd \"$@\"\n" +
+            "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl now only supports: launch. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

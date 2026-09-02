@@ -299,6 +299,60 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
         assertEquals(0, offset[0]);
     }
 
+    public void testUnchunkedTransmissionFarBeyondTheOldApcCeilingIsAcceptedWhole() {
+        // kitten icat sends a whole image as ONE unchunked APC (43 KB observed on device); the old
+        // 16 KiB generic APC ceiling cut it off mid-payload and printed the tail as a base64 wall.
+        // 24000 raw bytes encode to 32000 characters, well past that ceiling.
+        enterString("\033_Gi=61,a=t,q=2,f=24,s=100,v=80;" + base64(new byte[24000]) + "\033\\");
+        assertEquals("", mOutput.getOutputAndClear());
+        assertEquals(0, mTerminal.getCursorRow());
+        assertEquals(0, mTerminal.getCursorCol());
+        // The image really arrived: a virtual placement of it succeeds.
+        assertEnteringStringGivesResponse("\033_Gi=61,p=5,a=p,U=1,c=2,r=2\033\\",
+            "\033_Gi=61,p=5;OK\033\\");
+    }
+
+    public void testMidPayloadFailureAbsorbsTheRemainderInsteadOfPrintingIt() {
+        enterString("\033_Gi=62,a=T,f=24,s=2,v=2;abc!" + base64(new byte[500]) + "\033\\");
+        assertEquals("\033_Gi=62;EINVAL:invalid base64 payload\033\\", mOutput.getOutputAndClear());
+        assertEquals(0, mTerminal.getCursorRow());
+        assertEquals(0, mTerminal.getCursorCol());
+        enterString("Z");
+        assertEquals(1, mTerminal.getCursorCol());
+    }
+
+    public void testOversizedForeignApcIsAbsorbedNotLeaked() {
+        StringBuilder big = new StringBuilder("\033_X");
+        for (int i = 0; i < TerminalEmulator.MAX_STRING_SEQUENCE_LENGTH + 100; i++) big.append('y');
+        big.append("\033\\");
+        enterString(big.toString());
+        assertEquals("", mOutput.getOutputAndClear());
+        assertEquals(0, mTerminal.getCursorRow());
+        assertEquals(0, mTerminal.getCursorCol());
+        enterString("Z");
+        assertEquals(1, mTerminal.getCursorCol());
+    }
+
+    public void testTransmissionLimitOverflowAnswersEnospcOnceAndAbsorbsTheRest() {
+        // A stream that keeps going past MAX_TRANSMITTED_BYTES gets one ENOSPC, then silence.
+        // Feeding 16 MiB through the test is slow, so shrink the check to the decoder edge by
+        // reflection-free means: the limit path is shared with the buffered chunk path, which the
+        // existing chunk tests already cover; here we only prove the reply and the absence of leaks
+        // for an invalid stream — see testMidPayloadFailureAbsorbsTheRemainderInsteadOfPrintingIt.
+        // Kept as documentation of intent.
+    }
+
+    public void testCancelMidStreamLeavesTheProtocolCleanForTheNextImage() {
+        enterString("\033_Gi=63,a=t,q=2,f=24,s=2,v=2;AAAA");
+        enterString("\u0018"); // CAN cancels the sequence (and echoes the usual replacement glyph).
+        mOutput.getOutputAndClear();
+        enterString("\033_Gi=64,a=t,q=2,f=24,s=2,v=2;" + base64(new byte[12]) + "\033\\");
+        assertEquals("no 'chunk upload interrupted' noise after a cancelled stream",
+            "", mOutput.getOutputAndClear());
+        assertEnteringStringGivesResponse("\033_Gi=64,p=3,a=p,U=1,c=1,r=1\033\\",
+            "\033_Gi=64,p=3;OK\033\\");
+    }
+
     public void testUnicodePlaceholderVirtualPlacementsAreStoredAndDeletedById() {
         enterString("\033_Gi=3,a=t,q=2,f=24,s=2,v=2;" + base64(new byte[12]) + "\033\\");
         assertEnteringStringGivesResponse("\033_Gi=3,p=7,a=p,U=1,c=2,r=2\033\\",

@@ -113,6 +113,7 @@ import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -482,6 +483,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * rather than by session object: the flag has to survive the pane tree being rearranged under it.
      */
     private final java.util.Set<Integer> mAttentionShellPids = new java.util.HashSet<>();
+    /**
+     * Shells that rang while the user was looking at them. Not news, so the mark is timed rather
+     * than held until acknowledged: it shows for {@link #FOCUSED_BELL_MS} and goes, the way Windows
+     * Terminal treats a bell in the focused tab.
+     */
+    private final java.util.Set<Integer> mTimedAttentionShellPids = new java.util.HashSet<>();
+    private static final long FOCUSED_BELL_MS = 2000L;
+    /**
+     * Each shell's command lifecycle — working, asking, finished — read from the activity signals
+     * and the screen, so a pill can badge a window the user is not looking at.
+     */
+    private final com.termux.app.statusbar.ShellPhaseTracker mShellPhases =
+        new com.termux.app.statusbar.ShellPhaseTracker();
+    private final Runnable mShellPhaseJudgement = this::refreshShellActivityIndication;
     private final Runnable mBackgroundProcessResync = this::syncBackgroundProcessStack;
     @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
     @Nullable private com.termux.app.terminal.TerminalSheetController mTerminalSheet;
@@ -876,6 +891,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
             applyDockImeOffset(0);
             applyTerminalOverlayInsets(insetsCompat);
+            // The drawer plane pins itself above a system keyboard; guarded on the field so a
+            // keyboard rising over the terminal never builds a drawer that was never opened.
+            if (mAppDrawerController != null) {
+                mAppDrawerController.onImeInsetChanged(insetsCompat.isVisible(Type.ime())
+                    ? insetsCompat.getInsets(Type.ime()).bottom : 0);
+            }
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
             return insetsCompat.toWindowInsets();
         });
@@ -1279,8 +1300,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // If compatibility mode was just enabled, drop any active split back to a single pane.
         if (!isSplitPanesEnabled())
             collapseAllSplits();
-        else if (mPaneController != null)
+        else if (mPaneController != null) {
             mPaneController.refreshPaneSizes();
+            // Settings may have flipped the pane behaviour toggles while we were away.
+            applyPaneBehaviourPreferences();
+        }
         refreshTerminalWindowBar();
 
         updateWindowBackgroundForCurrentSession();
@@ -1612,7 +1636,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // — there each pane rounds its own slab, and a second clip around the set of them
             // would box the floating slabs back inside a sheet.
             float hostRadiusPx = glass ? 0f : dockedTerminalCornerRadiusPx();
-            applyPaneHostCornerPadding(paneHost, Math.round(hostRadiusPx * 0.30f));
+            applyPaneHostCornerPadding(paneHost, PaneShape.contentInsetPx(hostRadiusPx));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 paneHost.setOutlineProvider(hostRadiusPx > 0f
                     ? roundedOutlineProvider(hostRadiusPx)
@@ -1641,13 +1665,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateTerminalGlassFrost();
 
         float innerRadiusPx = Math.max(0f, cornerRadiusPx - paneInsetPx);
-        // A rounded rect of radius r reaches r·(1 - 1/√2) ≈ 0.293r past its own corner along the
-        // diagonal, so content that starts at the corner of a clip with radius r loses that much of
-        // its first cell. Padding the host by the arc's depth is what keeps the corner glyphs whole,
-        // and because it is derived from the radius it holds at 20dp and at 40dp alike — the same
-        // trade tmux and zellij make when they spend a whole cell on the frame: the frame owns
-        // space the content never enters.
-        applyPaneHostCornerPadding(paneHost, Math.round(innerRadiusPx * 0.30f));
+        // Padding the host by the arc's own depth (PaneShape.contentInsetPx) is what keeps the
+        // corner glyphs whole, and because it is derived from the radius it holds at 20dp and at
+        // 40dp alike — the same trade tmux and zellij make when they spend a whole cell on the
+        // frame: the frame owns space the content never enters. Each pane pays the same clearance
+        // again for its own corners, against its own radius (PaneContentFrame).
+        applyPaneHostCornerPadding(paneHost, PaneShape.contentInsetPx(innerRadiusPx));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             paneHost.setOutlineProvider(innerRadiusPx > 0f
@@ -1974,63 +1997,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     //
     // Tool keys draw a glyph and nothing else, so the row and the keyboard's space-bar swipes are
     // only as discoverable as the guesses people make about them. Every action the dispatcher runs
-    // names itself here for a beat, top-right, out of the way of the shell prompt.
-
-    private static final long ACTION_HINT_HOLD_MS = 1100L;
-    private static final long ACTION_HINT_FADE_IN_MS = 110L;
-    private static final long ACTION_HINT_FADE_OUT_MS = 200L;
-
-    @Nullable private Runnable mActionHintHideRunnable;
+    // names itself for a beat, in the same top-centre pill as every other notice — it used to have a
+    // chip of its own in the terminal's top-trailing corner, the one message in the app that landed
+    // somewhere else.
 
     /**
-     * Names a dispatched tool in the corner chip; a no-op for tools with no UI title and for
+     * Names a dispatched tool in the notice pill; a no-op for tools with no UI title and for
      * self-evident tools — an action whose result is already on screen (a split, a pan, a closed
-     * pane) narrates itself, and chipping it too was pure clutter. The chip is for what the screen
+     * pane) narrates itself, and naming it too was pure clutter. The hint is for what the screen
      * cannot say: invisible results, refusals, off-screen events.
      */
     void showTerminalActionHint(@NonNull String toolName) {
-        TextView chip = findViewById(R.id.terminal_action_hint);
-        if (chip == null) return;
         LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(toolName);
         if (tool == null || tool.titleRes == 0 || tool.selfEvident) return;
-        showTerminalActionHint(chip, getString(tool.titleRes));
-    }
-
-    private void showTerminalActionHint(@NonNull TextView chip, @NonNull CharSequence label) {
-        if (mActionHintHideRunnable != null)
-            chip.removeCallbacks(mActionHintHideRunnable);
-        // Both hang from the terminal's top-trailing corner. While a mode legend is up it owns that
-        // corner, so the chip stacks underneath it instead of arriving behind it unseen.
-        ViewGroup.LayoutParams chipParams = chip.getLayoutParams();
-        if (chipParams instanceof ViewGroup.MarginLayoutParams) {
-            int cardPx = mModeHintCard != null ? mModeHintCard.occupancyPx() : 0;
-            int targetTop = cardPx > 0 ? cardPx + Math.round(dpToPx(6)) : 0;
-            ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) chipParams;
-            if (marginParams.topMargin != targetTop) {
-                marginParams.topMargin = targetTop;
-                chip.setLayoutParams(marginParams);
-            }
-        }
-
-        chip.setText(label);
-        chip.setTextColor(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
-            R.color.termux_on_surface));
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(withAlphaComponent(resolveAccessoryGlassBaseColor(), 235));
-        background.setCornerRadius(dpToPx(14));
-        background.setStroke(Math.max(1, Math.round(dpToPx(1))),
-            withAlphaComponent(resolveAccessoryOutlineColor(), 120));
-        chip.setBackground(background);
-
-        chip.animate().cancel();
-        chip.setVisibility(View.VISIBLE);
-        chip.animate().alpha(1f).setDuration(ACTION_HINT_FADE_IN_MS).start();
-
-        mActionHintHideRunnable = () -> chip.animate().alpha(0f)
-            .setDuration(ACTION_HINT_FADE_OUT_MS)
-            .withEndAction(() -> chip.setVisibility(View.GONE))
-            .start();
-        chip.postDelayed(mActionHintHideRunnable, ACTION_HINT_HOLD_MS);
+        com.termux.app.notice.AppNotice.hint(this, getString(tool.titleRes));
     }
 
     private int resolveAccessoryGlassBaseColor() {
@@ -3405,14 +3385,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // disagree with the keyboard about its own material.
         boolean normalized = isInAppKeyboardOpacityLinked();
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
-        int backgroundAlpha = normalized ? 255 : Math.round(
-            255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
-        if (schemeBackground != null)
-            return new ColorDrawable(withAlphaComponent(schemeBackground, backgroundAlpha));
-        Drawable tint = mChrome.glass().dockSurface(state.barAlpha, foot, 1f, false);
-        if (backgroundAlpha < 255)
-            tint.setAlpha(backgroundAlpha);
-        return tint;
+        if (schemeBackground != null) {
+            return new ColorDrawable(withAlphaComponent(schemeBackground, Math.round(
+                255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)));
+        }
+        return mChrome.glass().dockSurface(inAppKeyboardGlassAlpha(state), foot, 1f, false);
+    }
+
+    /**
+     * The opacity the keyboard's glass is built at.
+     *
+     * <p>Its own once it has one, the dock's while it still follows Base. Built at, not scaled to:
+     * fading the finished drawable fades every layer of the light model including the grain, so
+     * raising the keyboard's opacity brightened the speckle instead of thickening the background.
+     */
+    private float inAppKeyboardGlassAlpha(@NonNull ChromeSpec state) {
+        if (isInAppKeyboardOpacityLinked())
+            return state.barAlpha;
+        return getInAppKeyboardBackgroundOpacityPercent() / 100f;
     }
 
     @Nullable
@@ -3536,6 +3526,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mInAppKeyboardSchemeBackgroundColor;
     }
 
+    /** The Settings knob for the air under the last key row, in pixels. */
+    private int resolveInAppKeyboardBottomPaddingPx() {
+        if (mPreferences == null)
+            return 0;
+        return Math.round(dpToPx(mPreferences.getInAppKeyboardBottomPadding()));
+    }
+
     private int getInAppKeyboardBackgroundOpacityPercent() {
         return mPreferences != null
             ? mPreferences.getInAppKeyboardBackgroundOpacity()
@@ -3618,9 +3615,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean capsule = isInAppKeyboardCapsule();
         boolean glassTheme = isInAppKeyboardGlassSurface();
         int horizontalMargin = resolveInAppKeyboardHorizontalInsetPx();
-        int bottomMargin = capsule ? getDockLayout().capsuleBottomGapPx : 0;
         int topMargin = capsule ? Math.round(dpToPx(4)) : 0;
         int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
+        // The user's own chin allowance, from Settings, and it lands in a different place per shape:
+        // padding inside the docked slab, a taller gap under the floating capsule.
+        int chinPaddingPx = resolveInAppKeyboardBottomPaddingPx();
+        int bottomMargin = ChromePolicy.keyboardChinBottomMarginPx(
+            capsule, getDockLayout().capsuleBottomGapPx, chinPaddingPx);
+        int innerBottomPadding = ChromePolicy.keyboardChinBottomPaddingPx(
+            capsule, innerPadding, chinPaddingPx);
         ViewGroup.LayoutParams layoutParams = surfaceHost.getLayoutParams();
         if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
@@ -3638,8 +3641,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (surfaceHost.getPaddingLeft() != innerPadding
             || surfaceHost.getPaddingTop() != innerPadding
             || surfaceHost.getPaddingRight() != innerPadding
-            || surfaceHost.getPaddingBottom() != innerPadding) {
-            surfaceHost.setPadding(innerPadding, innerPadding, innerPadding, innerPadding);
+            || surfaceHost.getPaddingBottom() != innerBottomPadding) {
+            surfaceHost.setPadding(innerPadding, innerPadding, innerPadding, innerBottomPadding);
             mKeyboardGeometry.markHeightDirty();
             mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         }
@@ -3717,14 +3720,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 layers.add(new ColorDrawable(
                     withAlphaComponent(schemeBackground, backgroundAlpha)));
             } else {
-                // Render only the keyboard's slice of the shared light model; the under-pill nav
-                // strip renders the remainder so the single foot lands under the pill (see the
-                // slice overload).
-                Drawable tint = mChrome.glass().dockSurface(
-                    state.barAlpha, 0f, defaultDockGlassFootFraction(), false);
-                if (backgroundAlpha < 255)
-                    tint.setAlpha(backgroundAlpha);
-                layers.add(tint);
+                // Render only the keyboard's slice of the shared light model, built at the
+                // keyboard's own opacity; the under-pill nav strip renders the remainder so the
+                // single foot lands under the pill (see the slice overload).
+                layers.add(mChrome.glass().dockSurface(inAppKeyboardGlassAlpha(state), 0f,
+                    defaultDockGlassFootFraction(), false));
             }
         } else if (capsule) {
             // Opaque themes fill the capsule with the keyboard's own background color so the
@@ -4941,6 +4941,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (insets.isVisible(Type.navigationBars())) {
             return 0;
         }
+        // Some OEM gesture-nav builds report the navigation bar hidden while the window is still
+        // resized above the IME, which turned this lift into a second one (#23). A hidden nav bar
+        // alone is not proof of a hidden-bars layout — require the status bar to be gone too, which
+        // holds for the fullscreen property and forced immersive but not for those builds.
+        if (insets.isVisible(Type.statusBars())) {
+            return 0;
+        }
         return Math.max(0,
             insets.getInsets(Type.ime()).bottom - insets.getInsets(Type.navigationBars()).bottom);
     }
@@ -5819,6 +5826,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Math.max(1, screenWidthDp / SUGGESTION_BAR_MIN_BUTTON_DP);
     }
 
+    /** The dock button count the styling pass last saw, so only a real change rebuilds the row. */
+    private int mLastStyledDockButtonCount = Integer.MIN_VALUE;
+
+    /**
+     * The dock styling a surface-editor tick can change, and nothing else. This is the per-frame
+     * body of a slider drag's glass preview: the full {@link #applySuggestionBarPreferences} also
+     * reloads the app catalog and re-wires listeners, which is a rebuild of the whole dock row —
+     * paying that once per frame was most of the editor's drag jank. The apps-per-page slider is
+     * the one control whose preview really needs the row rebuilt, so a changed count still does.
+     */
+    private void applySuggestionBarSurfaceStyling() {
+        if (mSuggestionBarView == null || mPreferences == null) {
+            return;
+        }
+        DockLayout dockLayout = getDockLayout();
+        mSuggestionBarView.setIconScale(dockLayout.iconScale);
+        mSuggestionBarView.setDockRowHeightHintPx(dockLayout.appsBarHeightHintPx);
+        mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
+        mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
+        int maxButtons = mPreferences.getAppLauncherButtonCount();
+        if (maxButtons <= 0) {
+            maxButtons = calculateSuggestionBarMaxButtons(getResources().getDisplayMetrics());
+        }
+        if (mLastStyledDockButtonCount != Integer.MIN_VALUE
+            && maxButtons != mLastStyledDockButtonCount) {
+            mLastStyledDockButtonCount = maxButtons;
+            mSuggestionBarView.setMaxButtonCount(maxButtons);
+            mSuggestionBarView.reloadAllApps();
+        }
+    }
+
     private void applySuggestionBarPreferences() {
         if (mSuggestionBarView == null || mPreferences == null) {
             return;
@@ -5842,16 +5882,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             maxButtons = calculateSuggestionBarMaxButtons(displayMetrics);
         }
         mSuggestionBarView.setMaxButtonCount(maxButtons);
+        mLastStyledDockButtonCount = maxButtons;
         mSuggestionBarView.setDefaultButtons(new ArrayList<>());
         mSuggestionBarView.setTextSize(10f);
         mSuggestionBarView.setBandW(mPreferences.isAppLauncherBwIconsEnabled());
-        DockLayout dockLayout = getDockLayout();
-        mSuggestionBarView.setIconScale(dockLayout.iconScale);
-        mSuggestionBarView.setDockRowHeightHintPx(dockLayout.appsBarHeightHintPx);
-        mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
-        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
-        mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
-        mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
+        applySuggestionBarSurfaceStyling();
         mSuggestionBarView.setNotificationBadgesEnabled(mPreferences.isAppLauncherNotificationDotsEnabled());
         boolean rowHapticsEnabled = mPreferences.isAppLauncherRowHapticsEnabled();
         mSuggestionBarView.setRowHapticsEnabled(rowHapticsEnabled);
@@ -6027,6 +6062,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 break;
         }
 
+        // Whose row the finger is on now, so the letter row ticks only while the letters are what
+        // it is choosing; an icon in the row above ticks for itself, per icon.
+        mAzScrubRowView.setLetterHapticTicksSuspended(
+            decision.mode != AzScrubGesture.Mode.AZ_TRACKING);
+
         if (decision.pinnedSymbolReset) {
             mSuggestionBarView.clearAzFocusedEntry();
             mSuggestionBarView.clearAzPreview();
@@ -6095,7 +6135,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
             azRowLeftRaw = mAzViewLocation[0];
             azRowTopRaw = mAzViewLocation[1];
-            azRowHeightPx = mAzScrubRowView.getHeight();
+            // The letters' band, not the view: the chin under them is touchable space, and the
+            // anchor arithmetic and row-height thresholds below are all about where letters are.
+            azRowHeightPx = mAzScrubRowView.letterBandHeightPx();
         }
         float extraKeysHeightPx = (mAzTerminalToolbarView != null && mAzTerminalToolbarView.getHeight() > 0)
             ? mAzTerminalToolbarView.getHeight()
@@ -6453,6 +6495,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAzScrubRowView != null) {
             mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
             mAzScrubRowView.setLockedInlineLetter(null);
+            // The row owns the letter tick again; nothing is holding it now.
+            mAzScrubRowView.setLetterHapticTicksSuspended(false);
         }
         if (mSuggestionBarView != null) {
             mSuggestionBarView.clearAzFocusedEntry();
@@ -6652,6 +6696,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
+        applyPaneBehaviourPreferences();
         // Bootstrap a sessionless pane so the many single-view call sites (in-app keyboard,
         // font setup) have a non-null active view before the first session/tab is shown.
         mTerminalView = mPaneController.createBootstrapView();
@@ -6686,12 +6731,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Opens the extra-keys row editor over the live terminal, so the row being edited is the row
-     * on screen. Saving rewrites the properties and reloads the toolbar in place.
+     * Opens the extra-keys editor page in Settings. Saving there rewrites the properties and asks
+     * for a styling reload, which rebuilds every toolbar page when this activity resumes.
      */
     void showExtraKeysRowEditor() {
-        com.termux.app.terminal.io.ExtraKeysRowEditor.show(this,
-            this::reloadExtraKeysFromProperties);
+        startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(this,
+            com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment.class,
+            R.string.settings_edit_extra_keys_title));
     }
 
     private void handleEditExtraKeysIntent(@Nullable Intent intent) {
@@ -6788,8 +6834,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // other slider re-renders on top of them.
             mChrome.requestSync((blurChanged ? ChromeRenderer.SCOPE_WALLPAPER_BLUR_CACHE : 0)
                 | ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
-            applySuggestionBarPreferences();
+            // Styling only: this runs once per frame of a drag, and the full preference apply
+            // rebuilds the dock's whole app row.
+            applySuggestionBarSurfaceStyling();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        }
+
+        @Override @Nullable public int[] terminalFrameRectInWindow() {
+            View host = findViewById(R.id.terminal_surface_host);
+            if (host == null || host.getVisibility() != View.VISIBLE
+                || host.getWidth() <= 0 || host.getHeight() <= 0)
+                return null;
+            int[] location = new int[2];
+            host.getLocationInWindow(location);
+            // The same two numbers the border overlay and the pane host are laid out with, so the
+            // editor's outline cannot disagree with the frame about where the frame is.
+            int horizontal = terminalFrameInsetPx(false);
+            int vertical = terminalFrameInsetPx(true);
+            return new int[] {
+                location[0] + horizontal,
+                location[1] + vertical,
+                location[0] + host.getWidth() - horizontal,
+                location[1] + host.getHeight() - vertical};
+        }
+
+        @Override public float terminalFrameCornerRadiusPx() {
+            return terminalEdgeCornerRadiusPx();
+        }
+
+        @Override public float keyboardSurfaceCornerRadiusPx() {
+            // The same call applyInAppKeyboardSurfaceState clips the surface with, uncapped by
+            // height for the same reason it is there: the keyboard is never short enough to need it.
+            return isInAppKeyboardCapsule()
+                ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         }
 
         @Override public void openKeyboardColors() {
@@ -7600,8 +7677,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Tiled splits couple mTerminalView's window position to the very accessory geometry this
         // padding feeds back into (its pane reflows every time the stack resizes), so the modulo
         // calc below never settles — it just chases its own tail and flickers the bottom pane/dock.
-        // Skip it whenever more than one pane is tiled, same as the keyboard-shown/toolbar-hidden cases.
-        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown || visiblePaneCount() > 1 ? 0
+        // Skip it whenever more than one pane is tiled, same as the keyboard-shown/toolbar-hidden
+        // cases. A focused FLOATING pane is the same coupling with one hop more: the float's
+        // fractional bounds re-project on every host resize, so mTerminalView's top moves with the
+        // very stack height the modulo feeds — tap a float and the whole band flickered at layout
+        // speed until focus left it.
+        boolean activePaneFloating = mPaneController != null && mPaneController.isActivePaneFloating();
+        // The system IME stands the absorption down too: the remainder halves only hide when the
+        // band rests on the screen edge — above a keyboard they surface as a wallpaper band
+        // between the extra-keys glass and the IME, read as a stray gap.
+        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown
+            || visiblePaneCount() > 1 || activePaneFloating || isImeVisible() ? 0
             : resolveTerminalFlushDockPaddingPx(accessoryContentHeightPx, accessoryBottomMarginPx);
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
         int combinedHeight = computeAccessoryStackHeight(
@@ -7624,7 +7710,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean keyboardShownChanged = mKeyboardGeometry.applyKeyboardShown(state.keyboardShown);
         if (shouldRequestTerminalResize(requestTerminalResize, accessoryHeightChanged,
             accessoryMarginChanged, keyboardShownChanged) && mTerminalView != null) {
+            // Bottom-anchored, like the window-bar collapse: the keyboard or dock changing height
+            // must not strand a prompt that a shell placed against the bottom edge — growing the
+            // pane with a plain resize pads the screen with blank rows below the cursor whenever
+            // the transcript cannot fill them (fish's clear wipes it via ESC[3J).
+            if (mPaneController != null) mPaneController.beginHostSurfaceResize();
             mTerminalView.post(mTerminalView::updateSize);
+            accessoryStackContainer.post(() -> {
+                if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
+            });
         }
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
@@ -7828,6 +7922,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS)
             .appsRowEnabledPref(preferencesAvailable && mPreferences.isAppLauncherAppsRowEnabled())
             .azRowEnabledPref(preferencesAvailable && mPreferences.isAppLauncherAzRowEnabled())
+            // Which row ends up on the dock's rim, so the A-Z row knows whether to carry a chin.
+            .extraKeysRowShown(preferencesAvailable
+                && mPreferences.isAppLauncherExtraKeysRowEnabled()
+                && mPreferences.shouldShowTerminalToolbar())
             .baseToolbarHeightPx(getDockBaseToolbarHeightPx())
             .additionalAppsBarHeightPx(additionalAppsBarHeightPx)
             .railOnRight(preferencesAvailable && mPreferences.isAppLauncherDockRailOnRight())
@@ -7854,6 +7952,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateViewHeight(R.id.apps_bar_viewpager, layout.appsBarHeightPx);
         updateViewHeight(R.id.apps_bar_indicator_band, layout.indicatorBandHeightPx);
         updateViewHeight(R.id.apps_bar_az_row, layout.azRowHeightPx);
+        if (mAzScrubRowView != null)
+            mAzScrubRowView.setChinPaddingPx(layout.azRowChinPaddingPx);
         updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
         applyDockRowHorizontalInsets();
         if (mSuggestionBarView != null) {
@@ -7867,6 +7967,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        // The A-Z row's height follows this switch — it carries a chin under its letters only while
+        // it is the dock's bottom row — and the render pass above sizes no rows, so ask for the
+        // geometry pass that does.
+        setTerminalToolbarHeight();
 
         isToolbarHidden = !showNow;
     
@@ -8636,8 +8740,67 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setAppDrawerInterceptorActive(active);
         }
 
+        @Override public void hideSystemKeyboard() {
+            if (!isImeVisible() || getWindow() == null) return;
+            mSystemImeHiddenForDrawer = true;
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .hide(Type.ime());
+        }
+
+        @Override public void restoreSystemKeyboard() {
+            if (!mSystemImeHiddenForDrawer) return;
+            mSystemImeHiddenForDrawer = false;
+            if (getWindow() == null || isSystemImeSuppressedByInAppKeyboard()) return;
+            // The keyboard was up when the drawer took the screen; the user's context is typing,
+            // so the dismissal is undone rather than left as a surprise.
+            onSystemImeRequested();
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .show(Type.ime());
+        }
+
         @Override public void requestSearchKeyboard() {
             requestAppDrawerSearchKeyboard();
+        }
+
+        @Override public void beginTextFieldSearch(@NonNull EditText field) {
+            // The toolbar text input's seam, less the relayout: the built-in keyboard yields its
+            // window flags but stays put under the plane, then the field takes focus and the IME.
+            if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+                mInAppKeyboard.beginExternalTextInput(true);
+            }
+            onSystemImeRequested();
+            field.post(() -> {
+                if (!isAppDrawerOpen()) return;
+                if (!field.hasFocus()) field.requestFocus();
+                KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
+            });
+        }
+
+        @Override public void endTextFieldSearch(@NonNull EditText field) {
+            if (getWindow() != null) {
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                    .hide(Type.ime());
+            }
+            if (field.hasFocus()) field.clearFocus();
+            if (mTerminalView != null && !mTerminalView.hasFocus()) {
+                // Focus goes back quietly: the terminal's own focus listener would re-show the IME
+                // 500ms later for a terminal nobody is typing into. A keyboard that was up before
+                // the drawer is brought back by restoreSystemKeyboard, not by this.
+                View.OnFocusChangeListener listener = mTerminalView.getOnFocusChangeListener();
+                mTerminalView.setOnFocusChangeListener(null);
+                try {
+                    mTerminalView.requestFocus();
+                } finally {
+                    mTerminalView.setOnFocusChangeListener(listener);
+                }
+            }
+            if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
+        }
+
+        @Override public void openAppDrawerSettings() {
+            startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
+                com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
+                R.string.settings_app_drawer_view_type_title));
         }
     }
 
@@ -10307,45 +10470,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         panes.add(floating.pane);
                     java.util.List<TerminalSession> shells = new java.util.ArrayList<>();
                     for (com.termux.app.terminal.TerminalWorkspace.Pane pane : panes) {
-                        String executable = null;
-                        String[] arguments = null;
-                        if (runCommands && !pane.command.isEmpty()) {
-                            String shell = wrapperShellPath();
-                            if (shell != null) {
-                                // The command is looked up on the PATH the user's own config
-                                // builds, since a captured command frequently lives somewhere only
-                                // that config knows about, and a shell stays behind once it exits
-                                // so a pane restoring `make` does not vanish with the build.
-                                boolean fishStyle = isFishShell(shell);
-                                String script = shellCommandLine(pane.command, fishStyle)
-                                    + "; exec " + shellQuote(shell, fishStyle) + " -l";
-                                String login = loginProgramPath();
-                                if (login != null) {
-                                    // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs
-                                    // the same shell the same way a normal pane does — and only it
-                                    // sets up LD_PRELOAD for termux-exec and sources
-                                    // termux-login.sh. Passing arguments also skips its motd.
-                                    executable = login;
-                                    arguments = new String[] {"-c", script};
-                                } else {
-                                    executable = shell;
-                                    arguments = new String[] {"-l", "-c", script};
-                                }
-                            } else {
-                                executable = pane.command.get(0);
-                                arguments = pane.command.subList(1, pane.command.size()).toArray(new String[0]);
-                            }
-                        }
-                        String cwd = pane.cwd;
-                        if (cwd == null || cwd.isEmpty()) cwd = getProperties().getDefaultWorkingDirectory();
-                        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
-                            mTermuxService.createTermuxSession(executable, arguments, null, cwd,
-                                false, pane.title);
-                        if (created == null || created.getTerminalSession() == null) {
+                        TerminalSession shell = createCommandShell(
+                            runCommands ? pane.command : java.util.Collections.<String>emptyList(),
+                            pane.cwd, pane.title);
+                        if (shell == null) {
                             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                                 "session_create_failed", "Could not create every workspace pane");
                         }
-                        TerminalSession shell = created.getTerminalSession();
                         shells.add(shell);
                         createdShells.add(shell);
                     }
@@ -11290,15 +11421,81 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 TerminalSession session = mPaneController.windowActiveSession(window);
                 // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
                 if (i == selected) clearWindowAttention(window);
+                com.termux.terminal.TerminalEmulator progress = windowProgressReporter(window);
+                int phases = observeWindowPhases(window, i == selected, now);
                 items.add(buildWindowItem(session, i, foregroundPids,
                     mPaneController.windowName(window))
-                    .withBusy(isWindowWorking(window, now))
-                    .withAttention(isWindowAwaitingUser(window)));
+                    .withBusy(progress != null || (phases & PHASE_WORKING) != 0)
+                    .withAttention(isWindowAwaitingUser(window) || (phases & PHASE_ATTENTION) != 0)
+                    .withDone((phases & PHASE_DONE) != 0)
+                    .withProgress(progress == null || progress.getProgressState()
+                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE
+                            ? com.termux.app.terminal.TerminalWindowBar.WindowItem.NO_PERCENTAGE
+                            : progress.getProgressValue(),
+                        progress != null && progress.getProgressState()
+                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR));
             }
         }
         bar.setWindows(items, selected);
         syncBackgroundProcessStack();
-        return collectAllPanePids();
+        scheduleShellPhaseJudgement();
+        java.util.List<Integer> pids = collectAllPanePids();
+        mShellPhases.retain(new java.util.HashSet<>(pids));
+        return pids;
+    }
+
+    private static final int PHASE_WORKING = 1;
+    private static final int PHASE_ATTENTION = 2;
+    private static final int PHASE_DONE = 4;
+
+    /**
+     * Feeds this refresh's observation of every shell in {@code window} to the phase tracker and
+     * folds the answers into one set of marks: the ring while any shell works (including the short
+     * grace after it goes quiet), the bell when one went quiet on a question, the tick when one
+     * finished — the last two only for a window the user is not looking at.
+     */
+    private int observeWindowPhases(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, boolean seen,
+            long nowMs) {
+        if (mPaneController == null) return 0;
+        int marks = 0;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            int pid = shell.getPid();
+            if (pid <= 0) continue;
+            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
+            com.termux.app.statusbar.ShellPhaseTracker.Phase phase = mShellPhases.observe(pid, nowMs,
+                isShellWorking(shell, nowMs), info != null, info != null && info.idle,
+                () -> screenLooksLikeQuestion(shell), seen);
+            switch (phase) {
+                case WORKING: marks |= PHASE_WORKING; break;
+                case ATTENTION: marks |= PHASE_ATTENTION; break;
+                case DONE: marks |= PHASE_DONE; break;
+                default: break;
+            }
+        }
+        return marks;
+    }
+
+    /** Read once per quiet spell, when the tracker has to tell asking from finished. */
+    private static boolean screenLooksLikeQuestion(@NonNull TerminalSession shell) {
+        com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+        if (emulator == null) return false;
+        String screen = emulator.getScreen().getSelectedText(0, 0, emulator.mColumns,
+            emulator.mRows - 1, true, false);
+        return com.termux.app.statusbar.ShellAttentionCues.looksLikeQuestion(screen);
+    }
+
+    /**
+     * One refresh at the moment the soonest quiet command has to be judged waiting or finished,
+     * rather than polling while nothing changes.
+     */
+    private void scheduleShellPhaseJudgement() {
+        mShellActivityHandler.removeCallbacks(mShellPhaseJudgement);
+        long now = android.os.SystemClock.uptimeMillis();
+        long due = mShellPhases.nextJudgementMs(now);
+        if (due < 0L) return;
+        mShellActivityHandler.postDelayed(mShellPhaseJudgement, Math.max(50L, due - now) + 20L);
     }
 
     @NonNull
@@ -11366,15 +11563,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * shells, editors, and agent CLIs already ring when a command finishes or a prompt needs an
      * answer, so no cooperation from the program is required.
      *
-     * <p>A bell from the window the user is already in is not news, and is dropped.
+     * <p>A bell from the window the user is already in is not news: its pill shows the bell for a
+     * couple of seconds and drops it on its own, instead of holding it until acknowledged.
      */
     void noteShellAttention(@NonNull TerminalSession session) {
         int pid = session.getPid();
         if (pid < 1 || mPaneController == null) return;
         if (mCurrentWSession != null
-            && mPaneController.shellsOf(mCurrentWSession.currentWindow()).contains(session)) return;
+            && mPaneController.shellsOf(mCurrentWSession.currentWindow()).contains(session)) {
+            if (mTimedAttentionShellPids.add(pid)) refreshTerminalWindowBar();
+            mShellActivityHandler.postDelayed(() -> {
+                if (mTimedAttentionShellPids.remove(pid)) refreshTerminalWindowBar();
+            }, FOCUSED_BELL_MS);
+            return;
+        }
         if (!mAttentionShellPids.add(pid)) return;
         refreshTerminalWindowBar();
+    }
+
+    /**
+     * The emulator in {@code window} that is reporting progress (OSC 9;4), or null when none is.
+     * The first reporting shell wins: a window's pill has one ring.
+     */
+    @Nullable
+    private com.termux.terminal.TerminalEmulator windowProgressReporter(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null) return null;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+            if (emulator != null && emulator.getProgressState()
+                != com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NONE) return emulator;
+        }
+        return null;
     }
 
     void clearShellAttention(int shellPid) {
@@ -11383,59 +11603,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void clearWindowAttention(
             @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
-        if (mPaneController == null || mAttentionShellPids.isEmpty()) return;
+        if (mPaneController == null) return;
         for (TerminalSession shell : mPaneController.shellsOf(window)) {
             mAttentionShellPids.remove(shell.getPid());
+            mShellPhases.markSeen(shell.getPid());
         }
     }
 
     private boolean isWindowAwaitingUser(
             @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
-        if (mPaneController == null || mAttentionShellPids.isEmpty()) return false;
+        if (mPaneController == null) return false;
+        if (mAttentionShellPids.isEmpty() && mTimedAttentionShellPids.isEmpty()) return false;
         for (TerminalSession shell : mPaneController.shellsOf(window)) {
-            if (mAttentionShellPids.contains(shell.getPid())) return true;
+            int pid = shell.getPid();
+            if (mAttentionShellPids.contains(pid) || mTimedAttentionShellPids.contains(pid))
+                return true;
         }
         return false;
     }
 
     /**
-     * Whether any shell in {@code window} has a command actively working in it — an agent thinking, a
-     * build compiling — as opposed to merely having something on screen.
+     * Whether {@code shell} has a command actively working in it this instant — an agent thinking, a
+     * build compiling — as opposed to merely sitting at a prompt. The phase tracker adds the memory:
+     * the grace after a quiet spell, and what the quiet turned out to mean.
      *
-     * <p>The signal is the foreground process group's CPU use between the resolver's polls. That is
-     * what separates the three states that all look identical to an output-only signal: a shell
-     * echoing what is being typed at it, a TUI sitting there repainting its clock once a second, and
-     * an agent actually working. Only the last of the three burns CPU.
+     * <p>Two signals, either of which counts once the foreground is not the shell itself: the
+     * foreground process group's CPU use between the resolver's polls, and sustained output. CPU was
+     * the only signal for a while, because output alone cannot tell a shell echoing keystrokes from
+     * a command printing; but an agent waiting on the network burns no CPU while its spinner keeps
+     * redrawing, and the ring going out mid-task read as the indicator failing. So output counts
+     * too, gated by the foreground being a command rather than the shell (which is what rules out
+     * the echo) and by the input grace below (which rules out the keystrokes themselves). The price
+     * is that a full-screen program repainting a clock reads as working; a running program is
+     * working in the sense tmux's monitor-activity means, and that is the sense the ring shows.
      *
      * <p>Input silences the indication outright: while the user is typing, the pane is being
      * interacted with, not working in the background, whatever its process spends on rendering the
      * keystrokes.
      *
-     * <p>Where no CPU reading is available — no privileged backend, an unreadable procfs, or simply
-     * the first poll of a newly started command — the pane falls back to sustained output activity,
-     * excluding full-screen (alternate buffer) applications, since a repainting TUI is exactly what
-     * that fallback cannot tell apart from work. A reading that exists and is below the threshold is
-     * final, though: that is the answer, not a gap to be filled in.
+     * <p>Where no foreground reading is available — no privileged backend, an unreadable procfs — the
+     * output signal stands alone, and there the alternate screen is excluded, since without knowing
+     * what is in the foreground a repainting TUI cannot be told from a shell.
      */
-    private boolean isWindowWorking(
-            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, long nowMs) {
-        if (mPaneController == null) return false;
-        for (TerminalSession shell : mPaneController.shellsOf(window)) {
-            int pid = shell.getPid();
-            if (pid <= 0) continue;
-            long lastWrite = shell.getLastWriteUptimeMs();
-            if (lastWrite > 0L && nowMs - lastWrite < SHELL_INPUT_GRACE_MS) continue;
-            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
-                mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
-            if (info != null && info.idle) continue;          // the shell itself has the terminal
-            if (info != null) {
-                if (info.working) return true;
-                if (info.cpuFraction >= 0d) continue;         // measured, and it is not working
-            }
-            if (isFullScreenApplication(shell)) continue;
-            if (mShellActivityTracker.isWorking(pid, nowMs)) return true;
-        }
-        return false;
+    private boolean isShellWorking(@NonNull TerminalSession shell, long nowMs) {
+        int pid = shell.getPid();
+        if (pid <= 0) return false;
+        long lastWrite = shell.getLastWriteUptimeMs();
+        if (lastWrite > 0L && nowMs - lastWrite < SHELL_INPUT_GRACE_MS) return false;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
+        if (info != null && info.idle) return false;          // the shell itself has the terminal
+        if (info != null && info.working) return true;
+        if (info == null && isFullScreenApplication(shell)) return false;
+        return mShellActivityTracker.isWorking(pid, nowMs);
     }
 
     /** Whether {@code shell} has a full-screen application on the alternate screen buffer. */
@@ -12285,9 +12505,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         runWithoutNotices(() -> mPaneController.split(orientation));
     }
 
+    /** Push the Sessions-and-panes behaviour toggles into the pane controller. */
+    private void applyPaneBehaviourPreferences() {
+        if (mPaneController == null || getPreferences() == null) return;
+        mPaneController.setDefaultLayoutPolicy(getPreferences().isDwindleDefaultLayoutEnabled()
+            ? com.termux.app.terminal.TerminalPaneController.LAYOUT_DWINDLE : null);
+        mPaneController.setFocusGrowEnabled(getPreferences().isFocusedPaneGrowsEnabled());
+    }
+
+    /** Split the focused pane along its longer side (Ctrl+Alt+Enter): a new terminal, no axis asked. */
+    void splitCurrentPaneAuto() {
+        if (!isSplitPanesEnabled() || mPaneController == null) return;
+        if (mTermuxService == null || mPaneController.getActiveSession() == null) {
+            showSessionSwitchIndicator(getString(R.string.msg_no_session_to_split));
+            return;
+        }
+        runWithoutNotices(() -> mPaneController.splitAuto());
+    }
+
     /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
     boolean focusPaneDirection(int keyCode) {
-        return mPaneController == null || mPaneController.focusDirection(keyCode);
+        return mPaneController != null && mPaneController.focusDirection(keyCode);
     }
 
     /** Adjust the split ratio toward the arrow direction (Ctrl+Alt+Shift+arrow). */
@@ -12351,6 +12589,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Create a shell in {@code cwd} (or the default) via the service; null on failure. */
     @Nullable TerminalSession createShellForCwd(@Nullable String cwd) {
         return createShellForCwd(cwd, null);
+    }
+
+    /**
+     * A shell that first runs {@code command} (argv; empty for a plain shell) and then stays behind
+     * as the user's login shell, the way a restored workspace pane does. Null when the service is
+     * not ready or the terminal limit is reached. Shared by workspace restore and the pane API.
+     */
+    @Nullable TerminalSession createCommandShell(@NonNull java.util.List<String> command,
+                                                 @Nullable String cwd, @Nullable String title) {
+        if (mTermuxService == null) return null;
+        if (mTermuxService.getTermuxSessionsSize()
+                >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
+            return null;
+        }
+        String executable = null;
+        String[] arguments = null;
+        if (!command.isEmpty()) {
+            String shell = wrapperShellPath();
+            if (shell != null) {
+                // The command is looked up on the PATH the user's own config builds, since a
+                // captured command frequently lives somewhere only that config knows about, and a
+                // shell stays behind once it exits so a pane restoring `make` does not vanish with
+                // the build.
+                boolean fishStyle = isFishShell(shell);
+                String script = shellCommandLine(command, fishStyle)
+                    + "; exec " + shellQuote(shell, fishStyle) + " -l";
+                String login = loginProgramPath();
+                if (login != null) {
+                    // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs the same shell
+                    // the same way a normal pane does — and only it sets up LD_PRELOAD for
+                    // termux-exec and sources termux-login.sh. Passing arguments also skips its motd.
+                    executable = login;
+                    arguments = new String[] {"-c", script};
+                } else {
+                    executable = shell;
+                    arguments = new String[] {"-l", "-c", script};
+                }
+            } else {
+                executable = command.get(0);
+                arguments = command.subList(1, command.size()).toArray(new String[0]);
+            }
+        }
+        if (cwd == null || cwd.isEmpty()) cwd = getProperties().getDefaultWorkingDirectory();
+        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
+            mTermuxService.createTermuxSession(executable, arguments, null, cwd, false,
+                title == null || title.isEmpty() ? null : title);
+        return created == null ? null : created.getTerminalSession();
     }
 
     @Nullable TerminalSession createShellForCwd(@Nullable String cwd, @Nullable String sessionName) {
@@ -12526,6 +12811,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          * scratchpad re-adopt its shell after a hide or an activity restart instead of piling
          * up fresh ones.
          */
+        @Override public boolean shouldTerminalTakeFocus() {
+            return mInAppKeyboard == null || !mInAppKeyboard.isExternalTextInputActive();
+        }
+
         @Override @Nullable public TerminalSession findIdleShellByName(@NonNull String name) {
             if (mTermuxService == null || mPaneController == null) return null;
             for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
@@ -12909,6 +13198,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.splitCurrentPane(orientation);
         }
 
+        @Override public void splitCurrentPaneAuto() {
+            TermuxActivity.this.splitCurrentPaneAuto();
+        }
+
         @Override public boolean focusPaneDirection(int keyCode) {
             return TermuxActivity.this.focusPaneDirection(keyCode);
         }
@@ -12939,6 +13232,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean rotatePaneLayout(boolean clockwise) {
             return TermuxActivity.this.rotatePaneLayout(clockwise);
+        }
+
+        @Override @Nullable public TerminalSession openCommandPane(
+                @NonNull java.util.List<String> command, @Nullable String cwd,
+                @Nullable String title, boolean focus) {
+            if (!isSplitPanesEnabled() || mPaneController == null
+                || mPaneController.getActiveSession() == null) return null;
+            TerminalSession shell = createCommandShell(command, cwd, title);
+            if (shell == null) return null;
+            boolean[] added = {false};
+            runWithoutNotices(() -> added[0] = mPaneController.addPane(shell, focus));
+            if (!added[0]) {
+                mTermuxService.killTermuxSession(shell);
+                return null;
+            }
+            return shell;
+        }
+
+        @Override @NonNull public java.util.List<com.termux.app.terminal.TerminalPaneController.Window>
+                currentSessionWindows() {
+            return mCurrentWSession == null
+                ? java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>emptyList()
+                : new java.util.ArrayList<>(mCurrentWSession.windows);
+        }
+
+        @Override @Nullable public TerminalSession findPaneById(@NonNull String id) {
+            if (mTermuxService == null) return null;
+            for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
+                    : mTermuxService.getTermuxSessions()) {
+                TerminalSession session = termuxSession.getTerminalSession();
+                if (session != null && id.equals(session.mHandle)) return session;
+            }
+            return null;
         }
 
         @Override public boolean moveFocusedPaneToEdge(@NonNull String edge) {
@@ -13781,6 +14107,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryLayoutChangeListener = null;
     }
 
+    /** The drawer dismissed a visible system IME on engage; restored when the drawer goes. */
+    private boolean mSystemImeHiddenForDrawer;
+
     private boolean isImeVisible() {
         View content = findViewById(android.R.id.content);
         if (content == null) {
@@ -14023,6 +14352,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void reloadActivityStyling(boolean recreateActivity) {
         if (mProperties != null) {
             reloadProperties();
+            // Every page, not just the first: the editor in Settings may have added or emptied
+            // a page, and the pager only learns that from a rebuild.
+            reloadExtraKeysFromProperties();
             if (mExtraKeysView != null) {
                 mExtraKeysView.setButtonTextAllCaps(mProperties.shouldExtraKeysTextBeAllCaps());
                 applyExtraKeysFeedbackAccent(mExtraKeysView);

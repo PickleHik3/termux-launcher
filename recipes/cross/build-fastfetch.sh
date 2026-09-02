@@ -53,8 +53,12 @@ fi
 #
 # termux-pwd-polyfill.h is force-included for the same class of reason: the stock NDK's getpwuid()
 # reports pw_dir="/data" for an app uid, and Fastfetch trusts passwd over $HOME, so without it the
-# binary never finds ~/.config/fastfetch and quietly falls back to the built-in ASCII logo.
-echo "Configuring..."
+# binary never finds ~/.config/fastfetch and quietly falls back to the built-in ASCII logo. Its
+# prefix and home have to be handed to it explicitly, or a build for another edition would resolve
+# the home directory to the default one, which is not this edition's.
+POLYFILL_FLAGS="-DTERMUX_POLYFILL_PREFIX=\\\"$TERMUX_PREFIX\\\" -DTERMUX_POLYFILL_HOME=\\\"$TERMUX_HOME\\\""
+
+echo "Configuring for $TERMUX_PREFIX..."
 PKG_CONFIG_SYSROOT_DIR="$TL_SYSROOT" \
 PKG_CONFIG_LIBDIR="$PREFIX_IN_SYSROOT/lib/pkgconfig" \
 cmake -S "$source_dir" -B "$TL_BUILD_DIR/build" -G Ninja \
@@ -66,8 +70,8 @@ cmake -S "$source_dir" -B "$TL_BUILD_DIR/build" -G Ninja \
     -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
     -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
     -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
-    -DCMAKE_C_FLAGS="-I$PREFIX_IN_SYSROOT/include -include $PWD_POLYFILL" \
-    -DCMAKE_CXX_FLAGS="-I$PREFIX_IN_SYSROOT/include -include $PWD_POLYFILL" \
+    -DCMAKE_C_FLAGS="-I$PREFIX_IN_SYSROOT/include -include $PWD_POLYFILL $POLYFILL_FLAGS" \
+    -DCMAKE_CXX_FLAGS="-I$PREFIX_IN_SYSROOT/include -include $PWD_POLYFILL $POLYFILL_FLAGS" \
     -DCMAKE_EXE_LINKER_FLAGS="-L$PREFIX_IN_SYSROOT/lib -landroid-glob -Wl,-rpath,$TERMUX_PREFIX/lib" \
     -DTARGET_DIR_HOME="$TERMUX_HOME" \
     -DTARGET_DIR_ROOT="$TERMUX_PREFIX" \
@@ -86,6 +90,17 @@ ninja -C "$TL_BUILD_DIR/build" -j"${TL_BUILD_JOBS:-$(nproc)}"
 # its absence means the build would resolve the home directory to "/data" on device.
 if ! grep -qa "$TERMUX_PREFIX/bin/login" "$TL_OUT/fastfetch"; then
     echo "error: the passwd polyfill is missing from the build — fastfetch would ignore ~/.config" >&2
+    exit 1
+fi
+
+# A cross-built binary cannot be run here, so the Kitty logo check in the on-device recipe has no
+# host equivalent. What can be checked is that the patch's depth normalisation survived a rebase:
+# ImageMagick is dlopened and every symbol resolved by name, so the string is in the binary exactly
+# when the call is. Without it a logo that is not already 8-bit transmits the wrong number of bytes
+# and the terminal drops it in silence.
+if ! grep -qa "SetImageDepth" "$TL_OUT/fastfetch"; then
+    echo "error: SetImageDepth is missing from the build — Kitty logos that are not 8-bit per" >&2
+    echo "       channel would be dropped by the terminal without an error" >&2
     exit 1
 fi
 

@@ -164,6 +164,22 @@ public final class TerminalEmulator {
     /** Escape processing: CSI &gt; parameters SPACE, used by kitty multiple cursors. */
     private static final int ESC_CSI_BIGGERTHAN_ARGS_SPACE = 26;
 
+    /** Inside a kitty graphics APC past the ';': payload streams straight to the protocol layer. */
+    private static final int ESC_APC_KITTY_PAYLOAD = 27;
+
+    /** ESC seen while in {@link #ESC_APC_KITTY_PAYLOAD}. */
+    private static final int ESC_APC_KITTY_PAYLOAD_ESCAPE = 28;
+
+    /**
+     * Absorbing an APC to its String Terminator without keeping or printing it: the sequence was
+     * oversized, refused or failed mid-stream. Leaking the remainder as text is the one thing
+     * that must never happen — it used to paint a wall of base64 over the screen.
+     */
+    private static final int ESC_APC_IGNORE = 29;
+
+    /** ESC seen while in {@link #ESC_APC_IGNORE}. */
+    private static final int ESC_APC_IGNORE_ESCAPE = 30;
+
     /** The number of parameter arguments including colon separated sub-parameters. */
     static final int MAX_ESCAPE_PARAMETERS = 32;
 
@@ -172,6 +188,16 @@ public final class TerminalEmulator {
 
     /** Default maximum length for OSC, non-sixel DCS, and ignored APC payloads. */
     static final int MAX_STRING_SEQUENCE_LENGTH = 16 * 1024;
+
+    /**
+     * How much of a kitty graphics APC is buffered as a string: the control data plus the payload
+     * of the small commands (queries, deletes). Pixel payloads never buffer — they stream — so
+     * this only needs to fit an oversized query comfortably.
+     */
+    static final int MAX_KITTY_BUFFERED_APC_LENGTH = 64 * 1024;
+
+    /** Absorb-to-ST safety net, so a sequence that never terminates cannot mute the terminal forever. */
+    private static final int MAX_APC_ABSORB_LENGTH = 64 * 1024 * 1024;
 
     /** OSC 52 carries base64 clipboard data and intentionally has a larger, still finite limit. */
     static final int MAX_CLIPBOARD_SEQUENCE_LENGTH = (100 * 1024) + 10;
@@ -372,6 +398,12 @@ public final class TerminalEmulator {
     private int mOscStringMaxLength = MAX_STRING_SEQUENCE_LENGTH;
     private int mCsiSequenceLength;
     private int mApcSequenceLength;
+
+    /** True while the current APC started with 'G' — kitty graphics, with its own bounds. */
+    private boolean mApcKitty;
+
+    /** True once a kitty APC chose the buffered path, so a ';' in its payload stays payload. */
+    private boolean mApcKittyBuffered;
     private int mDcsSequenceLength;
     private int mDcsSequenceMaxLength = MAX_STRING_SEQUENCE_LENGTH;
     private boolean mIgnoreCrLfForOsc = false;
@@ -454,6 +486,25 @@ public final class TerminalEmulator {
     public static final int COMMAND_EXIT_CODE_UNKNOWN = -1;
 
     private int mLastCommandExitCode = COMMAND_EXIT_CODE_UNKNOWN;
+
+    /** No progress reported (OSC 9;4;0). */
+    public static final int PROGRESS_STATE_NONE = 0;
+    /** Determinate progress, {@link #getProgressValue()} in 0-100 (OSC 9;4;1). */
+    public static final int PROGRESS_STATE_NORMAL = 1;
+    /** Determinate progress that has hit an error (OSC 9;4;2). */
+    public static final int PROGRESS_STATE_ERROR = 2;
+    /** Working, no percentage (OSC 9;4;3). */
+    public static final int PROGRESS_STATE_INDETERMINATE = 3;
+    /** Determinate progress, paused (OSC 9;4;4). */
+    public static final int PROGRESS_STATE_PAUSED = 4;
+
+    /**
+     * The ConEmu/Windows Terminal progress report ({@code OSC 9 ; 4 ; state ; percent ST}): what a
+     * long-running command says about how far along it is, so the window it runs in can show a
+     * progress ring rather than guess from output.
+     */
+    private int mProgressState = PROGRESS_STATE_NONE;
+    private int mProgressValue;
 
     /** Whether any OSC 133 mark has been seen, which is how the app knows shell integration is set up. */
     private boolean mShellIntegrationSeen;
@@ -753,6 +804,12 @@ public final class TerminalEmulator {
         } else if (columns < 2 || rows < 2) {
             throw new IllegalArgumentException("rows=" + rows + ", columns=" + columns);
         }
+        // Bottom anchoring exists so a prompt parked against the bottom edge stays on that edge as
+        // the screen grows. A cursor higher up means there is no such prompt — after a
+        // transcript-wiping clear it sits at the top — and anchoring then would float it
+        // mid-screen over rows of fresh blank padding, where every other terminal keeps it
+        // top-anchored. Judged against the pre-resize screen, before mRows moves.
+        keepCursorAtBottom &= mCursorRow >= mRows - 2;
         if (mRows != rows) {
             mRows = rows;
             mTopMargin = 0;
@@ -882,7 +939,21 @@ public final class TerminalEmulator {
      * @param length the number of bytes in the array to process
      */
     public void append(byte[] buffer, int length) {
-        for (int i = 0; i < length; i++) processByte(buffer[i]);
+        int i = 0;
+        while (i < length) {
+            // The kitty payload fast path: hand whole runs of plain ASCII to the streaming decoder
+            // instead of walking them byte by byte through the UTF-8 and escape machinery. This is
+            // what pays for lifting the old 16 KiB APC ceiling — big images get cheaper, not dearer.
+            if (mEscapeState == ESC_APC_KITTY_PAYLOAD && mUtf8ToFollow == 0) {
+                int start = i;
+                while (i < length && buffer[i] >= 32 && buffer[i] != 127) i++;
+                if (i > start && !mKittyGraphics.streamFeed(buffer, start, i - start)) {
+                    startApcAbsorb();
+                }
+                if (i >= length) return;
+            }
+            processByte(buffer[i++]);
+        }
     }
 
     private void processByte(byte byteToProcess) {
@@ -970,6 +1041,18 @@ public final class TerminalEmulator {
             return;
         } else if (mEscapeState == ESC_APC_ESCAPE) {
             doApcEscape(b);
+            return;
+        } else if (mEscapeState == ESC_APC_KITTY_PAYLOAD) {
+            doApcKittyPayload(b);
+            return;
+        } else if (mEscapeState == ESC_APC_KITTY_PAYLOAD_ESCAPE) {
+            doApcKittyPayloadEscape(b);
+            return;
+        } else if (mEscapeState == ESC_APC_IGNORE) {
+            doApcIgnore(b);
+            return;
+        } else if (mEscapeState == ESC_APC_IGNORE_ESCAPE) {
+            doApcIgnoreEscape(b);
             return;
         }
 
@@ -1620,11 +1703,40 @@ public final class TerminalEmulator {
     private void doApc(int b) {
         if (b == 27) {
             continueSequence(ESC_APC_ESCAPE);
-        } else if (++mApcSequenceLength > MAX_STRING_SEQUENCE_LENGTH) {
-            finishSequence();
-        } else {
-            mOSCOrDeviceControlArgs.appendCodePoint(b);
+            return;
         }
+        if (mApcSequenceLength == 0 && b == 'G') mApcKitty = true;
+        if (++mApcSequenceLength > apcBufferLimit()) {
+            // Oversized: swallow the rest up to ST. The old behaviour — dropping the sequence and
+            // letting the remaining payload print as text — is exactly the base64 wall bug.
+            startApcAbsorb();
+            return;
+        }
+        if (mApcKitty && !mApcKittyBuffered && b == ';') {
+            // The control data of a kitty graphics command just ended. Ask the protocol layer how
+            // to take the payload: pixel data streams (unbounded by this parser, bounded by the
+            // protocol's own 16 MiB transmission limit — kitten icat sends a whole image as one
+            // unchunked APC, and real kitty accepts that, so parity means we do too); the small
+            // commands stay buffered; a refused command is absorbed, already answered.
+            switch (mKittyGraphics.beginStream(mOSCOrDeviceControlArgs.substring(1))) {
+                case KittyGraphicsProtocol.STREAM_UPLOAD:
+                    mOSCOrDeviceControlArgs.setLength(0);
+                    continueSequence(ESC_APC_KITTY_PAYLOAD);
+                    return;
+                case KittyGraphicsProtocol.STREAM_REJECT:
+                    startApcAbsorb();
+                    return;
+                default:
+                    mApcKittyBuffered = true;
+                    break;
+            }
+        }
+        mOSCOrDeviceControlArgs.appendCodePoint(b);
+    }
+
+    /** The buffered ceiling for the current APC: kitty commands get room, the rest the old bound. */
+    private int apcBufferLimit() {
+        return mApcKitty ? MAX_KITTY_BUFFERED_APC_LENGTH : MAX_STRING_SEQUENCE_LENGTH;
     }
 
     /**
@@ -1635,15 +1747,64 @@ public final class TerminalEmulator {
             // A String Terminator (ST), ending the APC escape sequence.
             mKittyGraphics.accept(mOSCOrDeviceControlArgs.toString());
             finishSequence();
-        } else if (mApcSequenceLength > MAX_STRING_SEQUENCE_LENGTH - 2) {
+        } else if (mApcSequenceLength > apcBufferLimit() - 2) {
             // ESC followed by anything other than '\\' is two payload code points.
-            finishSequence();
+            startApcAbsorb();
         } else {
             // The Escape character was not the start of a String Terminator (ST),
             // but instead just data inside of the APC escape sequence.
             mApcSequenceLength += 2;
             mOSCOrDeviceControlArgs.append('\033').appendCodePoint(b);
             continueSequence(ESC_APC);
+        }
+    }
+
+    /** When streaming a kitty graphics payload ({@link #ESC_APC_KITTY_PAYLOAD}). */
+    private void doApcKittyPayload(int b) {
+        if (b == 27) {
+            continueSequence(ESC_APC_KITTY_PAYLOAD_ESCAPE);
+        } else if (!mKittyGraphics.streamFeed(b)) {
+            startApcAbsorb();
+        }
+    }
+
+    /** ESC inside a streamed kitty payload: ST finishes; anything else is (invalid) payload. */
+    private void doApcKittyPayloadEscape(int b) {
+        if (b == '\\') {
+            mKittyGraphics.finishStream();
+            finishSequence();
+            return;
+        }
+        // A raw ESC is never valid base64, so the decoder refuses it and the client hears EINVAL;
+        // the remainder is then absorbed rather than printed.
+        if (!mKittyGraphics.streamFeed(27) || !mKittyGraphics.streamFeed(b)) {
+            startApcAbsorb();
+            return;
+        }
+        continueSequence(ESC_APC_KITTY_PAYLOAD);
+    }
+
+    /** Discard the rest of the current APC up to its String Terminator, printing nothing. */
+    private void startApcAbsorb() {
+        mOSCOrDeviceControlArgs.setLength(0);
+        mApcSequenceLength = 0; // Reused as the absorb counter for the runaway safety net.
+        continueSequence(ESC_APC_IGNORE);
+    }
+
+    private void doApcIgnore(int b) {
+        if (b == 27) {
+            continueSequence(ESC_APC_IGNORE_ESCAPE);
+        } else if (++mApcSequenceLength > MAX_APC_ABSORB_LENGTH) {
+            finishSequence();
+        }
+    }
+
+    private void doApcIgnoreEscape(int b) {
+        if (b == '\\') {
+            finishSequence();
+        } else {
+            mApcSequenceLength += 2;
+            continueSequence(ESC_APC_IGNORE);
         }
     }
 
@@ -3292,6 +3453,24 @@ public final class TerminalEmulator {
                     }
                 }
                 break;
+            case 9:
+                // ConEmu-style shell reports: the progress report (9;4;…), and otherwise the
+                // iTerm2 notification (9;message) — agents ring it when a turn ends or an approval
+                // is needed, and it is what lets a window say so without a bell.
+                if (textParameter.startsWith("4;") || textParameter.equals("4")) {
+                    doOscProgress(textParameter);
+                } else if (!textParameter.isEmpty()) {
+                    mSession.onNotification(null, textParameter);
+                }
+                break;
+            case 777: {
+                // rxvt-unicode's notification: 777;notify;title;body.
+                String[] parts = textParameter.split(";", 3);
+                if (parts.length >= 2 && "notify".equals(parts[0])) {
+                    mSession.onNotification(parts[1], parts.length > 2 ? parts[2] : "");
+                }
+                break;
+            }
             default:
                 unknownParameter(value);
                 break;
@@ -3334,6 +3513,55 @@ public final class TerminalEmulator {
      */
     public int getLastCommandExitCode() {
         return mLastCommandExitCode;
+    }
+
+    /**
+     * {@code 4 ; state [; percent]} from OSC 9. State 0 clears, 1/2/4 carry a percentage (a missing or
+     * malformed one keeps the last value, as Windows Terminal does), 3 is indeterminate. Anything
+     * else is ignored rather than reset: an unknown state is a newer spec, not a request to clear.
+     */
+    private void doOscProgress(String parameter) {
+        String[] parts = parameter.split(";", -1);
+        if (parts.length < 2) return;
+        int state;
+        try {
+            state = Integer.parseInt(parts[1].trim());
+        } catch (NumberFormatException e) {
+            return;
+        }
+        switch (state) {
+            case PROGRESS_STATE_NONE:
+                mProgressState = PROGRESS_STATE_NONE;
+                mProgressValue = 0;
+                break;
+            case PROGRESS_STATE_INDETERMINATE:
+                mProgressState = state;
+                break;
+            case PROGRESS_STATE_NORMAL:
+            case PROGRESS_STATE_ERROR:
+            case PROGRESS_STATE_PAUSED:
+                mProgressState = state;
+                if (parts.length > 2) {
+                    try {
+                        mProgressValue = Math.max(0, Math.min(100, Integer.parseInt(parts[2].trim())));
+                    } catch (NumberFormatException ignored) {
+                        // Keep the previous value.
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** One of the {@code PROGRESS_STATE_*} constants: the last progress report from the shell. */
+    public int getProgressState() {
+        return mProgressState;
+    }
+
+    /** Percent complete, 0-100, meaningful for the determinate progress states. */
+    public int getProgressValue() {
+        return mProgressValue;
     }
 
     /** Whether the shell has ever reported an OSC 133 mark, i.e. whether shell integration is active. */
@@ -3595,6 +3823,12 @@ public final class TerminalEmulator {
     }
 
     private void finishSequence() {
+        // A cancelled kitty payload stream (CAN/SUB, or a runaway absorb) must tell the protocol
+        // layer; finishing after a clean ST is a no-op because finishStream() already closed it.
+        if (mEscapeState == ESC_APC_KITTY_PAYLOAD || mEscapeState == ESC_APC_KITTY_PAYLOAD_ESCAPE)
+            mKittyGraphics.abortStream();
+        mApcKitty = false;
+        mApcKittyBuffered = false;
         mEscapeState = ESC_NONE;
         mIgnoreCrLfForOsc = false;
         mOscStringMaxLength = MAX_STRING_SEQUENCE_LENGTH;
@@ -3878,6 +4112,8 @@ public final class TerminalEmulator {
         mCurrentHyperlinkId = TerminalHyperlinks.NO_LINK;
         mHyperlinks.clear();
         mLastCommandExitCode = COMMAND_EXIT_CODE_UNKNOWN;
+        mProgressState = PROGRESS_STATE_NONE;
+        mProgressValue = 0;
         mShellIntegrationCommandRunning = false;
         mShellIntegrationSeen = false;
         mKeyboardModesMain.reset();
@@ -3901,6 +4137,9 @@ public final class TerminalEmulator {
         mOscStringMaxLength = MAX_STRING_SEQUENCE_LENGTH;
         mCsiSequenceLength = 0;
         mApcSequenceLength = 0;
+        mKittyGraphics.abortStream();
+        mApcKitty = false;
+        mApcKittyBuffered = false;
         mDcsSequenceLength = 0;
         mDcsSequenceMaxLength = MAX_STRING_SEQUENCE_LENGTH;
         clearStringSequenceArgs();
