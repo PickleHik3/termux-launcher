@@ -3634,12 +3634,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean capsule = isInAppKeyboardCapsule();
         boolean glassTheme = isInAppKeyboardGlassSurface();
         int horizontalMargin = resolveInAppKeyboardHorizontalInsetPx();
-        int bottomMargin = capsule ? getDockLayout().capsuleBottomGapPx : 0;
         int topMargin = capsule ? Math.round(dpToPx(4)) : 0;
         int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
-        // The user's own chin allowance, from Settings. Padding inside the slab rather than a
-        // margin under it, so the material still runs to the screen edge and only the keys move up.
-        int innerBottomPadding = innerPadding + resolveInAppKeyboardBottomPaddingPx();
+        // The user's own chin allowance, from Settings, and it lands in a different place per shape:
+        // padding inside the docked slab, a taller gap under the floating capsule.
+        int chinPaddingPx = resolveInAppKeyboardBottomPaddingPx();
+        int bottomMargin = ChromePolicy.keyboardChinBottomMarginPx(
+            capsule, getDockLayout().capsuleBottomGapPx, chinPaddingPx);
+        int innerBottomPadding = ChromePolicy.keyboardChinBottomPaddingPx(
+            capsule, innerPadding, chinPaddingPx);
         ViewGroup.LayoutParams layoutParams = surfaceHost.getLayoutParams();
         if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
@@ -6867,6 +6870,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public float terminalFrameCornerRadiusPx() {
             return terminalEdgeCornerRadiusPx();
+        }
+
+        @Override public float keyboardSurfaceCornerRadiusPx() {
+            // The same call applyInAppKeyboardSurfaceState clips the surface with, uncapped by
+            // height for the same reason it is there: the keyboard is never short enough to need it.
+            return isInAppKeyboardCapsule()
+                ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         }
 
         @Override public void openKeyboardColors() {

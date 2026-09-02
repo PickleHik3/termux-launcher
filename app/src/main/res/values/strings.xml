@@ -1108,7 +1108,9 @@
                 <string name="termux_surface_tuning_keyboard_spacing">Key spacing</string>
                 <string name="termux_surface_tuning_keyboard_key_opacity">Key opacity</string>
                 <string name="termux_surface_tuning_edges">Margin</string>
+                <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
                 <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
+                <string name="termux_surface_tuning_keyboard_chin_handle">Drag to change the space under the keys</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
@@ -1121,7 +1123,9 @@
                 <string name="termux_surface_tuning_peek_readout">%1$s · %2$s</string>
                 <!-- The peek echo names the control in full; the card's own label column is too
                      narrow for that, and there the heading disambiguates anyway. -->
+                <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
                 <string name="termux_surface_tuning_peek_keyboard_height">Keyboard height</string>
+                <string name="termux_surface_tuning_peek_keyboard_chin">Space under the keys</string>
                 <string name="termux_surface_tuning_unsaved_title">Unsaved changes</string>
                 <string name="termux_surface_tuning_unsaved_message">Discard them and put every surface back to how it looked when you opened the editor, or save and close?</string>
                 <string name="termux_surface_tuning_unsaved_discard">Discard</string>

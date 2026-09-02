@@ -114,6 +114,8 @@ Open-Meteo attribution.
 - **On-screen keyboard:** built-in terminal keyboard, Android keyboard, or none.
 - **Hide the on-screen keyboard:** hide it while a physical keyboard is connected.
 - **Customize keyboard appearance:** live size, spacing, radius, and color tuning.
+- **Space under the keys:** lift the bottom key row away from the edge of the screen. The surface
+  editor sets the same space by dragging the pill under the last key row.
 - **Theme**, **Keyboard colors**, and **Typeface**.
 - **Edit extra keys:** the terminal key row, previewed as it will look. Add common keys
   such as CTRL with one tap, search for any other key or launcher action, drag keys to
