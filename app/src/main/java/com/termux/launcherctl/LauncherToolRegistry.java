@@ -572,7 +572,8 @@ public final class LauncherToolRegistry {
             "Terminate the shell running in the focused pane.",
             schemaEmpty(),
             ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
-            CATEGORY_PANE, R.string.tool_pane_kill_focused, R.string.tool_desc_pane_kill_focused, null, REQUIRES_SESSION);
+            CATEGORY_PANE, R.string.tool_pane_kill_focused, R.string.tool_desc_pane_kill_focused,
+            Collections.singletonList(Binding.of("ctrl+alt+w", BindingCondition.SPLITS_ON)), REQUIRES_SESSION);
         // The palette cannot prompt for a preset or edge. Keep those two parameterized actions
         // agent/CLI-only; equalize and clockwise rotate remain directly useful palette actions.
         add(map, TOOL_PANE_LAYOUT,
