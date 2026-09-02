@@ -28,6 +28,7 @@ or VAJ (`io.vaj.tl`) build; everything above it applies to all three.
 
 - `Ctrl+Alt+Enter` opens a new pane.
 - `Alt+Arrow` moves between panes. It was `Ctrl+Arrow`, which took word jumps away from the shell and editors.
+- `Ctrl+Alt+W` closes the focused pane.
 
 #### Keyboard
 
