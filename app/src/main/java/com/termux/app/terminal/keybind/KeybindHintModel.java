@@ -226,6 +226,7 @@ public final class KeybindHintModel {
     private static final String[][] STRIP_BASE = {
         {"enter", "new pane"},
         {"v h", "split"},
+        {"w", "close pane"},
         {"c", "new window"},
         {"x", "close window"},
         {"left right", ""},   // nf-fa-window_maximize: previous/next window
