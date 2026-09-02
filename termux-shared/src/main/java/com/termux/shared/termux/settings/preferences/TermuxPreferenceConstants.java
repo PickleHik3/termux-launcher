@@ -264,6 +264,25 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
             APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
 
+        /**
+         * Defines the key for opening the keyboard as soon as the app drawer opens, so the drawer
+         * arrives ready to search instead of waiting for the pill to be tapped.
+         */
+        public static final String KEY_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN =
+            "app_launcher_drawer_search_on_open";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN = false;
+
+        /**
+         * Defines the key for searching the app drawer with the Android keyboard through a real text
+         * field, so its suggestions and swipe typing apply, instead of the built-in keyboard's key
+         * stream.
+         */
+        public static final String KEY_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD =
+            "app_launcher_drawer_search_android_keyboard";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD = false;
+
         /** Custom drawer corner radius in dp, or -1 to follow the shared rounded-surface token. */
         public static final String KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS =
             "app_launcher_drawer_corner_radius";
@@ -538,6 +557,17 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_KEY_SOUND_ENABLED = false;
 
         /**
+         * Defines the key for whether the built-in keyboard learns where the user's taps land
+         * and nudges presses near a key boundary onto the key they usually mean. Off by
+         * default: it is the home screen's keyboard, and the model is learned from the user's
+         * own typing, so it has to be asked for.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_TAP_CORRECTION =
+            "in_app_keyboard_tap_correction";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_TAP_CORRECTION = false;
+
+        /**
          * Defines the key for the absolute path of a user-imported label font file,
          * or an empty string for the system default typeface.
          */
@@ -634,6 +664,22 @@ public final class TermuxPreferenceConstants {
         public static final float MIN_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 0.0f;
 
         public static final float MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 24.0f;
+
+        /**
+         * Defines the extra air in dp under the last key row, inside the keyboard's own surface.
+         * The slab keeps its bounds, so the material still runs to the screen edge; only the keys
+         * move up — which is what clears a gesture bar without leaving a bare strip under the
+         * glass. Lives in Settings rather than the surface editor: it is a fit against one
+         * device's chin, not part of a look.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_BOTTOM_PADDING =
+            "in_app_keyboard_bottom_padding";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING = 0;
+
+        public static final int MIN_IN_APP_KEYBOARD_BOTTOM_PADDING = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_BOTTOM_PADDING = 48;
 
         /**
          * Defines the absolute key cap opacity in percent (0 = invisible caps, 100 = fully

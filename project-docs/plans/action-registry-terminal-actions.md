@@ -1,7 +1,7 @@
 # Terminal action registry — inventory and rollout
 
-Feeds the command-palette / custom-bindings work described in
-`kitty-to-termux-launcher-feasibility-study.md` (Phase 1).
+Feeds the command-palette / custom-bindings work: Phase 1 of the Kitty feasibility study, whose
+overview lives in [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
 
 Status: delivered. User configuration and usage are documented in
 [`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md); the cross-project

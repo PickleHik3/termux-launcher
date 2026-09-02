@@ -84,6 +84,7 @@ public final class AppDrawerSearchController
     @NonNull private List<LauncherAppEntry> mResults = Collections.emptyList();
     @Nullable private Host mHost;
     @Nullable private ResultsListener mListener;
+    private boolean mTextFieldOwnsInput;
 
     public void setHost(@Nullable Host host) {
         mHost = host;
@@ -91,6 +92,33 @@ public final class AppDrawerSearchController
 
     public void setResultsListener(@Nullable ResultsListener listener) {
         mListener = listener;
+    }
+
+    /**
+     * The Android-keyboard search: a focused text field owns typing, deleting and caret movement,
+     * and reports the result through {@link #replaceQuery}. The hardware-key channel then keeps
+     * only the strokes that mean something to the drawer rather than to the text — Enter and Esc —
+     * and the in-app keyboard's interceptor is left to the yielded keyboard.
+     */
+    public void setTextFieldOwnsInput(boolean owns) {
+        mTextFieldOwnsInput = owns;
+    }
+
+    public boolean textFieldOwnsInput() {
+        return mTextFieldOwnsInput;
+    }
+
+    /** Esc on the text field: the same press the key channel would have spent inside the drawer. */
+    public void requestDismiss() {
+        dismiss();
+    }
+
+    /** The text field's whole query after an edit; ranked only when the text itself moved. */
+    public void replaceQuery(@NonNull String text, int caret) {
+        boolean textChanged = !text.contentEquals(mModel.query());
+        if (!mModel.replace(text, caret)) return;
+        if (textChanged) rank(true);
+        else notifyCaretOnly();
     }
 
     // ------------------------------------------------------------------ state
@@ -226,6 +254,22 @@ public final class AppDrawerSearchController
      */
     public boolean handleKeyDown(int keyCode, @NonNull KeyEvent event) {
         if (!isActive()) return false;
+        if (mTextFieldOwnsInput) {
+            // Letters, backspace and the arrows are the field's; only the strokes that act on the
+            // drawer are claimed, and on the down stroke alone so the field never sees a stray up.
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                    commit();
+                    return true;
+                case KeyEvent.KEYCODE_ESCAPE:
+                    dismiss();
+                    return true;
+                default:
+                    return false;
+            }
+        }
         if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
         if (handleKeyCode(keyCode)) return true;
         // A chord is a shortcut, not a letter; swallowed rather than typed, as the palette does.

@@ -79,8 +79,19 @@ public class AccessoryStackLayoutPolicyTest {
 
     @Test
     public void azRowHeight_usesFixedHeight() {
-        assertEquals(57, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, 3f));
-        assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowHeightPx(false, 3f));
+        assertEquals(57, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, true, 3f));
+        assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowHeightPx(false, true, 3f));
+    }
+
+    @Test
+    public void azRowCarriesAChinOnlyWhenItIsTheDocksBottomRow() {
+        // Extra keys hidden: the 19dp letter band plus a 10dp chin, all of it touchable.
+        assertEquals(87, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, 3f));
+        assertEquals(30, AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(true, false, 3f));
+        // Extra keys shown: that row is the one on the rim, so the A-Z row is the band alone.
+        assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(true, true, 3f));
+        // A row that is off has neither.
+        assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(false, false, 3f));
     }
 
     @Test

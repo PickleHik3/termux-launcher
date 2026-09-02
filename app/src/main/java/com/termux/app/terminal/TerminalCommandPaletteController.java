@@ -83,7 +83,6 @@ public final class TerminalCommandPaletteController
     /** Bottom edge sits this far down the terminal area, then clamps clear of the strip. */
     private static final float ANCHOR_FRACTION = 0.71f;
 
-    private static final long CONFIRMATION_MS = 2600L;
 
     // Content reads well before the sprout settles: the rectangle is recognisable from about a
     // fifth of the way in, and an end of exactly 1 would leave the strip waiting on the spring's
@@ -184,7 +183,6 @@ public final class TerminalCommandPaletteController
     private boolean mListRevealed;
     @Nullable private CommandPaletteFilter.Entry mPendingEntry;
     private String mCrumb = "";
-    private final Runnable mClearConfirmation = this::clearConfirmation;
 
     public TerminalCommandPaletteController(@NonNull TermuxActivity activity) {
         mActivity = activity;
@@ -225,7 +223,6 @@ public final class TerminalCommandPaletteController
             AppNotice.show(mActivity, R.string.palette_empty, false);
             return;
         }
-        mHandler.removeCallbacks(mClearConfirmation);
         mMode = Mode.LIST;
         mQuery = "";
         mQueryCursor = 0;
@@ -239,7 +236,6 @@ public final class TerminalCommandPaletteController
         mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
 
         mView.refreshPalette();
-        mView.setConfirmation(null, 0f, 0f);
         mView.setArgumentMode(false, "", "");
         mView.setQuery("", mActivity.getString(R.string.palette_search_hint));
         rebuildKeycaps();
@@ -290,10 +286,8 @@ public final class TerminalCommandPaletteController
         mMode = Mode.LIST;
         mCaptureStroke = "";
         mCaptureConflict = null;
-        mHandler.removeCallbacks(mClearConfirmation);
         mActivity.setCommandPaletteInterceptorActive(false);
         mProgress.reset(0f);
-        if (mView != null) mView.setConfirmation(null, 0f, 0f);
         if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
         if (mHost != null) mHost.setVisibility(View.INVISIBLE);
     }
@@ -389,7 +383,6 @@ public final class TerminalCommandPaletteController
             frost.setImageDrawable(null);
             frost.setVisibility(View.GONE);
         }
-        if (mView.hasConfirmation()) return;
         mHost.setVisibility(View.INVISIBLE);
     }
 
@@ -1057,7 +1050,9 @@ public final class TerminalCommandPaletteController
             CommandPaletteFilter.compactStroke(mCaptureStroke), pending.title);
         playTick();
         collapse();
-        showConfirmation(saved);
+        // A saved binding is news the screen cannot show, so it gets a real notice rather than the
+        // fleeting read-out an action gets.
+        AppNotice.success(mActivity, saved);
     }
 
     /** Stable id of this package's default launch target, for choosing what to write. */
@@ -1153,15 +1148,10 @@ public final class TerminalCommandPaletteController
     }
 
     /**
-     * Actions whose result is plainly visible on screen, so the palette does not also announce
-     * them: a new window or pane is its own confirmation, and the chip on top of it was noise.
+     * Runs the entry. What ran is not announced here: the dispatcher names every action it
+     * completes on the notice pill, for the palette and every other way in alike, so a second
+     * confirmation drawn by the palette itself was the same sentence twice.
      */
-    private static final java.util.Set<String> SILENT_TOOLS = new java.util.HashSet<>(
-        java.util.Arrays.asList(
-            com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_NEW,
-            com.termux.launcherctl.LauncherToolRegistry.TOOL_PANE_SPLIT_VERTICAL,
-            com.termux.launcherctl.LauncherToolRegistry.TOOL_PANE_SPLIT_HORIZONTAL));
-
     private void run(@NonNull CommandPaletteFilter.Entry entry) {
         mStats.recordRun(CommandPaletteActionStats.keyFor(entry));
         playTick();
@@ -1173,9 +1163,7 @@ public final class TerminalCommandPaletteController
                 mActivity.getString(R.string.palette_action_failed, entry.title));
             Logger.logWarn(LOG_TAG, "Palette action " + entry.toolName + " failed: " + message);
             AppNotice.show(mActivity, message, false);
-            return;
         }
-        if (!SILENT_TOOLS.contains(entry.toolName)) showConfirmation(entry.title);
     }
 
     /** No match: ⏎ hands the query to the shell verbatim. */
@@ -1189,20 +1177,6 @@ public final class TerminalCommandPaletteController
             return;
         }
         session.write(command + "\r");
-    }
-
-    private void showConfirmation(@NonNull String text) {
-        if (mView == null) return;
-        mHost.setVisibility(View.VISIBLE);
-        mView.setConfirmation("✓ " + text, dp(SIDE_INSET) + dp(2f), mAnchorY);
-        mHandler.removeCallbacks(mClearConfirmation);
-        mHandler.postDelayed(mClearConfirmation, CONFIRMATION_MS);
-    }
-
-    private void clearConfirmation() {
-        if (mView == null) return;
-        mView.setConfirmation(null, 0f, 0f);
-        if (!mOpen && mHost != null) mHost.setVisibility(View.INVISIBLE);
     }
 
     @NonNull

@@ -198,6 +198,17 @@ before you hand work over. CI owns the rest.
 - Compile-check any API claim before you rely on it. `UserHandle.getIdentifier` looks public and is
   `@SystemApi`; a worker asserted otherwise and was wrong.
 
+## User-facing text
+
+Settings entries, dialogs, hints, notices — every string a user can see is product copy, not an
+engineering note. Write it the way a polished 2026 app would: a short title and one sentence that
+says what the user gets. No implementation mechanism, no window-manager or protocol names, no HTTP
+codes, no keybind lore, and never a recap of the design discussion that produced the feature.
+"Arrange panes automatically as you open and move them", not "tiles like Hyprland: each new pane
+halves the focused one along its longer side". If a string seems to need a paragraph, the setting
+is doing too much. The deeper detail belongs in `docs/en/`, where curious users are already sent —
+and in the commit body, where the next agent will look.
+
 ## Coding style
 
 Follow `.editorconfig`: UTF-8, LF, final newline, four spaces (two for YAML). Standard Java
@@ -209,7 +220,7 @@ repository-wide formatter: match the surrounding code.
   interface or a deep module (`TerminalHost`, `ChromeRenderer`, `DockLayoutPolicy`,
   `SurfaceEditorController.Host`, …), not a new public method on the activity. That interface
   accreted 326 public methods once; the extraction is what stopped it.
-- Keep geometry and policy **pure and tested** (`DockLayoutPolicy`, `SurfaceEditorCardMetrics`,
+- Keep geometry and policy **pure and tested** (`DockLayoutPolicy`, `SurfaceEditorPillMetrics`,
   `AzScrubGesture`, `PaneShape`), with the view layer dumb enough to just apply the answer.
 - Comments describe how a thing is used and move when the code moves. Do not annotate every line.
 - Inferred types over ceremony. Do not preserve complexity because it already exists, and do not
@@ -222,8 +233,10 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
 - **Negative / concave corner radius was proposed and fully dropped.** Do not reintroduce it.
 - **The Sessions sidebar is legacy.** It loses its purpose with split tabs and its edge-swipe
   fights the keyboard's. No Sessions tab in the editor, no dot tab badges.
-- **The surface editor commits only on Done.** Back and ✕ both route through the unsaved-changes
-  dialog; dirtiness is a comparison against the snapshot taken on entry.
+- **The surface editor commits only on Done.** It rests as the outlines plus a floating
+  palette/✓ pill; the card is raised by the palette (shared layer) or by touching a surface, and its
+  ✕ only puts the card down. Back puts an open card down first; from the resting state it routes
+  through the unsaved-changes dialog. Dirtiness is a comparison against the snapshot taken on entry.
 - **A stored `-1` corner radius is the "follow the style" sentinel**, resolved in one place
   (`resolveAutoCornerRadiusDp`). Never set `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
   `DEFAULT_STATUS_BAR_CORNER_RADIUS` to a real number — the shipped default rides on
@@ -258,7 +271,7 @@ All development happens on `dev`. Editions receive features exclusively by mergi
 - `main` — the Termux edition (`com.termux`). Merge `dev`, tag `vX.Y.Z`.
 - `nix-edition` — the Nix edition (`com.termux.launcher.nix`), tag `vX.Y.Z-nix`, published as a
   prerelease. Backed by the PickleHik3/nix-on-droid fork, branch `launcher-nix`; bootstrap zips live
-  on the `nix-bootstrap` tag. Companion apps (TLNix API/Styling) release from their `nix-pkg`
+  on the `nix-bootstrap` tag. Companion apps (TLNix API/Styling/Boot) release from their `nix-pkg`
   branches via `github_release_build.yml` with `nix-v*` tags.
 - `io-vaj-package` — the VAJ edition (`io.vaj.tl`), tag `vX.Y.Z-vaj`. **The demo edition, and the
   least recommended one to install.** Its packages come from the developer's own apt repository
@@ -266,6 +279,16 @@ All development happens on `dev`. Editions receive features exclusively by mergi
   carried from v0.2.34-vaj to v0.2.36-vaj is over — it gets every release like the others — but
   "not frozen" is not "supported", and nothing should describe it as maintained, revived or
   production-ready.
+
+The **companion apps** are forks of the Termux plugins, one branch per edition, released on their
+own cadence and not part of a launcher cut: PickleHik3/termux-api, termux-styling and termux-boot,
+branches `master` / `nix-pkg` / `io-vaj-package`, tags `vX.Y.Z` / `nix-vX.Y.Z` / `vX.Y.Z-vaj`. They
+exist because a plugin is only granted the launcher's permissions when it joins that edition's
+`sharedUserId` and carries the same signature, so each edition needs its own build. Every one of
+them is **debug-signed with the shared `testkey_untrusted.jks`**, the same key the launcher's own
+published APKs use — that is what makes them pair, and why an F-Droid plugin never will. In
+termux-boot the edition is three values at the top of `app/build.gradle`; nothing else in that tree
+names a package. Their `targetSdk` must stay at the launcher's 28, per the shared-user rule above.
 
 **Every release ships all three editions.** A cut is not finished when `main` is tagged — `dev`
 goes to `nix-edition` and `io-vaj-package` in the same pass, each with its own tag, notes and APK
@@ -282,10 +305,19 @@ usual. Build metadata is ignored in semver precedence, so the tag compares equal
 patches — which also means **a hotfix ships fixes only**. A feature under a `+hotfix` tag is a
 feature under a version that sorts equal to the one before it; cut a real version for that.
 
-Release notes live at `project-docs/release-notes-v<version>.md` and are the **only** changelog.
-There is no `CHANGELOG.md` — it was deleted after v0.2.35-a as a second hand-maintained history that
-duplicated the notes and drifted from them. The technical record is `git log`: commit bodies carry
-the mechanism, the measurements and the reasoning, which is where a reader who wants that should be
+Release notes are the **only** changelog, and they live in exactly one place at a time:
+
+- While a release is being written, its notes are `project-docs/release-notes-v<version>.md` — one
+  file, so `gh release create --notes-file` can point at it.
+- **Once every edition of that version is published, move the notes into
+  `project-docs/release-notes.md`** (newest first, `## v<version>`, the per-edition notes folded
+  into a closing `### Editions` list) and delete the per-version file. Moving, never copying: the
+  earlier split into eleven files, and the `CHANGELOG.md` deleted after v0.2.35-a, both failed the
+  same way — a second hand-maintained history that duplicated the notes and drifted from them.
+
+Entries in `release-notes.md` are kept as they shipped and are not revised afterwards; an old entry
+describes its own release, not today. The technical record is `git log`: commit bodies carry the
+mechanism, the measurements and the reasoning, which is where a reader who wants that should be
 sent. Write the notes from the commit range (`git log v<previous>..dev`), not from another document.
 
 The notes are for someone holding the phone. One line per item, saying what they can now do or what
@@ -297,14 +329,16 @@ Config paths appear only because people type them.
 seams, performance internals, and any defect that was introduced and fixed inside the same release
 cycle. A reader must never learn that something was briefly broken between two tags.
 
-Since v0.2.35 they are split by edition and the split is the point:
+Editions are a section, not a file. The notes for a version are one document:
 
-- `release-notes-v<version>.md` is the whole changelog and ships with the `com.termux` release.
-  Group under `## New` / `## Changes` / `## Fixes` (and `## Security` when a review is behind it),
-  with `###` sub-headings per surface under `## New` (App Drawer, Widgets Page, Keybinds, Terminal,
-  Launcher, Extra Keys).
-- `release-notes-v<version>-vaj.md` and `-nix.md` carry **only** what is exclusive to that edition
-  and link back to the main notes. Do not restate the shared notes.
+- The body is the whole changelog and ships with the `com.termux` release. Group under `## New` /
+  `## Changes` / `## Fixes` (and `## Security` when a review is behind it), with `###` sub-headings
+  per surface under `## New` (App Drawer, Widgets Page, Keybinds, Terminal, Launcher, Extra Keys).
+- A closing `## Editions` list carries **only** what is exclusive to the Nix or VAJ build. Do not
+  restate the shared notes there. When an edition has nothing exclusive, say so — a reader must be
+  able to tell "nothing was exclusive" from "nobody wrote it down".
+- Cutting the `-nix` and `-vaj` releases: pass the same notes file, or an extract of it, to
+  `gh release create`. There is no separate per-edition file to write.
 
 ## Commits, PRs and work artifacts
 

@@ -67,6 +67,7 @@ public final class TermuxInAppKeyboard {
     private InAppKeyboardHost mHost;
     private TermuxAppSharedPreferences mPreferences;
     private final ExecutorService mLayoutExecutor;
+    private final TapCorrectionController mTapCorrection;
     private TermuxInAppKeyboardLayoutLoader mLayoutLoader;
 
     private TerminalKeyEventHandler mKeyEventHandler;
@@ -131,6 +132,10 @@ public final class TermuxInAppKeyboard {
         mLayoutExecutor = Objects.requireNonNull(layoutExecutor, "layoutExecutor");
 
         Context context = requireContainer().getContext();
+        mTapCorrection = new TapCorrectionController(
+            TapCorrectionController.modelFile(context), mLayoutExecutor,
+            new Handler(Looper.getMainLooper()));
+        mTapCorrection.setEnabled(mPreferences.isInAppKeyboardTapCorrectionEnabled());
         mExtraKeysStoredValue = mPreferences.getInAppKeyboardExtraKeys();
         mLayoutOptions = buildLayoutOptions(mExtraKeysStoredValue);
         if (layoutFile == null) {
@@ -208,6 +213,7 @@ public final class TermuxInAppKeyboard {
     /** Cancels gesture and macro state without changing activity-instance visibility. */
     public void onStop() {
         resetInputPipeline();
+        mTapCorrection.flush();
     }
 
     public void onDestroy() {
@@ -225,7 +231,8 @@ public final class TermuxInAppKeyboard {
             mHost.detachKeyboardView();
         if (mLayoutLoader != null)
             mLayoutLoader.close();
-        mLayoutExecutor.shutdownNow();
+        mTapCorrection.flush();
+        mLayoutExecutor.shutdown();
         mKeyboardView = null;
         mKeyEventHandler = null;
         mMainKeyboardData = null;
@@ -294,6 +301,9 @@ public final class TermuxInAppKeyboard {
             suppressSystemIme();
             showInternal();
         } else if (enabled) {
+            // Settings may have toggled the feature or forgotten the learned taps.
+            mTapCorrection.reload();
+            mTapCorrection.setEnabled(mPreferences.isInAppKeyboardTapCorrectionEnabled());
             String extraKeys = mPreferences.getInAppKeyboardExtraKeys();
             if (!Objects.equals(mExtraKeysStoredValue, extraKeys)) {
                 mExtraKeysStoredValue = extraKeys;
@@ -740,13 +750,27 @@ public final class TermuxInAppKeyboard {
 
     /** Temporarily yields to a real text field such as a notification RemoteInput reply. */
     public void beginExternalTextInput() {
+        beginExternalTextInput(false);
+    }
+
+    /**
+     * Yields to a real text field.
+     *
+     * @param keepKeyboardInPlace leave the embedded keyboard's container where it is instead of
+     *                            hiding it and relayouting the accessory stack — for a field under a
+     *                            surface that already covers the keyboard and holds the stack's
+     *                            geometry frozen, such as the open app drawer
+     */
+    public void beginExternalTextInput(boolean keepKeyboardInPlace) {
         if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
             return;
         mExternalTextInputActive = true;
         mHost.onExternalTextInputStarted();
         resetInputPipeline();
-        setContainerVisible(false);
-        mHost.requestAccessoryGeometrySync();
+        if (!keepKeyboardInPlace) {
+            setContainerVisible(false);
+            mHost.requestAccessoryGeometrySync();
+        }
         mHost.runOnMain(() -> {
             if (!mEnabled || mDestroyed || mHost == null || !mExternalTextInputActive)
                 return;
@@ -842,6 +866,8 @@ public final class TermuxInAppKeyboard {
         mKeyboardView.setKeyMarginScale(mKeyMarginScale);
         mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
+        mTapCorrection.setLayoutId(mSelectedLayoutId);
+        mKeyboardView.setTapResolver(mTapCorrection);
         KeyboardData data = getSelectedLayoutData();
         if (data != null)
             mKeyboardView.setKeyboard(data);
@@ -1031,6 +1057,7 @@ public final class TermuxInAppKeyboard {
         if (data == null)
             return;
         mSelectedLayoutId = normalizedId;
+        mTapCorrection.setLayoutId(normalizedId);
         resetInputPipeline();
         if (mKeyboardView != null)
             mKeyboardView.setKeyboard(data);

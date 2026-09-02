@@ -487,6 +487,25 @@ public final class TerminalEmulator {
 
     private int mLastCommandExitCode = COMMAND_EXIT_CODE_UNKNOWN;
 
+    /** No progress reported (OSC 9;4;0). */
+    public static final int PROGRESS_STATE_NONE = 0;
+    /** Determinate progress, {@link #getProgressValue()} in 0-100 (OSC 9;4;1). */
+    public static final int PROGRESS_STATE_NORMAL = 1;
+    /** Determinate progress that has hit an error (OSC 9;4;2). */
+    public static final int PROGRESS_STATE_ERROR = 2;
+    /** Working, no percentage (OSC 9;4;3). */
+    public static final int PROGRESS_STATE_INDETERMINATE = 3;
+    /** Determinate progress, paused (OSC 9;4;4). */
+    public static final int PROGRESS_STATE_PAUSED = 4;
+
+    /**
+     * The ConEmu/Windows Terminal progress report ({@code OSC 9 ; 4 ; state ; percent ST}): what a
+     * long-running command says about how far along it is, so the window it runs in can show a
+     * progress ring rather than guess from output.
+     */
+    private int mProgressState = PROGRESS_STATE_NONE;
+    private int mProgressValue;
+
     /** Whether any OSC 133 mark has been seen, which is how the app knows shell integration is set up. */
     private boolean mShellIntegrationSeen;
     /** True between OSC 133;C (command output) and OSC 133;D/prompt return. */
@@ -785,6 +804,12 @@ public final class TerminalEmulator {
         } else if (columns < 2 || rows < 2) {
             throw new IllegalArgumentException("rows=" + rows + ", columns=" + columns);
         }
+        // Bottom anchoring exists so a prompt parked against the bottom edge stays on that edge as
+        // the screen grows. A cursor higher up means there is no such prompt — after a
+        // transcript-wiping clear it sits at the top — and anchoring then would float it
+        // mid-screen over rows of fresh blank padding, where every other terminal keeps it
+        // top-anchored. Judged against the pre-resize screen, before mRows moves.
+        keepCursorAtBottom &= mCursorRow >= mRows - 2;
         if (mRows != rows) {
             mRows = rows;
             mTopMargin = 0;
@@ -3428,6 +3453,24 @@ public final class TerminalEmulator {
                     }
                 }
                 break;
+            case 9:
+                // ConEmu-style shell reports: the progress report (9;4;…), and otherwise the
+                // iTerm2 notification (9;message) — agents ring it when a turn ends or an approval
+                // is needed, and it is what lets a window say so without a bell.
+                if (textParameter.startsWith("4;") || textParameter.equals("4")) {
+                    doOscProgress(textParameter);
+                } else if (!textParameter.isEmpty()) {
+                    mSession.onNotification(null, textParameter);
+                }
+                break;
+            case 777: {
+                // rxvt-unicode's notification: 777;notify;title;body.
+                String[] parts = textParameter.split(";", 3);
+                if (parts.length >= 2 && "notify".equals(parts[0])) {
+                    mSession.onNotification(parts[1], parts.length > 2 ? parts[2] : "");
+                }
+                break;
+            }
             default:
                 unknownParameter(value);
                 break;
@@ -3470,6 +3513,55 @@ public final class TerminalEmulator {
      */
     public int getLastCommandExitCode() {
         return mLastCommandExitCode;
+    }
+
+    /**
+     * {@code 4 ; state [; percent]} from OSC 9. State 0 clears, 1/2/4 carry a percentage (a missing or
+     * malformed one keeps the last value, as Windows Terminal does), 3 is indeterminate. Anything
+     * else is ignored rather than reset: an unknown state is a newer spec, not a request to clear.
+     */
+    private void doOscProgress(String parameter) {
+        String[] parts = parameter.split(";", -1);
+        if (parts.length < 2) return;
+        int state;
+        try {
+            state = Integer.parseInt(parts[1].trim());
+        } catch (NumberFormatException e) {
+            return;
+        }
+        switch (state) {
+            case PROGRESS_STATE_NONE:
+                mProgressState = PROGRESS_STATE_NONE;
+                mProgressValue = 0;
+                break;
+            case PROGRESS_STATE_INDETERMINATE:
+                mProgressState = state;
+                break;
+            case PROGRESS_STATE_NORMAL:
+            case PROGRESS_STATE_ERROR:
+            case PROGRESS_STATE_PAUSED:
+                mProgressState = state;
+                if (parts.length > 2) {
+                    try {
+                        mProgressValue = Math.max(0, Math.min(100, Integer.parseInt(parts[2].trim())));
+                    } catch (NumberFormatException ignored) {
+                        // Keep the previous value.
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** One of the {@code PROGRESS_STATE_*} constants: the last progress report from the shell. */
+    public int getProgressState() {
+        return mProgressState;
+    }
+
+    /** Percent complete, 0-100, meaningful for the determinate progress states. */
+    public int getProgressValue() {
+        return mProgressValue;
     }
 
     /** Whether the shell has ever reported an OSC 133 mark, i.e. whether shell integration is active. */
@@ -4020,6 +4112,8 @@ public final class TerminalEmulator {
         mCurrentHyperlinkId = TerminalHyperlinks.NO_LINK;
         mHyperlinks.clear();
         mLastCommandExitCode = COMMAND_EXIT_CODE_UNKNOWN;
+        mProgressState = PROGRESS_STATE_NONE;
+        mProgressValue = 0;
         mShellIntegrationCommandRunning = false;
         mShellIntegrationSeen = false;
         mKeyboardModesMain.reset();

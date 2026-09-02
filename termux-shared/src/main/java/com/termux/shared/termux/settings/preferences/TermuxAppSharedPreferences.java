@@ -195,6 +195,28 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
     }
 
+    public boolean isAppLauncherDrawerSearchOnOpenEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN);
+    }
+
+    public void setAppLauncherDrawerSearchOnOpenEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN, value, false);
+    }
+
+    public boolean isAppLauncherDrawerSearchAndroidKeyboardEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD);
+    }
+
+    public void setAppLauncherDrawerSearchAndroidKeyboardEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD, value, false);
+    }
+
     public int getAppLauncherDrawerCornerRadius() {
         int value = SharedPreferenceUtils.getInt(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS,
@@ -914,6 +936,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED, value, false);
     }
 
+    /** Whether the built-in keyboard learns the user's tap offsets and corrects near-miss presses. */
+    public boolean isInAppKeyboardTapCorrectionEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TAP_CORRECTION,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_TAP_CORRECTION);
+    }
+
+    public void setInAppKeyboardTapCorrectionEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TAP_CORRECTION, value, false);
+    }
+
     public boolean isInAppKeyboardKeySoundEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED,
@@ -1165,6 +1199,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (Float.isNaN(value) || Float.isInfinite(value) || value < 0f)
             return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
         return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, value);
+    }
+
+    /** Extra air under the last key row, in dp, inside the keyboard's own surface. */
+    public int getInAppKeyboardBottomPadding() {
+        return clampInAppKeyboardBottomPadding(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING));
+    }
+
+    public void setInAppKeyboardBottomPadding(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            clampInAppKeyboardBottomPadding(value), false);
+    }
+
+    public static int clampInAppKeyboardBottomPadding(int value) {
+        return DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING);
     }
 
     public int getInAppKeyboardKeyOpacity() {

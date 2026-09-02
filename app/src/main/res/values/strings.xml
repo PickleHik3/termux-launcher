@@ -44,11 +44,11 @@
     <string name="settings_show_key_hints_title">Show key hints</string>
     <string name="settings_show_key_hints_summary">Show a hint strip while Ctrl+Alt is held. When off, the ? key lights up instead — press it for the full list.</string>
     <string name="settings_pane_dwindle_default_title">Automatic tiling</string>
-    <string name="settings_pane_dwindle_default_summary">New windows tile like Hyprland: each new pane halves the focused one along its longer side, and a dragged pane takes the half you drop it on. Any window can still switch layouts with Ctrl+Alt+L.</string>
-    <string name="settings_pane_focus_grows_title">Focused pane grows</string>
-    <string name="settings_pane_focus_grows_summary">The pane you tap takes most of the room and the others slide aside, so you can watch an agent work in one pane and its output in another by tapping between them.</string>
-    <string name="settings_pane_agent_api_title">Let scripts open panes</string>
-    <string name="settings_pane_agent_api_summary">Programs in your shell — AI agents, builds, scripts — may open panes of their own with launcherctl pane and drive only those. When off, the pane routes of the local API answer 403.</string>
+    <string name="settings_pane_dwindle_default_summary">Tiles panes automatically: each new pane splits the one it opened from.</string>
+    <string name="settings_pane_focus_grows_title">Spotlight the active pane</string>
+    <string name="settings_pane_focus_grows_summary">The pane you are working in takes most of the screen and the rest shrink aside.</string>
+    <string name="settings_pane_agent_api_title">Let programs and agents control panes</string>
+    <string name="settings_pane_agent_api_summary">Programs you run can open, switch and close panes on their own.</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_style_title">Clock style</string>
     <string name="settings_clock_alignment_title">Clock alignment</string>
@@ -92,42 +92,50 @@
     <string name="settings_icon_appearance_title">Use monochrome icons</string>
     <string name="settings_icon_pack_title">Icon pack</string>
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
-    <string name="settings_extra_keys_editor_title">Extra keys editor</string>
-    <string name="settings_extra_keys_editor_summary">Tap a key to edit it, hold and drag to move it. Changes are written to termux.properties when you save.</string>
-    <string name="settings_extra_keys_editor_page">Page %1$d</string>
-    <string name="settings_extra_keys_editor_page_selected">Page %1$d, selected</string>
-    <string name="settings_extra_keys_editor_page_hint">Swipe the key row to change pages</string>
-    <string name="settings_extra_keys_editor_add_page">+ New page</string>
-    <string name="settings_extra_keys_editor_add_row">Add row</string>
-    <string name="settings_extra_keys_editor_remove_row">Remove row %1$d</string>
-    <string name="settings_extra_keys_editor_add_key">Add key</string>
-    <string name="settings_extra_keys_editor_add_key_to_row">Add key to row %1$d</string>
-    <string name="settings_extra_keys_editor_remove_key">Remove key</string>
-    <string name="settings_extra_keys_editor_empty_row">Empty row — not saved</string>
-    <string name="settings_extra_keys_editor_does">Tap action</string>
-    <string name="settings_extra_keys_editor_swipe_up">Swipe-up action</string>
-    <string name="settings_extra_keys_editor_shows">Display label</string>
-    <string name="settings_extra_keys_editor_shows_hint">Blank uses the action name</string>
-    <string name="settings_extra_keys_editor_swipe_up_shows">Swipe-up label</string>
-    <string name="settings_extra_keys_editor_swipe_up_shows_hint">Shown in the small badge above the key</string>
-    <string name="settings_extra_keys_editor_none">Nothing</string>
-    <string name="settings_extra_keys_editor_clear_swipe_up">Remove swipe-up action</string>
-    <string name="settings_extra_keys_editor_macro_summary">Macro: %1$s</string>
-    <string name="settings_extra_keys_editor_move">Move</string>
-    <string name="settings_extra_keys_editor_move_left">Move key left</string>
-    <string name="settings_extra_keys_editor_move_right">Move key right</string>
-    <string name="settings_extra_keys_editor_move_up">Move key up</string>
-    <string name="settings_extra_keys_editor_move_down">Move key down</string>
-    <string name="settings_extra_keys_editor_row_removed">Row removed</string>
-    <string name="settings_extra_keys_editor_undo">Undo</string>
-    <string name="settings_extra_keys_editor_close">Close</string>
-    <string name="settings_extra_keys_editor_reset">Reset page</string>
-    <string name="settings_extra_keys_editor_reset_confirm">Reset current page to defaults?</string>
-    <string name="settings_extra_keys_editor_save">Save changes</string>
-    <string name="settings_extra_keys_editor_saved_toast">Extra keys saved</string>
-    <string name="settings_extra_keys_editor_discard_title">Discard changes?</string>
-    <string name="settings_extra_keys_editor_discard">Discard</string>
-    <string name="settings_extra_keys_editor_keep_editing">Keep editing</string>
+    <string name="settings_extra_keys_preview_empty">No keys on this page</string>
+    <string name="settings_extra_keys_page">Page %1$d</string>
+    <string name="settings_extra_keys_page_hint_tap">Tap a key to change what it does.</string>
+    <string name="settings_extra_keys_page_hint_swipe">Swipe the row sideways to switch pages.</string>
+    <string name="settings_extra_keys_page_hint_empty">This page appears in the row once it has keys.</string>
+    <string name="settings_extra_keys_page_hint_first_empty">With no keys, the row stays hidden.</string>
+    <string name="settings_extra_keys_add_header">Add a key</string>
+    <string name="settings_extra_keys_add_more">More</string>
+    <string name="settings_extra_keys_keys_header">Keys on this page</string>
+    <string name="settings_extra_keys_add_row">Add row</string>
+    <string name="settings_extra_keys_row">Row %1$d</string>
+    <string name="settings_extra_keys_remove_row_title">Remove row %1$d?</string>
+    <string name="settings_extra_keys_remove_row_message">Its keys are removed with it.</string>
+    <string name="settings_extra_keys_remove">Remove</string>
+    <string name="settings_extra_keys_empty_row">No keys yet. Drag a key here or add one above.</string>
+    <string name="settings_extra_keys_drag_handle">Drag to reorder</string>
+    <string name="settings_extra_keys_swipe_up_summary">Swipe up: %1$s</string>
+    <string name="settings_extra_keys_presets_header">Presets</string>
+    <string name="settings_extra_keys_preset_launcher">Launcher default</string>
+    <string name="settings_extra_keys_preset_classic">Classic Termux</string>
+    <string name="settings_extra_keys_preset_two_rows">Two rows</string>
+    <string name="settings_extra_keys_preset_empty">Clear page</string>
+    <string name="settings_extra_keys_preset_replace_message">Replace the keys on page %1$d?</string>
+    <string name="settings_extra_keys_preset_replace">Replace</string>
+    <string name="settings_extra_keys_save">Save</string>
+    <string name="settings_extra_keys_discard">Discard</string>
+    <string name="settings_extra_keys_discard_title">Discard changes?</string>
+    <string name="settings_extra_keys_discard_message">Your edits to the key row will be lost.</string>
+    <string name="settings_extra_keys_keep_editing">Keep editing</string>
+    <string name="settings_extra_keys_saved">Key row saved</string>
+    <string name="settings_extra_keys_sheet_tap">Tap</string>
+    <string name="settings_extra_keys_sheet_swipe_up">Swipe up</string>
+    <string name="settings_extra_keys_sheet_none">Nothing</string>
+    <string name="settings_extra_keys_sheet_label">Label</string>
+    <string name="settings_extra_keys_sheet_label_hint">Blank shows the key name</string>
+    <string name="settings_extra_keys_sheet_swipe_label">Swipe-up label</string>
+    <string name="settings_extra_keys_sheet_swipe_label_hint">Small label above the key</string>
+    <string name="settings_extra_keys_sheet_clear_swipe_up">Remove swipe-up action</string>
+    <string name="settings_extra_keys_sheet_remove">Remove key</string>
+    <string name="settings_extra_keys_sheet_done">Done</string>
+    <string name="settings_extra_keys_action_macro_title">Macro: %1$s</string>
+    <string name="settings_extra_keys_action_types_title">Types \"%1$s\"</string>
+    <string name="settings_extra_keys_action_modifiers">Modifiers</string>
+    <string name="settings_extra_keys_action_row_keys">Row controls</string>
     <string name="settings_extra_keys_action_picker_title">Choose action</string>
     <string name="settings_extra_keys_action_search_hint">Search actions</string>
     <string name="settings_extra_keys_action_send_text">Send \"%1$s\" as text</string>
@@ -151,7 +159,7 @@
     <string name="settings_extra_keys_glyph_more_results">%1$d more — search by name, e.g. \"keyboard\" or \"nf-md-folder\"</string>
     <string name="settings_extra_keys_glyph_paste_hint">Nerd Font icons are bundled: search them above, or paste any icon straight into a key label.</string>
     <string name="settings_edit_extra_keys_title">Edit extra keys</string>
-    <string name="settings_edit_extra_keys_summary">Keys, swipe-up actions and pages of the extra keys row.</string>
+    <string name="settings_edit_extra_keys_summary">Choose the keys in the row, what a swipe up does, and how they look.</string>
     <string name="settings_terminal_key_row_header">Extra keys</string>
     <string name="settings_extra_keys_all_caps_title">Capitalize key labels</string>
     <string name="settings_extra_keys_all_caps_summary">Show ESC and TAB in capitals rather than as written.</string>
@@ -180,12 +188,23 @@
     <string name="settings_keyboard_colors_title">Keyboard colors</string>
     <string name="settings_keyboard_colors_summary">Edit keyboard colors with a persistent live preview.</string>
     <string name="settings_typeface_title">Typeface</string>
+    <string name="settings_keyboard_bottom_padding_title">Space under the keys</string>
+    <string name="settings_keyboard_bottom_padding_summary">Lift the bottom key row away from the edge of the screen.</string>
     <string name="settings_layout_header">Layout</string>
     <string name="settings_extra_keys_title">Extra keys</string>
     <string name="settings_extra_keys_summary">Choose keys to add to the built-in keyboard.</string>
     <string name="settings_layout_documentation_title">Layout documentation</string>
     <string name="settings_supported_keys_title">Supported key values</string>
     <string name="settings_feedback_header">Feedback</string>
+    <string name="settings_typing_header">Typing</string>
+    <string name="settings_keyboard_tap_correction_title">Learn where you tap</string>
+    <string name="settings_keyboard_tap_correction_summary">Nudge presses toward the key you usually mean, based on your own typing.</string>
+    <string name="settings_keyboard_tap_correction_reset_title">Forget learned taps</string>
+    <string name="settings_keyboard_tap_correction_reset_summary_none">Nothing learned yet.</string>
+    <plurals name="settings_keyboard_tap_correction_reset_summary">
+        <item quantity="one">Learned from %1$d tap.</item>
+        <item quantity="other">Learned from %1$d taps.</item>
+    </plurals>
     <string name="settings_haptic_feedback_title">Haptic feedback</string>
     <string name="settings_keypress_sound_title">Keypress sound</string>
     <string name="settings_keyboard_credits_header">Keyboard credits</string>
@@ -289,6 +308,10 @@
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
     <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
     <string name="settings_app_drawer_view_type_categories">Categories</string>
+    <string name="settings_app_drawer_search_on_open_title">Open the keyboard with the drawer</string>
+    <string name="settings_app_drawer_search_on_open_summary">Start typing to search as soon as the drawer opens.</string>
+    <string name="settings_app_drawer_search_android_keyboard_title">Search with the Android keyboard</string>
+    <string name="settings_app_drawer_search_android_keyboard_summary">Use your Android keyboard for the app search, with its suggestions and swipe typing.</string>
     <string name="settings_app_drawer_category_sort_title">Sort apps into categories</string>
     <string name="settings_app_drawer_category_sort_summary">Choose how your apps get grouped</string>
     <string name="settings_app_drawer_category_sort_dialog_title">Sort apps into categories</string>
@@ -303,6 +326,15 @@
     <string name="settings_app_drawer_category_refresh_title">Re-run categorization</string>
     <string name="settings_app_drawer_category_refresh_never">Never run</string>
     <string name="settings_app_drawer_category_refresh_last_run">Last run · %1$s · %2$d apps</string>
+    <plurals name="settings_app_drawer_category_refresh_pending">
+        <item quantity="one">%1$d new app not sorted yet</item>
+        <item quantity="other">%1$d new apps not sorted yet</item>
+    </plurals>
+    <plurals name="app_drawer_category_pending_notice">
+        <item quantity="one">%1$d new app isn\'t sorted into a category yet</item>
+        <item quantity="other">%1$d new apps aren\'t sorted into categories yet</item>
+    </plurals>
+    <string name="app_drawer_category_pending_notice_hint">Tap to sort</string>
     <string name="settings_app_drawer_category_sort_paste_dialog_body">The prompt is on your clipboard. Paste it into an AI chat, then paste its answer below.</string>
     <string name="settings_app_drawer_category_sort_paste_input_hint">Paste the AI answer here</string>
     <string name="settings_app_drawer_category_sort_paste_copy_again">Copy prompt to clipboard</string>
@@ -417,7 +449,7 @@
 
     <string name="settings_lazy_mode_header">Battery</string>
     <string name="settings_lazy_mode_title">Lazy mode</string>
-    <string name="settings_lazy_mode_summary">Stop the idle animation: the clock swaps its digits instead of folding them, a working window\'s rim stays lit instead of breathing, the CPU/memory readings sample three times less often, and the weather icon rests on its last frame. Nothing repaints while you are only looking at the screen.\n\nWorth turning on — this is planned to become the default, so please report anything that looks stuck or stale with it.</string>
+    <string name="settings_lazy_mode_summary">Stop the idle animation: the clock swaps its digits instead of folding them, a working window\'s ring turns in steps instead of spinning, the CPU/memory readings sample three times less often, and the weather icon rests on its last frame. Nothing repaints while you are only looking at the screen.\n\nWorth turning on — this is planned to become the default, so please report anything that looks stuck or stale with it.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
@@ -597,6 +629,8 @@
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
                 <string name="termux_window_tab_busy_content_description">working</string>
                 <string name="termux_window_tab_attention_content_description">waiting for you</string>
+                <string name="termux_window_tab_progress_content_description">%1$d%% done</string>
+                <string name="termux_window_tab_done_content_description">finished</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
                 <string name="termux_top_pane_media_content_description">Media playback controls</string>
@@ -1031,8 +1065,6 @@
             <!-- Extra Keys Category -->
                 <string name="termux_dock_tune_live_title">Surface editor</string>
                 <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, and terminal live on the home screen.</string>
-                <string name="termux_dock_tuning_title">Surface editor</string>
-                <string name="termux_surface_tuning_presets_section">Presets</string>
                 <!-- Preset names describe the whole look, deliberately not the material family:
                      "Glass", "Frost" and "Solid" are what the Material control is called, and a
                      preset named after one of them read as a shortcut to that control rather than
@@ -1045,94 +1077,70 @@
                 <string name="termux_surface_preset_applied">%1$s applied</string>
                 <string name="termux_surface_preset_saved">Look saved as Custom</string>
                 <string name="termux_surface_preset_custom_empty">No saved look yet</string>
-                <string name="termux_surface_preset_custom_empty_hint">Use ⤓ in the editor\'s title bar to save the look you have now.</string>
-                <string name="termux_surface_tuning_save_look">⤓</string>
-                <string name="termux_surface_tuning_save_look_description">Save this look as the Custom preset</string>
+                <string name="termux_surface_preset_custom_empty_hint">Change something, then tap Save look to keep it here.</string>
+                <string name="termux_surface_editor_save_look">Save look</string>
+                <!-- The header's ↺: back to how everything looked when the editor was opened. Held
+                     down, it goes all the way back to the shipped defaults instead. -->
+                <string name="termux_surface_editor_revert">Undo changes. Hold to reset everything.</string>
+                <string name="termux_surface_editor_reset_done">Everything back to defaults</string>
                 <!-- Subtitle on the "applied" notice chip, whose tap undoes the preset. -->
                 <string name="termux_surface_preset_undo_hint">Tap to undo</string>
                 <string name="termux_surface_preset_card_description">%1$s preset</string>
                 <string name="termux_surface_preset_apply_action">apply this look</string>
                 <string name="termux_surface_preset_current_look">Current look</string>
-                <string name="termux_surface_tuning_base_section">Global</string>
-                <string name="termux_surface_tuning_material">Material</string>
+
+                <!-- The floating pill the editor rests as, and the card's header. The palette opens
+                     the card on every surface at once; the card's heading names one surface, or
+                     wears the palette glyph again for all of them; ✕ only puts the card away. -->
+                <string name="termux_surface_editor_open_look">Style all surfaces</string>
+                <string name="termux_surface_editor_all_surfaces">All surfaces</string>
+                <string name="termux_surface_editor_hide_panel">Hide panel</string>
+                <string name="termux_surface_editor_action_chevron">›</string>
+                <string name="termux_surface_editor_select_description">Edit %1$s</string>
+                <string name="termux_surface_editor_key_radius">Key radius</string>
+                <!-- The keyboard's slab, as against its key caps, which are the row below it. -->
+                <string name="termux_surface_editor_background_opacity">BG opacity</string>
+                <string name="termux_surface_editor_wallpaper_dim">Wallpaper</string>
+
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>
-                <string name="termux_surface_tuning_material_intensity">Intensity</string>
-                <string name="termux_surface_tuning_material_custom">Custom</string>
-                <!-- The link chip on a shared row: a tick while the surface follows Base, an
-                     undo glyph once it has its own value. -->
-                <string name="termux_surface_tuning_link_inherited">✓</string>
+                <!-- Only rendered once a surface has taken a value of its own; tapping it puts
+                     the row back on the shared layer. -->
                 <string name="termux_surface_tuning_link_detached">↺</string>
-                <string name="termux_surface_tuning_link_inherited_description">Following Base. Move this control to give %1$s its own value.</string>
                 <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Base again.</string>
-                <plurals name="termux_surface_tuning_followers_some">
-                    <item quantity="one">%1$d property has its own value. Its ↺ puts it back.</item>
-                    <item quantity="other">%1$d properties have their own values. Their ↺ puts them back.</item>
-                </plurals>
-                <string name="termux_surface_tuning_reattach_all">Reattach all</string>
-                <!-- The fold between the global controls and the per-surface groups, one of
-                     which shows at a time behind the surface pills. -->
-                <string name="termux_surface_tuning_advanced">Fine tune</string>
-                <string name="termux_surface_tuning_advanced_chevron_closed">▸</string>
-                <string name="termux_surface_tuning_advanced_chevron_open">▾</string>
-                <!-- The clock row in the editor's Status group. The pane's clock is the one
-                     thing in that group that is a look rather than a number, so the row shows the
-                     face itself and hides the six of them behind one tap. -->
-                <string name="termux_surface_tuning_clock">Clock</string>
                 <!-- One shape for the two chips on the status row: the sessions indicator and the
                      window pills. Content inside the bar, not a surface, so it has its own knob. -->
                 <string name="termux_surface_tuning_indicator_radius">Chip radius</string>
-                <string name="termux_surface_tuning_indicator_radius_description">Corner radius of the sessions indicator and the window pills</string>
                 <string name="termux_surface_tuning_clock_chevron">▾</string>
-                <string name="termux_surface_tuning_clock_picker_title">Clock face</string>
-                <string name="termux_surface_tuning_clock_row_description">Clock face: %1$s. Tap to change.</string>
+                <string name="termux_surface_tuning_clock_open">Change the clock face</string>
                 <string name="termux_surface_tuning_clock_face_description">%1$s clock face</string>
                 <string name="termux_surface_tuning_clock_selected">✓</string>
-                <string name="termux_surface_tuning_clock_elsewhere">Alignment and 12-hour time stay in Settings, under Terminal and status.</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>
                 <string name="termux_surface_tuning_terminal">Terminal</string>
-                <string name="termux_surface_tuning_reset">Reset</string>
-                <string name="termux_surface_tuning_keyboard_height">Height</string>
-                <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
-                <string name="termux_surface_tuning_keyboard_key_opacity">Keys opacity</string>
-                <string name="termux_surface_tuning_keyboard_bg_opacity">Bg opacity</string>
+                <string name="termux_surface_tuning_keyboard_spacing">Key spacing</string>
+                <string name="termux_surface_tuning_keyboard_key_opacity">Key opacity</string>
                 <string name="termux_surface_tuning_edges">Margin</string>
                 <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
                 <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
+                <string name="termux_surface_tuning_keyboard_chin_handle">Drag to change the space under the keys</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
-                <string name="termux_dock_tuning_radius">Corner radius</string>
-                <string name="termux_dock_tuning_style">Shape</string>
+                <string name="termux_dock_tuning_radius">Corners</string>
                 <string name="termux_dock_tuning_size">Size</string>
-                <string name="termux_dock_tuning_icons">Apps per page</string>
+                <string name="termux_dock_tuning_icons">Apps</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
-                <string name="termux_dock_tuning_terminal_border">Border</string>
-                <string name="termux_dock_tuning_section_wallpaper">Wallpaper</string>
-                <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
-                <!-- Docked spends the same knob on the terminal's outer air as well as the gap
-                     between panes, so there it is a margin. Floating insets the frame from the
-                     capsule instead, and the knob only gaps the panes. -->
-                <string name="termux_dock_tuning_terminal_margin">Margin</string>
+                <string name="termux_dock_tuning_terminal_border">Frame</string>
                 <string name="termux_dock_tuning_done">Done</string>
-                <string name="termux_dock_tuning_cancel">Close</string>
-                <string name="termux_surface_tuning_value_not_applicable">—</string>
                 <string name="termux_surface_tuning_peek_readout">%1$s · %2$s</string>
-                <!-- Fully qualified names for the peek echo. The card's own 88dp label column is
-                     too narrow for these, and there the section heading disambiguates anyway. -->
-                <string name="termux_surface_tuning_peek_terminal_opacity">Terminal opacity</string>
-                <string name="termux_surface_tuning_peek_terminal_blur">Terminal blur</string>
-                <string name="termux_surface_tuning_peek_terminal_grain">Terminal grain</string>
-                <string name="termux_surface_tuning_peek_terminal_gap">Inner padding</string>
-                <string name="termux_surface_tuning_peek_terminal_margin">Terminal margin</string>
-                <string name="termux_surface_tuning_peek_wallpaper_opacity">Wallpaper opacity</string>
+                <!-- The peek echo names the control in full; the card's own label column is too
+                     narrow for that, and there the heading disambiguates anyway. -->
                 <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
-                <string name="termux_surface_tuning_peek_dock_icons">Apps per page</string>
                 <string name="termux_surface_tuning_peek_keyboard_height">Keyboard height</string>
-                <string name="termux_surface_tuning_unsaved_badge">Unsaved</string>
+                <string name="termux_surface_tuning_peek_keyboard_chin">Space under the keys</string>
                 <string name="termux_surface_tuning_unsaved_title">Unsaved changes</string>
                 <string name="termux_surface_tuning_unsaved_message">Discard them and put every surface back to how it looked when you opened the editor, or save and close?</string>
                 <string name="termux_surface_tuning_unsaved_discard">Discard</string>
@@ -1329,7 +1337,7 @@
     <string name="tool_session_rename_prompt">Rename session…</string>
     <string name="tool_pane_rename_prompt">Rename pane…</string>
     <!-- Palette subtitles -->
-    <string name="tool_desc_pane_split">Split the focused pane along its longer side, no direction to choose.</string>
+    <string name="tool_desc_pane_split">Open a new pane where there is the most room.</string>
     <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
     <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>

@@ -178,4 +178,13 @@ public final class AppDrawerTransitionGeometry {
                                                  float reveal) {
         return lerp(openBottomPx, pinTopPx - gapPx, clamp01(reveal));
     }
+
+    /**
+     * Where the host's scene dim ends while the keyboard is being revealed: the host's own bottom at
+     * reveal 0, the keyboard's top at reveal 1. Unlike {@link #resolveSearchPlaneBottom} there is no
+     * gap — the strip between plane and keyboard stays dimmed, the keys do not.
+     */
+    public static float resolveRevealClipBottom(float hostBottomPx, float pinTopPx, float reveal) {
+        return lerp(hostBottomPx, pinTopPx, clamp01(reveal));
+    }
 }

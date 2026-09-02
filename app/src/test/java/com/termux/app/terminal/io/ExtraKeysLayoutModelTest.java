@@ -209,4 +209,22 @@ public class ExtraKeysLayoutModelTest {
                 "[]".equals(value.trim()), ExtraKeysLayoutModel.parse(value).isEmpty());
         }
     }
+
+    @Test
+    public void replaceRowsTakesTheListOrderAndDropsEmptyRowsOnSave() {
+        ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse("[[ESC, TAB], [CTRL]]");
+        java.util.List<java.util.List<ExtraKeysLayoutModel.Key>> reordered = new java.util.ArrayList<>();
+        reordered.add(new java.util.ArrayList<>());
+        reordered.add(java.util.Arrays.asList(model.row(1).get(0), model.row(0).get(1),
+            model.row(0).get(0)));
+
+        model.replaceRows(reordered);
+
+        assertEquals(2, model.rowCount());
+        assertTrue(model.row(0).isEmpty());
+        assertEquals("CTRL", model.row(1).get(0).key);
+        assertEquals("[[\"CTRL\",\"TAB\",\"ESC\"]]", model.serialize());
+        model.pruneEmptyRows();
+        assertEquals(1, model.rowCount());
+    }
 }

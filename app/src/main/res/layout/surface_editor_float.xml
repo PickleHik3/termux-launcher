@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The surface editor's resting state: one small pill floating at the foot of the free room, the
+     only chrome on screen while nothing is picked. The palette opens the card on the shared layer —
+     the look of every surface at once — and ✓ is the way out. Touching a surface instead opens the
+     card on that surface, so the pill never has to name what else is touchable: the outlines do.
+
+     Parked in code at the same foot the shared-layer card parks at, so the card reads as the pill
+     expanded in place. Hidden while the card is up; the card's ✕ brings it back. Background set in
+     code from the card's own fill, rounded to a capsule. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/surface_editor_float"
+    android:layout_width="wrap_content"
+    android:layout_height="40dp"
+    android:layout_gravity="top|end"
+    android:layout_marginEnd="14dp"
+    android:elevation="6dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="2dp"
+    android:paddingEnd="5dp"
+    android:visibility="gone">
+
+    <ImageView
+        android:id="@+id/surface_editor_float_palette"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/termux_surface_editor_open_look"
+        android:padding="9dp"
+        android:scaleType="fitCenter" />
+
+    <ImageView
+        android:id="@+id/surface_editor_float_done"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_marginStart="2dp"
+        android:background="@drawable/dock_tuning_done_pill"
+        android:contentDescription="@string/termux_dock_tuning_done"
+        android:padding="6dp"
+        android:scaleType="fitCenter" />
+</LinearLayout>

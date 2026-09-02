@@ -42,6 +42,43 @@ public class PaneShapeTest {
     }
 
     @Test
+    public void clearanceCoversTheArc_atEveryRadius() {
+        // The content box's own corner must land on or inside the arc: with the box held `inset`
+        // off both edges, its corner sits (r - inset) from the arc's centre on each axis.
+        for (float radius = 1f; radius <= 200f; radius += 0.5f) {
+            int inset = PaneShape.contentInsetPx(radius);
+            double toCentre = Math.hypot(radius - inset, radius - inset);
+            assertTrue("clearance " + inset + " leaves the corner outside a " + radius + "px arc",
+                toCentre <= radius + EPS);
+        }
+    }
+
+    @Test
+    public void clearanceIsMinimal_soNoColumnIsSpentTwice() {
+        // One pixel less would put the corner back under the arc.
+        for (float radius = 1f; radius <= 200f; radius += 0.5f) {
+            int inset = PaneShape.contentInsetPx(radius);
+            if (inset == 0) continue;
+            double toCentre = Math.hypot(radius - (inset - 1), radius - (inset - 1));
+            assertTrue("clearance " + inset + " is larger than a " + radius + "px arc needs",
+                toCentre > radius);
+        }
+    }
+
+    @Test
+    public void squareCornerClearsNothing() {
+        assertEquals(0, PaneShape.contentInsetPx(0f));
+        assertEquals(0, PaneShape.contentInsetPx(-4f));
+        assertEquals(0, PaneShape.contentInsetForBounds(52.5f, 0, 0));
+    }
+
+    @Test
+    public void clearanceFollowsTheRadiusAPaneCanActuallyWear() {
+        // The pane is capped to a 30px arc, so it owes the clearance for 30px, not for 52.5px.
+        assertEquals(PaneShape.contentInsetPx(30f), PaneShape.contentInsetForBounds(52.5f, 1080, 90));
+    }
+
+    @Test
     public void capIsMonotonic_soAResizeNeverJumpsTheShape() {
         float previous = 0f;
         for (int height = 1; height <= 400; height += 7) {

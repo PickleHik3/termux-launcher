@@ -1,6 +1,6 @@
 # Terminal modernization backlog
 
-The single list of what is left from `kitty-to-termux-launcher-feasibility-study.md`. It exists
+The single list of what is left from the Kitty feasibility study that opened this work. It exists
 because the remaining work was spread across three documents, and a list kept in more than one
 place drifts — which is exactly the bug that made two registered actions answer `501` while being
 advertised everywhere else.
@@ -26,8 +26,7 @@ slice records instead:
   focused-pane movement to an outer edge (Phase 3 multiplexer completion).
 - `session-browser.md` — searchable session/window/pane hierarchy, clone-with-CWD, and browser
   management actions (Phase 3 multiplexer completion).
-- `../../../../kitty-to-termux-launcher-feasibility-study.md` — the original assessment, with a phase
-  status table near the top.
+The study itself was never checked in; its phase numbering survives only in the labels above.
 
 Sizes follow the study: **S** 2–5 days, **M** 1–3 weeks, **L** 4–8 weeks, **XL** 2–6 months.
 

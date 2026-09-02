@@ -1105,9 +1105,10 @@ public final class TerminalView extends View {
 
     private int getRowForY(float y) {
         // While a smooth fling/settle holds a fractional offset, drawn content sits that many
-        // pixels above its nominal row position, so screen Y maps back by adding it.
-        return (int) ((y + mScrollOffsetPixels - mRenderer.mFontLineSpacingAndAscent)
-            / mRenderer.mFontLineSpacing);
+        // pixels above its nominal row position, so screen Y maps back by adding it; the
+        // bottom-anchor offset shifts it the other way.
+        return (int) ((y - getVerticalContentOffset() + mScrollOffsetPixels
+            - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
     }
 
     /**
@@ -1993,9 +1994,10 @@ public final class TerminalView extends View {
                 mTextSelectionCursorController.getSelectors(sel);
             }
             final float scrollOffset = mScrollOffsetPixels;
-            if (scrollOffset != 0f) {
+            final float drawOffset = getVerticalContentOffset() - scrollOffset;
+            if (drawOffset != 0f) {
                 canvas.save();
-                canvas.translate(0f, -scrollOffset);
+                canvas.translate(0f, drawOffset);
             }
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
             if (mFindOverlay != null) {
@@ -2009,7 +2011,7 @@ public final class TerminalView extends View {
                 if (needsAnotherFrame)
                     postInvalidateOnAnimation();
             }
-            if (scrollOffset != 0f)
+            if (drawOffset != 0f)
                 canvas.restore();
             // render the text selection handles
             renderTextSelection();
@@ -2080,7 +2082,8 @@ public final class TerminalView extends View {
     }
 
     public int getCursorY(float y) {
-        return (int) (((y - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing) + mTopRow);
+        return (int) (((y - getVerticalContentOffset() - mRenderer.mFontLineSpacingAndAscent)
+            / mRenderer.mFontLineSpacing) + mTopRow);
     }
 
     public int getPointX(int cx) {
@@ -2091,7 +2094,7 @@ public final class TerminalView extends View {
     }
 
     public int getPointY(int cy) {
-        return Math.round((cy - mTopRow) * mRenderer.mFontLineSpacing);
+        return Math.round((cy - mTopRow) * mRenderer.mFontLineSpacing + getVerticalContentOffset());
     }
 
     public float getHorizontalContentOffset() {
@@ -2100,6 +2103,28 @@ public final class TerminalView extends View {
         }
         float contentWidth = mEmulator.mColumns * mRenderer.mFontWidth;
         return Math.max(0f, (getWidth() - contentWidth) / 2f);
+    }
+
+    /**
+     * How far down the grid is drawn, anchoring it to the edge the content lives against.
+     *
+     * <p>Rows are integral, so up to a line of the view's height is left over, and it has to sit
+     * somewhere. On the normal buffer the prompt is the content's live edge, so the grid anchors
+     * to the bottom: the last row's cells end flush with the view (the pane frame's corner
+     * clearance is outside this view), the prompt sits a constant distance off the border, and the
+     * leftover joins the slack that already sits above the first row's cells (the renderer starts
+     * them {@code mFontLineSpacingAndAscent} down), where it reads as headroom. On the alternate
+     * buffer a full-screen app has drawn its own frame from row 0, so the grid anchors to the top
+     * and the leftover returns to the bottom, under the app's last row — anchoring such an app to
+     * the bottom would instead float its top border below the pane's arc.
+     */
+    public float getVerticalContentOffset() {
+        if (mEmulator == null || mRenderer == null || mEmulator.isAlternateBufferActive()) {
+            return 0f;
+        }
+        float contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
+            + mRenderer.mFontLineSpacingAndAscent;
+        return Math.max(0f, getHeight() - contentHeight);
     }
 
     /**

@@ -11,6 +11,18 @@
         app:entryValues="@array/app_launcher_drawer_view_type_values"
         app:useSimpleSummaryProvider="true" />
 
+    <SwitchPreferenceCompat
+        app:key="app_launcher_drawer_search_on_open"
+        app:title="@string/settings_app_drawer_search_on_open_title"
+        app:summary="@string/settings_app_drawer_search_on_open_summary"
+        android:defaultValue="false" />
+
+    <SwitchPreferenceCompat
+        app:key="app_launcher_drawer_search_android_keyboard"
+        app:title="@string/settings_app_drawer_search_android_keyboard_title"
+        app:summary="@string/settings_app_drawer_search_android_keyboard_summary"
+        android:defaultValue="false" />
+
     <Preference
         app:key="app_launcher_category_sort"
         app:title="@string/settings_app_drawer_category_sort_title"

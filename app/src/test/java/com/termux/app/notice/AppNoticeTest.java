@@ -113,6 +113,47 @@ public class AppNoticeTest {
     }
 
     /**
+     * The "what did that key just do" read-out used to be its own chip in the terminal's corner.
+     * On the shared pill it has to behave like a read-out, not a message: a second hint replaces the
+     * first in place rather than queueing a {@code +1} behind it.
+     */
+    @Test
+    public void aHintReplacesTheHintBeforeItInsteadOfQueueing() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        AppNotice.hint(activity, "Copy");
+        AppNoticeHostView host = AppNotice.hostFor(activity);
+        assertNotNull(host);
+        assertEquals("Copy", String.valueOf(host.activeItem().title));
+        assertTrue(host.activeItem().fleeting);
+        assertEquals(AppNoticeHostView.HOLD_HINT_MS, host.activeItem().durationMs);
+
+        AppNotice.hint(activity, "Paste");
+        assertEquals("Paste", String.valueOf(host.activeItem().title));
+        assertEquals("Paste", String.valueOf(host.getContentDescription()));
+        assertEquals(View.GONE, ((LinearLayout) host).getChildAt(3).getVisibility());
+    }
+
+    /** A hint never delays a real message, and never shows up late behind one. */
+    @Test
+    public void aHintYieldsToRealNotices() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        AppNoticeHostView host = AppNotice.hostFor(activity);
+        assertNotNull(host);
+        AppNotice.show(activity, "Saved");
+        AppNotice.hint(activity, "Copy");
+        // Dropped: by the time the pill is free it would describe an action long forgotten.
+        assertEquals("Saved", String.valueOf(host.activeItem().title));
+        assertEquals(View.GONE, ((LinearLayout) host).getChildAt(3).getVisibility());
+
+        host.clear();
+        AppNotice.hint(activity, "Copy");
+        AppNotice.show(activity, "Saved");
+        // The message takes the pill at once rather than waiting out the read-out's hold.
+        assertEquals("Saved", String.valueOf(host.activeItem().title));
+        assertEquals(View.GONE, ((LinearLayout) host).getChildAt(3).getVisibility());
+    }
+
+    /**
      * The preset-applied confirmation is a notice with an Undo, replacing a snackbar that landed
      * on the keyboard and could not be swiped away. Two things have to survive: the hold is long
      * enough to decide (a confirmation's few seconds are not), and the chip's node says what the
