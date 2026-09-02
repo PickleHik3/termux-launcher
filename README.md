@@ -1,10 +1,9 @@
 # Termux Launcher
 
-> [!WARNING]
+> [!NOTE]
 > **This project is entirely vibe-coded.**
 > I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, and uses about ~350 MB of RAM at idle (for reference, something like smart launcher uses about 250 on fresh install).
-
-> [!CAUTION]
+>
 > **Security review wanted**
 >
 > I’ve made several security-review passes over the codebase using LLMs (FABLE), i would have considered it enough if it continued to be just my launcher, but now that there are others using it, i would really appreciate if an actual developer can have a quick look at the code.
