@@ -3,7 +3,7 @@
      what says the tap goes somewhere rather than changing a value in place. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="36dp"
+    android:layout_height="32dp"
     android:background="?attr/selectableItemBackground"
     android:gravity="center_vertical"
     android:orientation="horizontal">

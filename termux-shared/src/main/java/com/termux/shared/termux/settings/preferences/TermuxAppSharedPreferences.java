@@ -425,15 +425,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FOCUSED_PANE_GROWS, value, false);
     }
 
-    public boolean isSurfaceEditorTapHintSeen() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_SURFACE_EDITOR_TAP_HINT_SEEN, TERMUX_APP.DEFAULT_SURFACE_EDITOR_TAP_HINT_SEEN);
-    }
-
-    public void setSurfaceEditorTapHintSeen(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SURFACE_EDITOR_TAP_HINT_SEEN, value, false);
-    }
-
     public boolean isAgentPanesEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_AGENT_PANES_ENABLED, TERMUX_APP.DEFAULT_AGENT_PANES_ENABLED);

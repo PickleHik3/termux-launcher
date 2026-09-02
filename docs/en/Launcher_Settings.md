@@ -11,8 +11,9 @@ so `fonts`, `ligatures`, or `Shizuku` can find the containing section.
 
 Use this section for visible surfaces and colors:
 
-- **Surface editor:** tune the dock, keyboard, status panel, terminal, and sessions while looking at
-  the real home screen.
+- **Surface editor:** tune the dock, keyboard, status panel, and terminal while looking at the real
+  home screen. Tap the floating palette to style every surface at once, or tap a surface to style
+  it on its own.
 - **Terminal fonts:** install one of fourteen curated multi-face families with pinned SHA-256
   verification and visible license information, enable Nerd Font icons, choose ligature behavior,
   and adjust weight where supported.

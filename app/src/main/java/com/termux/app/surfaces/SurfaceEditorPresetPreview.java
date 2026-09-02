@@ -14,10 +14,10 @@ public final class SurfaceEditorPresetPreview {
 
     private SurfaceEditorPresetPreview() {}
 
-    public static final int CARD_WIDTH_DP = 48;
-    public static final int CARD_HEIGHT_DP = 80;
+    public static final int CARD_WIDTH_DP = 42;
+    public static final int CARD_HEIGHT_DP = 68;
     /** The card's own clip corner. */
-    public static final float CARD_CORNER_DP = 6f;
+    public static final float CARD_CORNER_DP = 5f;
 
     /** The device width the preset's dp values are scaled down from. */
     private static final float REFERENCE_WIDTH_DP = 360f;

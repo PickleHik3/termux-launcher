@@ -1050,7 +1050,6 @@
             <!-- Extra Keys Category -->
                 <string name="termux_dock_tune_live_title">Surface editor</string>
                 <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, and terminal live on the home screen.</string>
-                <string name="termux_surface_tuning_presets_section">Presets</string>
                 <!-- Preset names describe the whole look, deliberately not the material family:
                      "Glass", "Frost" and "Solid" are what the Material control is called, and a
                      preset named after one of them read as a shortcut to that control rather than
@@ -1063,7 +1062,7 @@
                 <string name="termux_surface_preset_applied">%1$s applied</string>
                 <string name="termux_surface_preset_saved">Look saved as Custom</string>
                 <string name="termux_surface_preset_custom_empty">No saved look yet</string>
-                <string name="termux_surface_preset_custom_empty_hint">Tap Save look under Presets, and the look you have now lands here.</string>
+                <string name="termux_surface_preset_custom_empty_hint">Change something, then tap Save look to keep it here.</string>
                 <string name="termux_surface_editor_save_look">Save look</string>
                 <!-- The header's ↺: back to how everything looked when the editor was opened. Held
                      down, it goes all the way back to the shipped defaults instead. -->
@@ -1075,10 +1074,12 @@
                 <string name="termux_surface_preset_apply_action">apply this look</string>
                 <string name="termux_surface_preset_current_look">Current look</string>
 
-                <!-- The card's header. The heading names what is being edited, and while that is
-                     a surface it is also the way back to the shared layer. -->
-                <string name="termux_surface_editor_tap_hint">Tap the dock, terminal, status or keyboard to style each one on its own.</string>
-                <string name="termux_surface_editor_title_back_description">%1$s. Tap to go back to all surfaces.</string>
+                <!-- The floating pill the editor rests as, and the card's header. The palette opens
+                     the card on every surface at once; the card's heading names one surface, or
+                     wears the palette glyph again for all of them; ✕ only puts the card away. -->
+                <string name="termux_surface_editor_open_look">Style all surfaces</string>
+                <string name="termux_surface_editor_all_surfaces">All surfaces</string>
+                <string name="termux_surface_editor_hide_panel">Hide panel</string>
                 <string name="termux_surface_editor_action_chevron">›</string>
                 <string name="termux_surface_editor_select_description">Edit %1$s</string>
                 <string name="termux_surface_editor_key_radius">Key radius</string>
@@ -1117,7 +1118,6 @@
                 <string name="termux_dock_tuning_terminal">Opacity</string>
                 <string name="termux_dock_tuning_terminal_border">Frame</string>
                 <string name="termux_dock_tuning_done">Done</string>
-                <string name="termux_dock_tuning_cancel">Close</string>
                 <string name="termux_surface_tuning_peek_readout">%1$s · %2$s</string>
                 <!-- The peek echo names the control in full; the card's own label column is too
                      narrow for that, and there the heading disambiguates anyway. -->

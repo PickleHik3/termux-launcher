@@ -28,7 +28,7 @@
         <!-- A fixed height, not wrap_content: appcompat switches auto-sizing off entirely when
              either dimension wraps, and auto-sizing is what keeps "Floating" whole at a large font
              scale in a segment this narrow. -->
-        <item name="android:layout_height">34dp</item>
+        <item name="android:layout_height">30dp</item>
         <item name="android:layout_weight">1</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>

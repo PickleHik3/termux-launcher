@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The surface editor's panel. One card, parked in the free room between the launcher's own
-     chrome, never over the surface it is editing.
+<!-- The surface editor's card. Parked in the free room between the launcher's own chrome, never
+     over the surface it is editing, and not on screen at all until asked for: the editor rests as
+     the outlines plus surface_editor_float.xml, and the card is what either of those opens.
 
-     It opens on the shared layer: the presets, the two style pills, and the handful of numbers that
-     move everything at once. Touching a surface on the home screen slides the card to it and swaps
-     the body for that surface's own rows — same rows, same order, the inapplicable ones dropped.
+     The floating palette opens it on the shared layer: the presets, the two style pills, and the
+     handful of numbers that move everything at once. Touching a surface on the home screen opens it
+     on that surface — or slides it there if it is already up — and swaps the body for that surface's
+     own rows: same rows, same order, the inapplicable ones dropped.
 
-     Nothing here is a second level: the header's four glyphs are the whole chrome, and the body is a
+     Nothing here is a second level: the header's glyphs are the whole chrome, and the body is a
      plain list that scrolls inside its own cap when a raised keyboard shortens the room (issue #20).
 
      The fill is deliberately opaque rather than glass. The editor draws on top of the very surfaces
@@ -20,11 +22,12 @@
     android:layout_gravity="top"
     android:layout_marginStart="10dp"
     android:layout_marginEnd="10dp"
+    android:elevation="6dp"
     android:orientation="vertical"
-    android:paddingStart="14dp"
-    android:paddingTop="6dp"
-    android:paddingEnd="8dp"
-    android:paddingBottom="10dp">
+    android:paddingStart="12dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="6dp"
+    android:paddingBottom="8dp">
 
     <LinearLayout
         android:id="@+id/surface_editor_pill_header"
@@ -33,12 +36,13 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <!-- Names what the card is showing: "Presets" on the shared layer, the surface's own name
-             once one is picked — and there it wears a back glyph and is the way out again. -->
+        <!-- Names what the card is showing: the surface's own name once one is picked, and on the
+             shared layer the same palette glyph that opened it, with no words — the strip below
+             says what it is. Set in code. -->
         <TextView
             android:id="@+id/surface_editor_pill_title"
             android:layout_width="0dp"
-            android:layout_height="36dp"
+            android:layout_height="32dp"
             android:layout_weight="1"
             android:drawablePadding="6dp"
             android:ellipsize="end"
@@ -52,60 +56,47 @@
              appearing together is also how the card says the edit is unsaved. Icons set in code. -->
         <ImageView
             android:id="@+id/surface_editor_pill_save"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/termux_surface_editor_save_look"
-            android:padding="7dp"
+            android:padding="6dp"
             android:scaleType="fitCenter"
             android:visibility="gone" />
 
         <ImageView
             android:id="@+id/surface_editor_pill_reset"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/termux_surface_editor_revert"
-            android:padding="7dp"
+            android:padding="6dp"
             android:scaleType="fitCenter"
             android:visibility="gone" />
 
-        <!-- Done is the only commit; ✕ and the back press both route through the unsaved gate. -->
+        <!-- Done is the only commit. ✕ only puts the card away, back to the outlines and the
+             floating pill; nothing is lost by it, so it asks nothing. -->
         <ImageView
             android:id="@+id/surface_editor_pill_done"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
             android:layout_marginStart="4dp"
             android:background="@drawable/dock_tuning_done_pill"
             android:contentDescription="@string/termux_dock_tuning_done"
-            android:padding="7dp"
+            android:padding="6dp"
             android:scaleType="fitCenter" />
 
         <ImageView
             android:id="@+id/surface_editor_pill_close"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
             android:layout_marginStart="2dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/termux_dock_tuning_cancel"
-            android:padding="8dp"
+            android:contentDescription="@string/termux_surface_editor_hide_panel"
+            android:padding="7dp"
             android:scaleType="fitCenter" />
     </LinearLayout>
 
-    <!-- Said once, and only until the user acts on it: the outlines breathing on the home screen
-         are the invitation, and this is the sentence for anyone who does not read a pulse as one.
-         Gone for good the first time a surface is picked. -->
-    <TextView
-        android:id="@+id/surface_editor_pill_tap_hint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="6dp"
-        android:layout_marginEnd="6dp"
-        android:lineSpacingExtra="1sp"
-        android:text="@string/termux_surface_editor_tap_hint"
-        android:textColor="?attr/termuxColorOnSurfaceVariant"
-        android:textSize="12sp"
-        android:visibility="gone" />
 
     <!-- Complete looks, one tap each, filled in code. The shared layer only: a preset writes every
          surface, which is not an answer to a question asked while editing one of them. -->
@@ -120,7 +111,7 @@
         android:id="@+id/surface_editor_pill_pills"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="3dp"
         android:baselineAligned="false"
         android:orientation="horizontal">
 

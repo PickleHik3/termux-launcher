@@ -4,13 +4,13 @@
      own row read as the same control. Generated per entry in SurfaceEditorProperties. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="36dp"
+    android:layout_height="32dp"
     android:gravity="center_vertical"
     android:orientation="horizontal">
 
     <TextView
         android:id="@+id/surface_editor_row_label"
-        android:layout_width="84dp"
+        android:layout_width="78dp"
         android:layout_height="wrap_content"
         android:ellipsize="end"
         android:maxLines="1"
@@ -20,13 +20,13 @@
     <SeekBar
         android:id="@+id/surface_editor_row_slider"
         android:layout_width="0dp"
-        android:layout_height="36dp"
+        android:layout_height="32dp"
         android:layout_weight="1"
         android:splitTrack="false" />
 
     <TextView
         android:id="@+id/surface_editor_row_value"
-        android:layout_width="46dp"
+        android:layout_width="42dp"
         android:layout_height="wrap_content"
         android:ellipsize="end"
         android:gravity="end|center_vertical"
@@ -38,8 +38,8 @@
          the shared layer. Invisible while the row still follows Base, which is the quiet default. -->
     <TextView
         android:id="@+id/surface_editor_row_chip"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:gravity="center"
         android:text="@string/termux_surface_tuning_link_detached"

@@ -61,22 +61,26 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The surface editor: one card over the live home screen.
+ * The surface editor: the live home screen with its surfaces outlined, and one card over it.
  *
- * <p>It opens on the shared layer — the presets, the two style pills, and the few numbers that move
- * every surface at once — with the surfaces it can edit outlined in a slow accent glow. Touching one
- * of those outlines slides the card to it and swaps the body for that surface's own rows; the header
- * then names the surface and is the way back. The card never covers the surface it is editing, and
- * never overlaps the status bar, the dock or the keyboard: it lives in the free room between them
- * and scrolls inside its own height cap when a raised keyboard shortens that room.
+ * <p>It opens with nothing but the outlines — the surfaces it can edit, breathing in a slow accent
+ * glow — and a small floating pill at the foot of the free room: a palette and a ✓. The palette opens
+ * the card on the shared layer — the presets, the two style pills, and the few numbers that move
+ * every surface at once. Touching an outline instead opens the card on that surface, or slides it
+ * there if it is already up, and swaps the body for that surface's own rows; the header then names
+ * the surface. The card's ✕ puts it away again, back to the outlines and the pill. The card never
+ * covers the surface it is editing, and never overlaps the status bar, the dock or the keyboard: it
+ * lives in the free room between them and scrolls inside its own height cap when a raised keyboard
+ * shortens that room.
  *
  * <p>Every panel is the same list in the same order — opacity, blur, grain, corners, margin, then
  * whatever else that surface owns. A row the current state makes inert is dropped rather than drawn
  * dead, and the rows below close up into its place, so a property is always found in the same
  * position relative to its neighbours. {@link SurfaceEditorProperties} is that table.
  *
- * <p>The editor writes through to preferences live, so the preview is the real thing; only ✓ commits,
- * and the ✕ and back both route through {@link #requestClose()} against the snapshot taken on entry.
+ * <p>The editor writes through to preferences live, so the preview is the real thing; only ✓ commits.
+ * The back press puts an open card away first, and from the resting state routes through
+ * {@link #requestClose()} against the snapshot taken on entry.
  * The activity keeps the render pipeline; everything the editor needs from it crosses {@link Host},
  * which is the seam that keeps this class free of the activity's fifteen thousand lines.
  */
@@ -204,8 +208,16 @@ public final class SurfaceEditorController {
     private long mSurfaceEditorAnchorSignature = Long.MIN_VALUE;
     private final int[] mTmpAnchorLocation = new int[2];
 
-    /** The surface the card is pointing at, or null for the shared layer it opens on. */
+    /** The surface the card is pointing at, or null for the shared layer. */
     @Nullable private SurfaceSlot mSelectedSlot;
+    /**
+     * Whether the card is up at all. Down, the editor is the outlines and the floating pill; the
+     * pill's palette raises it on the shared layer, a surface raises it on that surface, and ✕ puts
+     * it back down.
+     */
+    private boolean mCardShown;
+    /** True while a surface's own drag runs under the card; a card raised mid-drag arrives faded. */
+    private boolean mPanelPeeking;
     /** True while a toggle group is being restated in code, so a restate is not read as a pick. */
     private boolean mRestatingToggles;
 
@@ -226,6 +238,9 @@ public final class SurfaceEditorController {
     private static final long SURFACE_TUNING_FADE_DURATION_MS = 200;
     /** How long the card takes to travel to a newly selected surface's park position. */
     private static final long SURFACE_EDITOR_PARK_DURATION_MS = 200;
+    /** The card rising from its park, or the pill settling back into its place. */
+    private static final long SURFACE_EDITOR_REVEAL_DURATION_MS = 180;
+    private static final float SURFACE_EDITOR_REVEAL_RISE_DP = 12f;
     private static final long SURFACE_EDITOR_RING_DURATION_MS = 150;
     /** The constant gap between the card and whatever bounds the room it lives in. */
     private static final float SURFACE_EDITOR_STANDOFF_DP = 14f;
@@ -244,7 +259,10 @@ public final class SurfaceEditorController {
 
     // ------------------------------------------------------------------------------- the card
 
-    /** The card's fixed views, found once per process. Its body is generated per target. */
+    /**
+     * The editor's fixed views, found once per process: the card, whose body is generated per
+     * target, and the floating pill the editor rests as while the card is down.
+     */
     private static final class Panel {
         final View host;
         final LinearLayout root;
@@ -255,18 +273,21 @@ public final class SurfaceEditorController {
         final ImageView done;
         final ImageView close;
         final ViewGroup presets;
-        final TextView tapHint;
         final View pills;
         final MaterialButtonToggleGroup shape;
         final MaterialButtonToggleGroup material;
         final ViewGroup rowsHost;
+        final View floatRoot;
+        final ImageView floatPalette;
+        final ImageView floatDone;
 
         /** Last heading pushed in; a restate that changes nothing skips its layout pass. */
         String shownTitle;
 
-        Panel(View host, LinearLayout root) {
+        Panel(View host, LinearLayout root, View floatRoot) {
             this.host = host;
             this.root = root;
+            this.floatRoot = floatRoot;
             header = root.findViewById(R.id.surface_editor_pill_header);
             title = root.findViewById(R.id.surface_editor_pill_title);
             save = root.findViewById(R.id.surface_editor_pill_save);
@@ -274,17 +295,19 @@ public final class SurfaceEditorController {
             done = root.findViewById(R.id.surface_editor_pill_done);
             close = root.findViewById(R.id.surface_editor_pill_close);
             presets = root.findViewById(R.id.surface_editor_pill_presets);
-            tapHint = root.findViewById(R.id.surface_editor_pill_tap_hint);
             pills = root.findViewById(R.id.surface_editor_pill_pills);
             shape = root.findViewById(R.id.surface_editor_pill_shape);
             material = root.findViewById(R.id.surface_editor_pill_material);
             rowsHost = root.findViewById(R.id.surface_editor_pill_rows_host);
+            floatPalette = floatRoot.findViewById(R.id.surface_editor_float_palette);
+            floatDone = floatRoot.findViewById(R.id.surface_editor_float_done);
         }
 
         boolean complete() {
             return header != null && title != null && save != null && reset != null && done != null
-                && close != null && presets != null && tapHint != null && pills != null
-                && shape != null && material != null && rowsHost != null;
+                && close != null && presets != null && pills != null
+                && shape != null && material != null && rowsHost != null
+                && floatPalette != null && floatDone != null;
         }
     }
 
@@ -298,7 +321,7 @@ public final class SurfaceEditorController {
     /** Which set of rows the body is built for; a change in what is editable rebuilds it. */
     private long mShownRowSignature = Long.MIN_VALUE;
 
-    /** Inflates the card into its host, once. */
+    /** Inflates the card and the floating pill into their host, once. */
     @Nullable
     private Panel panel() {
         if (mPanel != null)
@@ -306,15 +329,20 @@ public final class SurfaceEditorController {
         ViewGroup host = mHost.findView(R.id.surface_editor_pill_host);
         if (host == null)
             return null;
+        LayoutInflater inflater = LayoutInflater.from(mHost.context());
         LinearLayout root = host.findViewById(R.id.surface_editor_pill);
         if (root == null) {
-            LayoutInflater.from(mHost.context())
-                .inflate(R.layout.surface_editor_pill, host, true);
+            inflater.inflate(R.layout.surface_editor_pill, host, true);
             root = host.findViewById(R.id.surface_editor_pill);
         }
-        if (root == null)
+        View floatRoot = host.findViewById(R.id.surface_editor_float);
+        if (floatRoot == null) {
+            inflater.inflate(R.layout.surface_editor_float, host, true);
+            floatRoot = host.findViewById(R.id.surface_editor_float);
+        }
+        if (root == null || floatRoot == null)
             return null;
-        Panel panel = new Panel(host, root);
+        Panel panel = new Panel(host, root, floatRoot);
         if (!panel.complete())
             return null;
         mPanel = panel;
@@ -325,7 +353,7 @@ public final class SurfaceEditorController {
     // ------------------------------------------------------------------------------------ entry
 
     public void enter() {
-        // No section asked for: the editor opens on the shared layer, every surface outlined.
+        // No section asked for: the editor opens at rest, every surface outlined and the card down.
         enter(null);
     }
 
@@ -348,14 +376,22 @@ public final class SurfaceEditorController {
         }
         mSurfaceEditorOpen = true;
         panel.host.setVisibility(View.VISIBLE);
-        panel.root.setAlpha(1f);
 
         if (freshEditorSession || mSurfaceEditorEntrySignature == null) {
             mSurfaceEditorRevert = captureEntryState();
             mSurfaceEditorEntrySignature = surfaceEditorStateSignature();
         }
 
-        selectTarget(slotForSectionKey(initialSection), false);
+        // A deep link names the surface it wants and gets the card on it straight away. A plain
+        // open rests: outlines and the pill, the card down until the user asks for it. A re-entry
+        // with the editor already open and no section named leaves whatever is up alone.
+        SurfaceSlot initial = slotForSectionKey(initialSection);
+        if (initial != null)
+            selectTarget(initial, false);
+        else if (freshEditorSession)
+            hideCard(false);
+        else
+            syncPanel();
         bindSurfaceTuningGestures();
         panel.host.bringToFront();
         setSurfaceTuningGestureOverlayVisible(true);
@@ -363,6 +399,7 @@ public final class SurfaceEditorController {
         panel.host.post(() -> {
             applyRowsCap();
             parkPanel(false);
+            parkFloat();
             positionSelectionRings(false);
             syncGlow();
         });
@@ -495,30 +532,30 @@ public final class SurfaceEditorController {
     // ------------------------------------------------------------------------- the card's wiring
 
     private void bindPanel(@NonNull Panel panel) {
-        // Before the first layout pass, so the card's first frame is never bare text over the
+        // Before the first layout pass, so neither view's first frame is bare glyphs over the
         // wallpaper.
-        panel.root.setBackground(buildPanelBackground());
+        panel.root.setBackground(buildPanelBackground(24));
+        panel.floatRoot.setBackground(buildPanelBackground(999));
         setIcon(panel.save, R.drawable.ic_symbol_save, false);
         setIcon(panel.reset, R.drawable.ic_symbol_restart, false);
         setIcon(panel.done, R.drawable.ic_symbol_check, true);
         setIcon(panel.close, R.drawable.ic_symbol_close, false);
+        setIcon(panel.floatPalette, R.drawable.ic_symbol_palette, false);
+        setIcon(panel.floatDone, R.drawable.ic_symbol_check, true);
 
-        // The heading is the way back out of a surface; on the shared layer it is only a label.
-        panel.title.setOnClickListener(view -> {
-            if (mSelectedSlot != null)
-                selectTarget(null, true);
-        });
         panel.save.setOnClickListener(view -> saveCurrentLook());
         panel.reset.setOnClickListener(view -> revertToEntryState());
         panel.reset.setOnLongClickListener(view -> {
             resetEverythingToDefaults();
             return true;
         });
+        // ✓ is the only commit, on the card and on the pill alike; the two are never up together.
         panel.done.setOnClickListener(view -> exitSurfaceEditor());
-        // ✓ is the only commit. The ✕ and the back press both route through the unsaved-changes
-        // gate, so the two agree with each other without the close glyph silently throwing work
-        // away.
-        panel.close.setOnClickListener(view -> requestClose());
+        panel.floatDone.setOnClickListener(view -> exitSurfaceEditor());
+        // ✕ only puts the card down. Nothing is lost by it — the edits are already written through
+        // and still on screen — so it asks nothing; the unsaved gate belongs to leaving the editor.
+        panel.close.setOnClickListener(view -> hideCard(true));
+        panel.floatPalette.setOnClickListener(view -> selectTarget(null, true));
 
         panel.shape.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked || mRestatingToggles || prefs() == null)
@@ -559,20 +596,19 @@ public final class SurfaceEditorController {
     // ---------------------------------------------------------------------------- the selection
 
     /**
-     * Points the card at a target: its heading, its rows, its ring and its park position.
+     * Raises the card on a target: its heading, its rows, its ring and its park position.
      *
      * @param slot    the surface to edit, or null for the shared layer
-     * @param animate a real pick, which travels the card to the new park rather than jumping there
+     * @param animate a real pick: a card already up travels to the new park rather than jumping
+     *                there, and a card that was down rises out of the pill's place
      */
     private void selectTarget(@Nullable SurfaceSlot slot, boolean animate) {
         if (mPanel == null)
             return;
-        boolean changed = mSelectedSlot != slot;
+        boolean raising = !mCardShown;
+        boolean changed = raising || mSelectedSlot != slot;
         mSelectedSlot = slot;
-        // Acting on the hint is what retires it: the sentence has done its job and must not be
-        // there to read a second time.
-        if (slot != null && prefs() != null && !prefs().isSurfaceEditorTapHintSeen())
-            prefs().setSurfaceEditorTapHintSeen(true);
+        mCardShown = true;
         // Status is the one surface whose content is hidden by the shape the editor holds it in on
         // entry, so selecting it opens it back up — the clock has to be visible to be chosen.
         applyStatusPaneForSelection(changed);
@@ -580,8 +616,138 @@ public final class SurfaceEditorController {
         syncPanel();
         positionSelectionRings(animate && changed);
         positionClockHandle(mHost.findView(R.id.terminal_window_bar_host));
-        parkPanel(animate && changed);
+        if (raising) {
+            setFloatShown(false, animate);
+            parkPanel(false);
+            showCard(animate);
+        } else {
+            parkPanel(animate && changed);
+        }
         syncGlow();
+    }
+
+    /**
+     * Puts the card down: back to the outlines, all of them breathing again, and the floating pill.
+     * The shared layer is what a card raised by the palette shows, so nothing is selected once it
+     * is down.
+     */
+    private void hideCard(boolean animate) {
+        if (mPanel == null)
+            return;
+        boolean changed = mCardShown || mSelectedSlot != null;
+        mSelectedSlot = null;
+        mCardShown = false;
+        applyStatusPaneForSelection(changed);
+        positionSelectionRings(false);
+        positionClockHandle(mHost.findView(R.id.terminal_window_bar_host));
+        dismissClockDropdown();
+        Panel panel = mPanel;
+        panel.root.animate().cancel();
+        if (animate && panel.root.getVisibility() == View.VISIBLE) {
+            panel.root.animate().alpha(0f).translationY(dpToPx(SURFACE_EDITOR_REVEAL_RISE_DP))
+                .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+                .setInterpolator(Motion.settle())
+                .withEndAction(() -> {
+                    if (!mCardShown)
+                        panel.root.setVisibility(View.GONE);
+                    panel.root.setTranslationY(0f);
+                })
+                .start();
+        } else {
+            panel.root.setVisibility(View.GONE);
+            panel.root.setAlpha(1f);
+            panel.root.setTranslationY(0f);
+        }
+        parkFloat();
+        setFloatShown(true, animate);
+        syncGlow();
+    }
+
+    /** Raises the card at its park: a short rise and fade in, rather than a pop. */
+    private void showCard(boolean animate) {
+        Panel panel = mPanel;
+        if (panel == null)
+            return;
+        panel.root.animate().cancel();
+        panel.root.setVisibility(View.VISIBLE);
+        // A card raised while a surface drag is already running under it arrives at peek alpha,
+        // so the drag never has to fight a reveal for the card's opacity.
+        float alpha = mPanelPeeking ? SURFACE_TUNING_PEEK_ALPHA : 1f;
+        if (!animate) {
+            panel.root.setAlpha(alpha);
+            panel.root.setTranslationY(0f);
+            return;
+        }
+        panel.root.setAlpha(0f);
+        panel.root.setTranslationY(dpToPx(SURFACE_EDITOR_REVEAL_RISE_DP));
+        panel.root.animate().alpha(alpha).translationY(0f)
+            .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+            .setInterpolator(Motion.settle())
+            .start();
+    }
+
+    /** The floating pill: up while the card is down, and never both at once. */
+    private void setFloatShown(boolean shown, boolean animate) {
+        Panel panel = mPanel;
+        if (panel == null)
+            return;
+        View pill = panel.floatRoot;
+        pill.animate().cancel();
+        if (!animate) {
+            pill.setVisibility(shown ? View.VISIBLE : View.GONE);
+            pill.setAlpha(1f);
+            pill.setScaleX(1f);
+            pill.setScaleY(1f);
+            return;
+        }
+        if (shown) {
+            if (pill.getVisibility() != View.VISIBLE) {
+                pill.setAlpha(0f);
+                pill.setScaleX(0.85f);
+                pill.setScaleY(0.85f);
+                pill.setVisibility(View.VISIBLE);
+            }
+            pill.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+                .setInterpolator(Motion.settle())
+                .start();
+            return;
+        }
+        pill.animate().alpha(0f).scaleX(0.85f).scaleY(0.85f)
+            .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+            .setInterpolator(Motion.settle())
+            .withEndAction(() -> {
+                if (mCardShown)
+                    pill.setVisibility(View.GONE);
+                pill.setAlpha(1f);
+                pill.setScaleX(1f);
+                pill.setScaleY(1f);
+            })
+            .start();
+    }
+
+    /**
+     * Parks the pill at the foot of the free room, where the shared-layer card also parks, so the
+     * card reads as the pill grown in place and the terminal above stays whole to be touched.
+     */
+    private void parkFloat() {
+        Panel panel = mPanel;
+        if (panel == null || !mSurfaceEditorOpen)
+            return;
+        int height = panel.floatRoot.getHeight();
+        if (height <= 0)
+            height = dp(40);
+        int[] region = pillRegion();
+        int top = SurfaceEditorPillMetrics.parkRegionFootTopPx(height,
+            dp(SURFACE_EDITOR_STANDOFF_DP), region[0], region[1]);
+        ViewGroup.LayoutParams params = panel.floatRoot.getLayoutParams();
+        if (!(params instanceof ViewGroup.MarginLayoutParams))
+            return;
+        ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
+        if (margins.topMargin == top)
+            return;
+        margins.topMargin = top;
+        panel.floatRoot.setLayoutParams(margins);
     }
 
     /**
@@ -785,35 +951,29 @@ public final class SurfaceEditorController {
      */
     private void syncPanel() {
         Panel panel = mPanel;
-        if (panel == null || prefs() == null || !mSurfaceEditorOpen)
+        if (panel == null || prefs() == null || !mSurfaceEditorOpen || !mCardShown)
             return;
 
         // A structural change (dock style, terminal frame) can add or remove rows.
         if (rowSignature() != mShownRowSignature)
             rebuildRows();
 
+        // The heading names the surface, or — on the shared layer — wears the palette glyph that
+        // opened the card and says nothing more: the strip under it is what the layer is.
         boolean shared = mSelectedSlot == null;
-        String title = shared
-            ? getString(R.string.termux_surface_tuning_presets_section)
-            : getString(SurfaceEditorRows.slotLabel(mSelectedSlot));
+        String title = shared ? "" : getString(SurfaceEditorRows.slotLabel(mSelectedSlot));
         if (!title.equals(panel.shownTitle)) {
             panel.shownTitle = title;
             panel.title.setText(title);
-            panel.title.setCompoundDrawablesRelative(shared ? null : backGlyph(), null, null, null);
-            panel.title.setClickable(!shared);
-            panel.title.setFocusable(!shared);
-            panel.title.setBackgroundResource(shared ? 0 : selectableItemBackground());
-            panel.title.setContentDescription(shared ? title
-                : getString(R.string.termux_surface_editor_title_back_description, title));
+            panel.title.setCompoundDrawablesRelative(shared ? paletteGlyph() : null,
+                null, null, null);
+            panel.title.setContentDescription(shared
+                ? getString(R.string.termux_surface_editor_all_surfaces) : title);
         }
 
         int sharedVisibility = shared ? View.VISIBLE : View.GONE;
         if (panel.presets.getVisibility() != sharedVisibility)
             panel.presets.setVisibility(sharedVisibility);
-        int hintVisibility = shared && !prefs().isSurfaceEditorTapHintSeen()
-            ? View.VISIBLE : View.GONE;
-        if (panel.tapHint.getVisibility() != hintVisibility)
-            panel.tapHint.setVisibility(hintVisibility);
         if (panel.pills.getVisibility() != sharedVisibility)
             panel.pills.setVisibility(sharedVisibility);
         if (shared) {
@@ -829,24 +989,19 @@ public final class SurfaceEditorController {
         syncDirtyActions();
     }
 
+    /** The same glyph as the pill's, so the card reads as the pill opened. */
     @Nullable
-    private Drawable backGlyph() {
+    private Drawable paletteGlyph() {
         Drawable icon = androidx.core.content.ContextCompat.getDrawable(
-            mHost.context(), R.drawable.ic_symbol_arrow_back);
+            mHost.context(), R.drawable.ic_symbol_palette);
         if (icon == null)
             return null;
         icon = icon.mutate();
         icon.setTint(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
             R.color.termux_primary));
-        int size = dp(16);
+        int size = dp(20);
         icon.setBounds(0, 0, size, size);
         return icon;
-    }
-
-    private int selectableItemBackground() {
-        TypedValue value = new TypedValue();
-        return mHost.context().getTheme().resolveAttribute(
-            android.R.attr.selectableItemBackground, value, true) ? value.resourceId : 0;
     }
 
     /** Whether the selected surface has taken its own value for this row. */
@@ -1148,13 +1303,14 @@ public final class SurfaceEditorController {
 
     // ------------------------------------------------------------------------ shape and placement
 
+    /** The card's fill; an oversized radius clamps to a capsule, which is the pill's. */
     @NonNull
-    private Drawable buildPanelBackground() {
+    private Drawable buildPanelBackground(int cornerDp) {
         GradientDrawable background = new GradientDrawable();
         background.setColor(mHost.themeColor(
             com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
             R.color.termux_surface_panel_high));
-        background.setCornerRadius(dpToPx(24));
+        background.setCornerRadius(dpToPx(cornerDp));
         background.setStroke(Math.max(1, dp(1)), mHost.themeColor(
             com.termux.shared.R.attr.termuxColorOutlineVariant,
             R.color.termux_outline_variant));
@@ -1256,7 +1412,7 @@ public final class SurfaceEditorController {
      */
     private void parkPanel(boolean animate) {
         Panel panel = mPanel;
-        if (panel == null || !mSurfaceEditorOpen)
+        if (panel == null || !mSurfaceEditorOpen || !mCardShown)
             return;
         int height = panel.root.getHeight();
         if (height <= 0) {
@@ -1931,6 +2087,7 @@ public final class SurfaceEditorController {
             positionSurfaceTuningGestureTargets();
             applyRowsCap();
             parkPanel(false);
+            parkFloat();
             syncGlow();
         };
         host.getViewTreeObserver().addOnGlobalLayoutListener(mSurfaceEditorLayoutListener);
@@ -1949,6 +2106,8 @@ public final class SurfaceEditorController {
             stack != null ? surfaceEditorStackTopPx(stack, parentHeight) : -1);
         signature = mixAnchor(signature, overlay != null ? overlay.getWidth() : -1);
         signature = mixAnchor(signature, mPanel == null ? -1 : mPanel.root.getHeight());
+        signature = mixAnchor(signature, mPanel == null ? -1 : mPanel.floatRoot.getHeight());
+        signature = mixAnchor(signature, mCardShown ? 1 : 0);
         signature = mixAnchor(signature,
             anchorRectSignature(mHost.findView(R.id.terminal_window_bar_host)));
         signature = mixAnchor(signature,
@@ -2096,7 +2255,7 @@ public final class SurfaceEditorController {
         strip.setHorizontalScrollBarEnabled(false);
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, dp(6), 0, dp(2));
+        row.setPadding(0, dp(4), 0, dp(1));
         for (SurfacePresets.Preset preset : SurfacePresets.presets())
             addPresetCard(context, row, preset.id, preset.nameRes, () -> applyPreset(preset));
         // Custom is last and always present, saved or not: an empty slot that says where a saved
@@ -2117,7 +2276,7 @@ public final class SurfaceEditorController {
         item.setGravity(Gravity.CENTER_HORIZONTAL);
         LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        itemParams.rightMargin = dp(10);
+        itemParams.rightMargin = dp(8);
         item.setLayoutParams(itemParams);
 
         View preview = new View(context);
@@ -2136,13 +2295,13 @@ public final class SurfaceEditorController {
 
         TextView name = new TextView(context);
         name.setText(nameRes);
-        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
         name.setMaxLines(1);
         name.setEllipsize(TextUtils.TruncateAt.END);
         name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        nameParams.topMargin = dp(3);
+        nameParams.topMargin = dp(2);
         name.setLayoutParams(nameParams);
         item.addView(name);
 
@@ -2608,6 +2767,12 @@ public final class SurfaceEditorController {
         Panel panel = mPanel;
         if (panel == null || !mSurfaceEditorOpen)
             return;
+        mPanelPeeking = peek;
+        if (!peek) hideSurfaceTuningPeekReadout();
+        // A card that is down has nothing to get out of the way; showCard() reads the flag if the
+        // drag raises it.
+        if (!mCardShown)
+            return;
         panel.root.animate().cancel();
         // The whole drag happens behind a translucent card, and the thumb invalidates it on every
         // moved pixel. A hardware layer for the duration turns each of those frames into a cached-
@@ -2622,7 +2787,6 @@ public final class SurfaceEditorController {
                 if (!peek) panel.root.setLayerType(View.LAYER_TYPE_NONE, null);
             })
             .start();
-        if (!peek) hideSurfaceTuningPeekReadout();
     }
 
     /** The faded card's number, over the surface, so peeking does not trade one blindness for another. */
@@ -2728,13 +2892,18 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * The editor's only exit that is not a commit. ✓ commits; the ✕ and the back press come here,
-     * and when there is something to lose they ask rather than silently choosing for the user — the
-     * live write-through means "leave" would otherwise mean "keep" by accident.
+     * The back press. With the card up it only puts the card down — one layer per press. From the
+     * resting state it is the editor's only exit that is not a commit: ✓ commits, and when there is
+     * something to lose this asks rather than silently choosing for the user — the live
+     * write-through means "leave" would otherwise mean "keep" by accident.
      */
     public void requestClose() {
         if (!mSurfaceEditorOpen)
             return;
+        if (mCardShown) {
+            hideCard(true);
+            return;
+        }
         if (!isSurfaceEditorDirty()) {
             exitSurfaceEditor();
             return;
@@ -2760,15 +2929,21 @@ public final class SurfaceEditorController {
         if (mPanel != null) {
             mPanel.root.animate().cancel();
             mPanel.root.setAlpha(1f);
+            mPanel.root.setTranslationY(0f);
             mPanel.root.setLayerType(View.LAYER_TYPE_NONE, null);
+            mPanel.root.setVisibility(View.GONE);
+            mPanel.floatRoot.animate().cancel();
+            mPanel.floatRoot.setVisibility(View.GONE);
             mPanel.save.setVisibility(View.GONE);
             mPanel.reset.setVisibility(View.GONE);
         }
         dismissClockDropdown();
         hideSurfaceTuningPeekReadout();
+        mPanelPeeking = false;
         mSurfaceEditorEntrySignature = null;
         mSurfaceEditorRevert = null;
         mSelectedSlot = null;
+        mCardShown = false;
         mSurfaceEditorOpen = false;
         syncGlow();
         setSurfaceTuningGestureOverlayVisible(false);
