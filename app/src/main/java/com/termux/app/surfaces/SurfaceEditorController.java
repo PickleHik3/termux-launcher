@@ -2005,7 +2005,10 @@ public final class SurfaceEditorController {
         });
     }
 
-    /** The ▾ beside the live clock: the status bar's one control that is a look, not a number. */
+    /**
+     * The clock-face control: the live clock as a tap target, with a ▾ at its trailing edge as the
+     * hint that it is one. The status bar's one control that is a look, not a number.
+     */
     private void bindClockHandle() {
         View handle = mHost.findView(R.id.surface_tuning_status_clock_handle);
         if (handle == null)
@@ -2078,9 +2081,11 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * Parks the clock's ▾ against the live clock's own trailing edge, so the control that changes
-     * the face stands beside the face. Only while the status bar is the surface being edited —
-     * which is also the only time the bar is open far enough to show the clock at all.
+     * Lays the clock's tap target over the live clock itself, with the ▾ parked at its trailing
+     * edge. The ▾ is the indicator; the whole face is the control — a 28dp glyph beside thin digits
+     * was too small to hit reliably on a bar the finger has just pulled open. Only while the status
+     * bar is the surface being edited — which is also the only time the bar is open far enough to
+     * show the clock at all.
      */
     private void positionClockHandle(@Nullable View statusSurface) {
         View handle = mHost.findView(R.id.surface_tuning_status_clock_handle);
@@ -2102,30 +2107,42 @@ public final class SurfaceEditorController {
         int[] clockLocation = new int[2];
         group.getLocationInWindow(groupLocation);
         clock.getLocationInWindow(clockLocation);
-        int size = dp(28);
-        // The clock view fills the slot and paints inside it, so its own right edge is nowhere near
-        // the clock's; the widget is the only thing that knows where the digits stop.
+        // The clock view fills the slot and paints inside it, so its own edges are nowhere near
+        // the clock's; the widget is the only thing that knows where the digits start and stop.
+        int paintedLeft = clock instanceof TerminalClockWidget
+            ? Math.round(((TerminalClockWidget) clock).paintedLeftPx()) : 0;
         int paintedRight = clock instanceof TerminalClockWidget
             ? Math.round(((TerminalClockWidget) clock).paintedRightPx()) : clock.getWidth();
-        int left = clamp((clockLocation[0] - groupLocation[0]) + paintedRight + dp(2),
-            0, Math.max(0, group.getWidth() - size));
+        int chevronPx = dp(CLOCK_HANDLE_CHEVRON_DP);
+        int minHeight = dp(CLOCK_HANDLE_MIN_HEIGHT_DP);
+        int height = Math.max(minHeight, clock.getHeight());
+        int left = clamp((clockLocation[0] - groupLocation[0]) + paintedLeft, 0,
+            Math.max(0, group.getWidth() - chevronPx));
+        int right = clamp((clockLocation[0] - groupLocation[0]) + paintedRight + chevronPx,
+            left + chevronPx, group.getWidth());
         int top = Math.max(0,
-            (clockLocation[1] - groupLocation[1]) + (clock.getHeight() - size) / 2);
+            (clockLocation[1] - groupLocation[1]) + (clock.getHeight() - height) / 2);
         ViewGroup.LayoutParams params = handle.getLayoutParams();
         if (params instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
+            int width = right - left;
             if (margins.leftMargin != left || margins.topMargin != top
-                || margins.width != size || margins.height != size) {
+                || margins.width != width || margins.height != height) {
                 margins.leftMargin = left;
                 margins.topMargin = top;
-                margins.width = size;
-                margins.height = size;
+                margins.width = width;
+                margins.height = height;
                 handle.setLayoutParams(margins);
             }
         }
         if (handle.getVisibility() != View.VISIBLE)
             handle.setVisibility(View.VISIBLE);
     }
+
+    /** Room the ▾ takes past the clock's trailing edge, inside the tap target. */
+    private static final int CLOCK_HANDLE_CHEVRON_DP = 28;
+    /** The tap target never gets shorter than the ▾ glyph's old 28dp box. */
+    private static final int CLOCK_HANDLE_MIN_HEIGHT_DP = 28;
 
     /**
      * Parks the chin pill on the glass just under the last key row — never on the surface's own
@@ -2815,8 +2832,8 @@ public final class SurfaceEditorController {
     // ------------------------------------------------------------------------- the clock face
     //
     // The status bar's one control that is a look rather than a number, so it does not sit on the
-    // card as a row: it is a ▾ beside the live clock, and it drops the six faces under itself drawn
-    // as themselves. Picking one applies it the way every other editor control writes — live, and
+    // card as a row: it is the live clock itself, marked with a ▾, and it drops the six faces under
+    // itself drawn as themselves. Picking one applies it the way every other editor control writes — live, and
     // gated by ✓ like the rest.
 
     /** Package-private so a test can hold it against the settings list's own entry values. */

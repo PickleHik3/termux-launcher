@@ -593,6 +593,11 @@ public final class TerminalClockWidget extends View {
         return paintedXRangePx()[1];
     }
 
+    /** The leading edge of the painted clock, in view pixels; see {@link #paintedRightPx()}. */
+    public float paintedLeftPx() {
+        return paintedXRangePx()[0];
+    }
+
     /** Where the clock actually paints across the view, as {left, right} in view pixels. */
     private float[] paintedXRangePx() {
         if (mSnapshot == null) return new float[] {0f, getWidth()};

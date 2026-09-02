@@ -751,9 +751,10 @@
                     android:alpha="0.8"
                     android:background="@drawable/surface_tuning_gesture_pill" />
 
-                <!-- The clock's own control, parked beside the live clock in code while the
-                     status bar is the surface being edited. Clickable in its own right: a child
-                     takes the touch before the group's select-and-drag handler sees it. -->
+                <!-- The clock's own control: laid over the live clock in code while the status bar
+                     is the surface being edited, with the ▾ drawn at its trailing edge. Clickable in
+                     its own right: a child takes the touch before the group's select-and-drag
+                     handler sees it. -->
                 <TextView
                     android:id="@+id/surface_tuning_status_clock_handle"
                     android:layout_width="28dp"
@@ -762,7 +763,8 @@
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:focusable="true"
-                    android:gravity="center"
+                    android:gravity="center_vertical|end"
+                    android:paddingEnd="8dp"
                     android:text="@string/termux_surface_tuning_clock_chevron"
                     android:textColor="?attr/termuxColorPrimary"
                     android:textSize="13sp"
