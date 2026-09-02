@@ -195,6 +195,28 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
     }
 
+    public boolean isAppLauncherDrawerSearchOnOpenEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN);
+    }
+
+    public void setAppLauncherDrawerSearchOnOpenEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN, value, false);
+    }
+
+    public boolean isAppLauncherDrawerSearchAndroidKeyboardEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD);
+    }
+
+    public void setAppLauncherDrawerSearchAndroidKeyboardEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD, value, false);
+    }
+
     public int getAppLauncherDrawerCornerRadius() {
         int value = SharedPreferenceUtils.getInt(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS,

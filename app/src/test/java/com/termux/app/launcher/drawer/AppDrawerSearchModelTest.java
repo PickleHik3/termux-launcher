@@ -101,4 +101,23 @@ public class AppDrawerSearchModelTest {
         assertEquals("ab", model.query());
         assertEquals(1, model.caret());
     }
+
+    @Test
+    public void replaceTakesTheWholeTextAndClampsTheCaret() {
+        AppDrawerSearchModel model = new AppDrawerSearchModel();
+        assertTrue(model.insert("te"));
+        // What a keyboard reports after an autocorrection: a different word, caret at its end.
+        assertTrue(model.replace("term", 4));
+        assertEquals("term", model.query());
+        assertEquals(4, model.caret());
+        // The same text with the caret elsewhere is a caret move; out of range, it is clamped.
+        assertTrue(model.replace("term", 2));
+        assertEquals(2, model.caret());
+        assertTrue(model.replace("term", 9));
+        assertEquals(4, model.caret());
+        // Neither text nor caret moved: not a change, so nothing is re-ranked.
+        assertFalse(model.replace("term", 4));
+        assertTrue(model.replace("", 0));
+        assertTrue(model.isEmpty());
+    }
 }

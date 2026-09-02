@@ -876,6 +876,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
             applyDockImeOffset(0);
             applyTerminalOverlayInsets(insetsCompat);
+            // The drawer plane pins itself above a system keyboard; guarded on the field so a
+            // keyboard rising over the terminal never builds a drawer that was never opened.
+            if (mAppDrawerController != null) {
+                mAppDrawerController.onImeInsetChanged(insetsCompat.isVisible(Type.ime())
+                    ? insetsCompat.getInsets(Type.ime()).bottom : 0);
+            }
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
             return insetsCompat.toWindowInsets();
         });
@@ -8779,6 +8785,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void requestSearchKeyboard() {
             requestAppDrawerSearchKeyboard();
+        }
+
+        @Override public void beginTextFieldSearch(@NonNull EditText field) {
+            // The toolbar text input's seam, less the relayout: the built-in keyboard yields its
+            // window flags but stays put under the plane, then the field takes focus and the IME.
+            if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+                mInAppKeyboard.beginExternalTextInput(true);
+            }
+            onSystemImeRequested();
+            field.post(() -> {
+                if (!isAppDrawerOpen()) return;
+                if (!field.hasFocus()) field.requestFocus();
+                KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
+            });
+        }
+
+        @Override public void endTextFieldSearch(@NonNull EditText field) {
+            if (getWindow() != null) {
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                    .hide(Type.ime());
+            }
+            if (field.hasFocus()) field.clearFocus();
+            if (mTerminalView != null && !mTerminalView.hasFocus()) {
+                // Focus goes back quietly: the terminal's own focus listener would re-show the IME
+                // 500ms later for a terminal nobody is typing into. A keyboard that was up before
+                // the drawer is brought back by restoreSystemKeyboard, not by this.
+                View.OnFocusChangeListener listener = mTerminalView.getOnFocusChangeListener();
+                mTerminalView.setOnFocusChangeListener(null);
+                try {
+                    mTerminalView.requestFocus();
+                } finally {
+                    mTerminalView.setOnFocusChangeListener(listener);
+                }
+            }
+            if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
+        }
+
+        @Override public void openAppDrawerSettings() {
+            startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
+                com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
+                R.string.settings_app_drawer_view_type_title));
         }
     }
 

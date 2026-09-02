@@ -308,6 +308,10 @@
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
     <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
     <string name="settings_app_drawer_view_type_categories">Categories</string>
+    <string name="settings_app_drawer_search_on_open_title">Open the keyboard with the drawer</string>
+    <string name="settings_app_drawer_search_on_open_summary">Start typing to search as soon as the drawer opens.</string>
+    <string name="settings_app_drawer_search_android_keyboard_title">Search with the Android keyboard</string>
+    <string name="settings_app_drawer_search_android_keyboard_summary">Use your Android keyboard for the app search, with its suggestions and swipe typing.</string>
     <string name="settings_app_drawer_category_sort_title">Sort apps into categories</string>
     <string name="settings_app_drawer_category_sort_summary">Choose how your apps get grouped</string>
     <string name="settings_app_drawer_category_sort_dialog_title">Sort apps into categories</string>
@@ -322,6 +326,15 @@
     <string name="settings_app_drawer_category_refresh_title">Re-run categorization</string>
     <string name="settings_app_drawer_category_refresh_never">Never run</string>
     <string name="settings_app_drawer_category_refresh_last_run">Last run · %1$s · %2$d apps</string>
+    <plurals name="settings_app_drawer_category_refresh_pending">
+        <item quantity="one">%1$d new app not sorted yet</item>
+        <item quantity="other">%1$d new apps not sorted yet</item>
+    </plurals>
+    <plurals name="app_drawer_category_pending_notice">
+        <item quantity="one">%1$d new app isn\'t sorted into a category yet</item>
+        <item quantity="other">%1$d new apps aren\'t sorted into categories yet</item>
+    </plurals>
+    <string name="app_drawer_category_pending_notice_hint">Tap to sort</string>
     <string name="settings_app_drawer_category_sort_paste_dialog_body">The prompt is on your clipboard. Paste it into an AI chat, then paste its answer below.</string>
     <string name="settings_app_drawer_category_sort_paste_input_hint">Paste the AI answer here</string>
     <string name="settings_app_drawer_category_sort_paste_copy_again">Copy prompt to clipboard</string>

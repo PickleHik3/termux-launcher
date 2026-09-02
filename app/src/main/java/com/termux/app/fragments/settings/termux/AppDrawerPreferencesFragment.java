@@ -231,10 +231,34 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
             return;
         }
         // Locale-formatted: a hardcoded pattern is wrong everywhere outside en-US.
-        refresh.setSummary(getString(R.string.settings_app_drawer_category_refresh_last_run,
+        String lastRun = getString(R.string.settings_app_drawer_category_refresh_last_run,
             DateUtils.formatDateTime(context, state.getLastRunEpochMs(),
                 DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_SHOW_TIME | DateUtils.FORMAT_ABBREV_ALL),
-            state.getAppCount()));
+            state.getAppCount());
+        // Apps installed since that run sit in "Other" until the next one; say how many are waiting.
+        int pending = pendingCategoryApps(context);
+        refresh.setSummary(pending <= 0 ? lastRun : lastRun + "\n"
+            + getResources().getQuantityString(
+                R.plurals.settings_app_drawer_category_refresh_pending, pending, pending));
+    }
+
+    /**
+     * The count off the provider's in-memory catalogue. A cold provider answers zero and is warmed
+     * with a callback that redraws the row, so the number appears a moment later rather than never.
+     */
+    private int pendingCategoryApps(@NonNull Context context) {
+        com.termux.app.launcher.data.LauncherAppDataProvider provider =
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context);
+        List<com.termux.app.launcher.model.LauncherAppEntry> apps = provider.getAllApps();
+        if (apps.isEmpty()) {
+            provider.warmAsync(() -> {
+                if (!isAdded()) return;
+                Context current = getContext();
+                if (current != null) updateRefreshSummary(current);
+            });
+            return 0;
+        }
+        return com.termux.app.launcher.data.LauncherCategoryPendingApps.count(context, apps);
     }
 
     /**

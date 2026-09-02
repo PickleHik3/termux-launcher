@@ -136,6 +136,12 @@ Keyboard height is remembered separately for portrait and landscape.
 
 - **Customize dock appearance:** shared surface shape and live dock tuning.
 - **Show pinned apps row** and **Edit pinned apps**.
+- **App drawer:** swipe down on the pinned row to open it; choose the drawer layout. **Open the
+  keyboard with the drawer** brings the keyboard up as the drawer opens; **Search with the Android
+  keyboard** searches through your Android keyboard, with its suggestions and swipe typing. With the
+  categories layout, **Sort apps into categories** and **Re-run categorization** appear here too; the
+  re-run row counts the apps installed since the last run, and the drawer mentions them once when
+  more than five are waiting.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

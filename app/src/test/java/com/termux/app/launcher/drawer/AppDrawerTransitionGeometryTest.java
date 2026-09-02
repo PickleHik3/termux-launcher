@@ -131,4 +131,13 @@ public class AppDrawerTransitionGeometryTest {
         assertEquals(openBottom,
             AppDrawerTransitionGeometry.resolveSearchPlaneBottom(openBottom, pinTop, gap, -0.4f), 0f);
     }
+
+    @Test
+    public void theRevealClipRunsFromTheHostBottomToTheKeyboardTopWithNoGap() {
+        assertEquals(2400f, AppDrawerTransitionGeometry.resolveRevealClipBottom(2400f, 1700f, 0f), 0f);
+        assertEquals(2050f, AppDrawerTransitionGeometry.resolveRevealClipBottom(2400f, 1700f, 0.5f), 0f);
+        assertEquals(1700f, AppDrawerTransitionGeometry.resolveRevealClipBottom(2400f, 1700f, 1f), 0f);
+        // The plane itself stops a gap short of the same edge.
+        assertEquals(1680f, AppDrawerTransitionGeometry.resolveSearchPlaneBottom(2400f, 1700f, 20f, 1f), 0f);
+    }
 }

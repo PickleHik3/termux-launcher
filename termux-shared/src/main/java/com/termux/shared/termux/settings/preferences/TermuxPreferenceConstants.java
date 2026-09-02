@@ -264,6 +264,25 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
             APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
 
+        /**
+         * Defines the key for opening the keyboard as soon as the app drawer opens, so the drawer
+         * arrives ready to search instead of waiting for the pill to be tapped.
+         */
+        public static final String KEY_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN =
+            "app_launcher_drawer_search_on_open";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_SEARCH_ON_OPEN = false;
+
+        /**
+         * Defines the key for searching the app drawer with the Android keyboard through a real text
+         * field, so its suggestions and swipe typing apply, instead of the built-in keyboard's key
+         * stream.
+         */
+        public static final String KEY_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD =
+            "app_launcher_drawer_search_android_keyboard";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_SEARCH_ANDROID_KEYBOARD = false;
+
         /** Custom drawer corner radius in dp, or -1 to follow the shared rounded-surface token. */
         public static final String KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS =
             "app_launcher_drawer_corner_radius";

@@ -750,13 +750,27 @@ public final class TermuxInAppKeyboard {
 
     /** Temporarily yields to a real text field such as a notification RemoteInput reply. */
     public void beginExternalTextInput() {
+        beginExternalTextInput(false);
+    }
+
+    /**
+     * Yields to a real text field.
+     *
+     * @param keepKeyboardInPlace leave the embedded keyboard's container where it is instead of
+     *                            hiding it and relayouting the accessory stack — for a field under a
+     *                            surface that already covers the keyboard and holds the stack's
+     *                            geometry frozen, such as the open app drawer
+     */
+    public void beginExternalTextInput(boolean keepKeyboardInPlace) {
         if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
             return;
         mExternalTextInputActive = true;
         mHost.onExternalTextInputStarted();
         resetInputPipeline();
-        setContainerVisible(false);
-        mHost.requestAccessoryGeometrySync();
+        if (!keepKeyboardInPlace) {
+            setContainerVisible(false);
+            mHost.requestAccessoryGeometrySync();
+        }
         mHost.runOnMain(() -> {
             if (!mEnabled || mDestroyed || mHost == null || !mExternalTextInputActive)
                 return;

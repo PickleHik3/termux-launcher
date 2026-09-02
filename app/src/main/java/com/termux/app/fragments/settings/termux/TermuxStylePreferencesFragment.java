@@ -210,6 +210,14 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherDrawerEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_drawer_search_on_open":
+                // Read fresh every time the drawer commits open, so nothing has to be re-styled.
+                mPreferences.setAppLauncherDrawerSearchOnOpenEnabled(value);
+                break;
+            case "app_launcher_drawer_search_android_keyboard":
+                // Same: decided per open, never mid-search.
+                mPreferences.setAppLauncherDrawerSearchAndroidKeyboardEnabled(value);
+                break;
             case "app_launcher_widget_pane_enabled":
                 mPreferences.setAppLauncherWidgetPaneEnabled(value);
                 // The pane is built once per activity, so it has to come back on a recreate.
@@ -255,6 +263,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherAzRowChosen();
             case "app_launcher_drawer_enabled":
                 return mPreferences.isAppLauncherDrawerEnabled();
+            case "app_launcher_drawer_search_on_open":
+                return mPreferences.isAppLauncherDrawerSearchOnOpenEnabled();
+            case "app_launcher_drawer_search_android_keyboard":
+                return mPreferences.isAppLauncherDrawerSearchAndroidKeyboardEnabled();
             case "app_launcher_widget_pane_enabled":
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
             case "app_launcher_row_haptics":
