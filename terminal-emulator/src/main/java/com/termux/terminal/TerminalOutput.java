@@ -45,6 +45,14 @@ public abstract class TerminalOutput {
     public abstract void onColorsChanged();
 
     /**
+     * Notify the terminal client that the program asked for the user's attention with a message —
+     * an iTerm2-style {@code OSC 9 ; body} or an rxvt-style {@code OSC 777 ; notify ; title ; body}.
+     * Agents emit these when a turn ends or an approval is needed. The default drops it.
+     */
+    public void onNotification(String title, String body) {
+    }
+
+    /**
      * Return work produced off-thread to the terminal's serialized update thread. Test outputs that do not own a
      * looper may use this default; a live {@link TerminalSession} overrides it and posts to its main-thread handler.
      */

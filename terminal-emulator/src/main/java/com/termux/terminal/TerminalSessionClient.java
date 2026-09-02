@@ -22,6 +22,13 @@ public interface TerminalSessionClient {
 
     void onBell(@NonNull TerminalSession session);
 
+    /**
+     * The program asked for the user with a message (a terminal notification escape). Like a bell
+     * with words: the default ignores it, so clients that only care about bells need not change.
+     */
+    default void onNotification(@NonNull TerminalSession session, String title, String body) {
+    }
+
     void onColorsChanged(@NonNull TerminalSession session);
 
     void onTerminalCursorStateChange(boolean state);
