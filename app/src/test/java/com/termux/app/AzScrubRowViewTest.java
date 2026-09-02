@@ -1,16 +1,19 @@
 package com.termux.app;
 
 import android.os.Build;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.LooperMode;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -166,5 +169,62 @@ public class AzScrubRowViewTest {
         view.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 200f, 10f, 0));
         view.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, 200f, y, 0));
         return selection[0];
+    }
+
+    /**
+     * The letter tick belongs to whoever the finger is choosing with. A scrub that has climbed onto
+     * the apps row goes on passing over letter slots, and ticking those made every part of the
+     * gesture feel like a scrub along the letters.
+     */
+    @Test
+    public void letterTicks_stopWhileTheFingerIsChoosingAnIconInstead() {
+        assertTrue(crossedALetterBoundaryWithSuspension(false));
+        assertFalse(crossedALetterBoundaryWithSuspension(true));
+    }
+
+    /**
+     * The suspension is read after the callback, so the sample that hands the gesture to the apps
+     * row is already silent — the row does not owe it one last letter tick.
+     */
+    @Test
+    public void letterTicks_areDecidedBySampleNotByTheSampleBefore() {
+        AzScrubRowView view = layoutRow(48, 0);
+        view.setScrubCallback(new AzScrubRowView.ScrubCallback() {
+            @Override
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
+                                float rawX, float rawY, long eventTimeMs,
+                                AzScrubRowView.GesturePhase phase) {
+                // What the activity does with the decision this very sample produced.
+                view.setLetterHapticTicksSuspended(true);
+            }
+
+            @Override
+            public void onCancel() {}
+        });
+        view.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 0f, 24f, 0));
+        view.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, 400f, 24f, 0));
+        assertFalse(tickedOn(view));
+    }
+
+    private static boolean crossedALetterBoundaryWithSuspension(boolean suspended) {
+        AzScrubRowView view = layoutRow(48, 0);
+        view.setScrubCallback(new AzScrubRowView.ScrubCallback() {
+            @Override
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
+                                float rawX, float rawY, long eventTimeMs,
+                                AzScrubRowView.GesturePhase phase) {}
+
+            @Override
+            public void onCancel() {}
+        });
+        view.setLetterHapticTicksSuspended(suspended);
+        view.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 0f, 24f, 0));
+        view.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, 400f, 24f, 0));
+        return tickedOn(view);
+    }
+
+    private static boolean tickedOn(AzScrubRowView view) {
+        return Shadows.shadowOf(view).lastHapticFeedbackPerformed()
+            == HapticFeedbackConstants.CLOCK_TICK;
     }
 }

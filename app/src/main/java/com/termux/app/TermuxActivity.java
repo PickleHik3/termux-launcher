@@ -6081,6 +6081,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 break;
         }
 
+        // Whose row the finger is on now, so the letter row ticks only while the letters are what
+        // it is choosing; an icon in the row above ticks for itself, per icon.
+        mAzScrubRowView.setLetterHapticTicksSuspended(
+            decision.mode != AzScrubGesture.Mode.AZ_TRACKING);
+
         if (decision.pinnedSymbolReset) {
             mSuggestionBarView.clearAzFocusedEntry();
             mSuggestionBarView.clearAzPreview();
@@ -6509,6 +6514,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAzScrubRowView != null) {
             mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
             mAzScrubRowView.setLockedInlineLetter(null);
+            // The row owns the letter tick again; nothing is holding it now.
+            mAzScrubRowView.setLetterHapticTicksSuspended(false);
         }
         if (mSuggestionBarView != null) {
             mSuggestionBarView.clearAzFocusedEntry();
