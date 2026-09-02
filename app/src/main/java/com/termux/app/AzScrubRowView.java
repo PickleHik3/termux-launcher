@@ -102,6 +102,8 @@ public final class AzScrubRowView extends AppCompatTextView {
     private boolean interactionRenderActive;
     private boolean rowHapticsEnabled = true;
     private int lastHapticLetterIndex = -1;
+    /** Touchable dead space under the letters, given by the dock when this row is its bottom one. */
+    private int chinPaddingPx;
 
     public AzScrubRowView(Context context) {
         super(context);
@@ -135,6 +137,25 @@ public final class AzScrubRowView extends AppCompatTextView {
         ViewConfiguration viewConfiguration = ViewConfiguration.get(getContext());
         doubleTapTimeoutMs = ViewConfiguration.getDoubleTapTimeout();
         doubleTapSlopPx = viewConfiguration.getScaledDoubleTapSlop();
+    }
+
+    /**
+     * Dead space under the letters, as bottom padding. The letters are placed off the bottom of the
+     * content box, so padding lifts them clear of the dock's rim and leaves the space below them
+     * inside the row — space that takes a touch like any other part of it.
+     */
+    public void setChinPaddingPx(int paddingPx) {
+        int chin = Math.max(0, paddingPx);
+        if (chin == chinPaddingPx)
+            return;
+        chinPaddingPx = chin;
+        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), dp(1) + chin);
+        invalidate();
+    }
+
+    /** The band the letters are drawn in: this row's height without the chin under them. */
+    public int letterBandHeightPx() {
+        return Math.max(0, getHeight() - chinPaddingPx);
     }
 
     private int dp(int value) {
@@ -431,8 +452,11 @@ public final class AzScrubRowView extends AppCompatTextView {
         if (callback == null) return super.onTouchEvent(event);
         float x = Math.max(0f, Math.min(getWidth(), event.getX()));
         char letter = pickLetter(x, event.getActionMasked() != MotionEvent.ACTION_DOWN);
+        // Measured against the letter band, not the row: the chin under the letters is touchable
+        // space, and letting it stretch the step would retune the drag-up selection behind the
+        // user's back the moment the extra-keys row is hidden.
         int selectionIndex = Math.max(0,
-            (int) ((-event.getY()) / Math.max(dp(12f), getHeight() / 2f)));
+            (int) ((-event.getY()) / Math.max(dp(12f), letterBandHeightPx() / 2f)));
         currentSelectionIndex = selectionIndex;
 
         switch (event.getActionMasked()) {

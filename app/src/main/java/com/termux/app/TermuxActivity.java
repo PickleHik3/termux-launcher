@@ -6149,7 +6149,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
             azRowLeftRaw = mAzViewLocation[0];
             azRowTopRaw = mAzViewLocation[1];
-            azRowHeightPx = mAzScrubRowView.getHeight();
+            // The letters' band, not the view: the chin under them is touchable space, and the
+            // anchor arithmetic and row-height thresholds below are all about where letters are.
+            azRowHeightPx = mAzScrubRowView.letterBandHeightPx();
         }
         float extraKeysHeightPx = (mAzTerminalToolbarView != null && mAzTerminalToolbarView.getHeight() > 0)
             ? mAzTerminalToolbarView.getHeight()
@@ -7932,6 +7934,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS)
             .appsRowEnabledPref(preferencesAvailable && mPreferences.isAppLauncherAppsRowEnabled())
             .azRowEnabledPref(preferencesAvailable && mPreferences.isAppLauncherAzRowEnabled())
+            // Which row ends up on the dock's rim, so the A-Z row knows whether to carry a chin.
+            .extraKeysRowShown(preferencesAvailable
+                && mPreferences.isAppLauncherExtraKeysRowEnabled()
+                && mPreferences.shouldShowTerminalToolbar())
             .baseToolbarHeightPx(getDockBaseToolbarHeightPx())
             .additionalAppsBarHeightPx(additionalAppsBarHeightPx)
             .railOnRight(preferencesAvailable && mPreferences.isAppLauncherDockRailOnRight())
@@ -7958,6 +7964,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateViewHeight(R.id.apps_bar_viewpager, layout.appsBarHeightPx);
         updateViewHeight(R.id.apps_bar_indicator_band, layout.indicatorBandHeightPx);
         updateViewHeight(R.id.apps_bar_az_row, layout.azRowHeightPx);
+        if (mAzScrubRowView != null)
+            mAzScrubRowView.setChinPaddingPx(layout.azRowChinPaddingPx);
         updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
         applyDockRowHorizontalInsets();
         if (mSuggestionBarView != null) {
@@ -7971,6 +7979,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        // The A-Z row's height follows this switch — it carries a chin under its letters only while
+        // it is the dock's bottom row — and the render pass above sizes no rows, so ask for the
+        // geometry pass that does.
+        setTerminalToolbarHeight();
 
         isToolbarHidden = !showNow;
     
