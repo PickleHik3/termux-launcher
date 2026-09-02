@@ -2,6 +2,7 @@ package com.termux.app.launcher.drawer;
 
 import android.content.Context;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
@@ -59,5 +60,38 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         interceptorActive = active;
     }
 
-    @Override public void requestSearchKeyboard() { }
+    public int hideSystemKeyboardCalls;
+    public int restoreSystemKeyboardCalls;
+
+    @Override public void restoreSystemKeyboard() {
+        restoreSystemKeyboardCalls++;
+    }
+
+    @Override public void hideSystemKeyboard() {
+        hideSystemKeyboardCalls++;
+    }
+
+    public int searchKeyboardRequests;
+
+    @Override public void requestSearchKeyboard() {
+        searchKeyboardRequests++;
+    }
+
+    public int textFieldSearchBegins;
+    public int textFieldSearchEnds;
+    @Nullable public EditText textFieldSearchField;
+    public int appDrawerSettingsOpens;
+
+    @Override public void beginTextFieldSearch(@NonNull EditText field) {
+        textFieldSearchBegins++;
+        textFieldSearchField = field;
+    }
+
+    @Override public void endTextFieldSearch(@NonNull EditText field) {
+        textFieldSearchEnds++;
+    }
+
+    @Override public void openAppDrawerSettings() {
+        appDrawerSettingsOpens++;
+    }
 }

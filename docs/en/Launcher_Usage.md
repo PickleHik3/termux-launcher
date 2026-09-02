@@ -135,9 +135,10 @@ Use the palette for these actions, or the default hardware-keyboard shortcuts:
 
 | Action | Shortcut |
 |---|---|
+| New pane (splits along the longer side) | `Ctrl+Alt+Enter` |
 | Split side by side | `Ctrl+Alt+v` |
 | Split top and bottom | `Ctrl+Alt+h` |
-| Focus a neighboring pane | `Ctrl+Arrow` |
+| Focus a neighboring pane | `Alt+Arrow` (passed to the shell when there is no pane that way) |
 | Resize the focused pane | `Ctrl+Alt+Shift+Arrow` |
 | New window | `Ctrl+Alt+c` |
 | Previous/next window | `Ctrl+Alt+[` / `Ctrl+Alt+]`, `Ctrl+Alt+Left` / `Ctrl+Alt+Right` |
@@ -174,9 +175,11 @@ retain at least one tiled pane.
 
 ### Automatic layouts
 
-**Next pane layout** cycles through grid, tall, fat, horizontal, vertical, and stack. Applying a layout
-makes it the policy for that window, so later splits and closes re-tile the survivors. Manually
-resizing or moving panes returns the window to manual control.
+**Next pane layout** cycles through grid, dwindle, tall, fat, horizontal, vertical, and stack. Applying
+a layout makes it the policy for that window, so later splits and closes re-tile the survivors.
+Manually resizing or moving panes returns the window to manual control — except under dwindle, which
+tiles the way Hyprland does: a new pane halves the focused one along its longer side, a dragged pane
+takes the half of the pane you drop it on, and the dividers you drag are kept.
 
 ## Use sessions
 

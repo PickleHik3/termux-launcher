@@ -578,20 +578,42 @@ public final class TerminalClockWidget extends View {
     }
 
     private boolean isInsidePaintedContent(float x, float y) {
-        if (mSnapshot == null) return true;
+        float[] painted = paintedXRangePx();
+        return x >= painted[0] && x <= painted[1];
+    }
+
+    /**
+     * The trailing edge of the painted clock, in view pixels.
+     *
+     * <p>In FULL form the view fills the whole slot and paints inside it at its own alignment, so
+     * the view's right edge is nowhere near the clock's. Anything placed beside the clock — the
+     * surface editor's face picker — has to ask for this rather than measure the view.
+     */
+    public float paintedRightPx() {
+        return paintedXRangePx()[1];
+    }
+
+    /** The leading edge of the painted clock, in view pixels; see {@link #paintedRightPx()}. */
+    public float paintedLeftPx() {
+        return paintedXRangePx()[0];
+    }
+
+    /** Where the clock actually paints across the view, as {left, right} in view pixels. */
+    private float[] paintedXRangePx() {
+        if (mSnapshot == null) return new float[] {0f, getWidth()};
         switch (mForm) {
             case MONO_CHIP:
-                return x >= 0f && x <= contentWidth();
+                return new float[] {0f, contentWidth()};
             case COMPACT: {
                 float scale = Math.min(1f, getHeight() / dp(compactColumnHeightDp()));
-                return x >= 0f && x <= contentWidth() * scale;
+                return new float[] {0f, contentWidth() * scale};
             }
             default: {
                 float columnDp = fullBandHeightDp() + fullDateGapDp() + fullDateBlockDp();
                 float scale = Math.min(1f, getHeight() / dp(columnDp));
                 float right = getWidth() / Math.max(.01f, scale);
                 float left = alignmentDx(right, contentWidth()) * scale;
-                return x >= left && x <= left + contentWidth() * scale;
+                return new float[] {left, left + contentWidth() * scale};
             }
         }
     }

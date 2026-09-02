@@ -87,6 +87,28 @@ public class Keyboard2View extends View
   private final SparseArray<TouchFx> _touchFx = new SparseArray<TouchFx>();
   private final ArrayList<TouchFx> _releasedTouchFx = new ArrayList<TouchFx>();
 
+  /**
+   * Host hook that may move a press onto a neighbouring key before it is
+   * committed, and that is told where every tap landed. Local addition, see
+   * UPSTREAM.md. Consulted only for real touches, never for the colour-editor
+   * paint path.
+   */
+  public interface TapResolver
+  {
+    /**
+     * Returns the index in [geometry] of the key the press should resolve to.
+     * Returning [rawIndex] or an invalid index leaves the press alone.
+     */
+    int resolveTap(TapGeometry geometry, int rawIndex, float x, float y);
+
+    /** A press has been released. [swiped] is true when the finger travelled. */
+    void observeTap(TapGeometry geometry, int rawIndex, float x, float y,
+        boolean swiped);
+  }
+
+  private TapResolver _tapResolver;
+  private TapGeometry _tapGeometry;
+
   private static final long PRESS_RAMP_MS = 60L;
   private static final long RELEASE_FADE_MS = 150L;
   private static final long LAUNCH_WAVE_TRAVEL_MS = 250L;
@@ -511,6 +533,14 @@ public class Keyboard2View extends View
     _lastPaintedKeyId = null;
   }
 
+  /** Installs or removes (null) the host's tap resolver. */
+  public void setTapResolver(TapResolver resolver)
+  {
+    requireMainThread();
+    _tapResolver = resolver;
+    _tapGeometry = null;
+  }
+
   /** Opaque/translucent color used by an activity-owned navigation-inset continuation surface. */
   public int getKeyboardBackgroundColor()
   {
@@ -653,6 +683,7 @@ public class Keyboard2View extends View
   {
     requireMainThread();
     _keyboard = Objects.requireNonNull(kw, "keyboard");
+    _tapGeometry = null;
     _shift_key = _keyboard.findKeyWithValue(KeyValue.SHIFT);
     _compose_key = _keyboard.findKeyWithValue(KeyValue.COMPOSE);
     resetInputStateInternal(true);
@@ -861,6 +892,7 @@ public class Keyboard2View extends View
       case MotionEvent.ACTION_UP:
       case MotionEvent.ACTION_POINTER_UP:
         p = event.getActionIndex();
+        observeTap(_touchFx.get(event.getPointerId(p)));
         finishTouchFx(event.getPointerId(p));
         _pointers.onTouchUp(event.getPointerId(p));
         _trails.remove(event.getPointerId(p));
@@ -874,10 +906,11 @@ public class Keyboard2View extends View
         float ty = event.getY(p);
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
-        KeyboardData.Key key = getKeyAtPosition(tx, ty);
+        KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
+        KeyboardData.Key key = resolveTap(rawKey, tx, ty);
         if (key != null)
         {
-          startTouchFx(event.getPointerId(p), key, tx, ty);
+          startTouchFx(event.getPointerId(p), key, rawKey, tx, ty);
           _pointers.onTouchDown(tx, ty, event.getPointerId(p), key);
           if (_config.swipeTrailEnabled)
             _trails.put(event.getPointerId(p), new Trail(tx, ty));
@@ -906,12 +939,59 @@ public class Keyboard2View extends View
     return (true);
   }
 
-  private void startTouchFx(int pointerId, KeyboardData.Key key, float x, float y)
+  private void startTouchFx(int pointerId, KeyboardData.Key key,
+      KeyboardData.Key rawKey, float x, float y)
   {
     TouchFx previous = _touchFx.get(pointerId);
     if (previous != null)
       releaseTouchFx(previous, SystemClock.uptimeMillis());
-    _touchFx.put(pointerId, new TouchFx(key, x, y, SystemClock.uptimeMillis()));
+    _touchFx.put(pointerId, new TouchFx(key, rawKey, x, y, SystemClock.uptimeMillis()));
+  }
+
+  /** Lazily rebuilds the tap geometry for the current layout and measurement. */
+  private TapGeometry tapGeometry()
+  {
+    if (_tapGeometry == null && _keyboard != null && _tc != null && _keyWidth > 0f)
+      _tapGeometry = TapGeometry.of(_keyboard, _tc.row_height, _keyWidth);
+    return _tapGeometry;
+  }
+
+  private float tapUnitsX(float px) { return (px - _marginLeft) / _keyWidth; }
+
+  private float tapUnitsY(float py)
+  {
+    return (py - getPaddingTop() - _config.marginTopPx) / _keyWidth;
+  }
+
+  /** The key a real press resolves to: [rawKey] unless the resolver moves it. */
+  private KeyboardData.Key resolveTap(KeyboardData.Key rawKey, float tx, float ty)
+  {
+    if (rawKey == null || _tapResolver == null)
+      return rawKey;
+    TapGeometry geometry = tapGeometry();
+    if (geometry == null)
+      return rawKey;
+    int rawIndex = geometry.indexOf(rawKey);
+    if (rawIndex < 0)
+      return rawKey;
+    int index = _tapResolver.resolveTap(geometry, rawIndex, tapUnitsX(tx), tapUnitsY(ty));
+    if (index < 0 || index >= geometry.keyCount)
+      return rawKey;
+    return geometry.keys[index];
+  }
+
+  private void observeTap(TouchFx fx)
+  {
+    if (fx == null || fx.rawKey == null || _tapResolver == null)
+      return;
+    TapGeometry geometry = tapGeometry();
+    if (geometry == null)
+      return;
+    int rawIndex = geometry.indexOf(fx.rawKey);
+    if (rawIndex < 0)
+      return;
+    _tapResolver.observeTap(geometry, rawIndex, tapUnitsX(fx.downX),
+        tapUnitsY(fx.downY), fx.swiped);
   }
 
   private void updateTouchFx(int pointerId, float x, float y)
@@ -1104,6 +1184,7 @@ public class Keyboard2View extends View
 
     _tc = new Theme.Computed(_theme, _config, _keyWidth, _keyboard, rowHeight,
         _keyMarginScale, _keyCornerRadiusOverridePx, _keyOpacity);
+    _tapGeometry = null;
     // Compute the size of labels based on the width or the height of keys. The
     // margin around keys is taken into account. Keys normal aspect ratio is
     // assumed to be 3/2 for a 10 columns layout. It's generally more, the
@@ -1596,6 +1677,8 @@ public class Keyboard2View extends View
   private static final class TouchFx
   {
     final KeyboardData.Key key;
+    /** The key the static grid resolved, before any tap correction. */
+    final KeyboardData.Key rawKey;
     final float downX;
     final float downY;
     final long downAt;
@@ -1607,9 +1690,10 @@ public class Keyboard2View extends View
     double angularTravel;
     long releasedAt = -1L;
 
-    TouchFx(KeyboardData.Key key, float x, float y, long downAt)
+    TouchFx(KeyboardData.Key key, KeyboardData.Key rawKey, float x, float y, long downAt)
     {
       this.key = key;
+      this.rawKey = rawKey;
       downX = x;
       downY = y;
       this.x = x;

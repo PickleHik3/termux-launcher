@@ -10,11 +10,13 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewOutlineProvider;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
@@ -24,6 +26,9 @@ import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.data.LauncherCategoryPendingApps;
+import com.termux.app.launcher.data.LauncherCategorySortState;
+import com.termux.app.notice.AppNotice;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -111,6 +116,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         /** The search asked for a system IME while the terminal keeps focus. */
         void requestSearchKeyboard();
+        /** Dismiss the system IME: the drawer is taking the screen and must not open under it. */
+        void hideSystemKeyboard();
+        /** The drawer is gone; an IME it dismissed on the way in comes back. */
+        void restoreSystemKeyboard();
+
+        /**
+         * The Android-keyboard search: the drawer's own text field takes focus from the terminal and
+         * the system keyboard is shown for it. The built-in keyboard, if enabled, yields without
+         * moving — the plane covers it and the accessory stack must not relayout under an open plane.
+         */
+        void beginTextFieldSearch(@NonNull EditText field);
+
+        /** The search is over: focus returns to the terminal and the keyboard the field showed goes. */
+        void endTextFieldSearch(@NonNull EditText field);
+
+        /** The app-drawer settings page, where categorization is run. */
+        void openAppDrawerSettings();
     }
 
     /**
@@ -131,6 +153,22 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private static final float STIFFNESS = 420f;
     private static final float DAMPING = 41f;
+    /**
+     * Closing runs on a stiffer spring: the same 420/41 that makes opening land softly reads as a
+     * crawl on the way out — a critically damped spring spends its last hundred milliseconds
+     * creeping through the final few percent, and a dismissal should feel decisive.
+     */
+    /**
+     * Closing is not a spring at all: a spring's exponential tail is a crawl through the last few
+     * percent however it is tuned, and a dismissal should read as one decisive motion. The plane
+     * exits on a fixed-length accelerating curve — it leaves at the speed of the release and speeds
+     * up into the dock, ending dead on zero with no tail — scaled by how far it has to travel so a
+     * barely-open plane doesn't take the full ride.
+     */
+    private static final long CLOSE_ANIM_FULL_TRAVEL_MS = 220L;
+    private static final long CLOSE_ANIM_MIN_MS = 100L;
+    private static final android.view.animation.Interpolator CLOSE_ANIM_CURVE =
+        new android.view.animation.PathInterpolator(0.4f, 0f, 1f, 1f);
 
     private static final float MIN_TRAVEL_DP = 120f;
     private static final float MAX_TRAVEL_DP = 260f;
@@ -144,11 +182,22 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private static final float ROW_FADE_END = 0.26f;
 
     /** Below this the closing spring is close enough to shut to tear the plane down. */
-    private static final float CLOSED_EPSILON = 0.002f;
+    /**
+     * Where a closing plane is done: ~0.6% of the travel is under a dozen pixels, already inside
+     * the dock glass, and cutting there is what makes the close end decisively — the spring tail
+     * below this line is pure crawl.
+     */
+    private static final float CLOSED_EPSILON = 0.006f;
+    /** Breathing room between the plane's bottom edge and a system keyboard's top. */
+    private static final float IME_GAP_DP = 8f;
 
     private final Host mHost;
     private final float mDensity;
     private final Spring mProgress = new Spring(0f, STIFFNESS, DAMPING);
+    /** True while the plane is exiting on the timed curve instead of the spring. */
+    private boolean mCloseTimeAnim;
+    private long mCloseAnimStartNanos;
+    private float mCloseAnimStartValue;
     /**
      * The search keyboard's reveal, {@code k ∈ [0,1]}. A second, independent transition: the drawer
      * is already open and {@code p} pinned at 1 when a keystroke brings the keyboard up
@@ -159,6 +208,19 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private final Spring mReveal = new Spring(0f, STIFFNESS, DAMPING);
     private final AppDrawerSearchController mSearch = new AppDrawerSearchController();
+    private final AppDrawerCategoryNudgePolicy mCategoryNudge = new AppDrawerCategoryNudgePolicy();
+    /** Read per open: the Android-keyboard search, through the content's own text field. */
+    private boolean mTextFieldSearch;
+    /** True from the host being asked to focus the field until it is asked to let it go. */
+    private boolean mTextFieldSearchBegun;
+    /** A field focus owed to the next frame the content is visible on; a hidden view cannot take it. */
+    private boolean mTextFieldFocusPending;
+    /** The system keyboard's top edge in host coordinates while it is up over the plane; 0 when not. */
+    private float mImePinTopPx;
+    /** The rectangle the content is currently laid out in; the open rect less any keyboard. */
+    @Nullable private Frame mContentRect;
+    private boolean mHostClipped;
+    private final Rect mHostClipScratch = new Rect();
     @NonNull private AppDrawerLayoutConfig mLayoutConfig = AppDrawerLayoutConfig.defaults();
 
     private final int[] mHostLocation = new int[2];
@@ -284,7 +346,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // drawer; anything between is a plane caught mid-settle, which continues from there rather
         // than snapping to an end.
         mGrabProgress = mProgress.value;
+        mCloseTimeAnim = false;
         mEngaged = true;
+        // With the embedded keyboard the IME can never be up here; with the system keyboard it
+        // stayed open across the drawer, covering the grid until dismissed by hand. A keyboard the
+        // drawer's own text field put up is the search's, and is put away with the search instead.
+        if (!closing || !mTextFieldSearchBegun) mHost.hideSystemKeyboard();
         applyFrame(mProgress.value);
         // The rope needs frames for the whole drag, not just for the release: its anchor is a
         // function of p, so the chain has to be integrated while the finger is moving or the letters
@@ -374,7 +441,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // in-app keyboard's single interceptor slot back, or a keystroke during the close would be
         // typed into a drawer that is on its way out.
         applyContentOpenState();
+        if (open) {
+            requestSearchKeyboardOnOpenIfEnabled();
+            nudgeCategorizationIfPending();
+        } else {
+            endTextFieldSearchIfBegun();
+        }
         retargetReveal();
+        mCloseTimeAnim = !open;
+        mCloseAnimStartNanos = 0L;
         mProgress.target = open ? 1f : 0f;
         // Progress runs with the finger when opening and against it when closing, so the injected
         // velocity is negated in the closing direction. Feeding the raw sign there makes a hard
@@ -539,7 +614,26 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mLastFrameTimeNanos = frameTimeNanos;
         dt = Spring.clampDelta(dt);
         boolean reducedMotion = isReducedMotion();
-        boolean moving = mProgress.tick(reducedMotion, dt);
+        boolean moving;
+        if (mCloseTimeAnim && !mDragging) {
+            if (mCloseAnimStartNanos == 0L) {
+                mCloseAnimStartNanos = frameTimeNanos;
+                mCloseAnimStartValue = Math.max(0f, mProgress.value);
+            }
+            long durationMs = Math.max(CLOSE_ANIM_MIN_MS,
+                (long) (CLOSE_ANIM_FULL_TRAVEL_MS * mCloseAnimStartValue));
+            float t = Math.min(1f, (frameTimeNanos - mCloseAnimStartNanos) / (durationMs * 1e6f));
+            if (reducedMotion) t = 1f;
+            mProgress.value = mCloseAnimStartValue * (1f - CLOSE_ANIM_CURVE.getInterpolation(t));
+            mProgress.vel = 0f;
+            moving = t < 1f;
+            if (!moving) {
+                mCloseTimeAnim = false;
+                mProgress.value = 0f;
+            }
+        } else {
+            moving = mProgress.tick(reducedMotion, dt);
+        }
         // The reveal rides this loop rather than one of its own: the plane's bottom edge and the
         // keyboard's top are the same edge to the eye, and two Choreographer callbacks would show
         // them a frame apart.
@@ -550,6 +644,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean fxMoving = content != null
             && content.advanceDrawerFx(mProgress.value, dt, reducedMotion);
         applyFrame(mProgress.value);
+        payPendingTextFieldFocus();
         // The !mDragging guard is the single most dangerous line in this slice. Before B-3 the loop
         // never ran during a drag, so this branch could not be reached with a finger down. The rope
         // needs frames *during* the opening drag, where mOpen is false and p starts at zero — which
@@ -562,7 +657,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             onClosed();
             return;
         }
-        if (moving || revealMoving || fxMoving) kick();
+        if (moving || revealMoving || fxMoving || mTextFieldFocusPending) kick();
         // The live blur ghosts the terminal through the glass at the price of a full software
         // re-draw of the decor hierarchy on every frame the window produces — including every
         // frame of a grid scroll. Once the plane has settled fully open, what it blurs is static
@@ -577,8 +672,116 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /**
+     * The keyboard-on-open preference: a committed open asks for the keyboard itself, so the drawer
+     * arrives ready to type instead of waiting for the pill to be tapped.
+     *
+     * <p>Read here rather than cached with the layout config: the switch takes effect on the next
+     * open with no drawer rebuild, and this runs once per open, not per frame.
+     */
+    private void requestSearchKeyboardOnOpenIfEnabled() {
+        AppDrawerContentView content = mContent;
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        if (content == null || preferences == null
+            || !preferences.isAppLauncherDrawerSearchOnOpenEnabled()) {
+            return;
+        }
+        content.requestSearchKeyboard();
+    }
+
+    /**
+     * The categories layout's nudge: apps installed since the last categorization run land in
+     * "Other" until it is run again, and past a handful of them the drawer says so once, on the
+     * open. Silent for every other layout, for a user who has never run it, and until the count
+     * changes again.
+     */
+    private void nudgeCategorizationIfPending() {
+        if (mLayoutConfig.viewType != AppDrawerViewType.CATEGORIES) return;
+        Context context = mHost.context();
+        if (!new LauncherCategorySortState(context).hasRun()) {
+            mCategoryNudge.reset();
+            return;
+        }
+        int pending = LauncherCategoryPendingApps.count(context,
+            LauncherAppDataProvider.getInstance(context).getAllApps());
+        if (!mCategoryNudge.onDrawerOpened(pending)) return;
+        AppNotice.shell(context,
+            context.getResources().getQuantityString(R.plurals.app_drawer_category_pending_notice,
+                pending, pending),
+            context.getString(R.string.app_drawer_category_pending_notice_hint), null, false,
+            mHost::openAppDrawerSettings);
+    }
+
+    /**
+     * The content asked for a keyboard — a pill tap, or the keyboard-on-open preference. With the
+     * Android-keyboard search on, that is the drawer's own text field and the system keyboard;
+     * otherwise it is the terminal-owned request the host has always answered.
+     */
+    @VisibleForTesting
+    void onSearchKeyboardRequested() {
+        AppDrawerContentView content = mContent;
+        if (mTextFieldSearch && content != null) {
+            mTextFieldSearchBegun = true;
+            // A committed fling can settle with the content still faded out, and a view that is not
+            // shown refuses focus. The frame loop pays the focus the first frame it can.
+            if (content.isShown()) {
+                mHost.beginTextFieldSearch(content.searchInput());
+            } else {
+                mTextFieldFocusPending = true;
+                kick();
+            }
+            return;
+        }
+        mHost.requestSearchKeyboard();
+    }
+
+    private void payPendingTextFieldFocus() {
+        if (!mTextFieldFocusPending || !mOpen) return;
+        AppDrawerContentView content = mContent;
+        if (content == null || !content.isShown()) return;
+        mTextFieldFocusPending = false;
+        mHost.beginTextFieldSearch(content.searchInput());
+    }
+
+    private void endTextFieldSearchIfBegun() {
+        mTextFieldFocusPending = false;
+        if (!mTextFieldSearchBegun) return;
+        mTextFieldSearchBegun = false;
+        AppDrawerContentView content = mContent;
+        if (content != null) mHost.endTextFieldSearch(content.searchInput());
+    }
+
+    /**
+     * The system keyboard's inset, from the activity's window insets, whenever it changes.
+     *
+     * <p>The keyboard is a window of its own that the plane cannot pin to a band, so this is how the
+     * plane learns where its top edge is: the reveal then shortens the plane to sit above it — and
+     * lays the grid out for the space that is left — exactly as it does for the built-in keyboard.
+     *
+     * @param imeBottomPx the keyboard's height above the window's bottom edge; 0 when hidden
+     */
+    public void onImeInsetChanged(int imeBottomPx) {
+        float pin = resolveImePinTopPx(imeBottomPx);
+        if (pin == mImePinTopPx) return;
+        mImePinTopPx = pin;
+        if (!mEngaged) return;
+        retargetReveal();
+        applyContentInsets();
+        applyFrame(mProgress.value);
+    }
+
+    private float resolveImePinTopPx(int imeBottomPx) {
+        FrameLayout host = mHostLayout;
+        if (host == null || imeBottomPx <= 0 || host.getHeight() <= 0) return 0f;
+        View root = host.getRootView();
+        int windowHeight = root == null || root.getHeight() <= 0 ? host.getHeight() : root.getHeight();
+        host.getLocationInWindow(mViewLocation);
+        float pin = windowHeight - imeBottomPx - mViewLocation[1];
+        return pin < host.getHeight() ? Math.max(0f, pin) : 0f;
+    }
+
+    /**
      * Retargets the search-keyboard reveal. Driven by the content — a first keystroke, a query
-     * emptied, a pill tap — never polled.
+     * emptied, a pill tap — and by the system keyboard's inset; never polled.
      */
     private void retargetReveal() {
         AppDrawerContentView content = mContent;
@@ -586,7 +789,37 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             ? AppDrawerTransitionGeometry.clamp01(content.getRevealFraction()) : 0f;
         if (mReveal.target == target) return;
         mReveal.target = target;
+        applyContentInsets();
         kick();
+    }
+
+    /**
+     * Lays the content out for the space the keyboard leaves it. The plane's rectangle shortens with
+     * the reveal spring frame by frame, but the grid is re-laid once, at the decision: a grid that
+     * kept the full-height layout under a shortened plane would have its last rows under the
+     * keyboard, reachable by no amount of scrolling.
+     */
+    private void applyContentInsets() {
+        AppDrawerPlaneView plane = mPlane;
+        AppDrawerContentView content = mContent;
+        Frame rect = contentRect();
+        if (plane == null || content == null || rect == null || rect.equals(mContentRect)) return;
+        boolean heightOnly = mContentRect != null && mContentRect.left == rect.left
+            && mContentRect.right == rect.right && mContentRect.top == rect.top;
+        mContentRect = rect;
+        plane.setContentInsets(rect);
+        applyContentMetrics(content, rect, heightOnly);
+    }
+
+    @Nullable
+    private Frame contentRect() {
+        Frame openRect = mOpenRect;
+        if (openRect == null) return null;
+        if (mReveal.target <= 0f || !hasRevealableKeyboard()) return openRect;
+        float bottom = pinTopPx() - revealGapPx();
+        if (bottom >= openRect.bottom) return openRect;
+        return new Frame(openRect.left, openRect.top, openRect.right,
+            Math.max(openRect.top, bottom));
     }
 
     private boolean isReducedMotion() {
@@ -648,7 +881,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setCallbacks(this);
         content.setRevealListener(this::retargetReveal);
         content.setFrameRequestListener(this::requestFrames);
-        content.setSearchKeyboardRequestListener(mHost::requestSearchKeyboard);
+        content.setSearchKeyboardRequestListener(this::onSearchKeyboardRequested);
         // A drawer that is not open is not a surface: interactivity is turned on by prepareOverlay
         // and off again on close, and never follows p.
         content.setInteractive(false);
@@ -855,37 +1088,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (content == null || openRect == null) return;
         content.setDock(mHost.suggestionBar());
         plane.setContentInsets(openRect);
+        mContentRect = openRect;
         content.setSurfaceRadiusPx(mOpenRadiusPx);
-        AppDrawerLayoutConfig config = mLayoutConfig;
-        AppDrawerViewType viewType = config.viewType;
-        content.setViewType(viewType);
-        float labelHeightPx = resolveCellLabelHeightPx();
-        switch (viewType) {
-            case VERTICAL:
-                float columnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
-                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(
-                    openRect.width() - columnWidthPx, mDensity, labelHeightPx,
-                    config.verticalColumns, config.iconSizeDp));
-                break;
-            case HORIZONTAL:
-                content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(openRect.width(),
-                    content.horizontalPagerUsableHeight(openRect.height()), mDensity, labelHeightPx,
-                    config.horizontalColumns, config.horizontalRows, config.iconSizeDp));
-                break;
-            case CATEGORIES:
-                SuggestionBarView dock = mHost.suggestionBar();
-                int budget = dock == null ? 6 * 1024 * 1024
-                    : dock.getRenderedIconCacheBudgetBytes();
-                // Category search temporarily reuses the shipped vertical grid at full width. It
-                // gets AUTO geometry here and deliberately reads no vertical grid preference.
-                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(openRect.width(),
-                    mDensity, labelHeightPx, 0, config.iconSizeDp));
-                content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(openRect.width(),
-                    content.horizontalPagerUsableHeight(openRect.height()), mDensity,
-                    resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
-                    config.categoryColumns, config.iconSizeDp));
-                break;
-        }
+        // Which keyboard the search will ask for is decided here, once per open, so a switch flipped
+        // in Settings takes effect on the next pull and never mid-search.
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        mTextFieldSearch = preferences != null
+            && preferences.isAppLauncherDrawerSearchAndroidKeyboardEnabled();
+        mSearch.setTextFieldOwnsInput(mTextFieldSearch);
+        content.setTextFieldSearch(mTextFieldSearch);
+        content.setViewType(mLayoutConfig.viewType);
+        applyContentMetrics(content, openRect, false);
         content.bind(LauncherAppDataProvider.getInstance(mHost.context()), mSearch);
         // Visible, but not yet interactive: interactivity is settle()'s to grant, and it grants it
         // from mOpen alone. The plane's own alpha-driven visibility flip on the content host keeps
@@ -897,35 +1110,54 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** Reconfigures the existing content tree; never enters styling/accessory/activity paths. */
     private void applyLayoutConfig() {
         AppDrawerContentView content = mContent;
-        Frame openRect = mOpenRect;
-        if (content == null || openRect == null) return;
+        Frame rect = mContentRect != null ? mContentRect : mOpenRect;
+        if (content == null || rect == null) return;
         content.cancelTransientFolderState();
         content.setViewType(mLayoutConfig.viewType);
+        applyContentMetrics(content, rect, false);
+        content.rebindCurrentResults();
+    }
+
+    /**
+     * Columns, rows and cell sizes for the rectangle the content is laid out in.
+     *
+     * <p>Every one of these is re-resolved rather than cached: the column count is a function of the
+     * plane's width and the icon size of the density, so a rotation that reused the last open's
+     * metrics would lay a portrait grid out in landscape. {@code heightOnly} is the keyboard coming
+     * or going: the vertical grid's metrics are width-only and skip the rebind, the paged layouts
+     * re-chunk their rows for the height that is left.
+     */
+    private void applyContentMetrics(@NonNull AppDrawerContentView content, @NonNull Frame rect,
+                                     boolean heightOnly) {
         float labelHeightPx = resolveCellLabelHeightPx();
-        switch (mLayoutConfig.viewType) {
+        AppDrawerLayoutConfig config = mLayoutConfig;
+        switch (config.viewType) {
             case VERTICAL:
-                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(openRect.width()
+                if (heightOnly) return;
+                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width()
                     - AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity), mDensity, labelHeightPx,
-                    mLayoutConfig.verticalColumns, mLayoutConfig.iconSizeDp));
+                    config.verticalColumns, config.iconSizeDp));
                 break;
             case HORIZONTAL:
-                content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(openRect.width(),
-                    content.horizontalPagerUsableHeight(openRect.height()), mDensity, labelHeightPx,
-                    mLayoutConfig.horizontalColumns, mLayoutConfig.horizontalRows,
-                    mLayoutConfig.iconSizeDp));
+                content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(rect.width(),
+                    content.horizontalPagerUsableHeight(rect.height()), mDensity, labelHeightPx,
+                    config.horizontalColumns, config.horizontalRows, config.iconSizeDp));
+                if (heightOnly) content.rebindCurrentResults();
                 break;
             case CATEGORIES:
                 SuggestionBarView dock = mHost.suggestionBar();
                 int budget = dock == null ? 6 * 1024 * 1024 : dock.getRenderedIconCacheBudgetBytes();
-                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(openRect.width(), mDensity,
-                    labelHeightPx, 0, mLayoutConfig.iconSizeDp));
-                content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(openRect.width(),
-                    content.horizontalPagerUsableHeight(openRect.height()), mDensity,
+                // Category search temporarily reuses the shipped vertical grid at full width. It
+                // gets AUTO geometry here and deliberately reads no vertical grid preference.
+                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width(), mDensity,
+                    labelHeightPx, 0, config.iconSizeDp));
+                content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(rect.width(),
+                    content.horizontalPagerUsableHeight(rect.height()), mDensity,
                     resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
-                    mLayoutConfig.categoryColumns, mLayoutConfig.iconSizeDp));
+                    config.categoryColumns, config.iconSizeDp));
+                if (heightOnly) content.rebindCurrentResults();
                 break;
         }
-        content.rebindCurrentResults();
     }
 
     /**
@@ -985,7 +1217,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame openRect = resolveOpenRect();
         if (openRect == null || openRect.equals(mOpenRect)) return;
         mOpenRect = openRect;
-        if (mPlane != null) mPlane.setContentInsets(openRect);
+        applyContentInsets();
         applyFrame(mProgress.value);
     }
 
@@ -1035,9 +1267,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // whether a keyboard exists.
         float k = revealFraction();
         if (k > 0f) {
+            float pinTop = pinTopPx();
             frame = new Frame(frame.left, frame.top, frame.right,
-                AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom,
-                    capturedPinTopPx(), mCapturedGapPx, k));
+                AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom, pinTop,
+                    revealGapPx(), k));
+            // The scene dim is the host's background and the host covers the whole screen, keyboard
+            // included. Clipped to the edge the reveal is uncovering, so the keyboard comes back at
+            // its own brightness rather than under the drawer's shade.
+            mHostClipScratch.set(0, 0, mHostLayout.getWidth(), Math.round(
+                AppDrawerTransitionGeometry.resolveRevealClipBottom(mHostLayout.getHeight(), pinTop, k)));
+            mHostLayout.setClipBounds(mHostClipScratch);
+            mHostClipped = true;
+        } else if (mHostClipped) {
+            mHostLayout.setClipBounds(null);
+            mHostClipped = false;
         }
         mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
             mOpenRadiusPx, p);
@@ -1067,7 +1310,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyAlpha(mAzFxOverlay, rowAlpha);
         applyAlpha(mAzLabelOverlay, rowAlpha);
 
-        applyAccessoryBands(p, frame.bottom, k);
+        // The built-in keyboard's bands come back with the reveal only when they are what is being
+        // revealed; under a system keyboard they stay where the plane pushed them.
+        applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f : k);
         applyStatusBand(p);
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
@@ -1087,8 +1332,18 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     private boolean hasRevealableKeyboard() {
-        return mHasBands && mExtraKeysBand != null && mKeyboardBand != null
+        if (mImePinTopPx > 0f) return true;
+        return !mTextFieldSearch && mHasBands && mExtraKeysBand != null && mKeyboardBand != null
             && mKeyboardBand.heightPx > 0f;
+    }
+
+    /** The edge the plane shortens to: the system keyboard's top when it is up, else the band's. */
+    private float pinTopPx() {
+        return mImePinTopPx > 0f ? mImePinTopPx : capturedPinTopPx();
+    }
+
+    private float revealGapPx() {
+        return mImePinTopPx > 0f ? dp(IME_GAP_DP) : mCapturedGapPx;
     }
 
     /** The captured keyboard top; the plane covers the terminal extra-keys band above this edge. */
@@ -1181,6 +1436,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mSearch.reset();
             }
             mReveal.reset(0f);
+            endTextFieldSearchIfBegun();
+            mImePinTopPx = 0f;
+            mContentRect = null;
+            if (mHostLayout != null && mHostClipped) {
+                mHostLayout.setClipBounds(null);
+                mHostClipped = false;
+            }
             removeHostLayoutListener();
             applyAlpha(mAccessorySurface, 1f);
             applyTranslationY(mAppsPager, 0f);
@@ -1212,6 +1474,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         } finally {
             mEngaged = false;
             mHost.flushPendingAccessoryGeometry();
+            mHost.restoreSystemKeyboard();
         }
     }
 

@@ -4,5 +4,7 @@
     <!-- Oversized radius clamps to half the view's short edge, so every pill gets true capsule
          arc ends at whatever size code gives it. -->
     <corners android:radius="999dp" />
-    <solid android:color="?attr/termuxColorOutlineVariant" />
+    <!-- The editor's grab points read as chrome, not decoration: outlineVariant left them nearly
+         invisible over glass, so they take the brighter on-surface variant role instead. -->
+    <solid android:color="?attr/termuxColorOnSurfaceVariant" />
 </shape>

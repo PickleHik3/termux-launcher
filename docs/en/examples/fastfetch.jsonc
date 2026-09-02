@@ -97,7 +97,7 @@
       "type": "command",
       "key": "{#dim_light_cyan}󰋊{#}",
       "outputColor": "light_white",
-      "text": "df -h /data/data/com.termux/files/home | awk 'NR==2 {print $3 \" / \" $2 \" \\u00b7 \" $5}'",
+      "text": "df -h $HOME | awk 'NR==2 {print $3 \" / \" $2 \" \\u00b7 \" $5}'",
       "format": "{}"
     },
     {

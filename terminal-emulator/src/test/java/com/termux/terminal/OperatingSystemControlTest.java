@@ -9,6 +9,70 @@ import java.util.Random;
 /** "ESC ]" is the Operating System Command. */
 public class OperatingSystemControlTest extends TerminalTestCase {
 
+	/** OSC 9;4 is the ConEmu/Windows Terminal progress report: state, then an optional percentage. */
+	public void testProgressReport() {
+		withTerminalSized(10, 10);
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NONE, mTerminal.getProgressState());
+
+		enterString("\033]9;4;1;42\007");
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NORMAL, mTerminal.getProgressState());
+		assertEquals(42, mTerminal.getProgressValue());
+
+		// A malformed or missing percentage keeps the last one.
+		enterString("\033]9;4;2\007");
+		assertEquals(TerminalEmulator.PROGRESS_STATE_ERROR, mTerminal.getProgressState());
+		assertEquals(42, mTerminal.getProgressValue());
+		enterString("\033]9;4;4;abc\033\\");
+		assertEquals(TerminalEmulator.PROGRESS_STATE_PAUSED, mTerminal.getProgressState());
+		assertEquals(42, mTerminal.getProgressValue());
+
+		// Out-of-range percentages are clamped rather than trusted.
+		enterString("\033]9;4;1;140\007");
+		assertEquals(100, mTerminal.getProgressValue());
+
+		enterString("\033]9;4;3\007");
+		assertEquals(TerminalEmulator.PROGRESS_STATE_INDETERMINATE, mTerminal.getProgressState());
+
+		// An unknown state is a newer spec, not a request to clear.
+		enterString("\033]9;4;7;10\007");
+		assertEquals(TerminalEmulator.PROGRESS_STATE_INDETERMINATE, mTerminal.getProgressState());
+
+		enterString("\033]9;4;0\007");
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NONE, mTerminal.getProgressState());
+		assertEquals(0, mTerminal.getProgressValue());
+
+		// The other OSC 9 forms (a desktop notification) are not progress and leave it alone.
+		enterString("\033]9;4;1;10\007");
+		enterString("\033]9;hello\007");
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NORMAL, mTerminal.getProgressState());
+		assertEquals(10, mTerminal.getProgressValue());
+
+		// A full reset clears the report along with everything else.
+		mTerminal.reset();
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NONE, mTerminal.getProgressState());
+	}
+
+	/** OSC 9;text (iTerm2) and OSC 777;notify;title;body (rxvt) both reach the client as a notification. */
+	public void testNotifications() {
+		withTerminalSized(10, 10);
+		enterString("\033]9;Turn complete\007");
+		assertEquals(1, mOutput.notifications.size());
+		assertEquals(null, mOutput.notifications.get(0)[0]);
+		assertEquals("Turn complete", mOutput.notifications.get(0)[1]);
+
+		enterString("\033]777;notify;codex;Approval needed\033\\");
+		assertEquals(2, mOutput.notifications.size());
+		assertEquals("codex", mOutput.notifications.get(1)[0]);
+		assertEquals("Approval needed", mOutput.notifications.get(1)[1]);
+
+		// A progress report is not a notification, and an empty message is nothing to show.
+		enterString("\033]9;4;1;50\007");
+		enterString("\033]9;\007");
+		enterString("\033]777;other;x\007");
+		assertEquals(2, mOutput.notifications.size());
+		assertEquals(TerminalEmulator.PROGRESS_STATE_NORMAL, mTerminal.getProgressState());
+	}
+
 	public void testSetTitle() throws Exception {
 		List<ChangedTitle> expectedTitleChanges = new ArrayList<>();
 

@@ -11,8 +11,9 @@ so `fonts`, `ligatures`, or `Shizuku` can find the containing section.
 
 Use this section for visible surfaces and colors:
 
-- **Surface editor:** tune the dock, keyboard, status panel, terminal, and sessions while looking at
-  the real home screen.
+- **Surface editor:** tune the dock, keyboard, status panel, and terminal while looking at the real
+  home screen. Tap the floating palette to style every surface at once, or tap a surface to style
+  it on its own.
 - **Terminal fonts:** install one of fourteen curated multi-face families with pinned SHA-256
   verification and visible license information, enable Nerd Font icons, choose ligature behavior,
   and adjust weight where supported.
@@ -79,6 +80,14 @@ Use this section for terminal geometry and the top row:
 - **Split-pane controls:** enable native windows, panes, and their tmux-style shortcuts. Turning this
   off returns to single-pane compatibility behavior and closes secondary panes, so finish their work
   first.
+- **Automatic tiling:** new windows start in the `dwindle` layout — every new pane halves the focused
+  one along its longer side, a dragged pane takes the half you drop it on. Off by default; any window
+  can still pick a layout with `Ctrl+Alt+L`.
+- **Focused pane grows:** the pane you tap (or focus with `Alt+Arrow`, or an agent focuses) takes
+  most of the room and the others slide aside, focus.nvim-style. Tap between an agent's pane and the
+  pane it drives to switch which one is big. Turning it off puts every divider back to 1:1.
+- **Let scripts open panes:** whether `launcherctl pane …` and the `/v1/panes` routes of the local
+  API may open and drive panes. On by default; off answers those routes with 403.
 - **Clock style** and **Use 12-hour time**.
 - **CPU usage**, **Memory usage**, and **Weather** status cards.
 - **Media and pinned notifications** and their essential notification rules.
@@ -105,9 +114,19 @@ Open-Meteo attribution.
 - **On-screen keyboard:** built-in terminal keyboard, Android keyboard, or none.
 - **Hide the on-screen keyboard:** hide it while a physical keyboard is connected.
 - **Customize keyboard appearance:** live size, spacing, radius, and color tuning.
+- **Space under the keys:** lift the bottom key row away from the edge of the screen. The surface
+  editor sets the same space by dragging the pill under the last key row.
 - **Theme**, **Keyboard colors**, and **Typeface**.
+- **Edit extra keys:** the terminal key row, previewed as it will look. Add common keys
+  such as CTRL with one tap, search for any other key or launcher action, drag keys to
+  reorder them, give a key a swipe-up action and a label, and start from presets including
+  the classic Termux row. Page two of the row is edited on the same screen.
 - **Extra keys:** choose editing and navigation keys shown on the built-in layout.
 - **Custom layout:** load `~/.termux/keyboard/layout.xml`.
+- **Learn where you tap:** off by default. The keyboard learns where your taps land on each key
+  and nudges presses near a boundary toward the key you usually mean. Only letters, digits and
+  punctuation are ever moved; Enter, Backspace, Ctrl and the other action keys are not. **Forget
+  learned taps** clears what it has learned. It stores per-key averages only, never what you typed.
 - **Layout documentation** and **Supported key values**.
 - **Haptic feedback** and **Keypress sound**.
 
@@ -117,6 +136,12 @@ Keyboard height is remembered separately for portrait and landscape.
 
 - **Customize dock appearance:** shared surface shape and live dock tuning.
 - **Show pinned apps row** and **Edit pinned apps**.
+- **App drawer:** swipe down on the pinned row to open it; choose the drawer layout. **Open the
+  keyboard with the drawer** brings the keyboard up as the drawer opens; **Search with the Android
+  keyboard** searches through your Android keyboard, with its suggestions and swipe typing. With the
+  categories layout, **Sort apps into categories** and **Re-run categorization** appear here too; the
+  re-run row counts the apps installed since the last run, and the drawer mentions them once when
+  more than five are waiting.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

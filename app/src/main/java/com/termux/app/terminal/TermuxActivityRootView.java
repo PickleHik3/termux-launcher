@@ -191,6 +191,23 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         }
 
         // Get the position Rects of the bottom space view and the main window holding it
+        // Prefer the insets API when it reports the keyboard: the legacy visible-display-frame
+        // below is fed by the IME's self-reported legacy content inset, which Gboard places ~17px
+        // above where the keyboard actually begins (a visible gap over the extra-keys row), and
+        // which some OEM builds misreport by the whole keyboard height (the terminal collapses to
+        // nothing, issue #21). The inset is the compositor's own answer, so the row lands flush.
+        Integer insetsTarget = imeInsetsMarginTarget(bottomSpaceView, params.bottomMargin);
+        if (insetsTarget != null) {
+            if (root_view_logging_enabled)
+                Logger.logVerbose(LOG_TAG, "IME insets margin target " + insetsTarget
+                    + ", bottom " + params.bottomMargin);
+            if (insetsTarget != params.bottomMargin) {
+                commitBottomMargin(params, insetsTarget);
+            }
+            lastMarginBottom = insetsTarget;
+            return;
+        }
+
         Rect[] windowAndViewRects = ViewUtils.getWindowAndViewRects(bottomSpaceView, mStatusBarHeight);
         if (windowAndViewRects == null)
             return;
@@ -331,6 +348,35 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
                     Logger.logVerbose(LOG_TAG, "Bottom margin already equals " + pxHidden);
             }
         }
+    }
+
+    /**
+     * The bottom margin that puts {@code bottomSpaceView} exactly on the keyboard's top edge,
+     * computed from the window insets, or null when they cannot answer — no insets, no laid-out
+     * views, or an IME inset of zero (which is also what a window the system already resized for
+     * the keyboard reports, since insets measure the keyboard's overlap with the window; margin
+     * compensation on top of a resize would double it). Stable by construction: the result is
+     * independent of the margin currently applied, so layout converges in one commit.
+     */
+    @Nullable
+    private Integer imeInsetsMarginTarget(@NonNull View bottomSpaceView, int currentBottomMargin) {
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
+        if (insets == null) return null;
+        int imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+        if (imeBottom <= 0) return null;
+        View decor = getRootView();
+        if (decor == null || decor.getHeight() <= 0) return null;
+        int[] decorLocation = new int[2];
+        int[] viewLocation = new int[2];
+        decor.getLocationOnScreen(decorLocation);
+        bottomSpaceView.getLocationOnScreen(viewLocation);
+        int imeTopOnScreen = decorLocation[1] + decor.getHeight() - imeBottom;
+        int overlap = (viewLocation[1] + bottomSpaceView.getHeight()) - imeTopOnScreen;
+        int target = currentBottomMargin + overlap;
+        if (target < 0 || target > imeBottom) target = Math.max(0, Math.min(target, imeBottom));
+        if (Math.abs(target - currentBottomMargin) <= BOTTOM_MARGIN_NOISE_PX)
+            target = currentBottomMargin;
+        return target;
     }
 
     private boolean isImeVisible() {

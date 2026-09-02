@@ -5,14 +5,18 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
-import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.os.SystemClock;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.ReplacementSpan;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -36,7 +40,7 @@ import androidx.core.widget.ImageViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
-import com.termux.app.statusbar.ShellActivityPulse;
+import com.termux.app.statusbar.WindowActivityRing;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalRenderer;
@@ -74,11 +78,27 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         /** Whether a shell in this window is producing output right now. */
         public final boolean busy;
         /**
-         * Whether a shell in this window has asked for the user — a prompt, a permission request, an
-         * agent handing its turn back. Outranks {@link #busy}: a command that is waiting on input is
-         * not working, and the two states share one rim.
+         * Whether a shell in this window has rung its bell — a prompt, a permission request, an agent
+         * handing its turn back. Shown as a bell after the label, the way Windows Terminal marks a
+         * tab; independent of {@link #busy}, since a window can be both working and asking.
          */
         public final boolean attention;
+        /**
+         * Whether a command in this window finished a real stretch of work while the user was
+         * elsewhere. Shown as a tick after the label until the window is visited; a bell outranks
+         * it, since a window that is asking is not finished.
+         */
+        public final boolean done;
+        /**
+         * What the shell itself reports about how far along it is, when it does: 0-100 for a
+         * percentage, {@link #NO_PERCENTAGE} when it is working without one (or reports nothing).
+         * Only read while {@link #busy}.
+         */
+        public final int progress;
+        /** Whether the reported progress is in its error state, so the ring can say so. */
+        public final boolean progressError;
+
+        public static final int NO_PERCENTAGE = -1;
 
         public WindowItem(@NonNull String label, @NonNull String spokenLabel) {
             this(label, spokenLabel, false, false);
@@ -90,10 +110,23 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
         public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
                           boolean attention) {
+            this(label, spokenLabel, busy, attention, NO_PERCENTAGE, false, false);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError) {
+            this(label, spokenLabel, busy, attention, progress, progressError, false);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done) {
             this.label = label;
             this.spokenLabel = spokenLabel;
             this.busy = busy;
             this.attention = attention;
+            this.progress = progress;
+            this.progressError = progressError;
+            this.done = done;
         }
 
         /**
@@ -103,15 +136,40 @@ public final class TerminalWindowBar extends HorizontalScrollView {
          */
         @NonNull
         public WindowItem withBusy(boolean busy) {
-            return busy == this.busy ? this : new WindowItem(label, spokenLabel, busy, attention);
+            return busy == this.busy ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
-            return attention == this.attention
-                ? this : new WindowItem(label, spokenLabel, busy, attention);
+            return attention == this.attention ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+        }
+
+        @NonNull
+        public WindowItem withDone(boolean done) {
+            return done == this.done ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+        }
+
+        /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
+        @NonNull
+        public WindowItem withProgress(int progress, boolean progressError) {
+            return progress == this.progress && progressError == this.progressError ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+        }
+
+        /** Whether the two would draw the same marks. Labels are compared separately. */
+        boolean sameActivity(@NonNull WindowItem other) {
+            return busy == other.busy && attention == other.attention && done == other.done
+                && progress == other.progress && progressError == other.progressError;
         }
     }
+
+    /** nf-fa-bell, the mark a window that rang gets after its label. */
+    static final String BELL_GLYPH = "\uf0f3";
+    /** nf-fa-check, the mark a window whose command finished unseen gets after its label. */
+    static final String DONE_GLYPH = "\uf00c";
 
     private final SelectionStrip mTabs;
     @Nullable private OnWindowSelectedListener mSelectionListener;
@@ -139,6 +197,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mUnselectedStrokeColor;
     private int mSelectedFillColor;
     private int mSelectedStrokeColor;
+    private int mBusyColor;
+    private int mAttentionColor;
     @Nullable private ValueAnimator mSelectionAnimator;
     @Nullable private ValueAnimator mBusyAnimator;
     /**
@@ -261,7 +321,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     public void setWindows(@NonNull List<WindowItem> items, int selectedIndex) {
         boolean typefaceChanged = reloadTerminalTypeface();
-        // sameActivity has to be part of the guard: a busy/attention-only flip changes neither the
+        // sameActivity has to be part of the guard: an activity-only flip changes neither the
         // labels nor the selection, so without it the new state would be silently dropped here.
         if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)
             && sameActivity(mItems, items)) return;
@@ -274,7 +334,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mItems = new ArrayList<>(items);
         updatePalette();
         if (canReuseTabs) {
-            pushBusyStates();
+            applyActivityStates(false);
             applyTabContentDescriptions();
             if (previousSelected >= 0 && previousSelected != selectedIndex) {
                 animateSelectionSlide(previousSelected, selectedIndex);
@@ -293,7 +353,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             final int index = i;
             WindowItem item = items.get(i);
             boolean selected = i == selectedIndex;
-            TextView tab = createTab(item.label, selected);
+            TextView tab = createTab(item, selected);
             tab.setOnClickListener(v -> {
                 if (mSelectionListener != null) mSelectionListener.onWindowSelected(index);
             });
@@ -304,7 +364,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
         addCreateButton(items.isEmpty());
         mTabs.setWindowCount(items.size());
-        pushBusyStates();
+        updateBusyAnimator();
         applyTabContentDescriptions();
         mTabs.snapSelection(selectedIndex);
         applyStableTabSelection();
@@ -325,63 +385,159 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 item.spokenLabel);
             if (item.attention) description += " · "
                 + getResources().getString(R.string.termux_window_tab_attention_content_description);
-            else if (item.busy) description += " · "
-                + getResources().getString(R.string.termux_window_tab_busy_content_description);
+            else if (item.done) description += " · "
+                + getResources().getString(R.string.termux_window_tab_done_content_description);
+            if (item.busy) {
+                description += " · " + getResources().getString(
+                    R.string.termux_window_tab_busy_content_description);
+                if (item.progress != WindowItem.NO_PERCENTAGE) description += ", " + getResources()
+                    .getString(R.string.termux_window_tab_progress_content_description, item.progress);
+            }
             mTabs.getChildAt(i).setContentDescription(description);
         }
     }
 
-    private void pushBusyStates() {
-        boolean[] busy = new boolean[mItems.size()];
-        boolean[] attention = new boolean[mItems.size()];
-        for (int i = 0; i < mItems.size(); i++) {
+    /**
+     * Re-set each reused pill's text so it carries the marks its window's state calls for: the ring
+     * in place of the process glyph while the shell is working, the bell after the label once it has
+     * rung. Only pills whose state moved are touched unless {@code force}, so a refresh that changes
+     * nothing costs no layout.
+     */
+    private void applyActivityStates(boolean force) {
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            View child = mTabs.getChildAt(i);
+            if (!(child instanceof TextView)) continue;
             WindowItem item = mItems.get(i);
-            attention[i] = item.attention;
-            // Attention owns the rim when both are set, so the pill has one meaning at a time.
-            busy[i] = item.busy && !item.attention;
+            Object shown = child.getTag(R.id.terminal_window_tab_state);
+            if (!force && shown instanceof WindowItem && ((WindowItem) shown).sameActivity(item)
+                && ((WindowItem) shown).label.equals(item.label)) continue;
+            ((TextView) child).setText(tabText(item));
+            child.setTag(R.id.terminal_window_tab_state, item);
         }
-        mTabs.setActivityStates(busy, attention);
         updateBusyAnimator();
     }
 
     /**
-     * One animator for the whole bar, driving the strip rather than a view per pill: setWindows's
-     * mTabs.removeAllViews() then has nothing to clean up, and every underline stays in phase.
-     *
-     * <p>Deliberately not folded into mSelectionAnimator. Both only mutate strip fields and
-     * invalidate, so they compose; sharing one animator would stall the activity indication for the
-     * length of every window switch.
+     * The pill's text with its marks. Windows Terminal is the model for the ring — the tab's icon
+     * gives way to a progress ring while the shell works — and a workspace manager's agent badges
+     * for the rest: a bell after the title once the shell has rung or asked, a tick once a command
+     * finished unseen. Here the icon is the leading Nerd Font process glyph, so the ring is a span
+     * over that glyph and the badge is appended.
      */
+    @NonNull
+    private CharSequence tabText(@NonNull WindowItem item) {
+        Context context = getContext();
+        String label = item.label;
+        int glyphEnd = leadingGlyphEnd(label);
+        // A label with no glyph of its own (a bare user name) still gets a ring: a placeholder run
+        // is prepended for the span to replace, so a working window always looks like one.
+        if (item.busy && glyphEnd == 0) {
+            label = "\u25cf " + label;
+            glyphEnd = 1;
+        }
+        // One trailing mark at a time: a window that is asking is not finished.
+        String mark = item.attention ? BELL_GLYPH : item.done ? DONE_GLYPH : null;
+        if (mark != null) label = label + " " + mark;
+        CharSequence spanned = TerminalLabelSymbolSpans.apply(
+            com.termux.shared.termux.font.NerdFontSpans.span(context, label), mSymbolMaps);
+        if (!item.busy && mark == null) return spanned;
+        SpannableStringBuilder text = new SpannableStringBuilder(spanned);
+        if (item.busy) {
+            text.setSpan(new ProgressRingSpan(item.progressError ? mAttentionColor : mBusyColor,
+                    item.progress, dp(1.25f), mLazyMode),
+                0, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        if (mark != null) {
+            text.setSpan(new ForegroundColorSpan(item.attention ? mAttentionColor : mBusyColor),
+                text.length() - mark.length(), text.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return text;
+    }
+
     /**
-     * Lazy mode keeps the rim lit but stops it breathing: the animator invalidated the whole strip
-     * every vsync for as long as any shell was busy, which with a long-running agent meant forever.
+     * Length of the process glyph the factories put in front of every label — one private-use code
+     * point and the space after it — or 0 when the label does not start with one.
+     */
+    static int leadingGlyphEnd(@NonNull String label) {
+        if (label.isEmpty()) return 0;
+        int codePoint = label.codePointAt(0);
+        int type = Character.getType(codePoint);
+        if (type != Character.PRIVATE_USE) return 0;
+        int end = Character.charCount(codePoint);
+        return end < label.length() && label.charAt(end) == ' ' ? end : 0;
+    }
+
+    /** Whether any pill is drawing the turning arc, which is the only mark that needs frames. */
+    private boolean hasIndeterminateWindow() {
+        for (WindowItem item : mItems) {
+            if (item.busy && item.progress == WindowItem.NO_PERCENTAGE) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Lazy mode turns the ring in steps instead of spinning it: the animator redrew every working
+     * pill each vsync for as long as any shell was busy, which with a long-running agent meant
+     * forever. A stationary arc was tried first and read as stuck, so the ring still moves — eight
+     * stops a turn, on a timer, which is one redraw per stop rather than one per frame.
      */
     public void setLazyMode(boolean lazy) {
         if (mLazyMode == lazy) return;
         mLazyMode = lazy;
-        mTabs.setLazyRim(lazy);
-        updateBusyAnimator();
+        applyActivityStates(true);
     }
 
     private boolean mLazyMode;
+    @Nullable private Runnable mLazyTick;
 
+    /**
+     * One clock for the whole bar rather than one per pill: setWindows's removeAllViews() then has
+     * nothing to clean up, and every ring turns in phase. It only invalidates the pills that carry
+     * a turning arc; a percentage ring and a bell are as static as the label. Smooth mode drives it
+     * from an animator, lazy mode from a slow tick.
+     *
+     * <p>Deliberately not folded into mSelectionAnimator. Both only invalidate, so they compose;
+     * sharing one animator would stall the activity indication for the length of every window switch.
+     */
     private void updateBusyAnimator() {
-        boolean wanted = mTabs.hasBusyWindow() && mAttached && mWindowVisible && !mLazyMode;
-        if (!wanted) {
-            if (mBusyAnimator != null) {
-                mBusyAnimator.cancel();
-                mBusyAnimator = null;
-                mTabs.invalidate();
-            }
-            return;
+        boolean wanted = hasIndeterminateWindow() && mAttached && mWindowVisible;
+        boolean smooth = wanted && !mLazyMode;
+        boolean stepped = wanted && mLazyMode;
+        if (!smooth && mBusyAnimator != null) {
+            mBusyAnimator.cancel();
+            mBusyAnimator = null;
         }
-        if (mBusyAnimator != null) return;
-        mBusyAnimator = ValueAnimator.ofFloat(0f, 1f);
-        mBusyAnimator.setDuration(ShellActivityPulse.CYCLE_MS);
-        mBusyAnimator.setRepeatCount(ValueAnimator.INFINITE);
-        mBusyAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
-        mBusyAnimator.addUpdateListener(animation -> mTabs.invalidate());
-        mBusyAnimator.start();
+        if (!stepped && mLazyTick != null) {
+            removeCallbacks(mLazyTick);
+            mLazyTick = null;
+        }
+        if (smooth && mBusyAnimator == null) {
+            mBusyAnimator = ValueAnimator.ofFloat(0f, 1f);
+            mBusyAnimator.setDuration(WindowActivityRing.SPIN_MS);
+            mBusyAnimator.setRepeatCount(ValueAnimator.INFINITE);
+            mBusyAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
+            mBusyAnimator.addUpdateListener(animation -> invalidateTurningRings());
+            mBusyAnimator.start();
+        }
+        if (stepped && mLazyTick == null) {
+            mLazyTick = new Runnable() {
+                @Override public void run() {
+                    if (mLazyTick != this) return;
+                    invalidateTurningRings();
+                    postDelayed(this, WindowActivityRing.LAZY_TICK_MS);
+                }
+            };
+            postDelayed(mLazyTick, WindowActivityRing.LAZY_TICK_MS);
+        }
+    }
+
+    private void invalidateTurningRings() {
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            WindowItem item = mItems.get(i);
+            if (item.busy && item.progress == WindowItem.NO_PERCENTAGE)
+                mTabs.getChildAt(i).invalidate();
+        }
     }
 
     @Override
@@ -398,6 +554,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             mBusyAnimator.cancel();
             mBusyAnimator = null;
         }
+        if (mLazyTick != null) {
+            removeCallbacks(mLazyTick);
+            mLazyTick = null;
+        }
         super.onDetachedFromWindow();
     }
 
@@ -408,13 +568,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         updateBusyAnimator();
     }
 
-    /** For tests: whether the busy underline is animating right now. */
+    /** For tests: whether a working window's ring is turning right now, smoothly or in steps. */
     @androidx.annotation.VisibleForTesting
     public boolean isBusyAnimationRunning() {
-        return mBusyAnimator != null && mBusyAnimator.isStarted();
+        return (mBusyAnimator != null && mBusyAnimator.isStarted()) || mLazyTick != null;
     }
 
-    private TextView createTab(String label, boolean selected) {
+    private TextView createTab(@NonNull WindowItem item, boolean selected) {
         Context context = getContext();
         TextView tab = new TextView(context);
         tab.setGravity(Gravity.CENTER);
@@ -430,8 +590,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         // Bundled symbols face first, symbol_map faces second: both spans land on a shared PUA
         // run, and the later-applied user-configured face wins at draw time — the bundled Nerd
         // Font glyphs only ever fill runs no symbol_map claims.
-        tab.setText(TerminalLabelSymbolSpans.apply(
-            com.termux.shared.termux.font.NerdFontSpans.span(context, label), mSymbolMaps));
+        tab.setText(tabText(item));
+        tab.setTag(R.id.terminal_window_tab_state, item);
         tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
         tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
         tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
@@ -588,21 +748,97 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
         mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
             mStatusBarRadiusPx, dp(1));
-        // Tertiary, like the row's other "something is happening" accents. Opaque here: the breath
-        // owns the rim's alpha, so a pre-dimmed base would flatten the swell it is made of.
-        // Error for attention: it is the one Material role that is warm in every generated palette,
-        // and a window waiting on the user has to be findable without reading any label.
-        mTabs.setActivityColors(
-            MaterialColors.getColor(context, com.google.android.material.R.attr.colorTertiary,
-                primary),
-            MaterialColors.getColor(context, com.google.android.material.R.attr.colorError,
-                ContextCompat.getColor(context, R.color.termux_error)));
+        // Tertiary for the ring, like the row's other "something is happening" accents. Error for
+        // the bell and a failed progress report: it is the one Material role that is warm in every
+        // generated palette, and a window waiting on the user has to be findable without reading
+        // any label.
+        mBusyColor = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorTertiary, primary);
+        mAttentionColor = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorError,
+            ContextCompat.getColor(context, R.color.termux_error));
+    }
+
+    /**
+     * The progress ring, drawn in the run the process glyph occupies so the label does not move
+     * when a window starts working. Reads the clock at draw time: the bar's one clock invalidates
+     * the pills that carry a turning arc, and this draws whatever angle the moment calls for, so
+     * nothing is stored per frame and a stopped clock simply leaves the arc where it was.
+     */
+    private static final class ProgressRingSpan extends ReplacementSpan {
+        /** Faint full circle under a percentage ring, so 0% is still visibly a ring. */
+        private static final int TRACK_ALPHA = 56;
+        /** Ring diameter as a share of the text's ascent-to-descent height. */
+        private static final float DIAMETER_FRACTION = 0.78f;
+
+        private final int mColor;
+        private final int mProgress;
+        private final float mStrokePx;
+        /** Lazy mode: the arc jumps between {@link WindowActivityRing#LAZY_STEPS} stops. */
+        private final boolean mStepped;
+        private final RectF mBounds = new RectF();
+
+        ProgressRingSpan(int color, int progress, float strokePx, boolean stepped) {
+            mColor = color;
+            mProgress = progress;
+            mStrokePx = strokePx;
+            mStepped = stepped;
+        }
+
+        @Override
+        public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
+                           @Nullable Paint.FontMetricsInt fm) {
+            // At least as wide as the glyph it replaces, so the rest of the label stays put; wider
+            // when a single narrow cell could not hold a ring anyone can read.
+            float glyphWidth = paint.measureText(text, start, end);
+            return Math.round(Math.max(glyphWidth, diameter(paint) + mStrokePx * 2f));
+        }
+
+        private float diameter(@NonNull Paint paint) {
+            return (paint.descent() - paint.ascent()) * DIAMETER_FRACTION;
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end, float x,
+                         int top, int y, int bottom, @NonNull Paint paint) {
+            float width = getSize(paint, text, start, end, null);
+            float diameter = diameter(paint) - mStrokePx;
+            float cx = x + width / 2f;
+            float cy = y + (paint.ascent() + paint.descent()) / 2f;
+            mBounds.set(cx - diameter / 2f, cy - diameter / 2f, cx + diameter / 2f, cy + diameter / 2f);
+
+            int color = paint.getColor();
+            Paint.Style style = paint.getStyle();
+            float strokeWidth = paint.getStrokeWidth();
+            Paint.Cap cap = paint.getStrokeCap();
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(mStrokePx);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            if (mProgress == WindowItem.NO_PERCENTAGE) {
+                float phase = WindowActivityRing.phase(SystemClock.uptimeMillis());
+                if (mStepped) phase = WindowActivityRing.steppedPhase(phase, WindowActivityRing.LAZY_STEPS);
+                paint.setColor(mColor);
+                canvas.drawArc(mBounds, WindowActivityRing.indeterminateStartDeg(phase),
+                    WindowActivityRing.INDETERMINATE_SWEEP_DEG, false, paint);
+            } else {
+                paint.setColor(ColorUtils.setAlphaComponent(mColor, TRACK_ALPHA));
+                canvas.drawOval(mBounds, paint);
+                paint.setColor(mColor);
+                float sweep = WindowActivityRing.determinateSweepDeg(mProgress);
+                if (sweep > 0f) canvas.drawArc(mBounds, WindowActivityRing.START_DEG, sweep, false, paint);
+            }
+            paint.setColor(color);
+            paint.setStyle(style);
+            paint.setStrokeWidth(strokeWidth);
+            paint.setStrokeCap(cap);
+        }
     }
 
     private void applyTabSurfaceStyle() {
         for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
             mTabs.getChildAt(i).setBackground(buildUnselectedChip());
         }
+        applyActivityStates(true);
         applyStableTabSelection();
         mTabs.invalidate();
     }
@@ -626,59 +862,20 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** Draws one selected surface beneath the pills so it can travel without moving their labels. */
     private static final class SelectionStrip extends LinearLayout {
 
-        /** Rim weight and opacity at the bottom and the top of the breath. */
-        private static final float BUSY_RIM_MIN_WIDTH_DP = 1f;
-        private static final float BUSY_RIM_MAX_WIDTH_DP = 1.75f;
-        private static final int BUSY_RIM_MIN_ALPHA = 70;
-        private static final int BUSY_RIM_MAX_ALPHA = 235;
-        /** Feather around the attention rim at the top of its breath. */
-        private static final float ATTENTION_GLOW_RADIUS_DP = 4.5f;
-        private static final float ATTENTION_GLOW_ALPHA_FRACTION = 0.55f;
-
         private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint mBusyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF mAnimatedHighlight = new RectF();
-        private final RectF mBusyRect = new RectF();
         private final RectF mDrawBounds = new RectF();
         private int mWindowCount;
         private int mSelection = -1;
         private boolean mHasAnimatedHighlight;
         private float mCornerRadius;
-        /** Activity flags per window, held on the strip so removeAllViews has nothing to clean up. */
-        @NonNull private boolean[] mBusy = new boolean[0];
-        @NonNull private boolean[] mAttention = new boolean[0];
-        private int mBusyColor;
-        private int mAttentionColor;
-        private long mBusyStartMs;
-        @Nullable private BlurMaskFilter mGlowFilter;
-        private float mGlowRadius;
 
         SelectionStrip(@NonNull Context context) {
             super(context);
             setWillNotDraw(false);
             mFillPaint.setStyle(Paint.Style.FILL);
             mStrokePaint.setStyle(Paint.Style.STROKE);
-            mBusyPaint.setStyle(Paint.Style.STROKE);
-        }
-
-        void setActivityStates(@NonNull boolean[] busy, @NonNull boolean[] attention) {
-            mBusy = busy;
-            mAttention = attention;
-            invalidate();
-        }
-
-        /** Whether anything needs the breath running — either rim is animated. */
-        boolean hasBusyWindow() {
-            for (boolean busy : mBusy) if (busy) return true;
-            for (boolean attention : mAttention) if (attention) return true;
-            return false;
-        }
-
-        void setActivityColors(int busyColor, int attentionColor) {
-            mBusyColor = busyColor;
-            mAttentionColor = attentionColor;
-            invalidate();
         }
 
         void setWindowCount(int windowCount) {
@@ -723,8 +920,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
 
         @Override protected void dispatchDraw(@NonNull Canvas canvas) {
-            // Reused: the busy breath invalidates this strip every frame it is running, and a fresh
-            // RectF per frame is pure allocation on an animation path.
+            // Reused: the selection slide invalidates this strip every frame it is running, and a
+            // fresh RectF per frame is pure allocation on an animation path.
             RectF bounds = mDrawBounds;
             boolean hasBounds;
             if (mHasAnimatedHighlight) {
@@ -740,85 +937,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 canvas.drawRoundRect(bounds, mCornerRadius, mCornerRadius, mStrokePaint);
             }
             super.dispatchDraw(canvas);
-            drawBusyRims(canvas);
-        }
-
-        /**
-         * A breathing outline around each working window's pill, drawn after the children so it sits
-         * over the chip's own border rather than under it.
-         *
-         * <p>The rim rather than a mark inside the pill: at this size anything drawn inside would have
-         * to share the row with the Nerd Font glyph and the label, while the border is already there
-         * and already the pill's own shape, so lighting it costs no space at all.
-         */
-        private void drawBusyRims(@NonNull Canvas canvas) {
-            if (!hasBusyWindow()) return;
-            float density = getResources().getDisplayMetrics().density;
-            // Lazy mode holds the breath at its peak rather than animating through it: a lit rim
-            // still says "working", and it costs one frame instead of sixty a second.
-            float phase = mLazyRim ? 0f : ShellActivityPulse.phase(busyElapsedMs());
-            drawRimPass(canvas, density, mBusy, mBusyColor,
-                ShellActivityPulse.rimWeight(phase), 0f);
-            // The attention rim breathes on its own curve — brighter floor, sharper peak — and carries
-            // a halo, so a window waiting on the user reads as lit rather than merely outlined.
-            drawRimPass(canvas, density, mAttention, mAttentionColor,
-                ShellActivityPulse.glowWeight(phase),
-                density * ATTENTION_GLOW_RADIUS_DP * ShellActivityPulse.glowWeight(phase));
-        }
-
-        private void drawRimPass(@NonNull Canvas canvas, float density, @NonNull boolean[] states,
-                                 int color, float weight, float glowRadius) {
-            boolean any = false;
-            for (boolean state : states) if (state) { any = true; break; }
-            if (!any) return;
-            float width = density * (BUSY_RIM_MIN_WIDTH_DP
-                + (BUSY_RIM_MAX_WIDTH_DP - BUSY_RIM_MIN_WIDTH_DP) * weight);
-            int alpha = Math.round(
-                BUSY_RIM_MIN_ALPHA + (BUSY_RIM_MAX_ALPHA - BUSY_RIM_MIN_ALPHA) * weight);
-            // Halo first, then the crisp rim over it, or the feather washes the outline out.
-            float inset = width / 2f;
-            for (int pass = glowRadius >= 1f ? 0 : 1; pass < 2; pass++) {
-                boolean halo = pass == 0;
-                mBusyPaint.setStrokeWidth(halo ? width * 1.35f : width);
-                mBusyPaint.setMaskFilter(halo ? glowFilter(glowRadius) : null);
-                mBusyPaint.setColor(ColorUtils.setAlphaComponent(color,
-                    halo ? Math.round(alpha * ATTENTION_GLOW_ALPHA_FRACTION) : alpha));
-                for (int i = 0; i < states.length && i < getChildCount(); i++) {
-                    if (!states[i]) continue;
-                    View child = getChildAt(i);
-                    if (child.getWidth() <= 0 || child.getHeight() <= 0) continue;
-                    mBusyRect.set(child.getLeft() + inset, child.getTop() + inset,
-                        child.getRight() - inset, child.getBottom() - inset);
-                    canvas.drawRoundRect(mBusyRect, mCornerRadius, mCornerRadius, mBusyPaint);
-                }
-            }
-            mBusyPaint.setMaskFilter(null);
-        }
-
-        /** Cached: the radius only moves with the breath, and rebuilding it per frame allocates. */
-        @NonNull
-        private BlurMaskFilter glowFilter(float radius) {
-            float quantized = Math.max(1f, Math.round(radius * 2f) / 2f);
-            if (mGlowFilter == null || mGlowRadius != quantized) {
-                mGlowRadius = quantized;
-                mGlowFilter = new BlurMaskFilter(quantized, BlurMaskFilter.Blur.NORMAL);
-            }
-            return mGlowFilter;
-        }
-
-        /** Holds the rim at its lit peak instead of breathing it. Set by the host's lazy mode. */
-        void setLazyRim(boolean lazy) {
-            if (mLazyRim == lazy) return;
-            mLazyRim = lazy;
-            invalidate();
-        }
-
-        private boolean mLazyRim;
-
-        private long busyElapsedMs() {
-            long now = android.os.SystemClock.uptimeMillis();
-            if (mBusyStartMs == 0L) mBusyStartMs = now;
-            return now - mBusyStartMs;
         }
     }
 
@@ -843,8 +961,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                                     @NonNull List<WindowItem> right) {
         if (left.size() != right.size()) return false;
         for (int i = 0; i < left.size(); i++) {
-            if (left.get(i).busy != right.get(i).busy) return false;
-            if (left.get(i).attention != right.get(i).attention) return false;
+            if (!left.get(i).sameActivity(right.get(i))) return false;
         }
         return true;
     }

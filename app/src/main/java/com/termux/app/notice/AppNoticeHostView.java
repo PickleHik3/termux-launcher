@@ -69,6 +69,12 @@ public final class AppNoticeHostView extends LinearLayout {
      * alone than deciding the old look was better.
      */
     public static final long HOLD_UNDO_MS = 9000L;
+    /**
+     * For a fleeting read-out of what a key just did. Long enough to be read after the eye has moved
+     * from the key to the pill, short enough that a run of key presses reads as a running commentary
+     * rather than a message that is in the way.
+     */
+    public static final long HOLD_HINT_MS = 1400L;
 
     /** Beyond this the oldest queued notices are dropped — a burst must still drain. */
     private static final int MAX_QUEUED = 4;
@@ -222,12 +228,39 @@ public final class AppNoticeHostView extends LinearLayout {
         mPlacementRefresh = refresh;
     }
 
-    /** Queue a notice, showing it immediately when the pill is idle. */
+    /**
+     * Queue a notice, showing it immediately when the pill is idle.
+     *
+     * <p>A fleeting notice (see {@link AppNoticeItem#fleeting}) never holds anything up. Whatever
+     * arrives while one is showing takes its place at once — another read-out, so tapping a key five
+     * times reads as five read-outs and not as one plus a {@code +4}; or a real notice, which must
+     * not wait behind a read-out. A fleeting notice arriving over a real one is dropped: by the time
+     * the pill is free it would be describing an action the user has forgotten.
+     */
     public void enqueue(@NonNull AppNoticeItem item) {
+        AppNoticeItem active = mActive;
+        if (active != null && active.fleeting) {
+            // Nothing can be queued behind a read-out, so the queue is empty here.
+            mActive = item;
+            bind(item);
+            cancelHold();
+            mHoldRunnable = this::leaveAndAdvance;
+            postDelayed(mHoldRunnable, item.durationMs);
+            notifyOccupancy();
+            return;
+        }
+        if (item.fleeting && active != null) return;
         mQueue.addLast(item);
         while (mQueue.size() > MAX_QUEUED) mQueue.removeFirst();
-        if (mActive == null) showNext();
+        if (active == null) showNext();
         else updateCount();
+    }
+
+    /** For tests: the notice on the pill right now. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable
+    public AppNoticeItem activeItem() {
+        return mActive;
     }
 
     /** Drop everything, without animation. Used when the host activity goes away. */

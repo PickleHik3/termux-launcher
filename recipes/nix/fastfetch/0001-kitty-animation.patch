@@ -1,5 +1,5 @@
 diff --git a/src/logo/image/image.c b/src/logo/image/image.c
-index bc33e67..4c83f6c 100644
+index bc33e67..f7b96b7 100644
 --- a/src/logo/image/image.c
 +++ b/src/logo/image/image.c
 @@ -347,8 +347,8 @@ static bool printImageKittyDirect(bool printError) {
@@ -13,16 +13,17 @@ index bc33e67..4c83f6c 100644
      #define FF_CACHE_FILE_CHAFA "chafa"
  
      #include <string.h>
-@@ -403,6 +403,8 @@ typedef struct ImageData {
+@@ -403,6 +403,9 @@ typedef struct ImageData {
      FF_LIBRARY_SYMBOL(CopyMagickString)
      FF_LIBRARY_SYMBOL(ImageToBlob)
      FF_LIBRARY_SYMBOL(Base64Encode)
 +    FF_LIBRARY_SYMBOL(CoalesceImages)
 +    FF_LIBRARY_SYMBOL(DestroyImage)
++    FF_LIBRARY_SYMBOL(SetImageDepth)
  
      ImageInfo* imageInfo;
      Image* image;
-@@ -436,6 +438,99 @@ static void writeCacheUint32(FFLogoRequestData* requestData, uint32_t value, con
+@@ -436,6 +439,99 @@ static void writeCacheUint32(FFLogoRequestData* requestData, uint32_t value, con
      writeCacheStrbuf(requestData, &content, cacheFileName);
  }
  
@@ -122,7 +123,7 @@ index bc33e67..4c83f6c 100644
  static void printImagePixels(FFLogoRequestData* requestData, const FFstrbuf* result, const char* cacheFileName) {
      const FFOptionsLogo* options = &instance.config.logo;
      // Calculate character dimensions
-@@ -463,6 +558,10 @@ static void printImagePixels(FFLogoRequestData* requestData, const FFstrbuf* res
+@@ -463,6 +559,10 @@ static void printImagePixels(FFLogoRequestData* requestData, const FFstrbuf* res
      fflush(stdout);
      ffWriteFDBuffer(FFUnixFD2NativeFD(STDOUT_FILENO), result);
  
@@ -133,7 +134,7 @@ index bc33e67..4c83f6c 100644
      if (options->position != FF_LOGO_POSITION_TOP) {
          // Go to upper left corner
          printf("\e[1G\e[%uA", instance.state.logoHeight);
-@@ -492,11 +591,14 @@ static bool printImageSixel(FFLogoRequestData* requestData, const ImageData* ima
+@@ -492,11 +592,14 @@ static bool printImageSixel(FFLogoRequestData* requestData, const ImageData* ima
      return true;
  }
  
@@ -149,7 +150,7 @@ index bc33e67..4c83f6c 100644
      } else {
          ffStrbufAppendC(result, ',');
      }
-@@ -509,19 +611,27 @@ static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length
+@@ -509,19 +612,35 @@ static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length
      *blob += chunkSize;
  }
  
@@ -163,6 +164,14 @@ index bc33e67..4c83f6c 100644
 +    uint32_t frameDelay,
 +    bool* compressed
 +) {
++    // f=32 promises four 8-bit channels, but ImageToBlob writes the raw blob at the image's own
++    // depth: a 1-bit PNG produces an eighth of those bytes and a 16-bit one twice as many. The
++    // header cannot describe either, so the terminal drops a transmission whose payload does not
++    // match s and v — silently, because q=2 suppresses the reply. Bring the frame to 8 bits first.
++    if (imageData->ffSetImageDepth(image, 8, imageData->exceptionInfo) == MagickFalse) {
++        return false;
++    }
++
      imageData->ffCopyMagickString(imageData->imageInfo->magick, "RGBA", 5);
  
      size_t length;
@@ -181,7 +190,7 @@ index bc33e67..4c83f6c 100644
      #endif
  
      char* chars = imageData->ffBase64Encode(blob, length, &length);
-@@ -530,26 +640,89 @@ static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* ima
+@@ -530,26 +649,89 @@ static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* ima
          return false;
      }
  
@@ -280,7 +289,7 @@ index bc33e67..4c83f6c 100644
      #ifdef FF_HAVE_CHAFA
          #include <chafa.h>
  static bool printImageChafa(FFLogoRequestData* requestData, const ImageData* imageData) {
-@@ -661,10 +834,12 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -661,10 +843,13 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
      FF_LIBRARY_LOAD_SYMBOL(imData->library, DestroyImage, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
  
      ImageData imageData;
@@ -290,10 +299,11 @@ index bc33e67..4c83f6c 100644
      FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, ImageToBlob, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
      FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, Base64Encode, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
 +    FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, CoalesceImages, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
++    FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, SetImageDepth, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
  
      ffMagickCoreGenesis(nullptr, MagickFalse);
  
-@@ -692,6 +867,18 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -692,6 +877,18 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
      }
  
@@ -312,7 +322,7 @@ index bc33e67..4c83f6c 100644
      if (requestData->logoPixelWidth == 0 && requestData->logoPixelHeight == 0) {
          requestData->logoPixelWidth = (uint32_t) imageData.image->columns;
          requestData->logoPixelHeight = (uint32_t) imageData.image->rows;
-@@ -711,14 +898,16 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -711,14 +908,16 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
      }
  
@@ -336,7 +346,7 @@ index bc33e67..4c83f6c 100644
  
      imageData.imageInfo = ffAcquireImageInfo();
      if (imageData.imageInfo == nullptr) {
-@@ -734,7 +923,7 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -734,7 +933,7 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          printSuccessful = printImageChafa(requestData, &imageData);
      #endif
      } else if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY) {
@@ -345,7 +355,7 @@ index bc33e67..4c83f6c 100644
      } else if (requestData->type == FF_LOGO_TYPE_IMAGE_SIXEL) {
          printSuccessful = printImageSixel(requestData, &imageData);
      }
-@@ -862,8 +1051,17 @@ static bool printCachedPixel(FFLogoRequestData* requestData) {
+@@ -862,8 +1061,17 @@ static bool printCachedPixel(FFLogoRequestData* requestData) {
          }
      }
  

@@ -69,10 +69,34 @@ public final class AccessoryStackLayoutPolicy {
         return Math.round(Math.max(0f, density) * 3f);
     }
 
-    public static int computeAzRowHeightPx(boolean azEnabled, float density) {
+    /** The letters' own band: the glyphs and the 1dp of air the row draws them in. */
+    private static final float AZ_ROW_LETTER_BAND_DP = 19f;
+
+    /**
+     * Dead space the A-Z row carries under its letters when it is the dock's bottom row, so the
+     * letters are not hard against the rim and the row is not a 19dp strip to hit. With the
+     * extra-keys row present that row is the one on the rim, and the A-Z row keeps its band alone.
+     */
+    private static final float AZ_ROW_CHIN_DP = 10f;
+
+    public static int computeAzRowChinPaddingPx(boolean azEnabled, boolean extraKeysRowEnabled,
+                                                float density) {
+        if (!azEnabled || extraKeysRowEnabled)
+            return 0;
+        return Math.round(Math.max(0f, density) * AZ_ROW_CHIN_DP);
+    }
+
+    /**
+     * The A-Z row's full height: the letter band, plus the chin under it when the row sits on the
+     * dock's bottom rim. The chin is drawn as bottom padding, so the letters keep their place in
+     * the band and the extra height is touchable space below them.
+     */
+    public static int computeAzRowHeightPx(boolean azEnabled, boolean extraKeysRowEnabled,
+                                           float density) {
         if (!azEnabled)
             return 0;
-        return Math.round(Math.max(0f, density) * 19f);
+        return Math.round(Math.max(0f, density) * AZ_ROW_LETTER_BAND_DP)
+            + computeAzRowChinPaddingPx(azEnabled, extraKeysRowEnabled, density);
     }
 
     public static int computeTerminalToolbarHeightPx(int baseHeightPx, int rowCount, float scaleFactor) {

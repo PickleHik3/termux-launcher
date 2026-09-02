@@ -38,6 +38,13 @@ public final class AppNoticeItem {
      * meaningless without {@link #onActivate}.
      */
     @Nullable public final CharSequence actionHint;
+    /**
+     * A read-out rather than a message: "what did that key just do". It never holds anything up —
+     * whatever is raised over it takes its place at once, another read-out or a real notice — and
+     * one raised while a real notice is up is dropped, since by the time the pill is free it would
+     * be describing an action the user has forgotten.
+     */
+    public final boolean fleeting;
 
     public AppNoticeItem(@NonNull Kind kind, @NonNull CharSequence title,
                          @Nullable CharSequence sub, @Nullable String glyph, long durationMs) {
@@ -54,6 +61,13 @@ public final class AppNoticeItem {
                          @Nullable CharSequence sub, @Nullable String glyph, long durationMs,
                          @Nullable Runnable onActivate, boolean attention,
                          @Nullable CharSequence actionHint) {
+        this(kind, title, sub, glyph, durationMs, onActivate, attention, actionHint, false);
+    }
+
+    public AppNoticeItem(@NonNull Kind kind, @NonNull CharSequence title,
+                         @Nullable CharSequence sub, @Nullable String glyph, long durationMs,
+                         @Nullable Runnable onActivate, boolean attention,
+                         @Nullable CharSequence actionHint, boolean fleeting) {
         this.kind = kind;
         this.title = title;
         this.sub = sub;
@@ -62,6 +76,7 @@ public final class AppNoticeItem {
         this.onActivate = onActivate;
         this.attention = attention;
         this.actionHint = actionHint;
+        this.fleeting = fleeting;
     }
 
     /** The glyph actually drawn: the caller's, or the kind's default. */

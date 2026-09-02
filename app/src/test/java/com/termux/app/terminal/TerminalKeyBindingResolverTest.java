@@ -83,8 +83,10 @@ public class TerminalKeyBindingResolverTest {
         int[] arrows = {KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN};
         for (int arrow : arrows) {
-            // Innermost move, shortest stroke: no Alt, no prefix.
-            assertEquals("pane.focus_direction", tool(arrow, KeyEvent.META_CTRL_ON, SPLITS_ON));
+            // Innermost move, shortest stroke: Alt alone. Not Ctrl — that is word motion in
+            // every line editor.
+            assertEquals("pane.focus_direction", tool(arrow, KeyEvent.META_ALT_ON, SPLITS_ON));
+            assertNull(tool(arrow, KeyEvent.META_CTRL_ON, SPLITS_ON));
             assertEquals("pane.resize", tool(arrow, CTRL_ALT_SHIFT, SPLITS_ON));
         }
         // Prefixed horizontal arrows walk the windows of the session, vertical ones the sessions.
@@ -92,8 +94,8 @@ public class TerminalKeyBindingResolverTest {
         assertEquals("window.next", tool(KeyEvent.KEYCODE_DPAD_RIGHT, CTRL_ALT, SPLITS_ON));
         assertEquals("session.previous", tool(KeyEvent.KEYCODE_DPAD_UP, CTRL_ALT, SPLITS_ON));
         assertEquals("session.next", tool(KeyEvent.KEYCODE_DPAD_DOWN, CTRL_ALT, SPLITS_ON));
-        // Pane focus needs panes: with splits off the plain Ctrl arrows stay the shell's.
-        assertNull(tool(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.META_CTRL_ON, SPLITS_OFF));
+        // Pane focus needs panes: with splits off the Alt arrows stay the shell's.
+        assertNull(tool(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.META_ALT_ON, SPLITS_OFF));
     }
 
     // ---------------------------------------------------------------- splits off

@@ -69,9 +69,10 @@ produced by the current keyboard layout.
 
 | Shortcut | Split panes enabled | Compatibility mode |
 |---|---|---|
+| `Ctrl+Alt+Enter` | New pane: split the focused pane along its longer side | Sent to the shell if unclaimed |
 | `Ctrl+Alt+v` | Split vertically (side by side) | Paste |
 | `Ctrl+Alt+h` | Split horizontally (stacked) | Sent to the shell if unclaimed |
-| `Ctrl+Arrow` | Focus the pane in that direction | Sent to the shell if unclaimed |
+| `Alt+Arrow` | Focus the pane in that direction | Sent to the shell when no pane lies that way |
 | `Ctrl+Alt+Left` / `Ctrl+Alt+Right` | Previous/next window | Opens or closes the session drawer |
 | `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | Previous/next session | Previous/next session |
 | `Ctrl+Alt+Shift+Arrow` | Resize the focused pane | Sent to the shell if unclaimed |
@@ -131,14 +132,26 @@ The following layouts act on the current window without restarting any shell:
 |---|---|
 | `stack` | Maximize the focused pane while keeping the other panes alive and hidden |
 | `grid` | Arrange panes in near-square, equally divided rows |
+| `dwindle` | Tile like Hyprland: each new pane halves the focused pane along its longer side, and a pane dragged onto another takes the half it is dropped on |
 | `tall` | Put a half-width master pane on the left and stack the rest on the right |
 | `fat` | Put a half-height master pane on top and arrange the rest below |
 | `horizontal` | Put every pane side by side at equal width |
 | `vertical` | Put every pane in one top-to-bottom column at equal height |
 
 `Ctrl+Alt+l`, **Next pane layout** in the palette, and `pane.next_layout` all cycle the window
-through `grid`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window with no
-layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
+through `grid`, `dwindle`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window
+with no layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
+
+**Automatic tiling** in Settings → Terminal & Status → Sessions and panes makes `dwindle` the layout
+every new window starts under. **Focused pane grows** (same section) gives the focused pane 70% of
+every split on its way to the window edge, animated, whichever layout is in use — tap a pane and it
+becomes the big one.
+
+`dwindle` is the one layout that grows rather than rearranges: it never rebuilds the tree, so the
+dividers you drag stay where you put them, a closed pane simply hands its space back to its
+neighbour, and dragging a pane's move handle onto another pane shows which half it will take before
+you let go. The first split of a portrait window stacks; a pane wider than it is tall splits side by
+side.
 
 The palette also exposes **Equalize panes** and clockwise **Rotate panes**. Choosing a specific
 layout by name and moving the focused pane to an edge remain available through custom key bindings.
@@ -242,9 +255,11 @@ still destructive and should only be used after saving anything important.
 ## Terminal actions and the palette
 
 Terminal commands share the internal action registry used by the command palette, the action sheet,
-and key bindings. Remote action execution over HTTP was removed together with the agent endpoints;
-the local API now serves TAI and the separate `/v1/apps/launch` route. Workspace tools
-(`workspace.save`, `workspace.load`,
+and key bindings. General remote action execution over HTTP was removed together with the agent
+endpoints; the local API serves TAI, the separate `/v1/apps/launch` route, and the pane routes
+(`/v1/panes`, `launcherctl pane …`) through which a process in a shell can open a pane of its own,
+type into it, read it back and close it — but only panes it opened itself; see
+[LauncherCtl API](LauncherCtl_API.md#panes). Workspace tools (`workspace.save`, `workspace.load`,
 `workspace.list`, `workspace.delete`) and the parameterized pane actions (`pane.layout`,
 `pane.move_to_edge`) remain reachable from custom key bindings.
 

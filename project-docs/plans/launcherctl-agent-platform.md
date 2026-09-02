@@ -1,10 +1,12 @@
 # Termux Launcher TAI Extension Plan
 
+Status: delivered June 2026. The record of what the launcher's agent platform is and why; the
+process scaffolding it was built under (a `tai-ext` branch off `experimental`, and a CI-only build
+loop because that session had no local Android SDK) is gone and does not describe how to work here
+now — see AGENTS.md.
+
 ## Summary
 
-- Correct repo: `/data/data/com.termux/files/home/myfiles/termux-launcher`.
-- Working branch: `tai-ext`, created from `experimental`.
-- Local Android build is unavailable; verification uses GitHub Actions.
 - Preserve existing TAI OpenAI-compatible endpoints and add device/context/tool surfaces around them.
 - Keep all runtime state under existing `~/.launcherctl`.
 
@@ -17,14 +19,6 @@
 - Implemented append-only event/audit storage plus event tail APIs.
 - Implemented `launcherctl mcp` as a Python stdio MCP bridge over `/v1/agent/tools` and `/v1/agent/execute`.
 - Added docs for LauncherCtl API, TAI integration boundaries, and MCP usage.
-- GitHub Actions remains the required Android build/unit-test gate because local Android SDK/NDK is unavailable in this Termux session.
-
-## Branch, CI, And Worker Flow
-
-- Push implementation work to `tai-ext`.
-- Use existing GitHub Actions workflow `Build nightly`.
-- The workflow runs `testDebugUnitTest`, `assembleDebug`, validates all ABI APKs, and uploads artifacts.
-- Retrieve APK artifacts from the successful run, especially universal and arm64-v8a.
 
 ## Implementation Changes
 
@@ -73,31 +67,6 @@ Notes:
 - `GET /v1/events/stream` is implemented as a snapshot SSE stream ending with `data: [DONE]`; it does not keep a long-lived poll loop open in this first pass.
 - FunctionGemma companion routing was removed; model clients can select it explicitly, while Android tools are exposed through LauncherCtl and MCP.
 
-## Opencode Worker Plan
-
-- Codex orchestrates, reviews diffs, commits, pushes, and monitors CI.
-- Use opencode from repo root:
-
-```sh
-opencode run -m opencode-go/kimi-k2.7-code "<focused prompt>"
-```
-
-- Model assignment:
-  - `opencode-go/kimi-k2.7-code`: main Java/API/CLI implementation.
-  - `opencode-go/qwen3.7-max`: tests and schema consistency.
-  - `opencode-go/deepseek-v4-pro`: security/API review.
-  - `opencode-go/glm-5.2`: docs and CLI help.
-- Worker sequence:
-  1. Storage helpers and notification persistence.
-  2. Notification query APIs and CLI.
-  3. Capabilities endpoint and hardware gating.
-  4. Shared tool registry and `/v1/agent/tools`.
-  5. Agent route/execute with deterministic fallback.
-  6. FunctionGemma catalog integration without hidden companion routing.
-  7. Events APIs and CLI.
-  8. MCP adapter.
-  9. Docs and final review.
-
 ## Verification
 
 - Local lightweight checks:
@@ -107,11 +76,7 @@ sh -n resources/bin/launcherctl
 git diff --check
 ```
 
-- GitHub Actions required:
-  - `Build nightly` on branch `tai-ext`.
-  - Must pass unit tests and debug APK build.
-  - Must upload universal, arm64-v8a, armeabi-v7a, x86_64, x86 APK artifacts and sha256sums.
-- Add or maintain tests for:
+- Tests that must stay green:
   - notification event persistence
   - recent/since/search/stats behavior
   - active notification snapshot compatibility

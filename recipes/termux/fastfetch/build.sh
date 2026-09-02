@@ -102,6 +102,86 @@ if ! printf '%s\n' "$features" | grep -qx 'zlib'; then
     exit 1
 fi
 
+# The Kitty transmission header always says f=32 — four 8-bit channels — but ImageMagick writes the
+# raw blob at the image's own depth, so a logo that is not already 8-bit transmits a payload of the
+# wrong length and the terminal drops it without a word, because Fastfetch asks for silence with
+# q=2. The patch normalises every frame to 8 bits; this checks that it still does, across the depths
+# a real logo arrives in. Rendering a logo needs a pty, so the check runs only where python3 can open
+# one: a missing interpreter skips it, a wrong payload fails the build.
+if command -v python3 >/dev/null 2>&1 && command -v magick >/dev/null 2>&1; then
+    echo "Checking the Kitty logo transmission..."
+    smoke_dir="$TL_BUILD_DIR/smoke"
+    mkdir -p "$smoke_dir"
+    magick -size 48x48 xc:red "$smoke_dir/depth1.png"
+    magick -size 48x48 xc:red -depth 8 -define png:color-type=6 "$smoke_dir/depth8.png"
+    magick -size 48x48 gradient:red-blue "$smoke_dir/depth16.png"
+    magick -delay 20 -size 48x48 xc:red -size 48x48 xc:blue -loop 0 "$smoke_dir/animated.gif"
+    FF_SMOKE_BIN="$TL_BUILD_DIR/source/build/fastfetch" FF_SMOKE_DIR="$smoke_dir" python3 - <<'SMOKE'
+import base64, fcntl, os, pty, re, select, struct, sys, termios, zlib
+
+binary = os.environ["FF_SMOKE_BIN"]
+directory = os.environ["FF_SMOKE_DIR"]
+os.environ["TERM"] = "xterm-kitty"
+os.environ["XDG_CACHE_HOME"] = os.path.join(directory, "cache")  # not the caller's own
+LOGOS = ("depth1.png", "depth8.png", "depth16.png", "animated.gif")
+
+
+def render(image):
+    pid, fd = pty.fork()
+    if pid == 0:
+        # 80x24 cells over 640x576 pixels: Fastfetch reads the cell size from here to size the logo.
+        fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 640, 576))
+        os.execv(binary, [binary, "--logo-type", "kitty", "--logo", image,
+                          "--logo-recache", "true", "-s", "Title"])
+    out = b""
+    while select.select([fd], [], [], 30)[0]:
+        try:
+            chunk = os.read(fd, 65536)
+        except OSError:
+            break
+        if not chunk:
+            break
+        out += chunk
+    os.waitpid(pid, 0)
+    return out
+
+
+def frames(data):
+    """One (declared, actual) byte count per transmitted frame; a chunked frame ends at m != 1."""
+    found, control, encoded = [], None, b""
+    for match in re.finditer(rb"\x1b_G([^;]*);([^\x1b]*)\x1b\\", data):
+        keys = dict(p.split("=", 1) for p in match.group(1).decode().split(",") if "=" in p)
+        if "s" in keys and "v" in keys:
+            control, encoded = keys, b""
+        encoded += match.group(2)
+        if keys.get("m", "0") != "1" and control is not None:
+            blob = base64.b64decode(encoded)
+            if control.get("o") == "z":
+                blob = zlib.decompress(blob)
+            found.append((int(control["s"]) * int(control["v"]) * (int(control["f"]) // 8), len(blob)))
+            control, encoded = None, b""
+    return found
+
+
+failed = False
+for name in LOGOS:
+    transmitted = frames(render(os.path.join(directory, name)))
+    if not transmitted:
+        print("error: %s transmitted no image at all" % name, file=sys.stderr)
+        failed = True
+    for index, (declared, actual) in enumerate(transmitted):
+        if declared != actual:
+            print("error: %s frame %d declares %d bytes and transmits %d — the blob is not 8 bits "
+                  "per channel and a terminal will drop it" % (name, index, declared, actual),
+                  file=sys.stderr)
+            failed = True
+
+sys.exit(1 if failed else 0)
+SMOKE
+else
+    echo "note: python3 and ImageMagick's magick(1) are needed for the Kitty logo check, skipping it"
+fi
+
 cmake --install "$TL_BUILD_DIR/source/build"
 
 echo "Installed $TL_INSTALL_PREFIX/bin/fastfetch"

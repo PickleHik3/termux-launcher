@@ -1,9 +1,8 @@
 # Kitty protocol and render features — inventory and rollout
 
-Continues `kitty-to-termux-launcher-feasibility-study.md` past the command palette and
-binding work recorded in `action-registry-terminal-actions.md`. That covered the study's
-Phase 1–2; this file covers Phase 4 (protocol/render upgrades) and the first Phase 5
-project (the keyboard protocol).
+Continues the Kitty feasibility study past the command palette and binding work recorded in
+`action-registry-terminal-actions.md`. That covered the study's Phase 1–2; this file covers Phase 4
+(protocol/render upgrades) and the first Phase 5 project (the keyboard protocol).
 
 Status: delivered through graphics Tier 2 core — stored images, placements, crop, z-index, and the
 full delete forms (slice 14), animation with terminal-driven playback (slice 16), and Unicode

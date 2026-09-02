@@ -31,6 +31,20 @@ public class ChromePolicyTest {
     }
 
     @Test
+    public void testKeyboardChinLiftsTheCapsuleAndPadsTheDockedSlab() {
+        // Floating: the allowance rides on the capsule's own gap, so the glass still wraps the keys.
+        Assert.assertEquals(6, ChromePolicy.keyboardChinBottomMarginPx(true, 6, 0));
+        Assert.assertEquals(30, ChromePolicy.keyboardChinBottomMarginPx(true, 6, 24));
+        Assert.assertEquals(6, ChromePolicy.keyboardChinBottomPaddingPx(true, 6, 24));
+        // Docked: no gap under a slab that reaches the screen edge; the keys move up inside it.
+        Assert.assertEquals(0, ChromePolicy.keyboardChinBottomMarginPx(false, 6, 24));
+        Assert.assertEquals(24, ChromePolicy.keyboardChinBottomPaddingPx(false, 0, 24));
+        // A negative allowance can only come from a bad read; it must not eat the capsule's gap.
+        Assert.assertEquals(6, ChromePolicy.keyboardChinBottomMarginPx(true, 6, -10));
+        Assert.assertEquals(0, ChromePolicy.keyboardChinBottomPaddingPx(false, 0, -10));
+    }
+
+    @Test
     public void testBlurAndGrainDoNotDependOnTintOpacity() {
         Assert.assertFalse(ChromePolicy.dockBlurEnabled(0));
         Assert.assertTrue(ChromePolicy.dockBlurEnabled(22));

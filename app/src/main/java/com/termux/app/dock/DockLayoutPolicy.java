@@ -70,6 +70,12 @@ public final class DockLayoutPolicy {
         /** Row switches as stored, before the landscape gate. */
         public final boolean appsRowEnabledPref;
         public final boolean azRowEnabledPref;
+        /**
+         * Whether the extra-keys row is showing. Not a row this policy sizes — the toolbar owns its
+         * own height — but it decides which row is on the dock's bottom rim, and so whether the A-Z
+         * row carries a chin under its letters.
+         */
+        public final boolean extraKeysRowShown;
         /** The extra-keys toolbar's single-row height, the apps row's baseline unit. */
         public final int baseToolbarHeightPx;
         /** Extra apps-row height requested by the tuning drag; negative values are ignored. */
@@ -88,6 +94,7 @@ public final class DockLayoutPolicy {
             this.configuredCornerRadiusDp = b.configuredCornerRadiusDp;
             this.appsRowEnabledPref = b.appsRowEnabledPref;
             this.azRowEnabledPref = b.azRowEnabledPref;
+            this.extraKeysRowShown = b.extraKeysRowShown;
             this.baseToolbarHeightPx = b.baseToolbarHeightPx;
             this.additionalAppsBarHeightPx = b.additionalAppsBarHeightPx;
             this.railOnRight = b.railOnRight;
@@ -111,6 +118,9 @@ public final class DockLayoutPolicy {
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
             private boolean appsRowEnabledPref;
             private boolean azRowEnabledPref;
+            // Defaults to shown, which is the shape every caller sized against before the A-Z
+            // row's chin existed: no chin unless a caller says the row is the bottom one.
+            private boolean extraKeysRowShown = true;
             private int baseToolbarHeightPx;
             private int additionalAppsBarHeightPx;
             private boolean railOnRight;
@@ -126,6 +136,7 @@ public final class DockLayoutPolicy {
             public Builder configuredCornerRadiusDp(int v) { this.configuredCornerRadiusDp = v; return this; }
             public Builder appsRowEnabledPref(boolean v) { this.appsRowEnabledPref = v; return this; }
             public Builder azRowEnabledPref(boolean v) { this.azRowEnabledPref = v; return this; }
+            public Builder extraKeysRowShown(boolean v) { this.extraKeysRowShown = v; return this; }
             public Builder baseToolbarHeightPx(int v) { this.baseToolbarHeightPx = v; return this; }
             public Builder additionalAppsBarHeightPx(int v) { this.additionalAppsBarHeightPx = v; return this; }
             public Builder railOnRight(boolean v) { this.railOnRight = v; return this; }
@@ -198,7 +209,10 @@ public final class DockLayoutPolicy {
                     in.baseToolbarHeightPx, out.appsTopPaddingPx, out.appsBottomPaddingPx,
                     density, Math.max(0, in.additionalAppsBarHeightPx))
                 : 0;
-            out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(azRowEnabled, density);
+            out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
+                azRowEnabled, in.extraKeysRowShown, density);
+            out.azRowChinPaddingPx = AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(
+                azRowEnabled, in.extraKeysRowShown, density);
             out.indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(
                 appsRowEnabled && azRowEnabled, density);
             out.interRowGapPx = out.indicatorBandHeightPx;

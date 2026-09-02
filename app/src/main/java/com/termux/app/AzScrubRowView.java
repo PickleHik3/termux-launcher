@@ -102,6 +102,13 @@ public final class AzScrubRowView extends AppCompatTextView {
     private boolean interactionRenderActive;
     private boolean rowHapticsEnabled = true;
     private int lastHapticLetterIndex = -1;
+    /** Touchable dead space under the letters, given by the dock when this row is its bottom one. */
+    private int chinPaddingPx;
+    /**
+     * True while the letters are not what the finger is choosing — it has climbed off this row and
+     * is picking an icon out of the apps row, which ticks for itself.
+     */
+    private boolean letterTicksSuspended;
 
     public AzScrubRowView(Context context) {
         super(context);
@@ -135,6 +142,25 @@ public final class AzScrubRowView extends AppCompatTextView {
         ViewConfiguration viewConfiguration = ViewConfiguration.get(getContext());
         doubleTapTimeoutMs = ViewConfiguration.getDoubleTapTimeout();
         doubleTapSlopPx = viewConfiguration.getScaledDoubleTapSlop();
+    }
+
+    /**
+     * Dead space under the letters, as bottom padding. The letters are placed off the bottom of the
+     * content box, so padding lifts them clear of the dock's rim and leaves the space below them
+     * inside the row — space that takes a touch like any other part of it.
+     */
+    public void setChinPaddingPx(int paddingPx) {
+        int chin = Math.max(0, paddingPx);
+        if (chin == chinPaddingPx)
+            return;
+        chinPaddingPx = chin;
+        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), dp(1) + chin);
+        invalidate();
+    }
+
+    /** The band the letters are drawn in: this row's height without the chin under them. */
+    public int letterBandHeightPx() {
+        return Math.max(0, getHeight() - chinPaddingPx);
     }
 
     private int dp(int value) {
@@ -255,6 +281,16 @@ public final class AzScrubRowView extends AppCompatTextView {
 
     public void setRowHapticsEnabled(boolean enabled) {
         rowHapticsEnabled = enabled;
+    }
+
+    /**
+     * Hands the letter tick over to whoever the finger is actually choosing with. The scrub can
+     * climb off this row and go on picking an icon out of the apps row, which ticks per icon; the
+     * letter slots underneath keep passing by, and ticking on those too made the whole gesture
+     * feel like a scrub along the letters no matter which row the finger was on.
+     */
+    public void setLetterHapticTicksSuspended(boolean suspended) {
+        letterTicksSuspended = suspended;
     }
 
     public void setVisibleLetters(@NonNull Set<Character> letters) {
@@ -431,8 +467,11 @@ public final class AzScrubRowView extends AppCompatTextView {
         if (callback == null) return super.onTouchEvent(event);
         float x = Math.max(0f, Math.min(getWidth(), event.getX()));
         char letter = pickLetter(x, event.getActionMasked() != MotionEvent.ACTION_DOWN);
+        // Measured against the letter band, not the row: the chin under the letters is touchable
+        // space, and letting it stretch the step would retune the drag-up selection behind the
+        // user's back the moment the extra-keys row is hidden.
         int selectionIndex = Math.max(0,
-            (int) ((-event.getY()) / Math.max(dp(12f), getHeight() / 2f)));
+            (int) ((-event.getY()) / Math.max(dp(12f), letterBandHeightPx() / 2f)));
         currentSelectionIndex = selectionIndex;
 
         switch (event.getActionMasked()) {
@@ -465,10 +504,8 @@ public final class AzScrubRowView extends AppCompatTextView {
                 return true;
             case MotionEvent.ACTION_MOVE:
                 int nextHapticLetterIndex = indexOfVisibleLetter(letter);
-                if (rowHapticsEnabled && RowHapticTickHelper.isBoundaryCrossing(
-                    lastHapticLetterIndex, nextHapticLetterIndex)) {
-                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
-                }
+                boolean crossedLetterBoundary = RowHapticTickHelper.isBoundaryCrossing(
+                    lastHapticLetterIndex, nextHapticLetterIndex);
                 lastHapticLetterIndex = nextHapticLetterIndex;
                 activeTouchX = x;
                 waveStrength = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0.92f : 1f;
@@ -476,6 +513,12 @@ public final class AzScrubRowView extends AppCompatTextView {
                 invalidate();
                 callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(),
                     event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.MOVE);
+                // Ticked after the callback, not before it: the gesture advances in there, and this
+                // sample is what decides whose row the finger is on. Asking first would tick a
+                // letter for the sample that just handed the gesture to the apps row.
+                if (crossedLetterBoundary && rowHapticsEnabled && !letterTicksSuspended) {
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                }
                 return true;
             case MotionEvent.ACTION_UP:
                 lastHapticLetterIndex = -1;

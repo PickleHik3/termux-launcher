@@ -289,10 +289,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         }
         if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
             int[] columnAndRow = mHost.focusedView().getColumnAndRow(e, true);
-            String wordAtTap = term.getScreen().getWordAtLocation(columnAndRow[0], columnAndRow[1]);
-            LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(wordAtTap);
-            if (!urlSet.isEmpty()) {
-                String url = (String) urlSet.iterator().next();
+            String url = urlAtTap(term, columnAndRow[0], columnAndRow[1]);
+            if (url != null) {
                 ShareUtils.openUrl(mContext, url);
                 return;
             }
@@ -1218,6 +1216,33 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         strip.addView(button, new LinearLayout.LayoutParams(
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    /**
+     * The URL under a tap, or null. The word at the tap is the usual answer; but a URL wrapped by a
+     * multiplexer pane is two words on two rows, so the rows around the tap are read together and a
+     * whole address that contains the tapped word wins over the fragment — from either half.
+     */
+    @Nullable
+    private static String urlAtTap(@NonNull com.termux.terminal.TerminalEmulator term,
+                                   int column, int row) {
+        com.termux.terminal.TerminalBuffer screen = term.getScreen();
+        String word = screen.getWordAtLocation(column, row);
+        String cleaned = word.replaceAll("^[|\u2502\u2503\u2551\u258c\u2590\u258f\u2595\u2591\u2592\u2593\u2588]+|[|\u2502\u2503\u2551\u258c\u2590\u258f\u2595\u2591\u2592\u2593\u2588]+$", "");
+        if (cleaned.length() >= 3) {
+            int first = Math.max(-screen.getActiveTranscriptRows(), row - 2);
+            int last = Math.min(term.mRows - 1, row + 2);
+            String rows = screen.getSelectedText(0, first, term.mColumns, last, true, true);
+            for (CharSequence candidate : TermuxUrlUtils.extractUrls(rows)) {
+                String url = candidate.toString();
+                if (url.contains(cleaned) && url.indexOf('\n') < 0) {
+                    // Prefer a joined address over the fragment a single row holds.
+                    if (!url.equals(cleaned) || TermuxUrlUtils.extractUrls(cleaned).isEmpty()) return url;
+                }
+            }
+        }
+        LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(word);
+        return urlSet.isEmpty() ? null : urlSet.iterator().next().toString();
     }
 
     public void showUrlSelection() {
