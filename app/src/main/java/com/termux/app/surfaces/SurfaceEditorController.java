@@ -555,13 +555,18 @@ public final class SurfaceEditorController {
         // Before the first layout pass, so neither view's first frame is bare glyphs over the
         // wallpaper.
         panel.root.setBackground(buildPanelBackground(24));
-        panel.floatRoot.setBackground(buildPanelBackground(999));
+        panel.floatRoot.setBackground(buildFloatBackground());
         setIcon(panel.save, R.drawable.ic_symbol_save, false);
         setIcon(panel.reset, R.drawable.ic_symbol_restart, false);
         setIcon(panel.done, R.drawable.ic_symbol_check, true);
         setIcon(panel.close, R.drawable.ic_symbol_close, false);
         setIcon(panel.floatPalette, R.drawable.ic_symbol_palette, false);
         setIcon(panel.floatDone, R.drawable.ic_symbol_check, true);
+        // The palette glyph in the accent too: it is the pill's whole job, and on the card's own
+        // fill it read as one more grey glyph in a row of dock icons.
+        androidx.core.widget.ImageViewCompat.setImageTintList(panel.floatPalette,
+            android.content.res.ColorStateList.valueOf(mHost.themeColor(
+                com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary)));
 
         panel.save.setOnClickListener(view -> saveCurrentLook());
         panel.reset.setOnClickListener(view -> revertToEntryState());
@@ -713,11 +718,13 @@ public final class SurfaceEditorController {
             return;
         View pill = panel.floatRoot;
         pill.animate().cancel();
+        stopFloatBreath();
         if (!animate) {
             pill.setVisibility(shown ? View.VISIBLE : View.GONE);
             pill.setAlpha(1f);
             pill.setScaleX(1f);
             pill.setScaleY(1f);
+            if (shown) startFloatBreath();
             return;
         }
         if (shown) {
@@ -730,6 +737,7 @@ public final class SurfaceEditorController {
             pill.animate().alpha(1f).scaleX(1f).scaleY(1f)
                 .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
                 .setInterpolator(Motion.settle())
+                .withEndAction(this::startFloatBreath)
                 .start();
             return;
         }
@@ -744,6 +752,53 @@ public final class SurfaceEditorController {
                 pill.setScaleY(1f);
             })
             .start();
+    }
+
+    /** One breath of the resting pill: a slow swell and back. */
+    private static final long FLOAT_BREATH_MS = 1400L;
+    private static final float FLOAT_BREATH_SCALE = 1.05f;
+    @Nullable private ValueAnimator mFloatBreath;
+
+    /**
+     * The resting pill breathes — a slow swell, not a blink — so the eye finds the editor's one
+     * control on a screen that is otherwise the user's own home. Scale on a hardware layer: the
+     * pill is rendered once and the layer is transformed, so nothing is redrawn per frame. Lazy
+     * mode holds it still, as it does every other idle motion.
+     */
+    private void startFloatBreath() {
+        Panel panel = mPanel;
+        if (panel == null || mFloatBreath != null || !mSurfaceEditorOpen || mCardShown)
+            return;
+        if (panel.floatRoot.getVisibility() != View.VISIBLE)
+            return;
+        if (prefs() != null && prefs().isLazyModeEnabled())
+            return;
+        View pill = panel.floatRoot;
+        pill.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        ValueAnimator breath = ValueAnimator.ofFloat(1f, FLOAT_BREATH_SCALE);
+        breath.setDuration(FLOAT_BREATH_MS);
+        breath.setRepeatCount(ValueAnimator.INFINITE);
+        breath.setRepeatMode(ValueAnimator.REVERSE);
+        breath.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        breath.addUpdateListener(animation -> {
+            float scale = (float) animation.getAnimatedValue();
+            pill.setScaleX(scale);
+            pill.setScaleY(scale);
+        });
+        mFloatBreath = breath;
+        breath.start();
+    }
+
+    private void stopFloatBreath() {
+        if (mFloatBreath == null)
+            return;
+        mFloatBreath.cancel();
+        mFloatBreath = null;
+        if (mPanel != null) {
+            mPanel.floatRoot.setLayerType(View.LAYER_TYPE_NONE, null);
+            mPanel.floatRoot.setScaleX(1f);
+            mPanel.floatRoot.setScaleY(1f);
+        }
     }
 
     /**
@@ -1325,6 +1380,24 @@ public final class SurfaceEditorController {
 
     /** The card's fill; an oversized radius clamps to a capsule, which is the pill's. */
     @NonNull
+    /**
+     * The floating pill's capsule: the card's fill warmed towards the accent, under an accent rim.
+     * The card's own grey capsule, over a grey dock, was the one control on the screen and the
+     * hardest thing on it to find.
+     */
+    private Drawable buildFloatBackground() {
+        int panel = mHost.themeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            R.color.termux_surface_panel_high);
+        int primary = mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(androidx.core.graphics.ColorUtils.blendARGB(panel, primary, 0.22f));
+        background.setCornerRadius(dpToPx(999));
+        background.setStroke(Math.max(1, dp(1.5f)),
+            androidx.core.graphics.ColorUtils.setAlphaComponent(primary, 210));
+        return background;
+    }
+
     private Drawable buildPanelBackground(int cornerDp) {
         GradientDrawable background = new GradientDrawable();
         background.setColor(mHost.themeColor(
@@ -3183,6 +3256,7 @@ public final class SurfaceEditorController {
             mPanel.root.setLayerType(View.LAYER_TYPE_NONE, null);
             mPanel.root.setVisibility(View.GONE);
             mPanel.floatRoot.animate().cancel();
+            stopFloatBreath();
             mPanel.floatRoot.setVisibility(View.GONE);
             mPanel.save.setVisibility(View.GONE);
             mPanel.reset.setVisibility(View.GONE);
