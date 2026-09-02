@@ -269,7 +269,7 @@ All development happens on `dev`. Editions receive features exclusively by mergi
 - `main` — the Termux edition (`com.termux`). Merge `dev`, tag `vX.Y.Z`.
 - `nix-edition` — the Nix edition (`com.termux.launcher.nix`), tag `vX.Y.Z-nix`, published as a
   prerelease. Backed by the PickleHik3/nix-on-droid fork, branch `launcher-nix`; bootstrap zips live
-  on the `nix-bootstrap` tag. Companion apps (TLNix API/Styling) release from their `nix-pkg`
+  on the `nix-bootstrap` tag. Companion apps (TLNix API/Styling/Boot) release from their `nix-pkg`
   branches via `github_release_build.yml` with `nix-v*` tags.
 - `io-vaj-package` — the VAJ edition (`io.vaj.tl`), tag `vX.Y.Z-vaj`. **The demo edition, and the
   least recommended one to install.** Its packages come from the developer's own apt repository
@@ -277,6 +277,16 @@ All development happens on `dev`. Editions receive features exclusively by mergi
   carried from v0.2.34-vaj to v0.2.36-vaj is over — it gets every release like the others — but
   "not frozen" is not "supported", and nothing should describe it as maintained, revived or
   production-ready.
+
+The **companion apps** are forks of the Termux plugins, one branch per edition, released on their
+own cadence and not part of a launcher cut: PickleHik3/termux-api, termux-styling and termux-boot,
+branches `master` / `nix-pkg` / `io-vaj-package`, tags `vX.Y.Z` / `nix-vX.Y.Z` / `vX.Y.Z-vaj`. They
+exist because a plugin is only granted the launcher's permissions when it joins that edition's
+`sharedUserId` and carries the same signature, so each edition needs its own build. Every one of
+them is **debug-signed with the shared `testkey_untrusted.jks`**, the same key the launcher's own
+published APKs use — that is what makes them pair, and why an F-Droid plugin never will. In
+termux-boot the edition is three values at the top of `app/build.gradle`; nothing else in that tree
+names a package. Their `targetSdk` must stay at the launcher's 28, per the shared-user rule above.
 
 **Every release ships all three editions.** A cut is not finished when `main` is tagged — `dev`
 goes to `nix-edition` and `io-vaj-package` in the same pass, each with its own tag, notes and APK

@@ -67,13 +67,13 @@ Every release ships the same launcher built from the same source; the editions d
 | Package manager | `pkg` / APT | [Nix](https://nixos.org) ([guide](docs/en/Nix_Package_Management.md)) | `pkg` / APT |
 | Package repository | official Termux repos | official `nixpkgs` binary cache | small VAJ APT repo (`https://repo.pathayam.xyz`) |
 | Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a, x86_64 — bootstrap downloaded on first run | arm64-v8a (aarch64) only, bootstrap downloaded on first run |
-| Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) (plain tags) | [TLNix:API](https://github.com/PickleHik3/termux-api/releases/tag/nix-v0.53.1) / [TLNix:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/nix-v0.32.2) (`nix-v*` tags) | same forks, `-vaj` tagged releases |
+| Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) / [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases) (plain tags) | [TLNix:API](https://github.com/PickleHik3/termux-api/releases/tag/nix-v0.53.1) / [TLNix:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/nix-v0.32.2) / [TLNix:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/nix-v0.8.1) (`nix-v*` tags) | same forks, `-vaj` tagged releases |
 
 Pick the **Termux edition** for the classic Termux experience — the launcher as your Termux, fully compatible with the upstream Termux package ecosystem. Pick the **Nix edition** if you want the entire `nixpkgs` collection, declarative configs, and rollbacks next to an existing Termux install — it is built on a [Nix-on-Droid](https://github.com/nix-community/nix-on-droid)-style environment; new to Nix? start with the [beginner's guide](docs/en/Nix_Getting_Started.md), then the [package management reference](docs/en/Nix_Package_Management.md). The **VAJ edition is a legacy demo**: it predates the Nix edition as the side-by-side option and is kept only for preview installs.
 
 > ⚠️ **The VAJ demo edition is being deprecated.** It has been security-fixes-only since `v0.2.34-vaj`. It runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set; keeping its crucial packages updated is no longer sustainable, and packages that stop receiving security updates are a liability rather than a feature. Move to the Nix edition instead — the **[VAJ to Nix migration guide](docs/en/VAJ_To_Nix_Migration.md)** covers backing up the home directory, installing the Nix build side by side, restoring your files, and replacing APT packages from `nixpkgs`. If the Nix edition does not cover a specific need, [open an issue](https://github.com/PickleHik3/termux-launcher/issues).
 
-Companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with any edition. Nix-edition companions ship as `nix-v*` tagged releases (TLNix:API, TLNix:Styling).
+Companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with any edition. Nix-edition companions ship as `nix-v*` tagged releases (TLNix:API, TLNix:Styling, TLNix:Boot).
 
 ## Installation
 
@@ -85,6 +85,7 @@ Recommended setup:
 - Matching companion forks when using Termux add-ons (pick the release matching your [edition](#editions): plain tag for `com.termux`, `nix-v*` tag for `com.termux.launcher.nix`, `-vaj` tag for `io.vaj.tl`):
   - [Termux:API](https://github.com/PickleHik3/termux-api/releases)
   - [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases)
+  - [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases) — runs the scripts in `~/.termux/boot/` after a restart
 
 The built-in terminal keyboard is enabled on fresh installs; an external keyboard app is optional.
 See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
