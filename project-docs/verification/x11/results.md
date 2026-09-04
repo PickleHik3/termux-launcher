@@ -13,6 +13,8 @@ the display, present frames and receive input at all.
 | 2026-09-04 | emulator `tl_test`, Android 16 | x86_64 | software, page hidden | same | 81 / 116 FPS, score 97-103 | 6/6 pass |
 | 2026-09-04 | emulator `tl_test`, Android 16 | x86_64 | software, no driver override | `zink Vulkan 1.4(llvmpipe)`, Mesa 26.0.6 | 6 / 10 FPS, score 7 | 5/5 pass |
 | 2026-09-05 | emulator `tl_test`, Android 16 | x86_64 | none (`xeyes`, `xclock` only; `6054b0be`) | — | — | by eye: Turn on → Start display → clients on the page; three rotations keep the display attached with `Activities: 1`, `Death Recipients: 1`; `termux-x11-preference list` / `touchMode:2` and `launcherctl x11 gpu --env` answer from a shell |
+| 2026-09-05 | **pong**, Nothing Phone 2 (A065), Adreno 730, Android 16 | arm64-v8a | software, page showing (`0b86a679`) | `llvmpipe (LLVM 21.1.8, 128 bits)`, Mesa 26.0.6, OpenGL ES 3.2 | 163 / 186 FPS, score 173 | 6/6 pass |
+| 2026-09-05 | **pong**, as above | arm64-v8a | `turnip-zink`, page showing (`MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=noconform`, `mesa-vulkan-icd-freedreno` from pacman's main repo, no separate loader) | `zink Vulkan 1.4(Turnip Adreno (TM) 725 (MESA_TURNIP))`, Mesa 26.0.6, OpenGL ES 3.2 | 91 / 91 FPS, score 90 | 6/6 pass |
 
 An emulator has no GPU: its host GL is swiftshader/swangle and its guest GL is llvmpipe, so single
 digits are the expected floor and say nothing about a phone. The rows exist to prove the path, not
@@ -35,10 +37,23 @@ Screenshots, not assertions — the script cannot see these, and they are the re
 - `glmark2-es2 --benchmark "shading:shading=phong" --run-forever` shows its shaded model live on
   the page, so an EGL context on the X display presents through the same surface.
 
+## The phone
+
+The two pong rows are the first real device: the arm64 `libXlorie.so` loads, the server hands
+`AHardwareBuffer`s to the page (step 4 counts them, and it passed), and a GPU client — Zink over
+Turnip on the Adreno — presents through the display. The Zink row's flat 91 FPS on both scenes
+against llvmpipe's 163–186 says the GPU path is paced by presentation, not by drawing; the
+software row is the CPU running free. `launcherctl x11 gpu` on the phone named the GPU (from the
+GL renderer string) and the `turnip-zink` profile before any package was installed.
+
+Memory, `dumpsys meminfo com.termux` TOTAL PSS on pong: 197 MB with no display and the Display
+place showing, 182 MB with the server, `xeyes` and `xclock` running and the page showing. The
+server is its own process; the launcher's cost is its surface. (A hidden-page reading was taken
+but is not trusted — another app came to the front during it.)
+
 ## Owed
 
-- **A real device.** Every row above is an emulator on x86_64. The arm64 `libXlorie.so` and the
-  `AHardwareBuffer` hand-off on a real GPU are unverified, as is anything about how it feels.
+- **Feel.** Nothing above says how a desktop feels to use on the phone.
 - **The GPU profiles that need hardware**: `turnip-zink` (Adreno), `virgl`, `virgl-angle` and
   `vulkan-wrapper`. `GL_PROFILE=…` on the script takes the env from the profile table in
   `PLAN-embedded-x11.md`, so each is one run once the packages are installed.
