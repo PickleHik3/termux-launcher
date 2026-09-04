@@ -408,16 +408,26 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * terminal — the wall's Display page, where an X client owns every ordinary key.
      *
      * <p>The rule is deliberately narrow: only a stroke holding <em>both</em> Ctrl and Alt is
-     * the launcher's. Every default binding lives in that space, so the ways back out of the
-     * display always work, while X keeps the whole ordinary keyboard — Ctrl+C, Alt+Tab, the
-     * function keys — which is what a Linux desktop needs to be usable at all.
+     * the launcher's, and only when it resolves to a binding. Every default binding lives in
+     * that space, so the ways back out of the display always work, while X keeps the whole
+     * ordinary keyboard — Ctrl+C, Alt+Tab, the function keys — and its own Ctrl+Alt chords too:
+     * a desktop's Ctrl+Alt+T or Ctrl+Alt+arrow is not the launcher's to swallow just because the
+     * terminal historically swallowed unbound Ctrl+Alt strokes.
      */
     public boolean consumeLauncherChord(@NonNull KeyEvent e) {
         if (!e.isCtrlPressed() || !e.isAltPressed()) return false;
-        return handleRegistryKeybinds(e);
+        return handleRegistryKeybinds(e, false);
     }
 
     private boolean handleRegistryKeybinds(KeyEvent e) {
+        return handleRegistryKeybinds(e, true);
+    }
+
+    /**
+     * @param swallowUnbound whether an unbound Ctrl+Alt stroke is consumed anyway — the terminal's
+     *                       historical contract — or left to whoever is behind the launcher
+     */
+    private boolean handleRegistryKeybinds(KeyEvent e, boolean swallowUnbound) {
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         if (mHost.properties().areHardwareKeyboardShortcutsDisabled()) {
             if (resolver.cancelPendingSequence()) clearPendingKeyChordUi();
@@ -467,7 +477,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {
             // Preserve the historical Termux contract: unmatched Ctrl+Alt strokes
             // are swallowed while hardware shortcuts are enabled.
-            return e.isAltPressed() && e.isCtrlPressed();
+            return swallowUnbound && e.isAltPressed() && e.isCtrlPressed();
         }
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.PASSTHROUGH)
             return false;
@@ -503,7 +513,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (inspector != null)
             inspector.recordBinding(match == null ? null : match.stroke, match == null ? null : match.toolName);
         if (match == null)
-            return true; // unbound Ctrl+Alt stroke: swallowed, as before
+            return swallowUnbound; // unbound Ctrl+Alt stroke: swallowed, as before
 
         boolean handled = runMatch(resolver, dispatcher, match);
         if (handled) mHost.keyChordUi().showAction(match.stroke, bindingDisplayName(match));
