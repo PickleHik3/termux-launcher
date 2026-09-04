@@ -174,13 +174,13 @@
     <string name="settings_wall_tiles_title">Status bar buttons</string>
     <string name="settings_wall_tiles_summary">Show Widgets and Display buttons in the expanded status bar.</string>
     <string name="termux_x11_no_display">No display is running.</string>
-    <string name="termux_x11_needs_keyboard_data">A display needs the keyboard layouts from `pkg install x11-repo xkeyboard-config`.</string>
+    <string name="termux_x11_needs_keyboard_data">The display needs the keyboard layout package before it can start; the Linux display guide names it.</string>
     <string name="termux_x11_start_display">Start display</string>
     <string name="termux_x11_stop_display">Stop display</string>
     <string name="termux_x11_display_settings">Display settings</string>
-    <string name="termux_x11_command_taken">Another termux-x11 command is installed; remove it to use the launcher\'s display.</string>
+    <string name="termux_x11_command_taken">Another app\'s display command is installed, so the launcher left its own out; the Linux display guide shows how to switch.</string>
     <string name="settings_x11_display_title">Linux display</string>
-    <string name="settings_x11_display_summary">Show a Linux desktop beside the terminal, started with the termux-x11 command.</string>
+    <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
     <string name="permission_x11_display_description">Lets the display server started from your shell show its screen in the launcher.</string>
     <string name="termux_wall_tile_widgets">Widgets</string>
