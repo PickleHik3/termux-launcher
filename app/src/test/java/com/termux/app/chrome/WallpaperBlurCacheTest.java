@@ -76,6 +76,22 @@ public class WallpaperBlurCacheTest {
     }
 
     @Test
+    public void theByteBudgetEvictsBeforeTheRadiusCapDoes() {
+        Bitmap probe = cache.obtain(4, wallpaperFrame);
+        long frameBytes = probe.getAllocationByteCount();
+        // Room for one frame and a half: the second frame in must push the first out.
+        WallpaperBlurCache budgeted = new WallpaperBlurCache(source, null, frameBytes * 3 / 2);
+
+        budgeted.obtain(4, wallpaperFrame);
+        budgeted.obtain(8, wallpaperFrame);
+
+        assertEquals(1, budgeted.residentRadiiCount());
+        assertFalse(budgeted.hasRadius(4));
+        assertTrue("the frame just cut always stays, however large", budgeted.hasRadius(8));
+        assertTrue(budgeted.residentBytes() <= frameBytes * 3 / 2);
+    }
+
+    @Test
     public void anEvictedFrameSomeViewIsStillDrawingIsDroppedWithoutRecycling() {
         Bitmap doomed = cache.obtain(8, wallpaperFrame);
         source.inUse.add(doomed);

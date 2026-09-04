@@ -68,9 +68,17 @@ public final class WallpaperBlurCache {
 
     /** How many independently tuned radii stay resident before the least-recently-used is dropped. */
     public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 3;
+    /**
+     * How many bytes of pre-blurred frames stay resident, whatever the radius count. A frame is a
+     * full-screen ARGB_8888 bitmap — about 10 MB on a 1080x2400 panel and 18 MB at 1440x3200 — so
+     * a count alone let a QHD phone hold 55 MB of wallpaper nobody was looking at. The most recent
+     * frame always stays, however large.
+     */
+    public static final long DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES = 40L * 1024 * 1024;
 
     @NonNull private final Source mSource;
     @Nullable private final Runnable mOnCleared;
+    private final long mMaxBytes;
 
     @NonNull private final LinkedHashMap<Integer, Bitmap> mByRadius =
         new LinkedHashMap<>(4, 0.75f, true);
@@ -94,8 +102,14 @@ public final class WallpaperBlurCache {
 
     /** @param onCleared runs after every clear, for the module-side state cut from the frames */
     public WallpaperBlurCache(@NonNull Source source, @Nullable Runnable onCleared) {
+        this(source, onCleared, DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES);
+    }
+
+    /** @param maxBytes the resident-frame byte budget; see {@link #DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES} */
+    public WallpaperBlurCache(@NonNull Source source, @Nullable Runnable onCleared, long maxBytes) {
         mSource = source;
         mOnCleared = onCleared;
+        mMaxBytes = maxBytes;
     }
 
     /** The rect the resident frames were captured for, in screen coordinates. */
@@ -143,6 +157,14 @@ public final class WallpaperBlurCache {
         return mByRadius.containsKey(blurRadiusDp);
     }
 
+    /** Bytes the resident frames hold, the figure the byte budget is charged against. */
+    public long residentBytes() {
+        long total = 0L;
+        for (Bitmap frame : mByRadius.values())
+            if (frame != null && !frame.isRecycled()) total += frame.getAllocationByteCount();
+        return total;
+    }
+
     /**
      * Returns the pre-blurred full wallpaper frame for {@code blurRadiusDp}, capturing and blurring
      * one only when no valid frame is resident.
@@ -184,7 +206,8 @@ public final class WallpaperBlurCache {
             wallpaperBitmap.recycle();
         }
         mByRadius.put(blurRadiusDp, blurredBitmap);
-        while (mByRadius.size() > MAX_CACHED_WALLPAPER_BLUR_RADII) {
+        while (mByRadius.size() > MAX_CACHED_WALLPAPER_BLUR_RADII
+            || (mByRadius.size() > 1 && residentBytes() > mMaxBytes)) {
             Iterator<Bitmap> eldest = mByRadius.values().iterator();
             Bitmap evicted = eldest.next();
             eldest.remove();
