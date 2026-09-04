@@ -2499,7 +2499,12 @@ public final class SuggestionBarView extends GridLayout
             && entries.isEmpty();
 
         if (showEmptyPinnedHint) {
-            TextView hint = new TextView(getContext());
+            TextView hint = new TextView(getContext()) {
+                @Override public void onVisibilityAggregated(boolean isVisible) {
+                    super.onVisibilityAggregated(isVisible);
+                    setPinnedHintShimmerRunning(isVisible);
+                }
+            };
             hint.setText(R.string.termux_app_launcher_empty_pinned_hint);
             hint.setTextColor(resolvePinnedHintBaseColor());
             hint.setTextSize(11f);
@@ -2778,7 +2783,18 @@ public final class SuggestionBarView extends GridLayout
         return order;
     }
 
+    /**
+     * The empty-dock hint's slow colour breath. It runs only while the hint is actually on screen —
+     * the dock is rebuilt often and the hint is a child of every rebuild, so an animator started
+     * on creation and left to loop repainted a hidden row forever — and not at all when the user
+     * has asked for a still launcher (lazy mode, or a zero animator scale).
+     */
     private void applyPinnedHintShimmer(@NonNull TextView hintView) {
+        if (mPinnedHintShimmer != null) {
+            mPinnedHintShimmer.cancel();
+            mPinnedHintShimmer = null;
+        }
+        if (!shouldAnimatePinnedHint()) return;
         final int baseColor = resolvePinnedHintBaseColor();
         final int shimmerColor = blendColors(baseColor, resolveLauncherTextColor(), 0.24f);
         ValueAnimator shimmer = ValueAnimator.ofObject(new ArgbEvaluator(), baseColor, shimmerColor, baseColor);
@@ -2789,18 +2805,41 @@ public final class SuggestionBarView extends GridLayout
         hintView.addOnAttachStateChangeListener(new OnAttachStateChangeListener() {
             @Override
             public void onViewAttachedToWindow(View v) {
-                if (!shimmer.isStarted()) {
-                    shimmer.start();
-                }
+                // onVisibilityAggregated starts it once the row is actually shown.
             }
 
             @Override
             public void onViewDetachedFromWindow(View v) {
                 shimmer.cancel();
+                if (mPinnedHintShimmer == shimmer) mPinnedHintShimmer = null;
             }
         });
-        shimmer.start();
+        mPinnedHintShimmer = shimmer;
     }
+
+    private void setPinnedHintShimmerRunning(boolean running) {
+        ValueAnimator shimmer = mPinnedHintShimmer;
+        if (shimmer == null) return;
+        if (running) {
+            if (!shimmer.isStarted()) shimmer.start();
+            else if (shimmer.isPaused()) shimmer.resume();
+        } else if (shimmer.isStarted() && !shimmer.isPaused()) {
+            shimmer.pause();
+        }
+    }
+
+    private boolean shouldAnimatePinnedHint() {
+        if (!ValueAnimator.areAnimatorsEnabled()) return false;
+        try {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+            return preferences == null || !preferences.isLazyModeEnabled();
+        } catch (Throwable ignored) {
+            return true;
+        }
+    }
+
+    /** The one live empty-dock hint animator; a rebuilt dock replaces it. */
+    @Nullable private ValueAnimator mPinnedHintShimmer;
 
     private int resolvePinnedHintBaseColor() {
         return blendColors(inheritedTintColor, resolveLauncherTextColor(), 0.58f);
