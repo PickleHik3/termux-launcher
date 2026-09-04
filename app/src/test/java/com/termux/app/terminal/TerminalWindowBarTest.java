@@ -339,24 +339,52 @@ public class TerminalWindowBarTest {
     }
 
     @Test
-    public void edgeOverswipeRequiresExtraDistanceAndReversalCancelsIt() {
+    public void edgeOverswipeStreamsTheSurplusDistanceAndFollowsAReversal() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
-        List<Boolean> requests = new ArrayList<>();
-        bar.setOnEdgeOverswipeListener(requests::add);
-        bar.setStatusBarCollapsed(true);
+        List<String> events = new ArrayList<>();
+        List<Float> offsets = new ArrayList<>();
+        bar.setOnEdgeOverswipeListener(new TerminalWindowBar.OnEdgeOverswipeListener() {
+            @Override public boolean onEdgeOverswipeBegin() { events.add("begin"); return true; }
+            @Override public void onEdgeOverswipe(float dxPx) { offsets.add(dxPx); }
+            @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) { events.add("end"); }
+            @Override public void onEdgeOverswipeCancel() { events.add("cancel"); }
+        });
+        bar.measure(exact(220), exact(30));
+        bar.layout(0, 0, 220, 30);
+
+        // An empty strip cannot scroll at all, so every pixel of a horizontal drag is surplus.
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 80, 15);
+        assertEquals(Collections.singletonList("begin"), events);
+        // The host starts from rest: the slop that proved the intent is not travel.
+        assertEquals(0f, offsets.get(0), 0.01f);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 120, 15);
+        assertEquals(40f, offsets.get(offsets.size() - 1), 0.01f);
+        // A reversal walks the offset back rather than dropping the stream.
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 60, 15);
+        assertEquals(-20f, offsets.get(offsets.size() - 1), 0.01f);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 60, 15);
+        assertEquals(Arrays.asList("begin", "end"), events);
+    }
+
+    @Test
+    public void aHostThatDeclinesTheSurplusLeavesTheStripScrolling() {
+        TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
+        List<String> events = new ArrayList<>();
+        bar.setOnEdgeOverswipeListener(new TerminalWindowBar.OnEdgeOverswipeListener() {
+            @Override public boolean onEdgeOverswipeBegin() { events.add("begin"); return false; }
+            @Override public void onEdgeOverswipe(float dxPx) { events.add("drag"); }
+            @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) { events.add("end"); }
+            @Override public void onEdgeOverswipeCancel() { events.add("cancel"); }
+        });
         bar.measure(exact(220), exact(30));
         bar.layout(0, 0, 220, 30);
 
         touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 80, 15);
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 40, 15); // reverse clears accumulated 60dp
-        touch(bar, android.view.MotionEvent.ACTION_UP, 40, 15);
-        assertEquals(0, requests.size());
-
-        touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 90, 15);
-        touch(bar, android.view.MotionEvent.ACTION_UP, 90, 15);
-        assertEquals(Collections.singletonList(Boolean.FALSE), requests);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 120, 15);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 120, 15);
+        assertFalse(events.contains("drag"));
+        assertFalse(events.contains("end"));
     }
 
     /**

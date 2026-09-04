@@ -28,6 +28,15 @@ public enum TopPaneSlotMode {
         return this == NOTIFICATIONS || this == NOTIFICATIONS_AND_MEDIA;
     }
 
+    /**
+     * Whether the wall's navigation tiles fit. Pinned notifications and media outrank the clock
+     * and the tiles both: the 68dp band cannot hold three cells and a notification card at phone
+     * widths, and the status-bar swipe remains the way across while they hold the slot.
+     */
+    public boolean showsTiles(boolean tilesRequested) {
+        return tilesRequested && this == CLOCK_ONLY;
+    }
+
     public boolean showsMedia() {
         return this == MEDIA || this == NOTIFICATIONS_AND_MEDIA;
     }

@@ -98,6 +98,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (mWidgetsPage != null) mWidgetsPage.applyStyle(style);
     }
 
+    /** The places this install has, in spatial order. */
+    @NonNull
+    public java.util.List<PaneWallPage> pages() {
+        return mWall.pages();
+    }
+
     @NonNull
     public PaneWallPage currentPage() {
         return mWall.currentPage();
@@ -123,6 +129,32 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     public void returnToTerminal(boolean animate) {
         mWall.goTo(PaneWallPolicy.homePage(), animate);
+    }
+
+    // ---- Dragging, from the status bar ------------------------------------------------------
+
+    /** True while a sideways drag on the status bar has anywhere to take the wall. */
+    public boolean canDrag() {
+        return mWall.areGesturesEnabled() && mWall.pages().size() > 1;
+    }
+
+    /** Take a drag. False when the wall has nowhere to go, leaving the gesture to its owner. */
+    public boolean beginDrag() {
+        if (!canDrag()) return false;
+        mWall.beginDrag();
+        return true;
+    }
+
+    public void dragTo(float dxPx) {
+        mWall.dragTo(dxPx);
+    }
+
+    public void endDrag(float velocityPxPerSec) {
+        mWall.endDrag(velocityPxPerSec);
+    }
+
+    public void cancelDrag() {
+        mWall.cancelDrag();
     }
 
     /** Hold the wall still while another surface owns the gesture. */

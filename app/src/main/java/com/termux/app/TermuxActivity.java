@@ -6832,6 +6832,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPaneWallController == null) return;
             if (held) mPaneWallController.returnToTerminal(false);
             mPaneWallController.setGesturesEnabled(!held);
+            syncWallGestureAvailability();
         }
         @Override public void refreshPaneLayout() {
             if (mPaneController != null) mPaneController.refreshPaneLayout();
@@ -11030,6 +11031,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             page == com.termux.app.wall.PaneWallPage.WIDGETS);
                     }
                 }
+                @Override public void onWallPageChanged(
+                        @NonNull com.termux.app.wall.PaneWallPage page) {
+                    syncWallTileSelection();
+                }
             });
         mPaneWallController.attachTerminalPage(paneHost);
         // The widget grid moves onto the wall before the widget controller looks it up, so the
@@ -11053,6 +11058,107 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * off the status bar's pull-down still holds the widget grid, so exactly one of the two ever
      * owns it.
      */
+    /**
+     * The wall's two navigation tiles in the expanded status bar: which of them this install
+     * offers, what they are shaped like, and which one is the place on screen.
+     */
+    private void refreshWallTiles() {
+        View slotView = findViewById(R.id.terminal_top_widget_area);
+        if (!(slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot)) return;
+        com.termux.app.statusbar.TopPaneWidgetSlot slot =
+            (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
+        java.util.List<com.termux.app.wall.PaneWallPage> pages;
+        if (mPaneWallController == null) {
+            pages = java.util.Collections.emptyList();
+        } else {
+            // A preference sync can have taken a place away or given one back.
+            mPaneWallController.refreshPages();
+            pages = mPaneWallController.pages();
+            syncWallGestureAvailability();
+        }
+        slot.setClockAlignment(mPreferences == null
+            ? null : mPreferences.getTopPaneClockAlignment());
+        slot.setWallTiles(mPreferences != null && mPreferences.isTopPaneWallTilesEnabled(),
+            pages.contains(com.termux.app.wall.PaneWallPage.WIDGETS),
+            pages.contains(com.termux.app.wall.PaneWallPage.DISPLAY));
+        wireWallTile(slot.widgetsTile(), com.termux.app.wall.PaneWallPage.WIDGETS,
+            R.string.termux_wall_tile_widgets);
+        wireWallTile(slot.displayTile(), com.termux.app.wall.PaneWallPage.DISPLAY,
+            R.string.termux_wall_tile_display);
+        syncWallTileSelection();
+    }
+
+    private void wireWallTile(@Nullable com.termux.app.statusbar.TopPaneWallTileView tile,
+                              @NonNull com.termux.app.wall.PaneWallPage page, int labelRes) {
+        if (tile == null) return;
+        tile.setLabel(getString(labelRes));
+        // The tiles are the status surface's own chips, so they take its resolved radius: the
+        // stored -1 sentinel and a detached Status radius both land here through one accessor.
+        tile.setCornerRadiusPx(resolveStatusBarCapsuleCornerRadiusPx(
+            Math.max(1, tile.getHeight() > 0 ? tile.getHeight() : Math.round(dpToPx(44)))));
+        tile.setListener(new com.termux.app.statusbar.TopPaneWallTileView.Listener() {
+            @Override public void onTileSelected() {
+                if (mPaneWallController == null) return;
+                // Tapping the place you are already on brings the terminal back.
+                mPaneWallController.goTo(mPaneWallController.currentPage() == page
+                    ? com.termux.app.wall.PaneWallPage.TERMINAL : page, true);
+            }
+            @Override public void onTileStopRequested() {
+                confirmStopEmbeddedDisplay();
+            }
+        });
+    }
+
+    /** The current page's tile reads as selected; tapping it again returns to the terminal. */
+    private void syncWallTileSelection() {
+        View slotView = findViewById(R.id.terminal_top_widget_area);
+        if (!(slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot)) return;
+        com.termux.app.statusbar.TopPaneWidgetSlot slot =
+            (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
+        com.termux.app.wall.PaneWallPage page = mPaneWallController == null
+            ? com.termux.app.wall.PaneWallPage.TERMINAL : mPaneWallController.currentPage();
+        if (slot.widgetsTile() != null) {
+            slot.widgetsTile().setSelected(page == com.termux.app.wall.PaneWallPage.WIDGETS);
+        }
+        if (slot.displayTile() != null) {
+            slot.displayTile().setSelected(page == com.termux.app.wall.PaneWallPage.DISPLAY);
+            slot.displayTile().setRunning(isEmbeddedDisplayRunning());
+        }
+    }
+
+    /**
+     * Whether a display is running behind the Display page. Nothing can start one yet, so the
+     * tile's stop control stays out of the way until the embedded server ships.
+     */
+    private boolean isEmbeddedDisplayRunning() {
+        return false;
+    }
+
+    /** Stopping a display closes everything on it, so it is asked once. */
+    private void confirmStopEmbeddedDisplay() {
+        if (!isEmbeddedDisplayRunning()) return;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.termux_wall_display_stop_title)
+            .setMessage(R.string.termux_wall_display_stop_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.termux_wall_display_stop_confirm,
+                (dialog, which) -> stopEmbeddedDisplay())
+            .show();
+    }
+
+    private void stopEmbeddedDisplay() {
+        // The embedded display server is not built yet; PLAN-embedded-x11.md wires this up.
+        syncWallTileSelection();
+    }
+
+    /** Arm or disarm the status bar's sideways drag from what the wall can actually do. */
+    private void syncWallGestureAvailability() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (!(host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)) return;
+        ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setWallAvailable(
+            mPaneWallController != null && mPaneWallController.canDrag());
+    }
+
     public boolean isPaneWallEnabled() {
         return mPreferences != null && mPreferences.isPaneWallEnabled();
     }
@@ -11242,8 +11348,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
             ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setCollapsed(collapsed);
         }
-        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
-        if (bar != null) bar.setStatusBarCollapsed(collapsed);
         refreshTerminalWindowBar();
     }
 
@@ -11256,7 +11360,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             showWindowFromBar(index);
         });
         bar.setOnCreateWindowListener(this::createNewWindow);
-        bar.setOnEdgeOverswipeListener(collapsed -> setTopStatusBarCollapsed(collapsed, true));
+        // The chips scroll first; once the strip is at its edge the surplus distance drags the
+        // pane wall, so reaching the last window and pulling further slides the next place in.
+        bar.setOnEdgeOverswipeListener(
+            new com.termux.app.terminal.TerminalWindowBar.OnEdgeOverswipeListener() {
+                @Override public boolean onEdgeOverswipeBegin() {
+                    return mPaneWallController != null && mPaneWallController.beginDrag();
+                }
+                @Override public void onEdgeOverswipe(float dxPx) {
+                    if (mPaneWallController != null) mPaneWallController.dragTo(dxPx);
+                }
+                @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) {
+                    if (mPaneWallController != null) mPaneWallController.endDrag(velocityPxPerSec);
+                }
+                @Override public void onEdgeOverswipeCancel() {
+                    if (mPaneWallController != null) mPaneWallController.cancelDrag();
+                }
+            });
         applyLazyMode();
 
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
@@ -11315,10 +11435,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mFullStatusBarController.dragCancel();
                     }
                 }
+                @Override public boolean onWallDragBegin() {
+                    if (mPaneWallController == null || !mPaneWallController.beginDrag()) return false;
+                    if (mAppDrawerController != null) mAppDrawerController.closeImmediate();
+                    if (mSuggestionBarView != null) mSuggestionBarView.dismissContextPopups();
+                    return true;
+                }
+                @Override public void onWallDrag(float dxPx) {
+                    if (mPaneWallController != null) mPaneWallController.dragTo(dxPx);
+                }
+                @Override public void onWallDragEnd(float velocityPxPerSec) {
+                    if (mPaneWallController != null) mPaneWallController.endDrag(velocityPxPerSec);
+                }
+                @Override public void onWallDragCancel() {
+                    if (mPaneWallController != null) mPaneWallController.cancelDrag();
+                }
             });
         }
-        bar.setStatusBarCollapsed(mPreferences != null
-            && mPreferences.isTopPaneClockCollapsed());
+        syncWallGestureAvailability();
         refreshTerminalWindowBar();
     }
 
@@ -11455,9 +11589,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean preferenceChanged = mPreferences.isTopPaneClockCollapsed() != collapsed;
         boolean geometryChanged = host != null && currentTopStatusBarHeight(host) != targetHeight;
         if (swipeHost != null) swipeHost.setCollapsed(collapsed);
-        com.termux.app.terminal.TerminalWindowBar windowBar =
-            findViewById(R.id.terminal_window_bar);
-        if (windowBar != null) windowBar.setStatusBarCollapsed(collapsed);
         if (!preferenceChanged && !geometryChanged) {
             if (topWidgets != null) {
                 topWidgets.setClipBounds(null);
@@ -11549,6 +11680,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setOnClickListener(v -> openSystemClockApp());
             }
         }
+        refreshWallTiles();
 
         float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity() / 100f : 1f;
         int blurRadiusDp = getEffectiveStatusBarBlurRadius();

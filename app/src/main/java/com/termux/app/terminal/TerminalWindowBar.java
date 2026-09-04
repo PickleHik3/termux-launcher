@@ -67,8 +67,19 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         void onCreateWindow();
     }
 
+    /**
+     * The chip strip has run out of scroll and the finger keeps going. The surplus distance is
+     * streamed to the host so "scroll to the last chip, keep pulling, and the page beside the
+     * terminal slides in" is one continuous gesture.
+     */
     public interface OnEdgeOverswipeListener {
-        void onEdgeOverswipeRequested(boolean collapsed);
+        /** @return true to take the stream; false leaves the strip's own scrolling alone */
+        boolean onEdgeOverswipeBegin();
+        /** @param dxPx surplus travel since the hand-over, positive to the right */
+        void onEdgeOverswipe(float dxPx);
+        /** @param velocityPxPerSec horizontal release velocity, positive to the right */
+        void onEdgeOverswipeEnd(float velocityPxPerSec);
+        void onEdgeOverswipeCancel();
     }
 
     /** Visual label plus a spoken label that does not expose Nerd Font private-use glyphs. */
@@ -204,14 +215,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     @Nullable private OnCreateWindowListener mCreateListener;
     @Nullable private OnEdgeOverswipeListener mEdgeOverswipeListener;
     private final int mTouchSlop;
-    private final float mOverswipeThresholdPx;
-    private boolean mStatusBarCollapsed;
     private boolean mGestureHorizontal;
     private boolean mGestureRejected;
     private float mTouchDownX;
     private float mTouchDownY;
     private float mLastTouchX;
+    /** Signed travel the strip could not spend on its own scroll, since the DOWN. */
     private float mOverswipePx;
+    /** One-way latch: once the surplus is the host's, the strip stops scrolling for this stream. */
+    private boolean mOverswipeOwned;
+    @Nullable private android.view.VelocityTracker mOverswipeVelocity;
     private int mSelectedIndex = -1;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
     private Typeface mTerminalTypeface = Typeface.MONOSPACE;
@@ -245,7 +258,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         setClipChildren(true);
         setOverScrollMode(OVER_SCROLL_NEVER);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mOverswipeThresholdPx = dp(48);
         // The parent already supplies the intended gap after the session indicator. A second
         // leading inset here made that gap look like trailing padding owned by the session chip.
         setPaddingRelative(0, dp(2), dp(5), dp(2));
@@ -271,10 +283,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mEdgeOverswipeListener = listener;
     }
 
-    public void setStatusBarCollapsed(boolean collapsed) {
-        mStatusBarCollapsed = collapsed;
-    }
-
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         int action = event.getActionMasked();
@@ -284,10 +292,17 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             mOverswipePx = 0f;
             mGestureHorizontal = false;
             mGestureRejected = false;
+            mOverswipeOwned = false;
+            if (mOverswipeVelocity == null) {
+                mOverswipeVelocity = android.view.VelocityTracker.obtain();
+            }
+            mOverswipeVelocity.clear();
+            mOverswipeVelocity.addMovement(event);
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
             return super.onTouchEvent(event);
         }
         if (action == MotionEvent.ACTION_MOVE) {
+            if (mOverswipeVelocity != null) mOverswipeVelocity.addMovement(event);
             float dx = event.getX() - mLastTouchX;
             float totalX = event.getX() - mTouchDownX;
             float totalY = event.getY() - mTouchDownY;
@@ -299,33 +314,51 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                     mGestureHorizontal = true;
                 }
             }
+            mLastTouchX = event.getX();
+            if (mOverswipeOwned) {
+                // The surplus is the host's for the rest of this stream: the chips hold still
+                // rather than scrolling back under a finger that is now dragging the wall.
+                mOverswipePx += dx;
+                if (mEdgeOverswipeListener != null) mEdgeOverswipeListener.onEdgeOverswipe(mOverswipePx);
+                return true;
+            }
             int before = getScrollX();
             boolean handled = super.onTouchEvent(event);
-            int consumed = Math.abs(getScrollX() - before);
-            if (mGestureHorizontal && !mGestureRejected) {
-                boolean outward = mStatusBarCollapsed ? dx > 0f : dx < 0f;
-                boolean atEdge = mStatusBarCollapsed
-                    ? !canScrollHorizontally(-1) : !canScrollHorizontally(1);
-                if (!outward) {
-                    // Reversal always cancels the extra-distance request; ordinary scrolling stays.
+            // Signed: dragging left scrolls right, so what the strip spent cancels the travel out.
+            float surplus = dx + (getScrollX() - before);
+            if (mGestureHorizontal && !mGestureRejected && Math.abs(surplus) > 0f) {
+                mOverswipePx += surplus;
+                if (Math.abs(mOverswipePx) > mTouchSlop && mEdgeOverswipeListener != null
+                    && mEdgeOverswipeListener.onEdgeOverswipeBegin()) {
+                    mOverswipeOwned = true;
+                    // Start the host from rest: the slop that proved the intent is not travel.
                     mOverswipePx = 0f;
-                } else if (atEdge) {
-                    mOverswipePx += Math.max(0f, Math.abs(dx) - consumed);
+                    mEdgeOverswipeListener.onEdgeOverswipe(0f);
                 }
             }
-            mLastTouchX = event.getX();
             return handled;
         }
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-            boolean commit = action == MotionEvent.ACTION_UP
-                && mGestureHorizontal && mOverswipePx >= mOverswipeThresholdPx;
+            boolean owned = mOverswipeOwned;
+            float velocity = 0f;
+            if (mOverswipeVelocity != null) {
+                mOverswipeVelocity.computeCurrentVelocity(1000);
+                velocity = mOverswipeVelocity.getXVelocity();
+                mOverswipeVelocity.recycle();
+                mOverswipeVelocity = null;
+            }
             boolean handled = super.onTouchEvent(event);
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
             mOverswipePx = 0f;
             mGestureHorizontal = false;
             mGestureRejected = false;
-            if (commit && mEdgeOverswipeListener != null) {
-                mEdgeOverswipeListener.onEdgeOverswipeRequested(!mStatusBarCollapsed);
+            mOverswipeOwned = false;
+            if (owned && mEdgeOverswipeListener != null) {
+                if (action == MotionEvent.ACTION_UP) {
+                    mEdgeOverswipeListener.onEdgeOverswipeEnd(velocity);
+                } else {
+                    mEdgeOverswipeListener.onEdgeOverswipeCancel();
+                }
                 return true;
             }
             return handled;

@@ -134,14 +134,20 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void windowBarEdgeOverswipeRemainsChildOwnedThroughRealDispatch() {
+    public void windowBarEdgeOverswipeStaysTheStripsOwnStreamThroughRealDispatch() {
         StatusBarSwipeLayout view = createView();
         TerminalWindowBar bar = new TerminalWindowBar(view.getContext(), null);
         bar.setId(R.id.terminal_window_bar);
-        List<Boolean> barRequests = new ArrayList<>();
+        List<String> barRequests = new ArrayList<>();
         List<String> parentRequests = new ArrayList<>();
-        bar.setStatusBarCollapsed(true);
-        bar.setOnEdgeOverswipeListener(barRequests::add);
+        bar.setOnEdgeOverswipeListener(new TerminalWindowBar.OnEdgeOverswipeListener() {
+            @Override public boolean onEdgeOverswipeBegin() { barRequests.add("begin"); return true; }
+            @Override public void onEdgeOverswipe(float dxPx) { }
+            @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) {
+                barRequests.add("end");
+            }
+            @Override public void onEdgeOverswipeCancel() { barRequests.add("cancel"); }
+        });
         view.setListener(new StatusBarSwipeLayout.Listener() {
             @Override public void onCollapsedStateRequested(boolean collapsed) {
                 parentRequests.add("swipe");
@@ -155,7 +161,7 @@ public class StatusBarSwipeLayoutTest {
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 20, 15));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 90, 15));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 90, 15));
-        assertEquals(java.util.Collections.singletonList(Boolean.FALSE), barRequests);
+        assertEquals(java.util.Arrays.asList("begin", "end"), barRequests);
         assertTrue(parentRequests.isEmpty());
     }
 

@@ -86,6 +86,36 @@ public class StatusBarGesturePolicyTest {
         assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, ineligible.move(12, 30));
     }
 
+    private static StatusBarGesturePolicy wallPolicy(boolean wallEligible, boolean interactive) {
+        return new StatusBarGesturePolicy(new StatusBarGesturePolicy.Down(0, 10, 10, 10, 10,
+            100, TopStatusBarState.EXPANDED, TopStatusBarState.EXPANDED, false, interactive,
+            false, false, true, false, wallEligible, 8, 7));
+    }
+
+    @Test public void aSidewaysDragGoesToTheWallWhereverItHasSomewhereToGo() {
+        assertEquals(StatusBarGesturePolicy.Claim.WALL_HORIZONTAL,
+            wallPolicy(true, false).move(60, 12));
+        // Over the clock or a tile too: a horizontal drag on one of those is not a tap.
+        StatusBarGesturePolicy overChild = wallPolicy(true, true);
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, overChild.claim());
+        assertEquals(StatusBarGesturePolicy.Claim.WALL_HORIZONTAL, overChild.move(-60, 12));
+        assertEquals(-70f, overChild.horizontalDelta(), 0.01f);
+    }
+
+    @Test public void withNoWallTheSidewaysDragKeepsItsOlderMeaning() {
+        assertEquals(StatusBarGesturePolicy.Claim.HORIZONTAL_SWIPE,
+            wallPolicy(false, false).move(60, 12));
+        // ...but never over an interactive child, which owns its own taps.
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
+            wallPolicy(false, true).move(60, 12));
+    }
+
+    @Test public void theWallNeverStealsAVerticalDrag() {
+        assertEquals(StatusBarGesturePolicy.Claim.PULL_DOWN, wallPolicy(true, false).move(12, 60));
+        assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
+            wallPolicy(true, false).move(12, -60));
+    }
+
     private static StatusBarGesturePolicy pullUpPolicy(boolean eligible) {
         return new StatusBarGesturePolicy(new StatusBarGesturePolicy.Down(0, 10, 100, 10, 100,
             100, TopStatusBarState.FULL, TopStatusBarState.EXPANDED, false, false, false, false,

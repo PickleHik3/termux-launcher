@@ -5,8 +5,8 @@ import androidx.annotation.NonNull;
 /** Pure one-way status gesture arbitration over one immutable DOWN snapshot. */
 public final class StatusBarGesturePolicy {
     public enum Claim {
-        PENDING, HORIZONTAL_SWIPE, LONG_PRESS, PULL_DOWN, PULL_UP, COLLAPSE_SWIPE, CHILD_OWNED,
-        CANCELLED
+        PENDING, HORIZONTAL_SWIPE, WALL_HORIZONTAL, LONG_PRESS, PULL_DOWN, PULL_UP, COLLAPSE_SWIPE,
+        CHILD_OWNED, CANCELLED
     }
 
     public static final class Down {
@@ -30,6 +30,12 @@ public final class StatusBarGesturePolicy {
         public final boolean pullDownEligible;
         /** FULL is open and this point may drag it closed (chrome/empty areas, not widgets). */
         public final boolean pullUpEligible;
+        /**
+         * The pane wall has somewhere to go and this point may drag it there. It supersedes the
+         * horizontal collapse/expand swipe: a wall with places beside the terminal is what a
+         * sideways drag on the status bar means.
+         */
+        public final boolean wallEligible;
         public final int touchSlop;
         public final long timeoutToken;
 
@@ -60,6 +66,18 @@ public final class StatusBarGesturePolicy {
                     boolean insideInteractiveChild, boolean nestedChildOwned,
                     boolean anotherSurfaceEngaged, boolean pullDownEligible,
                     boolean pullUpEligible, int touchSlop, long timeoutToken) {
+            this(pointerId, rawX, rawY, localX, localY, uptimeMillis, state, normalTarget,
+                insideWindowBar, insideInteractiveChild, nestedChildOwned, anotherSurfaceEngaged,
+                pullDownEligible, pullUpEligible, false, touchSlop, timeoutToken);
+        }
+
+        public Down(int pointerId, float rawX, float rawY, float localX, float localY,
+                    long uptimeMillis, @NonNull TopStatusBarState state,
+                    @NonNull TopStatusBarState normalTarget, boolean insideWindowBar,
+                    boolean insideInteractiveChild, boolean nestedChildOwned,
+                    boolean anotherSurfaceEngaged, boolean pullDownEligible,
+                    boolean pullUpEligible, boolean wallEligible, int touchSlop,
+                    long timeoutToken) {
             this.pointerId = pointerId;
             this.rawX = rawX;
             this.rawY = rawY;
@@ -74,6 +92,7 @@ public final class StatusBarGesturePolicy {
             this.anotherSurfaceEngaged = anotherSurfaceEngaged;
             this.pullDownEligible = pullDownEligible;
             this.pullUpEligible = pullUpEligible;
+            this.wallEligible = wallEligible;
             this.touchSlop = Math.max(0, touchSlop);
             this.timeoutToken = timeoutToken;
         }
@@ -91,7 +110,7 @@ public final class StatusBarGesturePolicy {
     public StatusBarGesturePolicy(@NonNull Down down) {
         this.down = down;
         claim = down.eligible() || down.pullDownEligible || down.pullUpEligible
-            ? Claim.PENDING : Claim.CHILD_OWNED;
+            || down.wallEligible ? Claim.PENDING : Claim.CHILD_OWNED;
     }
 
     @NonNull public Down down() { return down; }
@@ -115,8 +134,15 @@ public final class StatusBarGesturePolicy {
                 && down.state == TopStatusBarState.EXPANDED) claim = Claim.COLLAPSE_SWIPE;
             else claim = Claim.CHILD_OWNED;
         } else if (ax > down.touchSlop && ax > ay) {
-            // A stream that only pull-down could claim stays a child's for everything else.
-            if (down.eligible()) {
+            // The wall takes the sideways drag wherever it has a place to go: moving between the
+            // terminal and the pages beside it is what a horizontal swipe on the bar means. With
+            // no wall — a terminal-only install, or the feature off — it keeps its older meaning
+            // and toggles the bar's own form.
+            if (down.wallEligible) {
+                horizontalDelta = dx;
+                claim = Claim.WALL_HORIZONTAL;
+            } else if (down.eligible()) {
+                // A stream that only pull-down could claim stays a child's for everything else.
                 horizontalDelta = dx;
                 claim = Claim.HORIZONTAL_SWIPE;
             } else {

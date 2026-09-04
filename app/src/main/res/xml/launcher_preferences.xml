@@ -87,6 +87,11 @@
             app:title="@string/settings_widget_pane_enabled_title"
             app:summary="@string/settings_widget_pane_enabled_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="top_pane_wall_tiles"
+            app:title="@string/settings_wall_tiles_title"
+            app:summary="@string/settings_wall_tiles_summary"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_launcher_search_header">

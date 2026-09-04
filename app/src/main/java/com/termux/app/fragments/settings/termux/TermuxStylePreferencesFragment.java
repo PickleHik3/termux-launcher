@@ -223,6 +223,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 // The pane is built once per activity, so it has to come back on a recreate.
                 scheduleTermuxActivityStylingSync(true);
                 break;
+            case "top_pane_wall_tiles":
+                mPreferences.setTopPaneWallTilesEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "app_launcher_row_haptics":
                 mPreferences.setAppLauncherRowHapticsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -269,6 +273,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherDrawerSearchAndroidKeyboardEnabled();
             case "app_launcher_widget_pane_enabled":
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
+            case "top_pane_wall_tiles":
+                return mPreferences.isTopPaneWallTilesEnabled();
             case "app_launcher_row_haptics":
                 return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":

@@ -626,6 +626,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_PANE_WALL_ENABLED, value, false);
     }
 
+    public boolean isTopPaneWallTilesEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_WALL_TILES, TERMUX_APP.DEFAULT_TOP_PANE_WALL_TILES);
+    }
+
+    public void setTopPaneWallTilesEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_WALL_TILES, value, false);
+    }
+
     public String getAppLauncherUseCaseMode() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,

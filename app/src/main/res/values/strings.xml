@@ -170,7 +170,14 @@
     <string name="settings_use_case_terminal">Terminal only</string>
     <string name="settings_home_widgets_header">Home widgets</string>
     <string name="settings_widget_pane_enabled_title">Widget pane</string>
-    <string name="settings_widget_pane_enabled_summary">Pull down from the status bar for home screen widgets.</string>
+    <string name="settings_widget_pane_enabled_summary">Keep a page of home screen widgets beside the terminal.</string>
+    <string name="settings_wall_tiles_title">Status bar buttons</string>
+    <string name="settings_wall_tiles_summary">Show Widgets and Display buttons in the expanded status bar.</string>
+    <string name="termux_wall_tile_widgets">Widgets</string>
+    <string name="termux_wall_tile_display">Display</string>
+    <string name="termux_wall_display_stop_title">Stop the display?</string>
+    <string name="termux_wall_display_stop_message">Apps running on it will close.</string>
+    <string name="termux_wall_display_stop_confirm">Stop</string>
     <string name="settings_surfaces_header">Surfaces</string>
     <string name="settings_customize_dock_title">Customize dock appearance</string>
     <string name="settings_customize_dock_summary">Choose the shared Default or Rounded shape and tune the dock live on the home screen.</string>

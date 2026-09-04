@@ -36,6 +36,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     private static final Interpolator INTERPOLATOR = new PathInterpolator(.16f, 1f, .3f, 1f);
 
     private final Rect mClockBounds = new Rect();
+    private final Rect mWidgetsTileBounds = new Rect();
+    private final Rect mDisplayTileBounds = new Rect();
     private final Rect mNotificationBounds = new Rect();
     private final Rect mMediaBounds = new Rect();
 
@@ -44,10 +46,16 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private MediaWidgetView mMedia;
     @Nullable private PinnedNotificationIconCache mIcons;
     @Nullable private ViewPropertyAnimator mClockFade;
+    @Nullable private TopPaneWallTileView mWidgetsTile;
+    @Nullable private TopPaneWallTileView mDisplayTile;
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
     private int mPinnedCount;
     private float mFullExpansionProgress;
+    private boolean mTilesRequested;
+    private boolean mWidgetsTileAvailable;
+    private boolean mDisplayTileAvailable;
+    @Nullable private String mClockAlignment;
 
     public TopPaneWidgetSlot(Context context) {
         this(context, null);
@@ -100,7 +108,39 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             mNotifications.setOpenListener(this::openPinned);
         }
         if (mMedia != null) mMedia.setVisibility(GONE);
+        mWidgetsTile = findViewById(R.id.terminal_wall_tile_widgets);
+        mDisplayTile = findViewById(R.id.terminal_wall_tile_display);
         applyFeed(false);
+    }
+
+    @Nullable
+    public TopPaneWallTileView widgetsTile() {
+        return mWidgetsTile;
+    }
+
+    @Nullable
+    public TopPaneWallTileView displayTile() {
+        return mDisplayTile;
+    }
+
+    /**
+     * Which of the wall's navigation tiles this install offers, and whether the user wants them
+     * at all. A place the wall does not have gets no tile.
+     */
+    public void setWallTiles(boolean requested, boolean widgetsPage, boolean displayPage) {
+        if (mTilesRequested == requested && mWidgetsTileAvailable == widgetsPage
+            && mDisplayTileAvailable == displayPage) return;
+        mTilesRequested = requested;
+        mWidgetsTileAvailable = widgetsPage;
+        mDisplayTileAvailable = displayPage;
+        requestLayout();
+    }
+
+    /** The clock alignment decides the cell order; the tiles read the same preference it does. */
+    public void setClockAlignment(@Nullable String alignment) {
+        if (alignment == null ? mClockAlignment == null : alignment.equals(mClockAlignment)) return;
+        mClockAlignment = alignment;
+        requestLayout();
     }
 
     @NonNull
@@ -296,9 +336,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) {
+            applyWallTiles(width, height, gutter, gap);
             applyFullRowPolicy(width, height, gutter, gap);
             return;
         }
+        applyWallTiles(width, height, gutter, gap);
 
         if (stacked) {
             int stackHeight = Math.min(height, Math.round(dp(STACK_HEIGHT_DP)));
@@ -360,6 +402,46 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         applyFullRowPolicy(width, height, gutter, gap);
     }
 
+    /**
+     * Split the slot into equal cells for the clock and the wall's tiles, or take the tiles away.
+     * The clock drops to its compact face when a third of the slot cannot hold its full one — at
+     * a large font scale on a narrow screen it cannot, which is why the fit is measured.
+     */
+    private void applyWallTiles(int width, int height, int gutter, int gap) {
+        boolean tiles = mMode.showsTiles(mTilesRequested) && mFullExpansionProgress <= 0f;
+        boolean widgetsTile = tiles && mWidgetsTileAvailable;
+        boolean displayTile = tiles && mDisplayTileAvailable;
+        if (!widgetsTile && !displayTile) {
+            mWidgetsTileBounds.setEmpty();
+            mDisplayTileBounds.setEmpty();
+            if (mWidgetsTile != null) mWidgetsTile.setVisibility(GONE);
+            if (mDisplayTile != null) mDisplayTile.setVisibility(GONE);
+            return;
+        }
+        int clockDesired = mClock == null ? 0 : Math.max(1, Math.round(mClock.contentWidth()));
+        TopPaneTileLayoutPolicy.Result result = TopPaneTileLayoutPolicy.calculate(width, height,
+            gutter, gap, mClockAlignment, widgetsTile, displayTile, clockDesired,
+            getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+        mClockBounds.set(result.clock);
+        mWidgetsTileBounds.set(result.widgets);
+        mDisplayTileBounds.set(result.display);
+        applyClockForm(result.clockCompact ? TopPaneClockForm.COMPACT : TopPaneClockForm.FULL,
+            false);
+        if (mClock != null && !mClockBounds.isEmpty()) measureExact(mClock, mClockBounds);
+        applyTile(mWidgetsTile, mWidgetsTileBounds);
+        applyTile(mDisplayTile, mDisplayTileBounds);
+    }
+
+    private void applyTile(@Nullable TopPaneWallTileView tile, @NonNull Rect bounds) {
+        if (tile == null) return;
+        if (bounds.isEmpty()) {
+            tile.setVisibility(GONE);
+            return;
+        }
+        tile.setVisibility(VISIBLE);
+        measureExact(tile, bounds);
+    }
+
     private void applyFullRowPolicy(int width, int height, int gutter, int gap) {
         if (mClock == null) return;
         boolean stacked = mMode.showsNotifications()
@@ -405,6 +487,13 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mMedia != null && !mMediaBounds.isEmpty()) {
             mMedia.layout(mMediaBounds.left, mMediaBounds.top, mMediaBounds.right, mMediaBounds.bottom);
         }
+        layoutTile(mWidgetsTile, mWidgetsTileBounds);
+        layoutTile(mDisplayTile, mDisplayTileBounds);
+    }
+
+    private void layoutTile(@Nullable TopPaneWallTileView tile, @NonNull Rect bounds) {
+        if (tile == null || bounds.isEmpty()) return;
+        tile.layout(bounds.left, bounds.top, bounds.right, bounds.bottom);
     }
 
     private float dp(float value) {

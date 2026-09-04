@@ -180,6 +180,11 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_PANE_WALL_ENABLED = false;
 
+        /** Defines the key for the pane wall's Widgets and Display buttons in the status bar. */
+        public static final String KEY_TOP_PANE_WALL_TILES = "top_pane_wall_tiles";
+
+        public static final boolean DEFAULT_TOP_PANE_WALL_TILES = true;
+
         /**
          * Defines the key for the launcher / terminal-only use case the user picked. Stored rather
          * than derived from the surface switches: the surfaces stay individually settable after a
