@@ -1,0 +1,104 @@
+name: Build X11 native (Xlorie)
+
+# Builds libXlorie.so — the Xorg "Xlorie" DDX that backs the launcher's Display page — from
+# termux/termux-x11 at the commit pinned in x11-server/UPSTREAM.md, for arm64-v8a and x86_64
+# (the emulator is the only way to try the Display page without a phone). Artifacts are
+# committed into app/src/main/jniLibs/<abi>/ by hand after a green run, exactly like
+# build_mnn_native.yml does for libMNN.so.
+#
+# Iterative: dispatch manually or push this file. Does not touch the app build.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'termux-x11 commit or tag to build (defaults to the pinned one)'
+        required: false
+        default: '9df8b767645aa0d0a2f2576767449df55b41962f'
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/build_x11_native.yml'
+      - 'ci/x11-patch/**'
+
+env:
+  # Keep in step with x11-server/UPSTREAM.md. A build from a different commit than the vendored
+  # Java is a JNI mismatch waiting to happen, so both places name the same one.
+  TERMUX_X11_COMMIT: 9df8b767645aa0d0a2f2576767449df55b41962f
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    steps:
+      - name: Checkout termux-x11
+        uses: actions/checkout@v6
+        with:
+          repository: termux/termux-x11
+          ref: ${{ github.event.inputs.ref || env.TERMUX_X11_COMMIT }}
+          submodules: recursive
+          path: x11
+
+      - name: Checkout this repo (for the patch set)
+        uses: actions/checkout@v6
+        with:
+          path: self
+
+      - name: Apply patches
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          patches=(self/ci/x11-patch/*.patch)
+          if [ ${#patches[@]} -eq 0 ]; then
+            echo "No native patches — building upstream Xlorie unchanged."
+          else
+            for p in "${patches[@]}"; do
+              git -C x11 apply --verbose "$GITHUB_WORKSPACE/$p"
+            done
+          fi
+
+      - name: Install build tools
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y bison ninja-build python3
+
+      - name: Setup Android NDK 29.0.14206865
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r29
+          local-cache: false
+
+      - name: Build libXlorie.so for ${{ matrix.abi }}
+        env:
+          ANDROID_NDK: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          set -euxo pipefail
+          cmake -S x11/lorie/src/main/cpp -B build-${{ matrix.abi }} -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=${{ matrix.abi }} \
+            -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build-${{ matrix.abi }} --target Xlorie -j"$(nproc)"
+
+      - name: Collect artifact
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          find build-${{ matrix.abi }} -name 'libXlorie.so' -exec cp -v {} out/ \;
+          test -f out/libXlorie.so
+          "$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded out/libXlorie.so
+          ls -la out
+        env:
+          ANDROID_NDK: ${{ steps.ndk.outputs.ndk-path }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: x11-native-${{ matrix.abi }}
+          path: out/libXlorie.so
+          if-no-files-found: error
