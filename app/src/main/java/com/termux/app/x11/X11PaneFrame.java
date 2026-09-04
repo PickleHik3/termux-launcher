@@ -36,6 +36,11 @@ public final class X11PaneFrame extends PaneContentFrame {
         void startDisplay();
         /** The page was long-pressed; show its menu at these screen coordinates. */
         void showDisplayMenu(float rawX, float rawY);
+        /**
+         * True when one of the launcher's own chords claimed this key, in which case X must not
+         * see it. Everything else is the display's.
+         */
+        default boolean consumeLauncherKey(@NonNull android.view.KeyEvent event) { return false; }
     }
 
     private final PaneRim mRim = new PaneRim();
@@ -135,6 +140,17 @@ public final class X11PaneFrame extends PaneContentFrame {
         }
         if (glass) mRim.apply(this, true, radiusPx, true);
         else mRim.clear(this);
+    }
+
+    /**
+     * Every key aimed at the page passes through here on its way to the display's own view, so
+     * this is where the launcher gets first refusal. It takes only its own chords; the rest of
+     * the keyboard belongs to whatever is running on the display.
+     */
+    @Override
+    public boolean dispatchKeyEvent(@NonNull android.view.KeyEvent event) {
+        if (mHost != null && mHost.consumeLauncherKey(event)) return true;
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

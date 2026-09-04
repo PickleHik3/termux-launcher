@@ -11063,6 +11063,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void showDisplayMenu(float rawX, float rawY) {
                 showEmbeddedDisplayMenu();
             }
+            @Override public boolean consumeLauncherKey(@NonNull KeyEvent event) {
+                return mTermuxTerminalViewClient != null
+                    && mTermuxTerminalViewClient.consumeLauncherChord(event);
+            }
         });
         // The prefix commands go in with the feature, and are re-checked on every start.
         if (com.termux.app.x11.X11CliInstaller.install(this)

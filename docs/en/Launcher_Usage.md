@@ -73,6 +73,10 @@ reached and the next place slides in.
 The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
 a widget to move or resize it, and swipe inside the grid to reach its other pages.
 
+On the display page a hardware keyboard types into whatever Linux program is running there, so
+the launcher keeps only its own `Ctrl+Alt` shortcuts — the ones that move you between places and
+around your panes. Everything else, `Ctrl+C` and `Alt+Tab` included, reaches the program.
+
 ## Launch Android apps
 
 ### Pinned apps

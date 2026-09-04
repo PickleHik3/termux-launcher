@@ -403,6 +403,20 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * committed text would be guesswork, so the registry binds simply do not fire
      * from such a keyboard.
      */
+    /**
+     * The launcher's own chord space, for a surface that has taken the keyboard away from the
+     * terminal — the wall's Display page, where an X client owns every ordinary key.
+     *
+     * <p>The rule is deliberately narrow: only a stroke holding <em>both</em> Ctrl and Alt is
+     * the launcher's. Every default binding lives in that space, so the ways back out of the
+     * display always work, while X keeps the whole ordinary keyboard — Ctrl+C, Alt+Tab, the
+     * function keys — which is what a Linux desktop needs to be usable at all.
+     */
+    public boolean consumeLauncherChord(@NonNull KeyEvent e) {
+        if (!e.isCtrlPressed() || !e.isAltPressed()) return false;
+        return handleRegistryKeybinds(e);
+    }
+
     private boolean handleRegistryKeybinds(KeyEvent e) {
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         if (mHost.properties().areHardwareKeyboardShortcutsDisabled()) {

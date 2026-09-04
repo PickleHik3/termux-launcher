@@ -39,6 +39,16 @@ import java.util.Map;
  * Resolution picks the first binding whose condition holds. Two claims on the same
  * stroke with overlapping conditions are a real conflict: the first registration
  * wins and the clash is recorded in {@link #getConflicts()}.
+ *
+ * <h2>Precedence when another surface owns the keyboard</h2>
+ *
+ * The terminal reaches this resolver through its own view client, so a surface that has taken
+ * focus away from the terminal — the wall's Display page, where an X client is being typed into —
+ * would otherwise lose every binding. Such a surface offers its keys to
+ * {@code TermuxTerminalViewClient#consumeLauncherChord} first, which claims <em>only</em> strokes
+ * holding both Ctrl and Alt. That is the launcher's own chord space and where every default
+ * binding lives, so the ways back out always work; everything else, Ctrl+C and Alt+Tab and the
+ * function keys included, belongs to whatever is running on that surface.
  */
 public final class TerminalKeyBindingResolver {
 
