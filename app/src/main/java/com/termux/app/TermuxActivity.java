@@ -1755,8 +1755,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * dock and status surfaces use, so "Match all surfaces" moves the panes with everything else.
      */
     @NonNull
-    private com.termux.app.terminal.TerminalPaneController.PaneSurfaceStyle paneSurfaceStyle() {
-        return new com.termux.app.terminal.TerminalPaneController.PaneSurfaceStyle() {
+    private com.termux.app.terminal.PaneSurfaceStyle paneSurfaceStyle() {
+        return new com.termux.app.terminal.PaneSurfaceStyle() {
             @Override public boolean isPaneGlassActive() {
                 return isTerminalPaneGlassActive();
             }

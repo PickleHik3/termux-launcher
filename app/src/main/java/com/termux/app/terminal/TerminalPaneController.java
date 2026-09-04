@@ -146,30 +146,6 @@ public class TerminalPaneController {
     /** How long after the last resize keypress to commit the resize (mirrors touch drag-end). */
     private static final long RESIZE_KEY_FINISH_DELAY_MS = 220L;
 
-    /**
-     * How the panes dress themselves as glass. Supplied by the activity, which owns the shared
-     * pre-blurred wallpaper frame, the terminal tint and the surface-editor preferences; the
-     * controller only asks what to paint and how far apart to sit.
-     */
-    public interface PaneSurfaceStyle {
-        /** True while each pane should carry its own glass slab (frost, tint, grain, rim). */
-        boolean isPaneGlassActive();
-        /** The shared pre-blurred wallpaper frame at the configured radius, or null for none. */
-        @Nullable android.graphics.Bitmap paneGlassBlurFrame();
-        /** That frame's rect in screen coordinates. */
-        @NonNull android.graphics.Rect paneGlassBlurFrameRect();
-        /** Vibrancy filter applied to the frost, shared with every other glass surface. */
-        @Nullable android.graphics.ColorFilter paneGlassFrostFilter();
-        /** The terminal tint painted over the frost. */
-        int paneGlassTintColor();
-        /** Film grain layer for one pane, or null while grain is off. */
-        @Nullable android.graphics.drawable.Drawable paneGlassGrainLayer();
-        /** Corner radius of a pane slab, in px. */
-        float paneGlassCornerRadiusPx();
-        /** Gap between tiled panes, in dp — the surface editor's Inner padding. */
-        int paneGapDp();
-    }
-
     /** Callbacks into the hosting activity. */
     public interface Host {
         /** Spawn a new shell rooted at {@code cwd} (or default cwd if null); null on failure. */
@@ -297,7 +273,7 @@ public class TerminalPaneController {
     private final Map<TerminalSession, TerminalView> mPaneViews = new HashMap<>();
     /** Live border drawable + focus state per pane, so a focus flip can crossfade and a
      *  redundant re-render can leave a mid-flight crossfade untouched instead of snapping it. */
-    private final Map<TerminalSession, PaneBorderState> mBorderStates = new HashMap<>();
+    private final Map<TerminalSession, PaneRim> mBorderStates = new HashMap<>();
     private final Map<Split, LinearLayout> mSplitLayouts = new HashMap<>();
     /** The split a keybind resize burst is adjusting, while the finish is still debounced. */
     @Nullable private Split mPendingKeyResizeSplit;
@@ -317,8 +293,6 @@ public class TerminalPaneController {
     /** Fallback gap between tiled panes when no surface style is attached. */
     private static final int DIVIDER_DP = 1;
 
-    /** Radius a pane slab takes when the style has no opinion. */
-    private static final int PANE_GLASS_RADIUS_DP = 10;
 
     public TerminalPaneController(Host host, FrameLayout hostView, LayoutInflater inflater) {
         mHost = host;
@@ -1679,12 +1653,7 @@ public class TerminalPaneController {
      * resolver on every focus change, which is every tap on a pane.
      */
     private boolean arePaneAnimationsEnabled() {
-        try {
-            return Build.VERSION.SDK_INT < Build.VERSION_CODES.O
-                || android.animation.ValueAnimator.areAnimatorsEnabled();
-        } catch (Throwable t) {
-            return true;
-        }
+        return PaneRim.animationsEnabled();
     }
 
     /** Plays the float entry animation queued by {@link #toggleScratchpad}. */
@@ -2119,8 +2088,6 @@ public class TerminalPaneController {
 
     /** How long a pane takes to slide from where it was to where the layout put it. */
     private static final long PANE_MOVE_MS = 340L;
-    /** Focus border crossfade; a state change, so faster than any structural motion. */
-    private static final long FOCUS_BORDER_MS = 160L;
 
     /** Screen bounds of every live pane frame, captured just before a re-render replaces them. */
     private final Map<TerminalSession, Rect> mMoveOrigins = new HashMap<>();
@@ -2662,16 +2629,16 @@ public class TerminalPaneController {
 
     /** The configured gap between tiled panes, in dp. */
     private int paneGapDp() {
-        return mSurfaceStyle != null ? Math.max(0, mSurfaceStyle.paneGapDp()) : DIVIDER_DP;
+        return PaneGlass.gapDp(mSurfaceStyle, DIVIDER_DP);
     }
 
     private float paneGlassRadiusPx() {
-        float radius = mSurfaceStyle != null ? mSurfaceStyle.paneGlassCornerRadiusPx() : 0f;
-        return radius > 0f ? radius : dp(PANE_GLASS_RADIUS_DP);
+        return PaneGlass.radiusPx(mSurfaceStyle,
+            mHostView.getResources().getDisplayMetrics().density);
     }
 
     private boolean paneGlassActive() {
-        return mSurfaceStyle != null && mSurfaceStyle.isPaneGlassActive();
+        return PaneGlass.isActive(mSurfaceStyle);
     }
 
     /**
@@ -2680,25 +2647,12 @@ public class TerminalPaneController {
      * tick and on every frost refresh.
      */
     public void applyPaneGlass() {
-        boolean glass = paneGlassActive();
         float radiusPx = paneGlassRadiusPx();
         for (FrameLayout frame : mPaneFrames.values()) {
             PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
             if (backdrop == null) continue;
-            if (!glass) {
-                backdrop.setVisibility(View.GONE);
+            if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx))
                 releasePanePlank(frame);
-                continue;
-            }
-            // Against the pane's own size, not the window's: after four or five splits a pane is a
-            // few rows tall and the window's radius would be half of it.
-            float paneRadiusPx = PaneShape.radiusForBounds(radiusPx,
-                frame.getWidth(), frame.getHeight());
-            backdrop.setGlass(mSurfaceStyle.paneGlassBlurFrame(),
-                mSurfaceStyle.paneGlassBlurFrameRect(), mSurfaceStyle.paneGlassTintColor(),
-                mSurfaceStyle.paneGlassGrainLayer(), paneRadiusPx,
-                mSurfaceStyle.paneGlassFrostFilter());
-            backdrop.setVisibility(View.VISIBLE);
         }
         // The clip that keeps the terminal's rectangular cell backgrounds from poking past the
         // slab's corners is part of the pane's shape, which updateActiveBorders owns for every
@@ -2754,16 +2708,7 @@ public class TerminalPaneController {
             mHost.configureAttachedPaneView(view, session);
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
-            PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
-            if (backdrop != null) {
-                // A pane moves for reasons that never redraw it (a sibling's divider drag, a float
-                // being dragged, the host resizing under the keyboard), and the frost is positioned
-                // in screen space, so every move has to re-aim the matrix.
-                backdrop.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or2, ob) -> {
-                    if (l != ol || t != ot || r != or2 || b != ob)
-                        ((PaneGlassBackdropView) v).invalidateGlassPosition();
-                });
-            }
+            PaneGlass.followLayout(frame.findViewById(R.id.terminal_pane_glass));
             applyPaneGlass();
         } else {
             // A cached frame may still carry a half-finished entry animation's alpha/scale.
@@ -2802,8 +2747,8 @@ public class TerminalPaneController {
     }
 
     private void detachPaneView(TerminalSession session) {
-        PaneBorderState borderState = mBorderStates.remove(session);
-        if (borderState != null && borderState.animator != null) borderState.animator.cancel();
+        PaneRim rim = mBorderStates.remove(session);
+        if (rim != null) rim.cancel();
         FrameLayout frame = mPaneFrames.remove(session);
         releasePanePlank(frame);
         mPaneViews.remove(session);
@@ -2836,153 +2781,27 @@ public class TerminalPaneController {
                 : (floating || split || mMaximizedLeaf != null) ? dp(FLOAT_CORNER_RADIUS_DP) : 0f;
             frame.setPaneShape(shapeRadiusPx, glassShape);
             if (!split && mMaximizedLeaf == null && !floating && !glassShape) {
-                PaneBorderState gone = mBorderStates.remove(paneSession);
-                if (gone != null && gone.animator != null) gone.animator.cancel();
-                frame.setForeground(null);
+                PaneRim gone = mBorderStates.remove(paneSession);
+                if (gone != null) gone.clear(frame);
+                else frame.setForeground(null);
                 continue;
             }
-            boolean isActive = paneSession == activeSession;
-            boolean glass = glassShape;
             // Same Material primary hue for every pane, but the focused pane's border is at full
             // strength while the rest are dimmed — an unambiguous, theme-proof focus cue. On glass
             // the stroke gives way to the shared lit rim, which is the slab's own edge; a drawn
             // outline over frost reads as a box sitting on the material.
-            int focusedTint = 0;
-            int unfocusedTint = 0;
-            float radius = 0f;
-            if (glass) {
-                // Unlike the dock's white glass edge, a pane's rim is also its focus indicator, so
-                // it carries a Material colour and a wide alpha spread: the focused pane glows in
-                // the accent, the rest fall back to a dim neutral outline. A white rim at two
-                // alphas could not say which pane has the keyboard.
-                focusedTint = MaterialColors.getColor(mHostView.getContext(),
-                    com.google.android.material.R.attr.colorPrimary,
-                    ContextCompat.getColor(mHostView.getContext(), R.color.termux_primary));
-                unfocusedTint = MaterialColors.getColor(mHostView.getContext(),
-                    com.google.android.material.R.attr.colorOutlineVariant,
-                    ContextCompat.getColor(mHostView.getContext(), R.color.termux_outline_variant));
-                radius = paneGlassRadiusPx();
-            }
-            PaneBorderState state = mBorderStates.get(paneSession);
-            // Reuse the live drawable when nothing but focus can have changed. A focus flip then
-            // crossfades it in place, and an unchanged re-render (every render calls this) leaves
-            // a mid-flight crossfade running instead of stamping the end state over it.
-            boolean reusable = state != null && state.drawable != null
-                && state.glass == glass && frame.getForeground() == state.drawable
-                && (!glass || (state.focusedTint == focusedTint
-                    && state.unfocusedTint == unfocusedTint && state.radius == radius));
-            if (reusable) {
-                if (state.active != isActive) {
-                    state.active = isActive;
-                    animateBorderFocus(state);
-                }
-                continue;
-            }
-            if (state != null && state.animator != null) state.animator.cancel();
-            state = new PaneBorderState();
-            state.glass = glass;
-            state.active = isActive;
-            state.focusedTint = focusedTint;
-            state.unfocusedTint = unfocusedTint;
-            state.radius = radius;
-            if (glass) {
-                state.currentTint = isActive ? focusedTint : unfocusedTint;
-                state.drawable = new com.termux.app.GlassRimDrawable(
-                    mHostView.getResources().getDisplayMetrics().density, radius,
-                    state.currentTint);
-                state.drawable.setAlpha(isActive ? GLASS_FOCUSED_ALPHA : GLASS_UNFOCUSED_ALPHA);
-            } else {
-                android.graphics.drawable.Drawable border = ContextCompat.getDrawable(
-                    mHostView.getContext(), R.drawable.pane_active_border);
-                if (border != null) {
-                    border = border.mutate();
-                    border.setAlpha(isActive ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
-                }
-                state.drawable = border;
-            }
-            frame.setForeground(state.drawable);
-            if (state.drawable != null) mBorderStates.put(paneSession, state);
-            else mBorderStates.remove(paneSession);
+            PaneRim rim = mBorderStates.get(paneSession);
+            if (rim == null) rim = new PaneRim();
+            if (rim.apply(frame, glassShape, paneGlassRadiusPx(), paneSession == activeSession))
+                mBorderStates.put(paneSession, rim);
+            else
+                mBorderStates.remove(paneSession);
         }
         applyCursorOwnership();
         // The float handle pill dims with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
     }
 
-    private static final int GLASS_FOCUSED_ALPHA = 255;
-    private static final int GLASS_UNFOCUSED_ALPHA = 110;
-    private static final int STOCK_FOCUSED_ALPHA = 255;
-    private static final int STOCK_UNFOCUSED_ALPHA = 64;
-
-    /** See {@link #mBorderStates}. */
-    private static final class PaneBorderState {
-        android.graphics.drawable.Drawable drawable;
-        boolean glass;
-        boolean active;
-        int focusedTint;
-        int unfocusedTint;
-        int currentTint;
-        float radius;
-        ValueAnimator animator;
-    }
-
-    /**
-     * Crossfades a pane border between its focused and unfocused treatment instead of snapping.
-     * Alpha and (on glass) rim hue move together, so the eye gets a short motion path across the
-     * layout on "move pane focus" even though no geometry changes. Starts from wherever the
-     * drawable currently is, so an interrupted crossfade reverses smoothly.
-     */
-    private void animateBorderFocus(PaneBorderState state) {
-        final android.graphics.drawable.Drawable border = state.drawable;
-        // Read the mid-flight values before cancelling: a reversed crossfade continues from
-        // wherever the rim currently is. The superseded animator's end listener checks
-        // state.animator so it cannot stamp its own end state over these.
-        final int fromAlpha = border.getAlpha();
-        final int fromTint = state.currentTint;
-        if (state.animator != null) {
-            ValueAnimator superseded = state.animator;
-            state.animator = null;
-            superseded.cancel();
-        }
-        final int toAlpha = state.glass
-            ? (state.active ? GLASS_FOCUSED_ALPHA : GLASS_UNFOCUSED_ALPHA)
-            : (state.active ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
-        final int toTint = state.active ? state.focusedTint : state.unfocusedTint;
-        if (!arePaneAnimationsEnabled()) {
-            border.setAlpha(toAlpha);
-            if (state.glass && border instanceof com.termux.app.GlassRimDrawable) {
-                state.currentTint = toTint;
-                ((com.termux.app.GlassRimDrawable) border).setTint(toTint);
-            }
-            return;
-        }
-        final boolean tinted = state.glass && border instanceof com.termux.app.GlassRimDrawable;
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(FOCUS_BORDER_MS);
-        animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
-        animator.addUpdateListener(a -> {
-            float fraction = (float) a.getAnimatedValue();
-            border.setAlpha(Math.round(fromAlpha + (toAlpha - fromAlpha) * fraction));
-            if (tinted) {
-                state.currentTint = ColorUtils.blendARGB(fromTint, toTint, fraction);
-                ((com.termux.app.GlassRimDrawable) border).setTint(state.currentTint);
-            }
-        });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(android.animation.Animator animation) {
-                if (state.animator != animation) return; // superseded by a newer crossfade
-                state.animator = null;
-                border.setAlpha(toAlpha);
-                if (tinted) {
-                    state.currentTint = toTint;
-                    ((com.termux.app.GlassRimDrawable) border).setTint(toTint);
-                }
-            }
-        });
-        state.animator = animator;
-        animator.start();
-    }
 
     private void focusActiveView() {
         if (!mHost.shouldTerminalTakeFocus()) return;
