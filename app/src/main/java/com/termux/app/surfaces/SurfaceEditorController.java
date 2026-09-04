@@ -3246,6 +3246,18 @@ public final class SurfaceEditorController {
             .show();
     }
 
+    /**
+     * Leaves the editor from outside a Back press — a HOME press: the card goes down without
+     * ceremony and then {@link #requestClose()}'s rule applies, dirty edits included.
+     */
+    public void requestExit() {
+        if (!mSurfaceEditorOpen)
+            return;
+        if (mCardShown)
+            hideCard(false);
+        requestClose();
+    }
+
     private void exitSurfaceEditor() {
         // Cleared before the flag drops: the peek helpers no-op once mSurfaceEditorOpen is false,
         // and a drag interrupted by ✓ would otherwise leave the card stuck at peek alpha.

@@ -383,6 +383,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private LauncherAppDataProvider mLauncherAppDataProvider;
     private LauncherConfigRepository mLauncherConfigRepository;
     private final FolderRenameController mFolderRenameController = new FolderRenameController();
+    /** Every surface over the terminal, innermost first; Back, keys, text and teardown derive from it. */
+    private final com.termux.app.chrome.OverlayRegistry mOverlays = createOverlayRegistry();
     /** Anchored glass editor for session/window/pane renames; built on first rename. */
     @Nullable
     private com.termux.app.terminal.rename.TerminalRenameCoordinator mRenameCoordinator;
@@ -1073,9 +1075,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView);
         }
         if (isLauncherHomeIntent(intent)) {
-            // Before resetTransientVisualState(): that call stomps every dock child's alpha, scale
-            // and translation, so a drawer left open across HOME would strand faded pinned icons.
-            closeAppDrawerImmediate();
+            // HOME means the home screen, not the home screen with something still up. HOME while
+            // already home never stops the activity, so this is the one exit these get that is not
+            // a Back press. Before resetTransientVisualState(): that call stomps every dock child's
+            // alpha, scale and translation, so a drawer left open across HOME would strand faded
+            // pinned icons.
+            mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
@@ -5071,15 +5076,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
         if (mWidgetHostController != null) mWidgetHostController.onStop();
         mIsVisible = false;
-        if (mFullStatusBarController != null) mFullStatusBarController.closeImmediateToPrior();
+        mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mDockPlankController != null) {
             mDockPlankController.reset();
         }
-        if (mCommandPalette != null)
-            mCommandPalette.dismissImmediately();
-        if (mTerminalSheet != null)
-            mTerminalSheet.dismissImmediately();
-        closeAppDrawerImmediate();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStop();
         if (mTermuxTerminalViewClient != null)
@@ -5103,8 +5103,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         hideDecorNavBarSurfaceOverlay(true);
         mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
         mAzGestureHandler.removeCallbacks(mLauncherCatalogWarmRunnable);
-        getDrawer().closeDrawers();
-        mSurfaceEditor.restoreExpandedStatusAfterSurfaceEditor();
     }
 
     /**
@@ -5219,14 +5217,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mInAppKeyboardShiftLocked = false;
             mInAppKeyboard.onConfigurationChanged(newConfig);
         }
-        if (mCommandPalette != null) {
-            mCommandPalette.dismissImmediately();
+        // Every open surface measured the old orientation's geometry. The palette alone needs a
+        // refresh pass afterwards; a sheet's glass is built per show(), so the next one already
+        // picks up the new configuration.
+        mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION);
+        if (mCommandPalette != null)
             mCommandPalette.refreshAppearance();
-        }
-        // No refresh pass to match the palette's: a sheet's glass is built per show(), so the next
-        // one already picks up the new configuration.
-        if (mTerminalSheet != null)
-            mTerminalSheet.dismissImmediately();
         mChrome.onConfigurationChanged();
         scheduleOrientationGeometryPass();
     }
@@ -8995,40 +8991,169 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mAppDrawerController.handleSearchCodePoint(codePoint, ctrlDown);
     }
 
-    /** Set when {@link #handleOverlayPaneKey} closed a pane, so the matching release is swallowed. */
-    private boolean mOverlayPaneClaimedBackDown;
-
     /**
-     * Back aimed at the widget pane or the FULL status pane, claimed in the key channel.
+     * The overlays in z order, innermost first. Each entry reads its controller when asked, never
+     * when registered, because most of them are built lazily on first use.
      *
-     * <p>{@link #onBackPressed()} already closes both, but on a device the back key travels the key
-     * channel and is consumed before {@code onBackPressed()} ever runs — which is why two presses
-     * left the pane open and only the pull-up gesture closed it. The drawer has had a claim here for
-     * exactly this reason; these two had none. The order matches {@link #onBackPressed()}: panes
-     * before the palette and the drawer.
-     *
-     * <p>Restricted to {@code ACTION_DOWN} on the back key, so nothing here can swallow the escape
-     * stroke the palette is checked first for.
+     * <p>The order is the Back order: the rename chip and the find strip are modal editors over one
+     * surface; the widget pane and FULL are panes the palette can be summoned over; the palette
+     * outranks the sheet plane so a sheet can never swallow the escape stroke; a sheet closes the
+     * drawer as it opens and so outranks it; and the surface editor and the legacy sessions drawer
+     * are conceptually behind everything else.
      */
-    public boolean handleOverlayPaneKey(int keyCode, @NonNull KeyEvent event) {
-        if (keyCode != KeyEvent.KEYCODE_BACK || event.getAction() != KeyEvent.ACTION_DOWN)
-            return false;
-        boolean consumed = (mWidgetPaneController != null && mWidgetPaneController.onBackPressed())
-            || (mFullStatusBarController != null && mFullStatusBarController.onBackPressed());
-        if (consumed) mOverlayPaneClaimedBackDown = true;
-        return consumed;
+    private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
+        com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            @Override public boolean onBack() {
+                // Closing the chip discards the draft, unlike a tap outside.
+                if (!isTerminalRenameActive()) return false;
+                mRenameCoordinator.cancel();
+                return true;
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return handleTerminalRenameKey(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return handleTerminalRenameCodePoint(codePoint, ctrlDown);
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            @Override public boolean onBack() {
+                if (!isScrollbackFindActive()) return false;
+                cancelScrollbackFind();
+                return true;
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return handleScrollbackFindKey(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return handleScrollbackFindCodePoint(codePoint, ctrlDown);
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                // onPause already cancels a search when the activity leaves.
+                if (reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME
+                    && isScrollbackFindActive()) cancelScrollbackFind();
+            }
+        });
+        registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                // Stays claimed while its exit spring settles, so repeated Back cannot fall through.
+                return mFullStatusBarController != null && mFullStatusBarController.onBackPressed();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (reason == com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION) return;
+                if (mFullStatusBarController != null) mFullStatusBarController.closeImmediateToPrior();
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            @Override public boolean onBack() {
+                if (!isCommandPaletteOpen()) return false;
+                mCommandPalette.collapse();
+                return true;
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return handleCommandPaletteKey(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return handleCommandPaletteCodePoint(codePoint, ctrlDown);
+            }
+            @Override public boolean swallowsKeyUp() {
+                return isCommandPaletteOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mCommandPalette != null) mCommandPalette.dismissImmediately();
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            @Override public boolean onBack() {
+                // One card per press, not the whole stack: a confirmation opened over the workspace
+                // picker has to give the picker back rather than drop the user on the terminal.
+                return mTerminalSheet != null && mTerminalSheet.onBackPressed();
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return handleTerminalSheetKey(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return handleTerminalSheetCodePoint(codePoint, ctrlDown);
+            }
+            @Override public boolean swallowsKeyUp() {
+                return isTerminalSheetOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mTerminalSheet != null) mTerminalSheet.dismissImmediately();
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            @Override public boolean onBack() {
+                // A back press with something typed is spent on the query and the drawer stays up.
+                // Consumed either way: falling through to dock tuning because the query absorbed it
+                // would dismiss something behind a full-screen plane.
+                if (mAppDrawerController == null || !mAppDrawerController.isOpen()) return false;
+                if (!mAppDrawerController.onBackPressedInDrawer()) mAppDrawerController.close(true);
+                return true;
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return handleAppDrawerKey(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return handleAppDrawerCodePoint(codePoint, ctrlDown);
+            }
+            @Override public boolean swallowsKeyUp() {
+                return isFolderRenameActive() || isAppDrawerOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                closeAppDrawerImmediate();
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                if (!mSurfaceEditor.isActive()) return false;
+                mSurfaceEditor.requestClose();
+                return true;
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                switch (reason) {
+                    case STOP:
+                        // The editor survives a stop; only its borrowed status-pane shape goes back.
+                        mSurfaceEditor.restoreExpandedStatusAfterSurfaceEditor();
+                        break;
+                    case HOME:
+                        // Back to the home screen means leaving the editor — through its own
+                        // unsaved-changes rule, never by discarding.
+                        mSurfaceEditor.requestExit();
+                        break;
+                    default:
+                        break;
+                }
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                DrawerLayout drawer = getDrawer();
+                if (drawer == null || !drawer.isDrawerOpen(Gravity.LEFT)) return false;
+                drawer.closeDrawers();
+                return true;
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                DrawerLayout drawer = getDrawer();
+                if (drawer != null && reason != com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION)
+                    drawer.closeDrawers();
+            }
+        });
+        return registry;
     }
 
-    /**
-     * Whether the release of a back press this activity's panes already consumed should be
-     * swallowed. Tracked as a flag rather than re-asked as "is a pane open", because by the time the
-     * release arrives the pane is closing and would answer no.
-     */
-    public boolean consumeOverlayPaneKeyUp(int keyCode) {
-        if (keyCode != KeyEvent.KEYCODE_BACK || !mOverlayPaneClaimedBackDown)
-            return false;
-        mOverlayPaneClaimedBackDown = false;
-        return true;
+    /** The key channel's overlay claim; the route Back actually travels on a device. */
+    @VisibleForTesting
+    public boolean consumeOverlayKeyDown(int keyCode, @NonNull KeyEvent event) {
+        return mOverlays.consumeKeyDown(keyCode, event);
+    }
+
+    /** The release of a stroke {@link #consumeOverlayKeyDown} claimed. */
+    @VisibleForTesting
+    public boolean consumeOverlayKeyUp(int keyCode) {
+        return mOverlays.consumeKeyUp(keyCode);
     }
 
     /** True while the drawer plane is up — what the key-release swallow asks. */
@@ -9437,57 +9562,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Back consumers, in order.
-     *
-     * <p>FULL stays first, including while its exit spring is settling, so repeated Back cannot
-     * fall through into another surface. The palette follows, then the sheet plane, then the drawer
-     * because it is a full-screen plane, and both of the consumers
-     * below it — dock tuning and the navigation drawer — are conceptually behind it; a back press
-     * that skipped past it would dismiss something the user cannot even see.
-     *
-     * <p>The sheet plane sits after the palette so it can never swallow the escape stroke the
-     * palette is checked first for, and before the drawer, which a sheet closes as it opens and
-     * therefore always outranks.
+     * Back consumers, in the order {@link #createOverlayRegistry()} registers them. With nothing
+     * open and split panes off, Back opens the legacy sessions drawer instead.
      */
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        // The rename chip is the innermost surface on screen whenever it is up, so it is the first
-        // thing Back closes — and closing it discards the draft, unlike a tap outside.
-        if (isTerminalRenameActive()) {
-            mRenameCoordinator.cancel();
+        if (mOverlays.onBackPressed())
             return;
-        }
-        // The find strip is the next surface in: Back leaves the search before it leaves anything
-        // the search was opened over.
-        if (isScrollbackFindActive()) {
-            cancelScrollbackFind();
-            return;
-        }
-        if (mWidgetPaneController != null && mWidgetPaneController.onBackPressed()) {
-            return;
-        } else if (mFullStatusBarController != null && mFullStatusBarController.onBackPressed()) {
-            return;
-        } else if (isCommandPaletteOpen()) {
-            mCommandPalette.collapse();
-        } else if (mTerminalSheet != null && mTerminalSheet.onBackPressed()) {
-            // One card per press, not the whole stack: a confirmation opened over the workspace
-            // picker has to give the picker back rather than drop the user on the terminal.
-            return;
-        } else if (mAppDrawerController != null && mAppDrawerController.isOpen()) {
-            // A back press with something typed is spent on the query and the drawer stays up. The
-            // branch still consumes it either way: falling through to dock tuning because the query
-            // absorbed it would dismiss something behind a full-screen plane.
-            if (!mAppDrawerController.onBackPressedInDrawer())
-                mAppDrawerController.close(true);
-        } else if (mSurfaceEditor.isActive()) {
-            mSurfaceEditor.requestClose();
-        } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
-            getDrawer().closeDrawers();
-        } else if (!isSplitPanesEnabled() && !getDrawer().isDrawerOpen(Gravity.LEFT)) {
+        DrawerLayout drawer = getDrawer();
+        if (drawer != null && !isSplitPanesEnabled() && !drawer.isDrawerOpen(Gravity.LEFT)) {
             // The legacy sessions drawer only exists without the in-app multiplexer: with split
             // panes on, sessions live in the status pill's own panel and this drawer stays shut.
-            getDrawer().openDrawer(Gravity.LEFT);
+            drawer.openDrawer(Gravity.LEFT);
         }
     }
 
@@ -13126,70 +13213,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean overlaysConsumeKeyDown(int keyCode, @NonNull KeyEvent event) {
-            // An open rename chip is a modal editor over one surface, so it outranks every other
-            // consumer: while it is up, every stroke belongs to the name being typed.
-            if (handleTerminalRenameKey(keyCode, event))
-                return true;
-            // The find strip is the same kind of claim: while it is up every stroke is either the
-            // query or a vim command over the transcript, and none of it belongs to the shell.
-            if (handleScrollbackFindKey(keyCode, event))
-                return true;
-            // Back for the widget pane and the FULL status pane. Same order as onBackPressed(), and
-            // the same reason the drawer has a claim below: on a device the back key is consumed in
-            // this channel and never reaches onBackPressed().
-            if (handleOverlayPaneKey(keyCode, event))
-                return true;
-            // The palette overlay claims typing before the terminal writes it, the same point the
-            // in-app keyboard's interceptor sits at. Checked first so nothing else can consume esc.
-            if (handleCommandPaletteKey(keyCode, event))
-                return true;
-            // The sheet plane, after the palette so it can never swallow the escape stroke the
-            // palette is checked first for, and before the drawer, which a sheet closes as it opens.
-            // On a device back is consumed here and never reaches onBackPressed(), so the plane
-            // needs both routes.
-            if (handleTerminalSheetKey(keyCode, event))
-                return true;
-            // After the palette (which can be summoned over the drawer and therefore outranks it)
-            // and before the app-search hook, which reads the terminal's own input line — a line
-            // nothing typed into the drawer ever reaches.
-            if (handleAppDrawerKey(keyCode, event))
+            // Every modal surface gets first refusal, innermost first, before the app-search hook,
+            // which reads the terminal's own input line — a line nothing typed into an overlay
+            // ever reaches.
+            if (mOverlays.consumeKeyDown(keyCode, event))
                 return true;
             return handleTerminalAppSearchKey(keyCode);
         }
 
         @Override public boolean overlaysConsumeKeyUp(int keyCode) {
-            // The release of a stroke the palette consumed on the way down.
-            if (isCommandPaletteOpen())
-                return true;
-            if (isFolderRenameActive())
-                return true;
-            // The release of a back press a pane consumed on the way down.
-            if (consumeOverlayPaneKeyUp(keyCode))
-                return true;
-            // Same for the sheet plane: the press was claimed on the way down, and a release let
-            // through on its own would reach the shell behind a modal surface.
-            if (isTerminalSheetOpen())
-                return true;
-            // Same for the drawer, whose plane is full screen.
-            return isAppDrawerOpen();
+            return mOverlays.consumeKeyUp(keyCode);
         }
 
         @Override public boolean overlaysConsumeCodePoint(int codePoint, boolean ctrlDown) {
-            // The rename chip's twin of its key hook, in the same order: it outranks the rest.
-            if (handleTerminalRenameCodePoint(codePoint, ctrlDown))
-                return true;
-            // The find strip's twin of its key hook, in the same order.
-            if (handleScrollbackFindCodePoint(codePoint, ctrlDown))
-                return true;
-            // The twin of the palette hook, and checked first for the same reason.
-            if (handleCommandPaletteCodePoint(codePoint, ctrlDown))
-                return true;
-            // The sheet plane's twin of the same hook, in the same order.
-            if (handleTerminalSheetCodePoint(codePoint, ctrlDown))
-                return true;
-            // The drawer's twin of the same hook: after the palette, before the enter-only
-            // app-search hook below.
-            if (handleAppDrawerCodePoint(codePoint, ctrlDown))
+            if (mOverlays.consumeCodePoint(codePoint, ctrlDown))
                 return true;
             // The AOSP keyboard and its descendants send ⏎ as text rather than as KEYCODE_ENTER —
             // see TerminalView#sendTextToTerminal — so the key-code-only app-search hook needs this

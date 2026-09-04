@@ -86,35 +86,35 @@ public class WidgetPaneBackOrderTest {
     @Test public void backThroughTheKeyChannelClosesPickerThenFull() {
         Fixture fixture = openBothPanes();
 
-        assertTrue(fixture.activity.handleOverlayPaneKey(KeyEvent.KEYCODE_BACK, backDown()));
+        assertTrue(fixture.activity.consumeOverlayKeyDown(KeyEvent.KEYCODE_BACK, backDown()));
         assertFalse(fixture.pane.picker().isOpen());
         assertTrue(fixture.full.isEngaged());
 
-        assertTrue(fixture.activity.handleOverlayPaneKey(KeyEvent.KEYCODE_BACK, backDown()));
+        assertTrue(fixture.activity.consumeOverlayKeyDown(KeyEvent.KEYCODE_BACK, backDown()));
         assertFalse(fixture.full.isEngaged());
     }
 
     /** With nothing open the claim declines, or Back could never reach the drawer or the shell. */
     @Test public void theClaimDeclinesWhenNoPaneIsUp() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
-        assertFalse(activity.handleOverlayPaneKey(KeyEvent.KEYCODE_BACK, backDown()));
-        assertFalse(activity.consumeOverlayPaneKeyUp(KeyEvent.KEYCODE_BACK));
+        assertFalse(activity.consumeOverlayKeyDown(KeyEvent.KEYCODE_BACK, backDown()));
+        assertFalse(activity.consumeOverlayKeyUp(KeyEvent.KEYCODE_BACK));
     }
 
     /** A release let through on its own would reach the shell behind the pane that just closed. */
     @Test public void theReleaseOfAClaimedPressIsSwallowedOnce() {
         Fixture fixture = openBothPanes();
-        assertTrue(fixture.activity.handleOverlayPaneKey(KeyEvent.KEYCODE_BACK, backDown()));
+        assertTrue(fixture.activity.consumeOverlayKeyDown(KeyEvent.KEYCODE_BACK, backDown()));
 
-        assertTrue(fixture.activity.consumeOverlayPaneKeyUp(KeyEvent.KEYCODE_BACK));
+        assertTrue(fixture.activity.consumeOverlayKeyUp(KeyEvent.KEYCODE_BACK));
         assertFalse("the flag is one-shot",
-            fixture.activity.consumeOverlayPaneKeyUp(KeyEvent.KEYCODE_BACK));
+            fixture.activity.consumeOverlayKeyUp(KeyEvent.KEYCODE_BACK));
     }
 
     /** Escape belongs to the palette; this claim must never see it. */
     @Test public void onlyTheBackKeyIsClaimed() {
         Fixture fixture = openBothPanes();
-        assertFalse(fixture.activity.handleOverlayPaneKey(KeyEvent.KEYCODE_ESCAPE,
+        assertFalse(fixture.activity.consumeOverlayKeyDown(KeyEvent.KEYCODE_ESCAPE,
             new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ESCAPE)));
         assertTrue("escape must leave the picker alone", fixture.pane.picker().isOpen());
     }
