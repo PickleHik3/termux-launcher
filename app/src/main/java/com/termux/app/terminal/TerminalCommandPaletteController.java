@@ -132,6 +132,8 @@ public final class TerminalCommandPaletteController
     private FrameLayout mHost;
     private FrameLayout mGlass;
     private CommandPaletteView mView;
+    /** The glass's live blur, when the backdrop is not a wallpaper frost. */
+    @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
 
     private boolean mOpen;
     private boolean mFrameScheduled;
@@ -303,6 +305,8 @@ public final class TerminalCommandPaletteController
         mGlass = mActivity.findViewById(R.id.command_palette_glass);
         View blur = mActivity.findViewById(R.id.command_palette_blur);
         if (mHost == null || mGlass == null || blur == null) return false;
+        mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
+            ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -356,6 +360,14 @@ public final class TerminalCommandPaletteController
         boolean moving = mProgress.tick(reduced, dt);
         moving |= mHeight.tick(reduced, dt);
         applyFrame();
+        // The live blur re-rasterises the decor on every frame the window draws — every frame of
+        // a list fling above it included. While the glass moves it has to; once the palette has
+        // settled it rests on one fresh capture, like the drawer does. What is behind it is the
+        // terminal, so a settled palette shows the terminal as it was when it settled.
+        if (mLiveBlur != null) {
+            if (moving) mLiveBlur.setUpdatesPaused(false);
+            else if (mOpen) mLiveBlur.refreshThenRest();
+        }
         // Faded out is enough to tear down — deliberately not "and both channels have settled".
         // The height channel tracks a result count that can keep nudging it, and anything that
         // leaves it in motion would otherwise pin the blur pane open over the space bar, since

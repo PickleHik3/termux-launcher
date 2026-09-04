@@ -1149,7 +1149,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateStatusWidgets();
         applySessionsDrawerLockState();
         syncRecentsVisibilityPolicy();
-        configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
+        applySessionsSurfaceAlpha();
         mChrome.requestSync(ChromeRenderer.SCOPE_BLUR_HEALTH);
         registerTermuxActivityBroadcastReceiver();
         registerPackageChangeReceiver();
@@ -1314,7 +1314,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalSurfaceAppearance();
         syncRecentsVisibilityPolicy();
         applyWallpaperOffsetFixIfNeeded();
-        configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
+        applySessionsSurfaceAlpha();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER
             | ChromeRenderer.SCOPE_BLUR_HEALTH);
         refreshPrivilegedBackendIfNeeded();
@@ -2548,6 +2548,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         if (drawer == null)
             return;
+        // The same dim the drawer plane settles on, in place of the AndroidX default's near-black
+        // 60%, which sat on top of a glass stack that is already eight layers deep.
+        drawer.setScrimColor(GlassBackdropTint.colorFor(1f));
         if (isSplitPanesEnabled()) {
             drawer.closeDrawers();
             drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
@@ -3056,6 +3059,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(),
             Math.round(70f * Math.max(0f, Math.min(1f, materialAlpha)))));
         divider.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * Rests a live blur on one fresh capture, or wakes it. A resting blur draws its last frame
+     * instead of re-rasterising the whole decor every time the window draws.
+     */
+    private static void restLiveBlur(@Nullable View blur, boolean rest) {
+        if (!(blur instanceof RealtimeBlurView)) return;
+        if (rest) ((RealtimeBlurView) blur).refreshThenRest();
+        else ((RealtimeBlurView) blur).setUpdatesPaused(false);
+    }
+
+    /** The legacy sessions drawer has an opacity but no blur; its glass is a plain tinted sheet. */
+    private void applySessionsSurfaceAlpha() {
+        View sessionsBackground = findViewById(R.id.sessions_background);
+        if (sessionsBackground != null && mPreferences != null)
+            sessionsBackground.setAlpha(mPreferences.getSessionsOpacity() / 100f);
     }
 
     private void configureBackgroundBlur(int blurViewId, int backgroundViewId, boolean isBlurEnabled, float surfaceAlpha, int blurRadiusDp) {
@@ -4033,10 +4053,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             return accessoryHealthy;
         }
-        View realtimeBlur = findViewById(R.id.extrakeys_backgroundblur);
-        return realtimeBlur != null
-            && realtimeBlur.getVisibility() == View.VISIBLE
-            && realtimeBlur instanceof RealtimeBlurView;
+        // Without RenderEffect the dock has no live blur of its own to be healthy; the renderer
+        // only asks while blur is on and the toolbar is shown, which is the RenderEffect case.
+        return false;
     }
 
     private boolean shouldUseManagedWallpaperBlurSource() {
@@ -4501,7 +4520,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View appsBarViewPager = findViewById(R.id.apps_bar_viewpager);
         View indicatorBand = findViewById(R.id.apps_bar_indicator_band);
         View extraKeysBackground = findViewById(R.id.extrakeys_background);
-        View extraKeysBackgroundBlur = findViewById(R.id.extrakeys_backgroundblur);
         View azRow = findViewById(R.id.apps_bar_az_row);
         View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
@@ -4514,14 +4532,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean useDecorSurface = shouldUseDockDecorNavBarSurface(state);
         applyAccessoryAmbientVeil(accessoryContainer, state);
 
-        if (extraKeysBackgroundBlur != null && !useRenderEffectBlur && !useDecorSurface) {
-            applyRealtimeBlurRadius(extraKeysBackgroundBlur, state.blurRadiusDp);
-            applyRealtimeBlurDownsampleFactor(extraKeysBackgroundBlur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
-            applyRealtimeBlurOverlayColor(
-                extraKeysBackgroundBlur,
-                state.blurEnabled ? resolveAccessorySurfaceColor(state.barAlpha) : Color.TRANSPARENT
-            );
-        }
         // Invalidate platform/local drag state while its source view is still attached and visible.
         // Alphabet and extra-key row state is deliberately not part of this cancellation decision.
         if (!state.appsRowEnabled && mSuggestionBarView != null)
@@ -4530,9 +4540,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (accessoryContainer != null) {
                 accessoryContainer.setVisibility(
                     shouldShowAccessoryStack(false, state.keyboardShown) ? View.VISIBLE : View.GONE);
-            }
-            if (extraKeysBackgroundBlur != null) {
-                extraKeysBackgroundBlur.setVisibility(View.GONE);
             }
             if (extraKeysBackground != null) {
                 extraKeysBackground.setVisibility(View.GONE);
@@ -4621,12 +4628,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         refreshDockPlankFx(state.barAlpha);
 
-        if (extraKeysBackgroundBlur != null) {
-            extraKeysBackgroundBlur.setAlpha(1f);
-            extraKeysBackgroundBlur.setVisibility(
-                state.blurEnabled && !useRenderEffectBlur && !useDecorSurface ? View.VISIBLE : View.GONE
-            );
-        }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         // Thin material hairline at the seam between the A–Z row and the extra-keys row.
         configureExtraKeysDivider(
@@ -4894,6 +4895,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyRealtimeBlurOverlayColor(statusBlur, Color.TRANSPARENT);
         if (statusBlur != null) {
             statusBlur.setVisibility(statusBlurEnabled ? View.VISIBLE : View.GONE);
+            // Behind the status band there is only the window's own ground, so one capture is
+            // the whole picture.
+            restLiveBlur(statusBlur, true);
         }
         if (statusSurface != null) {
             statusSurface.setBackground(mChrome.glass().statusBarSurface(opacity, 0f,
@@ -6818,8 +6822,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void applySessionsSurfaceBackground() {
             if (mPreferences == null) return;
-            configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false,
-                mPreferences.getSessionsOpacity() / 100f, 0);
+            applySessionsSurfaceAlpha();
         }
 
         @Override public void applyGeometryPreview(boolean commit) {
@@ -10947,6 +10950,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onEngagementChanged(boolean engaged,
                         @NonNull com.termux.app.statusbar.TopStatusBarState normalTarget) {
+                    restLiveBlur(findViewById(R.id.terminal_window_bar_blur), !engaged);
                     if (engaged) freezeTerminalForFullOverlay();
                     View view = paneHost();
                     if (view instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
@@ -11469,6 +11473,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Blur only; the glass drawable below owns the tint. See the status-glass caller above.
         applyRealtimeBlurOverlayColor(blur, Color.TRANSPARENT);
         if (blur != null) blur.setVisibility(windowBarBlurEnabled ? View.VISIBLE : View.GONE);
+        // At rest nothing moves behind the pane; in FULL it sits over the frozen terminal, whose
+        // output has to keep showing through.
+        restLiveBlur(blur, !isFullStatusBarEngaged());
         boolean capsuleStatusBar = isRoundedDockStyle();
         View background = findViewById(R.id.terminal_window_bar_background);
         if (background != null) {

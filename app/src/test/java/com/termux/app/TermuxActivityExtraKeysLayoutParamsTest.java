@@ -33,18 +33,14 @@ public class TermuxActivityExtraKeysLayoutParamsTest {
         activity.setContentView(R.layout.activity_termux);
 
         View extraKeysBackground = activity.findViewById(R.id.extrakeys_background);
-        View extraKeysBackgroundBlur = activity.findViewById(R.id.extrakeys_backgroundblur);
         RelativeLayout rootRelativeLayout = activity.findViewById(R.id.activity_termux_root_relative_layout);
 
         assertNotNull(extraKeysBackground);
-        assertNotNull(extraKeysBackgroundBlur);
         assertNotNull(rootRelativeLayout);
 
         ViewGroup.LayoutParams backgroundLpBefore = extraKeysBackground.getLayoutParams();
-        ViewGroup.LayoutParams backgroundBlurLpBefore = extraKeysBackgroundBlur.getLayoutParams();
 
         assertNotNull(backgroundLpBefore);
-        assertNotNull(backgroundBlurLpBefore);
 
         // The point of this test is that the height update mutates the existing params in place
         // instead of swapping in a fresh generic instance, which would silently drop whatever
@@ -52,26 +48,18 @@ public class TermuxActivityExtraKeysLayoutParamsTest {
         // views actually have rather than naming a parent, so relocating the views in the layout
         // does not turn into a false failure here.
         Class<?> backgroundLpClass = backgroundLpBefore.getClass();
-        Class<?> backgroundBlurLpClass = backgroundBlurLpBefore.getClass();
 
         int expectedHeight = 123;
 
         ReflectionHelpers.callInstanceMethod(activity, "updateExtraKeysBackgroundHeight",
                 ReflectionHelpers.ClassParameter.from(View.class, extraKeysBackground),
                 ReflectionHelpers.ClassParameter.from(int.class, expectedHeight));
-        ReflectionHelpers.callInstanceMethod(activity, "updateExtraKeysBackgroundHeight",
-                ReflectionHelpers.ClassParameter.from(View.class, extraKeysBackgroundBlur),
-                ReflectionHelpers.ClassParameter.from(int.class, expectedHeight));
 
         ViewGroup.LayoutParams backgroundLpAfter = extraKeysBackground.getLayoutParams();
-        ViewGroup.LayoutParams backgroundBlurLpAfter = extraKeysBackgroundBlur.getLayoutParams();
 
         assertEquals(backgroundLpClass, backgroundLpAfter.getClass());
-        assertEquals(backgroundBlurLpClass, backgroundBlurLpAfter.getClass());
         assertEquals(expectedHeight, backgroundLpAfter.height);
-        assertEquals(expectedHeight, backgroundBlurLpAfter.height);
         assertSame(backgroundLpBefore, backgroundLpAfter);
-        assertSame(backgroundBlurLpBefore, backgroundBlurLpAfter);
 
         int widthSpec = View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY);
         int heightSpec = View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY);
@@ -79,19 +67,31 @@ public class TermuxActivityExtraKeysLayoutParamsTest {
         rootRelativeLayout.layout(0, 0, 1080, 1920);
     }
 
+    /**
+     * Every live blur view left in the layout has a surface that turns it on. The sessions
+     * drawer's, the dock's and the bottom space's were retired: the drawer never blurred, the dock
+     * moved to RenderEffect, the bottom space never had a reader, and each still cost a per-frame
+     * pre-draw callback on the decor for nothing.
+     */
     @Test
-    public void realtimeBlurViews_areInflatedAndConfigurable() {
+    public void everyRemainingLiveBlurViewHasAReader() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         activity.setContentView(R.layout.activity_termux);
 
-        View sessionsBlur = activity.findViewById(R.id.sessions_backgroundblur);
-        View extraKeysBlur = activity.findViewById(R.id.extrakeys_backgroundblur);
+        java.util.Set<Integer> expected = new java.util.HashSet<>(java.util.Arrays.asList(
+            R.id.terminal_status_bar_glass_blur, R.id.terminal_window_bar_blur,
+            R.id.app_drawer_blur, R.id.command_palette_blur, R.id.terminal_sheet_blur));
+        java.util.Set<Integer> found = new java.util.HashSet<>();
+        collectBlurViews(activity.findViewById(R.id.activity_termux_root_view), found);
+        assertEquals(expected, found);
+    }
 
-        assertTrue(sessionsBlur instanceof RealtimeBlurView);
-        assertTrue(extraKeysBlur instanceof RealtimeBlurView);
-
-        ((RealtimeBlurView) sessionsBlur).setBlurRadius(12f);
-        ((RealtimeBlurView) extraKeysBlur).setBlurRadius(16f);
+    private static void collectBlurViews(View view, java.util.Set<Integer> out) {
+        if (view instanceof RealtimeBlurView) out.add(view.getId());
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) collectBlurViews(group.getChildAt(i), out);
+        }
     }
 
 }

@@ -88,6 +88,9 @@ public final class TerminalSheetController
         boolean isReducedMotionEnabled();
     }
 
+    /** The plane's live blur, when the backdrop is not a wallpaper frost. */
+    @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
+
     private static final long ENTER_DURATION_MS = 170L;
     private static final long EXIT_DURATION_MS = 110L;
     /** Side inset of a card, and the vertical inset of a full-height one. */
@@ -446,6 +449,9 @@ public final class TerminalSheetController
         mStack.add(new Sheet(card, sink, onDismiss, coverPrevious, bare, placement.foot));
         mPlane.setVisibility(View.VISIBLE);
         applyBackdropMaterial();
+        // Live while the card arrives; animateIn rests it on one fresh capture once it has. The
+        // glass itself never moves, and a resize of it (the keyboard inset) recaptures on its own.
+        if (mLiveBlur != null) mLiveBlur.setUpdatesPaused(false);
         // Only a sheet with somewhere for typing to land is worth summoning a keyboard for; a
         // confirmation is all buttons and would just push the terminal around.
         if (sink != null) mHost.ensureInAppTypingKeyboard();
@@ -641,6 +647,8 @@ public final class TerminalSheetController
     private void applyBackdropMaterial() {
         ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
         View blur = mHost.findView(R.id.terminal_sheet_blur);
+        mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
+            ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
         if (allBare()) {
             // Every open card asked for no backdrop, so the plane draws nothing of its own and what
             // is behind it — the transcript a search is searching — stays exactly as it was.
@@ -861,6 +869,7 @@ public final class TerminalSheetController
             card.setScaleX(1f);
             card.setScaleY(1f);
             card.setTranslationY(0f);
+            restLiveBlur();
             return;
         }
         if (foot) {
@@ -875,6 +884,7 @@ public final class TerminalSheetController
                         card.setTranslationY(card.getHeight());
                         card.animate().translationY(0f).setDuration(ENTER_DURATION_MS)
                             .setInterpolator(new PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+                            .withEndAction(TerminalSheetController.this::restLiveBlur)
                             .start();
                         return true;
                     }
@@ -887,7 +897,13 @@ public final class TerminalSheetController
         card.animate().alpha(1f).scaleX(1f).scaleY(1f)
             .setDuration(ENTER_DURATION_MS)
             .setInterpolator(new PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+            .withEndAction(this::restLiveBlur)
             .start();
+    }
+
+    /** One more capture of what is behind the plane, then the blur rests on it. */
+    private void restLiveBlur() {
+        if (mLiveBlur != null && !mStack.isEmpty()) mLiveBlur.refreshThenRest();
     }
 
     private void animateOut(@NonNull View card, boolean foot) {
