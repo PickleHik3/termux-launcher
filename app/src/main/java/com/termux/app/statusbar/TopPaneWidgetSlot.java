@@ -313,11 +313,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
-        if (mMode == TopPaneSlotMode.CLOCK_ONLY) {
-            applyWallTiles(width, height, gutter, gap);
-            return;
-        }
         applyWallTiles(width, height, gutter, gap);
+        if (mMode == TopPaneSlotMode.CLOCK_ONLY) return;
 
         if (stacked) {
             int stackHeight = Math.min(height, Math.round(dp(STACK_HEIGHT_DP)));

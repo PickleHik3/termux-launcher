@@ -1830,8 +1830,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Observes (never consumes) touches over the terminal and hands them to the pane under the
      * finger, so scrolling, selecting text or just pressing a pane tips that one physical slab.
-     * Overlays that own the screen (drawer, palette, surface editor, FULL status) mute it, so their
-     * gestures never tilt the surface underneath.
+     * Overlays that own the screen (drawer, palette, surface editor) mute it, so their gestures
+     * never tilt the surface underneath.
      */
     private void feedTerminalPlank(MotionEvent ev) {
         if (!mTerminalGlassActive || mPaneController == null) return;
@@ -8972,7 +8972,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * when registered, because most of them are built lazily on first use.
      *
      * <p>The order is the Back order: the rename chip and the find strip are modal editors over one
-     * surface; the widget pane and FULL are panes the palette can be summoned over; the palette
+     * surface; the widget pane is a place the palette can be summoned over; the palette
      * outranks the sheet plane so a sheet can never swallow the escape stroke; a sheet closes the
      * drawer as it opens and so outranks it; and the surface editor and the legacy sessions drawer
      * are conceptually behind everything else.
@@ -10948,6 +10948,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // stored -1 sentinel and a detached Status radius both land here through one accessor.
         tile.setCornerRadiusPx(resolveStatusBarCapsuleCornerRadiusPx(
             Math.max(1, tile.getHeight() > 0 ? tile.getHeight() : Math.round(dpToPx(44)))));
+        boolean display = page == com.termux.app.wall.PaneWallPage.DISPLAY;
         tile.setListener(new com.termux.app.statusbar.TopPaneWallTileView.Listener() {
             @Override public void onTileSelected() {
                 if (mPaneWallController == null) return;
@@ -10956,7 +10957,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ? com.termux.app.wall.PaneWallPage.TERMINAL : page, true);
             }
             @Override public void onTileStopRequested() {
-                confirmStopEmbeddedDisplay();
+                // Only the Display tile has a × — the display is the one place with a process
+                // behind it to stop.
+                if (display) confirmStopEmbeddedDisplay();
             }
         });
     }
@@ -11470,8 +11473,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Blur only; the glass drawable below owns the tint. See the status-glass caller above.
         applyRealtimeBlurOverlayColor(blur, Color.TRANSPARENT);
         if (blur != null) blur.setVisibility(windowBarBlurEnabled ? View.VISIBLE : View.GONE);
-        // At rest nothing moves behind the pane; in FULL it sits over the frozen terminal, whose
-        // output has to keep showing through.
+        // Nothing moves behind the bar at rest, so its blur rests too instead of repainting.
         restLiveBlur(blur, true);
         boolean capsuleStatusBar = isRoundedDockStyle();
         View background = findViewById(R.id.terminal_window_bar_background);

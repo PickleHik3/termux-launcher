@@ -22,7 +22,7 @@ import com.termux.R;
 
 import java.util.List;
 
-/** Fixed middle-body UI; it has no authority over FULL or terminal geometry. */
+/** The widget grid's own body, a page of the pane wall; it has no authority over the wall or the terminal's geometry. */
 public final class WidgetPaneView extends FrameLayout {
     public interface Listener {
         /** The horizontal page swipe committed; the coordinator re-renders onto this page. */

@@ -1,9 +1,9 @@
 package com.termux.app;
 
 /**
- * Standardized backdrop dim behind elevated glass surfaces (app drawer plane, FULL widgets
- * pane). Each surface feeds its own transition progress, so the tint breathes from transparent
- * to dark and back with the same spring that moves the surface — never a hard cut.
+ * Standardized backdrop dim behind elevated glass surfaces (the app drawer plane). Each surface
+ * feeds its own transition progress, so the tint breathes from transparent to dark and back with
+ * the same spring that moves the surface — never a hard cut.
  */
 public final class GlassBackdropTint {
     /** Dim strength with the surface fully open: ~33% black over the glass stack. */
