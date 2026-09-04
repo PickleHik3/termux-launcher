@@ -20,15 +20,26 @@ public class Loader {
             android.content.pm.PackageInfo targetInfo = (android.os.Build.VERSION.SDK_INT <= 32) ?
                     android.app.ActivityThread.getPackageManager().getPackageInfo(BuildConfig.APPLICATION_ID, android.content.pm.PackageManager.GET_SIGNATURES, 0) :
                     android.app.ActivityThread.getPackageManager().getPackageInfo(BuildConfig.APPLICATION_ID, (long) android.content.pm.PackageManager.GET_SIGNATURES, 0);
-            assert targetInfo != null : BuildConfig.packageNotInstalledErrorText;
-            assert targetInfo.signatures.length == 1 && BuildConfig.SIGNATURE == targetInfo.signatures[0].hashCode() : BuildConfig.packageSignatureMismatchErrorText;
+            // Upstream wrote these two checks as `assert`. ART runs app_process without -ea, so
+            // they never ran and any APK carrying this applicationId was class-loaded; the
+            // signature check is the whole reason this loader exists, so it is a real check.
+            if (targetInfo == null) {
+                System.err.println(BuildConfig.packageNotInstalledErrorText);
+                System.exit(1);
+                return;
+            }
+            if (targetInfo.signatures == null || targetInfo.signatures.length != 1
+                    || BuildConfig.SIGNATURE != targetInfo.signatures[0].hashCode()) {
+                System.err.println(BuildConfig.packageSignatureMismatchErrorText);
+                System.exit(1);
+                return;
+            }
+
 
             android.util.Log.i(BuildConfig.logTag, "loading " + targetInfo.applicationInfo.sourceDir + "::" + cls + "::main of " + targetInfo.packageName + " application (commit " + BuildConfig.COMMIT + ")");
             Class<?> targetClass = Class.forName(cls, true,
                     new dalvik.system.PathClassLoader(targetInfo.applicationInfo.sourceDir, null, ClassLoader.getSystemClassLoader()));
             targetClass.getMethod("main", String[].class).invoke(null, (Object) args);
-        } catch (AssertionError e) {
-            System.err.println(e.getMessage());
         } catch (java.lang.reflect.InvocationTargetException e) {
             e.getCause().printStackTrace(System.err);
         } catch (Throwable e) {

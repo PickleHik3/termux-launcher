@@ -87,6 +87,11 @@ the edition's own, and its error strings say what a launcher user would need to 
 `termux-x11-nightly` apt package cannot serve here at all — it bakes `com.termux.x11` into both
 the script and the signature check.
 
+Upstream's "is it installed" and "does the signature match" checks are Java `assert` statements.
+ART runs `app_process` without `-ea`, so they never executed and any APK with the right
+applicationId was class-loaded. Ours are explicit checks that print upstream's error text and exit
+non-zero (`Loader.java`); the `AssertionError` catch went with them.
+
 `app/build.gradle` packs the built APK into the launcher's assets as `assets/x11/loader.apk`, and
 `X11CliInstaller` writes it and the two scripts into the prefix.
 
