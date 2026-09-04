@@ -142,6 +142,9 @@ Keyboard height is remembered separately for portrait and landscape.
   categories layout, **Sort apps into categories** and **Re-run categorization** appear here too; the
   re-run row counts the apps installed since the last run, and the drawer mentions them once when
   more than five are waiting.
+- **Widget pane:** keep a page of home-screen widgets beside the terminal.
+- **Status bar buttons:** show Widgets and Display buttons in the expanded status bar. They give
+  way to a media session or a pinned notification; the swipe always works.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

@@ -57,6 +57,22 @@ A background window that rings the terminal bell receives a pulsing error-colore
 attention. Focusing that window clears the state; a bell in the already-focused window is not marked
 as new attention.
 
+## Move between the terminal and the widget grid
+
+The terminal is one of a row of places. Swipe left or right anywhere on the status surface to move
+between them, or expand the status panel and tap a button — **Widgets** on the left, and
+**Display** once an embedded Linux display is running. The button of the place you are on is
+filled in; tapping it again brings the terminal back, and so does the Home key.
+
+Exactly one place is on screen at a time, and the terminal never changes size for the others, so
+nothing reflows in your shells when you move. Your session keeps running while you are away.
+
+A swipe that starts on the window pills scrolls those first; keep pulling once the last pill is
+reached and the next place slides in.
+
+The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
+a widget to move or resize it, and swipe inside the grid to reach its other pages.
+
 ## Launch Android apps
 
 ### Pinned apps
