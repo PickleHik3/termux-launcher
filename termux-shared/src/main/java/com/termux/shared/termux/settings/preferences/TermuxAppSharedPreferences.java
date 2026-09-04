@@ -639,6 +639,57 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_X11_DISPLAY_COMMAND, value, false);
     }
 
+    public boolean isX11DisplayAutostartEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, TERMUX_APP.DEFAULT_X11_DISPLAY_AUTOSTART);
+    }
+
+    public void setX11DisplayAutostartEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, value, false);
+    }
+
+    public boolean isX11SetDisplayEnvEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_SET_DISPLAY_ENV, TERMUX_APP.DEFAULT_X11_SET_DISPLAY_ENV);
+    }
+
+    public void setX11SetDisplayEnvEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_SET_DISPLAY_ENV, value, false);
+    }
+
+    /** 0 means "leave it to the server". */
+    public int getX11DisplayDpi() {
+        return Math.max(0, SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_DPI, TERMUX_APP.DEFAULT_X11_DISPLAY_DPI));
+    }
+
+    public void setX11DisplayDpi(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_DPI, Math.max(0, value), false);
+    }
+
+    public boolean isX11LegacyDrawingEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_LEGACY_DRAWING, TERMUX_APP.DEFAULT_X11_LEGACY_DRAWING);
+    }
+
+    public void setX11LegacyDrawingEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_LEGACY_DRAWING, value, false);
+    }
+
+    public boolean isX11ForceBgraEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_FORCE_BGRA, TERMUX_APP.DEFAULT_X11_FORCE_BGRA);
+    }
+
+    public void setX11ForceBgraEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_FORCE_BGRA, value, false);
+    }
+
     public boolean isTopPaneWallTilesEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TOP_PANE_WALL_TILES, TERMUX_APP.DEFAULT_TOP_PANE_WALL_TILES);

@@ -55,9 +55,28 @@ public final class X11DisplayHostController {
 
     private final Runnable connectRetry = this::tryConnect;
 
+    /** A preference changed — from the settings page or {@code termux-x11-preference}. */
+    private final android.content.BroadcastReceiver preferencesReceiver =
+        new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context context, android.content.Intent intent) {
+                if (!destroyed) reloadPreferences();
+            }
+        };
+    @NonNull private final Context appContext;
+
     public X11DisplayHostController(@NonNull Context context,
                                     @NonNull LorieHost.Callbacks callbacks) {
-        this.host = new LorieHost(context.getApplicationContext(), callbacks);
+        this.appContext = context.getApplicationContext();
+        this.host = new LorieHost(appContext, callbacks);
+        // The broadcast is sent to this package only, and the app targets sdk 28, so the plain
+        // registration is right below Android 13; from 13 on the flag says the same thing.
+        android.content.IntentFilter filter = new android.content.IntentFilter(
+            com.termux.x11.LoriePreferences.ACTION_PREFERENCES_CHANGED);
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            appContext.registerReceiver(preferencesReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            appContext.registerReceiver(preferencesReceiver, filter);
+        }
         X11DisplayReceiver.register(this);
         // A server that announced itself while no activity was up — or to the activity this one
         // replaces — is taken straight away; the view connects to it when the page attaches.
@@ -108,6 +127,11 @@ public final class X11DisplayHostController {
     public void destroy() {
         destroyed = true;
         handler.removeCallbacks(connectRetry);
+        try {
+            appContext.unregisterReceiver(preferencesReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // Never registered, or already gone with the process.
+        }
         X11DisplayReceiver.unregister(this);
         if (announcement != null && link.isLinked()) X11DisplayReceiver.keepAnnouncement(announcement);
         link.release();
@@ -219,10 +243,34 @@ public final class X11DisplayHostController {
         if (current != null) current.onDisplayRunningChanged(value);
     }
 
-    /** Re-read the display preferences into a live server. */
+    /**
+     * Re-read the display preferences into the live view: filtering and the clipboard on the view,
+     * the touch mode on the input handler, and a fresh layout pass so a new resolution mode is
+     * applied to the X screen.
+     */
     public void reloadPreferences() {
         LorieView live = view;
-        if (live != null) live.reloadPreferences(LorieHost.getPrefs());
+        if (live == null) return;
+        com.termux.x11.Prefs prefs = LorieHost.getPrefs();
+        live.reloadPreferences(prefs);
+        if (host.mInputHandler != null) host.mInputHandler.reloadPreferences(prefs);
+        live.requestLayout();
+    }
+
+    /**
+     * The display the running server answers on, as {@code DISPLAY} wants it — read from the X
+     * socket the server opened, {@code :0} when there is nothing better to go on.
+     */
+    @NonNull
+    public static String displayName() {
+        java.io.File dir = new java.io.File(
+            com.termux.shared.termux.TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH, ".X11-unix");
+        String[] sockets = dir.list((d, name) -> name.startsWith("X") && name.length() > 1);
+        if (sockets != null && sockets.length > 0) {
+            java.util.Arrays.sort(sockets);
+            return ":" + sockets[0].substring(1);
+        }
+        return ":0";
     }
 
     /** Hardware keys the page routes into X; true when X took the key. */

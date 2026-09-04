@@ -59,8 +59,14 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
 - **`utils/SamsungDexUtils.dexMetaKeyCapture`** takes a `Context` instead of an `Activity` and
   resolves the component name itself; there is no activity behind the page.
 - **`LoriePreferences`** is a plain container for `PrefsProto` and `Receiver`. Its
-  `ACTION_PREFERENCES_CHANGED` constant is kept; the `enableAccessibilityServiceAutomatically`
-  and `extra_keys_config` branches of the receiver's setter are gone with the features they set.
+  `ACTION_PREFERENCES_CHANGED` constant is kept and made public, and the string the command-line
+  `main` broadcasts is the new public `ACTION_CHANGE_PREFERENCE`: the launcher's manifest
+  declares the vendored `Receiver` for it (not exported, signature permission — the same guard as
+  the server's announcement), and `X11DisplayHostController` listens for the changed broadcast to
+  re-read the store into the live view, which is what upstream's `MainActivity` did. The
+  `enableAccessibilityServiceAutomatically` and `extra_keys_config` branches of the receiver's
+  setter are gone with the features they set. `PrefsProto.IntPreference` gains the `put(int)` its
+  boolean and string siblings already have, for the launcher's settings page.
 - **`res/xml/preferences.xml`** loses upstream's "main" screen — the rows that navigated into the
   four sections and the version row — because those titles only existed for the dropped activity,
   and AAPT links a resource file whether or not anything shows it. The store's schema, which is

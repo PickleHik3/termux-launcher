@@ -244,7 +244,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
                 R.xml.termux_keyboard_preferences});
             CHILD_XML_RESOURCES.put("launcher_apps", new int[]{
-                R.xml.launcher_preferences});
+                R.xml.launcher_preferences, R.xml.x11_display_preferences});
             CHILD_XML_RESOURCES.put("services_permissions", new int[]{
                 R.xml.services_permissions_preferences, R.xml.termux_ai_preferences,
                 R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});

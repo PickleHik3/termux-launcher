@@ -168,4 +168,26 @@
         <item>litert-lm</item>
         <item>mnn-llm</item>
     </string-array>
+    <string-array name="x11_touch_mode_entries">
+        <item>Trackpad</item>
+        <item>Touchscreen</item>
+        <item>Direct touch</item>
+    </string-array>
+    <string-array name="x11_touch_mode_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+    <string-array name="x11_resolution_mode_entries">
+        <item>Same as the screen</item>
+        <item>Scaled</item>
+        <item>Fixed size</item>
+        <item>Custom size</item>
+    </string-array>
+    <string-array name="x11_resolution_mode_values">
+        <item>native</item>
+        <item>scaled</item>
+        <item>exact</item>
+        <item>custom</item>
+    </string-array>
 </resources>

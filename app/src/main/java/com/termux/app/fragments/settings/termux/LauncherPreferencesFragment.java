@@ -71,6 +71,8 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         // A build made without the X server has no display to switch on.
         Preference display = findPreference("x11_display_enabled");
         if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
+        Preference displayOptions = findPreference("x11_display_options");
+        if (displayOptions != null && !com.termux.BuildConfig.X11_SERVER) displayOptions.setVisible(false);
         Preference customizeDock = findPreference("customize_dock_surface");
         if (customizeDock != null) customizeDock.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, TermuxActivity.class);

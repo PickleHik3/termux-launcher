@@ -551,6 +551,15 @@ public class LauncherCtlApiServer {
                     return jsonResponse(error);
                 }
                 return jsonResponse(runPaneRequest(request));
+            } else if ("GET".equals(request.method) && "/v1/x11/gpu".equals(request.path)) {
+                // Off the request thread's main-thread worries already: this is the server's own
+                // worker, and the probe builds a throwaway GL context the first time.
+                com.termux.app.x11.X11GpuProbe.Result gpu = com.termux.app.x11.X11GpuProbe.probe(context);
+                if ("env".equals(queryParameters(request.query).get("format"))) {
+                    return new HttpResponse(200, "text/plain; charset=utf-8",
+                        gpu.toEnv().getBytes(StandardCharsets.UTF_8), null);
+                }
+                return jsonResponse(gpu.toJson());
             } else if ("POST".equals(request.method) && "/v1/auth/rotate".equals(request.path)) {
                 return jsonResponse(rotateAuthToken(context, false));
             } else if ("GET".equals(request.method) && "/v1/ai/status".equals(request.path)) {
@@ -1648,6 +1657,7 @@ public class LauncherCtlApiServer {
             "  launcherctl pane write <id> [--enter] <text> | launcherctl pane write <id> [--enter] < file\n" +
             "  launcherctl pane read <id> [--lines N]\n" +
             "  launcherctl pane close <id>\n" +
+            "  launcherctl x11 gpu [--env]\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl launch whatsapp\n" +
@@ -1770,9 +1780,20 @@ public class LauncherCtlApiServer {
             "    shift || true\n" +
             "    pane_cmd \"$@\"\n" +
             "    ;;\n" +
+            "  x11)\n" +
+            "    shift || true\n" +
+            "    case \"${1:-}\" in\n" +
+            "      gpu)\n" +
+            "        # What this phone's GPU can do for Linux apps on the display, and the exact\n" +
+            "        # environment that asks for it: JSON, or with --env lines to eval in a shell.\n" +
+            "        if [ \"${2:-}\" = \"--env\" ]; then api GET \"/v1/x11/gpu?format=env\"; else api GET /v1/x11/gpu; fi\n" +
+            "        ;;\n" +
+            "      *) echo \"usage: launcherctl x11 gpu [--env]\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, x11. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

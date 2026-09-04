@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Linux display's options. The display rows write into the same store the display server
+     and `termux-x11-preference` read, so all three always agree; the starting rows are the
+     launcher's own and shape the command it runs when it starts a display itself. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_x11_category_display">
+        <ListPreference
+            app:key="touchMode"
+            app:title="@string/settings_x11_touch_mode_title"
+            android:defaultValue="1"
+            app:entries="@array/x11_touch_mode_entries"
+            app:entryValues="@array/x11_touch_mode_values"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="displayResolutionMode"
+            app:title="@string/settings_x11_resolution_mode_title"
+            android:defaultValue="native"
+            app:entries="@array/x11_resolution_mode_entries"
+            app:entryValues="@array/x11_resolution_mode_values"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            app:key="displayScale"
+            app:title="@string/settings_x11_scale_title"
+            android:defaultValue="100"
+            app:min="30"
+            android:max="300"
+            app:seekBarIncrement="10"
+            app:showSeekBarValue="true" />
+        <ListPreference
+            app:key="displayResolutionExact"
+            app:title="@string/settings_x11_resolution_exact_title"
+            android:defaultValue="1280x1024"
+            app:entries="@array/displayResolution"
+            app:entryValues="@array/displayResolution"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="displayResolutionCustom"
+            app:title="@string/settings_x11_resolution_custom_title"
+            android:defaultValue="1280x1024"
+            app:dialogMessage="@string/settings_x11_resolution_custom_summary"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            app:key="x11_display_dpi"
+            app:title="@string/settings_x11_dpi_title"
+            app:summary="@string/settings_x11_dpi_summary"
+            android:defaultValue="0"
+            app:min="0"
+            android:max="480"
+            app:seekBarIncrement="8"
+            app:showSeekBarValue="true" />
+        <SwitchPreferenceCompat
+            app:key="clipboardEnable"
+            app:title="@string/settings_x11_clipboard_title"
+            app:summary="@string/settings_x11_clipboard_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_x11_category_starting">
+        <SwitchPreferenceCompat
+            app:key="x11_display_autostart"
+            app:title="@string/settings_x11_autostart_title"
+            app:summary="@string/settings_x11_autostart_summary"
+            android:defaultValue="false" />
+        <EditTextPreference
+            app:key="x11_display_command"
+            app:title="@string/settings_x11_command_title"
+            android:defaultValue="termux-x11 :0"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="x11_set_display_env"
+            app:title="@string/settings_x11_set_display_env_title"
+            app:summary="@string/settings_x11_set_display_env_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="x11_legacy_drawing"
+            app:title="@string/settings_x11_legacy_drawing_title"
+            app:summary="@string/settings_x11_legacy_drawing_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="x11_force_bgra"
+            app:title="@string/settings_x11_force_bgra_title"
+            app:summary="@string/settings_x11_force_bgra_summary"
+            android:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_x11_category_graphics">
+        <Preference
+            app:key="x11_gpu"
+            app:title="@string/settings_x11_gpu_title"
+            app:summary="@string/settings_x11_gpu_probing"
+            app:selectable="false" />
+    </PreferenceCategory>
+</PreferenceScreen>

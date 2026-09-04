@@ -1244,6 +1244,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onResume");
         if (mIsInvalidState)
             return;
+        // The DISPLAY opt-in can have been flipped in Settings while we were away.
+        syncDisplayEnvironment();
         // Terminal hierarchy actions from launcherctl/agent/MCP need a foreground
         // Activity; they answer 409 activity_not_running while nothing is attached.
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().attach(terminalHost());
@@ -11083,6 +11085,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * {@code DISPLAY} for shells started from now on: set while a display runs and the user asked
+     * for it, cleared otherwise. Nothing already running is touched, and nothing is written to
+     * disk — Termux:X11 never set it, so it stays an opt-in.
+     */
+    private void syncDisplayEnvironment() {
+        boolean wanted = mPreferences != null && mPreferences.isX11SetDisplayEnvEnabled()
+            && isEmbeddedDisplayRunning();
+        com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+            .setDisplayForNewSessions(wanted
+                ? com.termux.app.x11.X11DisplayHostController.displayName() : null);
+    }
+
     /** The page's own "Turn on": the setting flips and the display comes alive in place. */
     private void turnOnEmbeddedDisplay() {
         if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
@@ -11127,7 +11142,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? null : mPaneWallController.displayPage();
             if (frame != null) frame.applyRunning(running);
             syncWallTiles();
+            syncDisplayEnvironment();
         });
+        syncDisplayEnvironment();
         // The prefix commands go in with the feature, and are re-checked on every start — off
         // the main thread, because it is disk I/O on the home screen's way up.
         com.termux.app.x11.X11CliInstaller.installAsync(this, result -> {
@@ -11147,13 +11164,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Run the configured start command as a background task, as if it had been typed. */
     private void startEmbeddedDisplay() {
         if (mTermuxService == null || mPreferences == null || !isX11DisplayEnabled()) return;
-        String[] argv = mPreferences.getX11DisplayCommand().split("\\s+");
-        if (argv.length == 0 || argv[0].isEmpty()) return;
-        String executable = argv[0].contains("/") ? argv[0]
-            : TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/" + argv[0];
-        mTermuxService.createTermuxTask(executable,
-            java.util.Arrays.copyOfRange(argv, 1, argv.length), null,
-            TermuxConstants.TERMUX_HOME_DIR_PATH);
+        String[] argv = com.termux.app.x11.X11StartCommand.argv(mPreferences.getX11DisplayCommand(),
+            mPreferences.getX11DisplayDpi(), mPreferences.isX11LegacyDrawingEnabled(),
+            mPreferences.isX11ForceBgraEnabled());
+        if (argv.length == 0) return;
+        mTermuxService.createTermuxTask(argv[0], java.util.Arrays.copyOfRange(argv, 1, argv.length),
+            null, TermuxConstants.TERMUX_HOME_DIR_PATH);
     }
 
     /** Long-press on the Display page: start it, stop it, or go to its settings. */
@@ -11173,7 +11189,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 else if (running) confirmStopEmbeddedDisplay();
                 else startEmbeddedDisplay();
             } else {
-                openSettings();
+                ActivityUtils.startActivity(this,
+                    com.termux.app.activities.SettingsActivity.createFragmentIntent(this,
+                        com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment.class,
+                        R.string.settings_x11_display_options_title));
             }
             return true;
         });

@@ -2,6 +2,7 @@ package com.termux.shared.termux.shell.command.environment;
 
 import android.content.Context;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import com.termux.shared.errors.Error;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
@@ -62,6 +63,23 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
         }
     }
 
+    /** {@code DISPLAY} for new shells while an embedded display runs and the user asked for it. */
+    private static volatile String sDisplayForNewSessions;
+
+    /**
+     * Put {@code DISPLAY=<display>} into every shell started from now on, or stop doing so with
+     * null. The launcher sets this while its embedded X display is running and the opt-in is on;
+     * nothing is written into rc files, and shells already running are not touched.
+     */
+    public static void setDisplayForNewSessions(@Nullable String display) {
+        sDisplayForNewSessions = display == null || display.trim().isEmpty() ? null : display.trim();
+    }
+
+    @Nullable
+    public static String getDisplayForNewSessions() {
+        return sDisplayForNewSessions;
+    }
+
     /**
      * Get shell environment for Termux.
      */
@@ -70,6 +88,8 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
     public HashMap<String, String> getEnvironment(@NonNull Context currentPackageContext, boolean isFailSafe) {
         // Termux environment builds upon the Android environment
         HashMap<String, String> environment = super.getEnvironment(currentPackageContext, isFailSafe);
+        String display = sDisplayForNewSessions;
+        if (display != null) environment.put("DISPLAY", display);
         HashMap<String, String> termuxAppEnvironment = TermuxAppShellEnvironment.getEnvironment(currentPackageContext);
         if (termuxAppEnvironment != null)
             environment.putAll(termuxAppEnvironment);

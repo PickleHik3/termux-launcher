@@ -186,6 +186,31 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_X11_DISPLAY_COMMAND = "termux-x11 :0";
 
+        /** Run the start command when the launcher's service comes up. Off: a home screen that never asked for a display pays nothing for one. */
+        public static final String KEY_X11_DISPLAY_AUTOSTART = "x11_display_autostart";
+
+        public static final boolean DEFAULT_X11_DISPLAY_AUTOSTART = false;
+
+        /** Put {@code DISPLAY} into new shells while a display is running. Off, as Termux:X11 never did it. */
+        public static final String KEY_X11_SET_DISPLAY_ENV = "x11_set_display_env";
+
+        public static final boolean DEFAULT_X11_SET_DISPLAY_ENV = false;
+
+        /** The X screen's dots per inch when the launcher starts the server; 0 leaves it to the server. */
+        public static final String KEY_X11_DISPLAY_DPI = "x11_display_dpi";
+
+        public static final int DEFAULT_X11_DISPLAY_DPI = 0;
+
+        /** Pass {@code -legacy-drawing} when the launcher starts the server. */
+        public static final String KEY_X11_LEGACY_DRAWING = "x11_legacy_drawing";
+
+        public static final boolean DEFAULT_X11_LEGACY_DRAWING = false;
+
+        /** Pass {@code -force-bgra} when the launcher starts the server. */
+        public static final String KEY_X11_FORCE_BGRA = "x11_force_bgra";
+
+        public static final boolean DEFAULT_X11_FORCE_BGRA = false;
+
         /** Defines the key for the pane wall's Widgets and Display buttons in the status bar. */
         public static final String KEY_TOP_PANE_WALL_TILES = "top_pane_wall_tiles";
 

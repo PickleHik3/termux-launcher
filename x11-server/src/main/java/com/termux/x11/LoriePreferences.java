@@ -91,7 +91,10 @@ import java.util.regex.PatternSyntaxException;
  */
 public class LoriePreferences {
 
-    static final String ACTION_PREFERENCES_CHANGED = "com.termux.x11.ACTION_PREFERENCES_CHANGED";
+    /** Broadcast within the package after a preference changed; the display re-reads its store. */
+    public static final String ACTION_PREFERENCES_CHANGED = "com.termux.x11.ACTION_PREFERENCES_CHANGED";
+    /** What {@code termux-x11-preference} broadcasts to the app: the keys to change, or "list". */
+    public static final String ACTION_CHANGE_PREFERENCE = "com.termux.x11.CHANGE_PREFERENCE";
 
     private static Prefs prefs = null;
 
@@ -248,7 +251,7 @@ public class LoriePreferences {
             android.util.Log.i("LoriePreferences$Receiver", "commit " + BuildConfig.COMMIT);
             //noinspection resource
             ParcelFileDescriptor in = ParcelFileDescriptor.adoptFd(0);
-            Intent i = new Intent("com.termux.x11.CHANGE_PREFERENCE");
+            Intent i = new Intent(ACTION_CHANGE_PREFERENCE);
             Bundle bundle = new Bundle();
             boolean inputIsFile = !android.system.Os.isatty(in.getFileDescriptor());
 
@@ -355,6 +358,10 @@ public class LoriePreferences {
 
             public int get() {
                 return preferences.getInt(key, (int) defValue);
+            }
+
+            public void put(int v) {
+                preferences.edit().putInt(key, v).commit();
             }
 
             public int defValue() {

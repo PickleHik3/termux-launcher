@@ -305,6 +305,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- `termux-x11-preference` from a shell: the vendored receiver writes the display's store
+             and tells a running display to re-read it. Same guard as the announcement above. -->
+        <receiver
+            android:name="com.termux.x11.LoriePreferences$Receiver"
+            android:exported="false"
+            android:permission="${TERMUX_PACKAGE_NAME}.permission.X11_DISPLAY">
+            <intent-filter>
+                <action android:name="com.termux.x11.CHANGE_PREFERENCE" />
+            </intent-filter>
+        </receiver>
+
 
         <service
             android:name=".app.TermuxService"
