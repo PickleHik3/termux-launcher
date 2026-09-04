@@ -12,6 +12,7 @@ the display, present frames and receive input at all.
 | 2026-09-04 | emulator `tl_test`, Android 16 | x86_64 | software, page showing | `llvmpipe (LLVM 21.1.8)`, Mesa 26.0.6, OpenGL ES 3.2 | 7-10 / 7-13 FPS, score 6-10 | 6/6 pass |
 | 2026-09-04 | emulator `tl_test`, Android 16 | x86_64 | software, page hidden | same | 81 / 116 FPS, score 97-103 | 6/6 pass |
 | 2026-09-04 | emulator `tl_test`, Android 16 | x86_64 | software, no driver override | `zink Vulkan 1.4(llvmpipe)`, Mesa 26.0.6 | 6 / 10 FPS, score 7 | 5/5 pass |
+| 2026-09-05 | emulator `tl_test`, Android 16 | x86_64 | none (`xeyes`, `xclock` only; `6054b0be`) | — | — | by eye: Turn on → Start display → clients on the page; three rotations keep the display attached with `Activities: 1`, `Death Recipients: 1`; `termux-x11-preference list` / `touchMode:2` and `launcherctl x11 gpu --env` answer from a shell |
 
 An emulator has no GPU: its host GL is swiftshader/swangle and its guest GL is llvmpipe, so single
 digits are the expected floor and say nothing about a phone. The rows exist to prove the path, not
