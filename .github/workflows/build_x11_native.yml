@@ -6,7 +6,9 @@ name: Build X11 native (Xlorie)
 # committed into app/src/main/jniLibs/<abi>/ by hand after a green run, exactly like
 # build_mnn_native.yml does for libMNN.so.
 #
-# Iterative: dispatch manually or push this file. Does not touch the app build.
+# Iterative: dispatch manually or push this file. Does not touch the app build. A manual `ref`
+# other than the pin is refused until the pin is bumped to it — the vendored Java and the native
+# library must come from one commit, and the pin check below is what enforces that.
 
 on:
   workflow_dispatch:
@@ -16,7 +18,8 @@ on:
         required: false
         default: '9df8b767645aa0d0a2f2576767449df55b41962f'
   push:
-    branches: [experimental]
+    # `dev` too: the pin bump that calls for a rebuild is made on dev, and the run is cheap.
+    branches: [dev, experimental]
     paths:
       - '.github/workflows/build_x11_native.yml'
       - 'ci/x11-patch/**'
@@ -49,12 +52,18 @@ jobs:
         with:
           path: self
 
-      - name: Check the pinned commit agrees with the vendored Java
+      - name: Check the commit being built agrees with the vendored Java
         run: |
           set -euo pipefail
+          # What was actually checked out — a manually dispatched ref, resolved to its commit —
+          # not just this file's own pin.
+          built=$(git -C x11 rev-parse HEAD)
+          if [ "$built" != "$TERMUX_X11_COMMIT" ]; then
+            echo "Building $built, but this workflow pins $TERMUX_X11_COMMIT" >&2
+          fi
           for file in self/x11-server/version.gradle self/x11-server/UPSTREAM.md; do
-            if ! grep -q "$TERMUX_X11_COMMIT" "$file"; then
-              echo "$file does not name $TERMUX_X11_COMMIT — the pins have drifted" >&2
+            if ! grep -q "$built" "$file"; then
+              echo "$file does not name $built — bump the pins to the commit you are building first" >&2
               exit 1
             fi
           done
