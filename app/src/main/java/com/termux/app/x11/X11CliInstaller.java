@@ -1,9 +1,12 @@
 package com.termux.app.x11;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -15,6 +18,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 /**
  * Puts {@code termux-x11} and {@code termux-x11-preference} in the prefix, the way the launcher
@@ -26,26 +33,36 @@ import java.nio.file.Files;
  *
  * <p>It refuses to overwrite a {@code termux-x11} it did not write. Someone who has installed the
  * apt package has made a choice, and a home screen must not quietly take a command out from under
- * a package manager.
+ * a package manager. Every file is written beside its destination and moved into place, so a
+ * reader never sees a half-written command, and a destination that is a symlink is never followed.
+ *
+ * <p>All of it is disk I/O; {@link #installAsync} keeps it off the main thread.
  */
 public final class X11CliInstaller {
 
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    private static final int VERSION = 3;
+    @VisibleForTesting static final int VERSION = 3;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
     private static final String LIBEXEC_DIR = PREFIX + "/libexec/termux-launcher/x11";
+    private static final String LOADER_ASSET = "x11/loader.apk";
 
     static final String SERVER_SCRIPT_PATH = BIN_DIR + "/termux-x11";
     static final String PREFERENCE_SCRIPT_PATH = BIN_DIR + "/termux-x11-preference";
     static final String LOADER_PATH = LIBEXEC_DIR + "/loader.apk";
-    private static final String MARKER_PATH = LIBEXEC_DIR + "/.installed";
 
     /** Every marker this launcher has ever written, so "is this ours?" survives an upgrade. */
-    private static final String MARKER_PREAMBLE = "# written by termux-launcher";
+    @VisibleForTesting static final String MARKER_PREAMBLE = "# written by termux-launcher";
+
+    /** One thread for the prefix writes: they are rare and must never overlap. */
+    private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "x11-cli-installer");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     /** What the install attempt found. */
     public enum Result {
@@ -60,62 +77,52 @@ public final class X11CliInstaller {
         FAILED
     }
 
-    private X11CliInstaller() {}
+    /** Where the loader's bytes come from: the app's assets, or a fixture. */
+    interface LoaderSource {
+        @NonNull InputStream open() throws IOException;
+    }
+
+    @NonNull private final File binDir;
+    @NonNull private final File libexecDir;
+    @NonNull private final String applicationId;
+    @NonNull private final LoaderSource loader;
+
+    @VisibleForTesting
+    X11CliInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull String applicationId,
+                    @NonNull LoaderSource loader) {
+        this.binDir = binDir;
+        this.libexecDir = libexecDir;
+        this.applicationId = applicationId;
+        this.loader = loader;
+    }
+
+    /** The installer for this launcher's own prefix. */
+    @NonNull
+    static X11CliInstaller forPrefix(@NonNull Context context) {
+        Context app = context.getApplicationContext();
+        return new X11CliInstaller(new File(BIN_DIR), new File(LIBEXEC_DIR), app.getPackageName(),
+            () -> app.getAssets().open(LOADER_ASSET));
+    }
+
+    // ---- The static face the launcher uses -------------------------------------------------
 
     /**
-     * Write the scripts and the loader if they are missing or out of date.
-     *
-     * <p>Safe to call on every app start: it stats a marker file and returns.
+     * Write the scripts and the loader if they are missing or out of date, off the main thread,
+     * and report on it. Safe to call on every app start: an up-to-date install is one file read.
      */
-    @NonNull
-    public static Result install(@NonNull Context context) {
-        if (!new File(BIN_DIR).isDirectory()) return Result.NO_PREFIX;
-        String applicationId = context.getPackageName();
-        String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + "\n";
-        if (marker.equals(read(MARKER_PATH))) return Result.UP_TO_DATE;
-        if (isForeignCommand()) {
-            Logger.logInfo(LOG_TAG, "Leaving a termux-x11 we did not write alone");
-            return Result.FOREIGN_COMMAND;
-        }
-        try {
-            File libexec = new File(LIBEXEC_DIR);
-            if (!libexec.isDirectory() && !libexec.mkdirs()) {
-                throw new IOException("Failed to create " + LIBEXEC_DIR);
-            }
-            copyAsset(context, "x11/loader.apk", LOADER_PATH);
-            writeExecutable(SERVER_SCRIPT_PATH, serverScript(applicationId));
-            writeExecutable(PREFERENCE_SCRIPT_PATH, preferenceScript(applicationId));
-            write(MARKER_PATH, marker);
-            return Result.INSTALLED;
-        } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to install the X11 commands: " + e.getMessage());
-            return Result.FAILED;
-        }
+    public static void installAsync(@NonNull Context context, @NonNull Consumer<Result> onResult) {
+        X11CliInstaller installer = forPrefix(context);
+        Handler main = new Handler(Looper.getMainLooper());
+        EXECUTOR.execute(() -> {
+            Result result = installer.install();
+            main.post(() -> onResult.accept(result));
+        });
     }
 
     /** Take the commands back out, for a user who switches the display off. */
-    public static void uninstall() {
-        if (isForeignCommand()) return;
-        for (String path : new String[]{SERVER_SCRIPT_PATH, PREFERENCE_SCRIPT_PATH, LOADER_PATH,
-                MARKER_PATH}) {
-            File file = new File(path);
-            if (!file.exists()) continue;
-            file.setWritable(true, true);
-            if (!file.delete()) {
-                Logger.logWarn(LOG_TAG, "Failed to remove " + path);
-            }
-        }
-    }
-
-    /**
-     * True while a {@code termux-x11} that is not ours sits in the prefix. Ours always carries
-     * the marker comment in its first lines; the apt package's does not.
-     */
-    public static boolean isForeignCommand() {
-        File script = new File(SERVER_SCRIPT_PATH);
-        if (!script.exists()) return false;
-        String content = read(SERVER_SCRIPT_PATH);
-        return content == null || !content.contains(MARKER_PREAMBLE);
+    public static void uninstallAsync(@NonNull Context context) {
+        X11CliInstaller installer = forPrefix(context);
+        EXECUTOR.execute(installer::uninstall);
     }
 
     /**
@@ -128,8 +135,68 @@ public final class X11CliInstaller {
     }
 
     /** True once this launcher's own commands are in place. */
-    public static boolean isInstalled() {
-        return new File(SERVER_SCRIPT_PATH).exists() && !isForeignCommand();
+    public static boolean isInstalled(@NonNull Context context) {
+        X11CliInstaller installer = forPrefix(context);
+        return installer.serverScript().exists() && !installer.isForeignCommand();
+    }
+
+    // ---- The work ---------------------------------------------------------------------------
+
+    @NonNull File serverScript() { return new File(binDir, "termux-x11"); }
+    @NonNull File preferenceScript() { return new File(binDir, "termux-x11-preference"); }
+    @NonNull File loaderFile() { return new File(libexecDir, "loader.apk"); }
+    @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
+
+    @NonNull
+    Result install() {
+        if (!binDir.isDirectory()) return Result.NO_PREFIX;
+        String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + "\n";
+        if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
+        if (isForeignCommand()) {
+            Logger.logInfo(LOG_TAG, "Leaving a termux-x11 we did not write alone");
+            return Result.FOREIGN_COMMAND;
+        }
+        try {
+            if (!libexecDir.isDirectory() && !libexecDir.mkdirs()) {
+                throw new IOException("Failed to create " + libexecDir);
+            }
+            // The loader must end up read-only: ART refuses a writable dex on CLASSPATH
+            // ("Writable dex file ... is not allowed") and aborts app_process before main.
+            try (InputStream in = loader.open()) {
+                writeAtomically(loaderFile(), in, false, false);
+            }
+            writeAtomically(serverScript(), bytes(serverScript(applicationId)), true, true);
+            writeAtomically(preferenceScript(), bytes(preferenceScript(applicationId)), true, true);
+            writeAtomically(markerFile(), bytes(marker), true, false);
+            return Result.INSTALLED;
+        } catch (Exception e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to install the X11 commands: " + e.getMessage());
+            return Result.FAILED;
+        }
+    }
+
+    void uninstall() {
+        if (isForeignCommand()) return;
+        for (File file : new File[]{serverScript(), preferenceScript(), loaderFile(), markerFile()}) {
+            if (!file.exists() && !Files.isSymbolicLink(file.toPath())) continue;
+            file.setWritable(true, true);
+            if (!file.delete()) {
+                Logger.logWarn(LOG_TAG, "Failed to remove " + file);
+            }
+        }
+    }
+
+    /**
+     * True while a {@code termux-x11} that is not ours sits in the prefix. Ours is a plain file
+     * carrying the marker comment in its first lines; the apt package's does not, and a symlink
+     * is somebody's arrangement whatever it points at.
+     */
+    boolean isForeignCommand() {
+        File script = serverScript();
+        if (Files.isSymbolicLink(script.toPath())) return true;
+        if (!script.exists()) return false;
+        String content = read(script);
+        return content == null || !content.contains(MARKER_PREAMBLE);
     }
 
     /**
@@ -188,50 +255,56 @@ public final class X11CliInstaller {
             + "exec /system/bin/app_process -Xnoimage-dex2oat / com.termux.x11.Loader \"$@\"\n";
     }
 
+    // ---- Files ------------------------------------------------------------------------------
+
     /**
-     * Copy an asset out and leave it read-only. The read-only part is not tidiness: ART refuses
-     * to put a writable dex file on {@code CLASSPATH} ("Writable dex file ... is not allowed"),
-     * so a loader the app can still write to aborts {@code app_process} before it reaches main.
+     * Write {@code content} to a temporary file beside {@code destination}, give it its final
+     * mode, and move it into place in one step. A destination that is a symlink is refused rather
+     * than followed: the launcher writes its own files, never through someone else's link.
+     *
+     * @param ownerWritable whether the owner keeps write access (the loader must not: ART
+     *                      refuses a writable dex on {@code CLASSPATH})
+     * @param executable    whether everyone may execute it (the two commands)
      */
-    private static void copyAsset(@NonNull Context context, @NonNull String asset,
-                                  @NonNull String path) throws IOException {
-        File file = new File(path);
-        // A read-only file cannot be truncated, so an upgrade has to take the old one away first.
-        if (file.exists() && !file.setWritable(true, true) && !file.delete()) {
-            throw new IOException("Cannot replace " + path);
-        }
-        try (InputStream in = context.getAssets().open(asset);
-             OutputStream out = new FileOutputStream(file, false)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
-        }
-        file.setWritable(false, false);
-        file.setReadable(true, false);
-    }
-
-    private static void write(@NonNull String path, @NonNull String content) throws IOException {
-        File file = new File(path);
-        try (FileOutputStream stream = new FileOutputStream(file, false)) {
-            stream.write(content.getBytes(StandardCharsets.UTF_8));
-        }
-        file.setReadable(false, false);
-        file.setWritable(false, false);
-        file.setReadable(true, true);
-        file.setWritable(true, true);
-    }
-
-    private static void writeExecutable(@NonNull String path, @NonNull String content)
+    private static void writeAtomically(@NonNull File destination, @NonNull InputStream content,
+                                        boolean ownerWritable, boolean executable)
             throws IOException {
-        write(path, content);
-        File file = new File(path);
-        file.setExecutable(true, false);
-        file.setReadable(true, false);
+        if (Files.isSymbolicLink(destination.toPath())) {
+            throw new IOException(destination + " is a symlink; refusing to write through it");
+        }
+        File dir = destination.getParentFile();
+        if (dir == null) throw new IOException(destination + " has no directory");
+        File temp = File.createTempFile(".termux-x11-", ".tmp", dir);
+        try {
+            try (OutputStream out = new FileOutputStream(temp, false)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = content.read(buffer)) > 0) out.write(buffer, 0, read);
+            }
+            // Mode first, then move, so the file is never observable half-permissioned.
+            temp.setReadable(false, false);
+            temp.setWritable(false, false);
+            temp.setExecutable(false, false);
+            temp.setReadable(true, false);
+            if (ownerWritable) temp.setWritable(true, true);
+            if (executable) temp.setExecutable(true, false);
+            // A read-only destination cannot be truncated, but the directory entry can be
+            // replaced: rename is what makes the upgrade of the read-only loader work at all.
+            Files.move(temp.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
+        }
+    }
+
+    @NonNull
+    private static InputStream bytes(@NonNull String content) {
+        return new java.io.ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
     }
 
     @Nullable
-    private static String read(@NonNull String path) {
-        File file = new File(path);
+    private static String read(@NonNull File file) {
         if (!file.isFile() || file.length() > 64 * 1024) return null;
         try {
             return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);

@@ -11091,11 +11091,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     && mTermuxTerminalViewClient.consumeLauncherChord(event);
             }
         });
-        // The prefix commands go in with the feature, and are re-checked on every start.
-        if (com.termux.app.x11.X11CliInstaller.install(this)
-                == com.termux.app.x11.X11CliInstaller.Result.FOREIGN_COMMAND) {
-            showToast(getString(R.string.termux_x11_command_taken), true);
-        }
+        // The prefix commands go in with the feature, and are re-checked on every start — off
+        // the main thread, because it is disk I/O on the home screen's way up.
+        com.termux.app.x11.X11CliInstaller.installAsync(this, result -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (result == com.termux.app.x11.X11CliInstaller.Result.FOREIGN_COMMAND) {
+                showToast(getString(R.string.termux_x11_command_taken), true);
+            }
+        });
     }
 
     /** Run the configured start command as a background task, as if it had been typed. */

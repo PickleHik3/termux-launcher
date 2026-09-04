@@ -229,6 +229,9 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "x11_display_enabled":
                 mPreferences.setX11DisplayEnabled(value);
+                // The commands go into the prefix with the feature and come back out with it;
+                // a running server is left alone either way.
+                if (!value) com.termux.app.x11.X11CliInstaller.uninstallAsync(mContext);
                 // The page and the prefix commands are set up once per activity, so turning the
                 // display on or off has to come back through a recreate.
                 scheduleTermuxActivityStylingSync(true);
