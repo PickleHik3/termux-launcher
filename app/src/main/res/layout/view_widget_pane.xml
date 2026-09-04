@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pane wall's Widgets page: the app-widget grid dressed as a terminal pane. Mirrors
+     view_terminal_pane.xml — same frame, same glass slab, same rim and radius — so the page
+     follows the Canvas surface exactly as the panes beside it do. The WidgetPaneView itself is
+     moved in here from the status host, not inflated twice: there is one widget grid. -->
+<com.termux.app.wall.WidgetPaneFrame xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <!-- This page's glass: the shared pre-blurred wallpaper frame drawn through the page's own
+         rect, with the surface tint and film grain over it. Hidden unless the terminal glass is
+         on (PaneGlass.apply). -->
+    <com.termux.app.terminal.PaneGlassBackdropView
+        android:id="@+id/widget_pane_glass"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+</com.termux.app.wall.WidgetPaneFrame>

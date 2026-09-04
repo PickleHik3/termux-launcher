@@ -1,10 +1,13 @@
 package com.termux.app.wall;
 
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.termux.app.terminal.PaneSurfaceStyle;
 
 /**
  * Owns the pane wall: which places this install has, which one is showing, and every way in and
@@ -17,6 +20,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public interface Host {
         /** Honour the system's reduce-motion setting for the page slide. */
         boolean reducedMotion();
+        /** The wall itself is switched on; off, the terminal is the only place there is. */
+        boolean isWallEnabled();
         /** The terminal-only use case: no home surfaces, so no Widgets page. */
         boolean isTerminalOnly();
         /** The widgets feature is switched on. */
@@ -34,6 +39,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @NonNull private final PaneWallLayout mWall;
     @NonNull private final Host mHost;
+    @Nullable private WidgetPaneFrame mWidgetsPage;
+    @Nullable private PaneSurfaceStyle mStyle;
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
         mWall = wall;
@@ -56,8 +63,39 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** Re-read the preferences that decide which places exist. */
     public void refreshPages() {
         mWall.setReducedMotion(mHost.reducedMotion());
+        boolean wall = mHost.isWallEnabled();
         mWall.setPages(PaneWallPolicy.availablePages(mHost.isTerminalOnly(),
-            mHost.isWidgetsEnabled(), mHost.isDisplayEnabled()));
+            wall && mHost.isWidgetsEnabled(), wall && mHost.isDisplayEnabled()));
+    }
+
+    /**
+     * Move the widget grid onto the wall as its Widgets page. The grid keeps its app-widget host
+     * views across the move, so nothing it is showing is recreated.
+     */
+    public void attachWidgetsPage(@NonNull LayoutInflater inflater, @NonNull View grid) {
+        if (mWidgetsPage != null) return;
+        WidgetPaneFrame frame = (WidgetPaneFrame) inflater.inflate(
+            com.termux.R.layout.view_widget_pane, mWall, false);
+        mWall.addView(frame, 0);
+        frame.adoptGrid(grid);
+        mWidgetsPage = frame;
+        mWall.setPageView(PaneWallPage.WIDGETS, frame);
+        applyStyle(mStyle);
+    }
+
+    /** True once the widget grid has been moved onto the wall. */
+    public boolean hasWidgetsPage() {
+        return mWidgetsPage != null;
+    }
+
+    /**
+     * Dress every non-terminal page from the surface style. The terminal pages dress themselves
+     * through {@code TerminalPaneController}; this is the same pass for the rest of the wall, and
+     * it runs on the same triggers — a wallpaper change, a blur change, an editor slider tick.
+     */
+    public void applyStyle(@Nullable PaneSurfaceStyle style) {
+        mStyle = style;
+        if (mWidgetsPage != null) mWidgetsPage.applyStyle(style);
     }
 
     @NonNull

@@ -261,6 +261,7 @@ public final class LauncherToolRegistry {
                 TOOL_PANE_SPLIT_VERTICAL, TOOL_PANE_SPLIT_HORIZONTAL,
                 TOOL_PANE_KILL_FOCUSED, TOOL_PANE_EQUALIZE, TOOL_PANE_ROTATE,
                 TOOL_PANE_MOVE_TO_EDGE, TOOL_PANE_TOGGLE_FLOAT, TOOL_PANE_RESIZE,
+                TOOL_WALL_GO,
                 TOOL_PANE_FOCUS_DIRECTION,
                 TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
                 TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
@@ -387,6 +388,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_PANE_ROTATE = "pane.rotate";
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
+    /** The pane wall: move between the terminal and the places beside it. */
+    public static final String TOOL_WALL_GO = "wall.go";
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_PANE_OPEN = "pane.open";
     public static final String TOOL_PANE_LIST = "pane.list";
@@ -597,6 +600,16 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_rotate, R.string.tool_desc_pane_rotate, null,
             REQUIRES_SPLITS);
+        // Agent and CLI only, for the same reason as pane.layout: the palette cannot prompt for
+        // a page, and the wall's own ways across — the status-bar swipe and the tiles — are the
+        // ones a user reaches for. A user who wants a key for it binds this tool by name.
+        add(map, TOOL_WALL_GO,
+            "Show one of the pane wall's places: the widget grid, the terminal, or the display.",
+            schemaObject()
+                .withEnum("page", new String[]{"widgets", "terminal", "display", "left", "right"},
+                    true, "terminal")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
         add(map, TOOL_PANE_MOVE_TO_EDGE,
             "Move the focused pane to an outer edge of the current window.",
             schemaObject()

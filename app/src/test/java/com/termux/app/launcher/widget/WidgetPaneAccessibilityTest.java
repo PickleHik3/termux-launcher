@@ -28,11 +28,9 @@ public class WidgetPaneAccessibilityTest {
         WidgetPaneController controller = new WidgetPaneController(pane, widgets,
             new WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return true; }
-                @Override public boolean isFullEngaged() { return true; }
-                @Override public com.termux.app.statusbar.TopStatusBarState fullPriorState() {
-                    return com.termux.app.statusbar.TopStatusBarState.EXPANDED;
-                }
-                @Override public void restoreFull(com.termux.app.statusbar.TopStatusBarState prior) { }
+                @Override public boolean isWidgetSurfaceShowing() { return true; }
+                @Override public void captureWidgetSurfaceOrigin() { }
+                @Override public void restoreWidgetSurfaceOrigin() { }
             });
         pane.setFullProgress(1); layout(pane);
         TextView hint = pane.findViewById(R.id.widget_empty_message);

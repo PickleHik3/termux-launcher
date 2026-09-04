@@ -57,7 +57,8 @@ public final class PaneRim {
     /**
      * Put the rim on {@code frame}, or crossfade the one already there to a new focus state.
      *
-     * @param radiusPx the slab radius, already capped against the frame's own bounds
+     * @param radiusPx the slab radius as the surface asks for it; the rim drawable caps it
+     *                 against the frame's live bounds on every draw
      * @return true while the frame carries a rim, false when there is nothing to draw (in which
      *         case the caller can drop this instance)
      */

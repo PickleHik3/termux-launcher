@@ -172,6 +172,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
         /**
+         * Defines the key for the pane wall: fixed places beside the terminal — the widget grid,
+         * and later the embedded display — reached by swiping the status bar. Off until the
+         * gestures and the tiles that navigate it ship.
+         */
+        public static final String KEY_PANE_WALL_ENABLED = "pane_wall";
+
+        public static final boolean DEFAULT_PANE_WALL_ENABLED = false;
+
+        /**
          * Defines the key for the launcher / terminal-only use case the user picked. Stored rather
          * than derived from the surface switches: the surfaces stay individually settable after a
          * mode is picked, and a derived mode would jump between the two the moment one is flipped.

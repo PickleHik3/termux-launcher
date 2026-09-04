@@ -20,7 +20,7 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.S, application = Application.class)
 public class WidgetAddExternalReturnIntegrationTest {
-    @Test public void matchingLiveExternalResultRestoresFullOnceAndColdControllerDoesNot() {
+    @Test public void matchingLiveExternalResultRestoresTheWidgetSurfaceOnceAndColdControllerDoesNot() {
         WidgetPickerProductionSelectionTest.Fixture fixture =
             new WidgetPickerProductionSelectionTest.Fixture(false);
         fixture.platform.directBind = false;
@@ -28,20 +28,19 @@ public class WidgetAddExternalReturnIntegrationTest {
         RecyclerView.ViewHolder card = fixture.pane.picker().list().findViewHolderForAdapterPosition(1);
         card.itemView.performClick();
         int id = fixture.repository.pending().appWidgetId;
-        fixture.platform.info.put(id, fixture.info); fixture.fullEngaged = false;
+        fixture.platform.info.put(id, fixture.info); fixture.surfaceShowing = false;
         Intent result = new Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
         assertTrue(fixture.widgets.handleActivityResult(4714, Activity.RESULT_OK, result));
         assertEquals(1, fixture.restoreCount); assertEquals(1, fixture.repository.records().size());
 
-        // A newly-created pane coordinator has no live-origin latch and cannot reopen FULL.
-        fixture.controller.destroy(); fixture.fullEngaged = false; fixture.restoreCount = 0;
+        // A newly-created pane coordinator has no live-origin latch and cannot reopen it.
+        fixture.controller.destroy(); fixture.surfaceShowing = false; fixture.restoreCount = 0;
         new WidgetPaneController(fixture.pane, fixture.widgets, new WidgetPaneController.Host() {
             @Override public boolean reducedMotion() { return true; }
-            @Override public boolean isFullEngaged() { return false; }
-            @Override public com.termux.app.statusbar.TopStatusBarState fullPriorState() {
-                return com.termux.app.statusbar.TopStatusBarState.EXPANDED;
+            @Override public boolean isWidgetSurfaceShowing() { return false; }
+            @Override public void captureWidgetSurfaceOrigin() {
             }
-            @Override public void restoreFull(com.termux.app.statusbar.TopStatusBarState prior) {
+            @Override public void restoreWidgetSurfaceOrigin() {
                 fixture.restoreCount++;
             }
         });

@@ -308,6 +308,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
     /** The wall page an activity recreation is coming back to; null on a cold start. */
     @Nullable private String mPendingWallPage;
+    /** The status-bar arrangement an external add-widget flow has to come back to. */
+    @NonNull private com.termux.app.statusbar.TopStatusBarState mWidgetSurfaceOrigin =
+        com.termux.app.statusbar.TopStatusBarState.EXPANDED;
     @Nullable private com.termux.app.launcher.widget.LauncherWidgetHostController mWidgetHostController;
     @Nullable private com.termux.app.launcher.widget.WidgetPaneController mWidgetPaneController;
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
@@ -1086,6 +1089,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // alpha, scale and translation, so a drawer left open across HOME would strand faded
             // pinned icons.
             mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
+            // HOME means the home screen, which is the terminal: the wall comes back to it.
+            if (mPaneWallController != null) mPaneWallController.returnToTerminal(true);
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
@@ -1836,7 +1841,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void updateTerminalGlassFrost() {
         if (mPaneController == null) return;
-        mPaneController.setSurfaceStyle(paneSurfaceStyle());
+        com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
+        mPaneController.setSurfaceStyle(style);
+        if (mPaneWallController != null) mPaneWallController.applyStyle(style);
     }
 
     /**
@@ -6821,6 +6828,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return getTermuxThemeColor(attr, fallbackRes);
         }
 
+        @Override public void holdPaneWallOnTerminal(boolean held) {
+            if (mPaneWallController == null) return;
+            if (held) mPaneWallController.returnToTerminal(false);
+            mPaneWallController.setGesturesEnabled(!held);
+        }
         @Override public void refreshPaneLayout() {
             if (mPaneController != null) mPaneController.refreshPaneLayout();
         }
@@ -11003,6 +11015,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             (com.termux.app.wall.PaneWallLayout) wall,
             new com.termux.app.wall.PaneWallController.Host() {
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+                @Override public boolean isWallEnabled() { return isPaneWallEnabled(); }
                 @Override public boolean isTerminalOnly() {
                     return mPreferences != null && mPreferences.isTerminalOnlyUseCase();
                 }
@@ -11010,14 +11023,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled();
                 }
                 @Override public boolean isDisplayEnabled() { return false; }
+                @Override public void onWallPageSettled(
+                        @NonNull com.termux.app.wall.PaneWallPage page) {
+                    if (mWidgetPaneController != null) {
+                        mWidgetPaneController.onWallPageShown(
+                            page == com.termux.app.wall.PaneWallPage.WIDGETS);
+                    }
+                }
             });
         mPaneWallController.attachTerminalPage(paneHost);
+        // The widget grid moves onto the wall before the widget controller looks it up, so the
+        // controller finds it in its new home and nothing is built twice.
+        View grid = findViewById(R.id.widget_pane);
+        if (isPaneWallEnabled() && grid != null && mPreferences != null
+            && mPreferences.isAppLauncherWidgetPaneEnabled()) {
+            mPaneWallController.attachWidgetsPage(getLayoutInflater(), grid);
+        }
+        mPaneWallController.applyStyle(paneSurfaceStyle());
         if (mPendingWallPage != null) {
             Bundle state = new Bundle();
             state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, mPendingWallPage);
             mPendingWallPage = null;
             mPaneWallController.restoreInstanceState(state);
         }
+    }
+
+    /**
+     * The pane wall: places beside the terminal, reached by swiping the status bar. While it is
+     * off the status bar's pull-down still holds the widget grid, so exactly one of the two ever
+     * owns it.
+     */
+    public boolean isPaneWallEnabled() {
+        return mPreferences != null && mPreferences.isPaneWallEnabled();
     }
 
     private void createWidgetPaneController() {
@@ -11033,17 +11070,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             (com.termux.app.launcher.widget.WidgetPaneView) view, mWidgetHostController,
             new com.termux.app.launcher.widget.WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
-                @Override public boolean isFullEngaged() {
+                // Where the widget grid lives: the wall's Widgets page once the wall is on,
+                // the status bar's pull-down until then.
+                @Override public boolean isWidgetSurfaceShowing() {
+                    if (mPaneWallController != null && isPaneWallEnabled()) {
+                        return mPaneWallController.currentPage()
+                            == com.termux.app.wall.PaneWallPage.WIDGETS;
+                    }
                     return mFullStatusBarController != null && mFullStatusBarController.isEngaged();
                 }
-                @NonNull @Override public com.termux.app.statusbar.TopStatusBarState fullPriorState() {
-                    return mFullStatusBarController == null
+                @Override public void captureWidgetSurfaceOrigin() {
+                    mWidgetSurfaceOrigin = mFullStatusBarController == null
                         ? com.termux.app.statusbar.TopStatusBarState.EXPANDED
                         : mFullStatusBarController.priorState();
                 }
-                @Override public void restoreFull(
-                        @NonNull com.termux.app.statusbar.TopStatusBarState prior) {
+                @Override public void restoreWidgetSurfaceOrigin() {
+                    if (mPaneWallController != null && isPaneWallEnabled()) {
+                        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, false);
+                        return;
+                    }
                     View pane = findViewById(R.id.widget_pane);
+                    final com.termux.app.statusbar.TopStatusBarState prior = mWidgetSurfaceOrigin;
                     if (pane != null) pane.post(() -> {
                         if (mFullStatusBarController != null
                             && !mFullStatusBarController.isEngaged()) {
@@ -11227,8 +11274,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && mPreferences.isTopPaneClockCollapsed());
             // The FULL pane is a home surface: a terminal-only install must not be able to pull
             // a notification panel down over its terminal, by drag or by long press.
-            swipeHost.setFullPaneAvailable(mPreferences == null
-                || !mPreferences.isTerminalOnlyUseCase());
+            swipeHost.setFullPaneAvailable(!isPaneWallEnabled() && (mPreferences == null
+                || !mPreferences.isTerminalOnlyUseCase()));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
                 @Override public void onCollapsedStateRequested(boolean collapsed) {
                     setTopStatusBarCollapsed(collapsed, true);
@@ -13346,6 +13393,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean cyclePaneLayout() {
             return TermuxActivity.this.cyclePaneLayout();
+        }
+
+        @Override public boolean goToWallPage(@NonNull String page) {
+            return mPaneWallController != null && mPaneWallController.goTo(page);
         }
 
         @Override @Nullable public String activePaneLayoutPolicy() {

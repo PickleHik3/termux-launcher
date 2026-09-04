@@ -31,7 +31,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void agentOnlyTools_haveNoUiMetadata() {
         String[] agentOnly = {"workspace.save", "workspace.load", "workspace.list", "workspace.delete",
-            "pane.layout", "pane.move_to_edge"};
+            "pane.layout", "pane.move_to_edge", "wall.go"};
         for (String name : agentOnly) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -143,7 +143,7 @@ public class LauncherToolRegistryTest {
         String[] navigation = {"terminal.state", "pane.focus_direction", "pane.resize",
             "window.next", "window.previous", "session.next", "session.previous",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
-            "pane.next_layout", "session.browser"};
+            "pane.next_layout", "session.browser", "wall.go"};
         for (String name : navigation) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertEquals(name, LauncherToolRegistry.ToolRisk.LOW, tool.risk);

@@ -7,6 +7,8 @@ import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
+import androidx.annotation.Nullable;
+
 import com.termux.R;
 
 /**
@@ -54,6 +56,16 @@ public class PaneContentFrame extends FrameLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
         mContent = findViewById(R.id.terminal_view);
+    }
+
+    /**
+     * The child that owes the shape its clearance. A terminal pane finds its own on inflation; a
+     * page whose content arrives later — the wall's widget grid — names it here.
+     */
+    public void setPaneContent(@Nullable View content) {
+        if (mContent == content) return;
+        mContent = content;
+        requestLayout();
     }
 
     /**

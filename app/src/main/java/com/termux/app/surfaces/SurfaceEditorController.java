@@ -101,6 +101,12 @@ public final class SurfaceEditorController {
         int statusBarInsetTop();
         int themeColor(int attr, int fallbackRes);
         void refreshPaneLayout();
+        /**
+         * Bring the pane wall back to the terminal and hold its gestures, or hand them back. The
+         * editor tunes the surface the terminal is drawn on, so it edits the terminal's own page
+         * — the same reason it collapses the status pane on entry.
+         */
+        void holdPaneWallOnTerminal(boolean held);
         void applyTerminalSurfaceAppearance();
         void refreshTerminalWindowBar();
         /** Re-applies the sessions panel background at its stored opacity. */
@@ -393,6 +399,7 @@ public final class SurfaceEditorController {
             mHasEntryStatusCollapsed = true;
         }
         mSurfaceEditorOpen = true;
+        if (freshEditorSession) mHost.holdPaneWallOnTerminal(true);
         panel.host.setVisibility(View.VISIBLE);
 
         if (freshEditorSession || mSurfaceEditorEntrySignature == null) {
@@ -3281,6 +3288,7 @@ public final class SurfaceEditorController {
         mSelectedSlot = null;
         mCardShown = false;
         mSurfaceEditorOpen = false;
+        mHost.holdPaneWallOnTerminal(false);
         syncGlow();
         setSurfaceTuningGestureOverlayVisible(false);
         unregisterSurfaceEditorLayoutListener();

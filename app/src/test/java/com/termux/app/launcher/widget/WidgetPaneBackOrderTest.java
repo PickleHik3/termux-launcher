@@ -39,9 +39,9 @@ public class WidgetPaneBackOrderTest {
         WidgetPaneController paneController = new WidgetPaneController(fixture.pane, widgets,
             new WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return true; }
-                @Override public boolean isFullEngaged() { return true; }
-                @Override public TopStatusBarState fullPriorState() { return TopStatusBarState.EXPANDED; }
-                @Override public void restoreFull(TopStatusBarState prior) { }
+                @Override public boolean isWidgetSurfaceShowing() { return true; }
+                @Override public void captureWidgetSurfaceOrigin() { }
+                @Override public void restoreWidgetSurfaceOrigin() { }
             });
         final int[] height = {96};
         fixture.full = new FullStatusBarController(new FullStatusBarController.Host() {

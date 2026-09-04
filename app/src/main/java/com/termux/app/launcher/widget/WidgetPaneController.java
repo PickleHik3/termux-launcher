@@ -11,7 +11,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.statusbar.TopStatusBarState;
 
 import java.util.List;
 import java.util.UUID;
@@ -20,9 +19,15 @@ import java.util.UUID;
 public final class WidgetPaneController implements LauncherWidgetHostController.Listener {
     public interface Host {
         boolean reducedMotion();
-        boolean isFullEngaged();
-        @NonNull TopStatusBarState fullPriorState();
-        void restoreFull(@NonNull TopStatusBarState prior);
+        /** True while the surface holding the widget grid is on screen. */
+        boolean isWidgetSurfaceShowing();
+        /**
+         * An add-widget flow is about to leave for another app's activity. Remember whatever the
+         * surface needs to come back to; the controller does not know what that is.
+         */
+        void captureWidgetSurfaceOrigin();
+        /** That flow has returned and the surface had gone away: bring it back. */
+        void restoreWidgetSurfaceOrigin();
         /** A provider text editor took focus; give it the system IME. */
         default void onWidgetEditorFocused(@NonNull View editor) { }
         /** The editor lost focus; restore the terminal's IME arrangement. */
@@ -35,7 +40,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private final Host host;
     private String liveOrigin;
     private boolean awaitingExternal;
-    private TopStatusBarState capturedPrior = TopStatusBarState.EXPANDED;
     private float fullProgress;
     private boolean fullSettled;
     private int currentPage;
@@ -95,6 +99,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
     public void onFullSettled(boolean settled) {
         fullSettled = settled; pane.setFullState(fullProgress, fullSettled);
+    }
+
+    /**
+     * The wall's Widgets page came to rest on screen, or left it. A page that has gone opens
+     * again the way it always does — page 0, no menu — like the pull-down it replaces.
+     */
+    public void onWallPageShown(boolean shown) {
+        if (shown) return;
+        dismissPaneMenu();
+        if (currentPage != 0) { currentPage = 0; render(); }
     }
     public boolean onBackPressed() {
         if (paneMenu != null && paneMenu.isShowing()) { dismissPaneMenu(); return true; }
@@ -221,7 +235,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         Rect bounds = pane.grid().metrics().boundsFor(placement.rect);
         Bundle options = initialOptions(bounds.width(), bounds.height());
         liveOrigin = UUID.randomUUID().toString();
-        capturedPrior = host.fullPriorState();
+        host.captureWidgetSurfaceOrigin();
         LauncherWidgetHostController.AddResult result = widgets.beginAdd(item.info, placement.rect,
             currentPage, revision, options, liveOrigin);
         if (result == LauncherWidgetHostController.AddResult.STARTED) {
@@ -253,7 +267,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (awaitingExternal && result != LauncherWidgetHostController.AddResult.IGNORED
             && result != LauncherWidgetHostController.AddResult.STARTED) {
             awaitingExternal = false;
-            if (!host.isFullEngaged()) host.restoreFull(capturedPrior);
+            if (!host.isWidgetSurfaceShowing()) host.restoreWidgetSurfaceOrigin();
             if (result != LauncherWidgetHostController.AddResult.READY) pane.showNotice(messageFor(result));
         }
         if (result != LauncherWidgetHostController.AddResult.IGNORED) liveOrigin = null;

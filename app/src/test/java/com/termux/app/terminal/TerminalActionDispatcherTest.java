@@ -392,6 +392,29 @@ public class TerminalActionDispatcherTest {
     }
 
     @Test
+    public void wallGoTakesAPageNameOrADirection() throws Exception {
+        FakeTerminalHost host = attach();
+
+        assertEquals(400, dispatcher.execute("wall.go", new JSONObject()).getInt("_statusCode"));
+        assertFalse(host.called("goToWallPage"));
+
+        for (String page : new String[]{"widgets", "terminal", "display", "left", "right"}) {
+            JSONObject result = dispatcher.execute("wall.go", new JSONObject().put("page", page));
+            assertEquals(page, page, result.getString("page"));
+            assertEquals(page, page, host.lastWallPage);
+        }
+    }
+
+    @Test
+    public void wallGoToAPageThisInstallHasNotIsABadRequest() throws Exception {
+        FakeTerminalHost host = attach();
+        host.goToWallPageResult = false;
+        JSONObject result = dispatcher.execute("wall.go", new JSONObject().put("page", "display"));
+        assertEquals(400, result.getInt("_statusCode"));
+        assertTrue(host.called("goToWallPage"));
+    }
+
+    @Test
     public void paneLayoutWithoutASessionIsAConflict() throws Exception {
         FakeTerminalHost host = attach();
         host.applyPaneLayoutResult = false;

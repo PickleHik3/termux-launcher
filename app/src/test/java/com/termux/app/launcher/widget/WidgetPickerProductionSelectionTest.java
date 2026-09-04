@@ -57,7 +57,7 @@ public class WidgetPickerProductionSelectionTest {
         final WidgetPaneView pane;
         final WidgetPaneController controller;
         final AppWidgetProviderInfo info;
-        boolean fullEngaged = true;
+        boolean surfaceShowing = true;
         int restoreCount;
         Fixture(boolean fill) {
             activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -78,9 +78,11 @@ public class WidgetPickerProductionSelectionTest {
                 1024 * 1024);
             controller = new WidgetPaneController(pane, widgets, new WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return true; }
-                @Override public boolean isFullEngaged() { return fullEngaged; }
-                @Override public TopStatusBarState fullPriorState() { return TopStatusBarState.EXPANDED; }
-                @Override public void restoreFull(TopStatusBarState prior) { restoreCount++; fullEngaged = true; }
+                @Override public boolean isWidgetSurfaceShowing() { return surfaceShowing; }
+                @Override public void captureWidgetSurfaceOrigin() { }
+                @Override public void restoreWidgetSurfaceOrigin() {
+                    restoreCount++; surfaceShowing = true;
+                }
             }, loader);
             controller.onFullFrame(1f); controller.onFullSettled(true); layout();
         }

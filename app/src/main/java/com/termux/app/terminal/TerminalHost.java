@@ -249,6 +249,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     boolean cyclePaneLayout();
 
+    /**
+     * Show one of the pane wall's places. Accepts a name (widgets, terminal, display) or a
+     * direction (left, right); false when this install does not have that place.
+     */
+    boolean goToWallPage(@NonNull String page);
+
     /** The retained automatic layout, or null when the window is manually managed. */
     @Nullable String activePaneLayoutPolicy();
 

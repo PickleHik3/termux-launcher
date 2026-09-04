@@ -97,6 +97,8 @@ class FakeTerminalHost implements TerminalHost {
     boolean killFocusedPaneResult = true;
     boolean applyPaneLayoutResult = true;
     boolean cyclePaneLayoutResult = true;
+    @Nullable String lastWallPage;
+    boolean goToWallPageResult = true;
     boolean equalizePaneLayoutResult = true;
     boolean rotatePaneLayoutResult = true;
     boolean moveFocusedPaneToEdgeResult = true;
@@ -531,6 +533,12 @@ class FakeTerminalHost implements TerminalHost {
         record("applyPaneLayout");
         lastLayout = layout;
         return applyPaneLayoutResult;
+    }
+
+    @Override public boolean goToWallPage(@NonNull String page) {
+        record("goToWallPage");
+        lastWallPage = page;
+        return goToWallPageResult;
     }
 
     @Override public boolean cyclePaneLayout() {
