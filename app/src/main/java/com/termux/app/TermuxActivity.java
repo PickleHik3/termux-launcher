@@ -5151,6 +5151,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mInAppKeyboard.onDestroy();
             mInAppKeyboard = null;
         }
+        // The display controller is this activity's; the server it talks to is not. Letting go
+        // here hands the server's announcement on to the next activity's controller, and stops
+        // this activity's view chain being pinned by the Binder for as long as the server runs.
+        if (mX11Display != null) {
+            mX11Display.destroy();
+            mX11Display = null;
+        }
         clearAccessoryRenderEffectBackdrop();
         removeDecorNavBarSurfaceOverlay();
         if (mSuggestionBarView != null) {

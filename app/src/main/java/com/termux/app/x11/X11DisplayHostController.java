@@ -24,6 +24,10 @@ import com.termux.x11.LorieView;
  * {@code termux-x11}, and it keeps an X server crash away from the home screen. Nothing here
  * starts one: a display exists because someone typed {@code termux-x11 :0}, or because the user
  * turned on the opt-in that runs that command at start-up.
+ *
+ * <p>One controller exists per activity and is {@link #destroy() destroyed} with it. The server
+ * outlives both; its announcement is handed across through {@link X11DisplayReceiver}, so the
+ * next activity's controller starts with the Binder rather than waiting for the server to knock.
  */
 public final class X11DisplayHostController {
 
@@ -54,7 +58,11 @@ public final class X11DisplayHostController {
     public X11DisplayHostController(@NonNull Context context,
                                     @NonNull LorieHost.Callbacks callbacks) {
         this.host = new LorieHost(context.getApplicationContext(), callbacks);
-        X11DisplayReceiver.setController(this);
+        X11DisplayReceiver.register(this);
+        // A server that announced itself while no activity was up — or to the activity this one
+        // replaces — is taken straight away; the view connects to it when the page attaches.
+        Bundle kept = X11DisplayReceiver.takeAnnouncement();
+        if (kept != null) onServerAnnounced(kept);
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -93,11 +101,15 @@ public final class X11DisplayHostController {
         host.setLorieView(null);
     }
 
-    /** Let go of everything. The server keeps running; it is not ours to stop. */
+    /**
+     * Let go of everything. The server keeps running; it is not ours to stop — and its
+     * announcement is left with the receiver for the controller that comes after this one.
+     */
     public void destroy() {
         destroyed = true;
         handler.removeCallbacks(connectRetry);
-        X11DisplayReceiver.setController(null);
+        X11DisplayReceiver.unregister(this);
+        if (announcement != null && link.isLinked()) X11DisplayReceiver.keepAnnouncement(announcement);
         link.release();
         announcement = null;
         view = null;
@@ -108,9 +120,8 @@ public final class X11DisplayHostController {
     // ---- The server's announcement ----------------------------------------------------------
 
     /** Called by {@link X11DisplayReceiver} for every {@code ACTION_START} broadcast. */
-    void onServerAnnounced(@NonNull android.content.Intent intent) {
-        Bundle bundle = intent.getBundleExtra(null);
-        if (destroyed || bundle == null || bundle.getBinder(null) == null) return;
+    void onServerAnnounced(@NonNull Bundle bundle) {
+        if (destroyed || bundle.getBinder(null) == null) return;
         announcement = bundle;
         connect(bundle);
     }
