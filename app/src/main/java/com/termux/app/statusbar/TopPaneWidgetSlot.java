@@ -79,6 +79,9 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         super.dispatchDraw(canvas);
         TerminalClockWidget clock = mClock;
         if (clock == null || clock.getVisibility() != VISIBLE || clock.getAlpha() <= 0f) return;
+        // With the wall's tiles sharing the slot there is no plane left for the line to span:
+        // carrying it into a tile's cell would draw the clock's own detail across a button.
+        if (!mWidgetsTileBounds.isEmpty() || !mDisplayTileBounds.isEmpty()) return;
         float ruleY = clock.fullRuleCenterYPx();
         if (ruleY < 0f) return;
         float y = clock.getTop() + clock.getTranslationY() + ruleY;

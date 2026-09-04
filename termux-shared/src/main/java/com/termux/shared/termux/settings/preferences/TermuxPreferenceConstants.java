@@ -173,12 +173,12 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Defines the key for the pane wall: fixed places beside the terminal — the widget grid,
-         * and later the embedded display — reached by swiping the status bar. Off until the
-         * gestures and the tiles that navigate it ship.
+         * and later the embedded display — reached by swiping the status bar or tapping a tile.
+         * With it off the widget grid stays behind the status bar's pull-down instead.
          */
         public static final String KEY_PANE_WALL_ENABLED = "pane_wall";
 
-        public static final boolean DEFAULT_PANE_WALL_ENABLED = false;
+        public static final boolean DEFAULT_PANE_WALL_ENABLED = true;
 
         /** Defines the key for the pane wall's Widgets and Display buttons in the status bar. */
         public static final String KEY_TOP_PANE_WALL_TILES = "top_pane_wall_tiles";

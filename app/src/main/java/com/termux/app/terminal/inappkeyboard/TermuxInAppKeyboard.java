@@ -57,7 +57,9 @@ public final class TermuxInAppKeyboard {
         KEYBOARD_ACTION,
         USER_EVENT,
         PREFERENCE_DISABLED,
-        DESTROYED
+        DESTROYED,
+        /** The pane wall left the terminal: there is nothing on the other pages to type into. */
+        WALL_PAGE
     }
 
     public enum ToggleReason {

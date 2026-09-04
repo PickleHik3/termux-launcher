@@ -33,6 +33,11 @@ public final class TopPaneWallTileView extends View {
     private static final float RUNNING_DOT_DP = 4f;
     private static final float LABEL_SP = 12f;
     private static final float RIM_DP = 1f;
+    /** Keeps the slab off the band's own edges, so it reads as a chip and not as a second bar. */
+    private static final float VERTICAL_INSET_DP = 8f;
+    /** The slab is glass over the status surface, like every other chip in the bar. */
+    private static final int FILL_ALPHA = 64;
+    private static final int SELECTED_FILL_ALPHA = 148;
 
     public interface Listener {
         /** The tile was tapped: show its place, or return to the terminal if it already shows. */
@@ -159,44 +164,54 @@ public final class TopPaneWallTileView extends View {
         boolean selected = isSelected();
         float density = getResources().getDisplayMetrics().density;
         float rimPx = RIM_DP * density;
-        // The tile is a small surface of its own: a container fill, and the rim only while it is
-        // the place on screen — the same "this one has the focus" cue a pane's rim carries.
+        // The tile is glass over the status surface, not a card on top of it: a translucent fill
+        // and a thin rim, the same treatment the window chips beside it wear. The rim brightens
+        // and the fill fills in while this is the place on screen — the same "this one has the
+        // focus" cue a pane's rim carries.
         int fill = themeColor(selected ? com.termux.shared.R.attr.termuxColorPrimaryContainer
-            : com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-            selected ? R.color.termux_primary : R.color.termux_surface_panel_high);
+            : com.termux.shared.R.attr.termuxColorSurfacePanelHighest,
+            selected ? R.color.termux_primary : R.color.termux_surface_panel_highest);
         int text = themeColor(selected ? com.termux.shared.R.attr.termuxColorOnPrimaryContainer
             : com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
             selected ? R.color.termux_on_surface : R.color.termux_on_surface_variant);
-        mShape.set(rimPx / 2f, rimPx / 2f, width - rimPx / 2f, height - rimPx / 2f);
+        int rim = themeColor(selected ? com.termux.shared.R.attr.termuxColorPrimary
+            : com.termux.shared.R.attr.termuxColorOutlineVariant,
+            selected ? R.color.termux_primary : R.color.termux_outline_variant);
+        float inset = Math.min(VERTICAL_INSET_DP * density, height * 0.12f);
+        mShape.set(rimPx / 2f, inset + rimPx / 2f, width - rimPx / 2f, height - inset - rimPx / 2f);
         float radius = Math.min(mRadiusPx, Math.min(mShape.width(), mShape.height()) / 2f);
         mFill.setColor(fill);
+        mFill.setAlpha(selected ? SELECTED_FILL_ALPHA : FILL_ALPHA);
         canvas.drawRoundRect(mShape, radius, radius, mFill);
-        if (selected) {
-            mRim.setColor(themeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                R.color.termux_primary));
-            mRim.setStrokeWidth(rimPx);
-            canvas.drawRoundRect(mShape, radius, radius, mRim);
-        }
+        mRim.setColor(rim);
+        mRim.setAlpha(selected ? 255 : 128);
+        mRim.setStrokeWidth(rimPx);
+        canvas.drawRoundRect(mShape, radius, radius, mRim);
 
-        float padding = 8f * density;
+        float padding = 12f * density;
         float stopTarget = STOP_TARGET_DP * density;
         boolean showStop = mRunning && width >= stopTarget + padding * 2f;
         if (showStop) {
             int left = Math.round(width - stopTarget);
-            mStopTarget.set(left, 0, width, height);
+            mStopTarget.set(left, Math.round(mShape.top), width, Math.round(mShape.bottom));
         } else {
             mStopTarget.setEmpty();
         }
 
         mLabel.setColor(text);
+        mLabel.setAlpha(255);
         mLabel.setTextSize(LABEL_SP * getResources().getDisplayMetrics().scaledDensity);
-        float dotSpace = mRunning ? RUNNING_DOT_DP * density * 2.5f : 0f;
+        float dotSpace = mRunning ? RUNNING_DOT_DP * density * 3f : 0f;
         float labelLeft = padding + dotSpace;
         float labelRight = showStop ? mStopTarget.left : width - padding;
-        String label = ellipsize(mText, Math.max(0f, labelRight - labelLeft));
+        float available = Math.max(0f, labelRight - labelLeft);
+        String label = ellipsize(mText, available);
         mLabel.getTextBounds(label, 0, label.length(), mLabelBounds);
         float baseline = height / 2f - (mLabel.descent() + mLabel.ascent()) / 2f;
-        canvas.drawText(label, labelLeft, baseline, mLabel);
+        // Centred in whatever the running state leaves it, so the word does not shift when a
+        // display comes up beside it.
+        float x = labelLeft + Math.max(0f, (available - mLabel.measureText(label)) / 2f);
+        canvas.drawText(label, x, baseline, mLabel);
 
         if (mRunning) {
             mGlyph.setStyle(Paint.Style.FILL);

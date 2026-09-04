@@ -308,6 +308,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
     /** The wall page an activity recreation is coming back to; null on a cold start. */
     @Nullable private String mPendingWallPage;
+    /** The wall put the in-app keyboard away when it left the terminal, and owes it back. */
+    private boolean mWallHidKeyboard;
     /** The status-bar arrangement an external add-widget flow has to come back to. */
     @NonNull private com.termux.app.statusbar.TopStatusBarState mWidgetSurfaceOrigin =
         com.termux.app.statusbar.TopStatusBarState.EXPANDED;
@@ -11034,6 +11036,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
                     syncWallTileSelection();
+                    // Nothing on a widget grid takes typing, so the keyboard goes away with the
+                    // terminal and comes back with it. A widget's own text field asks for the
+                    // system IME through onWidgetEditorFocused instead.
+                    if (page != com.termux.app.wall.PaneWallPage.TERMINAL) {
+                        if (mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                            mWallHidKeyboard = true;
+                            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
+                                .TermuxInAppKeyboard.HideReason.WALL_PAGE);
+                        }
+                        KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, getCurrentFocus());
+                    } else if (mWallHidKeyboard) {
+                        mWallHidKeyboard = false;
+                        if (mInAppKeyboard != null) {
+                            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
+                                .TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+                        }
+                    }
                 }
             });
         mPaneWallController.attachTerminalPage(paneHost);
