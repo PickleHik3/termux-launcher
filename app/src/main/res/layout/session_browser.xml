@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Wrap, not fill. The browser is a panel on the terminal's foot: with three sessions in it a
+     match_parent list stretched to the terminal's whole height and left most of the panel empty.
+     The card's own top margin is the terminal's ceiling, so a long list still stops there and
+     scrolls inside itself. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical">
 
     <!-- Not an EditText. The browser lives on the terminal sheet plane, which never takes focus so
@@ -14,7 +18,7 @@
         android:layout_height="wrap_content"
         android:focusable="false"
         android:gravity="center_vertical"
-        android:minHeight="44dp"
+        android:minHeight="40dp"
         android:singleLine="true"
         android:textAppearance="?attr/textAppearanceBodyLarge" />
 
@@ -30,6 +34,10 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
             android:text="@string/session_browser_new" />
 
         <com.google.android.material.button.MaterialButton
@@ -39,6 +47,10 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
             android:text="@string/session_browser_clone_current" />
 
         <com.google.android.material.button.MaterialButton
@@ -48,15 +60,18 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
             android:text="@string/session_browser_save_workspace" />
     </LinearLayout>
 
     <ListView
         android:id="@+id/session_browser_list"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:layout_weight="1"
         android:divider="@null"
         android:dividerHeight="0dp"
         android:scrollbarStyle="outsideOverlay" />
@@ -65,8 +80,8 @@
         android:id="@+id/session_browser_empty"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
         android:gravity="center"
         android:text="@string/session_browser_empty"
         android:textAppearance="?attr/textAppearanceBodyMedium"

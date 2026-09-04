@@ -20,9 +20,9 @@ import java.util.Locale;
  * Quick select: keyboard-labelled URLs, paths, hashes and source line references from the focused
  * session's transcript.
  *
- * <p>Shaped like the scrollback-search bar rather than a full-screen sheet: a bare bar on the
- * dock's edge with no plane backdrop, so the transcript the labels point into stays visible while
- * choosing. Rows lift the bar only as far as they exist, to a ceiling, and scroll beyond it.
+ * <p>Shaped like the scrollback-search bar rather than a full-screen sheet: a bare bar rising from
+ * the terminal's own bottom edge with no plane backdrop, so the transcript the labels point into
+ * stays visible while choosing. Rows lift the bar only as far as they exist, to a ceiling, and scroll beyond it.
  *
  * <p>The letter jump used to be a {@code Dialog.OnKeyListener}, which only ever saw hardware
  * strokes. On the sheet it is a {@link TerminalSheetController.TextSink} instead, so the same press
@@ -60,7 +60,7 @@ public final class TerminalHintsOverlay {
 
         if (hints.isEmpty()) {
             sheet.show("", body, false, null, null, false,
-                TerminalSheetController.Placement.aboveDockBare());
+                TerminalSheetController.Placement.terminalFoot());
             return;
         }
 
@@ -101,7 +101,7 @@ public final class TerminalHintsOverlay {
         });
 
         sheet.show("", body, false, new LetterJump(activity, hints, highlight, render), null,
-            false, TerminalSheetController.Placement.aboveDockBare());
+            false, TerminalSheetController.Placement.terminalFoot());
     }
 
     /**

@@ -156,6 +156,95 @@ public class TerminalSheetPromptsTest {
         assertEquals("the search went, the hint picker under it stayed", 1, sheet.depth());
     }
 
+    /**
+     * The Save-workspace prompt: the caret is on the field before a key is pressed, and the answers
+     * are the tick and the cross in its heading rather than a button row of their own.
+     */
+    @Test
+    public void theSaveWorkspacePromptShowsItsCaretAndAnswersFromTheHeading() {
+        TermuxActivity activity = laidOutActivity();
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+
+        TerminalSessionBrowser.promptSaveWorkspace(activity);
+
+        View card = sheet.topCard();
+        assertNotNull(card);
+        TextView field = findCaretField(card);
+        assertNotNull("nothing said the prompt was already taking keys", field);
+        assertTrue("the hint follows the caret rather than replacing it",
+            field.getText().toString().startsWith("▏"));
+
+        assertNotNull("the cross closes the panel", findByDescription(card, "Cancel"));
+        assertNotNull("the tick commits it", findByDescription(card, "OK"));
+
+        findByDescription(card, "Cancel").performClick();
+        assertFalse(sheet.isOpen());
+    }
+
+    /**
+     * The caret blinks like a text cursor, and typing holds it solid — the glyph itself never
+     * leaves the string, so the draft does not shuffle sideways twice a second.
+     */
+    @Test
+    public void theCaretBlinksWithoutMovingTheDraft() {
+        TermuxActivity activity = laidOutActivity();
+        TerminalScrollbackSearchOverlay.show(activity, transcript(), row -> {});
+        View card = activity.getTerminalSheetController().topCard();
+        TextView field = findCaretField(card);
+        assertNotNull(field);
+
+        assertTrue("the caret is solid the moment the prompt opens", caretVisible(field));
+        String beforeBlink = field.getText().toString();
+
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            600L, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+        assertFalse("half a second in, the caret is off", caretVisible(field));
+        assertEquals("the glyph stays in the text so nothing moves", beforeBlink,
+            field.getText().toString());
+
+        activity.handleTerminalSheetCodePoint('e', false);
+        assertTrue("typing holds the cursor solid", caretVisible(field));
+    }
+
+    /** Whether the caret glyph is painted: the blink is a colour span over it, not a deletion. */
+    private static boolean caretVisible(@NonNull TextView field) {
+        CharSequence text = field.getText();
+        if (!(text instanceof android.text.Spanned)) return true;
+        android.text.style.ForegroundColorSpan[] spans = ((android.text.Spanned) text).getSpans(
+            0, text.length(), android.text.style.ForegroundColorSpan.class);
+        for (android.text.style.ForegroundColorSpan span : spans) {
+            if (android.graphics.Color.alpha(span.getForegroundColor()) == 0) return false;
+        }
+        return true;
+    }
+
+    @Nullable
+    private static TextView findCaretField(@NonNull View view) {
+        if (view instanceof TextView && ((TextView) view).getText().toString().contains("▏"))
+            return (TextView) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TextView found = findCaretField(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    @Nullable
+    private static View findByDescription(@NonNull View view, @NonNull String description) {
+        CharSequence own = view.getContentDescription();
+        if (own != null && description.contentEquals(own)) return view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View found = findByDescription(group.getChildAt(i), description);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
     @NonNull
     private static List<TerminalScrollbackSearchModel.Line> transcript() {
         return Arrays.asList(

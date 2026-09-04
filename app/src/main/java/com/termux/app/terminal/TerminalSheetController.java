@@ -66,14 +66,24 @@ public final class TerminalSheetController
         /** Whether a raw screen point lands on the in-app keyboard — the keys the sheet is typed with. */
         boolean isPointOnInAppKeyboard(float rawX, float rawY);
 
+        /** The in-app keyboard's rectangle on screen; false when no keyboard is up. */
+        boolean inAppKeyboardBoundsOnScreen(@NonNull Rect out);
+
         /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
         boolean applyWallpaperFrost(@NonNull ImageView frost);
 
         /** Glass for a sheet card, in the same kit as the dock and the rename chip. */
         @NonNull Drawable sheetSurface();
 
-        /** The dock's rectangle on screen; false when there is no dock laid out. */
-        boolean dockBoundsOnScreen(@NonNull Rect out);
+        /**
+         * The terminal's own frame on screen — the rectangle its border is drawn around, insets
+         * included — for a card that belongs inside the terminal window rather than over it. False
+         * when there is no terminal laid out.
+         */
+        boolean terminalFrameOnScreen(@NonNull Rect out);
+
+        /** The terminal frame's corner radius, so a card sitting in its corners can match them. */
+        float terminalCornerRadiusPx();
 
         boolean isReducedMotionEnabled();
     }
@@ -95,6 +105,14 @@ public final class TerminalSheetController
     private static final int PAGE_ARROW_ROWS = 5;
     private static final float CORNER_RADIUS_DP = 22f;
     private static final float CARD_PADDING_DP = 18f;
+    /** The least plane a card may be left with when the keyboard is inset out of it. */
+    private static final float MIN_CARD_SPACE_DP = 140f;
+    /**
+     * A foot panel is a strip across the terminal, not a card floating in the middle of it: it
+     * spends less on padding than a dialog would, in both directions.
+     */
+    private static final float FOOT_PADDING_DP = 10f;
+    private static final float FOOT_SIDE_PADDING_DP = 14f;
 
     /** Where a sheet's typing goes. A sheet without one swallows keystrokes rather than leaking. */
     public interface TextSink {
@@ -125,17 +143,18 @@ public final class TerminalSheetController
         private static final Placement CENTERED = new Placement(null, false, false, false);
 
         @Nullable final PointF anchor;
-        final boolean docked;
         /** No plane backdrop: the surface behind this card stays exactly as it was. */
         final boolean bare;
         /** A thin one-line card whose bottom edge sits at the anchor instead of its top. */
         final boolean strip;
+        /** A panel rising from the terminal's own bottom edge, inside its frame. */
+        final boolean foot;
 
-        private Placement(@Nullable PointF anchor, boolean docked, boolean bare, boolean strip) {
+        private Placement(@Nullable PointF anchor, boolean bare, boolean strip, boolean foot) {
             this.anchor = anchor;
-            this.docked = docked;
             this.bare = bare;
             this.strip = strip;
+            this.foot = foot;
         }
 
         /** The default: a centred card with side and vertical insets. */
@@ -159,32 +178,24 @@ public final class TerminalSheetController
          */
         @NonNull
         public static Placement stripAbove(@Nullable PointF screenPoint) {
-            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, true, true);
+            return screenPoint == null ? CENTERED : new Placement(screenPoint, true, true, false);
         }
 
         /**
-         * A bar the width of the dock, sitting directly above it and growing upward.
+         * A panel that rises from the terminal's bottom edge and sinks back into it.
          *
-         * <p>For a surface that belongs to the terminal rather than over it: the search bar lands
-         * where the dock already is, so the eye does not have to move and the terminal stays visible
-         * above it.
+         * <p>The shape the keybind hints already use, the other way up: inside the terminal's frame,
+         * edge to edge, wearing the terminal's own corner radius where it sits in its bottom corners
+         * — part of the terminal window rather than a card floating over one. It is anchored to the
+         * terminal and not to the dock, so it lands on the same edge whether the dock, the A–Z row
+         * and the extra keys are all there or none of them is.
+         *
+         * <p>Bare, because everything these panels are about is behind them: the transcript a search
+         * is searching, the session the prompt is about to save.
          */
         @NonNull
-        public static Placement aboveDock() {
-            return new Placement(null, true, false, false);
-        }
-
-        /**
-         * The same bar, with the plane's backdrop left off entirely.
-         *
-         * <p>For a surface that is <em>about</em> what is behind it. Scrollback search blurring the
-         * transcript it searches was the worst of it: the plane's full-screen frost took the thing
-         * being searched away at the moment it mattered. A bare card sits on the dock's edge like
-         * the keybind hint slab does, and everything above it stays legible.
-         */
-        @NonNull
-        public static Placement aboveDockBare() {
-            return new Placement(null, true, true, false);
+        public static Placement terminalFoot() {
+            return new Placement(null, true, false, true);
         }
     }
 
@@ -193,6 +204,11 @@ public final class TerminalSheetController
      * migrated prompts used to carry. Renders the draft with a caret, or the hint while empty.
      */
     public static final class TextField implements TextSink {
+
+        /** Where the next keystroke lands. Shown on an empty field too, ahead of the hint. */
+        private static final String CARET = "▏";
+        /** The system's own cursor cadence, so this reads as a text cursor and not as a warning. */
+        private static final long BLINK_MS = 500L;
 
         public interface OnChanged {
             void onChanged(@NonNull String value);
@@ -203,6 +219,25 @@ public final class TerminalSheetController
         @Nullable private final OnChanged mOnChanged;
         @Nullable private final Runnable mOnCommit;
         @NonNull private String mValue = "";
+        /** The blink's phase. The glyph is always in the text; only its colour comes and goes. */
+        private boolean mCaretVisible = true;
+        /**
+         * Its own handler rather than {@code View.postDelayed}: a view that is not attached to a
+         * window queues those in its run queue instead of on a looper, and the field is built
+         * before its card reaches the plane.
+         */
+        private final android.os.Handler mBlinkHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+        private final Runnable mBlink = new Runnable() {
+            @Override public void run() {
+                // The card is taken off the plane when the prompt closes, and a self-reposting
+                // blink that outlived it would tick for the rest of the session.
+                if (mView.getParent() == null) return;
+                mCaretVisible = !mCaretVisible;
+                render(false);
+                mBlinkHandler.postDelayed(this, BLINK_MS);
+            }
+        };
 
         public TextField(@NonNull TextView view, @NonNull String hint,
                          @Nullable OnChanged onChanged) {
@@ -215,7 +250,25 @@ public final class TerminalSheetController
             mHint = hint;
             mOnChanged = onChanged;
             mOnCommit = onCommit;
+            restartBlink();
+        }
+
+        /**
+         * Puts the caret back on and starts the phase again.
+         *
+         * <p>Called on every keystroke as well as on attach, which is what a text cursor does: it
+         * stays solid while the user is typing and only blinks once they stop, so the blink never
+         * hides the character just entered.
+         */
+        private void restartBlink() {
+            mBlinkHandler.removeCallbacks(mBlink);
+            mCaretVisible = true;
             render(false);
+            // A cursor that blinks is an animation like any other; with animations turned off it
+            // stays solid rather than ticking away in the corner of the eye.
+            if (android.provider.Settings.Global.getFloat(mView.getContext().getContentResolver(),
+                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f) return;
+            mBlinkHandler.postDelayed(mBlink, BLINK_MS);
         }
 
         @NonNull
@@ -228,6 +281,7 @@ public final class TerminalSheetController
             if (text.isEmpty()) return;
             mValue = mValue + text;
             render(true);
+            restartBlink();
         }
 
         @Override
@@ -237,6 +291,7 @@ public final class TerminalSheetController
             // would leave the field holding an unpaired one.
             mValue = mValue.substring(0, mValue.offsetByCodePoints(mValue.length(), -1));
             render(true);
+            restartBlink();
         }
 
         @Override
@@ -246,14 +301,35 @@ public final class TerminalSheetController
             return true;
         }
 
+        /**
+         * Draws the draft, its caret and — on an empty field — the hint behind the caret.
+         *
+         * <p>The caret glyph is in the text whatever the blink is doing, and only its colour is
+         * turned on and off: dropping the character instead would shuffle everything left and right
+         * twice a second, and on an empty field the hint would jump with it.
+         */
         private void render(boolean notify) {
-            if (mValue.isEmpty()) {
-                mView.setText(mHint);
-                mView.setAlpha(0.5f);
-            } else {
-                mView.setText(mValue + "▏");
-                mView.setAlpha(1f);
+            mView.setAlpha(1f);
+            int color = mView.getCurrentTextColor();
+            android.text.SpannableStringBuilder text =
+                new android.text.SpannableStringBuilder(mValue).append(CARET);
+            int caretStart = mValue.length();
+            if (!mCaretVisible) {
+                text.setSpan(new android.text.style.ForegroundColorSpan(
+                        androidx.core.graphics.ColorUtils.setAlphaComponent(color, 0)),
+                    caretStart, caretStart + CARET.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
+            if (mValue.isEmpty()) {
+                // The hint follows the caret rather than replacing it: without one the prompt read
+                // as a label, and nothing on screen said the keys would land here.
+                int hintStart = text.length();
+                text.append(mHint);
+                text.setSpan(new android.text.style.ForegroundColorSpan(
+                        androidx.core.graphics.ColorUtils.setAlphaComponent(color, 128)),
+                    hintStart, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            mView.setText(text);
             if (notify && mOnChanged != null) mOnChanged.onChanged(mValue);
         }
     }
@@ -267,14 +343,17 @@ public final class TerminalSheetController
         final boolean coversPrevious;
         /** True for a card that asked for no backdrop; see {@link Placement#aboveDockBare()}. */
         final boolean bare;
+        /** True for a card that rose from the terminal's foot, and has to sink back into it. */
+        final boolean foot;
 
         Sheet(@NonNull View card, @Nullable TextSink sink, @Nullable Runnable onDismiss,
-              boolean coversPrevious, boolean bare) {
+              boolean coversPrevious, boolean bare, boolean foot) {
             this.card = card;
             this.sink = sink;
             this.onDismiss = onDismiss;
             this.coversPrevious = coversPrevious;
             this.bare = bare;
+            this.foot = foot;
         }
     }
 
@@ -286,6 +365,13 @@ public final class TerminalSheetController
     @Nullable private FrameLayout mStackHost;
     /** Set by {@link #show} for the card it is about to build; read once by {@link #buildCard}. */
     @NonNull private Placement mPendingPlacement = Placement.centered();
+    /** How much of the plane's bottom is inset away, so a layout pass that changes nothing no-ops. */
+    private int mPlaneBottomInset;
+    /** Foot cards on the plane, including one still sinking back into the terminal. */
+    private int mFootCards;
+    private final Rect mKeyboardBounds = new Rect();
+    private final Rect mTerminalBounds = new Rect();
+    private final int[] mPlaneOnScreen = new int[2];
 
     public TerminalSheetController(@NonNull Host host) {
         mHost = host;
@@ -356,14 +442,16 @@ public final class TerminalSheetController
         if (coverPrevious && !mStack.isEmpty())
             mStack.get(mStack.size() - 1).card.setVisibility(View.GONE);
         mStackHost.addView(card);
-        mStack.add(new Sheet(card, sink, onDismiss, coverPrevious, bare));
+        if (placement.foot) mFootCards++;
+        mStack.add(new Sheet(card, sink, onDismiss, coverPrevious, bare, placement.foot));
         mPlane.setVisibility(View.VISIBLE);
         applyBackdropMaterial();
         // Only a sheet with somewhere for typing to land is worth summoning a keyboard for; a
         // confirmation is all buttons and would just push the terminal around.
         if (sink != null) mHost.ensureInAppTypingKeyboard();
         mHost.setSheetInterceptorActive(true);
-        animateIn(card);
+        applyPlaneInsets();
+        animateIn(card, placement.foot);
         return true;
     }
 
@@ -371,7 +459,7 @@ public final class TerminalSheetController
     public void dismiss() {
         if (mStack.isEmpty()) return;
         Sheet top = mStack.remove(mStack.size() - 1);
-        animateOut(top.card);
+        animateOut(top.card, top.foot);
         if (top.coversPrevious && !mStack.isEmpty())
             mStack.get(mStack.size() - 1).card.setVisibility(View.VISIBLE);
         if (top.onDismiss != null) top.onDismiss.run();
@@ -392,7 +480,7 @@ public final class TerminalSheetController
         int limit = Math.min(count, mStack.size());
         for (int i = limit - 1; i >= 0; i--) {
             Sheet sheet = mStack.remove(i);
-            animateOut(sheet.card);
+            animateOut(sheet.card, sheet.foot);
             if (sheet.onDismiss != null) sheet.onDismiss.run();
         }
         // Whatever is left is on top now, so nothing may still be hidden behind a card that went.
@@ -412,6 +500,8 @@ public final class TerminalSheetController
             if (sheet.onDismiss != null) sheet.onDismiss.run();
         }
         mStack.clear();
+        mFootCards = 0;
+        applyPlaneInsets();
         onEmptied();
     }
 
@@ -464,7 +554,83 @@ public final class TerminalSheetController
         });
         mPlane = host;
         mStackHost = stack;
+        // The keyboard lays out after the sheet asks for it, and it can also be raised or dropped
+        // while a sheet is up, so the inset is recomputed on every pass rather than only on show().
+        host.getViewTreeObserver().addOnGlobalLayoutListener(this::applyPlaneInsets);
+        applyPlaneInsets();
         return true;
+    }
+
+    /**
+     * Where the plane's bottom edge stops, and whether it clips there.
+     *
+     * <p>Two reasons it cannot simply be the screen's bottom. The keyboard: the plane fills the
+     * activity, keys included, and its glass is a frost over a live blur — with the keys behind it
+     * the Save-workspace prompt asked for a name over a keyboard the user could not see. Touches
+     * already fell through to those keys, so the keyboard was working the whole time; it was only
+     * ever covered. And the terminal's foot: a panel that rises out of the terminal's bottom edge
+     * has to be cut off by that edge, both while it rises and while it sinks back, or it slides
+     * across the dock and the keyboard on its way in and out.
+     *
+     * <p>The terminal's edge is always the higher of the two, so a foot panel simply takes over the
+     * inset while it is on the plane — and the card it clips is the same one the inset was cut for.
+     */
+    private void applyPlaneInsets() {
+        if (mPlane == null || mStackHost == null) return;
+        boolean foot = mFootCards > 0;
+        // A foot panel is clipped by the plane's own edge, which is the terminal's; nothing else on
+        // the plane is clipped, because a card's shadow is drawn outside it.
+        mStackHost.setClipChildren(foot);
+        int inset = foot ? terminalFootInsetPx() : keyboardInsetPx();
+        // The frost is one pre-blurred frame of the wallpaper stretched over the whole plane, so
+        // shortening its container would rescale it and slide the wallpaper out of register with
+        // the real one behind — the seam that appeared across the keyboard's top edge. It keeps the
+        // plane's full height whatever the glass around it is cut to, and is cropped by it.
+        View frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
+        if (frost != null && frost.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) frost.getLayoutParams();
+            int height = inset > 0 ? mPlane.getHeight() : ViewGroup.LayoutParams.MATCH_PARENT;
+            if (params.height != height || params.gravity != Gravity.TOP) {
+                params.height = height;
+                params.gravity = Gravity.TOP;
+                frost.setLayoutParams(params);
+            }
+        }
+        if (inset == mPlaneBottomInset) return;
+        mPlaneBottomInset = inset;
+        setBottomInset(mHost.findView(R.id.terminal_sheet_glass), inset);
+        setBottomInset(mStackHost, inset);
+    }
+
+    /** How much of the plane's bottom the in-app keyboard is taking. */
+    private int keyboardInsetPx() {
+        if (mPlane == null || mPlane.getHeight() <= 0
+            || !mHost.inAppKeyboardBoundsOnScreen(mKeyboardBounds)) return 0;
+        mPlane.getLocationOnScreen(mPlaneOnScreen);
+        return clampInset(mPlaneOnScreen[1] + mPlane.getHeight() - mKeyboardBounds.top);
+    }
+
+    /** The same, measured to the terminal's own bottom edge. Falls back to the keys. */
+    private int terminalFootInsetPx() {
+        if (mPlane == null || mPlane.getHeight() <= 0
+            || !mHost.terminalFrameOnScreen(mTerminalBounds)) return keyboardInsetPx();
+        mPlane.getLocationOnScreen(mPlaneOnScreen);
+        return clampInset(mPlaneOnScreen[1] + mPlane.getHeight() - mTerminalBounds.bottom);
+    }
+
+    /** A card still needs somewhere to be, whatever is claiming the bottom of the screen. */
+    private int clampInset(int inset) {
+        if (mPlane == null) return 0;
+        return Math.max(0, Math.min(inset,
+            Math.max(0, mPlane.getHeight() - dp(MIN_CARD_SPACE_DP))));
+    }
+
+    private static void setBottomInset(@Nullable View view, int inset) {
+        if (view == null || !(view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+        if (params.bottomMargin == inset) return;
+        params.bottomMargin = inset;
+        view.setLayoutParams(params);
     }
 
     /**
@@ -504,7 +670,17 @@ public final class TerminalSheetController
         Context context = mStackHost.getContext();
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
-        if (mPendingPlacement.strip) {
+        if (mPendingPlacement.foot) {
+            // The keybind hints' dress, the other way up: this panel sits in the terminal's bottom
+            // corners, so it takes the terminal's radius there and its own where it leaves the edge.
+            applyFootDress(card);
+            card.addOnLayoutChangeListener((view, l, t, r, b, ol, ot, or, ob) -> {
+                if (b - t != ob - ot) applyFootDress(card);
+            });
+            int padH = dp(FOOT_SIDE_PADDING_DP);
+            int padV = dp(FOOT_PADDING_DP);
+            card.setPadding(padH, padV, padH, padV);
+        } else if (mPendingPlacement.strip) {
             // A strip is one row of actions on a flat opaque surface: the glass sheet material and
             // the page padding would both spend more screen than the strip's content does.
             card.setBackground(buildStripSurface(context));
@@ -552,13 +728,13 @@ public final class TerminalSheetController
                             @NonNull CharSequence title) {
         TextView heading = new TextView(context);
         heading.setText(title);
-        heading.setTextSize(20f);
+        heading.setTextSize(TerminalSheetViews.HEADING_TEXT_SIZE_SP);
         heading.setSingleLine(true);
         heading.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        headingParams.bottomMargin = dp(10f);
+        headingParams.bottomMargin = dp(6f);
         card.addView(heading, headingParams);
     }
 
@@ -572,15 +748,14 @@ public final class TerminalSheetController
 
         Placement placement = mPendingPlacement;
         mPendingPlacement = Placement.centered();
+        if (placement.foot) {
+            card.setLayoutParams(terminalFootParams(fillHeight));
+            return card;
+        }
         if (placement.anchor != null) {
             card.setLayoutParams(anchoredParams(card, placement));
             return card;
         }
-        if (placement.docked) {
-            card.setLayoutParams(dockedParams());
-            return card;
-        }
-
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             fillHeight ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -593,38 +768,45 @@ public final class TerminalSheetController
         return card;
     }
 
+    private void applyFootDress(@NonNull View card) {
+        Context context = card.getContext();
+        float radius = mHost.terminalCornerRadiusPx();
+        card.setBackground(TerminalHintSurface.footBackground(context, radius,
+            TerminalHintSurface.freeCornerRadiusPx(context, radius, card.getHeight())));
+    }
+
     /**
-     * Places a bar the width of the dock, directly above it.
+     * Places a panel across the terminal's foot, inside its frame.
      *
-     * <p>Wrap height and bottom gravity together are what makes it grow upward: the bar's bottom edge
-     * stays put on the dock while its content pushes the top edge up, so the terminal above it is
-     * covered only as far as the content actually needs.
+     * <p>Bottom gravity with no bottom margin puts it on the plane's own bottom edge, which
+     * {@link #applyPlaneInsets()} has already moved to the terminal's; the top margin is the rest of
+     * the terminal, and it is what stops a long list rather than where the panel sits — a
+     * wrap-height child of a {@code FrameLayout} measures against the parent less its margins, so
+     * that margin is how the terminal's ceiling reaches the list inside.
+     *
+     * @param fillHeight the browser's weighted list, which has no height of its own to wrap: the
+     *     panel takes the whole terminal so the list has a measured frame to divide.
      */
     @NonNull
-    private FrameLayout.LayoutParams dockedParams() {
+    private FrameLayout.LayoutParams terminalFootParams(boolean fillHeight) {
         int planeWidth = mStackHost.getWidth();
-        int planeHeight = mStackHost.getHeight();
-        int inset = dp(SIDE_INSET_DP);
-        Rect dock = new Rect();
+        Rect terminal = new Rect();
         int[] planeOnScreen = new int[2];
         mStackHost.getLocationOnScreen(planeOnScreen);
-        boolean haveDock = mHost.dockBoundsOnScreen(dock) && dock.width() > 0;
+        boolean haveTerminal = mHost.terminalFrameOnScreen(terminal) && terminal.width() > 0;
 
-        int width = haveDock ? dock.width() : Math.max(0, planeWidth - 2 * inset);
+        int inset = dp(SIDE_INSET_DP);
+        int width = haveTerminal ? terminal.width() : Math.max(0, planeWidth - 2 * inset);
         if (planeWidth > 0) width = Math.min(width, planeWidth);
-        int left = haveDock ? dock.left - planeOnScreen[0] : inset;
+        int left = haveTerminal ? terminal.left - planeOnScreen[0] : inset;
         if (planeWidth > 0) left = Math.max(0, Math.min(left, Math.max(0, planeWidth - width)));
-        // Above the dock's top edge, or above the plane's own bottom inset when there is no dock at
-        // all — a terminal-only install still has to put the bar somewhere sensible.
-        int bottomMargin = haveDock && planeHeight > 0
-            ? Math.max(inset, planeHeight - (dock.top - planeOnScreen[1]) + dp(8f))
-            : inset;
-        if (planeHeight > 0) bottomMargin = Math.min(bottomMargin, Math.max(0, planeHeight - dp(80f)));
+        int top = haveTerminal ? terminal.top - planeOnScreen[1] : inset;
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width,
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
+            fillHeight ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM | Gravity.START);
         params.leftMargin = left;
-        params.bottomMargin = bottomMargin;
+        params.topMargin = Math.max(0, top);
         return params;
     }
 
@@ -672,12 +854,31 @@ public final class TerminalSheetController
         return params;
     }
 
-    private void animateIn(@NonNull View card) {
+    private void animateIn(@NonNull View card, boolean foot) {
         card.animate().cancel();
         if (mHost.isReducedMotionEnabled()) {
             card.setAlpha(1f);
             card.setScaleX(1f);
             card.setScaleY(1f);
+            card.setTranslationY(0f);
+            return;
+        }
+        if (foot) {
+            // A foot panel peeks out of the terminal's bottom edge, so it rises rather than
+            // appears: the travel is its own height, which is only known once it has been laid out.
+            card.setAlpha(0f);
+            card.getViewTreeObserver().addOnPreDrawListener(
+                new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override public boolean onPreDraw() {
+                        card.getViewTreeObserver().removeOnPreDrawListener(this);
+                        card.setAlpha(1f);
+                        card.setTranslationY(card.getHeight());
+                        card.animate().translationY(0f).setDuration(ENTER_DURATION_MS)
+                            .setInterpolator(new PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+                            .start();
+                        return true;
+                    }
+                });
             return;
         }
         card.setAlpha(0f);
@@ -689,18 +890,36 @@ public final class TerminalSheetController
             .start();
     }
 
-    private void animateOut(@NonNull View card) {
+    private void animateOut(@NonNull View card, boolean foot) {
         FrameLayout stack = mStackHost;
         if (stack == null) return;
         card.animate().cancel();
         if (mHost.isReducedMotionEnabled()) {
             stack.removeView(card);
+            onCardRemoved(foot);
+            return;
+        }
+        if (foot) {
+            // The plane keeps its foot inset until the panel has finished sinking: that inset is
+            // the terminal's bottom edge, and it is what cuts the panel off as it goes.
+            card.animate().translationY(card.getHeight()).setDuration(EXIT_DURATION_MS)
+                .withEndAction(() -> {
+                    stack.removeView(card);
+                    onCardRemoved(true);
+                })
+                .start();
             return;
         }
         card.animate().alpha(0f).scaleX(0.94f).scaleY(0.94f)
             .setDuration(EXIT_DURATION_MS)
             .withEndAction(() -> stack.removeView(card))
             .start();
+    }
+
+    /** A card has actually left the plane, so the insets it was holding can be given back. */
+    private void onCardRemoved(boolean foot) {
+        if (foot && mFootCards > 0) mFootCards--;
+        applyPlaneInsets();
     }
 
     // ------------------------------------------------------------------ input

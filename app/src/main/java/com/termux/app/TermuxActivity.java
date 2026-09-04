@@ -3145,18 +3145,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * @return false when there is no dock laid out — a terminal-only install, or before first layout.
      */
-    private boolean dockBoundsOnScreen(@NonNull Rect out) {
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        if (accessoryContainer == null || accessoryContainer.getVisibility() != View.VISIBLE
-            || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
+    /**
+     * The terminal's own frame on screen: the pane region less the insets its border is drawn at, so
+     * a surface that has to meet that edge — the keybind hints, a foot panel on the sheet plane —
+     * lands on the same line the border does.
+     */
+    private boolean terminalFrameOnScreen(@NonNull Rect out) {
+        View host = findViewById(R.id.terminal_surface_host);
+        if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0
+            || host.getVisibility() != View.VISIBLE) {
             return false;
         }
         int[] location = new int[2];
-        accessoryContainer.getLocationOnScreen(location);
-        out.set(location[0], location[1], location[0] + accessoryContainer.getWidth(),
-            location[1] + accessoryContainer.getHeight());
-        return true;
+        host.getLocationOnScreen(location);
+        int sideInset = terminalFrameInsetPx(false);
+        int verticalInset = terminalFrameInsetPx(true);
+        out.set(location[0] + sideInset, location[1] + verticalInset,
+            location[0] + host.getWidth() - sideInset,
+            location[1] + host.getHeight() - verticalInset);
+        return out.width() > 0 && out.height() > 0;
     }
+
 
 
     private boolean shouldUseAccessoryRenderEffectBlur(@NonNull ChromeSpec state) {
@@ -8619,6 +8628,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.isPointOnInAppKeyboard(rawX, rawY);
         }
 
+        @Override public boolean inAppKeyboardBoundsOnScreen(@NonNull Rect out) {
+            return mInAppKeyboard != null && mInAppKeyboard.getKeyboardRectOnScreen(out);
+        }
+
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
             return applyCommandPaletteWallpaperFrost(frost);
         }
@@ -8627,8 +8640,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return buildTerminalSheetSurface();
         }
 
-        @Override public boolean dockBoundsOnScreen(@NonNull Rect out) {
-            return TermuxActivity.this.dockBoundsOnScreen(out);
+        @Override public boolean terminalFrameOnScreen(@NonNull Rect out) {
+            return TermuxActivity.this.terminalFrameOnScreen(out);
+        }
+
+        @Override public float terminalCornerRadiusPx() {
+            return terminalEdgeCornerRadiusPx();
         }
 
         @Override public boolean isReducedMotionEnabled() {

@@ -13,6 +13,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -244,6 +245,81 @@ public class TerminalSheetControllerTest {
         assertFalse(sheet.isOpen());
     }
 
+    /**
+     * The keys are how a sheet with a field is typed into, and the plane covers the whole activity —
+     * so the Save-workspace prompt used to ask for a name over a keyboard hidden behind its own
+     * frost. The plane stops at the keyboard's top edge instead.
+     */
+    @Test
+    public void thePlaneStopsAboveTheInAppKeyboard() {
+        FakeSheetHost host = new FakeSheetHost();
+        host.keyboardRect.set(0, 600, 400, 800);
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Workspace name", new TextView(host.context()), false, new NoopSink(), null);
+
+        View stack = host.findView(R.id.terminal_sheet_stack);
+        assertEquals("the cards stop where the keys start", 200,
+            ((ViewGroup.MarginLayoutParams) stack.getLayoutParams()).bottomMargin);
+    }
+
+    /**
+     * A workspace prompt or the search bar rises out of the terminal's own bottom edge: it spans the
+     * terminal's frame, sits on that edge, and the plane is cut off there so the panel is clipped by
+     * it on the way in and out instead of sliding across the dock.
+     */
+    @Test
+    public void aFootPanelSitsOnTheTerminalsBottomEdgeAndIsClippedByIt() {
+        FakeSheetHost host = new FakeSheetHost();
+        host.keyboardRect.set(0, 600, 400, 800);
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Save workspace", new TextView(host.context()), false, new NoopSink(), null,
+            false, TerminalSheetController.Placement.terminalFoot());
+
+        ViewGroup stack = host.findView(R.id.terminal_sheet_stack);
+        assertEquals("the plane stops on the terminal's bottom edge, not the keyboard's top", 240,
+            ((ViewGroup.MarginLayoutParams) stack.getLayoutParams()).bottomMargin);
+        assertTrue("the panel has to be cut off by that edge as it rises and sinks",
+            stack.getClipChildren());
+
+        FrameLayout.LayoutParams card =
+            (FrameLayout.LayoutParams) sheet.topCard().getLayoutParams();
+        assertEquals("edge to edge inside the terminal's frame", 384, card.width);
+        assertEquals(8, card.leftMargin);
+        assertEquals(0, card.bottomMargin);
+        assertEquals("the terminal's ceiling is what stops a long list", 40, card.topMargin);
+        assertEquals(Gravity.BOTTOM | Gravity.START, card.gravity);
+    }
+
+    /** A list panel has no height of its own to wrap, so it takes the terminal's. */
+    @Test
+    public void aFillHeightFootPanelTakesTheWholeTerminal() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Sessions", new TextView(host.context()), true, null, null, false,
+            TerminalSheetController.Placement.terminalFoot());
+
+        FrameLayout.LayoutParams card =
+            (FrameLayout.LayoutParams) sheet.topCard().getLayoutParams();
+        assertEquals("a weighted list inside a wrap-height card measures to nothing",
+            ViewGroup.LayoutParams.MATCH_PARENT, card.height);
+        assertEquals(40, card.topMargin);
+    }
+
+    /** With no keyboard up there is nothing to avoid, and the plane keeps the whole screen. */
+    @Test
+    public void thePlaneKeepsTheScreenWhenNoKeyboardIsUp() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Sessions", new TextView(host.context()));
+
+        View stack = host.findView(R.id.terminal_sheet_stack);
+        assertEquals(0, ((ViewGroup.MarginLayoutParams) stack.getLayoutParams()).bottomMargin);
+    }
+
     @Test
     public void aCardWearsTheHostsGlassAndFrost() {
         FakeSheetHost host = new FakeSheetHost();
@@ -276,6 +352,9 @@ public class TerminalSheetControllerTest {
         final View blur;
         final Drawable glass = new ColorDrawable(0xFF102030);
         final Rect keyboardRect = new Rect();
+        /** The terminal's frame: below a status bar, above the dock and keys. */
+        final Rect terminalRect = new Rect(8, 40, 392, 560);
+        float terminalCornerRadiusPx = 20f;
         int yields;
         int keyboardRequests;
         int frostRequests;
@@ -325,6 +404,22 @@ public class TerminalSheetControllerTest {
             return keyboardRect.contains(Math.round(rawX), Math.round(rawY));
         }
 
+        @Override public boolean inAppKeyboardBoundsOnScreen(@NonNull Rect out) {
+            if (keyboardRect.isEmpty()) return false;
+            out.set(keyboardRect);
+            return true;
+        }
+
+        @Override public boolean terminalFrameOnScreen(@NonNull Rect out) {
+            if (terminalRect.isEmpty()) return false;
+            out.set(terminalRect);
+            return true;
+        }
+
+        @Override public float terminalCornerRadiusPx() {
+            return terminalCornerRadiusPx;
+        }
+
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
             frostRequests++;
             return true;
@@ -334,9 +429,6 @@ public class TerminalSheetControllerTest {
             return glass;
         }
 
-        @Override public boolean dockBoundsOnScreen(@NonNull Rect out) {
-            return false;
-        }
 
         @Override public boolean isReducedMotionEnabled() {
             return true;

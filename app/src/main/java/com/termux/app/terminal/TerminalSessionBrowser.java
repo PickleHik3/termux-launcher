@@ -67,12 +67,17 @@ public final class TerminalSessionBrowser {
         container.findViewById(R.id.session_browser_save).setOnClickListener(v -> promptSave(activity));
 
         adapter.setMenuListener((anchor, session) -> showSessionMenu(activity, adapter, session));
+        // The heading rides inside the body so it can carry the close mark on its own line; the
+        // card's own heading would put the title on a row of its own above it.
+        TerminalSheetViews.addHeaderRow((LinearLayout) container,
+            activity.getString(R.string.session_browser_title), null, sheet::dismiss);
         // Subscribed only once the sheet is actually up: a callback registered against a surface
         // that never opened would keep reloading a browser nobody can see.
-        if (!sheet.show(activity.getString(R.string.session_browser_title), container, true,
+        if (!sheet.show("", container, false,
             new TerminalSheetController.TextField(search,
                 activity.getString(R.string.session_browser_search_hint), adapter::setQuery),
-            () -> activity.setSessionBrowserRefreshCallback(null))) return;
+            () -> activity.setSessionBrowserRefreshCallback(null), false,
+            TerminalSheetController.Placement.terminalFoot())) return;
         activity.setSessionBrowserRefreshCallback(adapter::reload);
         activity.requestSessionBrowserForegroundRefresh();
     }
@@ -102,7 +107,9 @@ public final class TerminalSessionBrowser {
             sheet.dismiss();
             confirmClose(activity, adapter, session);
         });
-        sheet.show(displayName(activity, session), body);
+        TerminalSheetViews.addHeaderRow(body, displayName(activity, session), null, sheet::dismiss);
+        sheet.show("", body, false, null, null, false,
+            TerminalSheetController.Placement.terminalFoot());
     }
 
     /**
@@ -125,15 +132,16 @@ public final class TerminalSessionBrowser {
         LinearLayout body = TerminalSheetViews.body(activity);
         TerminalSheetViews.addMessage(body, activity.getResources().getQuantityString(
             R.plurals.session_browser_close_message, session.paneCount(), session.paneCount()));
-        LinearLayout actions = TerminalSheetViews.addActionRow(body);
-        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
-        TerminalSheetViews.addAction(actions, activity.getString(R.string.session_browser_close), () -> {
-            sheet.dismiss();
-            if (activity.closeBrowserSession(session.index)) adapter.reload();
-            else showActionFailed(activity);
-        });
-        sheet.show(activity.getString(R.string.session_browser_close_title,
-            displayName(activity, session)), body);
+        TerminalSheetViews.addHeaderRow(body, activity.getString(
+            R.string.session_browser_close_title, displayName(activity, session)),
+            () -> {
+                sheet.dismiss();
+                if (activity.closeBrowserSession(session.index)) adapter.reload();
+                else showActionFailed(activity);
+            },
+            activity.getString(R.string.session_browser_close), sheet::dismiss);
+        sheet.show("", body, false, null, null, false,
+            TerminalSheetController.Placement.terminalFoot());
     }
 
     /** Extra-keys/palette entry: the same save-name prompt the browser's Save button shows. */
@@ -163,8 +171,16 @@ public final class TerminalSessionBrowser {
         for (com.termux.app.terminal.TerminalWorkspaceStore.Entry entry : entries) {
             TerminalSheetViews.addToFrame(list, workspaceRow(activity, entry.name));
         }
-        activity.getTerminalSheetController().show(
-            activity.getString(R.string.workspace_picker_title), TerminalSheetViews.wrapScrolling(list));
+        // The workspace panels rise out of the terminal's own bottom edge rather than floating over
+        // it: they are about the sessions behind them, and that edge is where they belong whether
+        // the dock and its rows are all there or none of them is.
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(activity);
+        body.addView(TerminalSheetViews.wrapScrolling(list));
+        TerminalSheetViews.addHeaderRow(body, activity.getString(R.string.workspace_picker_title),
+            null, sheet::dismiss);
+        sheet.show("", body, false, null, null, false,
+            TerminalSheetController.Placement.terminalFoot());
     }
 
     /** One picker row: the name loads it, the trailing button deletes it. */
@@ -181,7 +197,7 @@ public final class TerminalSessionBrowser {
         label.setTextSize(16f);
         label.setSingleLine(true);
         label.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-        label.setMinHeight(48 * density);
+        label.setMinHeight(44 * density);
         label.setGravity(Gravity.CENTER_VERTICAL);
         label.setOnClickListener(v -> {
             sheet.dismiss();
@@ -208,24 +224,29 @@ public final class TerminalSessionBrowser {
         TerminalSheetController sheet = activity.getTerminalSheetController();
         LinearLayout body = TerminalSheetViews.body(activity);
         TerminalSheetViews.addMessage(body, activity.getString(R.string.workspace_delete_message));
-        LinearLayout actions = TerminalSheetViews.addActionRow(body);
-        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), () -> {
-            sheet.dismiss();
-            showWorkspacePicker(activity);
-        });
-        TerminalSheetViews.addAction(actions, activity.getString(R.string.workspace_delete_confirm), () -> {
-            sheet.dismiss();
-            try {
-                activity.deleteWorkspace(name);
-                AppNotice.show(activity, activity.getString(
-                    R.string.workspace_deleted, name), false);
-            } catch (TerminalWorkspace.WorkspaceException e) {
-                AppNotice.show(activity, activity.getString(
-                    R.string.workspace_picker_failed, e.getMessage()), false);
-            }
-            showWorkspacePicker(activity);
-        });
-        sheet.show(activity.getString(R.string.workspace_delete_title, name), body);
+        TerminalSheetViews.addHeaderRow(body,
+            activity.getString(R.string.workspace_delete_title, name),
+            () -> {
+                sheet.dismiss();
+                try {
+                    activity.deleteWorkspace(name);
+                    AppNotice.show(activity, activity.getString(
+                        R.string.workspace_deleted, name), false);
+                } catch (TerminalWorkspace.WorkspaceException e) {
+                    AppNotice.show(activity, activity.getString(
+                        R.string.workspace_picker_failed, e.getMessage()), false);
+                }
+                showWorkspacePicker(activity);
+            },
+            activity.getString(R.string.workspace_delete_confirm),
+            () -> {
+                sheet.dismiss();
+                showWorkspacePicker(activity);
+            });
+        // Part of the same flow as the picker it replaces, so it arrives on the same edge rather
+        // than jumping to the middle of the screen and back.
+        sheet.show("", body, false, null, null, false,
+            TerminalSheetController.Placement.terminalFoot());
     }
 
     private static void promptWorkspaceLoadMode(@NonNull TermuxActivity activity,
@@ -245,8 +266,9 @@ public final class TerminalSessionBrowser {
             activity.getResources().getQuantityString(
                 R.plurals.workspace_load_run_commands, commandCount, commandCount),
             activity.getString(R.string.workspace_load_run_commands_summary));
+        // Two verbs, not one answer: append and replace both load, and a tick could only mean one
+        // of them. The cross in the heading is the way out.
         LinearLayout actions = TerminalSheetViews.addActionRow(body);
-        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
         TerminalSheetViews.addAction(actions, activity.getString(R.string.workspace_picker_append), () -> {
             sheet.dismiss();
             loadWorkspace(activity, name, false, isChecked(runCommands));
@@ -255,7 +277,9 @@ public final class TerminalSessionBrowser {
             sheet.dismiss();
             loadWorkspace(activity, name, true, isChecked(runCommands));
         });
-        sheet.show(name, body);
+        TerminalSheetViews.addHeaderRow(body, name, null, sheet::dismiss);
+        sheet.show("", body, false, null, null, false,
+            TerminalSheetController.Placement.terminalFoot());
     }
 
     private static void loadWorkspace(@NonNull TermuxActivity activity, @NonNull String name,
@@ -276,7 +300,7 @@ public final class TerminalSessionBrowser {
         nameField.setTextSize(16f);
         nameField.setSingleLine(true);
         nameField.setMinHeight(Math.round(
-            44 * activity.getResources().getDisplayMetrics().density));
+            40 * activity.getResources().getDisplayMetrics().density));
         nameField.setGravity(Gravity.CENTER_VERTICAL);
         TerminalSheetViews.addToFrame(body, nameField);
         CheckBox captureCommands = addCheckBox(body,
@@ -292,11 +316,10 @@ public final class TerminalSessionBrowser {
         };
         field[0] = new TerminalSheetController.TextField(nameField,
             activity.getString(R.string.session_browser_workspace_name), null, save);
-        LinearLayout actions = TerminalSheetViews.addActionRow(body);
-        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
-        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.ok), save);
-        sheet.show(activity.getString(R.string.session_browser_save_workspace_title), body, false,
-            field[0], null);
+        TerminalSheetViews.addHeaderRow(body,
+            activity.getString(R.string.session_browser_save_workspace_title), save, sheet::dismiss);
+        sheet.show("", body, false, field[0], null, false,
+            TerminalSheetController.Placement.terminalFoot());
     }
 
     private static boolean isChecked(@Nullable CheckBox box) {
@@ -314,6 +337,10 @@ public final class TerminalSessionBrowser {
         int density = Math.round(context.getResources().getDisplayMetrics().density);
         CheckBox box = new CheckBox(context);
         box.setText(title);
+        // A checkbox brings a 48dp target and its own padding; on a panel that is four rows tall
+        // that is a row of air above and below the one line it is asking about.
+        box.setMinHeight(40 * density);
+        box.setPaddingRelative(box.getPaddingStart(), 0, 0, 0);
         TerminalSheetViews.addToFrame(frame, box);
 
         TextView explanation = new TextView(context);
@@ -322,7 +349,7 @@ public final class TerminalSessionBrowser {
         explanation.setAlpha(0.7f);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.bottomMargin = 8 * density;
+        params.bottomMargin = 4 * density;
         frame.addView(explanation, params);
         return box;
     }
