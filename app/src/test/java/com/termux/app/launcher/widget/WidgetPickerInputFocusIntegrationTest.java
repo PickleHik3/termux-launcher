@@ -29,7 +29,7 @@ public class WidgetPickerInputFocusIntegrationTest {
         TerminalView terminal = new TerminalView(activity, null); terminal.setFocusableInTouchMode(true);
         root.addView(terminal, new FrameLayout.LayoutParams(-1, -1));
         WidgetPaneView pane = new WidgetPaneView(activity); root.addView(pane, new FrameLayout.LayoutParams(-1, -1));
-        activity.setContentView(root); pane.setFullProgress(1f);
+        activity.setContentView(root);
         root.measure(View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, 800, 900);

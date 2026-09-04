@@ -157,11 +157,6 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     }
 
     @Override
-    public boolean fullStatusBarEngaged() {
-        return fullStatusBar;
-    }
-
-    @Override
     public int effectiveDockBlurRadiusDp() {
         return dockBlurRadiusDp;
     }

@@ -59,7 +59,6 @@ public final class WidgetPaneView extends FrameLayout {
 
     public WidgetPaneView(@NonNull Context context) {
         super(context); setId(R.id.widget_pane); setClipChildren(true); setClipToPadding(true);
-        setVisibility(INVISIBLE);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         // Provider text inputs may take focus; the pane and its hosts never keep it themselves.
         setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
@@ -173,18 +172,11 @@ public final class WidgetPaneView extends FrameLayout {
         notice.setText(message); notice.setContentDescription(message); notice.setVisibility(VISIBLE);
         notice.removeCallbacks(hideNotice); notice.postDelayed(hideNotice, 3500);
     }
-    public void setFullProgress(float progress) {
-        setVisibility(progress >= 0.999f ? VISIBLE : INVISIBLE);
-    }
-    public void setFullState(float progress, boolean settled) {
-        setVisibility(settled && progress >= 0.999f ? VISIBLE : INVISIBLE);
-    }
 
     // ---- Horizontal page swipe -------------------------------------------------------------
-    // The status pane's vertical pull is arbitrated above this view (StatusBarSwipeLayout claims
-    // vertical slop first and cancels children). This intercept mirrors that policy on the other
-    // axis: it claims a stream only when horizontal travel wins the slop race, so a vertical
-    // drag is never stolen from the pull-up and a widget tap is never consumed.
+    // The wall's own sideways drag is arbitrated above this page, from the status bar. This
+    // intercept claims a stream only when horizontal travel wins the slop race inside the grid,
+    // so the grid's own pages move without stealing a vertical scroll or a widget tap.
 
     @Override public boolean onInterceptTouchEvent(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {

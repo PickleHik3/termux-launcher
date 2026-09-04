@@ -32,7 +32,7 @@ public class WidgetPaneAccessibilityTest {
                 @Override public void captureWidgetSurfaceOrigin() { }
                 @Override public void restoreWidgetSurfaceOrigin() { }
             });
-        pane.setFullProgress(1); layout(pane);
+        layout(pane);
         TextView hint = pane.findViewById(R.id.widget_empty_message);
         assertEquals(View.VISIBLE, ((View) hint.getParent()).getVisibility());
         assertEquals(activity.getString(R.string.widget_empty_hint), hint.getText().toString());

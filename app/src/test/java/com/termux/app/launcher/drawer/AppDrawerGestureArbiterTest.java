@@ -207,7 +207,7 @@ public class AppDrawerGestureArbiterTest {
     }
 
     private static Eligibility rail(Pull pull) {
-        return new Eligibility(true, true, true, pull, true, true, true, true, true);
+        return new Eligibility(true, true, true, pull, true, true, true, true);
     }
 
     private static Eligibility eligible() {

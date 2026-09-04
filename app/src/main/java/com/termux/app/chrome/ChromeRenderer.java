@@ -73,7 +73,6 @@ public final class ChromeRenderer {
 
         boolean wallpaperPassthroughEnabled();
 
-        boolean fullStatusBarEngaged();
 
         /** The dock's effective blur radius (0 while a live wallpaper or the slider disables it). */
         int effectiveDockBlurRadiusDp();

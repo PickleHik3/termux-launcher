@@ -95,7 +95,6 @@ public final class SurfaceEditorController {
         @Nullable View attachedInAppKeyboardView();
         boolean isInAppKeyboardShown();
         boolean isFloatingDock();
-        boolean isFullStatusBarEngaged();
         void setTopStatusBarCollapsed(boolean collapsed, boolean animate);
         /** The window's top status inset, as last delivered to the activity. */
         int statusBarInsetTop();
@@ -382,7 +381,6 @@ public final class SurfaceEditorController {
     }
 
     public void enter(@Nullable String initialSection) {
-        if (mHost.isFullStatusBarEngaged()) return;
         if (prefs() == null)
             return;
         Panel panel = panel();
@@ -838,7 +836,7 @@ public final class SurfaceEditorController {
      * otherwise.
      */
     private void applyStatusPaneForSelection(boolean animate) {
-        if (prefs() == null || !mSurfaceEditorOpen || mHost.isFullStatusBarEngaged())
+        if (prefs() == null || !mSurfaceEditorOpen)
             return;
         boolean collapsed = mSelectedSlot != SurfaceSlot.STATUS;
         if (prefs().isTopPaneClockCollapsed() != collapsed)

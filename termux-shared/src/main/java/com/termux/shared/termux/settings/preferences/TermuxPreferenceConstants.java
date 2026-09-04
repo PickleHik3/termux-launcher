@@ -172,15 +172,6 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
         /**
-         * Defines the key for the pane wall: fixed places beside the terminal — the widget grid,
-         * and later the embedded display — reached by swiping the status bar or tapping a tile.
-         * With it off the widget grid stays behind the status bar's pull-down instead.
-         */
-        public static final String KEY_PANE_WALL_ENABLED = "pane_wall";
-
-        public static final boolean DEFAULT_PANE_WALL_ENABLED = true;
-
-        /**
          * Defines the key for the embedded Linux display: the wall's Display page, the
          * {@code termux-x11} command the launcher writes into the prefix, and the display
          * settings. Off until the user asks for it — a home screen that never wants a display

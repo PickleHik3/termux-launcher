@@ -138,7 +138,6 @@ public final class TerminalClockWidget extends View {
     private ClockSnapshot mSnapshot;
     private boolean mTickerRunning;
     private boolean mUseAmPm;
-    private float mFullPresentationProgress;
 
     private int mPrimary;
     private int mSecondary;
@@ -232,17 +231,6 @@ public final class TerminalClockWidget extends View {
     public TopPaneClockForm getForm() {
         return mForm;
     }
-
-    /** Host-owned presentation channel; the clock itself owns no competing animation loop. */
-    public void setFullPresentationProgress(float progress) {
-        float clamped = Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
-        if (Math.abs(clamped - mFullPresentationProgress) < .0001f) return;
-        mFullPresentationProgress = clamped;
-        requestLayout();
-        invalidate();
-    }
-
-    public float getFullPresentationProgress() { return mFullPresentationProgress; }
 
     public void setUseAmPm(boolean useAmPm) {
         if (mUseAmPm == useAmPm) return;

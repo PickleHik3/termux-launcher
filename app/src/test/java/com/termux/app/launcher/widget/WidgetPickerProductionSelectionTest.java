@@ -15,7 +15,6 @@ import android.view.View;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
-import com.termux.app.statusbar.TopStatusBarState;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -84,7 +83,7 @@ public class WidgetPickerProductionSelectionTest {
                     restoreCount++; surfaceShowing = true;
                 }
             }, loader);
-            controller.onFullFrame(1f); controller.onFullSettled(true); layout();
+            controller.onWallPageShown(true); layout();
         }
         void idleAndLayout() { Shadows.shadowOf(Looper.getMainLooper()).idle(); layout();
             Shadows.shadowOf(Looper.getMainLooper()).idle(); }

@@ -160,7 +160,7 @@ public class SuggestionBarDrawerGestureTest {
         List<String> failures = new ArrayList<>();
         // "searchText" is deliberately absent: a filtered apps row no longer vetoes the pull-down
         // (the vertical pull is unambiguous even over filtered results).
-        for (String veto : new String[] {"pref", "surfaceEditor", "palette", "engaged", "full",
+        for (String veto : new String[] {"pref", "surfaceEditor", "palette", "engaged",
             "azLetter", "landscape", "activePickup", "noListener"}) {
             setUp();
             applyVeto(veto);
@@ -198,7 +198,6 @@ public class SuggestionBarDrawerGestureTest {
             case "surfaceEditor": listener.surfaceEditor = true; break;
             case "palette": listener.paletteOpen = true; break;
             case "engaged": listener.drawerEngaged = true; break;
-            case "full": listener.fullStatusPaneClosed = false; break;
             case "searchText": ReflectionHelpers.setField(row, "lastInput", "ls "); break;
             case "azLetter":
                 ReflectionHelpers.setField(row, "activeAzLetter", Character.valueOf('A'));
@@ -315,7 +314,6 @@ public class SuggestionBarDrawerGestureTest {
         boolean surfaceEditor = false;
         boolean paletteOpen = false;
         boolean drawerEngaged = false;
-        boolean fullStatusPaneClosed = true;
 
         int begins;
         int drags;
@@ -341,11 +339,6 @@ public class SuggestionBarDrawerGestureTest {
         @Override
         public boolean isAppDrawerEngaged() {
             return drawerEngaged;
-        }
-
-        @Override
-        public boolean isFullStatusPaneClosed() {
-            return fullStatusPaneClosed;
         }
 
         @Override

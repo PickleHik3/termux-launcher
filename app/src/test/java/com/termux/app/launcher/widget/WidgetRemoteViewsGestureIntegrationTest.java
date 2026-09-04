@@ -11,7 +11,6 @@ import android.widget.FrameLayout;
 import androidx.core.view.ViewCompat;
 
 import com.termux.app.statusbar.StatusBarSwipeLayout;
-import com.termux.app.statusbar.TopStatusBarState;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -31,11 +30,8 @@ public class WidgetRemoteViewsGestureIntegrationTest {
     @Test public void realStatusHierarchyKeepsProviderStreamAcrossCellBoundaryAndConsumesNoNestedDistance() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         StatusBarSwipeLayout status = new StatusBarSwipeLayout(activity, null);
-        status.setStatusState(TopStatusBarState.FULL, TopStatusBarState.EXPANDED);
-        AtomicInteger statusClaims = new AtomicInteger(); status.setListener(new StatusBarSwipeLayout.Listener() {
-            @Override public void onCollapsedStateRequested(boolean collapsed) { statusClaims.incrementAndGet(); }
-            @Override public void onFullStateRequested(TopStatusBarState prior) { statusClaims.incrementAndGet(); }
-        });
+        AtomicInteger statusClaims = new AtomicInteger();
+        status.setListener(collapsed -> statusClaims.incrementAndGet());
         WidgetCellView cell = new WidgetCellView(activity);
         AppWidgetHostView host = new AppWidgetHostView(activity);
         View provider = new View(activity); provider.setClickable(true);

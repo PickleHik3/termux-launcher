@@ -77,9 +77,9 @@
                 android:clipChildren="false"
                 android:clipToPadding="false">
 
-                <!-- App-owned top glass pane. Three compact rows are deliberately reserved above
-                     the bottom-aligned window row for future widgets. The glass backdrop is
-                     extended behind the system status bar in applyTerminalOverlayInsets(). -->
+                <!-- App-owned top glass pane: the modular widget slot above the bottom-aligned
+                     window row. The glass backdrop is extended behind the system status bar in
+                     applyTerminalOverlayInsets(). -->
                 <com.termux.app.statusbar.StatusBarSwipeLayout
                     android:id="@+id/terminal_window_bar_host"
                     android:layout_width="match_parent"
@@ -109,17 +109,6 @@
                         android:id="@+id/terminal_window_bar_background"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
-
-                    <!-- FULL-pane ownership rule: StatusBarSwipeLayout measures the body from the
-                         laid-out bottom of the top slot to the laid-out top of the status row.
-                         These margins deliberately do not approximate either chrome band. The
-                         hard clips remain a redundant containment boundary for provider content. -->
-                    <com.termux.app.launcher.widget.WidgetPaneView
-                        android:id="@id/widget_pane"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:clipChildren="true"
-                        android:clipToPadding="true" />
 
                     <!-- Stable modular slot: clocks render only here. A later widget editor can
                          resize/reorder this host without coupling widget code to the pane. The slot

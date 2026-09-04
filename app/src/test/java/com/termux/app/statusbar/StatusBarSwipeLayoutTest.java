@@ -86,54 +86,6 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void longPressOnEmptyWindowBarBackgroundRequestsFull() {
-        StatusBarSwipeLayout view = createView();
-        TerminalWindowBar bar = addWindowBar(view, false);
-        List<TopStatusBarState> full = new ArrayList<>();
-        view.setListener(new StatusBarSwipeLayout.Listener() {
-            @Override public void onCollapsedStateRequested(boolean value) { }
-            @Override public void onFullStateRequested(TopStatusBarState prior) { full.add(prior); }
-        });
-
-        float x = bar.getRight() - 10f;
-        float y = (bar.getTop() + bar.getBottom()) / 2f;
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, x, y));
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
-            Duration.ofMillis(android.view.ViewConfiguration.getLongPressTimeout() + 1));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, x, y));
-
-        assertEquals(Collections.singletonList(TopStatusBarState.EXPANDED), full);
-    }
-
-    @Test
-    public void longPressOnWindowChipOrAddButtonRemainsChildOwned() {
-        for (int targetIndex = 0; targetIndex < 2; targetIndex++) {
-            StatusBarSwipeLayout view = createView();
-            TerminalWindowBar bar = addWindowBar(view, true);
-            List<View> controls = new ArrayList<>();
-            collectClickableDescendants(bar, controls);
-            assertEquals(2, controls.size());
-            View target = controls.get(targetIndex);
-            int[] location = new int[2];
-            target.getLocationOnScreen(location);
-            float x = location[0] + target.getWidth() / 2f;
-            float y = location[1] + target.getHeight() / 2f;
-            List<TopStatusBarState> full = new ArrayList<>();
-            view.setListener(new StatusBarSwipeLayout.Listener() {
-                @Override public void onCollapsedStateRequested(boolean value) { }
-                @Override public void onFullStateRequested(TopStatusBarState prior) {
-                    full.add(prior);
-                }
-            });
-
-            view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, x, y));
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
-            assertTrue(full.isEmpty());
-            view.dispatchTouchEvent(event(MotionEvent.ACTION_CANCEL, x, y));
-        }
-    }
-
-    @Test
     public void windowBarEdgeOverswipeStaysTheStripsOwnStreamThroughRealDispatch() {
         StatusBarSwipeLayout view = createView();
         TerminalWindowBar bar = new TerminalWindowBar(view.getContext(), null);
@@ -148,14 +100,7 @@ public class StatusBarSwipeLayoutTest {
             }
             @Override public void onEdgeOverswipeCancel() { barRequests.add("cancel"); }
         });
-        view.setListener(new StatusBarSwipeLayout.Listener() {
-            @Override public void onCollapsedStateRequested(boolean collapsed) {
-                parentRequests.add("swipe");
-            }
-            @Override public void onFullStateRequested(TopStatusBarState prior) {
-                parentRequests.add("full");
-            }
-        });
+        view.setListener(collapsed -> parentRequests.add("swipe"));
         view.addView(bar, new FrameLayout.LayoutParams(200, 30));
         bar.layout(0, 0, 200, 30);
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 20, 15));
@@ -166,46 +111,33 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void verticalOrAlreadySatisfiedSwipe_hasNoAction() {
+    public void aVerticalSwipeTogglesTheBarAndAnAlreadySatisfiedOneDoesNot() {
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         view.setCollapsed(true);
         view.setListener(requests::add);
 
+        // Compact bar, downward drag: expand. This is the only swipe that changes its form.
         swipe(view, 100f, 105f, 15f, 70f);
-        swipe(view, 160f, 30f, 40f, 40f);
+        assertEquals(java.util.Collections.singletonList(false), requests);
 
+        // Compact bar, upward drag: nothing to collapse.
+        requests.clear();
+        swipe(view, 100f, 105f, 70f, 15f);
         assertEquals(0, requests.size());
-    }
 
-    @Test
-    public void longPressFromCompactAndExpandedCallsFullExactlyOnce() {
-        for (boolean collapsed : new boolean[] {true, false}) {
-            StatusBarSwipeLayout view = createView();
-            List<TopStatusBarState> full = new ArrayList<>();
-            view.setCollapsed(collapsed);
-            view.setListener(new StatusBarSwipeLayout.Listener() {
-                @Override public void onCollapsedStateRequested(boolean value) { }
-                @Override public void onFullStateRequested(TopStatusBarState prior) { full.add(prior); }
-            });
-            view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100, 40));
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
-                Duration.ofMillis(android.view.ViewConfiguration.getLongPressTimeout() + 1));
-            view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100, 40));
-            assertEquals(1, full.size());
-            assertEquals(collapsed ? TopStatusBarState.COMPACT : TopStatusBarState.EXPANDED,
-                full.get(0));
-        }
+        // A sideways drag with no wall to move keeps its older meaning, and asking for the form
+        // the bar is already in is not a request.
+        requests.clear();
+        swipe(view, 160f, 30f, 40f, 40f);
+        assertEquals(0, requests.size());
     }
 
     @Test
     public void nestedScrollConsumesZeroAndCancelsHold() {
         StatusBarSwipeLayout view = createView();
-        List<TopStatusBarState> full = new ArrayList<>();
-        view.setListener(new StatusBarSwipeLayout.Listener() {
-            @Override public void onCollapsedStateRequested(boolean value) { }
-            @Override public void onFullStateRequested(TopStatusBarState prior) { full.add(prior); }
-        });
+        List<Boolean> toggles = new ArrayList<>();
+        view.setListener(toggles::add);
         View child = new View(view.getContext());
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100, 40));
         assertTrue(view.onStartNestedScroll(child, child,
@@ -218,17 +150,14 @@ public class StatusBarSwipeLayoutTest {
         assertEquals(0, consumed[0]);
         assertEquals(0, consumed[1]);
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
-        assertTrue(full.isEmpty());
+        assertTrue(toggles.isEmpty());
     }
 
     @Test
     public void nestedScrollingChildOwnsFrozenDownBeforeItStartsScrolling() {
         StatusBarSwipeLayout view = createView();
-        List<TopStatusBarState> full = new ArrayList<>();
-        view.setListener(new StatusBarSwipeLayout.Listener() {
-            @Override public void onCollapsedStateRequested(boolean value) { }
-            @Override public void onFullStateRequested(TopStatusBarState prior) { full.add(prior); }
-        });
+        List<Boolean> toggles = new ArrayList<>();
+        view.setListener(toggles::add);
         View nested = new View(view.getContext());
         nested.setNestedScrollingEnabled(true);
         view.addView(nested, new FrameLayout.LayoutParams(80, 60));
@@ -236,25 +165,7 @@ public class StatusBarSwipeLayoutTest {
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 40, 30));
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 40, 30));
-        assertTrue(full.isEmpty());
-    }
-
-    @Test
-    public void fullCallbackReentrantResetCannotAlsoFireSwipe() {
-        StatusBarSwipeLayout view = createView();
-        List<String> actions = new ArrayList<>();
-        view.setListener(new StatusBarSwipeLayout.Listener() {
-            @Override public void onCollapsedStateRequested(boolean value) { actions.add("swipe"); }
-            @Override public void onFullStateRequested(TopStatusBarState prior) {
-                actions.add("full");
-                view.setStatusState(TopStatusBarState.FULL, prior);
-            }
-        });
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 30, 40));
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 180, 40));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 180, 40));
-        assertEquals(java.util.Collections.singletonList("full"), actions);
+        assertTrue(toggles.isEmpty());
     }
 
     @Test

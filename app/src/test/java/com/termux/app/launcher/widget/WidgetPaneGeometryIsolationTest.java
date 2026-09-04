@@ -24,9 +24,10 @@ public class WidgetPaneGeometryIsolationTest {
     @Test public void pickerAndGridNeverContributeToAccessoryCombinedHeight() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
-        android.view.ViewGroup root = (android.view.ViewGroup) LayoutInflater.from(activity)
-            .inflate(R.layout.activity_termux, null);
-        WidgetPaneView pane = root.findViewById(R.id.widget_pane);
+        // The grid lives on the wall's Widgets page, which is inflated when the wall gains it.
+        android.view.ViewGroup page = (android.view.ViewGroup) LayoutInflater.from(activity)
+            .inflate(R.layout.view_widget_pane, null);
+        WidgetPaneView pane = page.findViewById(R.id.widget_pane);
         pane.picker().setReducedMotion(true); pane.picker().open();
         int before = AccessoryStackLayoutPolicy.computeCombinedHeight(30, 40, 20, 3);
         pane.picker().close();

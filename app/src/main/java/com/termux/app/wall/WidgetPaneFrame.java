@@ -3,10 +3,7 @@ package com.termux.app.wall;
 import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.FrameLayout;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
@@ -45,24 +42,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         super.onFinishInflate();
         mGlass = findViewById(R.id.widget_pane_glass);
         PaneGlass.followLayout(mGlass);
-    }
-
-    /**
-     * Take the widget grid over from wherever it is now. Its previous parent — the status host,
-     * whose pull-down the wall replaces — loses it; the grid itself is untouched, so its widget
-     * host views are not recreated.
-     */
-    public void adoptGrid(@NonNull View grid) {
-        if (mGrid == grid) return;
-        if (grid.getParent() instanceof ViewGroup) ((ViewGroup) grid.getParent()).removeView(grid);
-        mGrid = grid;
-        addView(grid, new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        // The grid hid itself for the pull-down that used to hold it. On the wall the page is
-        // what comes and goes, so the grid is simply visible from here on.
-        grid.setVisibility(VISIBLE);
-        setPaneContent(grid);
-        applyStyle(mStyle);
+        mGrid = findViewById(R.id.widget_pane);
+        setPaneContent(mGrid);
     }
 
     @Nullable

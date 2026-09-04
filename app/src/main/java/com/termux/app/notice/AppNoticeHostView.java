@@ -422,7 +422,7 @@ public final class AppNoticeHostView extends LinearLayout {
      * Swipe to dismiss, either way: the pill is centred, so neither direction is "off the edge it
      * came from". Interactive rather than only tap-and-wait because these are frequent and one may
      * well be covering the top of a shell's output at the moment the user wants to read it. Only
-     * horizontal travel counts — a vertical drag here belongs to the status bar's own pull-down.
+     * horizontal travel counts — a vertical drag here belongs to the status bar's own gesture.
      */
     @Override
     public boolean onTouchEvent(MotionEvent event) {

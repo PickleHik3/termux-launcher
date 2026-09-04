@@ -20,8 +20,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public interface Host {
         /** Honour the system's reduce-motion setting for the page slide. */
         boolean reducedMotion();
-        /** The wall itself is switched on; off, the terminal is the only place there is. */
-        boolean isWallEnabled();
         /** The terminal-only use case: no home surfaces, so no Widgets page. */
         boolean isTerminalOnly();
         /** The widgets feature is switched on. */
@@ -64,21 +62,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** Re-read the preferences that decide which places exist. */
     public void refreshPages() {
         mWall.setReducedMotion(mHost.reducedMotion());
-        boolean wall = mHost.isWallEnabled();
         mWall.setPages(PaneWallPolicy.availablePages(mHost.isTerminalOnly(),
-            wall && mHost.isWidgetsEnabled(), wall && mHost.isDisplayEnabled()));
+            mHost.isWidgetsEnabled(), mHost.isDisplayEnabled()));
     }
 
-    /**
-     * Move the widget grid onto the wall as its Widgets page. The grid keeps its app-widget host
-     * views across the move, so nothing it is showing is recreated.
-     */
-    public void attachWidgetsPage(@NonNull LayoutInflater inflater, @NonNull View grid) {
+    /** Build the wall's Widgets page: the app-widget grid, dressed as a pane. */
+    public void attachWidgetsPage(@NonNull LayoutInflater inflater) {
         if (mWidgetsPage != null) return;
         WidgetPaneFrame frame = (WidgetPaneFrame) inflater.inflate(
             com.termux.R.layout.view_widget_pane, mWall, false);
         mWall.addView(frame, 0);
-        frame.adoptGrid(grid);
         mWidgetsPage = frame;
         mWall.setPageView(PaneWallPage.WIDGETS, frame);
         applyStyle(mStyle);

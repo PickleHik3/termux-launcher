@@ -40,8 +40,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private final Host host;
     private String liveOrigin;
     private boolean awaitingExternal;
-    private float fullProgress;
-    private boolean fullSettled;
     private int currentPage;
     private boolean editorFocusActive;
     @Nullable private PopupWindow paneMenu;
@@ -91,16 +89,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         catalog.invalidate();
         render(); if (pane.picker().isOpen()) loadCatalog();
     }
-    public void onFullFrame(float progress) {
-        fullProgress = progress; pane.setFullState(fullProgress, fullSettled);
-        if (progress < 0.999f) dismissPaneMenu();
-        // The pane always reopens on page 0: reset once the surface has fully receded.
-        if (progress <= 0.001f && currentPage != 0) { currentPage = 0; render(); }
-    }
-    public void onFullSettled(boolean settled) {
-        fullSettled = settled; pane.setFullState(fullProgress, fullSettled);
-    }
-
     /**
      * The wall's Widgets page came to rest on screen, or left it. A page that has gone opens
      * again the way it always does — page 0, no menu — like the pull-down it replaces.

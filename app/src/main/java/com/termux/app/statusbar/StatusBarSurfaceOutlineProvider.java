@@ -6,11 +6,8 @@ import android.view.ViewOutlineProvider;
 
 import androidx.annotation.NonNull;
 
-/** Mutable, allocation-free outline shared by normal and transient FULL status-pane geometry. */
+/** Mutable, allocation-free outline for the status pane's geometry. */
 public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
-    private float normalRadiusPx;
-    private float fullRadiusPx;
-    private float fullProgress;
     private float radiusPx;
     private boolean innerEdgeOnly;
 
@@ -24,17 +21,9 @@ public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
         this.innerEdgeOnly = innerEdgeOnly;
     }
 
-    /**
-     * Keeps normal surface styling at progress zero and reaches the pane's existing rounded-style
-     * radius at FULL. The same spring progress that owns the real height owns this interpolation,
-     * so neither end of the transition has a shape-state pop.
-     */
-    public void setFrame(float normalRadiusPx, float fullRadiusPx, float fullProgress) {
-        this.normalRadiusPx = finiteNonNegative(normalRadiusPx);
-        this.fullRadiusPx = finiteNonNegative(fullRadiusPx);
-        this.fullProgress = FullStatusBarGeometry.finiteUnit(fullProgress);
-        radiusPx = this.normalRadiusPx
-            + (this.fullRadiusPx - this.normalRadiusPx) * this.fullProgress;
+    /** The radius the pane's every layer — live blur and wallpaper frost included — clips to. */
+    public void setFrame(float radiusPx) {
+        this.radiusPx = finiteNonNegative(radiusPx);
     }
 
     @Override
@@ -46,8 +35,6 @@ public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
 
     public boolean clipsCorners() { return radiusPx > 0f; }
     public float radiusPx() { return radiusPx; }
-    public float fullRadiusPx() { return fullRadiusPx; }
-    public float fullProgress() { return fullProgress; }
 
     private static float finiteNonNegative(float value) {
         return Float.isFinite(value) ? Math.max(0f, value) : 0f;

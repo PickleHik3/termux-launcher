@@ -297,14 +297,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.statusbar.StatusCardHost();
     @Nullable private android.animation.ValueAnimator mStatusBarCollapseAnimator;
     private int mStatusBarTerminalResizeGeneration;
-    @Nullable private com.termux.app.statusbar.FullStatusBarController mFullStatusBarController;
     private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider
         mStatusBarSurfaceOutline =
             new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
-    private int mFullStatusBarResizeGeneration;
-    private boolean mRestoreFullStatusBar;
-    @NonNull private com.termux.app.statusbar.TopStatusBarState mRestoredFullPrior =
-        com.termux.app.statusbar.TopStatusBarState.EXPANDED;
     @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
     /** The wall page an activity recreation is coming back to; null on a cold start. */
     @Nullable private String mPendingWallPage;
@@ -312,9 +307,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
     /** The wall put the in-app keyboard away when it left the terminal, and owes it back. */
     private boolean mWallHidKeyboard;
-    /** The status-bar arrangement an external add-widget flow has to come back to. */
-    @NonNull private com.termux.app.statusbar.TopStatusBarState mWidgetSurfaceOrigin =
-        com.termux.app.statusbar.TopStatusBarState.EXPANDED;
     @Nullable private com.termux.app.launcher.widget.LauncherWidgetHostController mWidgetHostController;
     @Nullable private com.termux.app.launcher.widget.WidgetPaneController mWidgetPaneController;
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
@@ -648,8 +640,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
     private static final String ARG_PANE_LAYOUT = "pane_layout";
-    private static final String ARG_FULL_STATUS_BAR = "full_status_bar";
-    private static final String ARG_FULL_STATUS_BAR_PRIOR = "full_status_bar_prior";
     private static final String PANE_STATE_SESSIONS = "sessions";
     private static final String PANE_STATE_WINDOWS = "windows";
     private static final String PANE_STATE_CURRENT_WINDOW = "current_window";
@@ -780,10 +770,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return shouldUseWallpaperPassthroughMode();
         }
 
-        @Override public boolean fullStatusBarEngaged() {
-            return isFullStatusBarEngaged();
-        }
-
         @Override public int effectiveDockBlurRadiusDp() {
             return getEffectiveExtraKeysBlurRadius();
         }
@@ -852,14 +838,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
             mPendingWallPage = savedInstanceState.getString(
                 com.termux.app.wall.PaneWallController.ARG_PAGE);
-            mRestoreFullStatusBar = savedInstanceState.getBoolean(ARG_FULL_STATUS_BAR, false);
-            try {
-                mRestoredFullPrior = com.termux.app.statusbar.TopStatusBarState.valueOf(
-                    savedInstanceState.getString(ARG_FULL_STATUS_BAR_PRIOR,
-                        com.termux.app.statusbar.TopStatusBarState.EXPANDED.name()));
-            } catch (IllegalArgumentException ignored) {
-                mRestoredFullPrior = com.termux.app.statusbar.TopStatusBarState.EXPANDED;
-            }
         }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
@@ -921,7 +899,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registerWallpaperActivityResultLaunchers();
         mLastLaunchWasLauncherEntry = isLauncherHomeIntent(getIntent());
         setTermuxTerminalViewAndClients();
-        createFullStatusBarController();
         createWidgetPaneController();
         setTerminalWindowBar();
         setTerminalToolbarView(savedInstanceState);
@@ -933,15 +910,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleSurfaceEditorIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
-        }
-        if (mRestoreFullStatusBar) {
-            View fullHost = findViewById(R.id.terminal_window_bar_host);
-            if (fullHost != null) fullHost.post(() -> {
-                if (mFullStatusBarController != null && mRestoreFullStatusBar) {
-                    mRestoreFullStatusBar = false;
-                    mFullStatusBarController.restoreFullImmediate(mRestoredFullPrior);
-                }
-            });
         }
         setSettingsButtonView();
         setNewSessionButtonView();
@@ -1867,8 +1835,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void feedTerminalPlank(MotionEvent ev) {
         if (!mTerminalGlassActive || mPaneController == null) return;
-        if (isAppDrawerEngaged() || mSurfaceEditor.isActive() || isCommandPaletteOpen()
-            || isFullStatusBarEngaged()) {
+        if (isAppDrawerEngaged() || mSurfaceEditor.isActive() || isCommandPaletteOpen()) {
             mPaneController.cancelPaneGlassTouch();
             return;
         }
@@ -2720,12 +2687,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int targetHeight = targetStatusBarHeightPx(capsule, collapsed);
             if (mlp.leftMargin != hMargin || mlp.rightMargin != hMargin
                 || mlp.topMargin != topMargin
-                || (mStatusBarCollapseAnimator == null && !isFullStatusBarEngaged()
-                    && mlp.height != targetHeight)) {
+                || (mStatusBarCollapseAnimator == null && mlp.height != targetHeight)) {
                 mlp.leftMargin = hMargin;
                 mlp.rightMargin = hMargin;
                 mlp.topMargin = topMargin;
-                if (mStatusBarCollapseAnimator == null && !isFullStatusBarEngaged()) {
+                if (mStatusBarCollapseAnimator == null) {
                     mlp.height = targetHeight;
                 }
                 host.setLayoutParams(mlp);
@@ -2738,7 +2704,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     widgetParams.height = targetWidgetHeight;
                     topWidgets.setLayoutParams(widgetParams);
                 }
-                if (mStatusBarCollapseAnimator == null && !isFullStatusBarEngaged()) {
+                if (mStatusBarCollapseAnimator == null) {
                     topWidgets.setAlpha(1f);
                     topWidgets.setTranslationY(0f);
                     topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
@@ -2748,11 +2714,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // While a spring or animator drives the pane, applyFrame's
             // applyInteractiveStatusRowGeometry() is the sole writer of status-row geometry —
             // the same ownership rule the host-height and top-slot writes above already follow.
-            // Without this, any refreshTerminalWindowBar() while FULL is settled re-anchors the
-            // row to its normal-state rule (CENTER_VERTICAL while the clock is collapsed),
-            // parking it mid-pane instead of on the pane's bottom inset.
-            boolean interactiveGeometryOwnsRow = mStatusBarCollapseAnimator != null
-                || isFullStatusBarEngaged();
+            // A live collapse/expand animator owns the row's position; a refresh mid-animation
+            // must not re-anchor it to its rest rule and park it where the gesture is not.
+            boolean interactiveGeometryOwnsRow = mStatusBarCollapseAnimator != null;
 
             // Keep the bottom chip corners inside the capsule's 26dp outline. At the former 4dp
             // inset, the rounded host clip intersected the session and weather chip backgrounds.
@@ -2833,37 +2797,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setCollapsed(collapsed);
             }
         }
-        applyFullStatusBarOutline(host, isFullStatusBarEngaged()
-            ? mStatusBarSurfaceOutline.fullProgress() : 0f);
+        applyStatusBarOutline(host);
     }
 
     /**
-     * One outline clips every status-pane layer, including live blur and wallpaper frost. Normal
-     * Rounded keeps its capsule radius; normal Default remains square. FULL converges on the same
-     * status radius used by the existing top-pane/dock language instead of introducing a second
-     * radius, and its bottom edge therefore rounds continuously with the height spring.
+     * One outline clips every status-pane layer, including live blur and wallpaper frost. Docked
+     * rounds only the edge that faces the terminal; Floating is a card and rounds all four.
      */
-    private void applyFullStatusBarOutline(@NonNull View host, float fullProgress) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+    private void applyStatusBarOutline(@NonNull View host) {
         boolean capsule = isRoundedDockStyle();
         boolean collapsed = mPreferences != null && mPreferences.isTopPaneClockCollapsed();
-        float fullRadius = resolveStatusBarCapsuleCornerRadiusPx(
-            targetStatusBarHeightPx(true, collapsed));
-        // Docked rounds only the edge that faces the terminal; Floating is a card and rounds all
-        // four. FULL converges on the capsule radius either way.
-        float dockedInner = resolveDockedStatusInnerRadiusPx(
-            targetStatusBarHeightPx(false, collapsed));
         mStatusBarSurfaceOutline.setInnerEdgeOnly(!capsule);
-        mStatusBarSurfaceOutline.setFrame(capsule ? fullRadius : dockedInner,
-            fullRadius, fullProgress);
+        mStatusBarSurfaceOutline.setFrame(capsule
+            ? resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true, collapsed))
+            : resolveDockedStatusInnerRadiusPx(targetStatusBarHeightPx(false, collapsed)));
         if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
             host.setOutlineProvider(mStatusBarSurfaceOutline);
         host.setClipToOutline(mStatusBarSurfaceOutline.clipsCorners());
         host.invalidateOutline();
-        if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
-            ((com.termux.app.statusbar.StatusBarSwipeLayout) host)
-                .setGlassRim(mStatusBarSurfaceOutline.radiusPx(), fullProgress);
-        }
     }
 
     /**
@@ -5225,11 +5176,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mInAppKeyboard != null)
             mInAppKeyboard.onSaveInstanceState(savedInstanceState);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
-        if (mFullStatusBarController != null && mFullStatusBarController.isEngaged()) {
-            savedInstanceState.putBoolean(ARG_FULL_STATUS_BAR, true);
-            savedInstanceState.putString(ARG_FULL_STATUS_BAR_PRIOR,
-                mFullStatusBarController.priorState().name());
-        }
         Bundle paneLayout = savePaneLayoutState();
         if (paneLayout != null) savedInstanceState.putBundle(ARG_PANE_LAYOUT, paneLayout);
         if (mPaneWallController != null) mPaneWallController.onSaveInstanceState(savedInstanceState);
@@ -5617,11 +5563,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override
                 public boolean isAppDrawerEngaged() {
                     return TermuxActivity.this.isAppDrawerEngaged();
-                }
-
-                @Override
-                public boolean isFullStatusPaneClosed() {
-                    return !TermuxActivity.this.isFullStatusBarEngaged();
                 }
 
                 @Override
@@ -6817,10 +6758,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.isRoundedDockStyle();
         }
 
-        @Override public boolean isFullStatusBarEngaged() {
-            return TermuxActivity.this.isFullStatusBarEngaged();
-        }
-
         @Override public void setTopStatusBarCollapsed(boolean collapsed, boolean animate) {
             TermuxActivity.this.setTopStatusBarCollapsed(collapsed, animate);
         }
@@ -7548,8 +7485,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     !mSurfaceEditor.isActive(),
                     !isCommandPaletteOpen(),
                     true,
-                    !isAppDrawerEngaged(),
-                    !isFullStatusBarEngaged());
+                    !isAppDrawerEngaged());
             }
 
             @Override
@@ -8640,7 +8576,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void yieldCompetingPlanes() {
-            closeFullStatusBarImmediate();
             // Guarded on the open check rather than reached through the lazy accessor, so a session
             // that never pulls the drawer down does not build one just because it opened a prompt.
             if (isAppDrawerOpen()) mAppDrawerController.closeImmediate();
@@ -9070,16 +9005,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
-        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
-            @Override public boolean onBack() {
-                // Stays claimed while its exit spring settles, so repeated Back cannot fall through.
-                return mFullStatusBarController != null && mFullStatusBarController.onBackPressed();
-            }
-            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                if (reason == com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION) return;
-                if (mFullStatusBarController != null) mFullStatusBarController.closeImmediateToPrior();
-            }
-        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 if (!isCommandPaletteOpen()) return false;
@@ -10883,133 +10808,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshSessionsPanel();
     }
 
-    /** Wire the app-owned window strip. Window chips are indicators and direct switch targets. */
-    private void createFullStatusBarController() {
-        mFullStatusBarController = new com.termux.app.statusbar.FullStatusBarController(
-            new com.termux.app.statusbar.FullStatusBarController.Host() {
-                private View paneHost() { return findViewById(R.id.terminal_window_bar_host); }
-                private ViewGroup contentColumn() {
-                    View view = findViewById(R.id.terminal_content_column);
-                    return view instanceof ViewGroup ? (ViewGroup) view : null;
-                }
-
-                @Override public int currentHeight() {
-                    View host = paneHost();
-                    return host == null ? 0 : currentTopStatusBarHeight(host);
-                }
-                @Override public int normalHeight(@NonNull com.termux.app.statusbar.TopStatusBarState state) {
-                    return targetStatusBarHeightPx(isRoundedDockStyle(), state.toCollapsedPreference());
-                }
-                @Override public int parentMeasuredHeight() {
-                    ViewGroup column = contentColumn();
-                    return column == null ? 0 : column.getMeasuredHeight();
-                }
-                @Override public int parentPaddingTop() {
-                    ViewGroup column = contentColumn();
-                    return column == null ? 0 : column.getPaddingTop();
-                }
-                @Override public int parentPaddingBottom() {
-                    ViewGroup column = contentColumn();
-                    int padding = column == null ? 0 : column.getPaddingBottom();
-                    // FULL never touches the dock: when the accessory stack is visible, the pane's
-                    // resolved height keeps an 8dp breathing gap above its top edge. Reported as
-                    // parent padding so every frame of the spring uses the same shrunken travel —
-                    // the accessory bands themselves are never resized or clipped by this.
-                    View accessory = findViewById(R.id.accessory_stack_container);
-                    if (accessory != null && accessory.getVisibility() == View.VISIBLE) {
-                        padding += Math.round(dpToPx(8));
-                    }
-                    return padding;
-                }
-                @Override public int hostTopMargin() {
-                    View host = paneHost();
-                    ViewGroup.LayoutParams params = host == null ? null : host.getLayoutParams();
-                    return params instanceof ViewGroup.MarginLayoutParams
-                        ? ((ViewGroup.MarginLayoutParams) params).topMargin : 0;
-                }
-                @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
-                @Override public void cancelNormalAnimatorKeepingCurrent() {
-                    if (mStatusBarCollapseAnimator != null) mStatusBarCollapseAnimator.cancel();
-                }
-                @Override public void beginTerminalResize() {
-                    // FULL overlays a live terminal: the terminal never resizes for it, so the
-                    // PTY-pause machinery stays untouched. Normal COMPACT/EXPANDED writes keep it.
-                    if (mFullOverlayTerminalFrozen) return;
-                    mFullStatusBarResizeGeneration = beginStatusBarTerminalResize();
-                }
-                @Override public void applyFrame(int height, float fullProgress) {
-                    View host = paneHost();
-                    if (host == null) return;
-                    applyTopStatusBarInteractiveHeight(host,
-                        findViewById(R.id.terminal_top_widget_area), height, isRoundedDockStyle());
-                    applyFullOverlayTerminalShift(height);
-                    applyFullOverlayTerminalTint(fullProgress);
-                    // See-through pane, but only in flight: the surface tint thins out mid-drag
-                    // so the frozen terminal reads through the glass, then recovers by FULL. The
-                    // old linear fade rested at 40% tint, which made the settled widget surface
-                    // read noticeably brighter than every other glass surface.
-                    View surfaceTint = findViewById(R.id.terminal_window_bar_background);
-                    if (surfaceTint != null) {
-                        float p = Math.max(0f, Math.min(1f, fullProgress));
-                        surfaceTint.setAlpha(1f - 0.6f * (4f * p * (1f - p)));
-                    }
-                    if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
-                        ((com.termux.app.statusbar.StatusBarSwipeLayout) host)
-                            .setFullStatusRowBottomInset(Math.round(dpToPx(
-                                isRoundedDockStyle() ? 3 : 2)));
-                    }
-                    applyFullStatusBarOutline(host, fullProgress);
-                    View top = findViewById(R.id.terminal_top_widget_area);
-                    if (top instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
-                        ((com.termux.app.statusbar.TopPaneWidgetSlot) top)
-                            .setFullExpansionProgress(fullProgress);
-                    }
-                    mChrome.frost().alignFullStatusBar();
-                    if (mWidgetPaneController != null) {
-                        mWidgetPaneController.onFullFrame(fullProgress);
-                    }
-                }
-                @Override public void finishTerminalResizeAfterLayout() {
-                    if (mFullOverlayTerminalFrozen) return;
-                    View host = paneHost();
-                    if (host != null) finishStatusBarTerminalResizeAfterLayout(host,
-                        mFullStatusBarResizeGeneration);
-                }
-                @Override public void applyNormalState(
-                        @NonNull com.termux.app.statusbar.TopStatusBarState state) {
-                    applyFullStatusBarPriorState(state);
-                }
-                @Override public void onEngagementChanged(boolean engaged,
-                        @NonNull com.termux.app.statusbar.TopStatusBarState normalTarget) {
-                    restLiveBlur(findViewById(R.id.terminal_window_bar_blur), !engaged);
-                    if (engaged) freezeTerminalForFullOverlay();
-                    View view = paneHost();
-                    if (view instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
-                        ((com.termux.app.statusbar.StatusBarSwipeLayout) view).setStatusState(
-                            engaged ? com.termux.app.statusbar.TopStatusBarState.FULL : normalTarget,
-                            normalTarget);
-                    }
-                    if (!engaged) {
-                        unfreezeTerminalAfterFullOverlay();
-                        mChrome.frost().releaseFullStatusBar();
-                    }
-                }
-                @Override public void onFullSettled(boolean settled) {
-                    if (mWidgetPaneController != null) {
-                        mWidgetPaneController.onFullSettled(settled);
-                    }
-                }
-            });
-        View contentColumn = findViewById(R.id.terminal_content_column);
-        if (contentColumn != null) contentColumn.addOnLayoutChangeListener(
-            (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-                if (mFullStatusBarController != null && (right - left != oldRight - oldLeft
-                    || bottom - top != oldBottom - oldTop)) {
-                    mFullStatusBarController.onParentLayoutChanged();
-                }
-            });
-    }
-
     /**
      * Wire the pane wall around the terminal's pane host. The terminal is its middle page and is
      * handed over untouched; the other places register themselves as the install gains them.
@@ -11021,7 +10819,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             (com.termux.app.wall.PaneWallLayout) wall,
             new com.termux.app.wall.PaneWallController.Host() {
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
-                @Override public boolean isWallEnabled() { return isPaneWallEnabled(); }
                 @Override public boolean isTerminalOnly() {
                     return mPreferences != null && mPreferences.isTerminalOnlyUseCase();
                 }
@@ -11079,12 +10876,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
         mPaneWallController.attachTerminalPage(paneHost);
-        // The widget grid moves onto the wall before the widget controller looks it up, so the
-        // controller finds it in its new home and nothing is built twice.
-        View grid = findViewById(R.id.widget_pane);
-        if (isPaneWallEnabled() && grid != null && mPreferences != null
-            && mPreferences.isAppLauncherWidgetPaneEnabled()) {
-            mPaneWallController.attachWidgetsPage(getLayoutInflater(), grid);
+        // The Widgets page is built before the widget controller looks its grid up, so the
+        // controller finds it already on the wall.
+        if (mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled()) {
+            mPaneWallController.attachWidgetsPage(getLayoutInflater());
         }
         if (isX11DisplayEnabled()) createX11DisplayController();
         mPaneWallController.applyStyle(paneSurfaceStyle());
@@ -11217,18 +11012,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController != null && mPaneWallController.canDrag());
     }
 
-    /**
-     * The pane wall: places beside the terminal, reached by swiping the status bar. While it is
-     * off the status bar's pull-down still holds the widget grid, so exactly one of the two ever
-     * owns it.
-     */
-    public boolean isPaneWallEnabled() {
-        return mPreferences != null && mPreferences.isPaneWallEnabled();
-    }
-
     /** The embedded Linux display. Off by default; there is no Display page while it is. */
     public boolean isX11DisplayEnabled() {
-        return isPaneWallEnabled() && mPreferences != null && mPreferences.isX11DisplayEnabled();
+        return mPreferences != null && mPreferences.isX11DisplayEnabled();
     }
 
     /**
@@ -11321,44 +11107,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void createWidgetPaneController() {
         View view = findViewById(R.id.widget_pane);
-        // Terminal-only installs keep the FULL pull-down (clock, status) but not the widget grid.
+        // Terminal-only installs keep the status pane (clock, status) but not the widget grid.
         if (view != null && mPreferences != null && !mPreferences.isAppLauncherWidgetPaneEnabled()) {
             view.setVisibility(View.GONE);
             return;
         }
         if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)
-            || mWidgetHostController == null || mFullStatusBarController == null) return;
+            || mWidgetHostController == null) return;
         mWidgetPaneController = new com.termux.app.launcher.widget.WidgetPaneController(
             (com.termux.app.launcher.widget.WidgetPaneView) view, mWidgetHostController,
             new com.termux.app.launcher.widget.WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
-                // Where the widget grid lives: the wall's Widgets page once the wall is on,
-                // the status bar's pull-down until then.
+                // The widget grid lives on the wall's Widgets page, and nowhere else.
                 @Override public boolean isWidgetSurfaceShowing() {
-                    if (mPaneWallController != null && isPaneWallEnabled()) {
-                        return mPaneWallController.currentPage()
-                            == com.termux.app.wall.PaneWallPage.WIDGETS;
-                    }
-                    return mFullStatusBarController != null && mFullStatusBarController.isEngaged();
+                    return mPaneWallController != null && mPaneWallController.currentPage()
+                        == com.termux.app.wall.PaneWallPage.WIDGETS;
                 }
                 @Override public void captureWidgetSurfaceOrigin() {
-                    mWidgetSurfaceOrigin = mFullStatusBarController == null
-                        ? com.termux.app.statusbar.TopStatusBarState.EXPANDED
-                        : mFullStatusBarController.priorState();
+                    // The page is where it was and where it will be; there is nothing to keep.
                 }
                 @Override public void restoreWidgetSurfaceOrigin() {
-                    if (mPaneWallController != null && isPaneWallEnabled()) {
+                    if (mPaneWallController != null) {
                         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, false);
-                        return;
                     }
-                    View pane = findViewById(R.id.widget_pane);
-                    final com.termux.app.statusbar.TopStatusBarState prior = mWidgetSurfaceOrigin;
-                    if (pane != null) pane.post(() -> {
-                        if (mFullStatusBarController != null
-                            && !mFullStatusBarController.isEngaged()) {
-                            mFullStatusBarController.restoreFullImmediate(prior);
-                        }
-                    });
                 }
                 // A provider text input inside a widget follows the toolbar text-input seam: the
                 // in-app keyboard yields (clearing its disable-IME window flags), then the editor
@@ -11377,134 +11148,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
                 }
             });
-    }
-
-    /** True while FULL overlays a frozen-geometry, still-running terminal. */
-    private boolean mFullOverlayTerminalFrozen;
-    private int mFullOverlayHostBaseHeight;
-    private float mFullOverlayRestoreWeight;
-    private int mFullOverlayRestoreHeight;
-
-    /**
-     * FULL never resizes the terminal. The pane host still grows inside the shared column (its
-     * bounds must cover the pane for touch and glass), so the terminal surface is frozen at its
-     * current pixel height and counter-translated by exactly the host's growth: it keeps its
-     * screen position, keeps rendering, and shows through the pane's translucent glass. The host
-     * is Z-lifted for the duration so the pane draws over its later-in-column sibling.
-     */
-    private void freezeTerminalForFullOverlay() {
-        if (mFullOverlayTerminalFrozen) return;
-        View surface = findViewById(R.id.terminal_surface_host);
-        View host = findViewById(R.id.terminal_window_bar_host);
-        if (surface == null || host == null || surface.getHeight() <= 0) return;
-        ViewGroup.LayoutParams params = surface.getLayoutParams();
-        if (!(params instanceof android.widget.LinearLayout.LayoutParams)) return;
-        android.widget.LinearLayout.LayoutParams linear =
-            (android.widget.LinearLayout.LayoutParams) params;
-        mFullOverlayTerminalFrozen = true;
-        mFullOverlayHostBaseHeight = currentTopStatusBarHeight(host);
-        mFullOverlayRestoreWeight = linear.weight;
-        mFullOverlayRestoreHeight = linear.height;
-        linear.weight = 0f;
-        linear.height = surface.getHeight();
-        surface.setLayoutParams(linear);
-        host.setTranslationZ(dpToPx(6));
-    }
-
-    private void applyFullOverlayTerminalShift(int hostHeight) {
-        if (!mFullOverlayTerminalFrozen) return;
-        View surface = findViewById(R.id.terminal_surface_host);
-        if (surface != null) {
-            surface.setTranslationY(-Math.max(0, hostHeight - mFullOverlayHostBaseHeight));
-        }
-    }
-
-    /**
-     * Inverted standardized dim: the running terminal BEHIND the pane darkens with the pane's
-     * spring while the glass keeps its own opacity, so the surface reads elevated because the
-     * scene under it recedes.
-     */
-    private void applyFullOverlayTerminalTint(float fullProgress) {
-        if (!mFullOverlayTerminalFrozen && fullProgress > 0f) return;
-        View surface = findViewById(R.id.terminal_surface_host);
-        if (surface == null) return;
-        if (mFullOverlayTerminalTint == null) {
-            mFullOverlayTerminalTint = new android.graphics.drawable.ColorDrawable();
-            surface.setForeground(mFullOverlayTerminalTint);
-        }
-        int tint = com.termux.app.GlassBackdropTint.colorFor(fullProgress);
-        mFullOverlayTerminalTint.setColor(tint);
-        // The same progress-driven dim rides the accessory stack as its foreground, so dock and
-        // keyboard recede with the terminal instead of ending the scrim hard at the dock's top.
-        // A foreground (not an overlay view) draws after every child, whatever z-lift the dock's
-        // glass tuning gives them, and never re-orders siblings. The container has no other
-        // foreground owner.
-        View accessory = findViewById(R.id.accessory_stack_container);
-        if (accessory != null) {
-            if (mFullOverlayAccessoryTint == null) {
-                mFullOverlayAccessoryTint = new android.graphics.drawable.ColorDrawable();
-                accessory.setForeground(mFullOverlayAccessoryTint);
-            }
-            mFullOverlayAccessoryTint.setColor(tint);
-        }
-    }
-
-    private android.graphics.drawable.ColorDrawable mFullOverlayTerminalTint;
-    private android.graphics.drawable.ColorDrawable mFullOverlayAccessoryTint;
-
-    private void unfreezeTerminalAfterFullOverlay() {
-        if (!mFullOverlayTerminalFrozen) return;
-        mFullOverlayTerminalFrozen = false;
-        View surface = findViewById(R.id.terminal_surface_host);
-        View host = findViewById(R.id.terminal_window_bar_host);
-        if (surface != null) {
-            ViewGroup.LayoutParams params = surface.getLayoutParams();
-            if (params instanceof android.widget.LinearLayout.LayoutParams) {
-                android.widget.LinearLayout.LayoutParams linear =
-                    (android.widget.LinearLayout.LayoutParams) params;
-                linear.weight = mFullOverlayRestoreWeight;
-                linear.height = mFullOverlayRestoreHeight;
-                surface.setLayoutParams(linear);
-            }
-            surface.setTranslationY(0f);
-            if (mFullOverlayTerminalTint != null) mFullOverlayTerminalTint.setColor(0);
-        }
-        if (mFullOverlayAccessoryTint != null) mFullOverlayAccessoryTint.setColor(0);
-        if (host != null) host.setTranslationZ(0f);
-    }
-
-    private void openFullStatusBar(@NonNull com.termux.app.statusbar.TopStatusBarState prior) {
-        if (mFullStatusBarController == null) return;
-        if (mAppDrawerController != null) mAppDrawerController.closeImmediate();
-        if (mSuggestionBarView != null) mSuggestionBarView.dismissContextPopups();
-        mFullStatusBarController.open(prior);
-    }
-
-    public boolean isFullStatusBarEngaged() {
-        return mFullStatusBarController != null && mFullStatusBarController.isEngaged();
-    }
-
-    /** Palette takeover is immediate so two modal glass surfaces never stack. */
-    public void closeFullStatusBarImmediate() {
-        if (mFullStatusBarController != null) mFullStatusBarController.closeImmediateToPrior();
-    }
-
-    private void applyFullStatusBarPriorState(
-            @NonNull com.termux.app.statusbar.TopStatusBarState state) {
-        boolean collapsed = state.toCollapsedPreference();
-        if (mPreferences != null) mPreferences.setTopPaneClockCollapsed(collapsed);
-        View topWidgets = findViewById(R.id.terminal_top_widget_area);
-        if (topWidgets != null) {
-            topWidgets.setClipBounds(null);
-            topWidgets.setAlpha(1f);
-            topWidgets.setTranslationY(0f);
-            topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
-        }
-        View host = findViewById(R.id.terminal_window_bar_host);
-        if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
-            ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setCollapsed(collapsed);
-        }
-        refreshTerminalWindowBar();
     }
 
     private void setTerminalWindowBar() {
@@ -11548,48 +11191,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
             swipeHost.setCollapsed(mPreferences != null
                 && mPreferences.isTopPaneClockCollapsed());
-            // The FULL pane is a home surface: a terminal-only install must not be able to pull
-            // a notification panel down over its terminal, by drag or by long press.
-            swipeHost.setFullPaneAvailable(!isPaneWallEnabled() && (mPreferences == null
-                || !mPreferences.isTerminalOnlyUseCase()));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
                 @Override public void onCollapsedStateRequested(boolean collapsed) {
                     setTopStatusBarCollapsed(collapsed, true);
                 }
-                @Override public void onFullStateRequested(
-                        @NonNull com.termux.app.statusbar.TopStatusBarState priorState) {
-                    openFullStatusBar(priorState);
-                }
                 @Override public boolean isStatusGestureBlocked() {
-                    // A normal COMPACT/EXPANDED animator is deliberately eligible for takeover;
-                    // FullStatusBarController freezes its current height before cancelling it.
+                    // A live COMPACT/EXPANDED animator is deliberately eligible for takeover.
                     return isCommandPaletteOpen() || isAppDrawerEngaged() || mSurfaceEditor.isActive();
-                }
-                @Override public boolean onFullDragBegin(
-                        @NonNull com.termux.app.statusbar.TopStatusBarState priorState) {
-                    if (mFullStatusBarController == null) return false;
-                    if (mAppDrawerController != null) mAppDrawerController.closeImmediate();
-                    if (mSuggestionBarView != null) mSuggestionBarView.dismissContextPopups();
-                    return mFullStatusBarController.dragBegin(priorState);
-                }
-                @Override public boolean onFullCloseDragBegin() {
-                    return mFullStatusBarController != null
-                        && mFullStatusBarController.dragBeginClose();
-                }
-                @Override public void onFullDrag(float dragPx) {
-                    if (mFullStatusBarController != null) {
-                        mFullStatusBarController.dragUpdate(dragPx);
-                    }
-                }
-                @Override public void onFullDragEnd(float velocityPxPerSec) {
-                    if (mFullStatusBarController != null) {
-                        mFullStatusBarController.dragEnd(velocityPxPerSec);
-                    }
-                }
-                @Override public void onFullDragCancel() {
-                    if (mFullStatusBarController != null) {
-                        mFullStatusBarController.dragCancel();
-                    }
                 }
                 @Override public boolean onWallDragBegin() {
                     if (mPaneWallController == null || !mPaneWallController.beginDrag()) return false;
@@ -11641,16 +11249,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The clip radius must follow the CURRENT interactive height, not the endpoint it is
             // heading to: min(configured, height/2) keeps the compact pill a pill and rounds the
             // growing bar continuously, instead of dragging a stale endpoint radius through every
-            // intermediate height (visible as mismatched corners mid-gesture). FULL frames are
-            // excluded — applyFullStatusBarOutline re-resolves their radius right after this.
-            if (!isFullStatusBarEngaged()) {
+            // intermediate height (visible as mismatched corners mid-gesture).
+            {
                 // Docked keeps its terminal-facing corners through the gesture too, at the radius
                 // this height resolves to — dropping to 0 mid-drag and snapping back on release
                 // read as the corners flickering square.
                 float radius = capsule ? resolveStatusBarCapsuleCornerRadiusPx(height)
                     : resolveDockedStatusInnerRadiusPx(height);
                 mStatusBarSurfaceOutline.setInnerEdgeOnly(!capsule);
-                mStatusBarSurfaceOutline.setFrame(radius, radius, 0f);
+                mStatusBarSurfaceOutline.setFrame(radius);
                 if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
                     host.setOutlineProvider(mStatusBarSurfaceOutline);
                 host.setClipToOutline(mStatusBarSurfaceOutline.clipsCorners());
@@ -11666,20 +11273,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int expandedRowHeight = Math.round(dpToPx(24));
         int expandedBottomMargin = Math.round(dpToPx(capsule ? 3 : 2));
         com.termux.app.statusbar.StatusBarResizeGeometry.Row geometry =
-            isFullStatusBarEngaged()
-                ? com.termux.app.statusbar.StatusBarResizeGeometry.calculateFull(surfaceHeight,
-                    expandedHeight, Math.max(expandedHeight,
-                        com.termux.app.statusbar.FullStatusBarGeometry.resolveFullHeight(
-                            findViewById(R.id.terminal_content_column) == null ? 0
-                                : findViewById(R.id.terminal_content_column).getMeasuredHeight(),
-                            findViewById(R.id.terminal_content_column) == null ? 0
-                                : findViewById(R.id.terminal_content_column).getPaddingTop(),
-                            findViewById(R.id.terminal_content_column) == null ? 0
-                                : findViewById(R.id.terminal_content_column).getPaddingBottom(),
-                            0)), expandedRowHeight, expandedBottomMargin)
-                : com.termux.app.statusbar.StatusBarResizeGeometry.calculate(surfaceHeight,
-                    collapsedHeight, expandedHeight, collapsedRowHeight, expandedRowHeight,
-                    expandedBottomMargin);
+            com.termux.app.statusbar.StatusBarResizeGeometry.calculate(surfaceHeight,
+                collapsedHeight, expandedHeight, collapsedRowHeight, expandedRowHeight,
+                expandedBottomMargin);
 
         View statusRow = findViewById(R.id.terminal_status_row);
         if (statusRow != null && statusRow.getLayoutParams() instanceof FrameLayout.LayoutParams) {
@@ -11730,11 +11326,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void setTopStatusBarCollapsed(boolean collapsed, boolean animate) {
         if (mPreferences == null) return;
-        if (isFullStatusBarEngaged()) {
-            // FULL's captured prior remains authoritative; ordinary two-state requests cannot
-            // write geometry or start a competing animator until FULL has settled closed.
-            return;
-        }
         View host = findViewById(R.id.terminal_window_bar_host);
         View topWidgets = findViewById(R.id.terminal_top_widget_area);
         com.termux.app.statusbar.StatusBarSwipeLayout swipeHost = host instanceof
@@ -11851,7 +11442,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (blur != null) blur.setVisibility(windowBarBlurEnabled ? View.VISIBLE : View.GONE);
         // At rest nothing moves behind the pane; in FULL it sits over the frozen terminal, whose
         // output has to keep showing through.
-        restLiveBlur(blur, !isFullStatusBarEngaged());
+        restLiveBlur(blur, true);
         boolean capsuleStatusBar = isRoundedDockStyle();
         View background = findViewById(R.id.terminal_window_bar_background);
         if (background != null) {
@@ -14506,10 +14097,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return;
             }
             if (v.getId() == R.id.terminal_pane_host) {
-                if (isFullStatusBarEngaged()) return;
                 // Never mutate accessory layout params from inside this layout pass.
                 v.post(() -> {
-                    if (!isFinishing() && !isDestroyed() && !isFullStatusBarEngaged())
+                    if (!isFinishing() && !isDestroyed())
                         applyAccessoryGeometryIfNeeded(true, "terminal:layout");
                 });
                 return;

@@ -27,7 +27,6 @@ public final class WallpaperFrostPainter {
     @NonNull private final WallpaperBlurCache mBlurCache;
     @NonNull private final SurfaceDirtyLedger mLedger;
 
-    @NonNull private final Matrix mFullStatusFrostMatrix = new Matrix();
     @NonNull private final int[] mTmpViewLocation = new int[2];
     @NonNull private final Rect mTmpFrameRect = new Rect();
 
@@ -64,10 +63,6 @@ public final class WallpaperFrostPainter {
             clearTopPane();
             return;
         }
-        if (mSurfaces.fullStatusBarEngaged()) {
-            alignFullStatusBar();
-            return;
-        }
         // Rounded style: the pane is a floating capsule already clipped to its outline, so it takes
         // frost like any surface; the inset band above it shows raw wallpaper by design. This used
         // to bail out for the whole style, which left the capsule with no blur at all — its live
@@ -87,9 +82,7 @@ public final class WallpaperFrostPainter {
         View statusBlur = mSurfaces.findChromeView(R.id.terminal_status_bar_glass_blur);
         View paneBlur = mSurfaces.findChromeView(R.id.terminal_window_bar_blur);
         if (statusApplied && statusBlur != null) statusBlur.setVisibility(View.GONE);
-        // While FULL is engaged the pane's live blur deliberately stays on over the frost
-        // (alignFullStatusBar) so the terminal behind shows through the glass.
-        if (paneApplied && paneBlur != null && !mSurfaces.fullStatusBarEngaged()) {
+        if (paneApplied && paneBlur != null) {
             paneBlur.setVisibility(View.GONE);
         }
         if (statusApplied || paneApplied) {
@@ -117,58 +110,6 @@ public final class WallpaperFrostPainter {
         mLedger.setFrostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE, -1);
     }
 
-    /**
-     * FULL displays the already cached screen-sized status-radius frame through the existing pane
-     * backdrop. Only its matrix changes as layout moves; no target-sized bitmap is allocated per
-     * spring frame and no new blur-radius cache key exists.
-     */
-    public void alignFullStatusBar() {
-        if (!mSurfaces.fullStatusBarEngaged() || !mSurfaces.wallpaperPassthroughEnabled()) return;
-        int radiusDp = mSurfaces.effectiveStatusBarBlurRadiusDp();
-        if (radiusDp <= 0) return;
-        ImageView frost = frostView(R.id.terminal_window_bar_wallpaper_backdrop);
-        View host = mSurfaces.findChromeView(R.id.terminal_window_bar_host);
-        View wallpaperFrame = mSurfaces.findChromeView(R.id.activity_termux_root_view);
-        if (frost == null || host == null || wallpaperFrame == null) return;
-        Bitmap full = mBlurCache.obtain(radiusDp, wallpaperFrame);
-        if (full == null || full.isRecycled()) return;
-        host.getLocationOnScreen(mTmpViewLocation);
-        float scaleX = mBlurCache.frameRectWidth() / (float) Math.max(1, full.getWidth());
-        float scaleY = mBlurCache.frameRectHeight() / (float) Math.max(1, full.getHeight());
-        mFullStatusFrostMatrix.reset();
-        mFullStatusFrostMatrix.setScale(scaleX, scaleY);
-        mFullStatusFrostMatrix.postTranslate(
-            mBlurCache.frameRectLeft() - mTmpViewLocation[0],
-            mBlurCache.frameRectTop() - mTmpViewLocation[1]);
-        if (!(frost.getDrawable() instanceof BitmapDrawable)
-            || ((BitmapDrawable) frost.getDrawable()).getBitmap() != full) {
-            frost.setImageBitmap(full);
-        }
-        frost.setScaleType(ImageView.ScaleType.MATRIX);
-        frost.setImageMatrix(mFullStatusFrostMatrix);
-        frost.setColorFilter(GlassFilters.frost());
-        frost.setVisibility(View.VISIBLE);
-        // Live blur stays ON above the frost while FULL is engaged: it can see the frozen,
-        // still-running terminal behind the pane, so the terminal shows through the glass even
-        // in wallpaper mode (the frost keeps covering the wallpaper the blur cannot see).
-        View liveBlur = mSurfaces.findChromeView(R.id.terminal_window_bar_blur);
-        if (liveBlur != null) liveBlur.setVisibility(View.VISIBLE);
-        mBlurCache.copyFrameRect(mTmpFrameRect);
-        mLedger.recordFrostRect(SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR, mTmpFrameRect);
-        mLedger.setFrostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE, radiusDp);
-        mLedger.clearFrostDirty();
-    }
-
-    public void releaseFullStatusBar() {
-        ImageView frost = frostView(R.id.terminal_window_bar_wallpaper_backdrop);
-        if (frost != null) {
-            frost.setImageDrawable(null);
-            frost.setScaleType(ImageView.ScaleType.FIT_XY);
-        }
-        mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
-        mLedger.markFrostDirty();
-        updateTopPane();
-    }
 
     /** Installs one frost crop matching {@code boundsView}'s screen rect; false hides the frost. */
     private boolean applyCrop(@NonNull ImageView frost, @Nullable View boundsView, int blurRadiusDp,
