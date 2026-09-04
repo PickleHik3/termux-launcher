@@ -1,7 +1,8 @@
 # Pane wall, home-screen pane and X11 pane — feasibility study
 
-Research record, 2026-08-31. Nothing here is implemented; the implementation plan is written when
-the work starts. This exists so the decisions below don't get re-litigated from scratch.
+Research record, 2026-08-31, with the reasoning of the two implementation plans folded in on
+2026-09-05 when the work shipped (see *What shipped*, at the end). This exists so the decisions
+below don't get re-litigated from scratch.
 
 ## The vision
 
@@ -26,8 +27,13 @@ buttons); it gets decided at implementation time, with the constraint noted unde
   the code.
 - termux-x11 is the right code to own. It is a real Xorg port ("Xlorie" DDX over 16 vendored
   freedesktop submodules) with the only genuinely accelerated path (`AHardwareBuffer` zero-copy
-  rendering, shared-memory frame sync, DRI3 via Turnip/Zink or virgl through standard Termux GPU
-  packages). GPLv3, same as this app. Actively maintained (nightly builds, ~100 commits/90 days).
+  rendering, shared-memory frame sync) and works with Turnip/Zink or virgl through standard
+  Termux GPU packages. GPLv3, same as this app. Actively maintained (nightly builds, ~100
+  commits/90 days). *Correction, 2026-09-04:* the earlier claim of "DRI3 via Turnip/Zink" was
+  wrong — Xlorie is a software X server with no DRI3 or DMA-BUF import. GPU-accelerated clients
+  render into their own buffers and push pixels over MIT-SHM; the server composites the
+  framebuffer with GLES. Client-side acceleration is real and useful; server-side is out of reach
+  without new Xlorie work, and is not in scope.
 - Alternatives were examined and rejected:
   - **Winlator's pure-Java in-process X server** implements only the protocol subset Wine needs
     and is woven into Winlator's internals; pointing a real DE and arbitrary X clients at it means
@@ -105,6 +111,53 @@ buttons); it gets decided at implementation time, with the constraint noted unde
 The home-screen pane is the natural first milestone: no fork needed, mostly in-repo promotion
 work, and it forces the outer-container and gesture decisions the X11 pane will inherit. Fork
 termux-x11 when the X11 pane work actually starts; forking earlier buys nothing.
+
+## What shipped (2026-09-04 → 2026-09-05)
+
+The decisions above held. What the two implementation plans added, and why:
+
+- **The wall is three fixed, full-size places — Widgets, Terminal, Display — of which one is on
+  screen at rest** (`app/wall/`). The developer set this layout: the terminal never resizes for
+  the wall (no PTY churn), the pane tree is untouched, and the wall has no default keybinds —
+  keybinds stay with the multiplexer. Navigation is a sideways drag on the status bar (the window
+  strip scrolls its chips first and hands over the surplus), the place switch beside the clock in
+  the expanded status bar, Home, and the registry tool `wall.go`. Back never navigates the wall.
+  The old FULL status pull-down went with it; the widget grid is the Widgets place.
+- **Three places form a ring.** Past Display comes Widgets and the other way round, for swipes and
+  taps alike, so every place is one step from every other and a tap always slides towards where
+  its segment sits. Two places stay a line with a rubber band: the one other page cannot wait on
+  both sides at once.
+- **The place switch** replaced two swapping tiles, which read as unnatural and filled the slot.
+  It is one pill with all three places and a thumb driven by the wall's own offset, so it is a
+  map of the wall rather than an animation of its own. Display reads quieter until a display
+  runs, carries a dot while one does, and is held to stop it.
+- **Every page sits inside the terminal's frame insets.** The pane host's margins (the surface
+  editor's side gap, the border's air) are the wall's page insets; moving the host into the wall
+  had silently dropped them once, because a plain `ViewGroup` hands out non-margin layout params.
+- **The X server is vendored, not depended on** (`x11-server/`, deviations in `UPSTREAM.md`;
+  `libXlorie.so` prebuilts built by CI from one pinned commit and one native patch that renames
+  the host class). The server runs as a separate `app_process` started by the launcher's own
+  `termux-x11` command — Termux:X11's model, kept because it is what power users expect and it
+  keeps an X server crash off the home screen. The loader is built per edition and per build
+  type, because both the package and the signature it trusts are that edition's. The launcher
+  announces nothing itself: the server broadcasts a Binder to a receiver that is not exported and
+  sits behind a signature permission, and the controller that takes it lives and dies with the
+  activity, handing the Binder to its successor across a rotation.
+- **The Display place is always on the wall; the display is off by default and starts on
+  demand.** Decided with the developer on 2026-09-05: a home launcher is a process that never
+  dies, so a display server must never be started for it — the page offers Turn on, then Start,
+  and the display is stopped by hand (hold the segment, the long-press menu, `pkill`). The
+  "start with the launcher" and `DISPLAY` for new shells rows are opt-ins that default off, as
+  Termux:X11 never set either.
+- **GPU: detect, recommend, stay out of the way.** `X11GpuProbe` ranks the client-side profiles
+  (Adreno → turnip-zink, Mali → virgl over ANGLE and the wrapped Vulkan driver, others → ANGLE,
+  emulators → software) with the exact environment each needs, behind `launcherctl x11 gpu
+  [--env]` and a settings row. The launcher never writes any of it into a shell.
+- **Still owed (Phase 4):** the verification set on a real device (`check-display.sh` on pong,
+  the arm64 library and `AHardwareBuffer` hand-off, `turnip-zink` on Adreno, `dumpsys meminfo`
+  against the 171 MB baseline), and Phosh in an Arch proot — `phoc` with `WLR_BACKEND=x11`,
+  pixman first, Vulkan on a KGSL Turnip second, with phosh-termux-gpu's wlroots patches as the
+  documented requirement, not vendored.
 
 ## Sources
 
