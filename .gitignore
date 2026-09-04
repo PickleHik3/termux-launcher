@@ -11,6 +11,11 @@ release/
 !app/src/main/jniLibs/arm64-v8a/
 !app/src/main/jniLibs/arm64-v8a/libMNN.so
 !app/src/main/jniLibs/arm64-v8a/libmnnllmapp.so
+# The embedded X server, built by .github/workflows/build_x11_native.yml from the commit pinned
+# in x11-server/UPSTREAM.md. x86_64 is there so the Display page can be tried on an emulator.
+!app/src/main/jniLibs/x86_64/
+!app/src/main/jniLibs/arm64-v8a/libXlorie.so
+!app/src/main/jniLibs/x86_64/libXlorie.so
 .externalNativeBuild
 .cxx
 *.zip
