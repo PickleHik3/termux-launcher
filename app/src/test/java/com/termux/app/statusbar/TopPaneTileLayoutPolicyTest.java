@@ -16,7 +16,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Protects the equal-cell split that gives a top-slot tile the same dimensions as the clock, the
- * alignment-driven cell order (Widgets left of Display, mirroring the swipe direction), and the
+ * alignment-driven cell order (the left tile left of the right one, mirroring the swipe direction), and the
  * degenerate-input clamping so a bad measurement never produces a negative or thrown rect.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -33,68 +33,68 @@ public class TopPaneTileLayoutPolicyTest {
         TopPaneTileLayoutPolicy.Result r = TopPaneTileLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "left", true, true, 0, false);
         assertEquals(new Rect(12, 0, 116, 68), r.clock);
-        assertEquals(new Rect(128, 0, 232, 68), r.widgets);
-        assertEquals(new Rect(244, 0, 348, 68), r.display);
-        assertEqualCellWidths(r.clock, r.widgets, r.display);
-        assertCellsFillUsableWidth(r.clock, r.widgets, r.display);
+        assertEquals(new Rect(128, 0, 232, 68), r.left);
+        assertEquals(new Rect(244, 0, 348, 68), r.right);
+        assertEqualCellWidths(r.clock, r.left, r.right);
+        assertCellsFillUsableWidth(r.clock, r.left, r.right);
     }
 
     @Test
     public void threeCells_centerAlignment_putsClockInTheMiddle() {
         TopPaneTileLayoutPolicy.Result r = TopPaneTileLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "center", true, true, 0, false);
-        assertEquals(new Rect(12, 0, 116, 68), r.widgets);
+        assertEquals(new Rect(12, 0, 116, 68), r.left);
         assertEquals(new Rect(128, 0, 232, 68), r.clock);
-        assertEquals(new Rect(244, 0, 348, 68), r.display);
-        assertEqualCellWidths(r.clock, r.widgets, r.display);
-        assertCellsFillUsableWidth(r.widgets, r.clock, r.display);
+        assertEquals(new Rect(244, 0, 348, 68), r.right);
+        assertEqualCellWidths(r.clock, r.left, r.right);
+        assertCellsFillUsableWidth(r.left, r.clock, r.right);
     }
 
     @Test
     public void threeCells_rightAlignment_putsClockLast() {
         TopPaneTileLayoutPolicy.Result r = TopPaneTileLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "right", true, true, 0, false);
-        assertEquals(new Rect(12, 0, 116, 68), r.widgets);
-        assertEquals(new Rect(128, 0, 232, 68), r.display);
+        assertEquals(new Rect(12, 0, 116, 68), r.left);
+        assertEquals(new Rect(128, 0, 232, 68), r.right);
         assertEquals(new Rect(244, 0, 348, 68), r.clock);
-        assertEqualCellWidths(r.clock, r.widgets, r.display);
-        assertCellsFillUsableWidth(r.widgets, r.display, r.clock);
+        assertEqualCellWidths(r.clock, r.left, r.right);
+        assertCellsFillUsableWidth(r.left, r.right, r.clock);
     }
 
     @Test
-    public void twoCells_widgetsTileOnly_forAllThreeAlignments() {
+    public void twoCells_leftTileOnly_forAllThreeAlignments() {
         for (String alignment : new String[] {"left", "center", "right"}) {
             TopPaneTileLayoutPolicy.Result r = TopPaneTileLayoutPolicy.calculate(
                 WIDTH, HEIGHT, GUTTER, GAP, alignment, true, false, 0, false);
-            assertTrue(alignment, r.display.isEmpty());
-            assertFalse(alignment, r.widgets.isEmpty());
+            assertTrue(alignment, r.right.isEmpty());
+            assertFalse(alignment, r.left.isEmpty());
             assertFalse(alignment, r.clock.isEmpty());
-            assertEquals(alignment, r.clock.width(), r.widgets.width());
-            assertCellsFillUsableWidth(r.clock.left < r.widgets.left ? r.clock : r.widgets,
-                r.clock.left < r.widgets.left ? r.widgets : r.clock);
+            assertEquals(alignment, r.clock.width(), r.left.width());
+            assertCellsFillUsableWidth(r.clock.left < r.left.left ? r.clock : r.left,
+                r.clock.left < r.left.left ? r.left : r.clock);
             // "left" puts the clock in the first of the two cells; "center"/"right" (both
             // collapse to the same single trailing cell when there are only two) put it last.
             if ("left".equals(alignment)) {
-                assertTrue(r.clock.left < r.widgets.left);
+                assertTrue(r.clock.left < r.left.left);
             } else {
-                assertTrue(r.widgets.left < r.clock.left);
+                assertTrue(r.left.left < r.clock.left);
             }
         }
     }
 
     @Test
-    public void twoCells_displayTileOnly_forAllThreeAlignments() {
+    public void twoCells_rightTileOnly_forAllThreeAlignments() {
         for (String alignment : new String[] {"left", "center", "right"}) {
             TopPaneTileLayoutPolicy.Result r = TopPaneTileLayoutPolicy.calculate(
                 WIDTH, HEIGHT, GUTTER, GAP, alignment, false, true, 0, false);
-            assertTrue(alignment, r.widgets.isEmpty());
-            assertFalse(alignment, r.display.isEmpty());
+            assertTrue(alignment, r.left.isEmpty());
+            assertFalse(alignment, r.right.isEmpty());
             assertFalse(alignment, r.clock.isEmpty());
-            assertEquals(alignment, r.clock.width(), r.display.width());
+            assertEquals(alignment, r.clock.width(), r.right.width());
             if ("left".equals(alignment)) {
-                assertTrue(r.clock.left < r.display.left);
+                assertTrue(r.clock.left < r.right.left);
             } else {
-                assertTrue(r.display.left < r.clock.left);
+                assertTrue(r.right.left < r.clock.left);
             }
         }
     }
@@ -105,8 +105,8 @@ public class TopPaneTileLayoutPolicyTest {
             TopPaneTileLayoutPolicy.Result r = TopPaneTileLayoutPolicy.calculate(
                 WIDTH, HEIGHT, GUTTER, GAP, alignment, false, false, 0, false);
             assertEquals(alignment, new Rect(GUTTER, 0, WIDTH - GUTTER, HEIGHT), r.clock);
-            assertTrue(alignment, r.widgets.isEmpty());
-            assertTrue(alignment, r.display.isEmpty());
+            assertTrue(alignment, r.left.isEmpty());
+            assertTrue(alignment, r.right.isEmpty());
         }
     }
 
@@ -115,9 +115,9 @@ public class TopPaneTileLayoutPolicyTest {
         TopPaneTileLayoutPolicy.Result r = TopPaneTileLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "left", true, true, 0, false);
         assertEquals(GUTTER, r.clock.left);
-        assertEquals(WIDTH - GUTTER, r.display.right);
-        assertEquals(GAP, r.widgets.left - r.clock.right);
-        assertEquals(GAP, r.display.left - r.widgets.right);
+        assertEquals(WIDTH - GUTTER, r.right.right);
+        assertEquals(GAP, r.left.left - r.clock.right);
+        assertEquals(GAP, r.right.left - r.left.right);
     }
 
     @Test
@@ -127,12 +127,12 @@ public class TopPaneTileLayoutPolicyTest {
         TopPaneTileLayoutPolicy.Result rtl = TopPaneTileLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "left", true, true, 0, true);
         assertMirrored(ltr.clock, rtl.clock);
-        assertMirrored(ltr.widgets, rtl.widgets);
-        assertMirrored(ltr.display, rtl.display);
+        assertMirrored(ltr.left, rtl.left);
+        assertMirrored(ltr.right, rtl.right);
         // Logical order is unchanged: the clock was the leftmost logical cell, so mirroring
-        // makes it the rightmost on screen, and display (rightmost logically) becomes leftmost.
-        assertTrue(rtl.clock.left > rtl.widgets.left);
-        assertTrue(rtl.display.left < rtl.widgets.left);
+        // makes it the rightmost on screen, and the right tile (rightmost logically) becomes leftmost.
+        assertTrue(rtl.clock.left > rtl.left.left);
+        assertTrue(rtl.right.left < rtl.left.left);
     }
 
     @Test
@@ -171,8 +171,8 @@ public class TopPaneTileLayoutPolicyTest {
         TopPaneTileLayoutPolicy.Result hugeGap = TopPaneTileLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, 1000, "left", true, true, 100, false);
         assertNoNegativeRects(hugeGap);
-        assertTrue(hugeGap.widgets.isEmpty());
-        assertTrue(hugeGap.display.isEmpty());
+        assertTrue(hugeGap.left.isEmpty());
+        assertTrue(hugeGap.right.isEmpty());
         assertEquals(WIDTH - 2 * GUTTER, hugeGap.clock.width());
     }
 
@@ -204,8 +204,8 @@ public class TopPaneTileLayoutPolicyTest {
 
     private static void assertNoNegativeRects(TopPaneTileLayoutPolicy.Result r) {
         assertNoNegativeRect(r.clock);
-        assertNoNegativeRect(r.widgets);
-        assertNoNegativeRect(r.display);
+        assertNoNegativeRect(r.left);
+        assertNoNegativeRect(r.right);
     }
 
     private static void assertNoNegativeRect(Rect rect) {

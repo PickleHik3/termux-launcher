@@ -149,9 +149,9 @@ public class PaneWallControllerTest {
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
         assertTrue(controller.goTo("left"));
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
-        // Past the leftmost place there is nowhere to go, so "left" keeps the wall where it is.
-        controller.goTo("left");
-        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        // Three places form a ring: left of the leftmost is the rightmost.
+        assertTrue(controller.goTo("left"));
+        assertEquals(PaneWallPage.DISPLAY, controller.currentPage());
         assertFalse(controller.goTo("nowhere"));
         controller.returnToTerminal(false);
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());

@@ -162,12 +162,11 @@ public final class PaneWallLayout extends ViewGroup {
         if (!mPages.contains(page)) return false;
         interruptDrag();
         if (page == mCurrent && mOffsetPx == 0f) return true;
-        int from = mPages.indexOf(mCurrent);
-        int to = mPages.indexOf(page);
         // Carry the current visual position across the page change: the new page's rest is one
         // width away per step, so the wall keeps drawing where it already was and springs from
-        // there instead of jumping.
-        mOffsetPx += (to - from) * (float) getWidth();
+        // there instead of jumping. On a ring the step is the shorter way round, which is also
+        // the side the page's tile sits on.
+        mOffsetPx += PaneWallPolicy.relativePosition(mPages, mCurrent, page) * (float) getWidth();
         mCurrent = page;
         notifyPageChanged();
         if (!animate || mReducedMotion || getWidth() <= 0) {
@@ -288,16 +287,18 @@ public final class PaneWallLayout extends ViewGroup {
      */
     private void applyPagePositions() {
         int width = getWidth();
-        int currentIndex = Math.max(0, mPages.indexOf(mCurrent));
         boolean moving = isMoving();
         for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
             View view = entry.getValue();
-            int index = mPages.indexOf(entry.getKey());
-            if (index < 0) {
+            if (!mPages.contains(entry.getKey())) {
                 view.setVisibility(GONE);
                 continue;
             }
-            float x = (index - currentIndex) * (float) width + mOffsetPx;
+            // On a ring each page is placed the shorter way round from the current one, so the
+            // page past the outer edge is already waiting on the other side when a drag reaches
+            // for it.
+            float x = PaneWallPolicy.relativePosition(mPages, mCurrent, entry.getKey())
+                * (float) width + mOffsetPx;
             view.setTranslationX(x);
             boolean onScreen = width <= 0 || Math.abs(x) < width;
             view.setVisibility(onScreen || moving ? VISIBLE : INVISIBLE);

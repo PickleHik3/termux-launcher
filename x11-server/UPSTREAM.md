@@ -35,6 +35,10 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
 
 ## Deviations in the files that are vendored
 
+- **`LorieHost.primePrefs(Context)` (new)** and `release()` keeping the `Prefs`: the launcher's
+  Display page is on the wall — measured, which reads the resolution preference through
+  `getPrefs()` — while the display is switched off and no host exists. Upstream's view is never
+  in that position, because its activity is the host.
 - **`LorieHost` (new)** stands where `MainActivity` did. It carries the exact names the view and
   input classes already use — `getPrefs()`, `prefs`, `handler`, `getInstance()`, `findActivity()`,
   `getLorieView()`, `mInputHandler`, `getRealMetrics()`, `toggleKeyboardVisibility()`,

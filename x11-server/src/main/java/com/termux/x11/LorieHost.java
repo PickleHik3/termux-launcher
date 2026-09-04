@@ -73,12 +73,21 @@ public class LorieHost extends ContextWrapper {
 
     /** Drop the host: the page has gone away and nothing may reach a stale view through it. */
     public void release() {
-        if (instance == this) {
-            instance = null;
-            prefs = null;
-        }
+        if (instance == this) instance = null;
+        // The preferences stay: the page's view outlives its host (the wall keeps the Display
+        // place whether or not a display can run there) and measures itself through them.
         mInputHandler = null;
         view = null;
+    }
+
+    /**
+     * Make the preferences readable before any host exists. The launcher's Display page is on
+     * the wall — and so measured, which reads the display resolution preference — while the
+     * display is switched off and no host has been built; upstream's view could never be in
+     * that position, because its activity is the host.
+     */
+    public static void primePrefs(@NonNull Context context) {
+        if (prefs == null) prefs = new Prefs(context.getApplicationContext());
     }
 
     @Nullable

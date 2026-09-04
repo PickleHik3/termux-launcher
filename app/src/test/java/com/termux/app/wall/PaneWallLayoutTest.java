@@ -135,8 +135,40 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void aDragPastTheOuterPageSpringsBack() {
+    public void threePagesWrapSoTheOuterPageHasANeighbourOnBothSides() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.goTo(PaneWallPage.DISPLAY, false);
+        // From the rightmost place the Widgets page waits on the right, the shorter way round.
+        assertEquals(WIDTH, widgets.getTranslationX(), EPS);
+        assertEquals(-WIDTH, terminal.getTranslationX(), EPS);
+        wall.beginDrag();
+        wall.dragTo(-200f);
+        assertEquals("the wrapped page slides in one to one, no rubber band",
+            WIDTH - 200f, widgets.getTranslationX(), EPS);
+        assertEquals(View.VISIBLE, widgets.getVisibility());
+        wall.endDrag(-10_000f);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void aPageChangeAcrossTheRingSlidesTheShortWayRound() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.setReducedMotion(false);
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+
+        // Widgets -> Display: one step to the left on the ring, so the Display page starts one
+        // width to the left and the Widgets page slides off to the right.
+        wall.goTo(PaneWallPage.DISPLAY, true);
+        assertTrue(wall.isMoving());
+        assertEquals(-WIDTH, display.getTranslationX(), EPS);
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void aTwoPageWallStillRubberBandsAtItsEnd() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), false, true);
         wall.goTo(PaneWallPage.DISPLAY, false);
         wall.beginDrag();
         wall.dragTo(-WIDTH);

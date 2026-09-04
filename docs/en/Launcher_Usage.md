@@ -59,10 +59,13 @@ as new attention.
 
 ## Move between the terminal and the widget grid
 
-The terminal is one of a row of places. Swipe left or right anywhere on the status surface to move
-between them, or expand the status panel and tap a button — **Widgets** on the left, and
-**Display** once an embedded Linux display is running. The button of the place you are on is
-filled in; tapping it again brings the terminal back, and so does the Home key.
+The terminal is one of three places in a ring — Widgets, Terminal, Display — so from any of them
+the other two are one step away, one to each side. Swipe left or right anywhere on the status
+surface to move between them, or expand the status panel and tap a button: the two buttons name
+the places beside the one you are on, each on the side it slides in from. From the terminal they
+read **Widgets** and **Display**; from the widget grid, **Display** and **Terminal**; from the
+display, **Terminal** and **Widgets**. The Display button is dimmed until a display is running,
+and shows a dot and a × while one is. The Home key always brings the terminal back.
 
 Exactly one place is on screen at a time, and the terminal never changes size for the others, so
 nothing reflows in your shells when you move. Your session keeps running while you are away.

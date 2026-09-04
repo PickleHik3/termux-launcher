@@ -10832,33 +10832,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isWidgetsEnabled() {
                     return mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled();
                 }
-                @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
+                // The Display place exists in every build that carries the server; the setting
+                // decides whether a display can run there, not whether the place is on the wall.
+                @Override public boolean isDisplayEnabled() { return com.termux.BuildConfig.X11_SERVER; }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(
                             page == com.termux.app.wall.PaneWallPage.WIDGETS);
                     }
-                    // The display's surface follows the page: a hidden page holds no
-                    // screen-sized buffer, and the server keeps its clients either way.
-                    com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-                        ? null : mPaneWallController.displayPage();
-                    if (mX11Display != null && display != null) {
-                        if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
-                            mX11Display.attachView(display.display());
-                            display.display().requestFocus();
-                            // The in-app keyboard and the extra-keys row type into X while the
-                            // page is showing; the terminal never sees those values.
-                            if (mInAppKeyboard != null) {
-                                mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
-                            }
-                        } else {
-                            mX11Display.detachView();
-                            if (mInAppKeyboard != null) {
-                                mInAppKeyboard.setKeyValueInterceptor(null);
-                            }
-                        }
-                    }
+                    syncDisplayPageAttachment(page);
                 }
                 @Override public void onWallDragInterrupted() {
                     // A tile tap, wall.go or Home moved the wall under a finger that was dragging
@@ -10874,7 +10857,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
-                    syncWallTileSelection();
+                    syncWallTiles();
                     // Nothing on a widget grid takes typing, so the keyboard goes away with the
                     // terminal and comes back with it. A widget's own text field asks for the
                     // system IME through onWidgetEditorFocused instead.
@@ -10900,7 +10883,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled()) {
             mPaneWallController.attachWidgetsPage(getLayoutInflater());
         }
-        if (isX11DisplayEnabled()) createX11DisplayController();
+        if (com.termux.BuildConfig.X11_SERVER) attachDisplayPage();
         mPaneWallController.applyStyle(paneSurfaceStyle());
         if (mPendingWallPage != null) {
             Bundle state = new Bundle();
@@ -10911,50 +10894,69 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The wall's two navigation tiles in the expanded status bar: which of them this install
-     * offers, what they are shaped like, and which one is the place on screen.
+     * The wall's two navigation tiles in the expanded status bar. They are the two places beside
+     * the one on screen — the left tile is the place to the left, the right tile the place to the
+     * right — so a tile sits on the side its page slides in from, and the place you are on never
+     * has a tile of its own. On a three-place wall that is always one of each: from the terminal
+     * Widgets and Display, from Widgets Display and Terminal, from Display Terminal and Widgets.
      */
     private void refreshWallTiles() {
         View slotView = findViewById(R.id.terminal_top_widget_area);
         if (!(slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot)) return;
         com.termux.app.statusbar.TopPaneWidgetSlot slot =
             (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
-        java.util.List<com.termux.app.wall.PaneWallPage> pages;
-        if (mPaneWallController == null) {
-            pages = java.util.Collections.emptyList();
-        } else {
+        if (mPaneWallController != null) {
             // A preference sync can have taken a place away or given one back.
             mPaneWallController.refreshPages();
-            pages = mPaneWallController.pages();
             syncWallGestureAvailability();
         }
         slot.setClockAlignment(mPreferences == null
             ? null : mPreferences.getTopPaneClockAlignment());
+        syncWallTiles();
+    }
+
+    /** Point the two tiles at the places beside the current one, and dress them for it. */
+    private void syncWallTiles() {
+        View slotView = findViewById(R.id.terminal_top_widget_area);
+        if (!(slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot)) return;
+        com.termux.app.statusbar.TopPaneWidgetSlot slot =
+            (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
+        com.termux.app.wall.PaneWallPage left = null;
+        com.termux.app.wall.PaneWallPage right = null;
+        if (mPaneWallController != null) {
+            java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
+            com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
+            for (com.termux.app.wall.PaneWallPage page
+                    : com.termux.app.wall.PaneWallPolicy.tiles(pages, current)) {
+                if (com.termux.app.wall.PaneWallPolicy.relativePosition(pages, current, page) < 0) {
+                    left = page;
+                } else {
+                    right = page;
+                }
+            }
+        }
         slot.setWallTiles(mPreferences != null && mPreferences.isTopPaneWallTilesEnabled(),
-            pages.contains(com.termux.app.wall.PaneWallPage.WIDGETS),
-            pages.contains(com.termux.app.wall.PaneWallPage.DISPLAY));
-        wireWallTile(slot.widgetsTile(), com.termux.app.wall.PaneWallPage.WIDGETS,
-            R.string.termux_wall_tile_widgets);
-        wireWallTile(slot.displayTile(), com.termux.app.wall.PaneWallPage.DISPLAY,
-            R.string.termux_wall_tile_display);
-        syncWallTileSelection();
+            left != null, right != null);
+        wireWallTile(slot.leftTile(), left);
+        wireWallTile(slot.rightTile(), right);
     }
 
     private void wireWallTile(@Nullable com.termux.app.statusbar.TopPaneWallTileView tile,
-                              @NonNull com.termux.app.wall.PaneWallPage page, int labelRes) {
-        if (tile == null) return;
-        tile.setLabel(getString(labelRes));
+                              @Nullable com.termux.app.wall.PaneWallPage page) {
+        if (tile == null || page == null) return;
+        tile.setLabel(getString(wallTileLabel(page)));
         // The tiles are the status surface's own chips, so they take its resolved radius: the
         // stored -1 sentinel and a detached Status radius both land here through one accessor.
         tile.setCornerRadiusPx(resolveStatusBarCapsuleCornerRadiusPx(
             Math.max(1, tile.getHeight() > 0 ? tile.getHeight() : Math.round(dpToPx(44)))));
         boolean display = page == com.termux.app.wall.PaneWallPage.DISPLAY;
+        // The Display tile is always there; it reads dim until a display is actually running,
+        // then carries the running dot and the × that stops it.
+        tile.setRunning(display && isEmbeddedDisplayRunning());
+        tile.setDimmed(display && !isEmbeddedDisplayRunning());
         tile.setListener(new com.termux.app.statusbar.TopPaneWallTileView.Listener() {
             @Override public void onTileSelected() {
-                if (mPaneWallController == null) return;
-                // Tapping the place you are already on brings the terminal back.
-                mPaneWallController.goTo(mPaneWallController.currentPage() == page
-                    ? com.termux.app.wall.PaneWallPage.TERMINAL : page, true);
+                if (mPaneWallController != null) mPaneWallController.goTo(page, true);
             }
             @Override public void onTileStopRequested() {
                 // Only the Display tile has a × — the display is the one place with a process
@@ -10964,20 +10966,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
-    /** The current page's tile reads as selected; tapping it again returns to the terminal. */
-    private void syncWallTileSelection() {
-        View slotView = findViewById(R.id.terminal_top_widget_area);
-        if (!(slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot)) return;
-        com.termux.app.statusbar.TopPaneWidgetSlot slot =
-            (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
-        com.termux.app.wall.PaneWallPage page = mPaneWallController == null
-            ? com.termux.app.wall.PaneWallPage.TERMINAL : mPaneWallController.currentPage();
-        if (slot.widgetsTile() != null) {
-            slot.widgetsTile().setSelected(page == com.termux.app.wall.PaneWallPage.WIDGETS);
-        }
-        if (slot.displayTile() != null) {
-            slot.displayTile().setSelected(page == com.termux.app.wall.PaneWallPage.DISPLAY);
-            slot.displayTile().setRunning(isEmbeddedDisplayRunning());
+    private static int wallTileLabel(@NonNull com.termux.app.wall.PaneWallPage page) {
+        switch (page) {
+            case WIDGETS: return R.string.termux_wall_tile_widgets;
+            case DISPLAY: return R.string.termux_wall_tile_display;
+            default: return R.string.termux_wall_tile_terminal;
         }
     }
 
@@ -11023,7 +11016,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new String[]{"-f", "termux-x11 " + getPackageName()}, null,
                 TermuxConstants.TERMUX_HOME_DIR_PATH);
         }
-        syncWallTileSelection();
+        syncWallTiles();
     }
 
     /** Arm or disarm the status bar's sideways drag from what the wall can actually do. */
@@ -11044,13 +11037,71 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Wire the Display page and the connection to a server started from a shell. Nothing here
-     * starts one: a display exists because someone typed {@code termux-x11 :0}.
+     * Put the Display place on the wall. It is there whether or not the Linux display is switched
+     * on — the wall always has its three places — and says which of the two it is; the server
+     * connection behind it is only built when the setting is on.
+     */
+    private void attachDisplayPage() {
+        if (mPaneWallController == null) return;
+        com.termux.app.x11.X11PaneFrame page =
+            mPaneWallController.attachDisplayPage(getLayoutInflater());
+        if (page == null) return;
+        page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
+            @Override public void startDisplay() { startEmbeddedDisplay(); }
+            @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
+            @Override public void showDisplayMenu(float rawX, float rawY) {
+                showEmbeddedDisplayMenu();
+            }
+            @Override public boolean consumeLauncherKey(@NonNull KeyEvent event) {
+                return mTermuxTerminalViewClient != null
+                    && mTermuxTerminalViewClient.consumeLauncherChord(event);
+            }
+        });
+        page.applyEnabled(isX11DisplayEnabled());
+        if (isX11DisplayEnabled()) createX11DisplayController();
+    }
+
+    /**
+     * The display's surface follows the page: attached while the Display page is the one at
+     * rest, detached otherwise — a hidden page holds no screen-sized buffer, and the server keeps
+     * its clients either way. Called when the wall settles, and when a controller is built while
+     * the wall already rests on the page (the page's own "Turn on"), which no settle follows.
+     */
+    private void syncDisplayPageAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
+        com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (mX11Display == null || display == null) return;
+        if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
+            mX11Display.attachView(display.display());
+            display.display().requestFocus();
+            // The in-app keyboard and the extra-keys row type into X while the page is showing;
+            // the terminal never sees those values.
+            if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
+        } else {
+            mX11Display.detachView();
+            if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+        }
+    }
+
+    /** The page's own "Turn on": the setting flips and the display comes alive in place. */
+    private void turnOnEmbeddedDisplay() {
+        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
+        mPreferences.setX11DisplayEnabled(true);
+        com.termux.app.x11.X11PaneFrame page = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (page != null) page.applyEnabled(true);
+        createX11DisplayController();
+        syncWallTiles();
+    }
+
+    /**
+     * Wire the connection to a server started from a shell. Nothing here starts one: a display
+     * exists because someone typed {@code termux-x11 :0}.
      */
     private void createX11DisplayController() {
         if (mPaneWallController == null || mX11Display != null) return;
-        // The controller comes first: it builds the LorieHost the page's view looks itself up
-        // against, and a view built before its host has none.
+        com.termux.app.x11.X11PaneFrame page = mPaneWallController.displayPage();
+        if (page == null) return;
         mX11Display = new com.termux.app.x11.X11DisplayHostController(this,
             new com.termux.x11.LorieHost.Callbacks() {
                 @Override public void toggleKeyboardVisibility() {
@@ -11067,32 +11118,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
                         ? null : mPaneWallController.displayPage();
                     if (frame != null) frame.applyRunning(false);
-                    syncWallTileSelection();
+                    syncWallTiles();
                 }
             });
-        com.termux.app.x11.X11PaneFrame page =
-            mPaneWallController.attachDisplayPage(getLayoutInflater());
-        if (page == null) {
-            mX11Display.destroy();
-            mX11Display = null;
-            return;
-        }
         mX11Display.host().setLorieView(page.display());
         mX11Display.setListener(running -> {
             com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
                 ? null : mPaneWallController.displayPage();
             if (frame != null) frame.applyRunning(running);
-            syncWallTileSelection();
-        });
-        page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
-            @Override public void startDisplay() { startEmbeddedDisplay(); }
-            @Override public void showDisplayMenu(float rawX, float rawY) {
-                showEmbeddedDisplayMenu();
-            }
-            @Override public boolean consumeLauncherKey(@NonNull KeyEvent event) {
-                return mTermuxTerminalViewClient != null
-                    && mTermuxTerminalViewClient.consumeLauncherChord(event);
-            }
+            syncWallTiles();
         });
         // The prefix commands go in with the feature, and are re-checked on every start — off
         // the main thread, because it is disk I/O on the home screen's way up.
@@ -11102,11 +11136,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 showToast(getString(R.string.termux_x11_command_taken), true);
             }
         });
+        // Built while the wall already rests on the Display page — there is no settle coming to
+        // attach the surface, so do it now.
+        if (mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.DISPLAY
+                && !mPaneWallController.wall().isMoving()) {
+            syncDisplayPageAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
+        }
     }
 
     /** Run the configured start command as a background task, as if it had been typed. */
     private void startEmbeddedDisplay() {
-        if (mTermuxService == null || mPreferences == null) return;
+        if (mTermuxService == null || mPreferences == null || !isX11DisplayEnabled()) return;
         String[] argv = mPreferences.getX11DisplayCommand().split("\\s+");
         if (argv.length == 0 || argv[0].isEmpty()) return;
         String executable = argv[0].contains("/") ? argv[0]
@@ -11123,12 +11163,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (frame == null) return;
         android.widget.PopupMenu menu = new android.widget.PopupMenu(this, frame);
         boolean running = isEmbeddedDisplayRunning();
-        menu.getMenu().add(0, 1, 0, running
-            ? R.string.termux_x11_stop_display : R.string.termux_x11_start_display);
+        boolean enabled = isX11DisplayEnabled();
+        menu.getMenu().add(0, 1, 0, !enabled ? R.string.termux_x11_turn_on
+            : running ? R.string.termux_x11_stop_display : R.string.termux_x11_start_display);
         menu.getMenu().add(0, 2, 1, R.string.termux_x11_display_settings);
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
-                if (running) confirmStopEmbeddedDisplay();
+                if (!enabled) turnOnEmbeddedDisplay();
+                else if (running) confirmStopEmbeddedDisplay();
                 else startEmbeddedDisplay();
             } else {
                 openSettings();

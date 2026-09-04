@@ -34,6 +34,8 @@ public final class X11PaneFrame extends PaneContentFrame {
     public interface Host {
         /** Run the configured start command — the page's "Start display" button. */
         void startDisplay();
+        /** Switch the Linux display on — the page's button while the setting is off. */
+        default void turnOnDisplay() { }
         /** The page was long-pressed; show its menu at these screen coordinates. */
         void showDisplayMenu(float rawX, float rawY);
         /**
@@ -50,6 +52,8 @@ public final class X11PaneFrame extends PaneContentFrame {
     @Nullable private Host mHost;
     @Nullable private PaneSurfaceStyle mStyle;
     private boolean mRunning;
+    /** The Linux display setting. Off, the page is still a place — it just says so. */
+    private boolean mEnabled = true;
 
     public X11PaneFrame(Context context) {
         super(context);
@@ -62,6 +66,9 @@ public final class X11PaneFrame extends PaneContentFrame {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
+        // The display view reads its preferences while it is measured, host or no host; the
+        // page is measured whether or not a display can run on it.
+        com.termux.x11.LorieHost.primePrefs(getContext());
         mDisplay = findViewById(R.id.x11_display_view);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
@@ -69,7 +76,9 @@ public final class X11PaneFrame extends PaneContentFrame {
         PaneGlass.followLayout(mCornerMask);
         View start = findViewById(R.id.x11_pane_start);
         if (start != null) start.setOnClickListener(v -> {
-            if (mHost != null) mHost.startDisplay();
+            if (mHost == null) return;
+            if (mEnabled) mHost.startDisplay();
+            else mHost.turnOnDisplay();
         });
         setOnLongClickListener(v -> {
             if (mHost == null) return false;
@@ -90,6 +99,16 @@ public final class X11PaneFrame extends PaneContentFrame {
     }
 
     /**
+     * Whether the Linux display is switched on. The page is a place on the wall either way — the
+     * wall always has its three places — but off, it offers to turn the display on instead of to
+     * start one.
+     */
+    public void applyEnabled(boolean enabled) {
+        mEnabled = enabled;
+        if (!mRunning) applyRunning(false);
+    }
+
+    /**
      * Show the surface or the empty state. A server that exits leaves the page empty; it never
      * leaves a dead screen on the home screen.
      */
@@ -104,11 +123,15 @@ public final class X11PaneFrame extends PaneContentFrame {
         boolean ready = X11CliInstaller.hasKeyboardData();
         View message = findViewById(R.id.x11_pane_empty_message);
         if (message instanceof android.widget.TextView) {
-            ((android.widget.TextView) message).setText(ready
-                ? R.string.termux_x11_no_display : R.string.termux_x11_needs_keyboard_data);
+            ((android.widget.TextView) message).setText(!mEnabled ? R.string.termux_x11_display_off
+                : ready ? R.string.termux_x11_no_display : R.string.termux_x11_needs_keyboard_data);
         }
         View start = findViewById(R.id.x11_pane_start);
-        if (start != null) start.setVisibility(ready ? VISIBLE : GONE);
+        if (start instanceof android.widget.TextView) {
+            ((android.widget.TextView) start).setText(mEnabled
+                ? R.string.termux_x11_start_display : R.string.termux_x11_turn_on);
+        }
+        if (start != null) start.setVisibility(mEnabled && !ready ? GONE : VISIBLE);
     }
 
     public boolean isRunning() {

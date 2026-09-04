@@ -50,16 +50,65 @@ public final class PaneWallPolicy {
     }
 
     /**
-     * The neighbour {@code steps} places away over the available pages, or {@code page} itself at
-     * the outer edge. Missing pages are simply skipped, so a two-page wall has no dead swipe.
+     * Whether the wall wraps. Three places make a ring — past the Display page comes the Widgets
+     * page, and the other way round — so every place is one step from every other and the two
+     * tiles in the status bar are always "the place to my left" and "the place to my right".
+     * Two places cannot form a ring (the one other page cannot be on both sides at once), so a
+     * two-page wall stays a line with an end.
+     */
+    public static boolean isRing(@NonNull List<PaneWallPage> pages) {
+        return pages.size() >= 3;
+    }
+
+    /**
+     * Where {@code page} sits relative to {@code current}, in places: negative to the left,
+     * positive to the right, zero for itself. On a ring it is the shorter way round, so on a
+     * three-page wall every other page is exactly one place away.
+     */
+    public static int relativePosition(@NonNull List<PaneWallPage> pages,
+                                       @NonNull PaneWallPage current, @NonNull PaneWallPage page) {
+        int from = pages.indexOf(current);
+        int to = pages.indexOf(page);
+        if (from < 0 || to < 0) return 0;
+        int distance = to - from;
+        if (!isRing(pages)) return distance;
+        int count = pages.size();
+        distance = ((distance % count) + count) % count;
+        if (distance > count / 2) distance -= count;
+        return distance;
+    }
+
+    /**
+     * The neighbour {@code steps} places away over the available pages. On a ring the count
+     * wraps; on a line it stops at the outer page, which is then returned itself. Missing pages
+     * are simply skipped, so a two-page wall has no dead swipe.
      */
     @NonNull
     public static PaneWallPage neighbour(@NonNull List<PaneWallPage> pages,
                                          @NonNull PaneWallPage page, int steps) {
         int index = pages.indexOf(page);
         if (index < 0) return page;
-        int target = Math.max(0, Math.min(pages.size() - 1, index + steps));
+        int count = pages.size();
+        int target = isRing(pages)
+            ? (((index + steps) % count) + count) % count
+            : Math.max(0, Math.min(count - 1, index + steps));
         return pages.get(target);
+    }
+
+    /**
+     * The places the status bar offers as tiles from {@code current}: every other page, ordered
+     * by where it lies — the one to the left first, the one to the right last — so a tile sits
+     * on the side its page slides in from. On a ring of three that is always one of each; on a
+     * two-page wall it is the single other page, on whichever side it is.
+     */
+    @NonNull
+    public static List<PaneWallPage> tiles(@NonNull List<PaneWallPage> pages,
+                                           @NonNull PaneWallPage current) {
+        List<PaneWallPage> result = new ArrayList<>(pages.size());
+        for (PaneWallPage page : pages) if (page != current) result.add(page);
+        result.sort((a, b) -> Integer.compare(relativePosition(pages, current, a),
+            relativePosition(pages, current, b)));
+        return Collections.unmodifiableList(result);
     }
 
     /** True while a swipe in {@code steps}'s direction has somewhere to go. */

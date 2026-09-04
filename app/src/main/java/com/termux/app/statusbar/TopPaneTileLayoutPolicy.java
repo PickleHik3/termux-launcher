@@ -8,27 +8,28 @@ import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 /**
- * Where the clock and the wall's two navigation tiles (Widgets, Display) sit inside the 68dp top
- * slot, applied by {@link TopPaneWidgetSlot#onLayout}.
+ * Where the clock and the wall's two navigation tiles sit inside the 68dp top slot, applied by
+ * {@link TopPaneWidgetSlot#onLayout}.
  *
  * <p>The slot is split into N equal cells (N = 1 plus however many tiles are shown), so a tile is
  * the same dimensions as the clock rather than some incidental leftover strip. Cell order follows
- * the clock's alignment, and Widgets always sits to the left of Display, mirroring the swipe
- * direction: the Widgets page is a swipe left of the terminal, Display a swipe right.
+ * the clock's alignment, and the left tile always sits to the left of the right one: the left
+ * tile is the place a swipe right brings in, the right tile the place a swipe left brings in, so
+ * a tile sits on the side its page slides in from.
  */
 public final class TopPaneTileLayoutPolicy {
 
     /** Where the clock and the wall's navigation tiles sit in the top slot. */
     public static final class Result {
         @NonNull public final Rect clock;
-        @NonNull public final Rect widgets;
-        @NonNull public final Rect display;
+        @NonNull public final Rect left;
+        @NonNull public final Rect right;
         public final boolean clockCompact;
 
-        private Result(Rect clock, Rect widgets, Rect display, boolean clockCompact) {
+        private Result(Rect clock, Rect left, Rect right, boolean clockCompact) {
             this.clock = clock;
-            this.widgets = widgets;
-            this.display = display;
+            this.left = left;
+            this.right = right;
             this.clockCompact = clockCompact;
         }
     }
@@ -37,10 +38,10 @@ public final class TopPaneTileLayoutPolicy {
 
     @NonNull
     public static Result calculate(int widthPx, int heightPx, int gutterPx, int gapPx,
-                                    @Nullable String clockAlignment, boolean widgetsTile,
-                                    boolean displayTile, int clockFullDesiredWidthPx,
+                                    @Nullable String clockAlignment, boolean leftTile,
+                                    boolean rightTile, int clockFullDesiredWidthPx,
                                     boolean rtl) {
-        int cellCount = 1 + (widgetsTile ? 1 : 0) + (displayTile ? 1 : 0);
+        int cellCount = 1 + (leftTile ? 1 : 0) + (rightTile ? 1 : 0);
         int available = widthPx - gutterPx * 2;
         int height = Math.max(0, heightPx);
 
@@ -50,24 +51,24 @@ public final class TopPaneTileLayoutPolicy {
             && computeCells(available, gapPx, cellCount, cellLefts, cellWidths);
 
         Rect clock = new Rect();
-        Rect widgets = new Rect();
-        Rect display = new Rect();
+        Rect left = new Rect();
+        Rect right = new Rect();
         int clockCellWidth = 0;
 
         if (fits) {
             int clockIndex = clockCellIndex(clockAlignment, cellCount);
             int nextTileIndex = 0;
             for (int i = 0; i < cellCount; i++) {
-                int left = gutterPx + cellLefts[i];
-                Rect rect = new Rect(left, 0, left + cellWidths[i], height);
+                int cellLeft = gutterPx + cellLefts[i];
+                Rect rect = new Rect(cellLeft, 0, cellLeft + cellWidths[i], height);
                 if (i == clockIndex) {
                     clock = rect;
                     clockCellWidth = cellWidths[i];
-                } else if (nextTileIndex == 0 && widgetsTile) {
-                    widgets = rect;
+                } else if (nextTileIndex == 0 && leftTile) {
+                    left = rect;
                     nextTileIndex++;
                 } else {
-                    display = rect;
+                    right = rect;
                     nextTileIndex++;
                 }
             }
@@ -80,12 +81,12 @@ public final class TopPaneTileLayoutPolicy {
 
         if (rtl) {
             clock = mirror(clock, widthPx);
-            widgets = mirror(widgets, widthPx);
-            display = mirror(display, widthPx);
+            left = mirror(left, widthPx);
+            right = mirror(right, widthPx);
         }
 
         boolean clockCompact = clockFullDesiredWidthPx > clockCellWidth;
-        return new Result(clock, widgets, display, clockCompact);
+        return new Result(clock, left, right, clockCompact);
     }
 
     /**

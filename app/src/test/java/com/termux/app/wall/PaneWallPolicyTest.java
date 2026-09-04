@@ -61,9 +61,55 @@ public class PaneWallPolicyTest {
     }
 
     @Test
-    public void theOuterPagesHaveNoWrapAround() {
-        assertEquals(PaneWallPage.WIDGETS, PaneWallPolicy.neighbour(all(), PaneWallPage.WIDGETS, -1));
-        assertEquals(PaneWallPage.DISPLAY, PaneWallPolicy.neighbour(all(), PaneWallPage.DISPLAY, 1));
+    public void threePlacesFormARingThatWrapsBothWays() {
+        assertTrue(PaneWallPolicy.isRing(all()));
+        assertEquals(PaneWallPage.DISPLAY, PaneWallPolicy.neighbour(all(), PaneWallPage.WIDGETS, -1));
+        assertEquals(PaneWallPage.WIDGETS, PaneWallPolicy.neighbour(all(), PaneWallPage.DISPLAY, 1));
+        assertTrue(PaneWallPolicy.hasNeighbour(all(), PaneWallPage.WIDGETS, -1));
+        assertTrue(PaneWallPolicy.hasNeighbour(all(), PaneWallPage.DISPLAY, 1));
+        // Two steps round a ring of three is one step the other way: right twice from the
+        // terminal is the Widgets page.
+        assertEquals(PaneWallPage.WIDGETS, PaneWallPolicy.neighbour(all(), PaneWallPage.TERMINAL, 2));
+    }
+
+    @Test
+    public void twoPlacesStayALineWithAnEnd() {
+        List<PaneWallPage> twoPages = PaneWallPolicy.availablePages(false, true, false);
+        assertFalse(PaneWallPolicy.isRing(twoPages));
+        assertEquals(PaneWallPage.WIDGETS, PaneWallPolicy.neighbour(twoPages, PaneWallPage.WIDGETS, -1));
+        assertEquals(PaneWallPage.TERMINAL, PaneWallPolicy.neighbour(twoPages, PaneWallPage.TERMINAL, 1));
+        assertFalse(PaneWallPolicy.hasNeighbour(twoPages, PaneWallPage.TERMINAL, 1));
+    }
+
+    @Test
+    public void relativePositionIsTheShorterWayRoundARing() {
+        assertEquals(-1, PaneWallPolicy.relativePosition(all(), PaneWallPage.TERMINAL, PaneWallPage.WIDGETS));
+        assertEquals(1, PaneWallPolicy.relativePosition(all(), PaneWallPage.TERMINAL, PaneWallPage.DISPLAY));
+        // From the Widgets page the Display page is one step to the left, not two to the right.
+        assertEquals(-1, PaneWallPolicy.relativePosition(all(), PaneWallPage.WIDGETS, PaneWallPage.DISPLAY));
+        assertEquals(1, PaneWallPolicy.relativePosition(all(), PaneWallPage.WIDGETS, PaneWallPage.TERMINAL));
+        assertEquals(-1, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.TERMINAL));
+        assertEquals(1, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.WIDGETS));
+        assertEquals(0, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.DISPLAY));
+        // On a line the distance is what it is.
+        List<PaneWallPage> twoPages = PaneWallPolicy.availablePages(false, false, true);
+        assertEquals(-1, PaneWallPolicy.relativePosition(twoPages, PaneWallPage.DISPLAY, PaneWallPage.TERMINAL));
+    }
+
+    @Test
+    public void theTilesAreTheNeighboursLeftFirst() {
+        assertEquals(java.util.Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.DISPLAY),
+            PaneWallPolicy.tiles(all(), PaneWallPage.TERMINAL));
+        assertEquals(java.util.Arrays.asList(PaneWallPage.DISPLAY, PaneWallPage.TERMINAL),
+            PaneWallPolicy.tiles(all(), PaneWallPage.WIDGETS));
+        assertEquals(java.util.Arrays.asList(PaneWallPage.TERMINAL, PaneWallPage.WIDGETS),
+            PaneWallPolicy.tiles(all(), PaneWallPage.DISPLAY));
+        // Two places: the one other page, and the side it is on is its relative position.
+        List<PaneWallPage> twoPages = PaneWallPolicy.availablePages(false, true, false);
+        assertEquals(java.util.Collections.singletonList(PaneWallPage.WIDGETS),
+            PaneWallPolicy.tiles(twoPages, PaneWallPage.TERMINAL));
+        assertEquals(java.util.Collections.singletonList(PaneWallPage.TERMINAL),
+            PaneWallPolicy.tiles(twoPages, PaneWallPage.WIDGETS));
     }
 
     @Test

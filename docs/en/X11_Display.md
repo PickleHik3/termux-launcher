@@ -8,9 +8,10 @@ same way. This page is the short route from switching it on to running a desktop
 
 ## Turn it on
 
-1. Open **Settings → Launcher & apps** and switch on **Linux display**. The launcher restarts its
-   home screen, adds the Display place to the wall, and puts the `termux-x11` and
-   `termux-x11-preference` commands in your `$PREFIX/bin`.
+1. Swipe to the Display place and tap **Turn on**, or open **Settings → Launcher & apps** and
+   switch on **Linux display**. The Display place is always there; switching the display on puts
+   the `termux-x11` and `termux-x11-preference` commands in your `$PREFIX/bin` so a display can
+   be started from it.
 2. Install the keyboard layouts the server needs:
 
    ```sh
@@ -29,8 +30,8 @@ same way. This page is the short route from switching it on to running a desktop
    or tap **Start display** on the Display place, which runs the same command.
 4. Run something: `pkg install xorg-xeyes && xeyes`. Swipe to the Display place to see it.
 
-Switching the display off in Settings removes the Display place and takes the two commands back
-out of `$PREFIX/bin`. Running servers are not stopped.
+Switching the display off in Settings takes the two commands back out of `$PREFIX/bin`; the
+Display place stays and offers to turn it on again. Running servers are not stopped.
 
 If you already have the `termux-x11-nightly` package installed, the launcher leaves its
 `termux-x11` alone and tells you so. That package can only talk to the separate Termux:X11 app;

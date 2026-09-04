@@ -156,13 +156,13 @@
                              clock as three equal cells, and give way to pinned notifications and
                              media: the swipe remains the way across while those hold the slot. -->
                         <com.termux.app.statusbar.TopPaneWallTileView
-                            android:id="@+id/terminal_wall_tile_widgets"
+                            android:id="@+id/terminal_wall_tile_left"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:visibility="gone" />
 
                         <com.termux.app.statusbar.TopPaneWallTileView
-                            android:id="@+id/terminal_wall_tile_display"
+                            android:id="@+id/terminal_wall_tile_right"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:visibility="gone" />

@@ -58,6 +58,7 @@ public final class TopPaneWallTileView extends View {
     private String mText = "";
     private float mRadiusPx;
     private boolean mRunning;
+    private boolean mDimmed;
     private boolean mStopArmed;
 
     public TopPaneWallTileView(@NonNull Context context) {
@@ -104,6 +105,20 @@ public final class TopPaneWallTileView extends View {
 
     public boolean isRunning() {
         return mRunning;
+    }
+
+    /**
+     * The place behind this tile is there but has nothing on it yet — a display that is not
+     * running. The tile stays where it is and still navigates; it just reads quieter.
+     */
+    public void setDimmed(boolean dimmed) {
+        if (mDimmed == dimmed) return;
+        mDimmed = dimmed;
+        invalidate();
+    }
+
+    public boolean isDimmed() {
+        return mDimmed;
     }
 
     @Override
@@ -180,11 +195,14 @@ public final class TopPaneWallTileView extends View {
         float inset = Math.min(VERTICAL_INSET_DP * density, height * 0.12f);
         mShape.set(rimPx / 2f, inset + rimPx / 2f, width - rimPx / 2f, height - inset - rimPx / 2f);
         float radius = Math.min(mRadiusPx, Math.min(mShape.width(), mShape.height()) / 2f);
+        // Dim is a quieter version of the same chip, not a disabled one: half the fill and rim,
+        // and the label at the same reduced strength below.
+        int dim = mDimmed && !selected ? 2 : 1;
         mFill.setColor(fill);
-        mFill.setAlpha(selected ? SELECTED_FILL_ALPHA : FILL_ALPHA);
+        mFill.setAlpha((selected ? SELECTED_FILL_ALPHA : FILL_ALPHA) / dim);
         canvas.drawRoundRect(mShape, radius, radius, mFill);
         mRim.setColor(rim);
-        mRim.setAlpha(selected ? 255 : 128);
+        mRim.setAlpha((selected ? 255 : 128) / dim);
         mRim.setStrokeWidth(rimPx);
         canvas.drawRoundRect(mShape, radius, radius, mRim);
 
@@ -199,7 +217,7 @@ public final class TopPaneWallTileView extends View {
         }
 
         mLabel.setColor(text);
-        mLabel.setAlpha(255);
+        mLabel.setAlpha(mDimmed && !selected ? 140 : 255);
         mLabel.setTextSize(LABEL_SP * getResources().getDisplayMetrics().scaledDensity);
         float dotSpace = mRunning ? RUNNING_DOT_DP * density * 3f : 0f;
         float labelLeft = padding + dotSpace;
