@@ -1,13 +1,11 @@
 package com.termux.app.x11;
 
 import android.content.Context;
-import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
-import android.os.RemoteException;
 import android.view.KeyEvent;
 
 import androidx.annotation.NonNull;
@@ -41,13 +39,15 @@ public final class X11DisplayHostController {
 
     @NonNull private final Handler handler = new Handler(Looper.getMainLooper());
     @NonNull private final LorieHost host;
+    /** The server's Binder and the one death link on it. */
+    @NonNull private final X11ServerLink link = new X11ServerLink();
 
     @Nullable private LorieView view;
-    @Nullable private ICmdEntryInterface service;
     @Nullable private Listener listener;
     /** The announcement, kept so a page that attaches later can still reach the server. */
     @Nullable private Bundle announcement;
     private boolean running;
+    private boolean destroyed;
 
     private final Runnable connectRetry = this::tryConnect;
 
@@ -95,9 +95,10 @@ public final class X11DisplayHostController {
 
     /** Let go of everything. The server keeps running; it is not ours to stop. */
     public void destroy() {
+        destroyed = true;
         handler.removeCallbacks(connectRetry);
         X11DisplayReceiver.setController(null);
-        service = null;
+        link.release();
         announcement = null;
         view = null;
         host.release();
@@ -107,9 +108,9 @@ public final class X11DisplayHostController {
     // ---- The server's announcement ----------------------------------------------------------
 
     /** Called by {@link X11DisplayReceiver} for every {@code ACTION_START} broadcast. */
-    void onServerAnnounced(@NonNull Intent intent) {
+    void onServerAnnounced(@NonNull android.content.Intent intent) {
         Bundle bundle = intent.getBundleExtra(null);
-        if (bundle == null || bundle.getBinder(null) == null) return;
+        if (destroyed || bundle == null || bundle.getBinder(null) == null) return;
         announcement = bundle;
         connect(bundle);
     }
@@ -117,33 +118,46 @@ public final class X11DisplayHostController {
     private void connect(@NonNull Bundle bundle) {
         IBinder binder = bundle.getBinder(null);
         if (binder == null) return;
-        service = ICmdEntryInterface.Stub.asInterface(binder);
-        try {
-            binder.linkToDeath(() -> handler.post(() -> {
-                // The server exited (`pkill termux-x11`, a crash, the user's own kill). The page
-                // falls back to its empty state; it never sees a dead socket.
-                service = null;
-                announcement = null;
-                LorieView live = view;
-                if (live != null) live.connect(-1);
-                setRunning(false);
-            }), 0);
-        } catch (RemoteException ignored) {
-            // Already dead; tryConnect's own failure path handles it.
+        boolean known = link.holds(binder);
+        if (!link.accept(binder, () -> handler.post(this::onServerDied))) {
+            // Dead on arrival: a stale announcement from a server that has already gone.
+            if (announcement == bundle) announcement = null;
+            scheduleConnect();
+            return;
         }
-        // The server's own log, but only for someone who has asked to see logs: taking this
-        // pipe makes Android ask the user for access to all device logs, and a home screen must
-        // not put that dialog in front of anyone who merely started a display.
-        if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE) {
-            try {
-                ParcelFileDescriptor logcat = service.getLogcatOutput();
-                LorieView live = view;
-                if (logcat != null && live != null) live.startLogcat(logcat.detachFd());
-            } catch (Exception e) {
-                Logger.logVerbose(LOG_TAG, "No log pipe from the display server: " + e.getMessage());
-            }
-        }
+        if (!known) startLogcat();
         tryConnect();
+    }
+
+    /**
+     * The server exited (`pkill termux-x11`, a crash, the user's own kill). The page falls back
+     * to its empty state; it never sees a dead socket.
+     */
+    private void onServerDied() {
+        if (destroyed) return;
+        link.release();
+        announcement = null;
+        LorieView live = view;
+        if (live != null) live.connect(-1);
+        setRunning(false);
+    }
+
+    /**
+     * The server's own log, but only for someone who has asked to see logs: taking this pipe
+     * makes Android ask the user for access to all device logs, and a home screen must not put
+     * that dialog in front of anyone who merely started a display.
+     */
+    private void startLogcat() {
+        if (Logger.getLogLevel() < Logger.LOG_LEVEL_VERBOSE) return;
+        ICmdEntryInterface server = link.service();
+        LorieView live = view;
+        if (server == null || live == null) return;
+        try {
+            ParcelFileDescriptor logcat = server.getLogcatOutput();
+            if (logcat != null) live.startLogcat(logcat.detachFd());
+        } catch (Exception e) {
+            Logger.logVerbose(LOG_TAG, "No log pipe from the display server: " + e.getMessage());
+        }
     }
 
     /**
@@ -158,7 +172,7 @@ public final class X11DisplayHostController {
             setRunning(true);
             return;
         }
-        ICmdEntryInterface server = service;
+        ICmdEntryInterface server = link.service();
         if (server == null) {
             // No announcement yet: knock on the port so a server that is already up broadcasts.
             live.requestConnection();
@@ -177,7 +191,7 @@ public final class X11DisplayHostController {
             setRunning(true);
         } catch (Exception e) {
             Logger.logWarn(LOG_TAG, "Failed to take the X socket: " + e.getMessage());
-            service = null;
+            link.release();
             scheduleConnect();
         }
     }
