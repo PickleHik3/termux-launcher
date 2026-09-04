@@ -77,6 +77,33 @@ public class PaneWallLayoutTest {
     }
 
     @Test
+    public void theTerminalPagesMarginsAreEveryPagesMargins() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        // The activity writes the surface editor's frame insets into the pane host's margins,
+        // and checks they are margin params first — a plain ViewGroup's are not.
+        android.view.ViewGroup.LayoutParams params = terminal.getLayoutParams();
+        assertTrue("the wall hands out margin params",
+            params instanceof android.view.ViewGroup.MarginLayoutParams);
+        android.view.ViewGroup.MarginLayoutParams margins =
+            (android.view.ViewGroup.MarginLayoutParams) params;
+        margins.setMargins(24, 10, 24, 30);
+        terminal.setLayoutParams(margins);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+
+        for (View page : new View[]{widgets, terminal, display}) {
+            assertEquals(24, page.getLeft());
+            assertEquals(10, page.getTop());
+            assertEquals(WIDTH - 24, page.getRight());
+            assertEquals(HEIGHT - 30, page.getBottom());
+        }
+        // The pages still sit one full wall width apart, frame and all.
+        assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
+        assertEquals(WIDTH, display.getTranslationX(), EPS);
+    }
+
+    @Test
     public void aDragMovesTheWholeWallOneToOne() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.beginDrag();

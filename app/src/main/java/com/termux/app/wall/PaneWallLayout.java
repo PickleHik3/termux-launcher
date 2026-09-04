@@ -29,6 +29,13 @@ import java.util.Map;
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work.
+ *
+ * <p>The terminal page's margins are every page's margins. The activity lays the pane host out
+ * inside the frame insets the surface editor decides — the dock's side gap, the border's air —
+ * by setting margins on it, and the places beside it have to sit inside the same frame or the
+ * wall reads as three differently sized sheets. So the wall reads the terminal page's
+ * {@link MarginLayoutParams} and applies them to all of its pages; margins on the other pages are
+ * ignored.
  */
 public final class PaneWallLayout extends ViewGroup {
 
@@ -300,15 +307,28 @@ public final class PaneWallLayout extends ViewGroup {
 
     // ---- Layout ----------------------------------------------------------------------------
 
+    /**
+     * The frame every page sits inside: the terminal page's margins, which the activity sets from
+     * the surface editor's insets. A wall with no terminal page registered yet has no frame.
+     */
+    @NonNull
+    private MarginLayoutParams pageMargins() {
+        View terminal = mPageViews.get(PaneWallPage.TERMINAL);
+        ViewGroup.LayoutParams params = terminal == null ? null : terminal.getLayoutParams();
+        if (params instanceof MarginLayoutParams) return (MarginLayoutParams) params;
+        return new MarginLayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(width, height);
-        int childWidth = MeasureSpec.makeMeasureSpec(
-            Math.max(0, width - getPaddingLeft() - getPaddingRight()), MeasureSpec.EXACTLY);
-        int childHeight = MeasureSpec.makeMeasureSpec(
-            Math.max(0, height - getPaddingTop() - getPaddingBottom()), MeasureSpec.EXACTLY);
+        MarginLayoutParams margins = pageMargins();
+        int childWidth = MeasureSpec.makeMeasureSpec(Math.max(0, width - getPaddingLeft()
+            - getPaddingRight() - margins.leftMargin - margins.rightMargin), MeasureSpec.EXACTLY);
+        int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
+            - getPaddingBottom() - margins.topMargin - margins.bottomMargin), MeasureSpec.EXACTLY);
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child.getVisibility() == GONE) continue;
@@ -318,16 +338,42 @@ public final class PaneWallLayout extends ViewGroup {
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        int left = getPaddingLeft();
-        int top = getPaddingTop();
-        int right = Math.max(left, r - l - getPaddingRight());
-        int bottom = Math.max(top, b - t - getPaddingBottom());
+        MarginLayoutParams margins = pageMargins();
+        int left = getPaddingLeft() + margins.leftMargin;
+        int top = getPaddingTop() + margins.topMargin;
+        int right = Math.max(left, r - l - getPaddingRight() - margins.rightMargin);
+        int bottom = Math.max(top, b - t - getPaddingBottom() - margins.bottomMargin);
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child.getVisibility() == GONE) continue;
             child.layout(left, top, right, bottom);
         }
         applyPagePositions();
+    }
+
+    // The activity sets the terminal page's frame by writing margins into its layout params and
+    // checks they *are* margin params first, so the wall has to hand out that kind — a plain
+    // ViewGroup does not, and the pane host silently lost its side gap when it moved in here.
+
+    @Override
+    public LayoutParams generateLayoutParams(AttributeSet attrs) {
+        return new MarginLayoutParams(getContext(), attrs);
+    }
+
+    @Override
+    protected LayoutParams generateDefaultLayoutParams() {
+        return new MarginLayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+    }
+
+    @Override
+    protected LayoutParams generateLayoutParams(LayoutParams params) {
+        return params instanceof MarginLayoutParams ? new MarginLayoutParams((MarginLayoutParams) params)
+            : new MarginLayoutParams(params);
+    }
+
+    @Override
+    protected boolean checkLayoutParams(LayoutParams params) {
+        return params instanceof MarginLayoutParams;
     }
 
     @Override
