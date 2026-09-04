@@ -28,6 +28,17 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
 - **Tinted Theming schemes** — MIT — imported on demand from
   [tinted-theming/schemes](https://github.com/tinted-theming/schemes); palette authors remain
   credited in the downloaded scheme metadata.
+- **[termux-x11](https://github.com/termux/termux-x11)** — GPL-3.0-only — Copyright Twaik Yont
+  and termux-x11 contributors. The `lorie` library module is vendored and modified as
+  `x11-server/` and its `shell-loader` as `x11-server/loader/` (upstream commit
+  `9df8b767645aa0d0a2f2576767449df55b41962f`, recorded in `x11-server/UPSTREAM.md` with every
+  deviation); the `libXlorie.so` prebuilts under `app/src/main/jniLibs/` are built from the same
+  commit with the one patch in `ci/x11-patch/`. `libXlorie.so` statically links the freedesktop
+  components termux-x11 builds from source: the **X.Org Server**, **libX11**, **xorgproto**,
+  **libXfont2**, **libxkbfile**, **xkbcomp**, **libxcvt**, **libxshmfence**, **xtrans**,
+  **libXau**, **libXdmcp** and **libfontenc** (MIT/X11 licenses, see the notice below),
+  **pixman** (MIT), **libepoxy** (MIT), **libtirpc** (BSD-3-Clause — Copyright Sun Microsystems,
+  Inc.) and **bzip2** (bzip2 license — Copyright 1996–2019 Julian Seward).
 
 ## Bundled assets
 
@@ -126,3 +137,27 @@ NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPO
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## MIT/X11 notice for the X.Org components in libXlorie.so
+
+Copyright © The X.Org Foundation, The Open Group, Keith Packard, Red Hat, Inc., Intel Corporation,
+and the other authors named in each component's COPYING file.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice (including the next paragraph) shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Except as contained in this notice, the names of the copyright holders shall not be used in
+advertising or otherwise to promote the sale, use or other dealings in this Software without prior
+written authorization.
