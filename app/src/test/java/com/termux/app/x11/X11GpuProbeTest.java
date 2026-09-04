@@ -57,7 +57,7 @@ public class X11GpuProbeTest {
         assertEquals(X11GpuProbe.Profile.TURNIP_ZINK, best.profile);
         assertFalse(best.installed);
         assertTrue(best.packages.contains("mesa-vulkan-icd-freedreno"));
-        assertTrue(X11GpuProbe.evaluate(in).toEnv().contains("pkg install mesa mesa-vulkan-icd-freedreno"));
+        assertTrue(X11GpuProbe.evaluate(in).toEnv().contains("pkg install mesa mesa-vulkan-icd-freedreno\n"));
     }
 
     @Test public void theNewestAdrenoGetsTheConservativeSyncFlagsAndAPinnedIcd() {

@@ -233,9 +233,8 @@ public final class X11GpuProbe {
         if (in.icdFiles.size() > 1) env.add("VK_ICD_FILENAMES=" + ICD_DIR + "freedreno_icd.aarch64.json");
         boolean installed = in.mesaDri && in.hasIcd("freedreno");
         return new Recommendation(Profile.TURNIP_ZINK,
-            "a Qualcomm Adreno GPU: Turnip drives it directly and Zink puts OpenGL on top",
-            installed, Arrays.asList("mesa", "mesa-vulkan-icd-freedreno", "vulkan-loader-android"),
-            env, null);
+            "a Qualcomm Adreno GPU: Turnip drives it directly and Zink puts OpenGL on top (the Vulkan loader comes with mesa)",
+            installed, Arrays.asList("mesa", "mesa-vulkan-icd-freedreno"), env, null);
     }
 
     private static Recommendation virgl(Inputs in, boolean angle) {
@@ -267,19 +266,27 @@ public final class X11GpuProbe {
 
     // ---- Gathering ----------------------------------------------------------------------------
 
-    @Nullable private static volatile Result cached;
+    /** The one expensive input, gathered once: the GL context does not change under a running app. */
+    @Nullable private static volatile String cachedRenderer;
 
-    /** The device's answer, gathered once. Call off the main thread: it builds a GL context. */
+    /**
+     * The device's answer. Only the renderer string is cached — the prefix is read every time, so
+     * a package installed a moment ago is seen. Call off the main thread the first time: it builds
+     * a throwaway GL context.
+     */
     @NonNull
     public static Result probe(@NonNull Context context) {
-        Result result = cached;
-        if (result != null) return result;
         Inputs in = new Inputs();
         in.eglVendor = systemProperty("ro.hardware.egl");
         in.vulkanVendor = systemProperty("ro.hardware.vulkan");
         in.kgsl = new File("/dev/kgsl-3d0").exists();
         in.kgslModel = readFirstLine(new File("/sys/class/kgsl/kgsl-3d0/gpu_model"));
-        in.glRenderer = X11GlRendererProbe.rendererString();
+        String renderer = cachedRenderer;
+        if (renderer == null) {
+            renderer = X11GlRendererProbe.rendererString();
+            cachedRenderer = renderer;
+        }
+        in.glRenderer = renderer;
         String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
         in.virglServer = new File(prefix + "/bin/virgl_test_server_android").canExecute();
         in.angle = new File(prefix + "/lib/libGLESv2_angle.so").exists()
@@ -287,9 +294,7 @@ public final class X11GpuProbe {
         String[] icds = new File(ICD_DIR).list();
         in.icdFiles = icds == null ? Collections.emptyList() : Arrays.asList(icds);
         in.mesaDri = new File(prefix + "/lib/dri").isDirectory();
-        result = evaluate(in);
-        cached = result;
-        return result;
+        return evaluate(in);
     }
 
     @NonNull

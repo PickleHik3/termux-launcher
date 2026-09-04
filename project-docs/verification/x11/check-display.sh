@@ -39,8 +39,10 @@ run() {
     "export PATH=\$PREFIX/bin LD_LIBRARY_PATH=\$PREFIX/lib" \
     'mkdir -p "$TMPDIR"' \
     "$body" \
-    | "${ADB[@]}" shell run-as "$PKG" sh -c "cat > $HOME_DIR/$name.sh"
-  "${ADB[@]}" shell run-as "$PKG" "$PREFIX/bin/bash" "$HOME_DIR/$name.sh" 2>&1
+    | "${ADB[@]}" shell "run-as $PKG sh -c 'cat > $HOME_DIR/$name.sh'"
+  # One quoted string: adb shell strips a level of quoting, and an unquoted redirect runs as the
+  # shell user — which only works where adbd is root, i.e. on an emulator, never on a phone.
+  "${ADB[@]}" shell "run-as $PKG $PREFIX/bin/bash $HOME_DIR/$name.sh" 2>&1
 }
 
 cleanup() {

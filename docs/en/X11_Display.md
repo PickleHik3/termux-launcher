@@ -76,7 +76,7 @@ the proot's login shell). The launcher never sets these for you.
 
 | Profile | Packages | Export before starting the app | Also run | For |
 |---|---|---|---|---|
-| `turnip-zink` | `mesa`, `mesa-vulkan-icd-freedreno`, `vulkan-loader-android` | `MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=noconform` (add `VK_ICD_FILENAMES=$PREFIX/share/vulkan/icd.d/freedreno_icd.aarch64.json` if several ICDs are installed) | nothing | Qualcomm Adreno phones (`/dev/kgsl-3d0` exists) |
+| `turnip-zink` | `mesa`, `mesa-vulkan-icd-freedreno` (the Vulkan loader comes with mesa) | `MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=noconform` (add `VK_ICD_FILENAMES=$PREFIX/share/vulkan/icd.d/freedreno_icd.aarch64.json` if several ICDs are installed) | nothing | Qualcomm Adreno phones (`/dev/kgsl-3d0` exists) |
 | `virgl` | `virglrenderer-android`, `mesa` | `GALLIUM_DRIVER=virpipe MESA_GL_VERSION_OVERRIDE=4.3COMPAT MESA_GLES_VERSION_OVERRIDE=3.2 MESA_NO_ERROR=1 LIBGL_DRI3_DISABLE=1` | `virgl_test_server_android &` | most phones with a working Android GL driver; Mali is often unreliable |
 | `virgl-angle` | as `virgl`, plus `angle-android` | as `virgl` | `virgl_test_server_android --angle-gl &` | Mali, Xclipse and PowerVR phones where plain `virgl` misbehaves |
 | `vulkan-wrapper` | `vulkan-wrapper-android`, `mesa` | `VK_ICD_FILENAMES=$PREFIX/share/vulkan/icd.d/wrapper_icd.aarch64.json MESA_LOADER_DRIVER_OVERRIDE=zink` (Mali: add `MESA_VK_WSI_PRESENT_MODE=mailbox MESA_VK_WSI_DEBUG=blit`) | nothing | non-Adreno phones with a Vulkan driver |
