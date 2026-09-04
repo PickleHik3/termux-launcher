@@ -25,6 +25,11 @@ android {
     def releaseKeyAlias = System.getenv("TERMUX_RELEASE_KEY_ALIAS")
     def releaseKeyPassword = System.getenv("TERMUX_RELEASE_KEY_PASSWORD")
     def hasReleaseSigningConfig = releaseStoreFilePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+    // The embedded X server. Off with -Px11Server=false: the loader and libXlorie.so stay out of
+    // the APK and BuildConfig.X11_SERVER tells the app there is no display to offer.
+    // `project.` matters: inside the android block a bare hasProperty asks the extension.
+    def x11ServerEnabled = !project.hasProperty('x11Server')
+        || Boolean.parseBoolean(project.property('x11Server').toString())
 
     defaultConfig {
         minSdkVersion project.properties.minSdkVersion.toInteger()
@@ -37,6 +42,7 @@ android {
         validateVersionName(versionName)
 
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
+        buildConfigField "boolean", "X11_SERVER", String.valueOf(x11ServerEnabled)
 
         manifestPlaceholders = [
             TERMUX_PACKAGE_NAME    : "com.termux",
@@ -121,6 +127,9 @@ android {
     packagingOptions {
         jniLibs {
             useLegacyPackaging false
+            // A build without the display carries no X server: the committed prebuilts stay in
+            // the tree and out of the APK.
+            if (!x11ServerEnabled) excludes.add('**/libXlorie.so')
         }
     }
 
@@ -162,9 +171,9 @@ dependencies {
     implementation project(":terminal-view")
     implementation project(":termux-shared")
     implementation project(":inapp-keyboard")
-    // The embedded X server's Java half. Dropped with -Px11Server=false, along with the module
-    // itself (see settings.gradle) and the libXlorie.so prebuilts.
-    if (findProject(":x11-server") != null) implementation project(":x11-server")
+    // The embedded X server's Java half. Always compiled — the Display page is written against
+    // it; -Px11Server=false drops the loader and the native library instead (see settings.gradle).
+    implementation project(":x11-server")
 
     // Shizuku dependencies for privileged operations
     implementation "dev.rikka.shizuku:api:13.1.5"

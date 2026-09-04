@@ -11012,9 +11012,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController != null && mPaneWallController.canDrag());
     }
 
-    /** The embedded Linux display. Off by default; there is no Display page while it is. */
+    /**
+     * The embedded Linux display. Off by default, and never on in a build made without the
+     * server; there is no Display page while it is off.
+     */
     public boolean isX11DisplayEnabled() {
-        return mPreferences != null && mPreferences.isX11DisplayEnabled();
+        return com.termux.BuildConfig.X11_SERVER && mPreferences != null
+            && mPreferences.isX11DisplayEnabled();
     }
 
     /**
