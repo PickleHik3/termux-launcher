@@ -59,6 +59,12 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
 - **`build.gradle`** is ours: our compileSdk/minSdk/Java 11, `BuildConfig.APPLICATION_ID` from
   the edition's applicationId (the server broadcasts to and class-loads *our* APK), and the
   `generatePrefs` task carried over so the store and its schema can never disagree.
+- **`ci/x11-patch/0001-look-up-the-host-class-as-LorieHost.patch`** is the one native change.
+  The JNI surface names the host class and the `LorieView` field that holds it — the server does
+  `FindClassOrDie("com/termux/x11/MainActivity")` and reads `activity` as that type — and nothing
+  type-checks either, so the abort is at runtime, on the first `LorieView`. Two string literals
+  become `LorieHost`; `clientConnectedStateChanged()` and the view's `resetIme()` keep their names
+  and signatures. The rest of the JNI surface (`LorieView`, `CmdEntryPoint`) is untouched.
 - **`stub/`** is upstream's `shell-loader/stub` — compile-only declarations of the hidden
   framework classes `CmdEntryPoint` reaches for while it runs outside an app process.
 - Only `res/values/arrays.xml` and `res/xml/preferences.xml` are vendored from upstream's

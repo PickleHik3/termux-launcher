@@ -40,6 +40,8 @@ public class LorieHost extends ContextWrapper {
         default void setExternalKeyboardConnected(boolean connected) { }
         /** The server is gone and the page should fall back to its empty state. */
         default void onDisplayStopped() { }
+        /** An X client connected or the last one went away. */
+        default void onClientConnectedStateChanged(boolean connected) { }
     }
 
     /**
@@ -110,6 +112,17 @@ public class LorieHost extends ContextWrapper {
     @Nullable
     public LorieView getLorieView() {
         return view;
+    }
+
+    /**
+     * The X server has gained or lost its first client. Called from the server thread over JNI —
+     * the name and signature are part of that contract (see {@code ci/x11-patch/}) — so it hands
+     * over to the main thread before anything looks at a view.
+     */
+    @androidx.annotation.Keep
+    public void clientConnectedStateChanged() {
+        handler.post(() -> callbacks.onClientConnectedStateChanged(
+            view != null && view.connected()));
     }
 
     /** Upstream reads the real (not application-window) metrics to size the X screen. */
