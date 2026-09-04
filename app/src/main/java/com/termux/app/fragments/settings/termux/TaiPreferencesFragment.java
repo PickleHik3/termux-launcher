@@ -21,6 +21,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
@@ -201,7 +202,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         EditText input = buildDialogEditText(context, preference.getText(), InputType.TYPE_CLASS_TEXT, true);
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_general_prompt_title)
-            .setView(wrapDialogView(context, null, input))
+            .setView(dialogScroll(context, wrapDialogView(context, null, input)))
             .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) ->
                 preference.setText(input.getText().toString()))
             .setNegativeButton(android.R.string.cancel, null)
@@ -473,7 +474,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_endpoint_access_title)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(android.R.string.ok, null)
             .show();
     }
@@ -547,6 +548,17 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             input.setSelection(value.length());
         }
         return input;
+    }
+
+    /**
+     * Wraps dialog content so the button bar stays reachable. AlertDialog scrolls its message text
+     * but never a custom view, so a tall layout — the import flow stacks seventeen rows — pushes
+     * the buttons off the bottom of the screen. Content that already fits is unaffected.
+     */
+    private ScrollView dialogScroll(Context context, View content) {
+        ScrollView scroll = new ScrollView(context);
+        scroll.addView(content);
+        return scroll;
     }
 
     private LinearLayout wrapDialogView(Context context, CharSequence header, View input) {
@@ -681,7 +693,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_mnn_custom_download_title)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
                 String url = input.getText().toString().trim();
                 if (!url.startsWith("https://")) {
@@ -978,7 +990,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_huggingface_token_title)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                 context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
@@ -1318,7 +1330,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
         if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend) && !capabilities.mnnSupported) {
             String reason = capabilities.mnnUnsupportedReason;
-            AppNotice.show(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
+            AppNotice.show(context, reason == null ? context.getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
             return;
         }
         SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
@@ -1441,6 +1453,19 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         layout.setOrientation(LinearLayout.VERTICAL);
         int padding = (int) (20 * context.getResources().getDisplayMetrics().density);
         layout.setPadding(padding, 0, padding, 0);
+
+        // The dialog's own message, carried inside the scrolled view rather than passed to
+        // setMessage(). AlertDialogLayout only gives one panel the height left over from the
+        // buttons, and a dialog holding both a message and a custom view has two, so it falls back
+        // to plain LinearLayout measurement — which let this flow's seventeen rows push Import and
+        // Cancel off the bottom of the screen. One panel, and the buttons stay put.
+        TextView dialogMessage = new TextView(context);
+        dialogMessage.setText(R.string.termux_ai_model_import_dialog_message);
+        dialogMessage.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        dialogMessage.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+        dialogMessage.setPadding(0, 0, 0, Math.round(
+            12 * context.getResources().getDisplayMetrics().density));
+        layout.addView(dialogMessage);
 
         // Backend is auto-detected: a Hugging Face URL resolves to LiteRT or MNN from the repo's
         // files; a local file is always a LiteRT package. No manual toggle.
@@ -1584,8 +1609,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         tokenLine.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorPrimary));
         Runnable refreshTokenLine = () -> tokenLine.setText(
             new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()
-                ? getString(R.string.termux_ai_model_import_token_unset)
-                : getString(R.string.termux_ai_model_import_token_set));
+                ? context.getString(R.string.termux_ai_model_import_token_unset)
+                : context.getString(R.string.termux_ai_model_import_token_set));
         refreshTokenLine.run();
         tokenLine.setOnClickListener(v -> promptHuggingFaceToken(context, refreshTokenLine));
         layout.addView(tokenLine);
@@ -1620,8 +1645,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_model_import_dialog_title)
-            .setMessage(R.string.termux_ai_model_import_dialog_message)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(R.string.termux_ai_model_import_verify_action, null)
             .setNeutralButton(R.string.termux_ai_model_import_choose_file, null)
             .setNegativeButton(android.R.string.cancel, null)
@@ -1756,12 +1780,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         input.setText(new TaiSettings(context).getHuggingFaceToken());
         input.setSelectAllOnFocus(true);
         LinearLayout layout = wrapDialogView(context,
-            getString(R.string.termux_ai_huggingface_token_dialog_message), input);
+            context.getString(R.string.termux_ai_huggingface_token_dialog_message), input);
         layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_permissions_hint));
         layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_gated_hint));
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_huggingface_token_title)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
                 new TaiSettings(context).setHuggingFaceToken(input.getText().toString().trim());
                 if (onSaved != null) onSaved.run();
@@ -1840,7 +1864,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     // Gated/private repo: prompt for a token, then retry the same import.
                     new MaterialAlertDialogBuilder(currentContext)
                         .setTitle(R.string.termux_ai_huggingface_token_title)
-                        .setMessage(finalResult.optString("message", getString(R.string.termux_ai_model_import_gated_message)))
+                        .setMessage(finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_import_gated_message)))
                         .setPositiveButton(R.string.termux_ai_huggingface_token_title,
                             (d, w) -> promptHuggingFaceToken(currentContext, () -> {
                                 draft.hfToken = new TaiSettings(currentContext).getHuggingFaceToken();
