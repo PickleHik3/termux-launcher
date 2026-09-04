@@ -148,9 +148,8 @@ Keyboard height is remembered separately for portrait and landscape.
   resolution, text size, clipboard sharing, starting the display with the launcher, the start
   command, pointing new shells at the display, two compatibility switches, and what your GPU can
   do for Linux apps.
-- **Status bar buttons:** show the two place buttons in the expanded status bar — always the two
-  places beside the one you are on. They give way to a media session or a pinned notification;
-  the swipe always works.
+- **Place switch:** show the Widgets · Terminal · Display switch beside the clock in the expanded
+  status bar. It gives way to a media session or a pinned notification; the swipe always works.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

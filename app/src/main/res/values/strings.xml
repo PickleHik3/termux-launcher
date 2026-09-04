@@ -171,8 +171,8 @@
     <string name="settings_home_widgets_header">Home widgets</string>
     <string name="settings_widget_pane_enabled_title">Widget pane</string>
     <string name="settings_widget_pane_enabled_summary">Keep a page of home screen widgets beside the terminal.</string>
-    <string name="settings_wall_tiles_title">Status bar buttons</string>
-    <string name="settings_wall_tiles_summary">Show Widgets and Display buttons in the expanded status bar.</string>
+    <string name="settings_wall_tiles_title">Place switch</string>
+    <string name="settings_wall_tiles_summary">Show the Widgets, Terminal and Display switch in the expanded status bar.</string>
     <string name="termux_x11_no_display">No display is running.</string>
     <string name="termux_x11_needs_keyboard_data">The display needs the keyboard layout package before it can start; the Linux display guide names it.</string>
     <string name="termux_x11_start_display">Start display</string>

@@ -152,17 +152,12 @@
                             android:contentDescription="@string/termux_top_pane_media_content_description"
                             android:visibility="gone" />
 
-                        <!-- The pane wall's two navigation tiles. They share the slot with the
-                             clock as three equal cells, and give way to pinned notifications and
-                             media: the swipe remains the way across while those hold the slot. -->
-                        <com.termux.app.statusbar.TopPaneWallTileView
-                            android:id="@+id/terminal_wall_tile_left"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:visibility="gone" />
-
-                        <com.termux.app.statusbar.TopPaneWallTileView
-                            android:id="@+id/terminal_wall_tile_right"
+                        <!-- The pane wall's place switch: one pill, a segment per place, the thumb
+                             under the one on screen. It hugs its content beside the clock and gives
+                             way to pinned notifications and media: the swipe remains the way across
+                             while those hold the slot. -->
+                        <com.termux.app.statusbar.WallPlaceSwitchView
+                            android:id="@+id/terminal_wall_place_switch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:visibility="gone" />

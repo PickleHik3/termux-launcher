@@ -10845,6 +10845,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     syncDisplayPageAttachment(page);
                 }
+                @Override public void onWallOffsetChanged(float offsetPx) {
+                    syncPlaceSwitchThumb(offsetPx);
+                }
                 @Override public void onWallDragInterrupted() {
                     // A tile tap, wall.go or Home moved the wall under a finger that was dragging
                     // it; both surfaces that can drive a drag let go of that finger.
@@ -10859,7 +10862,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
-                    syncWallTiles();
+                    syncPlaceSwitch();
                     // Nothing on a widget grid takes typing, so the keyboard goes away with the
                     // terminal and comes back with it. A widget's own text field asks for the
                     // system IME through onWidgetEditorFocused instead.
@@ -10896,11 +10899,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The wall's two navigation tiles in the expanded status bar. They are the two places beside
-     * the one on screen — the left tile is the place to the left, the right tile the place to the
-     * right — so a tile sits on the side its page slides in from, and the place you are on never
-     * has a tile of its own. On a three-place wall that is always one of each: from the terminal
-     * Widgets and Display, from Widgets Display and Terminal, from Display Terminal and Widgets.
+     * The wall's place switch in the expanded status bar: one pill with a segment per place —
+     * Widgets, Terminal, Display, in spatial order — and a thumb under the one on screen that the
+     * wall's own offset drives, so a drag moves it with the finger and a tap's slide moves it
+     * with the spring.
      */
     private void refreshWallTiles() {
         View slotView = findViewById(R.id.terminal_top_widget_area);
@@ -10914,58 +10916,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         slot.setClockAlignment(mPreferences == null
             ? null : mPreferences.getTopPaneClockAlignment());
-        syncWallTiles();
+        syncPlaceSwitch();
     }
 
-    /** Point the two tiles at the places beside the current one, and dress them for it. */
-    private void syncWallTiles() {
+    /** Point the switch at the wall's places and dress it for the display's state. */
+    private void syncPlaceSwitch() {
         View slotView = findViewById(R.id.terminal_top_widget_area);
         if (!(slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot)) return;
         com.termux.app.statusbar.TopPaneWidgetSlot slot =
             (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
-        com.termux.app.wall.PaneWallPage left = null;
-        com.termux.app.wall.PaneWallPage right = null;
-        if (mPaneWallController != null) {
-            java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
-            com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
-            for (com.termux.app.wall.PaneWallPage page
-                    : com.termux.app.wall.PaneWallPolicy.tiles(pages, current)) {
-                if (com.termux.app.wall.PaneWallPolicy.relativePosition(pages, current, page) < 0) {
-                    left = page;
-                } else {
-                    right = page;
-                }
-            }
-        }
-        slot.setWallTiles(mPreferences != null && mPreferences.isTopPaneWallTilesEnabled(),
-            left != null, right != null);
-        wireWallTile(slot.leftTile(), left);
-        wireWallTile(slot.rightTile(), right);
-    }
-
-    private void wireWallTile(@Nullable com.termux.app.statusbar.TopPaneWallTileView tile,
-                              @Nullable com.termux.app.wall.PaneWallPage page) {
-        if (tile == null || page == null) return;
-        tile.setLabel(getString(wallTileLabel(page)));
-        // The tiles are the status surface's own chips, so they take its resolved radius: the
+        com.termux.app.statusbar.WallPlaceSwitchView place = slot.placeSwitch();
+        // One place is no choice: the switch only appears with somewhere to go.
+        boolean available = mPaneWallController != null && mPaneWallController.pages().size() > 1;
+        slot.setPlaceSwitchRequested(available && mPreferences != null
+            && mPreferences.isTopPaneWallTilesEnabled());
+        if (place == null || mPaneWallController == null) return;
+        java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
+        java.util.List<String> labels = new java.util.ArrayList<>(pages.size());
+        for (com.termux.app.wall.PaneWallPage page : pages) labels.add(getString(wallTileLabel(page)));
+        place.setPlaces(pages, labels);
+        // The switch is one of the status surface's chips, so it takes its resolved radius: the
         // stored -1 sentinel and a detached Status radius both land here through one accessor.
-        tile.setCornerRadiusPx(resolveStatusBarCapsuleCornerRadiusPx(
-            Math.max(1, tile.getHeight() > 0 ? tile.getHeight() : Math.round(dpToPx(44)))));
-        boolean display = page == com.termux.app.wall.PaneWallPage.DISPLAY;
-        // The Display tile is always there; it reads dim until a display is actually running,
-        // then carries the running dot and the × that stops it.
-        tile.setRunning(display && isEmbeddedDisplayRunning());
-        tile.setDimmed(display && !isEmbeddedDisplayRunning());
-        tile.setListener(new com.termux.app.statusbar.TopPaneWallTileView.Listener() {
-            @Override public void onTileSelected() {
+        place.setCornerRadiusPx(resolveStatusBarCapsuleCornerRadiusPx(
+            Math.max(1, place.getHeight() > 0 ? place.getHeight() : Math.round(dpToPx(36)))));
+        place.setDisplayRunning(isEmbeddedDisplayRunning());
+        if (!mPaneWallController.wall().isMoving()) {
+            place.setThumbPosition(pages.indexOf(mPaneWallController.currentPage()));
+        }
+        place.setListener(new com.termux.app.statusbar.WallPlaceSwitchView.Listener() {
+            @Override public void onPlaceSelected(@NonNull com.termux.app.wall.PaneWallPage page) {
                 if (mPaneWallController != null) mPaneWallController.goTo(page, true);
             }
-            @Override public void onTileStopRequested() {
-                // Only the Display tile has a × — the display is the one place with a process
-                // behind it to stop.
-                if (display) confirmStopEmbeddedDisplay();
+            @Override public void onDisplayStopRequested() {
+                confirmStopEmbeddedDisplay();
             }
         });
+    }
+
+    /** The wall moved; the thumb follows. */
+    private void syncPlaceSwitchThumb(float offsetPx) {
+        View slotView = findViewById(R.id.terminal_top_widget_area);
+        if (!(slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot)
+            || mPaneWallController == null) return;
+        com.termux.app.statusbar.WallPlaceSwitchView place =
+            ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).placeSwitch();
+        if (place == null) return;
+        place.setThumbPosition(com.termux.app.wall.WallPlaceSwitchPolicy.thumbPosition(
+            mPaneWallController.pages(), mPaneWallController.currentPage(), offsetPx,
+            mPaneWallController.wall().getWidth()));
     }
 
     private static int wallTileLabel(@NonNull com.termux.app.wall.PaneWallPage page) {
@@ -11018,7 +11016,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new String[]{"-f", "termux-x11 " + getPackageName()}, null,
                 TermuxConstants.TERMUX_HOME_DIR_PATH);
         }
-        syncWallTiles();
+        syncPlaceSwitch();
     }
 
     /** Arm or disarm the status bar's sideways drag from what the wall can actually do. */
@@ -11106,7 +11104,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? null : mPaneWallController.displayPage();
         if (page != null) page.applyEnabled(true);
         createX11DisplayController();
-        syncWallTiles();
+        syncPlaceSwitch();
     }
 
     /**
@@ -11133,7 +11131,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
                         ? null : mPaneWallController.displayPage();
                     if (frame != null) frame.applyRunning(false);
-                    syncWallTiles();
+                    syncPlaceSwitch();
                 }
             });
         mX11Display.host().setLorieView(page.display());
@@ -11141,7 +11139,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
                 ? null : mPaneWallController.displayPage();
             if (frame != null) frame.applyRunning(running);
-            syncWallTiles();
+            syncPlaceSwitch();
             syncDisplayEnvironment();
         });
         syncDisplayEnvironment();

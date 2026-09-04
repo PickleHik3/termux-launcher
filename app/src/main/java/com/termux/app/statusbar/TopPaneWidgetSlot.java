@@ -36,8 +36,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     private static final Interpolator INTERPOLATOR = new PathInterpolator(.16f, 1f, .3f, 1f);
 
     private final Rect mClockBounds = new Rect();
-    private final Rect mLeftTileBounds = new Rect();
-    private final Rect mRightTileBounds = new Rect();
+    private final Rect mPlaceSwitchBounds = new Rect();
     private final Rect mNotificationBounds = new Rect();
     private final Rect mMediaBounds = new Rect();
 
@@ -46,14 +45,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private MediaWidgetView mMedia;
     @Nullable private PinnedNotificationIconCache mIcons;
     @Nullable private ViewPropertyAnimator mClockFade;
-    @Nullable private TopPaneWallTileView mLeftTile;
-    @Nullable private TopPaneWallTileView mRightTile;
+    @Nullable private WallPlaceSwitchView mPlaceSwitch;
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
     private int mPinnedCount;
-    private boolean mTilesRequested;
-    private boolean mLeftTileAvailable;
-    private boolean mRightTileAvailable;
+    private boolean mPlaceSwitchRequested;
     @Nullable private String mClockAlignment;
 
     public TopPaneWidgetSlot(Context context) {
@@ -78,9 +74,9 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         super.dispatchDraw(canvas);
         TerminalClockWidget clock = mClock;
         if (clock == null || clock.getVisibility() != VISIBLE || clock.getAlpha() <= 0f) return;
-        // With the wall's tiles sharing the slot there is no plane left for the line to span:
-        // carrying it into a tile's cell would draw the clock's own detail across a button.
-        if (!mLeftTileBounds.isEmpty() || !mRightTileBounds.isEmpty()) return;
+        // With the place switch sharing the slot there is no plane left for the line to span:
+        // carrying it under the switch would draw the clock's own detail across a control.
+        if (!mPlaceSwitchBounds.isEmpty()) return;
         float ruleY = clock.fullRuleCenterYPx();
         if (ruleY < 0f) return;
         float y = clock.getTop() + clock.getTranslationY() + ruleY;
@@ -110,32 +106,19 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             mNotifications.setOpenListener(this::openPinned);
         }
         if (mMedia != null) mMedia.setVisibility(GONE);
-        mLeftTile = findViewById(R.id.terminal_wall_tile_left);
-        mRightTile = findViewById(R.id.terminal_wall_tile_right);
+        mPlaceSwitch = findViewById(R.id.terminal_wall_place_switch);
         applyFeed(false);
     }
 
     @Nullable
-    public TopPaneWallTileView leftTile() {
-        return mLeftTile;
+    public WallPlaceSwitchView placeSwitch() {
+        return mPlaceSwitch;
     }
 
-    @Nullable
-    public TopPaneWallTileView rightTile() {
-        return mRightTile;
-    }
-
-    /**
-     * Which of the wall's navigation tiles to show — the place to the left of the one on screen,
-     * the place to its right — and whether the user wants them at all. A side with no place gets
-     * no tile.
-     */
-    public void setWallTiles(boolean requested, boolean leftTile, boolean rightTile) {
-        if (mTilesRequested == requested && mLeftTileAvailable == leftTile
-            && mRightTileAvailable == rightTile) return;
-        mTilesRequested = requested;
-        mLeftTileAvailable = leftTile;
-        mRightTileAvailable = rightTile;
+    /** Whether the user wants the wall's place switch in the slot at all. */
+    public void setPlaceSwitchRequested(boolean requested) {
+        if (mPlaceSwitchRequested == requested) return;
+        mPlaceSwitchRequested = requested;
         requestLayout();
     }
 
@@ -314,7 +297,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
-        applyWallTiles(width, height, gutter, gap);
+        applyPlaceSwitch(width, height, gutter, gap);
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) return;
 
         if (stacked) {
@@ -374,46 +357,44 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);
     }
 
+    /** Height of the place switch's pill: a chip, not a bar. */
+    private static final float PLACE_SWITCH_HEIGHT_DP = 36f;
+    /** The compact clock's face; less than this beside the switch and the switch stands down. */
+    private static final float PLACE_SWITCH_MIN_CLOCK_DP = 96f;
+
     /**
-     * Split the slot into equal cells for the clock and the wall's tiles, or take the tiles away.
-     * The clock drops to its compact face when a third of the slot cannot hold its full one — at
-     * a large font scale on a narrow screen it cannot, which is why the fit is measured.
+     * Give the wall's place switch its hugging spot beside the clock, or take it away. The clock
+     * drops to its compact face when what the switch leaves cannot hold its full one — at a large
+     * font scale on a narrow screen it cannot, which is why the fit is measured.
      */
-    private void applyWallTiles(int width, int height, int gutter, int gap) {
-        boolean tiles = mMode.showsTiles(mTilesRequested);
-        boolean leftTile = tiles && mLeftTileAvailable;
-        boolean rightTile = tiles && mRightTileAvailable;
-        if (!leftTile && !rightTile) {
-            mLeftTileBounds.setEmpty();
-            mRightTileBounds.setEmpty();
-            if (mLeftTile != null) mLeftTile.setVisibility(GONE);
-            if (mRightTile != null) mRightTile.setVisibility(GONE);
+    private void applyPlaceSwitch(int width, int height, int gutter, int gap) {
+        boolean shown = mMode.showsTiles(mPlaceSwitchRequested) && mPlaceSwitch != null
+            && !mPlaceSwitch.places().isEmpty();
+        if (!shown) {
+            mPlaceSwitchBounds.setEmpty();
+            if (mPlaceSwitch != null) mPlaceSwitch.setVisibility(GONE);
             return;
         }
+        int switchHeight = Math.min(height, Math.round(dp(PLACE_SWITCH_HEIGHT_DP)));
+        mPlaceSwitch.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+            MeasureSpec.makeMeasureSpec(switchHeight, MeasureSpec.EXACTLY));
         int clockDesired = mClock == null ? 0 : Math.max(1, Math.round(mClock.contentWidth()));
-        TopPaneTileLayoutPolicy.Result result = TopPaneTileLayoutPolicy.calculate(width, height,
-            gutter, gap, mClockAlignment, leftTile, rightTile, clockDesired,
+        TopPaneSwitchLayoutPolicy.Result result = TopPaneSwitchLayoutPolicy.calculate(width, height,
+            gutter, gap, mClockAlignment, mPlaceSwitch.getMeasuredWidth(), switchHeight,
+            clockDesired, Math.round(dp(PLACE_SWITCH_MIN_CLOCK_DP)),
             getLayoutDirection() == LAYOUT_DIRECTION_RTL);
         mClockBounds.set(result.clock);
-        mLeftTileBounds.set(result.left);
-        mRightTileBounds.set(result.right);
+        mPlaceSwitchBounds.set(result.place);
         applyClockForm(result.clockCompact ? TopPaneClockForm.COMPACT : TopPaneClockForm.FULL,
             false);
         if (mClock != null && !mClockBounds.isEmpty()) measureExact(mClock, mClockBounds);
-        applyTile(mLeftTile, mLeftTileBounds);
-        applyTile(mRightTile, mRightTileBounds);
-    }
-
-    private void applyTile(@Nullable TopPaneWallTileView tile, @NonNull Rect bounds) {
-        if (tile == null) return;
-        if (bounds.isEmpty()) {
-            tile.setVisibility(GONE);
-            return;
+        if (mPlaceSwitchBounds.isEmpty()) {
+            mPlaceSwitch.setVisibility(GONE);
+        } else {
+            mPlaceSwitch.setVisibility(VISIBLE);
+            measureExact(mPlaceSwitch, mPlaceSwitchBounds);
         }
-        tile.setVisibility(VISIBLE);
-        measureExact(tile, bounds);
     }
-
 
     private void measureExact(@NonNull View view, @NonNull Rect bounds) {
         view.measure(MeasureSpec.makeMeasureSpec(bounds.width(), MeasureSpec.EXACTLY),
@@ -432,13 +413,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mMedia != null && !mMediaBounds.isEmpty()) {
             mMedia.layout(mMediaBounds.left, mMediaBounds.top, mMediaBounds.right, mMediaBounds.bottom);
         }
-        layoutTile(mLeftTile, mLeftTileBounds);
-        layoutTile(mRightTile, mRightTileBounds);
-    }
-
-    private void layoutTile(@Nullable TopPaneWallTileView tile, @NonNull Rect bounds) {
-        if (tile == null || bounds.isEmpty()) return;
-        tile.layout(bounds.left, bounds.top, bounds.right, bounds.bottom);
+        if (mPlaceSwitch != null && !mPlaceSwitchBounds.isEmpty()) {
+            mPlaceSwitch.layout(mPlaceSwitchBounds.left, mPlaceSwitchBounds.top,
+                mPlaceSwitchBounds.right, mPlaceSwitchBounds.bottom);
+        }
     }
 
     private float dp(float value) {

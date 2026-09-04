@@ -35,6 +35,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * surface that can drive a drag — the status bar, the window strip — must let go.
          */
         default void onWallDragInterrupted() { }
+        /** The wall moved: signed distance from the current page's rest, for the place switch. */
+        default void onWallOffsetChanged(float offsetPx) { }
     }
 
     /** Saved-instance-state key for the page the wall is showing. */
@@ -219,5 +221,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallDragInterrupted() {
         mHost.onWallDragInterrupted();
+    }
+
+    @Override
+    public void onWallOffsetChanged(float offsetPx) {
+        mHost.onWallOffsetChanged(offsetPx);
     }
 }

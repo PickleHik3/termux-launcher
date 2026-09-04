@@ -50,8 +50,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   Ctrl+Alt shortcuts, so the ways back to the terminal always work.
 - **Back** is the display's: it toggles the keyboard, as in Termux:X11. Change that with
   `termux-x11-preference`.
-- **Stop** from the Display button's ×, from the long-press menu on the display, or with
-  `pkill termux-x11`. Everything running on the display closes with it.
+- **Stop** by holding the Display segment of the place switch, from the long-press menu on the
+  display, or with `pkill termux-x11`. Everything running on the display closes with it. The
+  display never starts on its own unless you turn on **Start with the launcher**.
 - **The display survives switching away.** Your X apps keep running while you are on the
   terminal or the widget grid; only the picture is put away.
 - **Options.** Settings → Launcher & apps → **Display options** holds touch mode, resolution,
