@@ -14393,6 +14393,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 Intent.ACTION_PACKAGE_REPLACED.equals(action)) {
                 notePendingChangedPackage(intent.getData() != null
                     ? intent.getData().getSchemeSpecificPart() : null);
+                // A package change can also be a default-role change (a new browser, a new dialer).
+                com.termux.app.launcher.drawer.AppDrawerSystemRoleResolver.invalidate();
                 scheduleSuggestionBarPackageRefresh(false, true);
             }
         }

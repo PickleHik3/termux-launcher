@@ -60,6 +60,8 @@ public final class LauncherUsageStatsStore {
     private final Map<String, UsageStat> usageByStableId = new HashMap<>();
     private final Runnable persistRunnable = this::persist;
     private boolean loaded;
+    /** Bumped by every mutation, so a reader can tell "nothing launched since" without diffing. */
+    private long version;
 
     public LauncherUsageStatsStore(@NonNull Context context) {
         Context appContext = context.getApplicationContext();
@@ -88,6 +90,7 @@ public final class LauncherUsageStatsStore {
         }
         stat.count = Math.max(0, stat.count) + 1;
         stat.lastLaunchEpochMs = System.currentTimeMillis();
+        version++;
         mainHandler.removeCallbacks(persistRunnable);
         mainHandler.postDelayed(persistRunnable, PERSIST_DEBOUNCE_MS);
     }
@@ -96,7 +99,13 @@ public final class LauncherUsageStatsStore {
         mainHandler.removeCallbacks(persistRunnable);
         usageByStableId.clear();
         loaded = true;
+        version++;
         sharedPreferences.edit().putString(PREFS_KEY_USAGE_STATS_V1, "").apply();
+    }
+
+    /** A counter that changes whenever a ranking this store produces could change. */
+    public synchronized long version() {
+        return version;
     }
 
     @NonNull

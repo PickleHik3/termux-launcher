@@ -11,21 +11,47 @@ import android.provider.Telephony;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * Resolves the device's default-role packages into drawer categories, once per classify pass.
- * Every resolution is individually guarded; a failing lookup contributes nothing rather than
- * poisoning the map.
+ * Resolves the device's default-role packages into drawer categories. Every resolution is
+ * individually guarded; a failing lookup contributes nothing rather than poisoning the map.
+ *
+ * <p>Each pass is seven synchronous PackageManager round trips, and the drawer used to make it on
+ * every classification — two or three times per open, on the frame the pull gesture began. Defaults
+ * change rarely, so the answer is held for {@link #CACHE_TTL_MS} and dropped early by
+ * {@link #invalidate()} whenever the catalogue itself changes.
  */
 public final class AppDrawerSystemRoleResolver {
+
+    static final long CACHE_TTL_MS = 10 * 60 * 1000L;
+
+    @Nullable private static Map<String, AppDrawerCategory> sCached;
+    private static long sCachedAtMs;
 
     private AppDrawerSystemRoleResolver() {}
 
     @NonNull
-    public static Map<String, AppDrawerCategory> resolve(@NonNull Context context) {
+    public static synchronized Map<String, AppDrawerCategory> resolve(@NonNull Context context) {
+        long now = System.currentTimeMillis();
+        if (sCached != null && now - sCachedAtMs >= 0 && now - sCachedAtMs < CACHE_TTL_MS)
+            return sCached;
+        Map<String, AppDrawerCategory> roles = Collections.unmodifiableMap(resolveUncached(context));
+        sCached = roles;
+        sCachedAtMs = now;
+        return roles;
+    }
+
+    /** Forgets the cached defaults; the next {@link #resolve} asks the PackageManager again. */
+    public static synchronized void invalidate() {
+        sCached = null;
+    }
+
+    @NonNull
+    static Map<String, AppDrawerCategory> resolveUncached(@NonNull Context context) {
         Map<String, AppDrawerCategory> roles = new HashMap<>();
         PackageManager packageManager;
         try {
