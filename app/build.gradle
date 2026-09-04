@@ -162,6 +162,9 @@ dependencies {
     implementation project(":terminal-view")
     implementation project(":termux-shared")
     implementation project(":inapp-keyboard")
+    // The embedded X server's Java half. Dropped with -Px11Server=false, along with the module
+    // itself (see settings.gradle) and the libXlorie.so prebuilts.
+    if (findProject(":x11-server") != null) implementation project(":x11-server")
     // Shizuku dependencies for privileged operations
     implementation "dev.rikka.shizuku:api:13.1.5"
     implementation "dev.rikka.shizuku:provider:13.1.5"

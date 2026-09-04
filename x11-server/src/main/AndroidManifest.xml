@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The library declares no components: the server runs as its own process started by the
+     `termux-x11` command, and every component the launcher needs (the receiver that takes the
+     server's Binder) is declared in the app's manifest, not exported, behind a signature
+     permission. -->
+<manifest />

@@ -1,0 +1,22 @@
+// Compile-only declarations of the hidden framework classes CmdEntryPoint reaches for while it
+// runs as `app_process` outside an app process: ActivityThread's system context, and the
+// IActivityManager broadcast path it falls back to when it has no Context. Vendored from
+// termux-x11's shell-loader/stub — see ../UPSTREAM.md. Never packaged: the real classes are in
+// the platform at runtime.
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.termux.x11.stub'
+    compileSdkVersion project.properties.compileSdkVersion.toInteger()
+    defaultConfig.minSdkVersion project.properties.minSdkVersion.toInteger()
+    buildFeatures.buildConfig false
+    buildTypes.release.minifyEnabled false
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    implementation "androidx.annotation:annotation:1.8.0"
+}

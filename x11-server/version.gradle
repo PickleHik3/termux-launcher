@@ -1,0 +1,5 @@
+// The commit this module's Java and its libXlorie.so both come from. Keep it in step with
+// x11-server/UPSTREAM.md and .github/workflows/build_x11_native.yml: Java from one upstream and
+// a native library from another is a JNI mismatch waiting to happen.
+ext.termuxX11Commit = '9df8b767645aa0d0a2f2576767449df55b41962f'
+ext.termuxX11VersionName = '1.03.01'

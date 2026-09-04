@@ -1,0 +1,117 @@
+// The embedded X server's Java half: a vendored copy of termux-x11's `lorie` library module,
+// package `com.termux.x11` kept for diffability against upstream. Every deviation is recorded in
+// UPSTREAM.md. The native half (libXlorie.so) is a committed prebuilt under
+// app/src/main/jniLibs/, built by .github/workflows/build_x11_native.yml.
+apply plugin: 'com.android.library'
+apply from: 'version.gradle'
+
+// The server runs as `app_process` and class-loads the launcher's own APK, so the package it
+// broadcasts to and looks itself up under is the edition's applicationId, not this module's.
+def hostApplicationId = project(':app').android.defaultConfig.applicationId
+
+android {
+    namespace 'com.termux.x11'
+    compileSdkVersion project.properties.compileSdkVersion.toInteger()
+
+    defaultConfig {
+        minSdkVersion project.properties.minSdkVersion.toInteger()
+        buildConfigField "String", "APPLICATION_ID", "\"${hostApplicationId}\""
+        buildConfigField "String", "COMMIT", "\"${termuxX11Commit}\""
+        buildConfigField "String", "VERSION_NAME", "\"${termuxX11VersionName}\""
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        aidl true
+        buildConfig true
+    }
+}
+
+dependencies {
+    implementation "androidx.annotation:annotation:1.8.0"
+    implementation "androidx.core:core:1.13.1"
+    implementation "androidx.preference:preference:1.2.1"
+    // The hidden framework classes CmdEntryPoint reaches for outside an app process.
+    compileOnly project(':x11-server:stub')
+}
+
+// Upstream generates its Prefs class from preferences.xml so the store and the settings screen
+// can never disagree about a key or a default. Kept as-is: it is the contract the vendored view
+// and input classes read, and regenerating is what makes a nightly merge cheap.
+afterEvaluate {
+    tasks.register("generatePrefs") {
+        def source = file('src/main/res/xml/preferences.xml')
+        def out = file('build/generated/java/com/termux/x11/Prefs.java')
+        inputs.file source
+        outputs.file out
+        doLast {
+            //noinspection UnnecessaryQualifiedReference
+            def xml = groovy.xml.DOMBuilder.parse(new StringReader(source.text))
+            def nodes = xml.documentElement.getElementsByTagName("*")
+            def preferences = []
+            for (int i = 0; i < nodes.length; i++) {
+                def node = nodes.item(i)
+                switch (node.nodeName) {
+                    case 'EditTextPreference':
+                        preferences << [type: 'String', key: node.getAttribute("app:key"),
+                                        default: node.getAttribute("app:defaultValue")]
+                        break
+                    case 'SeekBarPreference':
+                        preferences << [type: 'Int', key: node.getAttribute("app:key"),
+                                        default: node.getAttribute("app:defaultValue")]
+                        break
+                    case 'ListPreference':
+                        def entries = node.getAttribute("app:entries")
+                        def values = node.getAttribute("app:entryValues")
+                        preferences << [type: 'List', key: node.getAttribute("app:key"),
+                                        default: node.getAttribute("app:defaultValue"),
+                                        entries: entries.substring(7, entries.length()),
+                                        values: values.substring(7, values.length())]
+                        break
+                    case 'SwitchPreferenceCompat':
+                        preferences << [type: 'Boolean', key: node.getAttribute("app:key"),
+                                        default: node.getAttribute("app:defaultValue")]
+                        break
+                }
+            }
+            out.parentFile.mkdirs()
+            def text = new StringBuilder()
+            text << '// Generated from src/main/res/xml/preferences.xml by :x11-server:generatePrefs.\n'
+            text << '// Do not edit.\n'
+            text << 'package com.termux.x11;\n'
+            text << 'import java.util.HashMap;\n'
+            text << 'import android.content.Context;\n'
+            text << 'import android.content.SharedPreferences;\n'
+            text << '\n'
+            text << 'public class Prefs extends LoriePreferences.PrefsProto {\n'
+            preferences.each {
+                if (it.type == 'Int' || it.type == 'Boolean')
+                    text << "  public final ${it.type}Preference ${it.key} = new ${it.type}Preference(\"${it.key}\", ${it.default});\n"
+                else if (it.type == 'String')
+                    text << "  public final StringPreference ${it.key} = new StringPreference(\"${it.key}\", \"${it.default}\");\n"
+                else if (it.type == 'List')
+                    text << "  public final ${it.type}Preference ${it.key} = new ${it.type}Preference(\"${it.key}\", \"${it.default}\", R.array.${it.entries}, R.array.${it.values});\n"
+            }
+            text << '  public final HashMap<String, Preference> keys = new HashMap<>() {{\n'
+            preferences.each { text << '    put("' + it.key + '", ' + it.key + ');\n' }
+            text << '  }};\n'
+            text << '\n'
+            text << '  public Prefs(Context ctx) {\n'
+            text << '    super(ctx);\n'
+            text << '    for (SharedPreferences store : new SharedPreferences[]{ builtInDisplayPreferences, secondaryDisplayPreferences }) {\n'
+            text << '      Object legacyKeepScreenOn = store.getAll().get("keepScreenOn");\n'
+            text << '      if (legacyKeepScreenOn instanceof Boolean && !store.contains("screenIdleTimeout"))\n'
+            text << '        store.edit().putString("screenIdleTimeout", (Boolean) legacyKeepScreenOn ? "never" : "system").commit();\n'
+            text << '    }\n'
+            text << '  }\n'
+            text << '}\n'
+            out.text = text.toString()
+        }
+    }
+    android.sourceSets.main.java.srcDirs += 'build/generated/java'
+    preBuild.dependsOn generatePrefs
+}
