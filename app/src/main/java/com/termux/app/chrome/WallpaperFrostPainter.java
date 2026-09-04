@@ -112,6 +112,7 @@ public final class WallpaperFrostPainter {
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE);
+        mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.APP_DRAWER);
         mLedger.setFrostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE, -1);
     }
@@ -213,8 +214,23 @@ public final class WallpaperFrostPainter {
      * outline clips it.
      */
     public boolean applyCommandPalette(@NonNull ImageView frost) {
-        return applyFullPane(frost, topGlassFrostRadiusDp(),
+        return applyFullPane(frost, null, topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE,
+            SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE);
+    }
+
+    /**
+     * Wallpaper frost for the sheet plane's glass: the palette's material and radius, since a
+     * sheet is a prompt in the same kit, cut for the whole plane rather than the glass. The glass
+     * is inset above the keyboard and clips the frost, which keeps the plane's full height so the
+     * wallpaper stays in register; cutting for the glass instead allocated a near-full-screen
+     * copy on every open the keyboard was up for. Its own rect entry, because the two planes are
+     * different heights and sharing the palette's made every alternation between them re-cut.
+     */
+    public boolean applyTerminalSheet(@NonNull ImageView frost) {
+        return applyFullPane(frost, mSurfaces.findChromeView(R.id.terminal_sheet_host),
+            topGlassFrostRadiusDp(),
+            SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET,
             SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE);
     }
 
@@ -229,7 +245,7 @@ public final class WallpaperFrostPainter {
      * plane's animated outline clips it.
      */
     public boolean applyAppDrawer(@NonNull ImageView frost) {
-        return applyFullPane(frost, mSurfaces.effectiveDockBlurRadiusDp(),
+        return applyFullPane(frost, null, mSurfaces.effectiveDockBlurRadiusDp(),
             SurfaceDirtyLedger.FrostRect.APP_DRAWER,
             SurfaceDirtyLedger.FrostRadius.APP_DRAWER);
     }
@@ -239,11 +255,12 @@ public final class WallpaperFrostPainter {
      * guarded so the repeated apply calls an open gesture makes do not each re-cut a full-screen
      * bitmap.
      */
-    private boolean applyFullPane(@NonNull ImageView frost, int blurRadiusDp,
+    private boolean applyFullPane(@NonNull ImageView frost, @Nullable View boundsView, int blurRadiusDp,
                                   @NonNull SurfaceDirtyLedger.FrostRect rectKey,
                                   @NonNull SurfaceDirtyLedger.FrostRadius radiusKey) {
         View wallpaperFrame = mSurfaces.findChromeView(R.id.activity_termux_root_view);
-        View glass = frost.getParent() instanceof View ? (View) frost.getParent() : null;
+        View glass = boundsView != null ? boundsView
+            : frost.getParent() instanceof View ? (View) frost.getParent() : null;
         if (!mSurfaces.wallpaperPassthroughEnabled() || blurRadiusDp <= 0 || wallpaperFrame == null
             || glass == null || glass.getWidth() <= 0 || glass.getHeight() <= 0) {
             frost.setImageDrawable(null);

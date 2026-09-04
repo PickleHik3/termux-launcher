@@ -4366,8 +4366,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (frame == mPaneGlassFrame) {
             return true;   // a pane is drawing it right now; recycling it would crash its next draw
         }
-        int[] frostIds = {R.id.command_palette_wallpaper_backdrop,
-            R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop};
+        int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
+            R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop,
+            R.id.terminal_status_bar_wallpaper_backdrop};
         for (int frostId : frostIds) {
             ImageView frost = findViewById(frostId);
             Drawable drawable = frost != null ? frost.getDrawable() : null;
@@ -4910,6 +4911,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Wallpaper frost for the command palette glass; true when the live blur should rest. */
     public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
         return mChrome.frost().applyCommandPalette(frost);
+    }
+
+    /** Wallpaper frost for the sheet plane's glass; true when the live blur should rest. */
+    public boolean applyTerminalSheetWallpaperFrost(@NonNull ImageView frost) {
+        return mChrome.frost().applyTerminalSheet(frost);
     }
 
     private float terminalWindowGlassStatusFraction(@NonNull View host) {
@@ -8632,7 +8638,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
-            return applyCommandPaletteWallpaperFrost(frost);
+            return applyTerminalSheetWallpaperFrost(frost);
         }
 
         @NonNull @Override public Drawable sheetSurface() {

@@ -25,7 +25,7 @@ import java.util.EnumMap;
  *       they are all cut from the same shared pre-blurred wallpaper frame, so whatever invalidates
  *       one invalidates all — while keeping a rect per surface and a radius per tuning group (the
  *       top pane's status band and window bar follow one radius, the palette and the drawer plane
- *       each follow their own).</li>
+ *       each follow their own; the sheet plane rides the palette's radius with a rect of its own).</li>
  * </ul>
  */
 public final class SurfaceDirtyLedger {
@@ -45,6 +45,7 @@ public final class SurfaceDirtyLedger {
         TOP_PANE_STATUS,
         TOP_PANE_WINDOW_BAR,
         COMMAND_PALETTE,
+        TERMINAL_SHEET,
         APP_DRAWER
     }
 
