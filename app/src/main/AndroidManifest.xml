@@ -16,6 +16,18 @@
         android:name="android.software.leanback"
         android:required="false" />
 
+    <!-- The embedded display server runs as its own process under this app's uid and signature,
+         and hands the launcher a Binder over a broadcast. Signature level, so only something
+         signed like the launcher can announce itself as a display server. -->
+    <permission
+        android:name="${TERMUX_PACKAGE_NAME}.permission.X11_DISPLAY"
+        android:description="@string/permission_x11_display_description"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/permission_x11_display_label"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="${TERMUX_PACKAGE_NAME}.permission.X11_DISPLAY" />
+
     <permission
         android:name="${TERMUX_PACKAGE_NAME}.permission.RUN_COMMAND"
         android:description="@string/permission_run_command_description"
@@ -281,6 +293,17 @@
         <receiver
             android:name=".app.launcher.data.LauncherCategoryPasteNotification$ActionReceiver"
             android:exported="false" />
+
+        <!-- A display server started by `termux-x11` announces itself here. Not exported and
+             signature-permission guarded: a foreign app cannot hand the home screen a Binder. -->
+        <receiver
+            android:name=".app.x11.X11DisplayReceiver"
+            android:exported="false"
+            android:permission="${TERMUX_PACKAGE_NAME}.permission.X11_DISPLAY">
+            <intent-filter>
+                <action android:name="com.termux.x11.CmdEntryPoint.ACTION_START" />
+            </intent-filter>
+        </receiver>
 
 
         <service

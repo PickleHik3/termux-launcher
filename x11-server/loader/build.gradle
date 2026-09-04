@@ -1,0 +1,63 @@
+// The few kilobytes of dex that $PREFIX/bin/termux-x11 hands to app_process: it finds the
+// launcher's own APK, checks its signature against the hash baked in here, class-loads its dex
+// and calls CmdEntryPoint.main. Vendored from termux-x11's shell-loader — see ../UPSTREAM.md.
+//
+// Built per edition, because both the package it looks up and the signature it trusts are that
+// edition's. The result is packed into the launcher's assets and written into the prefix by
+// X11CliInstaller; it is never installed.
+apply plugin: 'com.android.application'
+apply from: '../version.gradle'
+
+def app = project(':app')
+def hostApplicationId = app.android.defaultConfig.applicationId
+// Whatever signs the launcher has to be what the loader trusts, or the loader refuses to run
+// the very APK it was shipped inside.
+def signing = app.android.signingConfigs.findByName('release') ?: app.android.signingConfigs.debug
+def keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
+keyStore.load(new FileInputStream(signing.storeFile), signing.storePassword.toCharArray())
+def signatureHash = Arrays.hashCode(keyStore.getCertificate(signing.keyAlias).getEncoded())
+
+android {
+    namespace 'com.termux.x11.loader'
+    compileSdkVersion project.properties.compileSdkVersion.toInteger()
+
+    defaultConfig {
+        applicationId 'com.termux.x11.loader'
+        minSdkVersion project.properties.minSdkVersion.toInteger()
+        // Same rule as every other module here: the SELinux domain of the whole shared user is
+        // computed from the highest target sdk in it. See AGENTS.md.
+        targetSdkVersion project.properties.targetSdkVersion.toInteger()
+        versionCode 1
+        versionName termuxX11VersionName
+
+        buildConfigField "String", "APPLICATION_ID", "\"${hostApplicationId}\""
+        buildConfigField "int", "SIGNATURE", String.valueOf(signatureHash)
+        buildConfigField "String", "CLASS_ID", "\"com.termux.x11.CmdEntryPoint\""
+        buildConfigField "String", "COMMIT", "\"${termuxX11Commit}\""
+        buildConfigField "String", "logTag", "\"termux-launcher x11 loader\""
+        buildConfigField "String", "packageNotInstalledErrorText",
+            "\"${hostApplicationId} is not installed, so there is no display server to start.\""
+        buildConfigField "String", "packageSignatureMismatchErrorText",
+            "\"Signature check of ${hostApplicationId} failed. Reinstall the launcher from one source.\""
+    }
+
+    buildTypes.debug.signingConfig null
+    buildTypes.debug.minifyEnabled true
+    buildTypes.debug.shrinkResources true
+    buildTypes.debug.proguardFiles 'proguard-rules.pro'
+    buildTypes.release.minifyEnabled true
+    buildTypes.release.shrinkResources true
+    buildTypes.release.proguardFiles 'proguard-rules.pro'
+
+    buildFeatures.buildConfig true
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    // ActivityThread.getPackageManager(), which is how the loader looks the target up without a
+    // Context of its own.
+    compileOnly project(':x11-server:stub')
+}

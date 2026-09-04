@@ -173,6 +173,8 @@
     <string name="settings_widget_pane_enabled_summary">Keep a page of home screen widgets beside the terminal.</string>
     <string name="settings_wall_tiles_title">Status bar buttons</string>
     <string name="settings_wall_tiles_summary">Show Widgets and Display buttons in the expanded status bar.</string>
+    <string name="permission_x11_display_label">Run a Linux display</string>
+    <string name="permission_x11_display_description">Lets the display server started from your shell show its screen in the launcher.</string>
     <string name="termux_wall_tile_widgets">Widgets</string>
     <string name="termux_wall_tile_display">Display</string>
     <string name="termux_wall_display_stop_title">Stop the display?</string>

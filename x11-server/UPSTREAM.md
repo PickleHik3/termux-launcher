@@ -65,6 +65,20 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
   resources; its strings, styles, layouts, icons and the accessibility-service config belong to
   the app it was.
 
+## `loader/`
+
+Upstream's `shell-loader`, vendored the same way: the few kilobytes of dex that
+`$PREFIX/bin/termux-x11` puts on `app_process`'s CLASSPATH, which finds the launcher's APK,
+checks its signature against a hash baked in at build time, class-loads its dex and calls
+`CmdEntryPoint.main`. It is never installed. Deviations: our compileSdk/minSdk/targetSdk (the
+shared-user SELinux rule in AGENTS.md applies to it too), the package and signature it trusts are
+the edition's own, and its error strings say what a launcher user would need to hear. The
+`termux-x11-nightly` apt package cannot serve here at all — it bakes `com.termux.x11` into both
+the script and the signature check.
+
+`app/build.gradle` packs the built APK into the launcher's assets as `assets/x11/loader.apk`, and
+`X11CliInstaller` writes it and the two scripts into the prefix.
+
 ## Merging a newer upstream
 
 1. `git -C <termux-x11 checkout> diff <pinned>..<new> -- lorie/src/main/java lorie/src/main/res/xml lorie/src/main/res/values/arrays.xml lorie/src/main/aidl`

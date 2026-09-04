@@ -3,5 +3,5 @@ include ':app', ':termux-shared', ':terminal-emulator', ':terminal-view', ':term
 // The embedded X server. Off with -Px11Server=false, so an edition or a contributor can build
 // the launcher without the vendored Xorg port or its native library.
 if (!hasProperty('x11Server') || Boolean.parseBoolean(x11Server.toString())) {
-    include ':x11-server', ':x11-server:stub'
+    include ':x11-server', ':x11-server:stub', ':x11-server:loader'
 }
