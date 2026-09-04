@@ -1,0 +1,151 @@
+package com.termux.app.wall;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import android.app.Activity;
+import android.os.Build;
+import android.view.View;
+import android.widget.FrameLayout;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
+
+/**
+ * Page positions. Every place is laid out at the host's size and only ever moved, so a page
+ * change and a whole drag cost no layout work — and the terminal page in the middle keeps the
+ * exact bounds it had before the wall existed.
+ */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = {Build.VERSION_CODES.P})
+public class PaneWallLayoutTest {
+
+    private static final int WIDTH = 1080;
+    private static final int HEIGHT = 1800;
+    private static final float EPS = 0.01f;
+
+    private PaneWallLayout wall;
+    private View widgets;
+    private View terminal;
+    private View display;
+
+    private void build(Activity activity, boolean widgetsPage, boolean displayPage) {
+        wall = new PaneWallLayout(activity);
+        widgets = new FrameLayout(activity);
+        terminal = new FrameLayout(activity);
+        display = new FrameLayout(activity);
+        wall.addView(widgets);
+        wall.addView(terminal);
+        wall.addView(display);
+        wall.setReducedMotion(true); // no spring in a unit test: page changes land immediately
+        wall.setPages(PaneWallPolicy.availablePages(!widgetsPage, widgetsPage, displayPage));
+        // Every page view is registered whether or not the install has that place: a view whose
+        // page is switched off must go away, not sit on top of the terminal.
+        wall.setPageView(PaneWallPage.TERMINAL, terminal);
+        wall.setPageView(PaneWallPage.WIDGETS, widgets);
+        wall.setPageView(PaneWallPage.DISPLAY, display);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+    }
+
+    @Test
+    public void theTerminalRestsOnScreenAndItsNeighboursRestOffIt() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
+        assertEquals(WIDTH, display.getTranslationX(), EPS);
+        assertEquals(View.VISIBLE, terminal.getVisibility());
+        assertEquals(View.INVISIBLE, widgets.getVisibility());
+        assertEquals(View.INVISIBLE, display.getVisibility());
+    }
+
+    @Test
+    public void everyPageIsLaidOutAtTheHostsSize() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        for (View page : new View[]{widgets, terminal, display}) {
+            assertEquals(0, page.getLeft());
+            assertEquals(0, page.getTop());
+            assertEquals(WIDTH, page.getWidth());
+            assertEquals(HEIGHT, page.getHeight());
+        }
+    }
+
+    @Test
+    public void aDragMovesTheWholeWallOneToOne() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.beginDrag();
+        wall.dragTo(-200f);
+        assertEquals(-200f, terminal.getTranslationX(), EPS);
+        assertEquals(WIDTH - 200f, display.getTranslationX(), EPS);
+        assertTrue("a page sliding in has to be drawing", display.getVisibility() == View.VISIBLE);
+    }
+
+    @Test
+    public void aShortDragLeavesThePageAlone() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.beginDrag();
+        wall.dragTo(-100f);
+        wall.endDrag(0f);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void aCommittedDragLandsOnTheNextPage() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.beginDrag();
+        wall.dragTo(-WIDTH * 0.5f);
+        wall.endDrag(0f);
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(0f, display.getTranslationX(), EPS);
+        assertEquals(-WIDTH, terminal.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void aDragPastTheOuterPageSpringsBack() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.goTo(PaneWallPage.DISPLAY, false);
+        wall.beginDrag();
+        wall.dragTo(-WIDTH);
+        wall.endDrag(-10_000f);
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(0f, display.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void aMissingPageIsSkippedRatherThanLeftAsADeadSwipe() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), false, true);
+        assertEquals(View.GONE, widgets.getVisibility());
+        wall.beginDrag();
+        wall.dragTo(WIDTH * 0.5f);
+        wall.endDrag(0f);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+    }
+
+    @Test
+    public void aPageThatGoesAwayHandsTheWallBackToTheTerminal() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        wall.setPages(PaneWallPolicy.availablePages(true, false, false));
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void holdingTheGesturesStillEndsALiveDrag() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.beginDrag();
+        wall.dragTo(-300f);
+        wall.setGesturesEnabled(false);
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        wall.beginDrag();
+        wall.dragTo(-300f);
+        assertEquals("a held wall must not move at all", 0f, terminal.getTranslationX(), EPS);
+    }
+}

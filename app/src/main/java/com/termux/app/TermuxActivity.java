@@ -305,6 +305,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mRestoreFullStatusBar;
     @NonNull private com.termux.app.statusbar.TopStatusBarState mRestoredFullPrior =
         com.termux.app.statusbar.TopStatusBarState.EXPANDED;
+    @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
+    /** The wall page an activity recreation is coming back to; null on a cold start. */
+    @Nullable private String mPendingWallPage;
     @Nullable private com.termux.app.launcher.widget.LauncherWidgetHostController mWidgetHostController;
     @Nullable private com.termux.app.launcher.widget.WidgetPaneController mWidgetPaneController;
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
@@ -840,6 +843,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
+            mPendingWallPage = savedInstanceState.getString(
+                com.termux.app.wall.PaneWallController.ARG_PAGE);
             mRestoreFullStatusBar = savedInstanceState.getBoolean(ARG_FULL_STATUS_BAR, false);
             try {
                 mRestoredFullPrior = com.termux.app.statusbar.TopStatusBarState.valueOf(
@@ -5215,6 +5220,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         Bundle paneLayout = savePaneLayoutState();
         if (paneLayout != null) savedInstanceState.putBundle(ARG_PANE_LAYOUT, paneLayout);
+        if (mPaneWallController != null) mPaneWallController.onSaveInstanceState(savedInstanceState);
     }
 
     @Override
@@ -6707,6 +6713,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
+        createPaneWallController(paneHost);
         applyPaneBehaviourPreferences();
         // Bootstrap a sessionless pane so the many single-view call sites (in-app keyboard,
         // font setup) have a non-null active view before the first session/tab is shown.
@@ -10983,6 +10990,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mFullStatusBarController.onParentLayoutChanged();
                 }
             });
+    }
+
+    /**
+     * Wire the pane wall around the terminal's pane host. The terminal is its middle page and is
+     * handed over untouched; the other places register themselves as the install gains them.
+     */
+    private void createPaneWallController(@Nullable View paneHost) {
+        View wall = findViewById(R.id.terminal_pane_wall);
+        if (!(wall instanceof com.termux.app.wall.PaneWallLayout) || paneHost == null) return;
+        mPaneWallController = new com.termux.app.wall.PaneWallController(
+            (com.termux.app.wall.PaneWallLayout) wall,
+            new com.termux.app.wall.PaneWallController.Host() {
+                @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+                @Override public boolean isTerminalOnly() {
+                    return mPreferences != null && mPreferences.isTerminalOnlyUseCase();
+                }
+                @Override public boolean isWidgetsEnabled() {
+                    return mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled();
+                }
+                @Override public boolean isDisplayEnabled() { return false; }
+            });
+        mPaneWallController.attachTerminalPage(paneHost);
+        if (mPendingWallPage != null) {
+            Bundle state = new Bundle();
+            state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, mPendingWallPage);
+            mPendingWallPage = null;
+            mPaneWallController.restoreInstanceState(state);
+        }
     }
 
     private void createWidgetPaneController() {

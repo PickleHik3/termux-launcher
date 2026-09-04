@@ -289,15 +289,27 @@
                         android:visibility="gone"
                         android:background="?attr/termuxColorSurfaceBase" />
 
-                    <!-- Split-pane host: TerminalPaneController inflates the recursive pane tree
-                         (view_terminal_pane.xml per leaf) into this frame. A single unsplit shell
-                         is just one pane filling the host. -->
-                    <FrameLayout
-                        android:id="@+id/terminal_pane_host"
+                    <!-- The pane wall: fixed full-size places side by side, of which one is on
+                         screen at rest. The terminal is the middle one and its host below is
+                         untouched, so the terminal never resizes for the wall. The Widgets and
+                         Display pages are added by their controllers when the install has them. -->
+                    <com.termux.app.wall.PaneWallLayout
+                        android:id="@+id/terminal_pane_wall"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:clipChildren="false"
-                        android:clipToPadding="false" />
+                        android:clipToPadding="false">
+
+                        <!-- Split-pane host: TerminalPaneController inflates the recursive pane
+                             tree (view_terminal_pane.xml per leaf) into this frame. A single
+                             unsplit shell is just one pane filling the host. -->
+                        <FrameLayout
+                            android:id="@+id/terminal_pane_host"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:clipChildren="false"
+                            android:clipToPadding="false" />
+                    </com.termux.app.wall.PaneWallLayout>
 
                     <!-- Optional thin outline framing the terminal area; background/shape/margins
                          are set programmatically in applyTerminalBorderAppearance(). Draws the
