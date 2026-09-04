@@ -38,6 +38,23 @@ public class ShellIntegrationTest extends TerminalTestCase {
         assertEquals(TerminalEmulator.COMMAND_EXIT_CODE_UNKNOWN, mTerminal.getLastCommandExitCode());
     }
 
+    /**
+     * A progress report belongs to the command that made it. A program killed part-way through never
+     * sends the closing "OSC 9;4;0", and the ring it left turning would then outlive it; the
+     * command's end is the moment there is nothing left to report on.
+     */
+    public void testCommandEndClearsAnyProgressReport() {
+        withTerminalSized(4, 4);
+        enterString("\033]133;C\033\\");
+        enterString("\033]9;4;1;40\007");
+        assertEquals(TerminalEmulator.PROGRESS_STATE_NORMAL, mTerminal.getProgressState());
+
+        enterString("\033]133;D;0\033\\");
+
+        assertEquals(TerminalEmulator.PROGRESS_STATE_NONE, mTerminal.getProgressState());
+        assertEquals(0, mTerminal.getProgressValue());
+    }
+
     public void testGarbageStatusLeavesTheCodeUnknown() {
         withTerminalSized(4, 4).enterString("\033]133;D;notanumber\033\\");
         assertEquals(TerminalEmulator.COMMAND_EXIT_CODE_UNKNOWN, mTerminal.getLastCommandExitCode());

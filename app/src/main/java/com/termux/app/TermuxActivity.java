@@ -11417,13 +11417,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 TerminalSession session = mPaneController.windowActiveSession(window);
                 // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
                 if (i == selected) clearWindowAttention(window);
-                com.termux.terminal.TerminalEmulator progress = windowProgressReporter(window);
+                com.termux.terminal.TerminalEmulator progress = windowProgressReporter(window, now);
                 int phases = observeWindowPhases(window, i == selected, now);
                 items.add(buildWindowItem(session, i, foregroundPids,
                     mPaneController.windowName(window))
                     .withBusy(progress != null || (phases & PHASE_WORKING) != 0)
                     .withAttention(isWindowAwaitingUser(window) || (phases & PHASE_ATTENTION) != 0)
-                    .withDone((phases & PHASE_DONE) != 0)
+                    .withDone((phases & PHASE_DONE) != 0,
+                        (phases & PHASE_DONE) != 0 && windowCommandFailed(window))
                     .withProgress(progress == null || progress.getProgressState()
                             == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE
                             ? com.termux.app.terminal.TerminalWindowBar.WindowItem.NO_PERCENTAGE
@@ -11471,6 +11472,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         return marks;
+    }
+
+    /**
+     * Whether the last command to finish in {@code window} said it failed.
+     *
+     * <p>The status comes from the shell's own OSC 133;D report, so it is only ever available where
+     * shell integration is in use; without it every finished command gets the plain tick, which is
+     * the honest answer. Read at badge time rather than remembered, since the emulator holds the
+     * status until the next command replaces it.
+     */
+    private boolean windowCommandFailed(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null) return false;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+            if (emulator != null && emulator.getLastCommandExitCode() > 0) return true;
+        }
+        return false;
     }
 
     /** Read once per quiet spell, when the tracker has to tell asking from finished. */
@@ -11583,12 +11602,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.terminal.TerminalEmulator windowProgressReporter(
-            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, long nowMs) {
         if (mPaneController == null) return null;
         for (TerminalSession shell : mPaneController.shellsOf(window)) {
             com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
-            if (emulator != null && emulator.getProgressState()
-                != com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NONE) return emulator;
+            if (emulator == null || emulator.getProgressState()
+                == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NONE) continue;
+            // A report belongs to the command that made it. A program killed part-way through never
+            // sends the closing "OSC 9;4;0", and its ring would then turn for the rest of the
+            // session; once the shell itself has the terminal back there is nothing left to report
+            // on. Only a reading fresh enough to still mean something may retire a report.
+            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(shell.getPid());
+            if (info != null && info.idle && nowMs - info.atMs
+                <= com.termux.app.statusbar.WindowForegroundResolver.WORKING_TTL_MS) continue;
+            return emulator;
         }
         return null;
     }
@@ -11649,7 +11677,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
             mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
         if (info != null && info.idle) return false;          // the shell itself has the terminal
-        if (info != null && info.working) return true;
+        if (info != null && info.isWorkingAsOf(nowMs)) return true;
         if (info == null && isFullScreenApplication(shell)) return false;
         return mShellActivityTracker.isWorking(pid, nowMs);
     }

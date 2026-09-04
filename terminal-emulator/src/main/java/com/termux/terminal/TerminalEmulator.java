@@ -3196,6 +3196,11 @@ public final class TerminalEmulator {
                         // Leave the exit code unknown rather than failing the sequence.
                     }
                 }
+                // The command is over, so any progress it reported is over with it. A program that
+                // is killed, or that simply forgets the closing "OSC 9;4;0", would otherwise leave
+                // its window's pill turning a progress ring for work that has finished.
+                mProgressState = PROGRESS_STATE_NONE;
+                mProgressValue = 0;
                 break;
             default:
                 if (LOG_ESCAPE_SEQUENCES)

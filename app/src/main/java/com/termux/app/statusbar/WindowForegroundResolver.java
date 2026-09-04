@@ -49,10 +49,12 @@ public final class WindowForegroundResolver {
         public final boolean working;
         /** Its CPU use since the previous poll, as a fraction of one core; -1 when unknown. */
         public final double cpuFraction;
+        /** When this reading was taken, on the caller's clock. See {@link #isWorkingAsOf(long)}. */
+        public final long atMs;
 
         ForegroundInfo(boolean idle, int foregroundPid, @Nullable String processName,
                        @Nullable String openFile, @NonNull List<String> command,
-                       double cpuFraction) {
+                       double cpuFraction, long atMs) {
             this.idle = idle;
             this.foregroundPid = foregroundPid;
             this.processName = processName;
@@ -60,8 +62,29 @@ public final class WindowForegroundResolver {
             this.command = Collections.unmodifiableList(new ArrayList<>(command));
             this.cpuFraction = cpuFraction;
             this.working = cpuFraction >= WORKING_CPU_FRACTION;
+            this.atMs = atMs;
+        }
+
+        /**
+         * Whether this reading still says the pane is working.
+         *
+         * <p>{@link #working} is a CPU delta between two polls, and it is only true until something
+         * measures otherwise. A reading that has stopped being refreshed — the privileged backend
+         * went away mid-poll, or the poll never came back — must not go on asserting that a command
+         * is running: that is a window pill left turning its ring over a shell that finished long
+         * ago. Past {@link #WORKING_TTL_MS} the answer is no.
+         */
+        public boolean isWorkingAsOf(long nowMs) {
+            return working && nowMs - atMs <= WORKING_TTL_MS;
         }
     }
+
+    /**
+     * How long a {@code working} reading stands without being refreshed. Several poll intervals, so
+     * an ordinary late poll does not blink the ring, but bounded, so a poll that never returns
+     * cannot leave it turning for ever.
+     */
+    public static final long WORKING_TTL_MS = 6000L;
 
     /**
      * How much of one core the pane's foreground process has to be using to read as working.
@@ -82,6 +105,9 @@ public final class WindowForegroundResolver {
     }
 
     private static final long MIN_INTERVAL_MS = 1500L;
+
+    /** How long one poll may be outstanding before the next one is allowed to go anyway. */
+    private static final long IN_FLIGHT_TIMEOUT_MS = 8000L;
 
     /** One CPU-time reading for a foreground process, so the next poll can take a delta. */
     private static final class CpuSample {
@@ -104,6 +130,7 @@ public final class WindowForegroundResolver {
 
     private long mLastRunAt;
     private boolean mInFlight;
+    private long mInFlightSince;
 
     public WindowForegroundResolver(@Nullable Listener listener) {
         mListener = listener;
@@ -120,13 +147,19 @@ public final class WindowForegroundResolver {
      * listener fires only if any cached entry changed.
      */
     public void refresh(@NonNull List<Integer> pids, long nowMs) {
-        if (pids.isEmpty() || mInFlight) return;
+        if (pids.isEmpty()) return;
+        // A backend that dies mid-call never completes its future, and the flag it left set would
+        // stop every later poll — freezing the pills on whatever the last reading said. After the
+        // timeout the call is abandoned rather than waited on; a late reply still just updates the
+        // cache.
+        if (mInFlight && nowMs - mInFlightSince < IN_FLIGHT_TIMEOUT_MS) return;
         if (nowMs - mLastRunAt < MIN_INTERVAL_MS) return;
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
         if (!manager.isPrivilegedAvailable()) return;
 
         mLastRunAt = nowMs;
         mInFlight = true;
+        mInFlightSince = nowMs;
         String command = buildCommand(pids);
         java.util.List<Integer> asked = new ArrayList<>(pids);
         manager.executeCommand(command).whenComplete((output, error) -> {
@@ -222,12 +255,12 @@ public final class WindowForegroundResolver {
             if ("idle".equals(kind)) {
                 mCpuSamples.remove(pid);
                 next.put(pid, new ForegroundInfo(true, -1, null, null,
-                    Collections.emptyList(), -1d));
+                    Collections.emptyList(), -1d, nowMs));
             } else if ("fg".equals(kind) && parts.length == 4) {
                 int foregroundPid = parseInt(parts[2]);
                 Long ticks = groupTicks.get(foregroundPid);
                 ForegroundInfo info = parseForeground(parts[3], foregroundPid,
-                    cpuFraction(pid, foregroundPid, ticks == null ? -1L : ticks, nowMs));
+                    cpuFraction(pid, foregroundPid, ticks == null ? -1L : ticks, nowMs), nowMs);
                 if (info != null) next.put(pid, info);
             }
             // "x" (unreadable) leaves no entry so callers fall back to title/cwd.
@@ -251,7 +284,7 @@ public final class WindowForegroundResolver {
 
     @Nullable
     private static ForegroundInfo parseForeground(@NonNull String payload, int foregroundPid,
-                                                  double cpuFraction) {
+                                                  double cpuFraction, long atMs) {
         if (payload.isEmpty()) return null;
         String[] argv = payload.split("\t");
         String process = basename(argv[0]);
@@ -268,7 +301,8 @@ public final class WindowForegroundResolver {
         }
         List<String> command = new ArrayList<>();
         Collections.addAll(command, argv);
-        return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpuFraction);
+        return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpuFraction,
+            atMs);
     }
 
     /**

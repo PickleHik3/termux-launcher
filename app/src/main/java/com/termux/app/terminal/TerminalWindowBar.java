@@ -90,6 +90,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
          */
         public final boolean done;
         /**
+         * Whether that command failed, as its shell reported the status (OSC 133;D). The tick
+         * becomes a cross in the attention colour, so a window the user was not watching says
+         * whether the work succeeded and not only that it ended. False whenever no status was
+         * reported: a shell without integration cannot tell success from failure, and guessing is
+         * worse than the plain tick.
+         */
+        public final boolean doneFailed;
+        /**
          * What the shell itself reports about how far along it is, when it does: 0-100 for a
          * percentage, {@link #NO_PERCENTAGE} when it is working without one (or reports nothing).
          * Only read while {@link #busy}.
@@ -120,6 +128,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
         public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
                           boolean attention, int progress, boolean progressError, boolean done) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, false);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed) {
             this.label = label;
             this.spokenLabel = spokenLabel;
             this.busy = busy;
@@ -127,6 +141,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             this.progress = progress;
             this.progressError = progressError;
             this.done = done;
+            this.doneFailed = doneFailed;
         }
 
         /**
@@ -137,31 +152,42 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         @NonNull
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
-                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
-                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed);
         }
 
         @NonNull
         public WindowItem withDone(boolean done) {
-            return done == this.done ? this
-                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+            return withDone(done, done && doneFailed);
+        }
+
+        /** @param failed the finished command's own verdict; only meaningful while {@code done}. */
+        @NonNull
+        public WindowItem withDone(boolean done, boolean failed) {
+            return done == this.done && failed == this.doneFailed ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    failed);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
         @NonNull
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
-                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed);
         }
 
         /** Whether the two would draw the same marks. Labels are compared separately. */
         boolean sameActivity(@NonNull WindowItem other) {
             return busy == other.busy && attention == other.attention && done == other.done
+                && doneFailed == other.doneFailed
                 && progress == other.progress && progressError == other.progressError;
         }
     }
@@ -170,6 +196,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     static final String BELL_GLYPH = "\uf0f3";
     /** nf-fa-check, the mark a window whose command finished unseen gets after its label. */
     static final String DONE_GLYPH = "\uf00c";
+    /** nf-fa-times, the same mark for a command that finished unseen and failed. */
+    static final String FAIL_GLYPH = "\uf00d";
 
     private final SelectionStrip mTabs;
     @Nullable private OnWindowSelectedListener mSelectionListener;
@@ -385,8 +413,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 item.spokenLabel);
             if (item.attention) description += " · "
                 + getResources().getString(R.string.termux_window_tab_attention_content_description);
-            else if (item.done) description += " · "
-                + getResources().getString(R.string.termux_window_tab_done_content_description);
+            else if (item.done) description += " · " + getResources().getString(item.doneFailed
+                ? R.string.termux_window_tab_failed_content_description
+                : R.string.termux_window_tab_done_content_description);
             if (item.busy) {
                 description += " · " + getResources().getString(
                     R.string.termux_window_tab_busy_content_description);
@@ -436,7 +465,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             glyphEnd = 1;
         }
         // One trailing mark at a time: a window that is asking is not finished.
-        String mark = item.attention ? BELL_GLYPH : item.done ? DONE_GLYPH : null;
+        String mark = item.attention ? BELL_GLYPH
+            : item.done ? (item.doneFailed ? FAIL_GLYPH : DONE_GLYPH) : null;
         if (mark != null) label = label + " " + mark;
         CharSequence spanned = TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(context, label), mSymbolMaps);
@@ -448,7 +478,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 0, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         if (mark != null) {
-            text.setSpan(new ForegroundColorSpan(item.attention ? mAttentionColor : mBusyColor),
+            text.setSpan(new ForegroundColorSpan(
+                    item.attention || item.doneFailed ? mAttentionColor : mBusyColor),
                 text.length() - mark.length(), text.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }

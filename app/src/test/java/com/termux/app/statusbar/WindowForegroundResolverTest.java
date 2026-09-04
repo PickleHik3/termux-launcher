@@ -54,6 +54,26 @@ public class WindowForegroundResolverTest {
         assertTrue(info.working);
     }
 
+    /**
+     * A CPU delta is only true of the moment it was measured. A reading nobody is refreshing — the
+     * privileged backend went away mid-poll — must stop claiming the pane is working, or the window
+     * pill turns its ring over a command that finished long ago.
+     */
+    @Test
+    public void aWorkingReadingStopsCountingOnceItIsStale() {
+        WindowForegroundResolver resolver = new WindowForegroundResolver(null);
+        resolver.applyOutput("10|fg|500|sh\tbuild.sh\ng|500|0\n",
+            Collections.singletonList(10), 1000L);
+        resolver.applyOutput("10|fg|500|sh\tbuild.sh\ng|500|200\n",
+            Collections.singletonList(10), 2000L);
+        WindowForegroundResolver.ForegroundInfo info = resolver.get(10);
+
+        assertTrue(info.working);
+        assertTrue(info.isWorkingAsOf(2000L + WindowForegroundResolver.WORKING_TTL_MS));
+        assertFalse("a reading nobody refreshed cannot keep asserting work",
+            info.isWorkingAsOf(2000L + WindowForegroundResolver.WORKING_TTL_MS + 1L));
+    }
+
     @Test
     public void aGroupWithNoRowsReportsUnknownRatherThanZero() {
         WindowForegroundResolver resolver = new WindowForegroundResolver(null);

@@ -206,6 +206,23 @@ public class TerminalWindowBarTest {
         assertEquals("build", ((TextView) tabs.getChildAt(0)).getText().toString());
     }
 
+    /** A command that failed unseen says so: the tick becomes a cross, in the attention colour. */
+    @Test
+    public void aFailedCommandMarksTheTabWithACross() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("build", "build");
+        bar.setWindows(Arrays.asList(item.withDone(true, true)), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        assertEquals("build " + TerminalWindowBar.FAIL_GLYPH,
+            ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("failed"));
+
+        // Success and failure are different states, so the pill has to repaint between them.
+        bar.setWindows(Arrays.asList(item.withDone(true, false)), 0);
+        assertEquals("build " + TerminalWindowBar.DONE_GLYPH,
+            ((TextView) tabs.getChildAt(0)).getText().toString());
+    }
+
     /**
      * The ring takes the place of the process glyph, as Windows Terminal hides a tab's icon behind
      * its progress ring: the span sits on the leading glyph run and nowhere else.

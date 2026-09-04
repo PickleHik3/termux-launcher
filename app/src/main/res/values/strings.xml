@@ -631,6 +631,7 @@
                 <string name="termux_window_tab_attention_content_description">waiting for you</string>
                 <string name="termux_window_tab_progress_content_description">%1$d%% done</string>
                 <string name="termux_window_tab_done_content_description">finished</string>
+                <string name="termux_window_tab_failed_content_description">failed</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
                 <string name="termux_top_pane_media_content_description">Media playback controls</string>
