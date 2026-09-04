@@ -338,19 +338,44 @@ afterEvaluate {
 
 // $PREFIX/bin/termux-x11 hands app_process a few kilobytes of dex that finds this APK, checks
 // its signature and calls CmdEntryPoint.main. It is not installable and is not a dependency:
-// it is a file the launcher carries and writes into the prefix (X11CliInstaller). One variant
-// serves both build types — nothing in it differs, and CLASSPATH does not care about signing.
+// it is a file the launcher carries and writes into the prefix (X11CliInstaller). Built per
+// build type, because the signature it trusts is that build type's: a debug launcher carries a
+// loader that trusts the debug key, a release launcher one that trusts the release key.
 if (findProject(":x11-server:loader") != null) {
     def loaderProject = project(":x11-server:loader")
     def loaderAssetsDir = new File(buildDir, "generated/x11LoaderAssets")
-    def packageX11Loader = tasks.register("packageX11Loader", Copy) {
-        dependsOn "${loaderProject.path}:assembleDebug"
-        from(new File(loaderProject.buildDir, "outputs/apk/debug")) { include "*.apk" }
-        into new File(loaderAssetsDir, "x11")
-        rename ".*\\.apk", "loader.apk"
-    }
-    android.sourceSets.main.assets.srcDir loaderAssetsDir
-    tasks.configureEach {
-        if (name.startsWith("merge") && name.endsWith("Assets")) dependsOn packageX11Loader
+    android.buildTypes.all { buildType ->
+        def typeName = buildType.name
+        def typeDir = new File(loaderAssetsDir, typeName)
+        def task = tasks.register("packageX11Loader${typeName.capitalize()}", Copy) {
+            dependsOn "${loaderProject.path}:assemble${typeName.capitalize()}"
+            from(new File(loaderProject.buildDir, "outputs/apk/${typeName}")) { include "*.apk" }
+            into new File(typeDir, "x11")
+            rename ".*\\.apk", "loader.apk"
+            doFirst {
+                // The loader's baked hash and the APK it ships inside must name the same key,
+                // or `termux-x11` fails its own signature check on the very launcher that wrote
+                // it. Both sides read the app's signing config for this build type; this is
+                // the check that they did.
+                def appSigning = android.buildTypes.getByName(typeName).signingConfig
+                    ?: android.signingConfigs.debug
+                def expected = String.valueOf(loaderProject.signatureHashOf(appSigning))
+                def baked = loaderProject.android.buildTypes.getByName(typeName)
+                    .buildConfigFields['SIGNATURE']?.value
+                if (baked != expected) {
+                    throw new GradleException("The ${typeName} X11 loader trusts signature "
+                        + "${baked} but the ${typeName} launcher is signed with ${expected} "
+                        + "(${appSigning.name}); the loader must trust the key that signs "
+                        + "the APK it ships in.")
+                }
+            }
+        }
+        android.sourceSets.getByName(typeName).assets.srcDir typeDir
+        tasks.configureEach {
+            if (name.startsWith("merge") && name.endsWith("Assets")
+                    && name.toLowerCase().contains(typeName.toLowerCase())) {
+                dependsOn task
+            }
+        }
     }
 }

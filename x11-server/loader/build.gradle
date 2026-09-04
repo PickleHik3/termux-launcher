@@ -20,12 +20,26 @@ def hostApplicationId = {
     return id
 }()
 def app = project(':app')
+
+// The hash the loader compares against PackageInfo.signatures[0].hashCode(): Android's
+// Signature.hashCode() is Arrays.hashCode over the DER-encoded certificate.
+ext.signatureHashOf = { signing ->
+    def keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
+    keyStore.load(new FileInputStream(signing.storeFile), signing.storePassword.toCharArray())
+    return Arrays.hashCode(keyStore.getCertificate(signing.keyAlias).getEncoded())
+}
+
 // Whatever signs the launcher has to be what the loader trusts, or the loader refuses to run
-// the very APK it was shipped inside.
-def signing = app.android.signingConfigs.findByName('release') ?: app.android.signingConfigs.debug
-def keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
-keyStore.load(new FileInputStream(signing.storeFile), signing.storePassword.toCharArray())
-def signatureHash = Arrays.hashCode(keyStore.getCertificate(signing.keyAlias).getEncoded())
+// the very APK it was shipped inside — so the hash is per build type, read from the signing
+// config the app's *same* build type uses. Picking "release if configured, else debug" for both
+// baked the release hash into the loader of a debug build whenever the release keystore
+// variables were exported, and that loader then refused the installed debug APK.
+ext.appSigningFor = { String buildType ->
+    def type = app.android.buildTypes.getByName(buildType)
+    // An unsigned release (no release keystore configured) cannot be installed at all; the
+    // debug key is what the published debug-signed APKs and the companions all use.
+    return type.signingConfig ?: app.android.signingConfigs.debug
+}
 
 android {
     namespace 'com.termux.x11.loader'
@@ -41,7 +55,6 @@ android {
         versionName termuxX11VersionName
 
         buildConfigField "String", "APPLICATION_ID", "\"${hostApplicationId}\""
-        buildConfigField "int", "SIGNATURE", String.valueOf(signatureHash)
         buildConfigField "String", "CLASS_ID", "\"com.termux.x11.CmdEntryPoint\""
         buildConfigField "String", "COMMIT", "\"${termuxX11Commit}\""
         buildConfigField "String", "logTag", "\"termux-launcher x11 loader\""
@@ -55,9 +68,13 @@ android {
     buildTypes.debug.minifyEnabled true
     buildTypes.debug.shrinkResources true
     buildTypes.debug.proguardFiles 'proguard-rules.pro'
+    buildTypes.debug.buildConfigField "int", "SIGNATURE",
+        String.valueOf(signatureHashOf(appSigningFor('debug')))
     buildTypes.release.minifyEnabled true
     buildTypes.release.shrinkResources true
     buildTypes.release.proguardFiles 'proguard-rules.pro'
+    buildTypes.release.buildConfigField "int", "SIGNATURE",
+        String.valueOf(signatureHashOf(appSigningFor('release')))
 
     buildFeatures.buildConfig true
     compileOptions {
