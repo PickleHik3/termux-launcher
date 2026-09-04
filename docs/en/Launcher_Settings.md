@@ -143,8 +143,14 @@ Keyboard height is remembered separately for portrait and landscape.
   re-run row counts the apps installed since the last run, and the drawer mentions them once when
   more than five are waiting.
 - **Widget pane:** keep a page of home-screen widgets beside the terminal.
-- **Status bar buttons:** show Widgets and Display buttons in the expanded status bar. They give
-  way to a media session or a pinned notification; the swipe always works.
+- **Linux display** and **Display options:** run a Linux desktop or X11 apps as the third place
+  of the home screen — see [The Linux display](X11_Display.md). Options cover touch mode,
+  resolution, text size, clipboard sharing, starting the display with the launcher, the start
+  command, pointing new shells at the display, two compatibility switches, and what your GPU can
+  do for Linux apps.
+- **Status bar buttons:** show the two place buttons in the expanded status bar — always the two
+  places beside the one you are on. They give way to a media session or a pinned notification;
+  the swipe always works.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

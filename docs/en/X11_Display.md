@@ -54,8 +54,13 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   `pkill termux-x11`. Everything running on the display closes with it.
 - **The display survives switching away.** Your X apps keep running while you are on the
   terminal or the widget grid; only the picture is put away.
-- **Preferences.** `termux-x11-preference list` shows every setting;
-  `termux-x11-preference touchMode:2` sets one, exactly as in Termux:X11.
+- **Options.** Settings → Launcher & apps → **Display options** holds touch mode, resolution,
+  text size, clipboard sharing and how the launcher starts a display: with the launcher, with a
+  command of your choosing, pointing new shells at it (`DISPLAY` set in every new shell while a
+  display runs), and two compatibility switches. A running display picks a change up at once.
+- **Preferences from a shell.** `termux-x11-preference list` shows every setting;
+  `termux-x11-preference touchMode:2` sets one, exactly as in Termux:X11, and the running
+  display follows.
 - **Server flags.** `termux-x11 :0 -ac -dpi 240 -legacy-drawing -force-bgra -xstartup "xfce4-session"`
   — all Xorg flags and Termux:X11's own are accepted. `-legacy-drawing` is the one to try if the
   picture stays black on an unusual GPU.
@@ -75,6 +80,10 @@ the proot's login shell). The launcher never sets these for you.
 | `virgl-angle` | as `virgl`, plus `angle-android` | as `virgl` | `virgl_test_server_android --angle-gl &` | Mali, Xclipse and PowerVR phones where plain `virgl` misbehaves |
 | `vulkan-wrapper` | `vulkan-wrapper-android`, `mesa` | `VK_ICD_FILENAMES=$PREFIX/share/vulkan/icd.d/wrapper_icd.aarch64.json MESA_LOADER_DRIVER_OVERRIDE=zink` (Mali: add `MESA_VK_WSI_PRESENT_MODE=mailbox MESA_VK_WSI_DEBUG=blit`) | nothing | non-Adreno phones with a Vulkan driver |
 | `software` | `mesa` | `LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe MESA_LOADER_DRIVER_OVERRIDE=llvmpipe` | nothing | everything; the floor |
+
+The launcher can pick for you: `launcherctl x11 gpu` says which row fits this phone and what is
+installed, and `launcherctl x11 gpu --env` prints the exports to paste or `eval`. The same
+answer is at the bottom of Display options in Settings.
 
 Check what you got with `glmark2-es2` (from `x11-repo`): its first lines name the renderer, and
 the score with the Display place *showing* is the one that means anything — hidden, the server has
