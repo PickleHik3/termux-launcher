@@ -37,8 +37,9 @@ public class TaiSettingsParameterTest {
         Map<String, TaiSettings.ParameterSpec> fields = schema.fields();
 
         assertEquals(TaiModelSpec.BACKEND_LITERT_LM, schema.backend);
-        assertEquals(7, fields.size());
+        assertEquals(8, fields.size());
         assertIntegerSpec(fields.get(TaiSettings.FIELD_MAX_TOKENS), "4000", 2000, 32000);
+        assertIntegerSpec(fields.get(TaiSettings.FIELD_CONTEXT_WINDOW), "4096", 1024, 32_768);
         assertIntegerSpec(fields.get(TaiSettings.FIELD_TOP_K), "64", 5, 100);
         assertDecimalSpec(fields.get(TaiSettings.FIELD_TOP_P), "0.95", 0.0d, 1.0d);
         assertDecimalSpec(fields.get(TaiSettings.FIELD_TEMPERATURE), "1.00", 0.0d, 2.0d);
@@ -65,7 +66,7 @@ public class TaiSettingsParameterTest {
         assertEquals(TaiModelSpec.BACKEND_MNN_LLM, schema.backend);
         assertEquals(9, fields.size());
         assertArrayEquals(new String[] {"Auto", "CPU", "OpenCL"}, fields.get(TaiSettings.FIELD_ACCELERATOR).options);
-        assertIntegerSpec(fields.get(TaiSettings.FIELD_CONTEXT_WINDOW), "4096", 1024, 8192);
+        assertIntegerSpec(fields.get(TaiSettings.FIELD_CONTEXT_WINDOW), "4096", 1024, 32_768);
         assertIntegerSpec(fields.get(TaiSettings.FIELD_THREAD_COUNT), "4", 1, 16);
         assertArrayEquals(new String[] {"low", "normal", "high"}, fields.get(TaiSettings.FIELD_PRECISION).options);
         assertArrayEquals(new String[] {"low", "normal", "high"}, fields.get(TaiSettings.FIELD_MEMORY_MODE).options);
@@ -147,10 +148,10 @@ public class TaiSettingsParameterTest {
         assertEquals(Integer.valueOf(1024), mnnMin.contextWindow);
         assertEquals(Integer.valueOf(256), mnnMin.maxTokens);
 
-        settings.setGlobalParameter(TaiSettings.FIELD_CONTEXT_WINDOW, 8192);
+        settings.setGlobalParameter(TaiSettings.FIELD_CONTEXT_WINDOW, 32_768);
         settings.setGlobalParameter(TaiSettings.FIELD_MAX_TOKENS, 8192);
         TaiRuntimeOptions mnnMax = settings.getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, null);
-        assertEquals(Integer.valueOf(8192), mnnMax.contextWindow);
+        assertEquals(Integer.valueOf(32_768), mnnMax.contextWindow);
         assertEquals(Integer.valueOf(8192), mnnMax.maxTokens);
     }
 
@@ -173,7 +174,7 @@ public class TaiSettingsParameterTest {
         assertNull(liteRt.thinkingEnabled);
         assertNull(liteRt.speculativeDecodingEnabled);
 
-        settings.setGlobalParameter(TaiSettings.FIELD_CONTEXT_WINDOW, 9000);
+        settings.setGlobalParameter(TaiSettings.FIELD_CONTEXT_WINDOW, 40_000);
         TaiRuntimeOptions mnn = settings.getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, "mnn-bad");
         assertNull(mnn.accelerator);
         assertNull(mnn.contextWindow);

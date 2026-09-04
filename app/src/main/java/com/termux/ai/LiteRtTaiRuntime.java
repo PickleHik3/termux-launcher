@@ -62,6 +62,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private Engine engine;
     private Conversation conversation;
     private String conversationKey = "";
+    /**
+     * Fingerprints of the messages the live conversation has already consumed (system prompt
+     * excluded, the last assistant reply included). {@code null} for conversations that were not
+     * built from an OpenAI transcript — those keep the legacy key-only reuse of the tai CLI.
+     */
+    @Nullable private List<String> conversationTranscript;
+    /** Transcript of the request being generated, promoted to {@link #conversationTranscript} on success. */
+    @Nullable private List<String> pendingTranscript;
     private String loadedModelId;
     private String loadedModelPath;
     private String backendName = "none";
@@ -414,10 +422,26 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         } finally {
             synchronized (this) {
                 unloadRequested = unloadAfterGeneration;
-                finishGenerationLocked(errorRef.get());
+                Throwable failure = errorRef.get();
+                finishGenerationLocked(failure);
                 // cancelProcess() leaves the KV cache dirty, so a length-limited conversation
                 // must never be reused even though its partial response is a normal completion.
-                if (lengthLimited.get() || callbackCancelled.get() || !request.reusableConversation) closeConversationLocked();
+                // A failed generation leaves the KV state unknown, so it is not reused either.
+                if (lengthLimited.get() || callbackCancelled.get() || failure != null || !request.reusableConversation) {
+                    closeConversationLocked();
+                } else if (pendingTranscript != null && conversation == activeConversation) {
+                    String reply;
+                    synchronized (responseBuilder) {
+                        reply = responseBuilder.toString();
+                    }
+                    JSONArray replyCalls;
+                    synchronized (toolCalls) {
+                        replyCalls = toolCalls;
+                    }
+                    conversationTranscript = TaiConversationTranscript.extend(pendingTranscript,
+                        TaiConversationTranscript.assistantFingerprint(reply, replyCalls));
+                }
+                pendingTranscript = null;
             }
         }
 
@@ -699,10 +723,22 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         // key — otherwise a cached tool-less conversation silently serves tool requests.
         String key = mode + "|" + normalized(request.systemPrompt) + "|" + optionsKey(options)
             + "|tools:" + request.toolDefinitions.toString().hashCode();
-        if (request.reusableConversation && conversation != null && conversation.isAlive() && key.equals(conversationKey)) {
+        // OpenAI requests are stateless and carry the whole transcript. Reuse the live conversation
+        // (and its KV cache) only when that transcript is exactly what the conversation already
+        // holds plus the one new message we are about to send; anything else — an edited or
+        // trimmed history, a different client — starts a fresh conversation from the full history.
+        boolean transcriptRequest = request.messagesJson.length() > 0;
+        List<String> requestTranscript = transcriptRequest
+            ? TaiConversationTranscript.fingerprints(request.messagesJson) : null;
+        pendingTranscript = requestTranscript;
+        if (request.reusableConversation && conversation != null && conversation.isAlive() && key.equals(conversationKey)
+            && (transcriptRequest
+                ? TaiConversationTranscript.continuesFrom(conversationTranscript, requestTranscript)
+                : conversationTranscript == null)) {
             return conversation;
         }
         closeConversationLocked();
+        conversationTranscript = requestTranscript == null ? null : Collections.unmodifiableList(requestTranscript);
         Contents systemContents = contents(request.systemPrompt);
         ConversationConfig conversationConfig = conversationConfig(systemContents, request, options);
         synchronized (EXPERIMENTAL_FLAGS_LOCK) {
@@ -1113,6 +1149,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
         conversation = null;
         conversationKey = "";
+        conversationTranscript = null;
     }
 
     @NonNull

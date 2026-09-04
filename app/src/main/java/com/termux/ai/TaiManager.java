@@ -48,6 +48,8 @@ public final class TaiManager {
     @Nullable private TaiRuntime runtime;
     @Nullable private final TaiRuntimeServiceClient runtimeClient;
     private final boolean runtimeProcess;
+    /** Total device RAM, detected once; {@code -1} until first use, {@code 0} when unknown. */
+    private volatile long deviceMemoryBytes = -1L;
 
     public interface OpenAiStreamSink {
         void onEvent(@NonNull JSONObject event) throws IOException;
@@ -898,11 +900,13 @@ public final class TaiManager {
         LinkedHashMap<String, TaiModelSpec> availableModels = new LinkedHashMap<>();
         availableModels.putAll(modelStore.getDownloadedReadableModels());
         availableModels.putAll(modelStore.getInstalledUserModels());
-        for (TaiModelSpec spec : availableModels.values()) {
-            if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && !mnnSupported) continue;
+        for (TaiModelSpec stored : availableModels.values()) {
+            if (TaiModelSpec.BACKEND_MNN_LLM.equals(stored.backend) && !mnnSupported) continue;
             // Management can retain imported packages whose backend is not executable yet, but
             // generation discovery must publish only models with at least one runnable endpoint.
-            if (spec.endpointCapabilities.isEmpty()) continue;
+            if (stored.endpointCapabilities.isEmpty()) continue;
+            TaiModelSpec spec = TaiContextWindowPolicy.apply(stored, device.memoryBytes,
+                settings.getRuntimeOptions(stored).contextWindow);
             // Advertise multimodal LiteRT models as separate modality-scoped ids (chat / -vision /
             // -audio), matching Edge Gallery's per-task loading. See TaiModelVariants.
             for (TaiModelSpec variant : TaiModelVariants.expand(spec,
@@ -1342,11 +1346,30 @@ public final class TaiManager {
         // are reached through "-vision"/"-audio". Combined/Both: the canonical id loads every
         // enabled modality at once.
         if (direct != null) {
-            return TaiModelStore.EXPOSURE_SPLIT.equals(modelStore.getExposure(direct.id))
+            return withDeviceContextWindow(TaiModelStore.EXPOSURE_SPLIT.equals(modelStore.getExposure(direct.id))
                 ? TaiModelVariants.chatScopedOrSelf(direct)
-                : direct;
+                : direct);
         }
-        return TaiModelVariants.resolve(migratedId, this::lookupBaseModel);
+        return withDeviceContextWindow(TaiModelVariants.resolve(migratedId, this::lookupBaseModel));
+    }
+
+    /**
+     * Stored specs carry the catalog's conservative context floor. Everything that loads or
+     * advertises a model goes through here so the runtime budget, the tool-compatibility gate and
+     * {@code /v1/models} all see the same device-sized window (see {@link TaiContextWindowPolicy}).
+     */
+    @Nullable
+    private TaiModelSpec withDeviceContextWindow(@Nullable TaiModelSpec spec) {
+        if (spec == null) return null;
+        return TaiContextWindowPolicy.apply(spec, deviceMemoryBytes(), settings.getRuntimeOptions(spec).contextWindow);
+    }
+
+    private long deviceMemoryBytes() {
+        long cached = deviceMemoryBytes;
+        if (cached >= 0L) return cached;
+        long detected = TaiDeviceCapabilities.detect(appContext).memoryBytes;
+        deviceMemoryBytes = Math.max(0L, detected);
+        return deviceMemoryBytes;
     }
 
     @Nullable
@@ -1733,8 +1756,11 @@ public final class TaiManager {
             && finalMessage.getRole() != com.google.ai.edge.litertlm.Role.TOOL) {
             throw new JSONException("The final chat message must have role user or tool");
         }
+        // Reusable: the runtime keeps the conversation alive across stateless OpenAI requests when
+        // the new transcript continues the previous one, so a chat client's next turn prefills
+        // only the new message instead of the whole history (see TaiConversationTranscript).
         return new OpenAiChatRequest(new TaiChatRequest(
-            systemPrompt, conversationMessages, finalMessage, tools, false,
+            systemPrompt, conversationMessages, finalMessage, tools, true,
             messages, toolsJson, request.opt("tool_choice"), OpenAiStopSequences.fromRequest(request)));
     }
 

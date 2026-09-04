@@ -75,6 +75,14 @@ qwen2.5-coder-1.5b-instruct-mnn
 
 Endpoint truth wins: `_capabilities` always equals `_endpoint_capabilities`, meaning what this APK currently serves for that installed model. `_source_capabilities` and `_source_context_window` are informational upstream/package metadata and must not be used to decide whether to send media, embeddings, tools, or other requests.
 
+### Context Window Sizing
+
+`_endpoint_context_window` is sized per device, not fixed per model. The catalog carries a conservative floor for each model (4096 for LiteRT-LM chat models, 8192 or 16384 for MNN packages) and the model's own limit in `_source_context_window`. On a device whose RAM is known, TAI raises the endpoint window to the RAM tier's cap — 4096 below 5.5 GiB, 8192 below 7.5 GiB, 16384 below 11.5 GiB, 32768 above — never above the model's own limit and never below the catalog floor. The **Context window** setting (global or per model) overrides the tier. The same value sizes the LiteRT-LM engine budget and MNN's `max_all_tokens`, gates the automatic-tool compatibility rule, and is what `/v1/models` advertises, so a client can trust it.
+
+### Conversation Reuse
+
+OpenAI chat requests are stateless, but the LiteRT-LM runtime keeps the last conversation alive. When the next request's transcript is exactly the previous one plus the runtime's own reply plus one new message, that message is sent into the existing conversation and only it is prefilled. Any other transcript (edited, trimmed, a different system prompt, different tools or sampling options) starts a fresh conversation from the full history. Matching ignores tool-call ids, JSON key order and surrounding whitespace, so clients that echo the assistant message with extra fields still continue the conversation. MNN gets the same effect natively: `prompt_cache` is on, and MNN prefills only the suffix after the longest common rendered-prompt prefix.
+
 ## Load Preflight And Isolation
 
 `tai preflight <model>` and `POST /v1/ai/runtime/preflight` check compatibility without touching native runtime code. The checks cover ABI, Android API level, bundled native libraries, model-file readability/format, sidecar files for MNN packages, recommended and available memory, accelerator support, known GPU exclusions, and prior backend failures recorded for this model/device.
@@ -276,13 +284,12 @@ If `accelerator` is `auto` or omitted, TAI uses CPU for safety before native loa
 
 MNN models that advertise `tool_use` support OpenAI function tool requests through `/v1/chat/completions`.
 
-The current bundled prebuilt MNN native library does not export a native structured-tool bridge, so TAI marks MNN tool mode as `_tool_mode: "prompt_fallback"`. TAI renders a Java tool prompt and parses common tool-call outputs back into OpenAI `tool_calls`.
+The bundled MNN native library has no structured-tool bridge, so TAI marks MNN tool mode as `_tool_mode: "prompt_fallback"`: the model sees its tools as prompt text and TAI parses the text it emits back into OpenAI `tool_calls`. How the prompt is built depends on the package:
 
-For required or named tool choice, TAI guarantees an OpenAI-compatible result:
+- **Model template (preferred).** When the package's exported chat template (`llm_config.json`, `jinja.chat_template`) has a `tools` branch — every Qwen2.5 and Qwen3 export does — TAI passes the OpenAI function definitions to the template as its `tools` variable, passes assistant tool calls as structured messages and tool results as `role: "tool"` messages, and lets the model's own template render its official tool prompt, `<tool_call>` format and `<tool_response>` wrapping. A new model with a tools-aware template therefore works without any TAI change.
+- **Prompt fallback.** Packages whose template has no `tools` branch get TAI's Hermes-style `# Tools` system prompt with the same `<tool_call>` format, and tool results wrapped in `<tool_response>` by TAI.
 
-- valid model-emitted `<tool_call>...</tool_call>` blocks are parsed
-- valid bare JSON function-call responses are parsed
-- if the MNN fallback model still refuses to emit a call for `tool_choice:"required"` or a named tool, TAI synthesizes a tool call from the selected function schema and the last user message instead of returning prose
+In both cases TAI parses valid `<tool_call>...</tool_call>` blocks and bare JSON function-call responses (including a single ```json fence). If a request with `tool_choice: "required"` or a named tool yields no parsable call, TAI fails closed with `mnn_required_tool_call_missing` (HTTP 422). It never synthesizes a call from the user's text.
 
 Example request:
 

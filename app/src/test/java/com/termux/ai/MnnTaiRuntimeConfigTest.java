@@ -285,6 +285,132 @@ public class MnnTaiRuntimeConfigTest {
         assertFalse(overrides.getJSONObject("jinja").getJSONObject("context").getBoolean("enable_thinking"));
     }
 
+    @Test
+    public void chatTemplateSupportsTools_readsTheExportedTemplateFromLlmConfig() throws Exception {
+        File dir = new File(context.getCacheDir(), "mnn-template-tools");
+        dir.mkdirs();
+        File config = configFile(dir);
+        assertFalse(MnnTaiRuntime.chatTemplateSupportsTools(config));
+
+        write(new File(dir, "llm_config.json"), "{\"model_type\":\"qwen2\",\"jinja\":{\"chat_template\":"
+            + "\"{%- if messages[0]['role'] == 'system' %}{{ messages[0]['content'] }}{%- endif %}\",\"eos\":\"<|im_end|>\"}}");
+        assertFalse(MnnTaiRuntime.chatTemplateSupportsTools(config));
+
+        write(new File(dir, "llm_config.json"), "{\"model_type\":\"qwen2\",\"jinja\":{\"chat_template\":"
+            + "\"{%- if tools %}<tools>{%- for tool in tools %}{{ tool | tojson }}{%- endfor %}</tools>{%- endif %}\",\"eos\":\"<|im_end|>\"}}");
+        assertTrue(MnnTaiRuntime.chatTemplateSupportsTools(config));
+    }
+
+    @Test
+    public void requestConfig_passesToolsThroughTheJinjaContextAndClearsThemWithoutTools() throws Exception {
+        TaiRuntimeOptions options = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, Boolean.TRUE, null, null);
+        org.json.JSONArray tools = new org.json.JSONArray().put(new JSONObject()
+            .put("type", "function")
+            .put("function", new JSONObject().put("name", "get_weather")));
+        TaiChatRequest withTools = new TaiChatRequest("", Collections.emptyList(), Message.Companion.user("hi"),
+            Collections.emptyList(), false, new org.json.JSONArray(), tools, "auto");
+        TaiChatRequest withoutTools = new TaiChatRequest("", Collections.emptyList(), Message.Companion.user("hi"),
+            Collections.emptyList(), false, new org.json.JSONArray(), new org.json.JSONArray(), null);
+        TaiChatRequest toolsOff = new TaiChatRequest("", Collections.emptyList(), Message.Companion.user("hi"),
+            Collections.emptyList(), false, new org.json.JSONArray(), tools, "none");
+
+        JSONObject context = MnnTaiRuntime.requestConfigJson(options, withTools, true)
+            .getJSONObject("jinja").getJSONObject("context");
+        assertEquals(1, context.getJSONArray("tools").length());
+        assertEquals("get_weather", context.getJSONArray("tools").getJSONObject(0).getJSONObject("function").getString("name"));
+        assertTrue(context.getBoolean("enable_thinking"));
+
+        JSONObject cleared = MnnTaiRuntime.requestConfigJson(options, withoutTools, true)
+            .getJSONObject("jinja").getJSONObject("context");
+        assertTrue(cleared.has("tools"));
+        assertTrue(cleared.isNull("tools"));
+
+        JSONObject off = MnnTaiRuntime.requestConfigJson(options, toolsOff, true)
+            .getJSONObject("jinja").getJSONObject("context");
+        assertTrue(off.isNull("tools"));
+
+        JSONObject promptFallback = MnnTaiRuntime.requestConfigJson(options, withTools, false);
+        assertFalse(promptFallback.getJSONObject("jinja").getJSONObject("context").has("tools"));
+    }
+
+    @Test
+    public void mnnHistory_nativeTools_passesStructuredCallsAndRawResultsAndSkipsTheJavaToolPrompt() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        TaiChatRequest request = toolRequest(new JSONObject().put("type", "function")
+            .put("function", new JSONObject().put("name", "get_weather")));
+
+        List<Pair<String, String>> history = runtime.mnnHistory(request, true);
+
+        assertEquals("system", history.get(0).first);
+        assertEquals("Be brief.\nYou must call the tool named get_weather.", history.get(0).second);
+        assertFalse(history.get(0).second.contains("# Tools"));
+        assertEquals("user", history.get(1).first);
+        assertEquals("json", history.get(2).first);
+        JSONObject assistant = new JSONObject(history.get(2).second);
+        assertEquals("assistant", assistant.getString("role"));
+        assertEquals("", assistant.getString("content"));
+        JSONObject function = assistant.getJSONArray("tool_calls").getJSONObject(0).getJSONObject("function");
+        assertEquals("get_weather", function.getString("name"));
+        assertEquals("Kuwait City", function.getJSONObject("arguments").getString("city"));
+        assertEquals("tool", history.get(3).first);
+        assertEquals("{\"temp_c\":41}", history.get(3).second);
+    }
+
+    @Test
+    public void mnnHistory_promptFallback_keepsTheHermesPromptAndWrappedResults() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        TaiChatRequest request = toolRequest(new JSONObject().put("type", "function")
+            .put("function", new JSONObject().put("name", "get_weather")));
+
+        List<Pair<String, String>> history = runtime.mnnHistory(request, false);
+
+        assertTrue(history.get(0).second.startsWith("Be brief.\n\n# Tools"));
+        assertTrue(history.get(0).second.contains("\"name\":\"get_weather\""));
+        assertTrue(history.get(0).second.endsWith("You must call the tool named get_weather."));
+        assertEquals("assistant", history.get(2).first);
+        assertTrue(history.get(2).second.contains("<tool_call>"));
+        assertEquals("tool", history.get(3).first);
+        assertEquals("<tool_response>\n{\"temp_c\":41}\n</tool_response>", history.get(3).second);
+    }
+
+    @Test
+    public void requiredToolChoiceWithoutAParsableCall_failsClosedInsteadOfSynthesizing() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("validateRequiredToolChoice",
+            Object.class, org.json.JSONArray.class, org.json.JSONArray.class);
+        method.setAccessible(true);
+        org.json.JSONArray tools = new org.json.JSONArray().put(new JSONObject().put("type", "function")
+            .put("function", new JSONObject().put("name", "get_weather")));
+
+        JSONObject error = (JSONObject) method.invoke(runtime, "required", tools, new org.json.JSONArray());
+        assertEquals("mnn_required_tool_call_missing", error.getString("error"));
+
+        try {
+            MnnTaiRuntime.class.getDeclaredMethod("appendRequiredFallbackToolCall",
+                TaiChatRequest.class, String.class, String.class, org.json.JSONArray.class);
+            throw new AssertionError("the synthesized tool call must be gone");
+        } catch (NoSuchMethodException expected) {
+            // fail closed: no call is invented from the user's words
+        }
+    }
+
+    private static TaiChatRequest toolRequest(JSONObject tool) throws Exception {
+        org.json.JSONArray messages = new org.json.JSONArray()
+            .put(new JSONObject().put("role", "system").put("content", "Be brief."))
+            .put(new JSONObject().put("role", "user").put("content", "Weather in Kuwait City?"))
+            .put(new JSONObject().put("role", "assistant").put("content", JSONObject.NULL)
+                .put("tool_calls", new org.json.JSONArray().put(new JSONObject()
+                    .put("id", "call_1").put("type", "function")
+                    .put("function", new JSONObject().put("name", "get_weather")
+                        .put("arguments", "{\"city\":\"Kuwait City\"}")))))
+            .put(new JSONObject().put("role", "tool").put("tool_call_id", "call_1").put("content", "{\"temp_c\":41}"));
+        JSONObject choice = new JSONObject().put("type", "function")
+            .put("function", new JSONObject().put("name", "get_weather"));
+        return new TaiChatRequest("", Collections.emptyList(), Message.Companion.user(""), Collections.emptyList(),
+            false, messages, new org.json.JSONArray().put(tool), choice);
+    }
+
     private static Object invokeMergedConfig(MnnTaiRuntime runtime, File config, TaiModelSpec model, TaiRuntimeOptions options) throws Exception {
         Method method = MnnTaiRuntime.class.getDeclaredMethod("mergedConfigJson", File.class, TaiModelSpec.class, TaiRuntimeOptions.class);
         method.setAccessible(true);

@@ -192,6 +192,20 @@ public final class TaiModelSpec {
         this.toolMode = normalizedToolMode(toolMode, this.backend, endpointCaps);
     }
 
+    /**
+     * The same model with a different endpoint context window. Used by
+     * {@link TaiContextWindowPolicy} to size the runtime and the advertised window per device
+     * without touching the stored catalog or registry entry.
+     */
+    @NonNull
+    public TaiModelSpec withEndpointContextWindow(int newEndpointContextWindow) {
+        if (newEndpointContextWindow <= 0 || newEndpointContextWindow == endpointContextWindow) return this;
+        return new TaiModelSpec(id, displayName, roleHint, source, localPath, license, sizeBytes,
+            sourceCapabilities, builtInCatalogEntry, runtimeProfile, backend, format, architecture,
+            quantization, newEndpointContextWindow, sourceContextWindow, defaultMaxOutputTokens,
+            recommendedRamGb, sha256, endpointCapabilities, toolMode);
+    }
+
     @NonNull
     public JSONObject toJson() throws JSONException {
         JSONObject json = new JSONObject();

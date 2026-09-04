@@ -222,8 +222,8 @@ Each entry in the standard OpenAI-shaped `data` array includes TAI-specific meta
 - `_backend`: backend routing for the model, currently `litert-lm` (default LiteRT-LM runtime) or `mnn-llm` (bundled MNN backend).
 - `_capabilities`: ordered list of endpoint capability strings, for example `text_chat`, `image_input`, `audio_input`, `tool_use`, or `code`. This is what the installed APK can currently serve and is identical to `_endpoint_capabilities`.
 - `_source_capabilities`: informational upstream/package capabilities. Clients should not treat these as enabled endpoint features.
-- `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, TAI endpoint cap, and upstream/package context metadata.
-- `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback`; LiteRT tool support is native when advertised.
+- `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, the context window TAI serves on this device, and the model's own limit. The endpoint window grows with device RAM up to the model's limit and follows the **Context window** setting when one is set; see [Termux AI backends](Termux_AI_Backends.md#context-window-sizing).
+- `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback` (the model's own chat template renders the tools when it can, TAI's prompt otherwise); LiteRT tool support is native when advertised.
 
 `GET /v1/models/{id}` returns the single matching object (HTTP 404 if unknown).
 
