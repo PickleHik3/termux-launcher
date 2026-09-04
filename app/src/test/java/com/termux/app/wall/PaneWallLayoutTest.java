@@ -1,6 +1,7 @@
 package com.termux.app.wall;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -115,6 +116,62 @@ public class PaneWallLayoutTest {
         wall.endDrag(-10_000f);
         assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
         assertEquals(0f, display.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void aPageChangeUnderALiveDragEndsTheDragAndSaysSo() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        int[] interrupted = {0};
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onWallDragInterrupted() { interrupted[0]++; }
+        });
+        wall.beginDrag();
+        wall.dragTo(-200f);
+
+        // A tile tap, wall.go or Home lands mid-drag.
+        wall.goTo(PaneWallPage.DISPLAY, false);
+
+        assertEquals("the claimant is told once", 1, interrupted[0]);
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(0f, display.getTranslationX(), EPS);
+        // The rest of that finger is nobody's: the wall neither moves for it nor settles on it.
+        wall.dragTo(300f);
+        assertEquals(0f, display.getTranslationX(), EPS);
+        wall.endDrag(-10_000f);
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(1, interrupted[0]);
+    }
+
+    @Test
+    public void aPageChangeWithNoDragUnderWayInterruptsNothing() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        int[] interrupted = {0};
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onWallDragInterrupted() { interrupted[0]++; }
+        });
+
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.beginDrag();
+        wall.endDrag(0f);
+        wall.goTo(PaneWallPage.TERMINAL, false);
+
+        assertEquals(0, interrupted[0]);
+    }
+
+    @Test
+    public void switchingGesturesOffUnderALiveDragInterruptsIt() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        int[] interrupted = {0};
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onWallDragInterrupted() { interrupted[0]++; }
+        });
+        wall.beginDrag();
+        wall.dragTo(-200f);
+
+        wall.setGesturesEnabled(false);
+
+        assertEquals(1, interrupted[0]);
+        assertFalse(wall.isMoving());
     }
 
     @Test

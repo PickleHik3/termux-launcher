@@ -43,6 +43,13 @@ public final class PaneWallLayout extends ViewGroup {
         default void onWallPageSettled(@NonNull PaneWallPage page) { }
         /** The wall moved: {@code offsetPx} is signed distance from the current page's rest. */
         default void onWallOffsetChanged(float offsetPx) { }
+        /**
+         * A drag was under way and something else moved the wall — {@link #goTo}, or the
+         * gestures being switched off. Whoever was driving the drag has to let go of the finger:
+         * the wall will ignore it from here on, and a claimant that keeps streaming to it is
+         * holding a gesture nobody answers.
+         */
+        default void onWallDragInterrupted() { }
     }
 
     private final Map<PaneWallPage, View> mPageViews = new EnumMap<>(PaneWallPage.class);
@@ -129,7 +136,12 @@ public final class PaneWallLayout extends ViewGroup {
     /** Off while another surface owns the gesture (the surface editor, for one). */
     public void setGesturesEnabled(boolean enabled) {
         mGesturesEnabled = enabled;
-        if (!enabled) cancelDrag();
+        if (enabled || !mDragging) return;
+        // The claimant is told to let go, and the wall goes back to rest on its own — nothing
+        // else is going to release this drag now.
+        interruptDrag();
+        if (mReducedMotion) settleImmediately();
+        else startSlide();
     }
 
     public boolean areGesturesEnabled() {
@@ -141,7 +153,7 @@ public final class PaneWallLayout extends ViewGroup {
     /** Go to {@code page}, sliding unless {@code animate} is false or motion is reduced. */
     public boolean goTo(@NonNull PaneWallPage page, boolean animate) {
         if (!mPages.contains(page)) return false;
-        mDragging = false;
+        interruptDrag();
         if (page == mCurrent && mOffsetPx == 0f) return true;
         int from = mPages.indexOf(mCurrent);
         int to = mPages.indexOf(page);
@@ -198,11 +210,22 @@ public final class PaneWallLayout extends ViewGroup {
         goBy(steps, true);
     }
 
+    /** The claimant let go without a release (its stream was cancelled). */
     public void cancelDrag() {
         if (!mDragging) return;
         mDragging = false;
         if (mReducedMotion) settleImmediately();
         else startSlide();
+    }
+
+    /**
+     * The wall is taking over from a live drag. Unlike {@link #cancelDrag}, the claimant did not
+     * ask for this, so it is told: the rest of that finger's motion is not the wall's to answer.
+     */
+    private void interruptDrag() {
+        if (!mDragging) return;
+        mDragging = false;
+        if (mListener != null) mListener.onWallDragInterrupted();
     }
 
     // ---- Motion ----------------------------------------------------------------------------

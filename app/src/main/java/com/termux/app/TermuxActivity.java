@@ -10860,6 +10860,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         }
                     }
                 }
+                @Override public void onWallDragInterrupted() {
+                    // A tile tap, wall.go or Home moved the wall under a finger that was dragging
+                    // it; both surfaces that can drive a drag let go of that finger.
+                    View host = findViewById(R.id.terminal_window_bar_host);
+                    if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+                        ((com.termux.app.statusbar.StatusBarSwipeLayout) host).cancelWallDrag();
+                    }
+                    View bar = findViewById(R.id.terminal_window_bar);
+                    if (bar instanceof com.termux.app.terminal.TerminalWindowBar) {
+                        ((com.termux.app.terminal.TerminalWindowBar) bar).cancelOverswipe();
+                    }
+                }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
                     syncWallTileSelection();

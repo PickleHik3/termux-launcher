@@ -30,6 +30,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         default void onWallPageSettled(@NonNull PaneWallPage page) { }
         /** The wall committed to a different page, before the slide finishes. */
         default void onWallPageChanged(@NonNull PaneWallPage page) { }
+        /**
+         * The wall was moved by something other than the finger that was dragging it. Every
+         * surface that can drive a drag — the status bar, the window strip — must let go.
+         */
+        default void onWallDragInterrupted() { }
     }
 
     /** Saved-instance-state key for the page the wall is showing. */
@@ -209,5 +214,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallPageSettled(@NonNull PaneWallPage page) {
         mHost.onWallPageSettled(page);
+    }
+
+    @Override
+    public void onWallDragInterrupted() {
+        mHost.onWallDragInterrupted();
     }
 }

@@ -98,6 +98,18 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     public boolean isWallAvailable() { return mWallAvailable; }
 
     /**
+     * The wall was moved from elsewhere mid-drag (a tile tap, {@code wall.go}, Home). The drag
+     * is over: the rest of this finger's stream is ignored rather than fed to a wall that has
+     * stopped listening, and the next touch starts clean.
+     */
+    public void cancelWallDrag() {
+        if (!mWallDragActive) return;
+        mWallDragActive = false;
+        if (mGesture != null) mGesture.cancel();
+        requestStructuralReset();
+    }
+
+    /**
      * A tap on the bar's own chrome answers with the grabber the bar does not wear at rest: a
      * short pill that fades in below the row, sinks a few dp and fades out — the drag saying
      * it is there. Taps that belong to a child (window chips, the stat and weather widgets, the

@@ -224,6 +224,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private float mOverswipePx;
     /** One-way latch: once the surplus is the host's, the strip stops scrolling for this stream. */
     private boolean mOverswipeOwned;
+    /**
+     * The host took the wall away mid-overswipe. The rest of this stream belongs to nobody: not
+     * streamed to the host, not spent on the chips either — a finger that was dragging the wall
+     * must not suddenly scroll the strip under itself.
+     */
+    private boolean mOverswipeInterrupted;
     @Nullable private android.view.VelocityTracker mOverswipeVelocity;
     private int mSelectedIndex = -1;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
@@ -283,6 +289,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mEdgeOverswipeListener = listener;
     }
 
+    /** The wall moved on without this finger; the overswipe ends here, with no end or cancel. */
+    public void cancelOverswipe() {
+        if (!mOverswipeOwned) return;
+        mOverswipeOwned = false;
+        mOverswipeInterrupted = true;
+        mOverswipePx = 0f;
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         int action = event.getActionMasked();
@@ -293,6 +307,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             mGestureHorizontal = false;
             mGestureRejected = false;
             mOverswipeOwned = false;
+            mOverswipeInterrupted = false;
             if (mOverswipeVelocity == null) {
                 mOverswipeVelocity = android.view.VelocityTracker.obtain();
             }
@@ -315,6 +330,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 }
             }
             mLastTouchX = event.getX();
+            if (mOverswipeInterrupted) return true;
             if (mOverswipeOwned) {
                 // The surplus is the host's for the rest of this stream: the chips hold still
                 // rather than scrolling back under a finger that is now dragging the wall.
@@ -347,12 +363,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 mOverswipeVelocity.recycle();
                 mOverswipeVelocity = null;
             }
-            boolean handled = super.onTouchEvent(event);
+            boolean interrupted = mOverswipeInterrupted;
+            boolean handled = !interrupted && super.onTouchEvent(event);
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
             mOverswipePx = 0f;
             mGestureHorizontal = false;
             mGestureRejected = false;
             mOverswipeOwned = false;
+            mOverswipeInterrupted = false;
+            if (interrupted) return true;
             if (owned && mEdgeOverswipeListener != null) {
                 if (action == MotionEvent.ACTION_UP) {
                     mEdgeOverswipeListener.onEdgeOverswipeEnd(velocity);
@@ -622,6 +641,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             removeCallbacks(mLazyTick);
             mLazyTick = null;
         }
+        // A stream that was under way when the view left the window never gets its UP; the
+        // tracker goes back to the pool and the latch does not survive into the next attach.
+        if (mOverswipeVelocity != null) {
+            mOverswipeVelocity.recycle();
+            mOverswipeVelocity = null;
+        }
+        mOverswipeOwned = false;
+        mOverswipeInterrupted = false;
+        mOverswipePx = 0f;
         super.onDetachedFromWindow();
     }
 

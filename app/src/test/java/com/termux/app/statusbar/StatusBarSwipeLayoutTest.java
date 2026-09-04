@@ -176,6 +176,55 @@ public class StatusBarSwipeLayoutTest {
             R.color.termux_on_surface_variant), view.pullHintColor());
     }
 
+    /** Records the wall-drag stream the bar sends. */
+    private static final class WallListener implements StatusBarSwipeLayout.Listener {
+        final List<String> events = new ArrayList<>();
+        @Override public void onCollapsedStateRequested(boolean collapsed) { events.add("form"); }
+        @Override public boolean onWallDragBegin() { events.add("begin"); return true; }
+        @Override public void onWallDrag(float dxPx) { events.add("drag"); }
+        @Override public void onWallDragEnd(float velocityPxPerSec) { events.add("end"); }
+        @Override public void onWallDragCancel() { events.add("cancel"); }
+    }
+
+    @Test
+    public void cancelWallDragEndsTheStreamWithoutAnEndOrCancel() {
+        StatusBarSwipeLayout view = createView();
+        view.setWallAvailable(true);
+        WallListener listener = new WallListener();
+        view.setListener(listener);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 160f, 40f));
+        assertEquals(java.util.Arrays.asList("begin", "drag"), listener.events);
+
+        // The wall moved on its own (a tile tap, wall.go, Home) and says so.
+        view.cancelWallDrag();
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 190f, 40f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 190f, 40f));
+
+        assertEquals("the rest of that finger reaches nobody",
+            java.util.Arrays.asList("begin", "drag"), listener.events);
+
+        // The next touch starts clean.
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 160f, 40f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 160f, 40f));
+        assertEquals(java.util.Arrays.asList("begin", "drag", "begin", "drag", "end"),
+            listener.events);
+    }
+
+    @Test
+    public void cancelWallDragWithNoDragUnderWayIsANoOp() {
+        StatusBarSwipeLayout view = createView();
+        view.setWallAvailable(true);
+        WallListener listener = new WallListener();
+        view.setListener(listener);
+
+        view.cancelWallDrag();
+        swipe(view, 100f, 160f, 40f, 40f);
+
+        assertEquals(java.util.Arrays.asList("begin", "drag", "end"), listener.events);
+    }
+
     private static StatusBarSwipeLayout createView() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         StatusBarSwipeLayout view = new StatusBarSwipeLayout(
