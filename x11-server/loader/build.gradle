@@ -8,8 +8,18 @@
 apply plugin: 'com.android.application'
 apply from: '../version.gradle'
 
+// The edition's applicationId. An edition branch sets it explicitly — that is the one thing an
+// edition branch owns — and on `dev` AGP derives it from the namespace, so read both. Never
+// interpolate the raw property: a null lands in BuildConfig as the string "null", and the first
+// symptom is a package lookup for "null" at runtime.
+def hostApplicationId = {
+    def app = project(':app').android
+    def id = app.defaultConfig.applicationId ?: app.namespace
+    if (id == null || id.isEmpty() || id == 'null')
+        throw new GradleException("Cannot determine the launcher's applicationId for :${project.name}")
+    return id
+}()
 def app = project(':app')
-def hostApplicationId = app.android.defaultConfig.applicationId
 // Whatever signs the launcher has to be what the loader trusts, or the loader refuses to run
 // the very APK it was shipped inside.
 def signing = app.android.signingConfigs.findByName('release') ?: app.android.signingConfigs.debug

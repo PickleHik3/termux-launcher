@@ -180,6 +180,21 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_PANE_WALL_ENABLED = true;
 
+        /**
+         * Defines the key for the embedded Linux display: the wall's Display page, the
+         * {@code termux-x11} command the launcher writes into the prefix, and the display
+         * settings. Off until the user asks for it — a home screen that never wants a display
+         * should pay nothing for one.
+         */
+        public static final String KEY_X11_DISPLAY_ENABLED = "x11_display_enabled";
+
+        public static final boolean DEFAULT_X11_DISPLAY_ENABLED = false;
+
+        /** Command line the "Start display" button and the start-up opt-in run. */
+        public static final String KEY_X11_DISPLAY_COMMAND = "x11_display_command";
+
+        public static final String DEFAULT_X11_DISPLAY_COMMAND = "termux-x11 :0";
+
         /** Defines the key for the pane wall's Widgets and Display buttons in the status bar. */
         public static final String KEY_TOP_PANE_WALL_TILES = "top_pane_wall_tiles";
 

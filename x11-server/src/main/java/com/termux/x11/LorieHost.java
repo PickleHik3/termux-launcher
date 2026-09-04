@@ -107,6 +107,9 @@ public class LorieHost extends ContextWrapper {
 
     public void setLorieView(@Nullable LorieView view) {
         this.view = view;
+        // A page can be inflated before its host exists, so the view's own lookup may have come
+        // back empty; hand it the host here rather than relying on construction order.
+        if (view != null) view.activity = this;
     }
 
     @Nullable

@@ -37,6 +37,7 @@ import android.view.inputmethod.SurroundingText;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.math.MathUtils;
 
 import com.termux.x11.input.InputStub;
@@ -66,7 +67,12 @@ public class LorieView extends SurfaceView implements InputStub {
     private boolean clipboardSyncEnabled = false;
     private boolean hardwareKbdScancodesWorkaround = false;
     private final InputMethodManager mIMM = (InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-    private final LorieHost activity = LorieHost.findActivity(getContext());
+    /**
+     * The host. Not final and nullable, unlike upstream's: the launcher inflates this view as a
+     * page of the pane wall, which can happen before a host exists and can outlive one, and a
+     * null dereference here would be the home screen falling over. See UPSTREAM.md.
+     */
+    @Nullable LorieHost activity = LorieHost.findActivity(getContext());
     private Callback mCallback;
     private final Point p = new Point();
     private final Rect contentInsets = new Rect();
@@ -568,7 +574,7 @@ public class LorieView extends SurfaceView implements InputStub {
         if (hardwareKbdScancodesWorkaround)
             return false;
 
-        return activity.handleKey(event);
+        return activity != null && activity.handleKey(event);
     }
 
     @Override
@@ -591,7 +597,8 @@ public class LorieView extends SurfaceView implements InputStub {
         hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
         clipboardSyncEnabled = p.clipboardEnable.get();
         setClipboardSyncEnabled(mNativeContext, clipboardSyncEnabled, clipboardSyncEnabled);
-        activity.mInputHandler.refreshInputDevices();
+        if (activity != null && activity.mInputHandler != null)
+            activity.mInputHandler.refreshInputDevices();
     }
 
     // It is used in native code
@@ -649,7 +656,8 @@ public class LorieView extends SurfaceView implements InputStub {
         } else
             clipboard.removePrimaryClipChangedListener(clipboardListener);
 
-        activity.mInputHandler.refreshInputDevices();
+        if (activity != null && activity.mInputHandler != null)
+            activity.mInputHandler.refreshInputDevices();
     }
 
     @Override

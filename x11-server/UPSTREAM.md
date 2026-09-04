@@ -41,8 +41,13 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
   `handleKey()`, `setCapturingEnabled()`, `setExternalKeyboardConnected()`, `finish()`,
   `ACTION_CUSTOM`, `ACTION_STOP` — over a plain `ContextWrapper` and a `Callbacks` interface the
   launcher implements. Keeping the names is what makes a nightly merge stay a merge.
-- **`LorieView`**: `MainActivity` → `LorieHost`. The one behavioural cut is the composing-text
-  path's call into upstream's additional-keys bar, which is not vendored.
+- **`LorieView`**: `MainActivity` → `LorieHost`, and its `activity` field is nullable and no
+  longer final. Upstream can never see a null host — its activity exists for the life of its
+  process — but the launcher inflates this view as a page of the pane wall, which can happen
+  before a host exists and can outlive one, and a null dereference here is the home screen
+  falling over. `LorieHost.setLorieView` hands the host back to the view so construction order
+  does not matter. The one behavioural cut is the composing-text path's call into upstream's
+  additional-keys bar, which is not vendored.
 - **`input/TouchInputHandler`, `input/InputEventSender`**: `MainActivity` → `LorieHost`. Three
   gesture/notification actions lose their target — "toggle additional key bar" and "open
   preferences" become no-ops, and the notification's "restart activity" is gone — because they
@@ -95,3 +100,15 @@ the script and the signature check.
 4. `./gradlew :x11-server:assembleDebug :app:assembleDebug` and check the Display page on a
    device — the JNI surface between `CmdEntryPoint`/`LorieView` and the native library is not
    type-checked by anything.
+
+## Two things that only fail at runtime
+
+Both were found by running it, not by reading it, and both are cheap to break again:
+
+- **The loader must be read-only in the prefix.** ART refuses a writable dex file on `CLASSPATH`
+  ("Writable dex file ... is not allowed") and aborts `app_process` before `Loader.main`, so
+  `X11CliInstaller` clears the write bit after copying it out.
+- **The server needs the XKB data or it exits before opening a port.** It comes from the
+  `xkeyboard-config` package, and upstream only knows how to find it under `com.termux`'s own
+  prefix, so the generated `termux-x11` points `XKB_CONFIG_ROOT` at this edition's. The Display
+  page says what to install when it is missing.

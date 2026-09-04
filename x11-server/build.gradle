@@ -7,7 +7,17 @@ apply from: 'version.gradle'
 
 // The server runs as `app_process` and class-loads the launcher's own APK, so the package it
 // broadcasts to and looks itself up under is the edition's applicationId, not this module's.
-def hostApplicationId = project(':app').android.defaultConfig.applicationId
+// The edition's applicationId. An edition branch sets it explicitly — that is the one thing an
+// edition branch owns — and on `dev` AGP derives it from the namespace, so read both. Never
+// interpolate the raw property: a null lands in BuildConfig as the string "null", and the first
+// symptom is a package lookup for "null" at runtime.
+def hostApplicationId = {
+    def app = project(':app').android
+    def id = app.defaultConfig.applicationId ?: app.namespace
+    if (id == null || id.isEmpty() || id == 'null')
+        throw new GradleException("Cannot determine the launcher's applicationId for :${project.name}")
+    return id
+}()
 
 android {
     namespace 'com.termux.x11'

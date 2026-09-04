@@ -626,6 +626,29 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_PANE_WALL_ENABLED, value, false);
     }
 
+    public boolean isX11DisplayEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, TERMUX_APP.DEFAULT_X11_DISPLAY_ENABLED);
+    }
+
+    public void setX11DisplayEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, value, false);
+    }
+
+    @NonNull
+    public String getX11DisplayCommand() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_COMMAND, TERMUX_APP.DEFAULT_X11_DISPLAY_COMMAND, true);
+        return value == null || value.trim().isEmpty()
+            ? TERMUX_APP.DEFAULT_X11_DISPLAY_COMMAND : value.trim();
+    }
+
+    public void setX11DisplayCommand(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_COMMAND, value, false);
+    }
+
     public boolean isTopPaneWallTilesEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TOP_PANE_WALL_TILES, TERMUX_APP.DEFAULT_TOP_PANE_WALL_TILES);

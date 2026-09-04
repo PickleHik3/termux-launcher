@@ -40,6 +40,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @NonNull private final PaneWallLayout mWall;
     @NonNull private final Host mHost;
     @Nullable private WidgetPaneFrame mWidgetsPage;
+    @Nullable private com.termux.app.x11.X11PaneFrame mDisplayPage;
     @Nullable private PaneSurfaceStyle mStyle;
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
@@ -89,6 +90,27 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
+     * Put the embedded display on the wall as its Display page. Inflated here rather than in the
+     * layout file so an install that never turns the display on never builds its surface.
+     */
+    @Nullable
+    public com.termux.app.x11.X11PaneFrame attachDisplayPage(@NonNull LayoutInflater inflater) {
+        if (mDisplayPage != null) return mDisplayPage;
+        com.termux.app.x11.X11PaneFrame frame = (com.termux.app.x11.X11PaneFrame) inflater.inflate(
+            com.termux.R.layout.view_x11_pane, mWall, false);
+        mWall.addView(frame);
+        mDisplayPage = frame;
+        mWall.setPageView(PaneWallPage.DISPLAY, frame);
+        applyStyle(mStyle);
+        return frame;
+    }
+
+    @Nullable
+    public com.termux.app.x11.X11PaneFrame displayPage() {
+        return mDisplayPage;
+    }
+
+    /**
      * Dress every non-terminal page from the surface style. The terminal pages dress themselves
      * through {@code TerminalPaneController}; this is the same pass for the rest of the wall, and
      * it runs on the same triggers — a wallpaper change, a blur change, an editor slider tick.
@@ -96,6 +118,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
         if (mWidgetsPage != null) mWidgetsPage.applyStyle(style);
+        if (mDisplayPage != null) mDisplayPage.applyStyle(style);
     }
 
     /** The places this install has, in spatial order. */

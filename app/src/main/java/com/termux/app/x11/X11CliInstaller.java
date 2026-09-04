@@ -33,7 +33,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    private static final int VERSION = 1;
+    private static final int VERSION = 3;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -99,7 +99,9 @@ public final class X11CliInstaller {
         for (String path : new String[]{SERVER_SCRIPT_PATH, PREFERENCE_SCRIPT_PATH, LOADER_PATH,
                 MARKER_PATH}) {
             File file = new File(path);
-            if (file.exists() && !file.delete()) {
+            if (!file.exists()) continue;
+            file.setWritable(true, true);
+            if (!file.delete()) {
                 Logger.logWarn(LOG_TAG, "Failed to remove " + path);
             }
         }
@@ -114,6 +116,15 @@ public final class X11CliInstaller {
         if (!script.exists()) return false;
         String content = read(SERVER_SCRIPT_PATH);
         return content == null || !content.contains(MARKER_PREAMBLE);
+    }
+
+    /**
+     * Whether the XKB keyboard data the server needs is in the prefix. It comes from the
+     * {@code xkeyboard-config} package; without it the server exits before it opens a port.
+     */
+    public static boolean hasKeyboardData() {
+        return new File(PREFIX + "/share/X11/xkb").isDirectory()
+            || new File(PREFIX + "/share/xkeyboard-config-2").isDirectory();
     }
 
     /** True once this launcher's own commands are in place. */
@@ -133,6 +144,15 @@ public final class X11CliInstaller {
             + "if [ ! -e /system/bin/getprop ] || [ ! -e /system/bin/app_process ]; then\n"
             + "  echo \"This needs a standard Android system: the display server runs as an app process.\"\n"
             + "  exit 1\n"
+            + "fi\n"
+            // The server refuses to start without the XKB data and only knows how to find it in
+            // com.termux's own prefix, so point it at this edition's. It is the xkeyboard-config
+            // package's; the Display page says so when it is missing.
+            + "if [ -z \"${XKB_CONFIG_ROOT+x}\" ]; then\n"
+            + "  for dir in " + PREFIX + "/share/X11/xkb "
+            + PREFIX + "/share/xkeyboard-config-2; do\n"
+            + "    if [ -d \"$dir\" ]; then export XKB_CONFIG_ROOT=\"$dir\"; break; fi\n"
+            + "  done\n"
             + "fi\n"
             + "[ -z \"${LD_LIBRARY_PATH+x}\" ] || export XSTARTUP_LD_LIBRARY_PATH=\"$LD_LIBRARY_PATH\"\n"
             + "[ -z \"${LD_PRELOAD+x}\" ] || export XSTARTUP_LD_PRELOAD=\"$LD_PRELOAD\"\n"
@@ -168,15 +188,25 @@ public final class X11CliInstaller {
             + "exec /system/bin/app_process -Xnoimage-dex2oat / com.termux.x11.Loader \"$@\"\n";
     }
 
+    /**
+     * Copy an asset out and leave it read-only. The read-only part is not tidiness: ART refuses
+     * to put a writable dex file on {@code CLASSPATH} ("Writable dex file ... is not allowed"),
+     * so a loader the app can still write to aborts {@code app_process} before it reaches main.
+     */
     private static void copyAsset(@NonNull Context context, @NonNull String asset,
                                   @NonNull String path) throws IOException {
         File file = new File(path);
+        // A read-only file cannot be truncated, so an upgrade has to take the old one away first.
+        if (file.exists() && !file.setWritable(true, true) && !file.delete()) {
+            throw new IOException("Cannot replace " + path);
+        }
         try (InputStream in = context.getAssets().open(asset);
              OutputStream out = new FileOutputStream(file, false)) {
             byte[] buffer = new byte[8192];
             int read;
             while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
         }
+        file.setWritable(false, false);
         file.setReadable(true, false);
     }
 

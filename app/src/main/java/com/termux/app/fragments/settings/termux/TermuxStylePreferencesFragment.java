@@ -227,6 +227,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setTopPaneWallTilesEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "x11_display_enabled":
+                mPreferences.setX11DisplayEnabled(value);
+                // The page and the prefix commands are set up once per activity, so turning the
+                // display on or off has to come back through a recreate.
+                scheduleTermuxActivityStylingSync(true);
+                break;
             case "app_launcher_row_haptics":
                 mPreferences.setAppLauncherRowHapticsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -275,6 +281,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
             case "top_pane_wall_tiles":
                 return mPreferences.isTopPaneWallTilesEnabled();
+            case "x11_display_enabled":
+                return mPreferences.isX11DisplayEnabled();
             case "app_launcher_row_haptics":
                 return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":

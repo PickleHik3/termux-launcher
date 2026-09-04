@@ -88,6 +88,11 @@
             app:summary="@string/settings_widget_pane_enabled_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
+            app:key="x11_display_enabled"
+            app:title="@string/settings_x11_display_title"
+            app:summary="@string/settings_x11_display_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
             app:key="top_pane_wall_tiles"
             app:title="@string/settings_wall_tiles_title"
             app:summary="@string/settings_wall_tiles_summary"

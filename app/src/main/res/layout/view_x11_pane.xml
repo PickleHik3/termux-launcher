@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pane wall's Display page: the embedded X server's surface, dressed like a terminal pane.
+     There is no glass slab — an X screen is opaque, so there is nothing to see through it — but
+     the page keeps the rim, the radius and the gap. The corner mask paints what sits behind the
+     page over the four arcs, because the surface is composited outside the view hierarchy and no
+     parent clip can round it (there is no public SurfaceView corner radius at compileSdk 36). -->
+<com.termux.app.x11.X11PaneFrame xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <com.termux.x11.LorieView
+        android:id="@+id/x11_display_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:defaultFocusHighlightEnabled="false" />
+
+    <com.termux.app.terminal.PaneGlassBackdropView
+        android:id="@+id/x11_pane_corner_mask"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no" />
+
+    <!-- Shown whenever no server is running, which is the state a home screen rests in: the
+         launcher never starts one on its own. -->
+    <LinearLayout
+        android:id="@+id/x11_pane_empty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp">
+
+        <TextView
+            android:id="@+id/x11_pane_empty_message"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textSize="14sp"
+            android:textColor="?attr/termuxColorOnSurfaceVariant"
+            android:text="@string/termux_x11_no_display" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/x11_pane_start"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
+            android:text="@string/termux_x11_start_display" />
+    </LinearLayout>
+</com.termux.app.x11.X11PaneFrame>
