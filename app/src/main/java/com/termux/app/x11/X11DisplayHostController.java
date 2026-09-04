@@ -131,12 +131,17 @@ public final class X11DisplayHostController {
         } catch (RemoteException ignored) {
             // Already dead; tryConnect's own failure path handles it.
         }
-        try {
-            ParcelFileDescriptor logcat = service.getLogcatOutput();
-            LorieView live = view;
-            if (logcat != null && live != null) live.startLogcat(logcat.detachFd());
-        } catch (Exception e) {
-            Logger.logVerbose(LOG_TAG, "No logcat pipe from the display server: " + e.getMessage());
+        // The server's own log, but only for someone who has asked to see logs: taking this
+        // pipe makes Android ask the user for access to all device logs, and a home screen must
+        // not put that dialog in front of anyone who merely started a display.
+        if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE) {
+            try {
+                ParcelFileDescriptor logcat = service.getLogcatOutput();
+                LorieView live = view;
+                if (logcat != null && live != null) live.startLogcat(logcat.detachFd());
+            } catch (Exception e) {
+                Logger.logVerbose(LOG_TAG, "No log pipe from the display server: " + e.getMessage());
+            }
         }
         tryConnect();
     }
