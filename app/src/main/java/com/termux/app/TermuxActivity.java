@@ -11027,29 +11027,67 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Where the wall stands relative to its rest, as its last offset callback said. */
     private float mWallOffsetPx;
 
-    /** Dress the bar for the place on screen: accents, badge, summary, lens and tint. */
+    /** Dress the bar for the place on screen: row content, accents, summary, icons and tint. */
     private void syncPlaceBar() {
         com.termux.app.wall.PaneWallPage page = currentWallPage();
         int accent = com.termux.app.statusbar.StatusBarLensView.accentFor(this, page);
         // The terminal is the bar's own colour; the other places bring theirs.
         Integer placeAccent = page == com.termux.app.wall.PaneWallPage.TERMINAL ? null : accent;
+        // The row's badge is the terminal session's and shows nowhere else; the chips are the
+        // terminal's windows or the display's apps, and the Widgets place has none: its widgets
+        // speak for themselves.
         com.termux.app.statusbar.SessionsIndicatorView sessions =
             findViewById(R.id.terminal_sessions_indicator);
-        if (sessions != null) sessions.setAccent(placeAccent);
+        if (sessions != null) {
+            sessions.setAccent(placeAccent);
+            sessions.setVisibility(page == com.termux.app.wall.PaneWallPage.TERMINAL
+                ? View.VISIBLE : View.GONE);
+        }
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
-        if (bar != null) bar.setPlaceAccent(placeAccent);
+        if (bar != null) {
+            bar.setPlaceAccent(placeAccent);
+            bar.setVisibility(page == com.termux.app.wall.PaneWallPage.WIDGETS
+                ? View.GONE : View.VISIBLE);
+        }
         bindPlaceBadge(sessions);
         View slotView = findViewById(R.id.terminal_top_widget_area);
-        if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
-            ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setPlaceSummary(
-                placeSummary(page), accent);
-        }
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
+        if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
+            com.termux.app.statusbar.TopPaneWidgetSlot slot =
+                (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
+            slot.setPlaceSummary(placeSummary(page), accent);
+            if (lens != null) {
+                lens.setCardsPresent(slot.getSlotMode()
+                    != com.termux.app.statusbar.TopPaneSlotMode.CLOCK_ONLY);
+            }
+        }
         if (lens != null) {
             lens.setDisplayRunning(isEmbeddedDisplayRunning());
-            lens.setCompact(mPreferences != null && mPreferences.isTopPaneClockCollapsed());
+            lens.setDisplayGlyph(displayRuntimeGlyph());
+            if (mStatusBarCollapseAnimator == null) {
+                lens.setExpansion(mPreferences != null && mPreferences.isTopPaneClockCollapsed()
+                    ? 0f : 1f);
+            }
         }
+        applyPlaceStripInset(mPreferences != null && mPreferences.isTopPaneClockCollapsed()
+            ? 0f : 1f);
         syncPlaceBarOffset(mWallOffsetPx);
+    }
+
+    /**
+     * The row's place content starts after the lens — and, in the compact bar, after the home
+     * icon too, which lives in the row there instead of in the slot above.
+     */
+    private void applyPlaceStripInset(float expansion) {
+        View strip = findViewById(R.id.terminal_status_place_content);
+        if (strip == null) return;
+        float lens = dpToPx(com.termux.app.statusbar.PlaceContentStrip.LENS_WIDTH_DP);
+        float compactIcon = dpToPx(com.termux.app.statusbar.StatusBarLensView.COMPACT_ICON_DP + 6f);
+        int start = Math.round(lens + compactIcon * (1f - Math.max(0f, Math.min(1f, expansion))));
+        if (strip.getPaddingStart() != start) {
+            strip.setPaddingRelative(start, strip.getPaddingTop(), strip.getPaddingEnd(),
+                strip.getPaddingBottom());
+        }
     }
 
     /**
@@ -11058,16 +11096,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPlaceBarOffset(float offsetPx) {
         mWallOffsetPx = offsetPx;
+        int width = mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth();
+        // The place's row content and summary pan with the wall, one width per place like the
+        // terminal's own window switch, and dissolve towards the halfway point — which is where
+        // the wall commits to the next place and the content becomes that place's.
+        float travel = width <= 0 ? 0f : Math.min(1f, Math.abs(offsetPx) / (width * 0.5f));
+        float alpha = 1f - travel;
         View strip = findViewById(R.id.terminal_status_place_content);
-        if (strip != null) strip.setTranslationX(offsetPx);
+        if (strip != null) {
+            strip.setTranslationX(offsetPx);
+            strip.setAlpha(alpha);
+        }
         View slotView = findViewById(R.id.terminal_top_widget_area);
         if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
-            ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setPlaceOffset(offsetPx);
+            com.termux.app.statusbar.TopPaneWidgetSlot slot =
+                (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
+            slot.setPlaceOffset(offsetPx);
+            if (slot.placeSummary() != null) slot.placeSummary().setAlpha(alpha);
         }
         if (mPaneWallController == null) return;
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
-        int width = mPaneWallController.wall().getWidth();
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) lens.setWallState(pages, current, offsetPx, width);
         View tint = findViewById(R.id.terminal_status_place_tint);
@@ -11090,32 +11139,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /**
-     * The badge at the start of the status row is the place's: the session on the terminal, the
-     * page number on Widgets, the runtime mark on Display.
-     */
+    /** The badge at the start of the status row is the terminal session's; it shows nowhere else. */
     private void bindPlaceBadge(@Nullable com.termux.app.statusbar.SessionsIndicatorView badge) {
-        if (badge == null) return;
-        switch (currentWallPage()) {
-            case WIDGETS: {
-                int number = mWidgetPaneController == null ? 1
-                    : mWidgetPaneController.currentPageNumber();
-                badge.setBadge(Integer.toString(number),
-                    getString(R.string.termux_wall_widgets_badge_content_description, number));
-                break;
-            }
-            case DISPLAY:
-                badge.setBadge(displayRuntimeGlyph(),
-                    getString(R.string.termux_wall_display_badge_content_description,
-                        displayRuntimeLabel()));
-                break;
-            default: {
-                int sessionIndex = mCurrentWSession == null ? -1
-                    : mWSessions.indexOf(mCurrentWSession);
-                badge.setSession(currentStatusSessionName(), mWSessions.size(), sessionIndex);
-                break;
-            }
-        }
+        if (badge == null || currentWallPage() != com.termux.app.wall.PaneWallPage.TERMINAL) return;
+        int sessionIndex = mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession);
+        badge.setSession(currentStatusSessionName(), mWSessions.size(), sessionIndex);
     }
 
     /** What the place holds, for the line beside the clock: the widgets on the page, or nothing. */
@@ -11127,7 +11155,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return android.text.TextUtils.join(" · ", mWidgetPaneController.labelsOnCurrentPage());
     }
 
-    /** The Display badge's glyph: Termux X11's prompt, or the chosen distribution's mark. */
+    /** The Display place's icon: Termux X11's prompt, or the chosen distribution's mark. */
     @NonNull
     private String displayRuntimeGlyph() {
         String badge = mPreferences == null
@@ -11142,18 +11170,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    @NonNull
-    private String displayRuntimeLabel() {
-        String badge = mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE
-            : mPreferences.getX11RuntimeBadge();
-        String[] values = getResources().getStringArray(R.array.x11_runtime_badge_values);
-        String[] entries = getResources().getStringArray(R.array.x11_runtime_badge_entries);
-        for (int i = 0; i < values.length && i < entries.length; i++) {
-            if (values[i].equals(badge)) return entries[i];
-        }
-        return entries.length > 0 ? entries[0] : badge;
-    }
 
     /** The bridge that types the in-app keyboard's values into X. Built once. */
     @NonNull
@@ -11529,19 +11545,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 return;
             }
-            // A widget's chip names it and nothing more.
-            if (isWidgetsPageShowing()) return;
             if (mPaneController == null || mCurrentWSession == null
                 || index < 0 || index >= mCurrentWSession.windows.size()) return;
             showWindowFromBar(index);
         });
         bar.setOnCreateWindowListener(() -> {
-            // The Display place opens another app from the drawer rather than a terminal window;
-            // the Widgets place adds a widget.
+            // The Display place opens another app from the drawer rather than a terminal window.
             if (isDisplayPageShowing()) getDrawer().openDrawer(android.view.Gravity.LEFT);
-            else if (isWidgetsPageShowing()) {
-                if (mWidgetPaneController != null) mWidgetPaneController.openPicker();
-            } else createNewWindow();
+            else createNewWindow();
         });
         // The chips scroll first; once the strip is at its edge the surplus distance drags the
         // pane wall, so reaching the last window and pulling further slides the next place in.
@@ -11602,10 +11613,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) {
-            // A tap on a lens glyph slides the wall to the place it stands for.
+            // A tap on a peeking place icon slides the wall to the place it stands for.
             lens.setListener(page -> {
                 if (mPaneWallController != null) mPaneWallController.goTo(page, true);
             });
+            View slotView = findViewById(R.id.terminal_top_widget_area);
+            if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
+                com.termux.app.statusbar.TopPaneWidgetSlot slot =
+                    (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
+                slot.setModeListener(() -> lens.setCardsPresent(slot.getSlotMode()
+                    != com.termux.app.statusbar.TopPaneSlotMode.CLOCK_ONLY));
+            }
         }
         syncWallGestureAvailability();
         refreshTerminalWindowBar();
@@ -11625,6 +11643,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (height - collapsedHeight) / (float) (expandedHeight - collapsedHeight)));
         com.termux.app.statusbar.StatusBarResizeGeometry.Row rowGeometry =
             applyInteractiveStatusRowGeometry(height, capsule, collapsedHeight, expandedHeight);
+        com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
+        if (lens != null) lens.setExpansion(expansion);
+        applyPlaceStripInset(expansion);
         if (topWidgets != null) {
             topWidgets.setVisibility(View.VISIBLE);
             topWidgets.setAlpha(expansion);
@@ -11887,12 +11908,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             selected = mDisplayActiveWindow;
         } else if (isWidgetsPageShowing()) {
-            // The Widgets place: its chips name the widgets on the page, none of them selected.
-            if (mWidgetPaneController != null) {
-                for (String label : mWidgetPaneController.labelsOnCurrentPage()) {
-                    items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label));
-                }
-            }
+            // The Widgets place has no chips: the row is bare there and the widgets speak for
+            // themselves.
             selected = -1;
         } else if (mCurrentWSession != null && mPaneController != null) {
             long now = android.os.SystemClock.uptimeMillis();

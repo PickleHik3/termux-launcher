@@ -201,9 +201,6 @@
     <string name="settings_x11_drawer_apps_summary">List installed Linux apps beside your Android apps; tapping one opens it on the display.</string>
     <string name="settings_x11_runtime_badge_title">Display badge</string>
     <string name="settings_x11_runtime_badge_summary">The mark on the Display place\'s badge in the status bar.</string>
-    <string name="termux_wall_display_badge_content_description">Display place, %1$s</string>
-    <string name="termux_wall_widgets_badge_content_description">Widgets page %1$d</string>
-    <string name="termux_wall_glyph_content_description">Go to %1$s</string>
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>

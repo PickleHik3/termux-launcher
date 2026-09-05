@@ -110,9 +110,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     int currentPage() { return currentPage; }
 
-    /** One-based number of the page on screen, for the status bar's badge. */
-    public int currentPageNumber() { return currentPage + 1; }
-
     /**
      * What the page on screen holds, by provider label in reading order, for the status bar's
      * chips and summary. A widget whose provider is gone is named by its package.

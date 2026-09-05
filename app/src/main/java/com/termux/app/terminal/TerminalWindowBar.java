@@ -348,9 +348,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 if (Math.abs(mOverswipePx) > mTouchSlop && mEdgeOverswipeListener != null
                     && mEdgeOverswipeListener.onEdgeOverswipeBegin()) {
                     mOverswipeOwned = true;
-                    // Start the host from rest: the slop that proved the intent is not travel.
-                    mOverswipePx = 0f;
-                    mEdgeOverswipeListener.onEdgeOverswipe(0f);
+                    // The slop that proved the intent is not travel, but whatever the finger moved
+                    // beyond it is: a coarse stream can cover much of the bar in its first move,
+                    // and starting the host from rest threw that distance away.
+                    mOverswipePx -= Math.copySign(mTouchSlop, mOverswipePx);
+                    mEdgeOverswipeListener.onEdgeOverswipe(mOverswipePx);
                 }
             }
             return handled;

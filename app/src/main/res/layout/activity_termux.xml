@@ -219,10 +219,13 @@
                                 android:contentDescription="@string/termux_window_bar_content_description" />
                         </com.termux.app.statusbar.PlaceContentStrip>
 
+                        <!-- The stat widgets hold still while the place content slides; the end
+                             margin keeps them clear of the lens and the icon peeking through it. -->
                         <LinearLayout
                             android:id="@+id/terminal_status_widgets"
                             android:layout_width="wrap_content"
                             android:layout_height="match_parent"
+                            android:layout_marginEnd="12dp"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:paddingStart="3dp"

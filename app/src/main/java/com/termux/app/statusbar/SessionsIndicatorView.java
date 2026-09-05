@@ -86,18 +86,6 @@ public final class SessionsIndicatorView extends LinearLayout {
         applyColors();
     }
 
-    /**
-     * A one-glyph badge with a description of its own: the Display place's runtime mark, or the
-     * Widgets place's page number given as text. It keeps the square shape of a number.
-     */
-    public void setBadge(@NonNull CharSequence glyph, @NonNull CharSequence description) {
-        mShowingSessionNumber = true;
-        mLabel.setText(NerdFontSpans.span(getContext(), glyph));
-        setContentDescription(description);
-        syncWidthToCurrentLabel();
-        requestLayout();
-    }
-
     /** currentIndex is 0-based; label is the session name or one-based fallback number. */
     public void setSession(@Nullable CharSequence label, int count, int currentIndex) {
         if (count <= 0) {

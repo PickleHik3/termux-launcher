@@ -8,17 +8,22 @@ import com.termux.app.wall.PaneWallPolicy;
 import java.util.List;
 
 /**
- * Pure geometry for the status bar's lens edges: where each place's glyph sits, how present it
+ * Pure geometry for the status bar's place icons: where each place's icon sits, how present it
  * is, and how far the bar's glass has drifted towards that place's tint.
  *
  * <p>The bar is the pager. Every place is one bar-width from its neighbours, and a place's
  * distance from the one on screen, {@code t}, is measured in bar widths: 0 is the place on
- * screen, {@code -1} the one waiting past the left edge, {@code +1} the one past the right. The
- * glyph of the place on screen is hidden; a neighbour's glyph rests half past its edge, and as a
- * drag brings that place in the glyph travels to the bar's home position and dissolves — the
- * place you are arriving at needs no mark once it is here.
+ * screen, {@code -1} the one waiting past the left edge, {@code +1} the one past the right.
+ * Three icons show at any time. The place on screen wears its icon at the home position beside
+ * the clock; its two neighbours peek in from the edges, half past them. A drag moves all three
+ * together along one line: the arriving icon travels from its edge to home while the one that was
+ * home leaves through the other edge, and the third slips off and fades, to be found waiting at
+ * the far edge once the wall lands.
  */
 public final class StatusBarLensPolicy {
+
+    /** Beyond one width away an icon is leaving; by this many widths it has gone. */
+    private static final float FADE_OUT_WIDTHS = 0.5f;
 
     private StatusBarLensPolicy() {}
 
@@ -30,31 +35,34 @@ public final class StatusBarLensPolicy {
         return rel + offset;
     }
 
-    /** How present a glyph is: 0 for the place on screen, 1 for a neighbour at rest. */
+    /** How far from home an icon is, 0 at home and 1 at either edge. */
     public static float presence(float t) {
         return Math.min(1f, Math.abs(t));
     }
 
-    /** The glyph's opacity, eased so it lingers as it dissolves. */
+    /** Icons within a width of home are whole; further out they dissolve as they leave. */
     public static float alpha(float t) {
-        return (float) Math.pow(presence(t), 0.7);
+        float beyond = Math.abs(t) - 1f;
+        if (beyond <= 0f) return 1f;
+        return Math.max(0f, 1f - beyond / FADE_OUT_WIDTHS);
     }
 
-    /** The glyph shrinks a fifth on its way in. */
+    /** The icon at home is full size; at the edges it is a little smaller. */
     public static float scale(float t) {
-        return 1f - 0.2f * presence(t);
+        return 1f - 0.14f * presence(t);
     }
 
     /**
-     * The glyph's left edge. Rest for the place on screen is {@code home}; a neighbour on the left
-     * sits {@code inLeg} short of it, one on the right {@code outLeg} past it, and anything
-     * further out keeps travelling off the bar.
+     * The icon's left edge. {@code home} is where the place on screen rests, beside the clock;
+     * {@code leftPeek} and {@code rightPeek} are the resting places of the two neighbours, half
+     * past their edges. An icon further than a width away keeps travelling outward by its own
+     * size per width, which is what carries it off while it fades.
      */
-    public static float lensX(float t, float home, float inLeg, float outLeg) {
-        if (t >= -1f && t <= 0f) return home + t * inLeg;
-        if (t > 0f && t <= 1f) return home + t * outLeg;
-        if (t < -1f) return home - inLeg + (t + 1f) * inLeg * 3f;
-        return home + outLeg + (t - 1f) * inLeg * 3f;
+    public static float iconX(float t, float home, float leftPeek, float rightPeek, float size) {
+        if (t >= -1f && t <= 0f) return leftPeek + (t + 1f) * (home - leftPeek);
+        if (t > 0f && t <= 1f) return home + t * (rightPeek - home);
+        if (t < -1f) return leftPeek + (t + 1f) * size * 1.5f;
+        return rightPeek + (t - 1f) * size * 1.5f;
     }
 
     /** How much of a place's tint the glass wears: full on screen, gone one width away. */

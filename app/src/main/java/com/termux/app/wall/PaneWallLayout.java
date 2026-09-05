@@ -8,7 +8,11 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.Spring;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
+
+import com.termux.app.terminal.Motion;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,9 +43,13 @@ import java.util.Map;
  */
 public final class PaneWallLayout extends ViewGroup {
 
-    /** Springs the wall to rest; the same channel shape the status bar's pull-down uses. */
-    private static final float SLIDE_STIFFNESS = 420f;
-    private static final float SLIDE_DAMPING = 41f;
+    /**
+     * A slide is the terminal's own window pan: the same settle curve over the same time for a
+     * full width, shortened in proportion when the wall has less far to go, so a release near
+     * rest lands quickly and a tap from one place to the next travels like a window switch.
+     */
+    private static final long SLIDE_FULL_MS = 560L;
+    private static final long SLIDE_MIN_MS = 180L;
 
     public interface Listener {
         /** The wall has committed to a different page; the slide may still be running. */
@@ -66,14 +74,11 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Signed distance from the current page's rest position, in px. */
     private float mOffsetPx;
-    private final Spring mSlide = new Spring(0f, SLIDE_STIFFNESS, SLIDE_DAMPING);
+    @Nullable private ValueAnimator mSlide;
     private boolean mSliding;
     private boolean mDragging;
     private boolean mReducedMotion;
-    private long mLastFrameNanos;
     private boolean mGesturesEnabled = true;
-
-    private final Runnable mTick = this::tick;
 
     public PaneWallLayout(@NonNull Context context) {
         this(context, null);
@@ -140,6 +145,11 @@ public final class PaneWallLayout extends ViewGroup {
         return mDragging || mSliding;
     }
 
+    /** True while a finger is driving the wall. */
+    public boolean isDragging() {
+        return mDragging;
+    }
+
     /** Off while another surface owns the gesture (the surface editor, for one). */
     public void setGesturesEnabled(boolean enabled) {
         mGesturesEnabled = enabled;
@@ -187,8 +197,7 @@ public final class PaneWallLayout extends ViewGroup {
     public void beginDrag() {
         if (!mGesturesEnabled) return;
         mDragging = true;
-        mSliding = false;
-        removeCallbacks(mTick);
+        stopSlide();
     }
 
     /** Move the wall for a finger that has travelled {@code dxPx} since it went down. */
@@ -241,37 +250,39 @@ public final class PaneWallLayout extends ViewGroup {
             settleImmediately();
             return;
         }
-        mSlide.value = mOffsetPx;
-        mSlide.target = 0f;
-        mSlide.vel = 0f;
-        if (!mSliding) {
-            mSliding = true;
-            mLastFrameNanos = 0L;
-            postOnAnimation(mTick);
-        }
+        stopSlide();
+        int width = Math.max(1, getWidth());
+        float fraction = Math.min(1f, Math.abs(mOffsetPx) / width);
+        long duration = Math.max(SLIDE_MIN_MS, Math.round(SLIDE_FULL_MS * fraction));
+        ValueAnimator slide = ValueAnimator.ofFloat(mOffsetPx, 0f);
+        slide.setDuration(duration);
+        slide.setInterpolator(Motion.settle());
+        slide.addUpdateListener(animation -> {
+            mOffsetPx = (Float) animation.getAnimatedValue();
+            applyPagePositions();
+        });
+        slide.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+            @Override public void onAnimationCancel(Animator animation) { mCancelled = true; }
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mSlide == animation) mSlide = null;
+                if (!mCancelled) settleImmediately();
+            }
+        });
+        mSlide = slide;
+        mSliding = true;
+        slide.start();
     }
 
-    private void tick() {
-        if (!mSliding) return;
-        long now = System.nanoTime();
-        float dt = mLastFrameNanos == 0L ? Spring.MIN_DT
-            : Spring.clampDelta((now - mLastFrameNanos) / 1_000_000_000f);
-        mLastFrameNanos = now;
-        boolean running = mSlide.tick(mReducedMotion, dt);
-        mOffsetPx = mSlide.value;
-        applyPagePositions();
-        if (running) {
-            postOnAnimation(mTick);
-        } else {
-            settleImmediately();
-        }
+    private void stopSlide() {
+        mSliding = false;
+        ValueAnimator slide = mSlide;
+        mSlide = null;
+        if (slide != null) slide.cancel();
     }
 
     private void settleImmediately() {
-        mSliding = false;
-        mLastFrameNanos = 0L;
-        removeCallbacks(mTick);
-        mSlide.reset(0f);
+        stopSlide();
         mOffsetPx = 0f;
         applyPagePositions();
         if (mListener != null) mListener.onWallPageSettled(mCurrent);
@@ -381,6 +392,6 @@ public final class PaneWallLayout extends ViewGroup {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         mSliding = false;
-        removeCallbacks(mTick);
+        stopSlide();
     }
 }

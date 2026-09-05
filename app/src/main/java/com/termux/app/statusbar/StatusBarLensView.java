@@ -27,37 +27,46 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The lens edges of the status bar. The outer strip of the glass on each side is a lens: a
- * specular hairline over a brighter wash, with the neighbouring place's glyph resting half past
- * the edge and half dissolved. The glyphs are the only marks of place the bar carries — no switch
- * and no names — and each says where that direction leads: a tap on one slides the wall there,
- * and a drag brings it in along the lens until it dissolves as the place lands.
+ * The status bar's place icons and lens edges. Three square icons show at any time: the place on
+ * screen wears its icon at home, beside the clock at the bar's start, and its two neighbours peek
+ * in from the edges, half past them, saying where each direction leads. A drag moves the three
+ * along one line — the arriving icon travels to home as the one at home leaves through the far
+ * edge — and a tap on a peeking icon slides the wall to its place.
  *
- * <p>The view lies over the whole bar but owns only the glyphs' touches; everything else falls
- * through to the bar's own drag.
+ * <p>The outer strip of the glass on each side is a lens: a specular hairline over a brighter
+ * wash. When a pinned notification or a media session holds the slot beside the clock, the
+ * peeking icons drop into the status row's band so nothing crosses the cards.
+ *
+ * <p>The view lies over the whole bar but owns only the peeking icons' touches; everything else
+ * falls through to the bar's own drag.
  */
 public final class StatusBarLensView extends View {
 
     public interface Listener {
-        void onPlaceGlyphTapped(@NonNull PaneWallPage page);
+        void onPlaceIconTapped(@NonNull PaneWallPage page);
     }
 
-    private static final float HOME_DP = 15f;
-    private static final float IN_LEG_DP = 30f;
-    private static final float PILL_WIDTH_DP = 30f;
-    private static final float PILL_HEIGHT_DP = 76f;
-    private static final float COMPACT_PILL_DP = 20f;
-    private static final float GLYPH_SP = 20f;
-    private static final float COMPACT_GLYPH_SP = 11f;
+    /** The home icon's size in the expanded bar, and the cell the slot keeps clear for it. */
+    public static final float ICON_DP = 36f;
+    /** The gap between the home icon and the clock. */
+    public static final float ICON_GAP_DP = 10f;
+    /** Every icon's size in the compact bar, and of the peeking icons in the row band. */
+    public static final float COMPACT_ICON_DP = 20f;
+    /** The home icon's left edge: the slot's gutter. */
+    public static final float HOME_X_DP = 12f;
+    /** The expanded bar's slot height; the home icon centres on it. */
+    private static final float SLOT_HEIGHT_DP = 68f;
+    /** Where the row band's centre sits above the expanded bar's bottom edge. */
+    private static final float ROW_CENTER_FROM_BOTTOM_DP = 14f;
     private static final float HAIRLINE_DP = 1.5f;
     private static final float WASH_DP = 20f;
 
-    private final Paint mPillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mTilePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mHairlinePaint = new Paint();
     private final Paint mWashPaint = new Paint();
-    private final RectF mPill = new RectF();
+    private final RectF mTile = new RectF();
     private final RectF[] mHitRects = new RectF[PaneWallPage.values().length];
     private final int mTouchSlop;
 
@@ -65,8 +74,11 @@ public final class StatusBarLensView extends View {
     @NonNull private PaneWallPage mCurrent = PaneWallPage.TERMINAL;
     private float mOffsetPx;
     private int mWallWidthPx;
-    private boolean mCompact;
+    /** 0 in the compact bar, 1 in the expanded one, in between while it folds. */
+    private float mExpansion = 1f;
+    private boolean mCardsPresent;
     private boolean mDisplayRunning;
+    @NonNull private String mDisplayGlyph = "";
     @Nullable private Listener mListener;
     @Nullable private PaneWallPage mPressed;
     private float mDownX;
@@ -96,17 +108,32 @@ public final class StatusBarLensView extends View {
         invalidate();
     }
 
-    /** The compact bar wears small square glyphs; the expanded one tall pills. */
-    public void setCompact(boolean compact) {
-        if (mCompact == compact) return;
-        mCompact = compact;
+    /** How far the bar is unfolded: 0 compact, 1 expanded. The icons grow and rise with it. */
+    public void setExpansion(float expansion) {
+        float clamped = Math.max(0f, Math.min(1f, expansion));
+        if (mExpansion == clamped) return;
+        mExpansion = clamped;
         invalidate();
     }
 
-    /** The Display glyph reads quieter until a display runs. */
+    /** A pinned notification or media session holds the slot: the peeking icons keep clear. */
+    public void setCardsPresent(boolean present) {
+        if (mCardsPresent == present) return;
+        mCardsPresent = present;
+        invalidate();
+    }
+
+    /** The Display icon reads quieter until a display runs. */
     public void setDisplayRunning(boolean running) {
         if (mDisplayRunning == running) return;
         mDisplayRunning = running;
+        invalidate();
+    }
+
+    /** The Display place's mark: Termux X11's prompt, or the distribution the display serves. */
+    public void setDisplayGlyph(@NonNull String glyph) {
+        if (mDisplayGlyph.equals(glyph)) return;
+        mDisplayGlyph = glyph;
         invalidate();
     }
 
@@ -126,12 +153,19 @@ public final class StatusBarLensView extends View {
     }
 
     /** The place's mark: a grid, a prompt, a screen. */
-    public static String glyphFor(@NonNull PaneWallPage page) {
+    @NonNull
+    private String glyphFor(@NonNull PaneWallPage page) {
         switch (page) {
-            case WIDGETS: return "\uf00a";
-            case DISPLAY: return "\uf108";
-            default: return "\uf120";
+            case WIDGETS: return "";
+            case DISPLAY: return mDisplayGlyph;
+            default: return "";
         }
+    }
+
+    /** The width the slot keeps clear at its start for the home icon and its gap. */
+    public static int homeCellWidthPx(@NonNull Context context) {
+        float density = context.getResources().getDisplayMetrics().density;
+        return Math.round((ICON_DP + ICON_GAP_DP) * density);
     }
 
     @Override
@@ -150,35 +184,44 @@ public final class StatusBarLensView extends View {
         if (width <= 0 || height <= 0) return;
         drawLens(canvas, width, height);
         for (RectF rect : mHitRects) rect.setEmpty();
-        if (mWallWidthPx <= 0 || mPages.size() < 2) return;
-        float home = dp(HOME_DP);
-        float inLeg = dp(IN_LEG_DP);
-        float pillWidth = dp(mCompact ? COMPACT_PILL_DP : PILL_WIDTH_DP);
-        float pillHeight = mCompact ? pillWidth : Math.min(height - dp(8f), dp(PILL_HEIGHT_DP));
-        // Rest for a right-hand neighbour mirrors the left one: half past its edge.
-        float outLeg = (width - pillWidth / 2f) - home;
-        float radius = mCompact ? dp(7f) : pillWidth / 2f;
-        mGlyphPaint.setTextSize(sp(mCompact ? COMPACT_GLYPH_SP : GLYPH_SP));
+        if (mWallWidthPx <= 0 || mPages.isEmpty()) return;
+
+        // The home icon grows from the compact row's square to the slot's as the bar unfolds, and
+        // its centre rises from the row to the slot with it.
+        float homeSize = lerp(dp(COMPACT_ICON_DP), dp(ICON_DP), mExpansion);
+        float homeCenterY = lerp(height / 2f, dp(SLOT_HEIGHT_DP) / 2f, mExpansion);
+        // Peeking icons share the home icon's line, unless cards hold the slot: then they keep to
+        // the row band, and stay small, so nothing ever crosses a notification or the media strip.
+        boolean rowBand = mCardsPresent && mExpansion > 0.5f;
+        float peekSize = rowBand ? dp(COMPACT_ICON_DP) : homeSize;
+        float peekCenterY = rowBand ? height - dp(ROW_CENTER_FROM_BOTTOM_DP) : homeCenterY;
+        float home = dp(HOME_X_DP);
         for (PaneWallPage page : mPages) {
             float t = StatusBarLensPolicy.distance(mPages, mCurrent, page, mOffsetPx, mWallWidthPx);
             float alpha = StatusBarLensPolicy.alpha(t);
             if (alpha <= 0.01f) continue;
-            float scale = StatusBarLensPolicy.scale(t);
-            float x = StatusBarLensPolicy.lensX(t, home, inLeg, outLeg);
-            float centerX = x + pillWidth / 2f;
-            float centerY = height / 2f;
-            float halfW = pillWidth * scale / 2f;
-            float halfH = pillHeight * scale / 2f;
-            mPill.set(centerX - halfW, centerY - halfH, centerX + halfW, centerY + halfH);
-            mHitRects[page.ordinal()].set(mPill);
+            // An icon on its way between home and an edge takes the size and line of the end it
+            // is nearer, so the arriving one is already square-and-small in the band before it
+            // reaches the cards and grows only as it takes the home spot.
+            float presence = StatusBarLensPolicy.presence(t);
+            float size = lerp(homeSize, peekSize, presence) * StatusBarLensPolicy.scale(t);
+            float centerY = lerp(homeCenterY, peekCenterY, presence);
+            float leftPeek = -size / 2f;
+            float rightPeek = width - size / 2f;
+            float x = StatusBarLensPolicy.iconX(t, home, leftPeek, rightPeek, size);
+            float centerX = x + size / 2f;
+            mTile.set(centerX - size / 2f, centerY - size / 2f, centerX + size / 2f, centerY + size / 2f);
+            if (page != mCurrent) mHitRects[page.ordinal()].set(mTile);
             int accent = accentFor(getContext(), page);
             boolean quiet = page == PaneWallPage.DISPLAY && !mDisplayRunning;
-            float presence = quiet ? alpha * 0.55f : alpha;
-            mPillPaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(41 * presence)));
-            mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(102 * presence)));
-            mGlyphPaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(255 * presence)));
-            canvas.drawRoundRect(mPill, radius * scale, radius * scale, mPillPaint);
-            canvas.drawRoundRect(mPill, radius * scale, radius * scale, mStrokePaint);
+            float ink = quiet ? alpha * 0.6f : alpha;
+            float radius = size * 0.32f;
+            mTilePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(46 * ink)));
+            mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(110 * ink)));
+            mGlyphPaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(255 * ink)));
+            mGlyphPaint.setTextSize(size * 0.52f);
+            canvas.drawRoundRect(mTile, radius, radius, mTilePaint);
+            canvas.drawRoundRect(mTile, radius, radius, mStrokePaint);
             float baseline = centerY - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
             canvas.drawText(glyphFor(page), centerX, baseline, mGlyphPaint);
         }
@@ -203,7 +246,7 @@ public final class StatusBarLensView extends View {
     public boolean onTouchEvent(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
-                PaneWallPage hit = glyphAt(event.getX(), event.getY());
+                PaneWallPage hit = iconAt(event.getX(), event.getY());
                 if (hit == null) return false;
                 mPressed = hit;
                 mDownX = event.getX();
@@ -221,7 +264,7 @@ public final class StatusBarLensView extends View {
                 mPressed = null;
                 if (pressed == null) return false;
                 performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                if (mListener != null) mListener.onPlaceGlyphTapped(pressed);
+                if (mListener != null) mListener.onPlaceIconTapped(pressed);
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
@@ -232,21 +275,19 @@ public final class StatusBarLensView extends View {
         }
     }
 
-    /** Whether a touch lands on a glyph that is present enough to be a target. */
-    public boolean isGlyphAt(float x, float y) {
-        return glyphAt(x, y) != null;
+    /** Whether a touch lands on a peeking icon that is present enough to be a target. */
+    public boolean isIconAt(float x, float y) {
+        return iconAt(x, y) != null;
     }
 
     @Nullable
-    private PaneWallPage glyphAt(float x, float y) {
+    private PaneWallPage iconAt(float x, float y) {
         if (mWallWidthPx <= 0) return null;
         for (PaneWallPage page : mPages) {
             if (page == mCurrent) continue;
             RectF rect = mHitRects[page.ordinal()];
             if (rect.isEmpty()) continue;
-            float t = StatusBarLensPolicy.distance(mPages, mCurrent, page, mOffsetPx, mWallWidthPx);
-            if (StatusBarLensPolicy.presence(t) < 0.5f) continue;
-            // A pill half past the edge is a small target; give it the whole lens width.
+            // Half of a peeking icon is past the edge; the whole lens width is its target.
             float slop = dp(8f);
             if (x >= rect.left - slop && x <= rect.right + slop && y >= rect.top - slop
                 && y <= rect.bottom + slop) return page;
@@ -254,11 +295,11 @@ public final class StatusBarLensView extends View {
         return null;
     }
 
-    private float dp(float value) {
-        return value * getResources().getDisplayMetrics().density;
+    private static float lerp(float from, float to, float fraction) {
+        return from + (to - from) * fraction;
     }
 
-    private float sp(float value) {
-        return value * getResources().getDisplayMetrics().scaledDensity;
+    private float dp(float value) {
+        return value * getResources().getDisplayMetrics().density;
     }
 }

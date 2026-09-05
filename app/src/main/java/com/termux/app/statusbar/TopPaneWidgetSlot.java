@@ -48,6 +48,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private TopPanePlaceSummaryView mSummary;
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
+    @Nullable private Runnable mModeListener;
     private int mPinnedCount;
     @Nullable private String mClockAlignment;
 
@@ -142,6 +143,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         return mMode;
     }
 
+    /** Told whenever the slot's mode changes: the bar's place icons keep clear of the cards. */
+    public void setModeListener(@Nullable Runnable listener) {
+        mModeListener = listener;
+    }
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
@@ -190,8 +196,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         }
 
         boolean modeChanged = mode != mMode || pinnedCount != mPinnedCount;
+        boolean cardsChanged = (mode == TopPaneSlotMode.CLOCK_ONLY) != (mMode == TopPaneSlotMode.CLOCK_ONLY);
         mMode = mode;
         mPinnedCount = pinnedCount;
+        if (cardsChanged && mModeListener != null) mModeListener.run();
         applyClockForm(mode.clockForm(pinnedCount), animate);
         applyChildVisibility(mNotifications, mode.showsNotifications(), animate,
             PINNED_TRANSITION_MS, 0f, 6f);
@@ -284,7 +292,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         int gutter = Math.round(dp(GUTTER_DP));
         int gap = Math.round(dp(GAP_DP));
-        int available = Math.max(0, width - gutter * 2);
+        // The bar's home place icon sits at the slot's start, beside the clock, whatever the
+        // clock's alignment; the clock and everything else lay out after it.
+        int homeCell = StatusBarLensView.homeCellWidthPx(getContext());
+        int contentStart = gutter + homeCell;
+        int available = Math.max(0, width - contentStart - gutter);
         boolean stacked = mMode.showsNotifications() && mPinnedCount >= TopPaneSlotMode.MAX_PINNED;
 
         int clockWidth;
@@ -300,17 +312,17 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         }
         mClock.measure(MeasureSpec.makeMeasureSpec(clockWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
-        mClockBounds.set(gutter, stacked ? 0 : (height - clockHeight) / 2,
-            gutter + clockWidth, (stacked ? 0 : (height - clockHeight) / 2) + clockHeight);
+        mClockBounds.set(contentStart, stacked ? 0 : (height - clockHeight) / 2,
+            contentStart + clockWidth, (stacked ? 0 : (height - clockHeight) / 2) + clockHeight);
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
-        applyPlaceSummary(width, height, gutter, gap);
+        applyPlaceSummary(width, height, gutter, gap, homeCell);
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) return;
 
         if (stacked) {
             int stackHeight = Math.min(height, Math.round(dp(STACK_HEIGHT_DP)));
-            mNotificationBounds.set(gutter, Math.max(0, (height - stackHeight) / 2),
+            mNotificationBounds.set(contentStart, Math.max(0, (height - stackHeight) / 2),
                 width - gutter, Math.max(0, (height - stackHeight) / 2) + stackHeight);
             if (mNotifications != null) {
                 mNotifications.setHeaderInsetStart(clockWidth + gap);
@@ -319,7 +331,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             return;
         }
 
-        int contentLeft = gutter + clockWidth + gap;
+        int contentLeft = contentStart + clockWidth + gap;
         int contentRight = width - gutter;
         int contentWidth = Math.max(0, contentRight - contentLeft);
         if (mNotifications != null) mNotifications.setHeaderInsetStart(0f);
@@ -377,7 +389,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
      * to its compact face when what the summary leaves cannot hold its full one — at a large font
      * scale on a narrow screen it cannot, which is why the fit is measured.
      */
-    private void applyPlaceSummary(int width, int height, int gutter, int gap) {
+    private void applyPlaceSummary(int width, int height, int gutter, int gap, int homeCell) {
         boolean shown = mMode.showsTiles(true) && mSummary != null && mSummary.hasSummary();
         if (!shown) {
             mSummaryBounds.setEmpty();
@@ -385,16 +397,22 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             return;
         }
         int summaryHeight = Math.min(height, Math.round(dp(PLACE_SUMMARY_HEIGHT_DP)));
-        int maxWidth = Math.max(0, Math.round((width - gutter * 2) * PLACE_SUMMARY_MAX_FRACTION));
+        // The clock and the summary share what is left after the home icon's cell.
+        int shared = Math.max(0, width - homeCell);
+        int maxWidth = Math.max(0, Math.round((shared - gutter * 2) * PLACE_SUMMARY_MAX_FRACTION));
         mSummary.measure(MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.AT_MOST),
             MeasureSpec.makeMeasureSpec(summaryHeight, MeasureSpec.EXACTLY));
         int clockDesired = mClock == null ? 0 : Math.max(1, Math.round(mClock.contentWidth()));
-        TopPaneAsideLayoutPolicy.Result result = TopPaneAsideLayoutPolicy.calculate(width, height,
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        TopPaneAsideLayoutPolicy.Result result = TopPaneAsideLayoutPolicy.calculate(shared, height,
             gutter, gap, mClockAlignment, mSummary.getMeasuredWidth(), summaryHeight,
-            clockDesired, Math.round(dp(PLACE_SUMMARY_MIN_CLOCK_DP)),
-            getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+            clockDesired, Math.round(dp(PLACE_SUMMARY_MIN_CLOCK_DP)), rtl);
         mClockBounds.set(result.clock);
         mSummaryBounds.set(result.place);
+        // Back into the slot's own coordinates: the shared area starts after the home cell.
+        int shift = rtl ? 0 : homeCell;
+        mClockBounds.offset(shift, 0);
+        if (!mSummaryBounds.isEmpty()) mSummaryBounds.offset(shift, 0);
         applyClockForm(result.clockCompact ? TopPaneClockForm.COMPACT : TopPaneClockForm.FULL,
             false);
         if (mClock != null && !mClockBounds.isEmpty()) measureExact(mClock, mClockBounds);
