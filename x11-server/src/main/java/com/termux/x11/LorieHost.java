@@ -12,6 +12,7 @@ import android.view.WindowManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.x11.input.InputEventSender;
 import com.termux.x11.input.TouchInputHandler;
 
 /**
@@ -63,6 +64,8 @@ public class LorieHost extends ContextWrapper {
     @Nullable private LorieView view;
     /** Upstream's {@code MainActivity.mInputHandler}. */
     @Nullable public TouchInputHandler mInputHandler;
+    /** What the handler and hardware keys send through; it writes into the view's socket. */
+    @Nullable private InputEventSender mInjector;
 
     public LorieHost(@NonNull Context context, @NonNull Callbacks callbacks) {
         super(context);
@@ -77,6 +80,7 @@ public class LorieHost extends ContextWrapper {
         // The preferences stay: the page's view outlives its host (the wall keeps the Display
         // place whether or not a display can run there) and measures itself through them.
         mInputHandler = null;
+        mInjector = null;
         view = null;
     }
 
@@ -116,9 +120,24 @@ public class LorieHost extends ContextWrapper {
 
     public void setLorieView(@Nullable LorieView view) {
         this.view = view;
+        if (view == null) return;
         // A page can be inflated before its host exists, so the view's own lookup may have come
         // back empty; hand it the host here rather than relying on construction order.
-        if (view != null) view.activity = this;
+        view.activity = this;
+        // What upstream's MainActivity.onCreate wired: every pointer event on the view goes
+        // through the touch handler, which turns it into X input by the configured touch mode.
+        // Without this the display draws but nothing on it can be touched.
+        mInjector = new InputEventSender(this, view);
+        TouchInputHandler handler = new TouchInputHandler(this, mInjector);
+        mInputHandler = handler;
+        view.setOnTouchListener((v, e) -> handler.handleTouchEvent(view, view, e));
+        view.setOnHoverListener((v, e) -> handler.handleTouchEvent(view, view, e));
+        view.setOnGenericMotionListener((v, e) -> handler.handleTouchEvent(view, view, e));
+        view.setOnCapturedPointerListener((v, e) -> handler.handleTouchEvent(view, view, e));
+        if (prefs != null) handler.reloadPreferences(prefs);
+        // The handler maps view pixels onto the X screen with the transform the view reports as
+        // its viewport changes; without it every touch is scaled by zero and lands at the origin.
+        view.setCallback(handler::handleInputTransformChanged);
     }
 
     @Nullable
@@ -148,8 +167,14 @@ public class LorieHost extends ContextWrapper {
         callbacks.toggleKeyboardVisibility();
     }
 
+    /**
+     * A hardware key on the display's view: X gets it, the way upstream's activity handed it to
+     * its input handler; the launcher's own chords were already taken above this view.
+     */
     public boolean handleKey(@NonNull KeyEvent event) {
-        return callbacks.handleKey(event);
+        if (callbacks.handleKey(event)) return true;
+        InputEventSender injector = mInjector;
+        return injector != null && injector.sendKeyEvent(event);
     }
 
     public void setCapturingEnabled(boolean enabled) {

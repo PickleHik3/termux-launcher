@@ -45,6 +45,12 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
   `handleKey()`, `setCapturingEnabled()`, `setExternalKeyboardConnected()`, `finish()`,
   `ACTION_CUSTOM`, `ACTION_STOP` — over a plain `ContextWrapper` and a `Callbacks` interface the
   launcher implements. Keeping the names is what makes a nightly merge stay a merge.
+- **`LorieHost.setLorieView`** does what upstream's `MainActivity.onCreate` did after inflating
+  the view: builds the `InputEventSender` and `TouchInputHandler`, hangs the touch, hover,
+  generic-motion and captured-pointer listeners on the view, sets the view's `Callback` so the
+  handler learns the input transform as the viewport changes, and reloads the handler's
+  preferences; `handleKey` hands hardware keys to the sender. Both were missing in the first
+  vendoring — the display drew but nothing on it could be touched.
 - **`LorieView`**: `MainActivity` → `LorieHost`, and its `activity` field is nullable and no
   longer final. Upstream can never see a null host — its activity exists for the life of its
   process — but the launcher inflates this view as a page of the pane wall, which can happen
