@@ -37,7 +37,7 @@ import java.util.List;
 public final class WallPlaceSwitchView extends View {
 
     private static final float LABEL_SP = 12f;
-    private static final float SEGMENT_PADDING_DP = 12f;
+    private static final float SEGMENT_PADDING_DP = 10f;
     private static final float RIM_DP = 1f;
     private static final float DOT_DP = 3f;
     private static final int FILL_ALPHA = 64;
@@ -131,7 +131,6 @@ public final class WallPlaceSwitchView extends View {
     public void setDisplayRunning(boolean running) {
         if (mDisplayRunning == running) return;
         mDisplayRunning = running;
-        requestLayout();
         invalidate();
     }
 
@@ -145,13 +144,19 @@ public final class WallPlaceSwitchView extends View {
         mLabel.setTextSize(LABEL_SP * getResources().getDisplayMetrics().scaledDensity);
     }
 
-    /** The label's width plus the dot's, for the Display segment while a display runs. */
+    /**
+     * The label's width, plus room for the running dot beside Display — reserved whether or not a
+     * display runs, so the pill never changes width (and the clock beside it never re-fits)
+     * when one starts.
+     */
     private float contentWidth(int index) {
         float width = mLabel.measureText(mLabels.get(index));
-        if (mPages.get(index) == PaneWallPage.DISPLAY && mDisplayRunning) {
-            width += DOT_DP * density() * 4f;
-        }
+        if (mPages.get(index) == PaneWallPage.DISPLAY) width += dotSpace();
         return width;
+    }
+
+    private float dotSpace() {
+        return DOT_DP * density() * 4f;
     }
 
     @Override
@@ -294,9 +299,9 @@ public final class WallPlaceSwitchView extends View {
             mLabel.setColor(colour);
             mLabel.setAlpha(alpha);
             float centre = (mEdges[i] + mEdges[i + 1]) / 2f;
-            float dotSpace = display && mDisplayRunning ? DOT_DP * density * 4f : 0f;
+            float dotSpace = display ? dotSpace() : 0f;
             canvas.drawText(mLabels.get(i), centre + dotSpace / 2f, baseline, mLabel);
-            if (dotSpace > 0f) {
+            if (display && mDisplayRunning) {
                 float labelWidth = mLabel.measureText(mLabels.get(i));
                 float dot = DOT_DP * density;
                 mThumb.setColor(under > 0.5f ? onThumb : accent);

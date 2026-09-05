@@ -37,16 +37,18 @@ public class WallPlaceSwitchViewTest {
         return view;
     }
 
-    @Test public void itHugsItsLabelsAndGrowsForADot() {
+    @Test public void itHugsItsLabelsAndKeepsItsWidthWhenADisplayStarts() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WallPlaceSwitchView view = build(activity);
         int width = view.getMeasuredWidth();
-        assertTrue("three padded segments take real width", width >= 3 * 24);
+        assertTrue("three padded segments take real width", width >= 3 * 20);
 
+        // The dot's room is reserved from the start, so the clock beside the pill never re-fits
+        // when a display comes up.
         view.setDisplayRunning(true);
         view.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
             View.MeasureSpec.makeMeasureSpec(36, View.MeasureSpec.EXACTLY));
-        assertTrue("the running dot needs room beside Display", view.getMeasuredWidth() > width);
+        assertEquals(width, view.getMeasuredWidth());
     }
 
     @Test public void aTapPicksTheSegmentUnderIt() {
