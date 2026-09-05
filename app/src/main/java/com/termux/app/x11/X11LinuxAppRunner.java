@@ -59,8 +59,16 @@ public final class X11LinuxAppRunner {
         this.host = host;
     }
 
-    /** The drawer tapped {@code app}. */
+    /**
+     * The drawer tapped {@code app}, or launcherctl asked for it. Always continues on the main
+     * thread: the host shows the Display place and reads the controller, both of which are the
+     * activity's, and the API server calls in from a worker.
+     */
     public void run(@NonNull LinuxAppCatalog.LinuxApp app) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            handler.post(() -> run(app));
+            return;
+        }
         if (!host.isDisplayEnabled()) host.turnOnDisplay();
         host.showDisplayPlace();
         if (host.isDisplayRunning()) {
