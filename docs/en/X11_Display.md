@@ -40,14 +40,17 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 ## Every day
 
 - **Move between places** by swiping left or right anywhere on the status bar, or by tapping the
-  Widgets and Display buttons in the expanded status bar. Home always returns to the terminal.
-  Nothing is bound to the wall by default; to reach the display from the keyboard, bind the
-  `wall.go` action in your keybinds file — `map ctrl+alt+shift+d wall.go page=display`
-  (`terminal`, `widgets`, `left` and `right` are the other pages) — see
+  place icons peeking in from its edges. Where the wall rests is where the home screen comes back
+  to. To reach the display from the terminal's keyboard, bind the `wall.go` action in your
+  keybinds file — `map ctrl+alt+shift+d wall.go page=display` (`terminal`, `widgets`, `left` and
+  `right` are the other pages) — see
   [Customize keyboard bindings](Terminal_Modernization.md#customize-keyboard-bindings).
 - **Typing.** The launcher's keyboard and its extra-keys row type into the display while it is
-  showing. With a hardware keyboard, everything goes to the display except the launcher's own
-  Ctrl+Alt shortcuts, so the ways back to the terminal always work.
+  showing, and a hardware keyboard is the display's entirely: every key and every chord goes to
+  X, and the launcher's shortcuts and their hints stay out of the way. Leave the display by
+  touch, by the place icons, or with Home.
+- **The menu.** Hold the display and a short strip appears at the bottom edge of the terminal
+  area with Start or Stop and Display settings; tap anywhere else to put it away.
 - **Back** is the display's: it toggles the keyboard, as in Termux:X11. Change that with
   `termux-x11-preference`.
 - **Stop** from the long-press menu on the display, or with `pkill termux-x11`. Everything running on the display closes with it. The

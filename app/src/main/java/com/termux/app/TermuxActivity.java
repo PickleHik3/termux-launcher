@@ -1169,6 +1169,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         feedTerminalPlank(ev);
         mKeybindHintPresenter.onTerminalTouch(ev);
         notifyKeybindHintPanelTouch(ev);
+        dismissDisplayActionStripOnOutsideTouch(ev);
         return super.dispatchTouchEvent(ev);
     }
 
@@ -7076,6 +7077,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * borrows. Called by {@link com.termux.app.terminal.io.TermuxTerminalExtraKeys}.
      */
     public void showExtraKeyPressReadout(@Nullable CharSequence label) {
+        if (isDisplayPageShowing()) return;
         mKeybindHintPresenter.showExtraKeyPressReadout(label);
     }
 
@@ -7161,6 +7163,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void onKeyboardModifiersChanged(com.termux.app.terminal.inappkeyboard.TerminalModifiers modifiers) {
+            // Over the display the modifiers are X's; the terminal's hint strip stays down.
+            if (isDisplayPageShowing()) return;
             mKeybindHintPresenter.onInAppModifiersChanged(modifiers);
         }
 
@@ -9051,6 +9055,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                if (!isDisplayActionStripShowing()) return false;
+                dismissDisplayActionStrip();
+                return true;
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                dismissDisplayActionStrip();
+            }
+        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 if (!isCommandPaletteOpen()) return false;
@@ -10867,6 +10881,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
             KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, getCurrentFocus());
+            // The terminal's keybind hints have no meaning over the display; nothing here is
+            // a launcher chord.
+            mKeybindHintPresenter.hideNow(false);
             if (mInAppKeyboard == null) return;
             boolean wanted = mPreferences != null && mPreferences.isX11KeyboardShown();
             boolean visible = mInAppKeyboard.isVisible();
@@ -10961,6 +10978,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
+                    dismissDisplayActionStrip();
                     syncPlaceBar();
                     syncWallKeyboard(page);
                     mLastWallPage = page;
@@ -11250,8 +11268,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 showEmbeddedDisplayMenu();
             }
             @Override public boolean consumeLauncherKey(@NonNull KeyEvent event) {
-                return mTermuxTerminalViewClient != null
-                    && mTermuxTerminalViewClient.consumeLauncherChord(event);
+                // The display's keyboard is a PC keyboard: every key, chords included, is X's.
+                // The wall is left by touch, by the place icons, or by Home.
+                return false;
             }
         });
         page.applyEnabled(isX11DisplayEnabled());
@@ -11451,31 +11470,75 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             null, TermuxConstants.TERMUX_HOME_DIR_PATH);
     }
 
-    /** Long-press on the Display page: start it, stop it, or go to its settings. */
+    /** The Display place's menu while it is up. */
+    @Nullable private com.termux.app.x11.DisplayActionStripView mDisplayActionStrip;
+
+    /**
+     * Long-press on the Display page: start it, stop it, or go to its settings. The menu is a
+     * strip at the bottom edge of the terminal area, at the leading side, where the find strip
+     * and the other bottom-edge chrome appear, and it takes only the room its words need.
+     */
     private void showEmbeddedDisplayMenu() {
-        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-            ? null : mPaneWallController.displayPage();
-        if (frame == null) return;
-        android.widget.PopupMenu menu = new android.widget.PopupMenu(this, frame);
+        FrameLayout host = findViewById(R.id.terminal_find_bar_host);
+        if (host == null || isScrollbackFindActive()) return;
+        if (mDisplayActionStrip != null && mDisplayActionStrip.isShowing()) {
+            dismissDisplayActionStrip();
+            return;
+        }
         boolean running = isEmbeddedDisplayRunning();
         boolean enabled = isX11DisplayEnabled();
-        menu.getMenu().add(0, 1, 0, !enabled ? R.string.termux_x11_turn_on
-            : running ? R.string.termux_x11_stop_display : R.string.termux_x11_start_display);
-        menu.getMenu().add(0, 2, 1, R.string.termux_x11_display_settings);
-        menu.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == 1) {
+        java.util.List<com.termux.app.x11.DisplayActionStripView.Action> actions =
+            new java.util.ArrayList<>();
+        actions.add(new com.termux.app.x11.DisplayActionStripView.Action(
+            getString(!enabled ? R.string.termux_x11_turn_on
+                : running ? R.string.termux_x11_stop_display : R.string.termux_x11_start_display),
+            () -> {
                 if (!enabled) turnOnEmbeddedDisplay();
                 else if (running) confirmStopEmbeddedDisplay();
                 else startEmbeddedDisplay();
-            } else {
-                ActivityUtils.startActivity(this,
-                    com.termux.app.activities.SettingsActivity.createFragmentIntent(this,
-                        com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment.class,
-                        R.string.settings_x11_display_options_title));
-            }
-            return true;
-        });
-        menu.show();
+            }));
+        actions.add(new com.termux.app.x11.DisplayActionStripView.Action(
+            getString(R.string.termux_x11_display_settings),
+            () -> ActivityUtils.startActivity(this,
+                com.termux.app.activities.SettingsActivity.createFragmentIntent(this,
+                    com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment.class,
+                    R.string.settings_x11_display_options_title))));
+        float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
+        com.termux.app.x11.DisplayActionStripView strip =
+            new com.termux.app.x11.DisplayActionStripView(this,
+                mChrome.glass().dockSurface(Math.min(0.6f, barAlpha * 0.8f), 0f, 1f, false),
+                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                    R.color.termux_on_surface),
+                com.termux.app.statusbar.StatusBarLensView.accentFor(this,
+                    com.termux.app.wall.PaneWallPage.DISPLAY));
+        strip.bind(actions, this::dismissDisplayActionStrip);
+        mDisplayActionStrip = strip;
+        strip.enter(host, isReducedMotionEnabled());
+    }
+
+    private void dismissDisplayActionStrip() {
+        com.termux.app.x11.DisplayActionStripView strip = mDisplayActionStrip;
+        if (strip == null) return;
+        mDisplayActionStrip = null;
+        strip.leave(isReducedMotionEnabled());
+    }
+
+    private boolean isDisplayActionStripShowing() {
+        return mDisplayActionStrip != null && mDisplayActionStrip.isShowing();
+    }
+
+    /** A touch that lands anywhere but on the strip puts it away, like any menu. */
+    private void dismissDisplayActionStripOnOutsideTouch(@NonNull MotionEvent ev) {
+        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN || !isDisplayActionStripShowing()) {
+            return;
+        }
+        com.termux.app.x11.DisplayActionStripView strip = mDisplayActionStrip;
+        int[] location = new int[2];
+        strip.getLocationOnScreen(location);
+        boolean inside = ev.getRawX() >= location[0]
+            && ev.getRawX() < location[0] + strip.getWidth()
+            && ev.getRawY() >= location[1] && ev.getRawY() < location[1] + strip.getHeight();
+        if (!inside) dismissDisplayActionStrip();
     }
 
     private void createWidgetPaneController() {
