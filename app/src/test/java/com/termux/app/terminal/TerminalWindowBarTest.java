@@ -156,7 +156,7 @@ public class TerminalWindowBarTest {
 
         assertSame(second, tabs.getChildAt(1));
         assertFalse(bar.isBusyAnimationRunning());
-        assertEquals("work " + TerminalWindowBar.BELL_GLYPH,
+        assertEquals(TerminalWindowBar.BELL_GLYPH + " work",
             ((TextView) tabs.getChildAt(1)).getText().toString());
         assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
         assertTrue(tabs.getChildAt(1).getContentDescription().toString().contains("waiting for you"));
@@ -167,23 +167,49 @@ public class TerminalWindowBarTest {
     }
 
     @Test
-    public void attentionAndBusyAreIndependentMarksOnTheSameWindow() {
+    public void attentionAndBusyComposeButTheBellTakesTheSlot() {
         TerminalWindowBar.WindowItem both = new TerminalWindowBar.WindowItem("home", "home")
             .withBusy(true).withAttention(true);
         assertTrue(both.busy);
         assertTrue(both.attention);
         // withBusy/withAttention compose rather than overwrite: a window can be working and asking
-        // at once, and gets both the ring and the bell.
+        // at once. Only one mark shows, in the one slot, and the asking outranks the working.
         assertSame(both, both.withAttention(true));
 
         TerminalWindowBar bar = attachedBar();
         bar.setWindows(Arrays.asList(both), 0);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
         CharSequence text = ((TextView) tabs.getChildAt(0)).getText();
-        assertTrue(text.toString().endsWith(" " + TerminalWindowBar.BELL_GLYPH));
+        assertTrue(text.toString().startsWith(TerminalWindowBar.BELL_GLYPH + " "));
+        assertEquals(0, ((android.text.Spanned) text)
+            .getSpans(0, text.length(), android.text.style.ReplacementSpan.class).length);
+        // No ring is drawn, so nothing needs frames.
+        assertFalse(bar.isBusyAnimationRunning());
+
+        // Acknowledged, the ring has the slot back.
+        bar.setWindows(Arrays.asList(both.withAttention(false)), 0);
+        text = ((TextView) tabs.getChildAt(0)).getText();
         assertEquals(1, ((android.text.Spanned) text)
             .getSpans(0, text.length(), android.text.style.ReplacementSpan.class).length);
         assertTrue(bar.isBusyAnimationRunning());
+    }
+
+    /** The mark replaces the process glyph in its slot rather than joining the label's end. */
+    @Test
+    public void aMarkTakesTheProcessGlyphsSlot() {
+        String label = new String(Character.toChars(0xF023A)) + " home";
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem(label, "fish in home")
+            .withDone(true)), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        assertEquals(TerminalWindowBar.DONE_GLYPH + " home",
+            ((TextView) tabs.getChildAt(0)).getText().toString());
+
+        // A glyph-only pill is all slot: the mark is the whole label.
+        bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem(
+            new String(Character.toChars(0xF023A)), "fish").withAttention(true)), 0);
+        assertEquals(TerminalWindowBar.BELL_GLYPH,
+            ((TextView) tabs.getChildAt(0)).getText().toString());
     }
 
     /** A command that finished unseen leaves a tick; a bell outranks it, and a visit clears it. */
@@ -193,13 +219,13 @@ public class TerminalWindowBarTest {
         TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("build", "build");
         bar.setWindows(Arrays.asList(item.withDone(true)), 0);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
-        assertEquals("build " + TerminalWindowBar.DONE_GLYPH,
+        assertEquals(TerminalWindowBar.DONE_GLYPH + " build",
             ((TextView) tabs.getChildAt(0)).getText().toString());
         assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("finished"));
         assertFalse(bar.isBusyAnimationRunning());
 
         bar.setWindows(Arrays.asList(item.withDone(true).withAttention(true)), 0);
-        assertEquals("build " + TerminalWindowBar.BELL_GLYPH,
+        assertEquals(TerminalWindowBar.BELL_GLYPH + " build",
             ((TextView) tabs.getChildAt(0)).getText().toString());
 
         bar.setWindows(Arrays.asList(item), 0);
@@ -213,13 +239,13 @@ public class TerminalWindowBarTest {
         TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("build", "build");
         bar.setWindows(Arrays.asList(item.withDone(true, true)), 0);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
-        assertEquals("build " + TerminalWindowBar.FAIL_GLYPH,
+        assertEquals(TerminalWindowBar.FAIL_GLYPH + " build",
             ((TextView) tabs.getChildAt(0)).getText().toString());
         assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("failed"));
 
         // Success and failure are different states, so the pill has to repaint between them.
         bar.setWindows(Arrays.asList(item.withDone(true, false)), 0);
-        assertEquals("build " + TerminalWindowBar.DONE_GLYPH,
+        assertEquals(TerminalWindowBar.DONE_GLYPH + " build",
             ((TextView) tabs.getChildAt(0)).getText().toString());
     }
 
@@ -232,6 +258,7 @@ public class TerminalWindowBarTest {
         String label = new String(Character.toChars(0xF023A)) + " home";
         assertEquals(2, TerminalWindowBar.leadingGlyphEnd(label));
         assertEquals(1, TerminalWindowBar.leadingGlyphEnd("\uE795 1"));
+        assertEquals(1, TerminalWindowBar.leadingGlyphEnd("\uE795"));
         assertEquals(0, TerminalWindowBar.leadingGlyphEnd("home"));
         assertEquals(0, TerminalWindowBar.leadingGlyphEnd(""));
 

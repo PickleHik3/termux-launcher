@@ -72,6 +72,47 @@ public class TerminalWindowBarOverswipeTest {
         assertEquals(Arrays.asList("begin", "drag", "drag", "end"), host.events);
     }
 
+    /**
+     * A strip with more pills than fit is the finger's alone once it has scrolled: running into
+     * the last window must not slide the next place in under the same finger.
+     */
+    @Test public void aStripThatScrolledNeverHandsTheFingerOn() {
+        TerminalWindowBar bar = bar();
+        List<TerminalWindowBar.WindowItem> many = new ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            many.add(new TerminalWindowBar.WindowItem("window-" + i, "window " + i));
+        }
+        bar.setWindows(many, 0);
+        bar.measure(View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(40, View.MeasureSpec.EXACTLY));
+        bar.layout(0, 0, 300, 40);
+        assertTrue("the fixture needs an overflowing strip",
+            bar.getChildAt(0).getWidth() > bar.getWidth());
+        Host host = new Host();
+        bar.setOnEdgeOverswipeListener(host);
+
+        // The DOWN lands on a pill; the strip takes the stream over on the first sideways move
+        // and scrolls from the next, as a scroll container does.
+        touch(bar, MotionEvent.ACTION_DOWN, 250f);
+        touch(bar, MotionEvent.ACTION_MOVE, 200f);
+        touch(bar, MotionEvent.ACTION_MOVE, 150f);
+        assertTrue("the strip scrolled", bar.getScrollX() > 0);
+        // Far past anything the strip can spend.
+        touch(bar, MotionEvent.ACTION_MOVE, -5000f);
+        touch(bar, MotionEvent.ACTION_MOVE, -6000f);
+        touch(bar, MotionEvent.ACTION_UP, -6000f);
+        assertTrue(host.events.toString(), host.events.isEmpty());
+
+        // Resting at its start and pulled the other way, the strip has nothing to spend: the wall's.
+        bar.scrollTo(0, 0);
+        touch(bar, MotionEvent.ACTION_DOWN, 100f);
+        touch(bar, MotionEvent.ACTION_MOVE, 130f);
+        touch(bar, MotionEvent.ACTION_MOVE, 200f);
+        touch(bar, MotionEvent.ACTION_UP, 200f);
+        assertEquals(Arrays.asList("begin", "drag", "end"), host.events);
+        assertEquals(0, bar.getScrollX());
+    }
+
     @Test public void aCancelledStreamCancelsTheOverswipe() {
         TerminalWindowBar bar = bar();
         Host host = new Host();

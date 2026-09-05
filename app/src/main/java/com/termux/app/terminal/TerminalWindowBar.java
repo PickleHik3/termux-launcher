@@ -225,6 +225,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** One-way latch: once the surplus is the host's, the strip stops scrolling for this stream. */
     private boolean mOverswipeOwned;
     /**
+     * Where the strip stood at the DOWN. A finger that scrolled the chips at all keeps them for
+     * the rest of its stream: running into the last window is not a wish to change place. Only a
+     * strip with nothing to scroll, or one pulled past the edge it already rests at, hands the
+     * finger to the wall.
+     */
+    private int mScrollXAtDown;
+    private boolean mStripScrolled;
+    /** The DOWN time of the stream being tracked, so a DOWN seen twice is set up once. */
+    private long mStreamDownTime = -1L;
+    /**
      * The host took the wall away mid-overswipe. The rest of this stream belongs to nobody: not
      * streamed to the host, not spent on the chips either — a finger that was dragging the wall
      * must not suddenly scroll the strip under itself.
@@ -311,22 +321,39 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     @Override
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+        // A finger that lands on a pill gives the pill its DOWN; the strip only meets the stream
+        // when it intercepts a sideways move. Its bookkeeping has to start at the DOWN either way.
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) beginStream(event);
+        return super.onInterceptTouchEvent(event);
+    }
+
+    /** Reset everything a finger's stream carries; once per DOWN, whichever path sees it first. */
+    private void beginStream(MotionEvent event) {
+        if (mStreamDownTime == event.getDownTime()) return;
+        mStreamDownTime = event.getDownTime();
+        mTouchDownX = mLastTouchX = event.getX();
+        mTouchDownY = event.getY();
+        mOverswipePx = 0f;
+        mGestureHorizontal = false;
+        mGestureRejected = false;
+        mOverswipeOwned = false;
+        mOverswipeInterrupted = false;
+        mScrollXAtDown = getScrollX();
+        mStripScrolled = false;
+        if (mOverswipeVelocity == null) {
+            mOverswipeVelocity = android.view.VelocityTracker.obtain();
+        }
+        mOverswipeVelocity.clear();
+        mOverswipeVelocity.addMovement(event);
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+    }
+
+    @Override
     public boolean onTouchEvent(MotionEvent event) {
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
-            mTouchDownX = mLastTouchX = event.getX();
-            mTouchDownY = event.getY();
-            mOverswipePx = 0f;
-            mGestureHorizontal = false;
-            mGestureRejected = false;
-            mOverswipeOwned = false;
-            mOverswipeInterrupted = false;
-            if (mOverswipeVelocity == null) {
-                mOverswipeVelocity = android.view.VelocityTracker.obtain();
-            }
-            mOverswipeVelocity.clear();
-            mOverswipeVelocity.addMovement(event);
-            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+            beginStream(event);
             return super.onTouchEvent(event);
         }
         if (action == MotionEvent.ACTION_MOVE) {
@@ -353,9 +380,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             }
             int before = getScrollX();
             boolean handled = super.onTouchEvent(event);
+            if (getScrollX() != mScrollXAtDown) mStripScrolled = true;
             // Signed: dragging left scrolls right, so what the strip spent cancels the travel out.
             float surplus = dx + (getScrollX() - before);
-            if (mGestureHorizontal && !mGestureRejected && Math.abs(surplus) > 0f) {
+            if (mGestureHorizontal && !mGestureRejected && !mStripScrolled
+                && Math.abs(surplus) > 0f) {
                 mOverswipePx += surplus;
                 if (Math.abs(mOverswipePx) > mTouchSlop && mEdgeOverswipeListener != null
                     && mEdgeOverswipeListener.onEdgeOverswipeBegin()) {
@@ -381,6 +410,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             boolean interrupted = mOverswipeInterrupted;
             boolean handled = !interrupted && super.onTouchEvent(event);
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+            mStreamDownTime = -1L;
             mOverswipePx = 0f;
             mGestureHorizontal = false;
             mGestureRejected = false;
@@ -514,43 +544,59 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * The pill's text with its marks. Windows Terminal is the model for the ring — the tab's icon
-     * gives way to a progress ring while the shell works — and a workspace manager's agent badges
-     * for the rest: a bell after the title once the shell has rung or asked, a tick once a command
-     * finished unseen. Here the icon is the leading Nerd Font process glyph, so the ring is a span
-     * over that glyph and the badge is appended.
+     * The pill's text with its mark. Every mark lives in one place, the leading slot where the
+     * process glyph sits: Windows Terminal is the model, the tab's icon giving way to a progress
+     * ring while the shell works, and here the bell once the shell has rung or asked and the tick
+     * or cross once a command finished unseen take the same slot in turn. A bell outranks the
+     * tick, and either outranks the ring - a window that is asking is the news, not that it is
+     * still working - so the eye always looks in one spot.
      */
     @NonNull
     private CharSequence tabText(@NonNull WindowItem item) {
         Context context = getContext();
         String label = item.label;
         int glyphEnd = leadingGlyphEnd(label);
-        // A label with no glyph of its own (a bare user name) still gets a ring: a placeholder run
-        // is prepended for the span to replace, so a working window always looks like one.
-        if (item.busy && glyphEnd == 0) {
+        String mark = markFor(item);
+        boolean ring = mark == null && item.busy;
+        if (mark != null) {
+            // The mark takes the slot: whatever glyph led the label gives way to it.
+            String rest = glyphEnd == 0 ? label
+                : glyphEnd < label.length() ? label.substring(glyphEnd + 1) : "";
+            label = rest.isEmpty() ? mark : mark + " " + rest;
+            glyphEnd = mark.length();
+        } else if (ring && glyphEnd == 0) {
+            // A label with no glyph of its own (a bare user name) still gets a ring: a placeholder
+            // run is prepended for the span to replace, so a working window always looks like one.
             label = "\u25cf " + label;
             glyphEnd = 1;
         }
-        // One trailing mark at a time: a window that is asking is not finished.
-        String mark = item.attention ? BELL_GLYPH
-            : item.done ? (item.doneFailed ? FAIL_GLYPH : DONE_GLYPH) : null;
-        if (mark != null) label = label + " " + mark;
         CharSequence spanned = TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(context, label), mSymbolMaps);
-        if (!item.busy && mark == null) return spanned;
+        if (!ring && mark == null) return spanned;
         SpannableStringBuilder text = new SpannableStringBuilder(spanned);
-        if (item.busy) {
+        if (ring) {
             text.setSpan(new ProgressRingSpan(item.progressError ? mAttentionColor : mBusyColor,
                     item.progress, dp(1.25f), mLazyMode),
                 0, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        }
-        if (mark != null) {
+        } else {
             text.setSpan(new ForegroundColorSpan(
                     item.attention || item.doneFailed ? mAttentionColor : mBusyColor),
-                text.length() - mark.length(), text.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                0, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         return text;
+    }
+
+    /** The mark the slot shows instead of the process glyph, or null when the glyph keeps it. */
+    @Nullable
+    private static String markFor(@NonNull WindowItem item) {
+        if (item.attention) return BELL_GLYPH;
+        if (item.done) return item.doneFailed ? FAIL_GLYPH : DONE_GLYPH;
+        return null;
+    }
+
+    /** Whether the slot draws the turning ring: busy, with no mark that outranks it. */
+    private static boolean showsRing(@NonNull WindowItem item) {
+        return item.busy && markFor(item) == null;
     }
 
     /**
@@ -563,13 +609,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int type = Character.getType(codePoint);
         if (type != Character.PRIVATE_USE) return 0;
         int end = Character.charCount(codePoint);
-        return end < label.length() && label.charAt(end) == ' ' ? end : 0;
+        // A label that is the glyph alone - a process its icon names - is all slot.
+        if (end == label.length()) return end;
+        return label.charAt(end) == ' ' ? end : 0;
     }
 
     /** Whether any pill is drawing the turning arc, which is the only mark that needs frames. */
     private boolean hasIndeterminateWindow() {
         for (WindowItem item : mItems) {
-            if (item.busy && item.progress == WindowItem.NO_PERCENTAGE) return true;
+            if (showsRing(item) && item.progress == WindowItem.NO_PERCENTAGE) return true;
         }
         return false;
     }
@@ -1156,7 +1204,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     public static WindowItem itemForResolved(@Nullable String processName,
                                              @NonNull String displayText,
                                              @NonNull String spokenLabel) {
-        return new WindowItem(processGlyph(processName) + " " + displayText, spokenLabel);
+        String glyph = processGlyph(processName);
+        return new WindowItem(displayText.isEmpty() ? glyph : glyph + " " + displayText,
+            spokenLabel);
     }
 
     /** Terminal editors whose foreground presence means "show the open file, not the process". */
@@ -1191,9 +1241,23 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return directoryName(cwd, null);
     }
 
+    /**
+     * The most a pill's text runs to. The row is a phone's status bar: a pill carries one short
+     * item - the open file, the process, the directory - and the glyph in its slot says the rest.
+     */
+    static final int LABEL_MAX_CHARS = 9;
+
     @NonNull
     public static String truncateProcess(@NonNull String process) {
-        return middleEllipsize(process, 12);
+        return middleEllipsize(process, LABEL_MAX_CHARS);
+    }
+
+    /**
+     * Whether the glyph for {@code process} names it on its own, so a pill running it needs no
+     * text: the python icon says python. The fallback terminal glyph names nothing.
+     */
+    public static boolean glyphNamesProcess(@Nullable String process) {
+        return process != null && !processGlyph(process).equals(processGlyph(null));
     }
 
     /**
@@ -1203,7 +1267,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     public static String truncateFile(@NonNull String name) {
-        int maxChars = 13;
+        int maxChars = LABEL_MAX_CHARS;
         String cleaned = name;
         if (cleaned.length() <= maxChars) return cleaned;
         int dot = cleaned.lastIndexOf('.');
@@ -1288,7 +1352,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int slash = path.lastIndexOf('/');
         String leaf = slash >= 0 ? path.substring(slash + 1) : path;
         if (leaf.isEmpty()) leaf = "/";
-        return middleEllipsize(leaf, 12);
+        return middleEllipsize(leaf, LABEL_MAX_CHARS);
     }
 
     @NonNull

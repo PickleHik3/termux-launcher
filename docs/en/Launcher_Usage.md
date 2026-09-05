@@ -49,9 +49,12 @@ The top surface is both status display and navigation:
 The CPU and memory values describe the Android device, not only the foreground shell. Weather needs
 location permission and credits Open-Meteo in its detail view.
 
-A window pill breathes while its foreground process group is consuming CPU. A silent but busy build
-can therefore appear active; a sleeping or idle TUI does not count as work merely because it remains
-open.
+A window pill shows one short item: the open file in an editor, the process, or the directory of an
+idle shell. A process its icon names, such as python or pacman, shows the icon alone. Every mark sits
+in the icon's place, so the eye looks in one spot: a ring while the foreground process group is
+consuming CPU, a bell once the window rang or asked, a tick or a cross once a command finished unseen.
+A silent but busy build can therefore appear active; a sleeping or idle TUI does not count as work
+merely because it remains open.
 
 A background window that rings the terminal bell receives a pulsing error-colored rim when it needs
 attention. Focusing that window clears the state; a bell in the already-focused window is not marked
@@ -74,8 +77,8 @@ can put on the extra-keys row, on the in-app keyboard, or on a key chord.
 Exactly one place is on screen at a time, and the terminal never changes size for the others, so
 nothing reflows in your shells when you move. Your session keeps running while you are away.
 
-A swipe that starts on the window pills scrolls those first; keep pulling once the last pill is
-reached and the next place slides in.
+A swipe that starts on the window pills scrolls those, and only those. When the pills fit the row,
+or the strip already rests at the end you pull past, the swipe moves the wall instead.
 
 The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
 a widget to move or resize it, and swipe inside the grid to reach its other pages.

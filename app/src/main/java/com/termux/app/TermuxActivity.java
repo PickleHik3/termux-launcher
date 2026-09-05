@@ -11772,8 +11772,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (isDisplayPageShowing()) getDrawer().openDrawer(android.view.Gravity.LEFT);
             else createNewWindow();
         });
-        // The chips scroll first; once the strip is at its edge the surplus distance drags the
-        // pane wall, so reaching the last window and pulling further slides the next place in.
+        // A strip with nothing to scroll, or one pulled past the edge it already rests at, hands
+        // the finger to the pane wall; a finger that scrolled the chips keeps them to the end.
         bar.setOnEdgeOverswipeListener(
             new com.termux.app.terminal.TerminalWindowBar.OnEdgeOverswipeListener() {
                 @Override public boolean onEdgeOverswipeBegin() {
@@ -12499,8 +12499,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.terminal.TerminalWindowBar.truncateFile(info.openFile),
                     info.processName + " editing " + info.openFile);
             }
-            return com.termux.app.terminal.TerminalWindowBar.itemForResolved(info.processName,
-                com.termux.app.terminal.TerminalWindowBar.truncateProcess(info.processName),
+            // A process its glyph names is shown by the glyph alone; the name is text only when
+            // the slot would otherwise hold the plain terminal glyph.
+            String text = com.termux.app.terminal.TerminalWindowBar.glyphNamesProcess(info.processName)
+                ? "" : com.termux.app.terminal.TerminalWindowBar.truncateProcess(info.processName);
+            return com.termux.app.terminal.TerminalWindowBar.itemForResolved(info.processName, text,
                 info.processName);
         }
         // Idle or not yet resolved: directory basename via the existing title/cwd derivation.
