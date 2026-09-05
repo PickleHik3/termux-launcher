@@ -57,6 +57,20 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/settings_x11_category_apps">
+        <SwitchPreferenceCompat
+            app:key="x11_drawer_apps"
+            app:title="@string/settings_x11_drawer_apps_title"
+            app:summary="@string/settings_x11_drawer_apps_summary"
+            android:defaultValue="true" />
+        <EditTextPreference
+            app:key="x11_window_manager"
+            app:title="@string/settings_x11_window_manager_title"
+            app:dialogMessage="@string/settings_x11_window_manager_summary"
+            android:defaultValue="openbox"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_x11_category_starting">
         <SwitchPreferenceCompat
             app:key="x11_display_autostart"

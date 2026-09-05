@@ -148,6 +148,8 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_COMMAND.equals(key)) {
                 launcher.setX11DisplayCommand(value == null ? "" : value);
+            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_WINDOW_MANAGER.equals(key)) {
+                launcher.setX11WindowManager(value);
             }
         }
 
@@ -161,6 +163,9 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_COMMAND.equals(key)) {
                 return launcher.getX11DisplayCommand();
+            }
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_WINDOW_MANAGER.equals(key)) {
+                return launcher.getX11WindowManager();
             }
             return defValue;
         }
@@ -209,6 +214,11 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_FORCE_BGRA:
                     launcher.setX11ForceBgraEnabled(value);
                     break;
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
+                    launcher.setX11DrawerAppsEnabled(value);
+                    com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context)
+                        .refreshAsync(null, null);
+                    break;
                 default:
                     break;
             }
@@ -227,6 +237,8 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                     return launcher.isX11LegacyDrawingEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_FORCE_BGRA:
                     return launcher.isX11ForceBgraEnabled();
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
+                    return launcher.isX11DrawerAppsEnabled();
                 default:
                     return defValue;
             }

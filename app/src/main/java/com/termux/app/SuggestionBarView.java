@@ -2930,6 +2930,18 @@ public final class SuggestionBarView extends GridLayout
         }
         if (playRipple) dispatchLaunchRipple(entry, launchSourceView);
         Context context = getContext();
+        if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) {
+            // A Linux app: the display's runner takes it, with the same bookkeeping a launch gets.
+            if (!LauncherAppLauncher.launchEntry(context, entry)) return;
+            if (activeAzLetter != null) clearAzPreview();
+            getUsageStatsStore().recordLaunch(entry.appRef.stableId());
+            invalidateMostUsedCache();
+            if (terminalView != null) terminalView.clearInputLine();
+            dismissFolderPopup();
+            dismissAppContextPopup();
+            dismissShortcutsPopup();
+            return;
+        }
         if (entry.appRef.clonedProfile) {
             LaunchAnimationContext launchAnimationContext = shouldUseTouchLaunchAnimation(launchSourceView)
                 ? buildLaunchAnimationContext(launchSourceView)
@@ -4401,7 +4413,9 @@ public final class SuggestionBarView extends GridLayout
 
     private void showAppContextPopup(@NonNull AppMenuContext context) {
         dismissAppContextPopup();
-        List<ShortcutInfo> shortcuts = queryEntryShortcuts(context.entry);
+        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(context.entry.appRef);
+        List<ShortcutInfo> shortcuts = linuxApp ? java.util.Collections.<ShortcutInfo>emptyList()
+            : queryEntryShortcuts(context.entry);
         boolean hasShortcuts = !shortcuts.isEmpty();
         PinnedFolderItem sourceFolder = resolveLatestFolder(context.sourceFolderId);
         boolean folderSource = sourceFolder != null && context.folderEntryRef != null;
@@ -4437,24 +4451,27 @@ public final class SuggestionBarView extends GridLayout
             : (inheritedTintColor & 0x00FFFFFF);
         menuHighlight.setTintBase(tintBase);
 
-        TextView uninstallRow = menuRows.addActionRow(shell, "Uninstall", R.drawable.ic_dock_menu_uninstall, false, tintBase, () -> {
-            dismissAppContextPopup();
-            requestUninstall(context.entry);
-        });
-        pendingMenuRows.add(new MenuRow(uninstallRow, () -> {
-            dismissAppContextPopup();
-            requestUninstall(context.entry);
-        }, false));
+        // Uninstall and App info ask Android about a package; a Linux app has none.
+        if (!linuxApp) {
+            TextView uninstallRow = menuRows.addActionRow(shell, "Uninstall", R.drawable.ic_dock_menu_uninstall, false, tintBase, () -> {
+                dismissAppContextPopup();
+                requestUninstall(context.entry);
+            });
+            pendingMenuRows.add(new MenuRow(uninstallRow, () -> {
+                dismissAppContextPopup();
+                requestUninstall(context.entry);
+            }, false));
 
-        TextView appInfoRow = menuRows.addActionRow(shell, "App info", R.drawable.ic_dock_menu_info, false, tintBase, () -> {
-            dismissAppContextPopup();
-            openAppInfo(context.entry);
-        });
-        pendingMenuRows.add(new MenuRow(appInfoRow, () -> {
-            dismissAppContextPopup();
-            openAppInfo(context.entry);
-        }, false));
+            TextView appInfoRow = menuRows.addActionRow(shell, "App info", R.drawable.ic_dock_menu_info, false, tintBase, () -> {
+                dismissAppContextPopup();
+                openAppInfo(context.entry);
+            });
+            pendingMenuRows.add(new MenuRow(appInfoRow, () -> {
+                dismissAppContextPopup();
+                openAppInfo(context.entry);
+            }, false));
 
+        }
         if (folderSource) {
             PinnedAppItem folderApp = findFolderApp(sourceFolder, context.folderEntryRef);
             boolean folderHasCustomIcon = folderApp != null

@@ -198,6 +198,13 @@
     <string name="settings_x11_clipboard_title">Share the clipboard</string>
     <string name="settings_x11_clipboard_summary">Copy and paste between the display and Android.</string>
     <string name="settings_x11_category_starting">Starting</string>
+    <string name="settings_x11_category_apps">Apps</string>
+    <string name="settings_x11_drawer_apps_title">Linux apps in the drawer</string>
+    <string name="settings_x11_drawer_apps_summary">List installed Linux apps beside your Android apps; tapping one opens it on the display.</string>
+    <string name="settings_x11_window_manager_title">Window manager</string>
+    <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
+    <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
+    <string name="termux_x11_app_gone">That app is no longer installed.</string>
     <string name="settings_x11_autostart_title">Start with the launcher</string>
     <string name="settings_x11_autostart_summary">Start the display whenever the launcher starts.</string>
     <string name="settings_x11_command_title">Start command</string>

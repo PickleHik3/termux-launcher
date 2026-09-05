@@ -232,6 +232,9 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 // The commands go into the prefix with the feature and come back out with it;
                 // a running server is left alone either way.
                 if (!value) com.termux.app.x11.X11CliInstaller.uninstallAsync(mContext);
+                if (value) com.termux.app.x11.X11Defaults.applyOnce(mContext);
+                // The drawer lists Linux apps only while the display is on.
+                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).refreshAsync(null, null);
                 // The page and the prefix commands are set up once per activity, so turning the
                 // display on or off has to come back through a recreate.
                 scheduleTermuxActivityStylingSync(true);

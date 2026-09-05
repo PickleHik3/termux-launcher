@@ -93,6 +93,27 @@ no surface and the number is meaningless.
 Mesa 26 picks its own path unless all three of `LIBGL_ALWAYS_SOFTWARE`, `GALLIUM_DRIVER` and
 `MESA_LOADER_DRIVER_OVERRIDE` agree, so set every variable a row lists, not just one.
 
+## Apps on the display
+
+With the display switched on, the Linux apps installed in your prefix appear in the app drawer
+beside your Android apps, with their own icons. Tapping one starts the display if it is not
+running, opens the app on it full size, and takes you to the Display place — nothing to type.
+They can be pinned and searched like any other app. `pkg install firefox`, and Firefox is in the
+drawer the next time you return to the launcher.
+
+Two things make this work and can be changed in Display options:
+
+- **Window manager.** The launcher starts a small window manager with the display so windows
+  open full size and dialogs stay on screen. It is `openbox` by default (install it with
+  `pkg install openbox`), with a launcher-owned rule that maximises every window; put another
+  command there, or clear it to have none.
+- **Linux apps in the drawer** can be switched off if you would rather start apps from a shell.
+
+When an app is started from the drawer, the launcher exports the GPU settings from the table
+below for whichever profile's packages are installed, so a GPU app is accelerated without any
+setup. The first time the display is turned on, the text size and touch mode are set to values
+that suit a phone; both can be changed afterwards.
+
 ## A desktop in a proot
 
 The display server's socket lives in the launcher's `$TMPDIR`, so a proot needs to share it:

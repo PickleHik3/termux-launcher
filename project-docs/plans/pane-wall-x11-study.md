@@ -149,6 +149,13 @@ The decisions above held. What the two implementation plans added, and why:
   and the display is stopped by hand (hold the segment, the long-press menu, `pkill`). The
   "start with the launcher" and `DISPLAY` for new shells rows are opt-ins that default off, as
   Termux:X11 never set either.
+- **Linux apps are drawer entries, and the display starts on demand for them.** The prefix's
+  desktop files are read into the app catalogue under a reserved package (`X11Apps`), ranked,
+  pinned and searched like Android apps; a tap starts the server when none is up, runs the app
+  with the GPU environment for whatever profile is installed, and shows the Display place. A small
+  window manager (openbox, with a launcher-owned maximise rule) starts with the server so one app
+  fills the page — the launcher recommends one app at a time over a desktop, which a phone screen
+  and an always-running home process both argue for.
 - **GPU: detect, recommend, stay out of the way.** `X11GpuProbe` ranks the client-side profiles
   (Adreno → turnip-zink, Mali → virgl over ANGLE and the wrapped Vulkan driver, others → ANGLE,
   emulators → software) with the exact environment each needs, behind `launcherctl x11 gpu

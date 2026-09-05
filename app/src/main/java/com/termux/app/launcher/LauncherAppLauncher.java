@@ -27,9 +27,25 @@ public final class LauncherAppLauncher {
     private LauncherAppLauncher() {
     }
 
+    /** Runs a Linux app entry on the display; installed by the activity that owns the display. */
+    public interface LinuxAppRunner {
+        boolean run(@NonNull LauncherAppEntry entry);
+    }
+
+    @Nullable private static volatile LinuxAppRunner linuxAppRunner;
+
+    public static void setLinuxAppRunner(@Nullable LinuxAppRunner runner) {
+        linuxAppRunner = runner;
+    }
+
     public static boolean launchEntry(@NonNull Context context, @NonNull LauncherAppEntry entry) {
         if (entry.appRef.packageName.startsWith("injected.test")) {
             return false;
+        }
+        if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) {
+            // Not an Android component: the display's runner takes it, or nothing does.
+            LinuxAppRunner runner = linuxAppRunner;
+            return runner != null && runner.run(entry);
         }
         if (entry.appRef.clonedProfile && tryStartProfileMainActivity(context, entry, null)) {
             return true;

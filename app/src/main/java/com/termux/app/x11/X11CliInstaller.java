@@ -43,7 +43,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 3;
+    @VisibleForTesting static final int VERSION = 4;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -53,6 +53,8 @@ public final class X11CliInstaller {
     static final String SERVER_SCRIPT_PATH = BIN_DIR + "/termux-x11";
     static final String PREFERENCE_SCRIPT_PATH = BIN_DIR + "/termux-x11-preference";
     static final String LOADER_PATH = LIBEXEC_DIR + "/loader.apk";
+    /** openbox's configuration for the display: every window maximised, none decorated. */
+    public static final String OPENBOX_RC_PATH = LIBEXEC_DIR + "/openbox-rc.xml";
 
     /** Every marker this launcher has ever written, so "is this ours?" survives an upgrade. */
     @VisibleForTesting static final String MARKER_PREAMBLE = "# written by termux-launcher";
@@ -146,6 +148,7 @@ public final class X11CliInstaller {
     @NonNull File preferenceScript() { return new File(binDir, "termux-x11-preference"); }
     @NonNull File loaderFile() { return new File(libexecDir, "loader.apk"); }
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
+    @NonNull File openboxRc() { return new File(libexecDir, "openbox-rc.xml"); }
 
     @NonNull
     Result install() {
@@ -167,6 +170,7 @@ public final class X11CliInstaller {
             }
             writeAtomically(serverScript(), bytes(serverScript(applicationId)), true, true);
             writeAtomically(preferenceScript(), bytes(preferenceScript(applicationId)), true, true);
+            writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
         } catch (Exception e) {
@@ -177,7 +181,8 @@ public final class X11CliInstaller {
 
     void uninstall() {
         if (isForeignCommand()) return;
-        for (File file : new File[]{serverScript(), preferenceScript(), loaderFile(), markerFile()}) {
+        for (File file : new File[]{serverScript(), preferenceScript(), loaderFile(), openboxRc(),
+                markerFile()}) {
             if (!file.exists() && !Files.isSymbolicLink(file.toPath())) continue;
             file.setWritable(true, true);
             if (!file.delete()) {
@@ -253,6 +258,27 @@ public final class X11CliInstaller {
             + "export TERMUX_X11_LOADER_OVERRIDE_CMDENTRYPOINT_CLASS="
             + "com.termux.x11.LoriePreferences\\$Receiver\n"
             + "exec /system/bin/app_process -Xnoimage-dex2oat / com.termux.x11.Loader \"$@\"\n";
+    }
+
+    /**
+     * The window-manager rule behind "one app at a time, full size": every window maximised and
+     * undecorated, focus following the newest. openbox fills every other setting from its own
+     * defaults, so this is the whole file.
+     */
+    @NonNull
+    static String openboxRcContent() {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<!-- " + MARKER_PREAMBLE + " for the Linux display; do not edit -->\n"
+            + "<openbox_config xmlns=\"http://openbox.org/3.4/rc\">\n"
+            + "  <focus><focusNew>yes</focusNew></focus>\n"
+            + "  <applications>\n"
+            + "    <application class=\"*\">\n"
+            + "      <decor>no</decor>\n"
+            + "      <maximized>yes</maximized>\n"
+            + "      <focus>yes</focus>\n"
+            + "    </application>\n"
+            + "  </applications>\n"
+            + "</openbox_config>\n";
     }
 
     // ---- Files ------------------------------------------------------------------------------

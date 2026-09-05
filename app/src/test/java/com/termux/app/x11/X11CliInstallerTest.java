@@ -62,6 +62,7 @@ public class X11CliInstallerTest {
         assertTrue(installer.preferenceScript().canExecute());
         assertTrue(text(installer.preferenceScript()).contains("LoriePreferences"));
         assertArrayEquals(LOADER, Files.readAllBytes(installer.loaderFile().toPath()));
+        assertTrue(text(installer.openboxRc()).contains("<maximized>yes</maximized>"));
         assertFalse("ART refuses a writable dex on CLASSPATH", installer.loaderFile().canWrite());
         assertEquals(X11CliInstaller.MARKER_PREAMBLE + " v" + X11CliInstaller.VERSION
             + " com.termux.test\n", text(installer.markerFile()));
@@ -141,6 +142,7 @@ public class X11CliInstallerTest {
         assertFalse(installer.serverScript().exists());
         assertFalse(installer.preferenceScript().exists());
         assertFalse(installer.loaderFile().exists());
+        assertFalse(installer.openboxRc().exists());
         assertFalse(installer.markerFile().exists());
 
         Files.write(installer.serverScript().toPath(), "#!/bin/sh\n".getBytes(StandardCharsets.UTF_8));

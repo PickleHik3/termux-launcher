@@ -690,6 +690,42 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_X11_FORCE_BGRA, value, false);
     }
 
+    public boolean isX11DrawerAppsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DRAWER_APPS, TERMUX_APP.DEFAULT_X11_DRAWER_APPS);
+    }
+
+    public void setX11DrawerAppsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DRAWER_APPS, value, false);
+    }
+
+    /** Trimmed; empty means no window manager. */
+    @NonNull
+    public String getX11WindowManager() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_WINDOW_MANAGER, TERMUX_APP.DEFAULT_X11_WINDOW_MANAGER, false);
+        return value == null ? "" : value.trim();
+    }
+
+    public void setX11WindowManager(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_WINDOW_MANAGER, value == null ? "" : value.trim(), false);
+    }
+
+    public boolean areX11DefaultsApplied() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, false);
+    }
+
+    public void setX11DefaultsApplied(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, value, false);
+    }
+
+    /** Whether the user has ever set the display's text size; unset reads as the default 0. */
+    public boolean hasX11DisplayDpi() {
+        return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_X11_DISPLAY_DPI);
+    }
+
     public boolean isTopPaneWallTilesEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TOP_PANE_WALL_TILES, TERMUX_APP.DEFAULT_TOP_PANE_WALL_TILES);

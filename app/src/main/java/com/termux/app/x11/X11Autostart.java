@@ -35,7 +35,8 @@ public final class X11Autostart {
             return null;
         }
         String[] argv = X11StartCommand.argv(prefs.getX11DisplayCommand(), prefs.getX11DisplayDpi(),
-            prefs.isX11LegacyDrawingEnabled(), prefs.isX11ForceBgraEnabled());
+            prefs.isX11LegacyDrawingEnabled(), prefs.isX11ForceBgraEnabled(),
+            X11WindowManager.xstartup(prefs.getX11WindowManager()));
         if (argv.length == 0 || !new File(argv[0]).canExecute()) {
             Logger.logInfo(LOG_TAG, "Not starting the display: its command is not in the prefix yet");
             return null;

@@ -305,6 +305,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private String mPendingWallPage;
     @Nullable private com.termux.app.x11.X11DisplayHostController mX11Display;
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
+    /** Runs a Linux app from the drawer on the display, starting the display when needed. */
+    @Nullable private com.termux.app.x11.X11LinuxAppRunner mLinuxApps;
+    /** What the prefix's desktop files looked like when the drawer last listed them. */
+    private long mLinuxAppsSignature;
     /** The wall put the in-app keyboard away when it left the terminal, and owes it back. */
     private boolean mWallHidKeyboard;
     @Nullable private com.termux.app.launcher.widget.LauncherWidgetHostController mWidgetHostController;
@@ -1246,6 +1250,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         // The DISPLAY opt-in can have been flipped in Settings while we were away.
         syncDisplayEnvironment();
+        // `pkg install` leaves no broadcast behind: the drawer's Linux apps are re-read when the
+        // prefix's desktop files have changed since they were last listed.
+        refreshLinuxApps(false);
         // Terminal hierarchy actions from launcherctl/agent/MCP need a foreground
         // Activity; they answer 409 activity_not_running while nothing is attached.
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().attach(terminalHost());
@@ -5159,6 +5166,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mX11Display != null) {
             mX11Display.destroy();
             mX11Display = null;
+        }
+        if (mLinuxApps != null) {
+            mLinuxApps.destroy();
+            mLinuxApps = null;
+            com.termux.app.launcher.LauncherAppLauncher.setLinuxAppRunner(null);
         }
         clearAccessoryRenderEffectBackdrop();
         removeDecorNavBarSurfaceOverlay();
@@ -10889,6 +10901,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.attachWidgetsPage(getLayoutInflater());
         }
         if (com.termux.BuildConfig.X11_SERVER) attachDisplayPage();
+        installLinuxAppRunner();
         mPaneWallController.applyStyle(paneSurfaceStyle());
         if (mPendingWallPage != null) {
             Bundle state = new Bundle();
@@ -11096,10 +11109,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? com.termux.app.x11.X11DisplayHostController.displayName() : null);
     }
 
+    /**
+     * Re-list the prefix's Linux apps in the drawer when their desktop files changed — or, forced,
+     * when the display was just switched on or off, which decides whether they are listed at all.
+     */
+    private void refreshLinuxApps(boolean force) {
+        if (!com.termux.BuildConfig.X11_SERVER) return;
+        long signature = com.termux.app.x11.LinuxAppCatalog.signature(
+            com.termux.app.x11.LinuxAppCatalog.applicationDirs());
+        if (!force && signature == mLinuxAppsSignature) return;
+        mLinuxAppsSignature = signature;
+        com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this).refreshAsync(null, null);
+    }
+
+    /** Linux apps tapped in the drawer run on the display; this is what runs them. */
+    private void installLinuxAppRunner() {
+        if (!com.termux.BuildConfig.X11_SERVER) return;
+        mLinuxApps = new com.termux.app.x11.X11LinuxAppRunner(this,
+            new com.termux.app.x11.X11LinuxAppRunner.Host() {
+                @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
+                @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
+                @Override public boolean isDisplayRunning() { return isEmbeddedDisplayRunning(); }
+                @Override public void startDisplay() { startEmbeddedDisplay(); }
+                @Override public void runScript(@NonNull String script) {
+                    if (mTermuxService == null) return;
+                    mTermuxService.createTermuxTask(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
+                        new String[]{"-c", script}, null, TermuxConstants.TERMUX_HOME_DIR_PATH);
+                }
+                @Override public void showDisplayPlace() {
+                    if (mPaneWallController != null) {
+                        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, true);
+                    }
+                }
+                @Override public void showNotice(@NonNull String message) { showToast(message, true); }
+            });
+        com.termux.app.launcher.LauncherAppLauncher.setLinuxAppRunner(entry -> {
+            if (mLinuxApps == null) return false;
+            java.util.List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
+                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.applicationDirs());
+            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = com.termux.app.x11.LinuxAppCatalog.find(
+                apps, com.termux.app.x11.X11Apps.desktopId(entry.appRef));
+            if (app == null) {
+                showToast(getString(R.string.termux_x11_app_gone), true);
+                refreshLinuxApps(true);
+                return false;
+            }
+            mLinuxApps.run(app);
+            return true;
+        });
+    }
+
     /** The page's own "Turn on": the setting flips and the display comes alive in place. */
     private void turnOnEmbeddedDisplay() {
         if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
         mPreferences.setX11DisplayEnabled(true);
+        com.termux.app.x11.X11Defaults.applyOnce(this);
+        refreshLinuxApps(true);
         com.termux.app.x11.X11PaneFrame page = mPaneWallController == null
             ? null : mPaneWallController.displayPage();
         if (page != null) page.applyEnabled(true);
@@ -11141,6 +11206,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (frame != null) frame.applyRunning(running);
             syncPlaceSwitch();
             syncDisplayEnvironment();
+            if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
         });
         syncDisplayEnvironment();
         // The prefix commands go in with the feature, and are re-checked on every start — off
@@ -11164,7 +11230,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxService == null || mPreferences == null || !isX11DisplayEnabled()) return;
         String[] argv = com.termux.app.x11.X11StartCommand.argv(mPreferences.getX11DisplayCommand(),
             mPreferences.getX11DisplayDpi(), mPreferences.isX11LegacyDrawingEnabled(),
-            mPreferences.isX11ForceBgraEnabled());
+            mPreferences.isX11ForceBgraEnabled(),
+            com.termux.app.x11.X11WindowManager.xstartup(mPreferences.getX11WindowManager()));
         if (argv.length == 0) return;
         mTermuxService.createTermuxTask(argv[0], java.util.Arrays.copyOfRange(argv, 1, argv.length),
             null, TermuxConstants.TERMUX_HOME_DIR_PATH);

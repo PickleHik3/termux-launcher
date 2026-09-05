@@ -211,6 +211,19 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_FORCE_BGRA = false;
 
+        /** List the prefix's Linux apps in the app drawer, to be run on the display. */
+        public static final String KEY_X11_DRAWER_APPS = "x11_drawer_apps";
+
+        public static final boolean DEFAULT_X11_DRAWER_APPS = true;
+
+        /** The window manager the launcher starts with the server, so windows open full size. Empty for none. */
+        public static final String KEY_X11_WINDOW_MANAGER = "x11_window_manager";
+
+        public static final String DEFAULT_X11_WINDOW_MANAGER = "openbox";
+
+        /** Set once the phone-sized defaults (text size, touch mode) have been written on first turn-on. */
+        public static final String KEY_X11_DEFAULTS_APPLIED = "x11_defaults_applied";
+
         /** Defines the key for the pane wall's Widgets and Display buttons in the status bar. */
         public static final String KEY_TOP_PANE_WALL_TILES = "top_pane_wall_tiles";
 

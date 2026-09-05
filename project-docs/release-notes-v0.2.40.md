@@ -11,6 +11,7 @@
 - The Display segment of the place switch shows a dot while a display is running; hold it to stop the display, after asking. A display only ever starts when you ask for it.
 - Your keyboard and the extra-keys row type into the display while it is showing. With a hardware keyboard, everything reaches the display except the launcher's own Ctrl+Alt shortcuts.
 - Display options (Settings ▸ Launcher & apps): touch as trackpad, touchscreen or direct touch; resolution the same as the screen, scaled, fixed or custom; text and icon size; clipboard sharing; and how the launcher starts a display — with the launcher, with a command of your choosing, pointing new shells at it, and two compatibility switches for GPUs that draw black or with wrong colours.
+- Linux apps you install (`pkg install firefox`, say) appear in the app drawer with their icons. Tapping one starts the display if needed, opens the app full size and takes you there; they can be pinned and searched like Android apps. Switch the listing off in Display options.
 - `launcherctl x11 gpu` says what your phone's GPU can do for Linux apps and, with `--env`, prints the exact settings to use; the same answer sits at the bottom of Display options.
 
 ## Changes
