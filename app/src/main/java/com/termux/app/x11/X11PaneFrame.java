@@ -12,6 +12,7 @@ import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneRim;
+import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.x11.LorieView;
 
@@ -294,6 +295,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         // which no clip reaches. The page has no slab of its own to keep square, and the rim
         // draws the rounded edge whichever way the frame is set.
         setPaneShape(radiusPx, false);
+        // Maximised X windows keep the same clearance from the arcs a pane's text does; the
+        // surface itself still fills the frame.
+        X11CliInstaller.applyOpenboxMargin(PaneShape.contentInsetForBounds(radiusPx,
+            Math.max(1, getWidth()), Math.max(1, getHeight())));
         if (mCornerMask != null) {
             mCornerMask.setCornerMaskRadius(radiusPx);
             // Behind the page is the wallpaper (or the surface base colour), never a pane's own

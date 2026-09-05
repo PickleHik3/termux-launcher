@@ -158,11 +158,11 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void pullHintColorFallsBackToTheThemeResourceNotALiteralGrey() {
+    public void pullHintColorIsTheThemeAccentNotALiteralGrey() {
         StatusBarSwipeLayout view = createView();
         assertNotEquals(0xFFB0B0B0, view.pullHintColor());
         assertEquals(androidx.core.content.ContextCompat.getColor(view.getContext(),
-            R.color.termux_on_surface_variant), view.pullHintColor());
+            R.color.termux_primary), view.pullHintColor());
     }
 
     /** Records the wall-drag stream the bar sends. */

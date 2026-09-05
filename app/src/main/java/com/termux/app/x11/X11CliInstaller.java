@@ -175,7 +175,7 @@ public final class X11CliInstaller {
             writeAtomically(serverScript(), bytes(serverScript(applicationId)), true, true);
             writeAtomically(preferenceScript(), bytes(preferenceScript(applicationId)), true, true);
             writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
-            writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
+            writeAtomically(openboxRc(), bytes(openboxRcContent(sLastOpenboxMarginPx)), true, false);
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
         } catch (Exception e) {
@@ -272,10 +272,44 @@ public final class X11CliInstaller {
      */
     @NonNull
     static String openboxRcContent() {
+        return openboxRcContent(0);
+    }
+
+    /** The margin the last {@link #applyOpenboxMargin} asked for, so an install keeps it. */
+    private static volatile int sLastOpenboxMarginPx;
+
+    /**
+     * Keep maximised windows clear of the Display page's rounded corners. The X surface fills the
+     * frame to its rim, so the screen's own corners lie under the arcs; a window that fills the
+     * screen would lose its first and last cells there. openbox's margins reserve that clearance
+     * at every edge: windows stop short of the arcs, the root still runs to the rim. Written when
+     * the clearance changes; a display started afterwards reads it, a running one keeps its own
+     * until restarted.
+     *
+     * @param marginPx the corner clearance in screen pixels; 0 for a square frame
+     */
+    public static void applyOpenboxMargin(int marginPx) {
+        int margin = Math.max(0, marginPx);
+        if (margin == sLastOpenboxMarginPx && new File(OPENBOX_RC_PATH).isFile()) return;
+        sLastOpenboxMarginPx = margin;
+        File rc = new File(OPENBOX_RC_PATH);
+        if (!rc.isFile()) return;   // no display CLI installed; install writes the margin itself
+        try {
+            writeAtomically(rc, bytes(openboxRcContent(margin)), true, false);
+        } catch (IOException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to write the openbox margins", e);
+        }
+    }
+
+    @VisibleForTesting
+    static String openboxRcContent(int marginPx) {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
             + "<!-- " + MARKER_PREAMBLE + " for the Linux display; do not edit -->\n"
             + "<openbox_config xmlns=\"http://openbox.org/3.4/rc\">\n"
             + "  <focus><focusNew>yes</focusNew></focus>\n"
+            // The frame's corner clearance, so a maximised window keeps out of the arcs.
+            + "  <margins><top>" + marginPx + "</top><bottom>" + marginPx + "</bottom>"
+            + "<left>" + marginPx + "</left><right>" + marginPx + "</right></margins>\n"
             // The window-switching chords the touchpad's three-finger swipe sends, and a hardware
             // keyboard's Alt+Tab; a rc.xml without a keyboard section has no bindings at all.
             + "  <keyboard>\n"

@@ -53,16 +53,21 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private boolean mDispatchInProgress;
     private boolean mDeferredReset;
     @Nullable private android.view.VelocityTracker mVelocityTracker;
-    /** Drag hint: a grabber pill that blooms below the row on a tap of the bar's chrome. */
-    private static final long HINT_DURATION_MS = 620L;
-    private static final float HINT_WIDTH_DP = 30f;
-    private static final float HINT_HEIGHT_DP = 3f;
-    private static final float HINT_INSET_DP = 3f;
-    private static final float HINT_TRAVEL_DP = 4f;
+    /**
+     * Drag hint: two glowing chevrons that bloom at the row's bottom edge on a tap of the bar's
+     * chrome, pointing the way the bar can go from here - down while it is folded, up while it
+     * is open - and drifting that way as they fade.
+     */
+    private static final long HINT_DURATION_MS = 680L;
+    private static final float HINT_CHEVRON_WIDTH_DP = 14f;
+    private static final float HINT_CHEVRON_HEIGHT_DP = 5f;
+    private static final float HINT_CHEVRON_GAP_DP = 4f;
+    private static final float HINT_INSET_DP = 4f;
+    private static final float HINT_TRAVEL_DP = 6f;
     @Nullable private ValueAnimator mHintAnimator;
     private float mHintProgress;
     @Nullable private Paint mHintPaint;
-    @Nullable private RectF mHintRect;
+    @Nullable private android.graphics.Path mHintPath;
     private int mPullHintCount;
 
     /** How many times the drag hint has played — the animation itself is not observable. */
@@ -107,10 +112,10 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     /**
-     * A tap on the bar's own chrome answers with the grabber the bar does not wear at rest: a
-     * short pill that fades in below the row, sinks a few dp and fades out — the drag saying
-     * it is there. Taps that belong to a child (window chips, the stat and weather widgets, the
-     * sessions chip) never reach here, so switching windows or opening a card stays silent.
+     * A tap on the bar's own chrome answers with the direction the bar does not show at rest:
+     * two chevrons that glow in at the row's bottom edge, drift the way a swipe would take the
+     * bar and fade out. Taps that belong to a child (window chips, the stat and weather widgets,
+     * the sessions chip) never reach here, so switching windows or opening a card stays silent.
      */
     private void showPullHint() {
         mPullHintCount++;
@@ -146,30 +151,52 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     private void drawPullHint(@NonNull android.graphics.Canvas canvas) {
         if (mHintProgress <= 0f) return;
-        // One rise-and-fall envelope over the whole animation, so the pill never snaps off.
+        // One rise-and-fall envelope over the whole animation, so the chevrons never snap off.
         float envelope = (float) Math.sin(Math.PI * mHintProgress);
         if (envelope <= 0.01f) return;
         float density = getResources().getDisplayMetrics().density;
         if (mHintPaint == null) {
             mHintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mHintPaint.setStyle(Paint.Style.FILL);
+            mHintPaint.setStyle(Paint.Style.STROKE);
+            mHintPaint.setStrokeCap(Paint.Cap.ROUND);
+            mHintPaint.setStrokeJoin(Paint.Join.ROUND);
         }
-        mHintPaint.setColor(pullHintColor());
-        mHintPaint.setAlpha(Math.round(150 * envelope));
-        float width = HINT_WIDTH_DP * density;
-        float height = HINT_HEIGHT_DP * density;
-        float travel = HINT_TRAVEL_DP * density * mHintProgress;
-        float left = (getWidth() - width) / 2f;
-        float top = getHeight() - height - HINT_INSET_DP * density + travel;
-        if (mHintRect == null) mHintRect = new RectF();
-        mHintRect.set(left, top, left + width, top + height);
-        canvas.drawRoundRect(mHintRect, height / 2f, height / 2f, mHintPaint);
+        if (mHintPath == null) mHintPath = new android.graphics.Path();
+        // Folded, the bar opens by a pull down; open, it folds by a push up. The chevrons point
+        // that way and travel that way.
+        boolean down = mState.toCollapsedPreference();
+        float direction = down ? 1f : -1f;
+        float width = HINT_CHEVRON_WIDTH_DP * density;
+        float height = HINT_CHEVRON_HEIGHT_DP * density;
+        float gap = HINT_CHEVRON_GAP_DP * density;
+        float travel = HINT_TRAVEL_DP * density * mHintProgress * direction;
+        float cx = getWidth() / 2f;
+        float base = getHeight() - HINT_INSET_DP * density - height - gap - height + travel;
+        int color = pullHintColor();
+        for (int pass = 0; pass < 2; pass++) {
+            // A wide, faint stroke under a thin bright one is the glow.
+            boolean glow = pass == 0;
+            mHintPaint.setStrokeWidth((glow ? 6f : 1.75f) * density);
+            mHintPaint.setColor(color);
+            mHintPaint.setAlpha(Math.round((glow ? 70 : 230) * envelope));
+            for (int i = 0; i < 2; i++) {
+                float top = base + i * (height + gap);
+                // The tip leads: pointing down it is at the bottom, pointing up at the top.
+                float tipY = down ? top + height : top;
+                float tailY = down ? top : top + height;
+                mHintPath.reset();
+                mHintPath.moveTo(cx - width / 2f, tailY);
+                mHintPath.lineTo(cx, tipY);
+                mHintPath.lineTo(cx + width / 2f, tailY);
+                canvas.drawPath(mHintPath, mHintPaint);
+            }
+        }
     }
 
-    /** The hint's colour, from the theme like every other status widget, never a literal grey. */
+    /** The hint's colour: the accent, from the theme like every other status widget. */
     int pullHintColor() {
-        return MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));
+        return MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(getContext(), R.color.termux_primary));
     }
 
     @Override protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
