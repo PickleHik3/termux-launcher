@@ -11094,6 +11094,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyPlaceStripInset(mPreferences != null && mPreferences.isTopPaneClockCollapsed()
             ? 0f : 1f);
         syncPlaceBarOffset(mWallOffsetPx);
+        // The weather says more on the Widgets place, and the stats line up under the clock
+        // there; both read the place, so both follow it.
+        if (mWeatherController != null && mWeatherController.cache().valid) {
+            onWeatherUpdated(mWeatherController.cache());
+        }
+        View row = findViewById(R.id.terminal_status_row);
+        if (row != null) row.post(this::alignStatsUnderClock);
+    }
+
+    /**
+     * On the Widgets place the row holds only the stats and the weather, so they leave the row's
+     * end and line up under the clock — sharing its centre, wherever the clock is set to sit —
+     * and the bar reads as one column. Everywhere else they keep the row's end.
+     */
+    private void alignStatsUnderClock() {
+        View stats = findViewById(R.id.terminal_status_widgets);
+        if (stats == null) return;
+        View slot = findViewById(R.id.terminal_top_widget_area);
+        com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
+        View row = findViewById(R.id.terminal_status_row);
+        boolean underClock = isWidgetsPageShowing() && slot != null && clock != null && row != null
+            && slot.getVisibility() == View.VISIBLE && stats.getWidth() > 0 && clock.getWidth() > 0;
+        float target = 0f;
+        if (underClock) {
+            float clockCenter = slot.getLeft() + clock.getLeft()
+                + (clock.paintedLeftPx() + clock.paintedRightPx()) / 2f;
+            float statsCenter = row.getLeft() + stats.getLeft() + stats.getWidth() / 2f;
+            float shift = clockCenter - statsCenter;
+            // Never past the row's own start.
+            float leftmost = -(stats.getLeft() - row.getPaddingStart());
+            target = Math.max(leftmost, Math.min(0f, shift));
+        }
+        if (stats.getTranslationX() == target) return;
+        if (isReducedMotionEnabled() || stats.getTranslationX() == 0f && !underClock) {
+            stats.setTranslationX(target);
+        } else {
+            stats.animate().translationX(target)
+                .setDuration(com.termux.app.terminal.Motion.FLOAT_DEPTH_MS)
+                .setInterpolator(com.termux.app.terminal.Motion.settle()).start();
+        }
     }
 
     /**
@@ -11170,7 +11210,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case "ubuntu": return "\uf31b";
             case "debian": return "\uf306";
             case "fedora": return "\uf30a";
-            default: return "\uf120";
+            default: return "\uf108";
         }
     }
 
@@ -11782,6 +11822,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // says where that is after every layout.
                 ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setHomeAnchorListener(
                     lens::setHomeAnchor);
+            }
+            View stats = findViewById(R.id.terminal_status_widgets);
+            if (stats != null) {
+                stats.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                    if (r - l != or - ol || l != ol) v.post(this::alignStatsUnderClock);
+                });
+            }
+            if (slotView != null) {
+                slotView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
+                    v.post(this::alignStatsUnderClock));
             }
         }
         syncWallGestureAvailability();
@@ -12846,12 +12896,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (weather.valid) {
                 widget.setIconAnimation(com.termux.app.statusbar.WeatherController.animationAssetFor(
                     weather.currentCode, weather.currentIsDay));
-                widget.setValue(com.termux.app.statusbar.WeatherController.formatTemp(weather.currentC,
-                    mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit()));
+                String temp = com.termux.app.statusbar.WeatherController.formatTemp(weather.currentC,
+                    mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit());
+                // The Widgets place has room and nothing else in its row, so the weather says
+                // the whole of it there: the temperature, the sky, and where that is.
+                if (isWidgetsPageShowing()) {
+                    StringBuilder full = new StringBuilder(temp);
+                    String sky = com.termux.app.statusbar.WeatherController.describe(weather.currentCode);
+                    if (!sky.isEmpty()) full.append(" · ").append(sky);
+                    if (!weather.locationName.isEmpty()) full.append(" · ").append(weather.locationName);
+                    widget.setValue(full);
+                } else {
+                    widget.setValue(temp);
+                }
             } else {
                 widget.setValue("--°");
             }
         }
+        alignStatsUnderClock();
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
             mWeatherCardView.bind(weather);
         }

@@ -3,7 +3,6 @@ package com.termux.app.statusbar;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -35,8 +34,8 @@ import java.util.List;
  * arriving one travels to home as the one at home leaves through the far edge — and a tap on a
  * neighbour slides the wall to its place.
  *
- * <p>The outer strip of the glass on each side is a lens: a specular hairline over a brighter
- * wash.
+ * <p>The icon at home carries a soft glow of its own colour and its neighbours are drained
+ * towards the surface's neutral, so the place you are on is the one that reads.
  *
  * <p>The view lies under the bar's content but owns the neighbours' touches: nothing above it
  * claims the bar's edges, so a tap there reaches it.
@@ -59,15 +58,18 @@ public final class StatusBarLensView extends View {
     public static final float HOME_X_DP = 20f;
     /** The expanded bar's slot height; the home icon centres on it until the clock says where. */
     private static final float SLOT_HEIGHT_DP = 68f;
-    private static final float HAIRLINE_DP = 1.5f;
-    private static final float WASH_DP = 20f;
+    /** How far the home icon's glow reaches past its edge, as a share of its size. */
+    private static final float GLOW_REACH = 0.55f;
+    /** How far the neighbours' colour is drained towards the surface's neutral. */
+    private static final float NEIGHBOUR_DRAIN = 0.55f;
 
     private final Paint mTilePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mHairlinePaint = new Paint();
-    private final Paint mWashPaint = new Paint();
+    private final Paint mGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mTile = new RectF();
+    private final RectF mGlow = new RectF();
+    private final int mNeutral;
     private final RectF[] mHitRects = new RectF[PaneWallPage.values().length];
     private final int mTouchSlop;
 
@@ -96,6 +98,8 @@ public final class StatusBarLensView extends View {
         mStrokePaint.setStrokeWidth(dp(1f));
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
+        mNeutral = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            ContextCompat.getColor(context, R.color.termux_on_surface_variant));
         for (int i = 0; i < mHitRects.length; i++) mHitRects[i] = new RectF();
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         setWillNotDraw(false);
@@ -182,20 +186,11 @@ public final class StatusBarLensView extends View {
     }
 
     @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        int bright = ColorUtils.setAlphaComponent(Color.WHITE, 107);
-        int dim = ColorUtils.setAlphaComponent(Color.WHITE, 13);
-        mHairlinePaint.setShader(new LinearGradient(0f, 0f, 0f, h, bright, dim, Shader.TileMode.CLAMP));
-    }
-
-    @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
         int width = getWidth();
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
-        drawLens(canvas, width, height);
         for (RectF rect : mHitRects) rect.setEmpty();
         if (mWallWidthPx <= 0 || mPages.isEmpty()) return;
 
@@ -226,12 +221,25 @@ public final class StatusBarLensView extends View {
             float centerX = x + size / 2f;
             mTile.set(centerX - size / 2f, centerY - size / 2f, centerX + size / 2f, centerY + size / 2f);
             if (page != mCurrent) mHitRects[page.ordinal()].set(mTile);
-            int accent = accentFor(getContext(), page);
-            // Weight says what matters: the icon at home is the place you are on and reads full;
-            // the two peeking in are where you could go and read quieter; a display that is not
-            // running is quieter still.
+            // Weight and colour say what matters: the icon at home is the place you are on, in
+            // its own colour with a glow; the two peeking in are where you could go, drained
+            // towards the surface's neutral and quieter; a display that is not running is quieter
+            // still.
+            int accent = ColorUtils.blendARGB(accentFor(getContext(), page), mNeutral,
+                NEIGHBOUR_DRAIN * presence);
             float ink = alpha * (1f - 0.38f * presence);
             if (page == PaneWallPage.DISPLAY && !mDisplayRunning) ink *= 0.6f;
+            float glow = alpha * (1f - presence) * mExpansion;
+            if (glow > 0.01f) {
+                float reach = size * GLOW_REACH;
+                mGlow.set(mTile.left - reach, mTile.top - reach, mTile.right + reach, mTile.bottom + reach);
+                mGlowPaint.setShader(new android.graphics.RadialGradient(centerX, centerY,
+                    size / 2f + reach,
+                    new int[] {ColorUtils.setAlphaComponent(accent, Math.round(64 * glow)),
+                        ColorUtils.setAlphaComponent(accent, Math.round(22 * glow)), Color.TRANSPARENT},
+                    new float[] {0.45f, 0.7f, 1f}, Shader.TileMode.CLAMP));
+                canvas.drawRoundRect(mGlow, mGlow.width() / 2f, mGlow.height() / 2f, mGlowPaint);
+            }
             float radius = mChipRadiusPx >= 0f
                 ? Math.min(size / 2f, mChipRadiusPx * (size / dp(COMPACT_ICON_DP)))
                 : size * 0.32f;
@@ -246,21 +254,6 @@ public final class StatusBarLensView extends View {
             float baseline = centerY - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
             canvas.drawText(glyphFor(page), centerX, baseline, mGlyphPaint);
         }
-    }
-
-    /** The lens itself: a brighter wash fading inward under a specular hairline at each edge. */
-    private void drawLens(@NonNull Canvas canvas, int width, int height) {
-        float wash = dp(WASH_DP);
-        int washColor = ColorUtils.setAlphaComponent(Color.WHITE, 18);
-        mWashPaint.setShader(new LinearGradient(0f, 0f, wash, 0f, washColor, Color.TRANSPARENT,
-            Shader.TileMode.CLAMP));
-        canvas.drawRect(0f, 0f, wash, height, mWashPaint);
-        mWashPaint.setShader(new LinearGradient(width, 0f, width - wash, 0f, washColor,
-            Color.TRANSPARENT, Shader.TileMode.CLAMP));
-        canvas.drawRect(width - wash, 0f, width, height, mWashPaint);
-        float hairline = dp(HAIRLINE_DP);
-        canvas.drawRect(0f, 0f, hairline, height, mHairlinePaint);
-        canvas.drawRect(width - hairline, 0f, width, height, mHairlinePaint);
     }
 
     @Override

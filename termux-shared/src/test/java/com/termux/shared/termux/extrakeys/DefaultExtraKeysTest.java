@@ -21,30 +21,33 @@ public class DefaultExtraKeysTest {
             TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         ExtraKeyButton[][] matrix = info.getMatrix();
         assertEquals(1, matrix.length);
-        // Window and session switching moved to the in-app keyboard's space-bar swipes, so the
-        // row only carries what no key on that keyboard can reach.
+        // The row carries what no key on the in-app keyboard reaches: the keyboard toggle, a new
+        // session, the wall's three places, a split, and the workspaces. Window and session
+        // switching live on the keyboard's space-bar swipes; search, prompt jumps and the
+        // scratchpad have chords and the palette.
         String[] expectedKeys = {
             "KEYBOARD",
             "tool:session.new",
+            "tool:wall.widgets",
+            "tool:wall.terminal",
+            "tool:wall.display",
             "tool:pane.split_vertical",
-            "tool:terminal.jump_previous_prompt",
-            "tool:terminal.search_scrollback",
             "tool:workspace.picker",
-            "tool:terminal.toggle_scratchpad",
         };
         String[] expectedPopups = {
             "tool:terminal.select_at_cursor",
             "tool:window.new",
+            null,
+            null,
+            null,
             "tool:pane.split_horizontal",
-            "tool:terminal.jump_next_prompt",
-            "tool:terminal.hints",
             "tool:workspace.save_prompt",
-            "tool:pane.toggle_float",
         };
         assertEquals(expectedKeys.length, matrix[0].length);
         for (int i = 0; i < expectedKeys.length; i++) {
             assertEquals(expectedKeys[i], matrix[0][i].getKey());
-            assertEquals(expectedPopups[i], matrix[0][i].getPopup().getKey());
+            assertEquals(expectedPopups[i],
+                matrix[0][i].getPopup() == null ? null : matrix[0][i].getPopup().getKey());
         }
     }
 
