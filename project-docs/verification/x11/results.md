@@ -55,6 +55,15 @@ apart. The spread between readings of the same state (±10 MB, the terminal's ow
 than any difference between states: the server is its own process, and the launcher's cost for
 the display is its surface while shown, which does not register against the noise.
 
+## Input, on pong
+
+Until `bdfb1933` nothing on the display could be touched: the vendoring had kept upstream's
+input classes but not the wiring its activity did. With it in place, `xdotool getmouselocation`
+reports the X pointer where a tap or swipe on the page landed (screen coordinates minus the
+page's own offset), and a tap on Firefox's menu button opens the menu. `xeyes` is not a test of
+this — its pupils track XInput2 raw motion, which the simulated touch does not produce — `xclock
+-digital -update 1` proves the picture is live (its seconds change), and a real app proves input.
+
 ## Phosh
 
 phoc — Phosh's compositor — runs on the display as an X11 client with the pixman renderer, from
