@@ -276,13 +276,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         int gutter = Math.round(dp(GUTTER_DP));
         int gap = Math.round(dp(GAP_DP));
-        // The bar's place icons come first: the left neighbour's, then the one at home, both
-        // beside the clock whatever its alignment; the clock and everything else lay out after
-        // them. Beside cards the right neighbour's icon needs its room too.
-        int homeCell = StatusBarLensView.leadingCellWidthPx(getContext());
-        int contentStart = gutter + homeCell;
-        int contentEnd = width - gutter - (mMode == TopPaneSlotMode.CLOCK_ONLY ? 0
-            : StatusBarLensView.trailingCellWidthPx(getContext()));
+        // The bar's home place icon sits beside the clock, whatever the clock's alignment; the
+        // clock and everything else lay out after it. The neighbours peek past the edges behind
+        // the content and take no room.
+        int contentStart = StatusBarLensView.leadingCellWidthPx(getContext());
+        int contentEnd = width - gutter;
         int available = Math.max(0, contentEnd - contentStart);
         boolean stacked = mMode.showsNotifications() && mPinnedCount >= TopPaneSlotMode.MAX_PINNED;
 

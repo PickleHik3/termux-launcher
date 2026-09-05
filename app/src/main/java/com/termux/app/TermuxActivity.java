@@ -11075,6 +11075,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             bar.setPlaceAccent(placeAccent);
             bar.setVisibility(page == com.termux.app.wall.PaneWallPage.WIDGETS
                 ? View.GONE : View.VISIBLE);
+            // The plus opens a terminal window; the display's apps come from the drawer.
+            bar.setCreateButtonShown(page == com.termux.app.wall.PaneWallPage.TERMINAL);
         }
         bindPlaceBadge(sessions);
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
@@ -11095,31 +11097,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The row's place content starts after the lens — and, in the compact bar, after the two
-     * place icons that live in the row there instead of on the clock's line; the stat widgets at
-     * the row's end keep clear of the third the same way.
+     * The row's place content starts after the lens, in both forms: the place icons live behind
+     * the content and past the edges, and take no room from the row.
      */
     private void applyPlaceStripInset(float expansion) {
         View strip = findViewById(R.id.terminal_status_place_content);
         if (strip == null) return;
-        float folded = 1f - Math.max(0f, Math.min(1f, expansion));
-        float lens = dpToPx(com.termux.app.statusbar.PlaceContentStrip.LENS_WIDTH_DP);
-        int compactStart = com.termux.app.statusbar.StatusBarLensView.compactLeadingWidthPx(this);
-        int start = Math.round(lens + (compactStart - lens) * folded);
+        int start = Math.round(dpToPx(com.termux.app.statusbar.PlaceContentStrip.LENS_WIDTH_DP));
         if (strip.getPaddingStart() != start) {
             strip.setPaddingRelative(start, strip.getPaddingTop(), strip.getPaddingEnd(),
                 strip.getPaddingBottom());
-        }
-        View stats = findViewById(R.id.terminal_status_widgets);
-        if (stats != null && stats.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-            int expandedEnd = Math.round(dpToPx(12));
-            int compactEnd = com.termux.app.statusbar.StatusBarLensView.compactTrailingWidthPx(this);
-            int end = Math.round(expandedEnd + (compactEnd - expandedEnd) * folded);
-            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) stats.getLayoutParams();
-            if (params.getMarginEnd() != end) {
-                params.setMarginEnd(end);
-                stats.setLayoutParams(params);
-            }
         }
     }
 

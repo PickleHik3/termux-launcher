@@ -119,6 +119,15 @@
                         android:layout_height="match_parent"
                         android:importantForAccessibility="no" />
 
+                    <!-- The lens edges and the place icons, behind everything the bar shows: the
+                         neighbours rest half past the edges and the icon at home sits beside the
+                         clock, none of it taking room from the row. Taps on a neighbour still land
+                         here, since nothing above owns the bar's edges. -->
+                    <com.termux.app.statusbar.StatusBarLensView
+                        android:id="@+id/terminal_status_lens"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
                     <!-- Stable modular slot: clocks render only here. A later widget editor can
                          resize/reorder this host without coupling widget code to the pane. The slot
                          owns the clock / media / pinned-notification contention; the pane height
@@ -286,16 +295,6 @@
 
                         </LinearLayout>
                     </LinearLayout>
-
-                    <!-- The lens edges: a specular hairline over a brighter strip at each side, and
-                         in each the glyph of the place that direction leads to. Over everything
-                         in the bar; it owns only the glyphs' touches. -->
-                    <com.termux.app.statusbar.StatusBarLensView
-                        android:id="@+id/terminal_status_lens"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:elevation="7dp"
-                        android:outlineProvider="none" />
 
                 </com.termux.app.statusbar.StatusBarSwipeLayout>
 

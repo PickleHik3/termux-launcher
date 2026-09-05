@@ -247,6 +247,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mBusyColor;
     private int mAttentionColor;
     @Nullable private Integer mPlaceAccent;
+    /** Whether the strip ends with the plus that opens a new window. */
+    private boolean mCreateButtonShown = true;
     @Nullable private ValueAnimator mSelectionAnimator;
     @Nullable private ValueAnimator mBusyAnimator;
     /**
@@ -284,6 +286,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     public void setOnCreateWindowListener(@Nullable OnCreateWindowListener listener) {
         mCreateListener = listener;
+    }
+
+    /** Whether the strip offers the plus; a place with nothing to add leaves it out. */
+    public void setCreateButtonShown(boolean shown) {
+        if (mCreateButtonShown == shown) return;
+        mCreateButtonShown = shown;
+        for (int i = mTabs.getChildCount() - 1; i >= 0; i--) {
+            if (mTabs.getChildAt(i) instanceof AppCompatImageButton) mTabs.removeViewAt(i);
+        }
+        if (shown) addCreateButton(mItems.isEmpty());
     }
 
     public void setOnEdgeOverswipeListener(@Nullable OnEdgeOverswipeListener listener) {
@@ -412,7 +424,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         // sameItems deliberately still compares labels only, so starting a command keeps
         // canReuseTabs true: re-inflating the pill row would also kill the selection slide.
         boolean canReuseTabs = !typefaceChanged && sameItems(mItems, items)
-            && mTabs.getChildCount() == items.size() + 1;
+            && mTabs.getChildCount() == items.size() + (mCreateButtonShown ? 1 : 0);
         mSelectedIndex = selectedIndex;
         mItems = new ArrayList<>(items);
         updatePalette();
@@ -445,7 +457,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             if (i > 0) params.setMarginStart(dp(3));
             mTabs.addView(tab, params);
         }
-        addCreateButton(items.isEmpty());
+        if (mCreateButtonShown) addCreateButton(items.isEmpty());
         mTabs.setWindowCount(items.size());
         updateBusyAnimator();
         applyTabContentDescriptions();
