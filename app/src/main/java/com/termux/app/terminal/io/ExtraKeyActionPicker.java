@@ -321,9 +321,10 @@ public final class ExtraKeyActionPicker {
                                                     @NonNull String label) {
         String spec = "tool:" + toolName;
         if (argument != null && value != null) spec += ":" + argument + "=" + value;
-        // Tool specs have no sensible glyph of their own, so the label seeds the display text and
+        // A tool with a glyph of its own wears it; otherwise the label seeds the display text and
         // the user can shorten it in the key sheet.
-        return new ExtraKeysLayoutModel.Key(spec, false, label, null);
+        String glyph = ExtraKeyActionLabels.defaultCapGlyph(toolName);
+        return new ExtraKeysLayoutModel.Key(spec, false, glyph != null ? glyph : label, null);
     }
 
     @Nullable

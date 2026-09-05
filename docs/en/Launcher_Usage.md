@@ -68,7 +68,8 @@ spot beside the clock as the one that was there leaves. Tap a peeking icon to go
 icon reads quieter until a display is running. The row under the clock belongs to the place on
 screen: your session and windows on the terminal, the display's apps on Display, and nothing on
 Widgets, where the widgets speak for themselves. Where the wall rests is where the home screen
-comes back to.
+comes back to. **Go to Widgets**, **Go to Terminal** and **Go to Display** are also actions you
+can put on the extra-keys row, on the in-app keyboard, or on a key chord.
 
 Exactly one place is on screen at a time, and the terminal never changes size for the others, so
 nothing reflows in your shells when you move. Your session keeps running while you are away.

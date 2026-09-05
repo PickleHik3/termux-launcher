@@ -41,10 +41,11 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 
 - **Move between places** by swiping left or right anywhere on the status bar, or by tapping the
   place icons peeking in from its edges. Where the wall rests is where the home screen comes back
-  to. To reach the display from the terminal's keyboard, bind the `wall.go` action in your
-  keybinds file — `map ctrl+alt+shift+d wall.go page=display` (`terminal`, `widgets`, `left` and
-  `right` are the other pages) — see
-  [Customize keyboard bindings](Terminal_Modernization.md#customize-keyboard-bindings).
+  to. **Go to Widgets**, **Go to Terminal** and **Go to Display** are actions like any other:
+  put one on the extra-keys row from its editor, on the in-app keyboard as a `tool:wall.display`
+  key, or bind it in your keybinds file — `map ctrl+alt+shift+d wall.display` — see
+  [Customize keyboard bindings](Terminal_Modernization.md#customize-keyboard-bindings). Scripts
+  keep `wall.go page=…`.
 - **Typing.** The launcher's keyboard and its extra-keys row type into the display while it is
   showing, and a hardware keyboard is the display's entirely: every key and every chord goes to
   X, and the launcher's shortcuts and their hints stay out of the way. Leave the display by

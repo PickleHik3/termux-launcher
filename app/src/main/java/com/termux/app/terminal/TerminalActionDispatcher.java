@@ -74,6 +74,9 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
     public static final String TOOL_WALL_GO = "wall.go";
+    public static final String TOOL_WALL_WIDGETS = "wall.widgets";
+    public static final String TOOL_WALL_TERMINAL = "wall.terminal";
+    public static final String TOOL_WALL_DISPLAY = "wall.display";
     public static final String TOOL_PANE_SPLIT = "pane.split";
     /** Panes opened and driven through the local API (agents, scripts); see AgentPaneRegistry. */
     public static final String TOOL_PANE_OPEN = "pane.open";
@@ -206,6 +209,9 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_MOVE_TO_EDGE:
             case TOOL_PANE_NEXT_LAYOUT:
             case TOOL_WALL_GO:
+            case TOOL_WALL_WIDGETS:
+            case TOOL_WALL_TERMINAL:
+            case TOOL_WALL_DISPLAY:
             case TOOL_PANE_TOGGLE_FLOAT:
             case TOOL_PANE_OPEN:
             case TOOL_PANE_LIST:
@@ -489,6 +495,16 @@ public final class TerminalActionDispatcher {
                         return error(400, "bad_request",
                             "Invalid 'page'; expected widgets, terminal, display, left, or right,"
                                 + " and the page must exist on this install");
+                    }
+                    return ok().put("page", page);
+                }
+                case TOOL_WALL_WIDGETS:
+                case TOOL_WALL_TERMINAL:
+                case TOOL_WALL_DISPLAY: {
+                    String page = TOOL_WALL_WIDGETS.equals(toolName) ? "widgets"
+                        : TOOL_WALL_DISPLAY.equals(toolName) ? "display" : "terminal";
+                    if (!host.goToWallPage(page)) {
+                        return error(400, "bad_request", "That place is not on this install's wall");
                     }
                     return ok().put("page", page);
                 }

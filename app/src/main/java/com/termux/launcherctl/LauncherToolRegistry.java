@@ -76,6 +76,8 @@ public final class LauncherToolRegistry {
     public static final String CATEGORY_CLIPBOARD = "clipboard";
     public static final String CATEGORY_APPEARANCE = "appearance";
     public static final String CATEGORY_APP = "app";
+    /** The pane wall's places: Widgets, Terminal, Display. */
+    public static final String CATEGORY_WALL = "wall";
     /** Installed Android apps, contributed by the palette rather than by tools. */
     public static final String CATEGORY_APPS = "apps";
 
@@ -390,6 +392,9 @@ public final class LauncherToolRegistry {
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
     /** The pane wall: move between the terminal and the places beside it. */
     public static final String TOOL_WALL_GO = "wall.go";
+    public static final String TOOL_WALL_WIDGETS = "wall.widgets";
+    public static final String TOOL_WALL_TERMINAL = "wall.terminal";
+    public static final String TOOL_WALL_DISPLAY = "wall.display";
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_PANE_OPEN = "pane.open";
     public static final String TOOL_PANE_LIST = "pane.list";
@@ -610,6 +615,21 @@ public final class LauncherToolRegistry {
                     true, "terminal")
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        // One tool per place, with nothing to ask: these are what a finger binds — a key on the
+        // extra-keys row or the in-app keyboard, a chord, a palette row — where wall.go's page
+        // argument is what a script passes.
+        addUi(map, TOOL_WALL_WIDGETS,
+            "Show the pane wall's Widgets place.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_widgets, R.string.tool_desc_wall_widgets, null);
+        addUi(map, TOOL_WALL_TERMINAL,
+            "Show the pane wall's Terminal place.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_terminal, R.string.tool_desc_wall_terminal, null);
+        addUi(map, TOOL_WALL_DISPLAY,
+            "Show the pane wall's Display place.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_display, R.string.tool_desc_wall_display, null);
         add(map, TOOL_PANE_MOVE_TO_EDGE,
             "Move the focused pane to an outer edge of the current window.",
             schemaObject()

@@ -398,6 +398,7 @@ public final class TerminalCommandPalette {
             case LauncherToolRegistry.CATEGORY_APPEARANCE: return context.getString(R.string.palette_category_appearance);
             case LauncherToolRegistry.CATEGORY_APP: return context.getString(R.string.palette_category_app);
             case LauncherToolRegistry.CATEGORY_APPS: return context.getString(R.string.palette_category_apps);
+            case LauncherToolRegistry.CATEGORY_WALL: return context.getString(R.string.palette_category_wall);
             case CATEGORY_SESSIONS: return context.getString(R.string.palette_category_sessions);
             default: return category;
         }

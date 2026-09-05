@@ -1301,6 +1301,7 @@
     <string name="palette_category_appearance">Appearance</string>
     <string name="palette_category_app">App</string>
     <string name="palette_category_apps">Apps</string>
+    <string name="palette_category_wall">Places</string>
     <string name="palette_category_sessions">Sessions</string>
     <string name="palette_category_keyboard">Keyboard</string>
     <string name="palette_keyboard_layout_active">Current layout</string>
@@ -1337,6 +1338,9 @@
     <string name="tool_pane_kill_focused">Kill focused pane</string>
     <string name="tool_pane_equalize">Equalize pane dividers</string>
     <string name="tool_pane_rotate">Rotate pane layout</string>
+    <string name="tool_wall_widgets">Go to Widgets</string>
+    <string name="tool_wall_terminal">Go to Terminal</string>
+    <string name="tool_wall_display">Go to Display</string>
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
     <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>
@@ -1400,6 +1404,9 @@
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>
     <string name="tool_desc_pane_equalize">Reset every divider in this window to an equal ratio.</string>
     <string name="tool_desc_pane_rotate">Rotate this window’s pane layout clockwise.</string>
+    <string name="tool_desc_wall_widgets">Show the widget grid.</string>
+    <string name="tool_desc_wall_terminal">Show the terminal.</string>
+    <string name="tool_desc_wall_display">Show the Linux display.</string>
     <string name="tool_desc_pane_next_layout">Cycle this window to the next automatic pane layout and keep it applied as panes are added or closed.</string>
     <string name="tool_desc_pane_toggle_float">Detach the focused pane into a movable floating window above the tiled panes, or dock a floating pane back into the layout.</string>
     <string name="tool_desc_terminal_toggle_scratchpad">Show or hide a dedicated floating terminal; its shell keeps running while hidden.</string>
