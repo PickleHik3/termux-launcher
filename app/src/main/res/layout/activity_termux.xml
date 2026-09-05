@@ -110,15 +110,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
 
-                    <!-- The place's tint over the glass: the bar drifts towards the colour of the
-                         place coming in as the wall moves, and rests on the colour of the one on
-                         screen. Painted by the activity from the wall's offset. -->
-                    <View
-                        android:id="@+id/terminal_status_place_tint"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:importantForAccessibility="no" />
-
                     <!-- The lens edges and the place icons, behind everything the bar shows: the
                          neighbours rest half past the edges and the icon at home sits beside the
                          clock, none of it taking room from the row. Taps on a neighbour still land
@@ -292,6 +283,23 @@
                                 android:layout_marginStart="3dp"
                                 android:visibility="gone"
                                 android:contentDescription="@string/termux_status_widget_ai_content_description" />
+
+                            <!-- Mouse mode's mark: there while it is on, gone the moment it is off. -->
+                            <com.termux.app.statusbar.MaterialDotSeparatorView
+                                android:id="@+id/terminal_status_dot_mouse"
+                                android:layout_width="3dp"
+                                android:layout_height="3dp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginHorizontal="1dp"
+                                android:visibility="gone" />
+
+                            <com.termux.app.statusbar.StatusBarWidgetView
+                                android:id="@+id/terminal_status_widget_mouse"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:layout_marginStart="3dp"
+                                android:visibility="gone"
+                                android:contentDescription="@string/termux_status_widget_mouse_content_description" />
 
                         </LinearLayout>
                     </LinearLayout>

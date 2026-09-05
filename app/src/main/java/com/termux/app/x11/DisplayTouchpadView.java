@@ -40,11 +40,20 @@ public final class DisplayTouchpadView extends View {
     }
 
     private static final float GAIN = 1.25f;
+    /**
+     * Two-finger travel per wheel notch. A wheel click is one discrete step for X, so the pad
+     * counts finger travel and sends one step each time this much has passed, rather than a step
+     * per frame - which was fast and jumpy. Natural direction, as a laptop touchpad under
+     * libinput: the content follows the fingers.
+     */
+    private static final float SCROLL_NOTCH_DP = 26f;
+    /** What one wheel click sends, in the units a real wheel's click arrives as. */
+    private static final float SCROLL_NOTCH_UNITS = 100f;
     private static final long TAP_MS = 240L;
     private static final long HOLD_MS = 380L;
     private static final float RADIUS_DP = 20f;
-    private static final float BACK_SIZE_DP = 40f;
-    private static final float BACK_INSET_DP = 10f;
+    private static final float BACK_SIZE_DP = 28f;
+    private static final float BACK_INSET_DP = 8f;
 
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -66,7 +75,9 @@ public final class DisplayTouchpadView extends View {
     private boolean mDragging;
     private boolean mTwoFingers;
     private boolean mOnBack;
-    private float mScrollLastY;
+    private float mScrollLastX, mScrollLastY;
+    /** Two-finger travel since the last notch, signed, in px. */
+    private float mScrollAccumX, mScrollAccumY;
     private final Runnable mHold = this::onHold;
 
     /** A finger held still long enough: the left button goes down and stays down for a drag. */
@@ -95,7 +106,7 @@ public final class DisplayTouchpadView extends View {
         mGlyphPaint.setColor(accentColor);
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
-        mGlyphPaint.setTextSize(dp(18f));
+        mGlyphPaint.setTextSize(dp(13f));
         mDotPaint.setColor(ColorUtils.setAlphaComponent(onSurfaceColor, 40));
         setClickable(true);
         setFocusable(false);
@@ -158,17 +169,34 @@ public final class DisplayTouchpadView extends View {
                     mDragging = false;
                 }
                 mTwoFingers = true;
+                mScrollLastX = (event.getX(0) + event.getX(1)) / 2f;
                 mScrollLastY = (event.getY(0) + event.getY(1)) / 2f;
+                mScrollAccumX = 0f;
+                mScrollAccumY = 0f;
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 if (mOnBack) return true;
                 if (mTwoFingers && event.getPointerCount() >= 2) {
+                    float x = (event.getX(0) + event.getX(1)) / 2f;
                     float y = (event.getY(0) + event.getY(1)) / 2f;
-                    float dy = y - mScrollLastY;
-                    if (Math.abs(dy) > mTouchSlop / 2f) {
-                        mMoved = true;
-                        if (display != null) display.sendMouseWheelEvent(0f, dy);
-                        mScrollLastY = y;
+                    mScrollAccumX += x - mScrollLastX;
+                    mScrollAccumY += y - mScrollLastY;
+                    mScrollLastX = x;
+                    mScrollLastY = y;
+                    if (Math.abs(mScrollAccumX) > mTouchSlop / 2f
+                        || Math.abs(mScrollAccumY) > mTouchSlop / 2f) mMoved = true;
+                    float notch = dp(SCROLL_NOTCH_DP);
+                    // Fingers moving down bring the content down: a wheel-up click, which arrives
+                    // as a negative unit like a real wheel's.
+                    while (Math.abs(mScrollAccumY) >= notch) {
+                        float step = Math.signum(mScrollAccumY);
+                        mScrollAccumY -= step * notch;
+                        if (display != null) display.sendMouseWheelEvent(0f, -step * SCROLL_NOTCH_UNITS);
+                    }
+                    while (Math.abs(mScrollAccumX) >= notch) {
+                        float step = Math.signum(mScrollAccumX);
+                        mScrollAccumX -= step * notch;
+                        if (display != null) display.sendMouseWheelEvent(-step * SCROLL_NOTCH_UNITS, 0f);
                     }
                     return true;
                 }

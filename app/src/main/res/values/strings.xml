@@ -714,6 +714,7 @@
                 <string name="termux_status_widget_ram_content_description">Memory usage</string>
                 <string name="termux_status_widget_weather_content_description">Weather</string>
                 <string name="termux_status_widget_ai_content_description">AI model loaded</string>
+                <string name="termux_status_widget_mouse_content_description">Mouse mode on</string>
                 <string name="termux_status_widget_ai_loading">…</string>
                 <string name="termux_status_widget_ai_resident">on</string>
                 <string name="termux_status_widget_ai_unloaded">off</string>

@@ -204,10 +204,13 @@ public final class TerminalView extends View {
 
     /**
      * Mouse mode: every touch is the mouse. A finger down is the left button down at its cell, a
-     * move is the button held and moved, a lift is the release; two fingers turn the wheel. None
-     * of the view's own touch behaviour - scrolling the transcript, selecting text, the long-press
-     * menu - applies while it is on, and it all comes back when it is off.
+     * move is the button held and moved, a lift is the release; two fingers turn the wheel, one
+     * notch per {@link #TOUCH_MOUSE_WHEEL_NOTCH_DP} of travel in the natural direction - the
+     * content follows the fingers. None of the view's own touch behaviour - scrolling the
+     * transcript, selecting text, the long-press menu - applies while it is on, and it all comes
+     * back when it is off.
      */
+    private static final float TOUCH_MOUSE_WHEEL_NOTCH_DP = 26f;
     private boolean mTouchMouseMode;
     private boolean mTouchMouseModePressed;
     private int mTouchMouseModeLastCol, mTouchMouseModeLastRow;
@@ -1165,15 +1168,16 @@ public final class TerminalView extends View {
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (event.getPointerCount() >= 2) {
-                    float lineHeight = mRenderer == null ? 0f : mRenderer.mFontLineSpacing;
-                    if (lineHeight <= 0f) break;
-                    int notches = Math.round((mTouchMouseWheelStartY - event.getY()) / lineHeight);
+                    float notch = TOUCH_MOUSE_WHEEL_NOTCH_DP
+                        * getResources().getDisplayMetrics().density;
+                    // Fingers moving up bring the content up, which is the wheel turning down.
+                    int notches = Math.round((mTouchMouseWheelStartY - event.getY()) / notch);
                     while (mTouchMouseWheelSent < notches) {
-                        sendMouseEventAt(TerminalEmulator.MOUSE_WHEELUP_BUTTON, column, row, true);
+                        sendMouseEventAt(TerminalEmulator.MOUSE_WHEELDOWN_BUTTON, column, row, true);
                         mTouchMouseWheelSent++;
                     }
                     while (mTouchMouseWheelSent > notches) {
-                        sendMouseEventAt(TerminalEmulator.MOUSE_WHEELDOWN_BUTTON, column, row, true);
+                        sendMouseEventAt(TerminalEmulator.MOUSE_WHEELUP_BUTTON, column, row, true);
                         mTouchMouseWheelSent--;
                     }
                     break;

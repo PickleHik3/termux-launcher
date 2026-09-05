@@ -11172,24 +11172,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) lens.setWallState(pages, current, offsetPx, width);
-        View tint = findViewById(R.id.terminal_status_place_tint);
-        if (tint != null) {
-            float r = 0f, g = 0f, b = 0f, total = 0f;
-            for (com.termux.app.wall.PaneWallPage page : pages) {
-                float weight = com.termux.app.statusbar.StatusBarLensPolicy.tintWeight(
-                    com.termux.app.statusbar.StatusBarLensPolicy.distance(pages, current, page,
-                        offsetPx, width));
-                if (weight <= 0f) continue;
-                int accent = com.termux.app.statusbar.StatusBarLensView.accentFor(this, page);
-                r += weight * Color.red(accent);
-                g += weight * Color.green(accent);
-                b += weight * Color.blue(accent);
-                total += weight;
-            }
-            int blended = total <= 0f ? Color.TRANSPARENT : Color.argb(24, Math.round(r / total),
-                Math.round(g / total), Math.round(b / total));
-            tint.setBackgroundColor(blended);
-        }
     }
 
     /** The badge at the start of the status row is the terminal session's; it shows nowhere else. */
@@ -11521,6 +11503,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mMouseMode = enabled;
         if (mPaneController != null) mPaneController.setTouchMouseMode(enabled);
         syncDisplayTouchpad();
+        syncMouseModeMark();
+    }
+
+    /** A small mouse at the end of the stats while mouse mode is on; gone the moment it is off. */
+    private void syncMouseModeMark() {
+        com.termux.app.statusbar.StatusBarWidgetView mark = findViewById(R.id.terminal_status_widget_mouse);
+        com.termux.app.statusbar.MaterialDotSeparatorView dot = findViewById(R.id.terminal_status_dot_mouse);
+        if (mark == null || dot == null) return;
+        if (mMouseMode && mark.getTag() == null) {
+            mark.setTag("wired");
+            mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
+            mark.setIconGlyph("\uf245");
+            mark.setValue("");
+            mark.setOnClickListener(v -> toggleMouseMode());
+        }
+        boolean anyStatBefore = mPreferences != null && (mPreferences.isStatusWidgetCpuEnabled()
+            || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetWeatherEnabled());
+        mark.setVisibility(mMouseMode ? View.VISIBLE : View.GONE);
+        dot.setVisibility(mMouseMode && anyStatBefore ? View.VISIBLE : View.GONE);
+        dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
     }
 
     public boolean isMouseMode() {
@@ -11589,8 +11591,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDisplayTouchpad = pad;
         }
         if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
+        // The keyboard's height is the pad's: the host wraps its content, so a match-parent pad
+        // would take every pixel above the keyboard instead of the keyboard's own room.
+        View keyboardView = mAttachedInAppKeyboardView;
+        int padHeight = keyboardView != null && keyboardView.getHeight() > 0
+            ? keyboardView.getHeight() : ViewGroup.LayoutParams.WRAP_CONTENT;
         host.addView(pad, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+            padHeight, Gravity.TOP));
+        if (keyboardView != null) {
+            final com.termux.app.x11.DisplayTouchpadView following = pad;
+            keyboardView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (following.getParent() != host) return;
+                int h = b - t;
+                ViewGroup.LayoutParams lp = following.getLayoutParams();
+                if (h > 0 && lp != null && lp.height != h) {
+                    lp.height = h;
+                    following.setLayoutParams(lp);
+                }
+            });
+        }
         View keys = mAttachedInAppKeyboardView;
         if (keys != null) {
             keys.animate().cancel();
