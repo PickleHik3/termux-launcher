@@ -54,9 +54,11 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   area with Start or Stop and Display settings; tap anywhere else to put it away.
 - **Mouse mode.** The **Mouse mode** action — put it on the extra-keys row, the in-app keyboard
   as a `tool:mouse.toggle` key, or a chord — swaps the keyboard for a touchpad of the same size
-  while the display is showing: a finger moves the pointer, a tap clicks, two fingers scroll and
-  two fingers tapping together click the right button; hold, then move, to drag. The arrow in its
-  corner brings the keyboard back. In the terminal the same action makes every touch the mouse
+  while the display is showing. Its gestures are a laptop's: a finger moves the pointer and a tap
+  clicks; hold, or tap and touch again, then move, to drag. Two fingers scroll, keep going after a
+  fast lift, and pinch to zoom; two fingers tapping together click the right button. Three fingers
+  tapping click the middle button, swiping left or right switch windows, and swiping down bring
+  the keyboard back. The arrow in the corner does the same. In the terminal the same action makes every touch the mouse
   for programs that take one: a finger is the left button, two fingers are the wheel, and a fast
   lift keeps it turning. A program that has not asked for the mouse gets nothing typed at it;
   two fingers scroll the transcript there instead. A small mouse at the end of the status bar

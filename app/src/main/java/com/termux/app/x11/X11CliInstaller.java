@@ -43,7 +43,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 5;
+    @VisibleForTesting static final int VERSION = 6;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -276,6 +276,16 @@ public final class X11CliInstaller {
             + "<!-- " + MARKER_PREAMBLE + " for the Linux display; do not edit -->\n"
             + "<openbox_config xmlns=\"http://openbox.org/3.4/rc\">\n"
             + "  <focus><focusNew>yes</focusNew></focus>\n"
+            // The window-switching chords the touchpad's three-finger swipe sends, and a hardware
+            // keyboard's Alt+Tab; a rc.xml without a keyboard section has no bindings at all.
+            + "  <keyboard>\n"
+            + "    <keybind key=\"A-Tab\"><action name=\"NextWindow\">"
+            + "<finalactions><action name=\"Focus\"/><action name=\"Raise\"/>"
+            + "<action name=\"Unshade\"/></finalactions></action></keybind>\n"
+            + "    <keybind key=\"A-S-Tab\"><action name=\"PreviousWindow\">"
+            + "<finalactions><action name=\"Focus\"/><action name=\"Raise\"/>"
+            + "<action name=\"Unshade\"/></finalactions></action></keybind>\n"
+            + "  </keyboard>\n"
             + "  <applications>\n"
             + "    <application class=\"*\">\n"
             + "      <decor>no</decor>\n"
