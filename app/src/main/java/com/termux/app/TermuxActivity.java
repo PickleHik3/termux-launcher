@@ -11071,7 +11071,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         page.applyEnabled(isX11DisplayEnabled());
-        if (isX11DisplayEnabled()) createX11DisplayController();
+        if (isX11DisplayEnabled()) {
+            // An install that switched the display on before the phone defaults existed gets
+            // them here, once, the same way a fresh Turn on does.
+            com.termux.app.x11.X11Defaults.applyOnce(this);
+            createX11DisplayController();
+        }
     }
 
     /**
