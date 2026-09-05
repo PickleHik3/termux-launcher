@@ -44,7 +44,7 @@ public final class PaneGlassBackdropView extends View {
     private float mRadiusPx;
     /** Non-zero while this view paints only the corner arcs of an opaque page. */
     private float mCornerMaskRadiusPx;
-    /** Painted in the arcs when there is no frame to paint: a corner is never left open. */
+    /** Painted in the arcs over the frame, or alone when there is none: a corner is never left open. */
     private int mCornerMaskFallbackColor = android.graphics.Color.TRANSPARENT;
     @Nullable private android.graphics.Path mCornerMaskPath;
     private int mCornerMaskWidth;
@@ -111,7 +111,7 @@ public final class PaneGlassBackdropView extends View {
         invalidate();
     }
 
-    /** The colour the arcs take when no frame stands in for what is behind the page. */
+    /** The colour laid over the arcs: the wall's dim over its wallpaper, or a flat colour alone. */
     public void setCornerMaskFallbackColor(int color) {
         if (mCornerMaskFallbackColor == color) return;
         mCornerMaskFallbackColor = color;
@@ -136,11 +136,6 @@ public final class PaneGlassBackdropView extends View {
             mClipRect.set(0f, 0f, width, height);
             canvas.clipRect(mClipRect);   // the round clip is the parent frame's; this bounds ours
         }
-        if (mCornerMaskRadiusPx > 0f && (mFrame == null || mFrame.isRecycled())
-            && android.graphics.Color.alpha(mCornerMaskFallbackColor) > 0) {
-            mTintPaint.setColor(mCornerMaskFallbackColor);
-            canvas.drawRect(0f, 0f, width, height, mTintPaint);
-        }
         if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null) {
             layoutOriginOnScreen(mLocation);
             if (mLocation[0] != mLastLeft || mLocation[1] != mLastTop
@@ -159,8 +154,14 @@ public final class PaneGlassBackdropView extends View {
             canvas.drawRect(0f, 0f, width, height, mFramePaint);
         }
         // A corner mask stands in for what is behind the page, so it takes neither the pane
-        // tint nor the grain: those belong to a pane's own slab, and the page has none.
-        if (mCornerMaskRadiusPx <= 0f) {
+        // tint nor the grain: those belong to a pane's own slab, and the page has none. It takes
+        // the wall's own colour over the frame - the dim the root wears - or alone.
+        if (mCornerMaskRadiusPx > 0f) {
+            if (android.graphics.Color.alpha(mCornerMaskFallbackColor) > 0) {
+                mTintPaint.setColor(mCornerMaskFallbackColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+        } else {
             if (android.graphics.Color.alpha(mTintColor) > 0) {
                 mTintPaint.setColor(mTintColor);
                 canvas.drawRect(0f, 0f, width, height, mTintPaint);

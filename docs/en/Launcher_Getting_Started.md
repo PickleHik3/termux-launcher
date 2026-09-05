@@ -99,7 +99,7 @@ workspaces.
 - At an idle shell prompt, type `%settings` to filter the dock for apps matching “settings”. `%` is
   the default prefix and can be changed under **Settings → Launcher & apps → App search prefix**.
 - Tap `+` in the top row to create another terminal window.
-- Swipe left on the status bar for your widgets, right for the Linux display. The display is off
+- Swipe right on the status bar for your widgets, left for the Linux display. The display is off
   until you tap **Turn on** there; [The Linux display](X11_Display.md) takes it from there.
 - Open the command palette by long-pressing the terminal and choosing **Command palette**. With a
   hardware keyboard, use `Ctrl+Alt+Shift+P`.

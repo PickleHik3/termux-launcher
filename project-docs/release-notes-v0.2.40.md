@@ -18,7 +18,7 @@
 - Hold the display for a short menu at the bottom edge with Start or Stop and Display settings.
 - On the Display place the keyboard is the display's: every key and every chord, from the in-app keyboard or a hardware one, reaches the Linux program. Leave the display by swiping the status bar, tapping a place icon or pressing Home.
 - The Display place remembers whether the keyboard was up when you left it, and comes back that way.
-- Alt+Tab switches between windows on the display.
+- Alt+Tab switches between windows on the display with the default window manager.
 - Display options (Settings ▸ Launcher & apps): touch as trackpad, touchscreen or direct touch; resolution the same as the screen, scaled, fixed or custom; text and icon size; clipboard sharing; the window manager started with the display; the mark the Display place wears in the status bar; and how the launcher starts a display — with the launcher, with a command of your choosing, pointing new shells at it, and two compatibility switches for GPUs that draw black or with wrong colours.
 - `launcherctl x11 gpu` says what your phone's GPU can do for Linux apps and, with `--env`, prints the exact settings to use; the same answer sits at the bottom of Display options.
 - `termux-x11-gpu-setup` tries every graphics profile that fits your phone with a short 3D test, keeps the one that works best, removes the rest and explains each step as it goes. It works on apt and pacman installs and, with a Debian proot installed, tests inside the container too.

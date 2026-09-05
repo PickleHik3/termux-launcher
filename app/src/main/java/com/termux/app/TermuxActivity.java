@@ -1794,7 +1794,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int wallBehindColor() {
-                return shouldUseWallpaperPassthroughMode() ? Color.TRANSPARENT
+                // The root wears this dim over the wallpaper, so the arcs must too, or they
+                // show the wallpaper a shade brighter than the wall beside them.
+                return shouldUseWallpaperPassthroughMode() ? resolveWallpaperBackdropDimColor()
                     : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
                         R.color.termux_surface_base);
             }

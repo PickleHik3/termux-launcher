@@ -280,7 +280,7 @@ Review a hand-edited workspace before agreeing to run recorded commands.
 
 The built-in keyboard is the default on a fresh install. The action row above it ships with seven
 keys: keyboard (swipe up for mouse mode), new session (swipe up for a new window), Widgets,
-Terminal, Display, split (swipe up for a side-by-side split) and workspaces (swipe up to save one).
+Terminal, Display, split (swipe up for the other direction) and workspaces (swipe up to save one).
 A long-press or swipe reveals the popup action assigned to a key. Search, the prompt jumps and the
 scratchpad keep their chords and the command palette.
 

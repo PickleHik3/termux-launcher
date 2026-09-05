@@ -36,6 +36,9 @@ public interface PaneSurfaceStyle {
      */
     @Nullable default android.graphics.Bitmap wallBehindFrame() { return null; }
 
-    /** The flat colour behind a page when {@link #wallBehindFrame()} is null. */
+    /**
+     * The colour laid over {@link #wallBehindFrame()} - the wall's dim over the wallpaper - or
+     * standing alone, opaque, when there is no frame.
+     */
     default int wallBehindColor() { return android.graphics.Color.TRANSPARENT; }
 }
