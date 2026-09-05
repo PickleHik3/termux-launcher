@@ -685,7 +685,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             || !preferences.isAppLauncherDrawerSearchOnOpenEnabled()) {
             return;
         }
+        if (skipsSearchKeyboardOnOpen(mTextFieldSearch, isLandscape())) return;
         content.requestSearchKeyboard();
+    }
+
+    /**
+     * In landscape the system keyboard covers all but the search field of the drawer, so an
+     * Android-keyboard search does not open with it raised; the pill tap still raises it on demand.
+     * The in-app keyboard is a band of the drawer's own layout and keeps the on-open behaviour.
+     */
+    @VisibleForTesting
+    static boolean skipsSearchKeyboardOnOpen(boolean textFieldSearch, boolean landscape) {
+        return textFieldSearch && landscape;
+    }
+
+    private boolean isLandscape() {
+        return mHost.context().getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
     /**

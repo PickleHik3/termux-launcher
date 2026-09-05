@@ -405,10 +405,32 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
 
         @Override
         public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
-            mStatusBarHeight =  WindowInsetsCompat.toWindowInsetsCompat(insets).getInsets(WindowInsetsCompat.Type.statusBars()).top;
+            WindowInsetsCompat compat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
+            mStatusBarHeight = compat.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             // Let view window handle insets however it wants
-            return v.onApplyWindowInsets(insets);
+            WindowInsets result = v.onApplyWindowInsets(insets);
+            // fitsSystemWindows padded the root by the legacy system-window insets, which fold the
+            // display cutout in. The horizontal cutout is handled below the root: the content root
+            // pads itself away from it, and in landscape the dock rail sits in that very column, so
+            // a root that also padded for it pushed both a whole cutout inward (the terminal started
+            // a second cutout width from the edge). Keep the bars, drop the cutout.
+            androidx.core.graphics.Insets sides = horizontalRootInsets(compat);
+            if (v.getPaddingLeft() != sides.left || v.getPaddingRight() != sides.right) {
+                v.setPadding(sides.left, v.getPaddingTop(), sides.right, v.getPaddingBottom());
+            }
+            return result;
         }
+    }
+
+    /**
+     * The horizontal padding the root should carry: the system bars (a side navigation bar in
+     * landscape) and the keyboard, never the display cutout.
+     */
+    @NonNull
+    static androidx.core.graphics.Insets horizontalRootInsets(@NonNull WindowInsetsCompat insets) {
+        androidx.core.graphics.Insets bars = insets.getInsets(
+            WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.ime());
+        return androidx.core.graphics.Insets.of(bars.left, 0, bars.right, 0);
     }
 
 }
