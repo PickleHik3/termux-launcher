@@ -224,6 +224,9 @@ public final class TermuxPreferenceConstants {
         /** Set once the phone-sized defaults (text size, touch mode) have been written on first turn-on. */
         public static final String KEY_X11_DEFAULTS_APPLIED = "x11_defaults_applied";
 
+        /** Whether the keyboard was up the last time the user left the Display place. */
+        public static final String KEY_X11_KEYBOARD_SHOWN = "x11_keyboard_shown";
+
         /** Defines the key for the pane wall's Widgets and Display buttons in the status bar. */
         public static final String KEY_TOP_PANE_WALL_TILES = "top_pane_wall_tiles";
 

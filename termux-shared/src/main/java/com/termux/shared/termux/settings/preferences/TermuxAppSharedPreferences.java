@@ -721,6 +721,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, value, false);
     }
 
+    public boolean isX11KeyboardShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, false);
+    }
+
+    public void setX11KeyboardShown(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, value, false);
+    }
+
     /** Whether the user has ever set the display's text size; unset reads as the default 0. */
     public boolean hasX11DisplayDpi() {
         return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_X11_DISPLAY_DPI);

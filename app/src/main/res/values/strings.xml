@@ -205,6 +205,7 @@
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
+    <string name="termux_x11_window_unnamed">App</string>
     <string name="settings_x11_autostart_title">Start with the launcher</string>
     <string name="settings_x11_autostart_summary">Start the display whenever the launcher starts.</string>
     <string name="settings_x11_command_title">Start command</string>

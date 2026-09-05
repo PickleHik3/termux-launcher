@@ -307,6 +307,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
     /** Runs a Linux app from the drawer on the display, starting the display when needed. */
     @Nullable private com.termux.app.x11.X11LinuxAppRunner mLinuxApps;
+    /** The apps open on the display, shown as the window chips while the Display place is up. */
+    @Nullable private com.termux.app.x11.X11WindowList mX11Windows;
+    @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
+        java.util.Collections.emptyList();
+    private int mDisplayActiveWindow = -1;
+    /** The place the wall last rested on, so leaving one can record what it leaves behind. */
+    @NonNull private com.termux.app.wall.PaneWallPage mLastWallPage =
+        com.termux.app.wall.PaneWallPage.TERMINAL;
+    /** The Display place raised a keyboard the terminal did not have; it goes back down with it. */
+    private boolean mDisplayShowedKeyboard;
     /** What the prefix's desktop files looked like when the drawer last listed them. */
     private long mLinuxAppsSignature;
     /** The wall put the in-app keyboard away when it left the terminal, and owes it back. */
@@ -1133,6 +1143,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // neither onStart nor onResume calls. Without this the CPU and memory readings never
         // resumed after leaving the app and coming back.
         updateStatusWidgets();
+        // onStop let go of the display's surface; nothing else re-attaches it when the wall
+        // already rests on the Display place, and a display whose surface is not attached takes
+        // no touch and misses every setting changed while we were away.
+        if (mX11Display != null && isDisplayPageShowing() && !mPaneWallController.wall().isMoving()) {
+            syncDisplayPageAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
+        }
         applySessionsDrawerLockState();
         syncRecentsVisibilityPolicy();
         applySessionsSurfaceAlpha();
@@ -5064,6 +5080,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mIsVisible = false;
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mX11Display != null) mX11Display.detachView();
+        // Leaving the app from the Display place counts as leaving the place: it comes back the
+        // way it was left, keyboard included.
+        if (isDisplayPageShowing() && mPreferences != null) {
+            mPreferences.setX11KeyboardShown(mInAppKeyboard != null && mInAppKeyboard.isVisible());
+        }
         if (mDockPlankController != null) {
             mDockPlankController.reset();
         }
@@ -5166,6 +5187,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mX11Display != null) {
             mX11Display.destroy();
             mX11Display = null;
+        }
+        if (mX11Windows != null) {
+            mX11Windows.stop();
+            mX11Windows = null;
         }
         if (mLinuxApps != null) {
             mLinuxApps.destroy();
@@ -10830,6 +10855,65 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The keyboard follows the wall. Nothing on a widget grid takes typing, so it goes away with
+     * the terminal and comes back with it; the Display place types into X, so it keeps its own
+     * memory of whether the keyboard was up and comes back the way it was left. A widget's own
+     * text field asks for the system IME through onWidgetEditorFocused instead.
+     */
+    private void syncWallKeyboard(@NonNull com.termux.app.wall.PaneWallPage page) {
+        if (mLastWallPage == com.termux.app.wall.PaneWallPage.DISPLAY
+                && page != com.termux.app.wall.PaneWallPage.DISPLAY && mPreferences != null) {
+            mPreferences.setX11KeyboardShown(mInAppKeyboard != null && mInAppKeyboard.isVisible());
+        }
+        if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
+            KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, getCurrentFocus());
+            if (mInAppKeyboard == null) return;
+            boolean wanted = mPreferences != null && mPreferences.isX11KeyboardShown();
+            boolean visible = mInAppKeyboard.isVisible();
+            if (visible && !wanted) {
+                mWallHidKeyboard = true;
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
+                    .TermuxInAppKeyboard.HideReason.WALL_PAGE);
+            } else if (!visible && wanted) {
+                mDisplayShowedKeyboard = !mWallHidKeyboard;
+                mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
+                    .TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
+            }
+            return;
+        }
+        if (page != com.termux.app.wall.PaneWallPage.TERMINAL) {
+            if (mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                if (!mDisplayShowedKeyboard) mWallHidKeyboard = true;
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
+                    .TermuxInAppKeyboard.HideReason.WALL_PAGE);
+            }
+            mDisplayShowedKeyboard = false;
+            KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, getCurrentFocus());
+            return;
+        }
+        if (mDisplayShowedKeyboard) {
+            // The terminal had no keyboard before the Display place raised one.
+            mDisplayShowedKeyboard = false;
+            if (mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
+                    .TermuxInAppKeyboard.HideReason.WALL_PAGE);
+            }
+        } else if (mWallHidKeyboard) {
+            mWallHidKeyboard = false;
+            if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
+                mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
+                    .TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+            }
+        }
+    }
+
+    /** Whether the wall rests on the Display place. */
+    private boolean isDisplayPageShowing() {
+        return mPaneWallController != null
+            && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.DISPLAY;
+    }
+
+    /**
      * Wire the pane wall around the terminal's pane host. The terminal is its middle page and is
      * handed over untouched; the other places register themselves as the install gains them.
      */
@@ -10875,23 +10959,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
                     syncPlaceSwitch();
-                    // Nothing on a widget grid takes typing, so the keyboard goes away with the
-                    // terminal and comes back with it. A widget's own text field asks for the
-                    // system IME through onWidgetEditorFocused instead.
-                    if (page != com.termux.app.wall.PaneWallPage.TERMINAL) {
-                        if (mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
-                            mWallHidKeyboard = true;
-                            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
-                                .TermuxInAppKeyboard.HideReason.WALL_PAGE);
-                        }
-                        KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, getCurrentFocus());
-                    } else if (mWallHidKeyboard) {
-                        mWallHidKeyboard = false;
-                        if (mInAppKeyboard != null) {
-                            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
-                                .TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
-                        }
-                    }
+                    syncWallKeyboard(page);
+                    mLastWallPage = page;
+                    // The window chips belong to the place on screen: terminal windows on the
+                    // terminal, the display's apps on the Display place.
+                    com.termux.app.terminal.TerminalWindowBar chips =
+                        findViewById(R.id.terminal_window_bar);
+                    if (chips != null && isSplitPanesEnabled()) syncWindowBarItems(chips);
                 }
             });
         mPaneWallController.attachTerminalPage(paneHost);
@@ -11212,6 +11286,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncPlaceSwitch();
             syncDisplayEnvironment();
             if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
+            syncDisplayWindowList(running);
         });
         syncDisplayEnvironment();
         // The prefix commands go in with the feature, and are re-checked on every start — off
@@ -11228,6 +11303,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && !mPaneWallController.wall().isMoving()) {
             syncDisplayPageAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
         }
+    }
+
+    /** Follow the display's apps while a display runs; forget them when it stops. */
+    private void syncDisplayWindowList(boolean running) {
+        if (mX11Windows != null) {
+            mX11Windows.stop();
+            mX11Windows = null;
+        }
+        if (running) {
+            mX11Windows = new com.termux.app.x11.X11WindowList(
+                com.termux.app.x11.X11DisplayHostController.displayName(), this::onDisplayWindowsChanged);
+            mX11Windows.start();
+        } else {
+            onDisplayWindowsChanged(java.util.Collections.emptyList(), -1);
+        }
+    }
+
+    private void onDisplayWindowsChanged(
+            @NonNull java.util.List<com.termux.app.x11.X11WindowList.Window> windows, int active) {
+        mDisplayWindows = windows;
+        mDisplayActiveWindow = active;
+        if (!isDisplayPageShowing() || !isSplitPanesEnabled()) return;
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null) syncWindowBarItems(bar);
     }
 
     /** Run the configured start command as a background task, as if it had been typed. */
@@ -11318,11 +11417,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar == null) return;
         bar.setOnWindowSelectedListener(index -> {
-            if (!isSplitPanesEnabled() || mPaneController == null || mCurrentWSession == null
+            if (!isSplitPanesEnabled()) return;
+            if (isDisplayPageShowing()) {
+                // On the Display place the chips are the display's apps: a tap brings one to
+                // the front.
+                if (mX11Windows != null && index >= 0 && index < mDisplayWindows.size()) {
+                    mX11Windows.activate(mDisplayWindows.get(index).id);
+                }
+                return;
+            }
+            if (mPaneController == null || mCurrentWSession == null
                 || index < 0 || index >= mCurrentWSession.windows.size()) return;
             showWindowFromBar(index);
         });
-        bar.setOnCreateWindowListener(this::createNewWindow);
+        bar.setOnCreateWindowListener(() -> {
+            // The Display place opens another app from the drawer rather than a terminal window.
+            if (isDisplayPageShowing()) getDrawer().openDrawer(android.view.Gravity.LEFT);
+            else createNewWindow();
+        });
         // The chips scroll first; once the strip is at its edge the surplus distance drags the
         // pane wall, so reaching the last window and pulling further slides the next place in.
         bar.setOnEdgeOverswipeListener(
@@ -11648,7 +11760,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new java.util.ArrayList<>();
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
         int selected = -1;
-        if (mCurrentWSession != null && mPaneController != null) {
+        if (isDisplayPageShowing()) {
+            // The display's apps, front one selected; the terminal's marks (busy, attention,
+            // done) have no meaning for them.
+            for (com.termux.app.x11.X11WindowList.Window window : mDisplayWindows) {
+                String label = window.label.isEmpty()
+                    ? getString(R.string.termux_x11_window_unnamed) : window.label;
+                items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label));
+            }
+            selected = mDisplayActiveWindow;
+        } else if (mCurrentWSession != null && mPaneController != null) {
             long now = android.os.SystemClock.uptimeMillis();
             selected = Math.max(0, Math.min(mCurrentWSession.current,
                 mCurrentWSession.windows.size() - 1));
