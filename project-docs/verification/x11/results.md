@@ -46,10 +46,12 @@ against llvmpipe's 163–186 says the GPU path is paced by presentation, not by 
 software row is the CPU running free. `launcherctl x11 gpu` on the phone named the GPU (from the
 GL renderer string) and the `turnip-zink` profile before any package was installed.
 
-Memory, `dumpsys meminfo com.termux` TOTAL PSS on pong: 197 MB with no display and the Display
-place showing, 182 MB with the server, `xeyes` and `xclock` running and the page showing. The
-server is its own process; the launcher's cost is its surface. (A hidden-page reading was taken
-but is not trusted — another app came to the front during it.)
+Memory, `dumpsys meminfo com.termux` TOTAL PSS on pong, a live terminal session open throughout:
+193 MB with no display; 189 MB with the server and `xeyes` up and the terminal showing; 196 MB
+with the Display place showing; 184 MB and then 201 MB with the page hidden again, ten seconds
+apart. The spread between readings of the same state (±10 MB, the terminal's own churn) is wider
+than any difference between states: the server is its own process, and the launcher's cost for
+the display is its surface while shown, which does not register against the noise.
 
 ## Owed
 

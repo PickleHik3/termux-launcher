@@ -88,7 +88,7 @@ public final class X11DisplayHostController {
         this.listener = listener;
     }
 
-    /** True while a display server is up and its socket is connected to the view. */
+    /** True while a display server is up — announced and alive — attached to the page or not. */
     public boolean isRunning() {
         return running;
     }
@@ -161,6 +161,9 @@ public final class X11DisplayHostController {
             return;
         }
         if (!known) startLogcat();
+        // A live Binder is a running display, whether or not a page is attached to it yet: the
+        // place switch's dot and the stop control must not wait for the page to be looked at.
+        setRunning(true);
         tryConnect();
     }
 
