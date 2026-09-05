@@ -44,6 +44,8 @@ public final class PaneGlassBackdropView extends View {
     private float mRadiusPx;
     /** Non-zero while this view paints only the corner arcs of an opaque page. */
     private float mCornerMaskRadiusPx;
+    /** Painted in the arcs when there is no frame to paint: a corner is never left open. */
+    private int mCornerMaskFallbackColor = android.graphics.Color.TRANSPARENT;
     @Nullable private android.graphics.Path mCornerMaskPath;
     private int mCornerMaskWidth;
     private int mCornerMaskHeight;
@@ -109,6 +111,13 @@ public final class PaneGlassBackdropView extends View {
         invalidate();
     }
 
+    /** The colour the arcs take when no frame stands in for what is behind the page. */
+    public void setCornerMaskFallbackColor(int color) {
+        if (mCornerMaskFallbackColor == color) return;
+        mCornerMaskFallbackColor = color;
+        invalidate();
+    }
+
     public void invalidateGlassPosition() {
         mLastLeft = Integer.MIN_VALUE;
         invalidate();
@@ -126,6 +135,11 @@ public final class PaneGlassBackdropView extends View {
         } else if (mRadiusPx > 0f) {
             mClipRect.set(0f, 0f, width, height);
             canvas.clipRect(mClipRect);   // the round clip is the parent frame's; this bounds ours
+        }
+        if (mCornerMaskRadiusPx > 0f && (mFrame == null || mFrame.isRecycled())
+            && android.graphics.Color.alpha(mCornerMaskFallbackColor) > 0) {
+            mTintPaint.setColor(mCornerMaskFallbackColor);
+            canvas.drawRect(0f, 0f, width, height, mTintPaint);
         }
         if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null) {
             layoutOriginOnScreen(mLocation);

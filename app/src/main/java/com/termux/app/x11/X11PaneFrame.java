@@ -204,9 +204,16 @@ public final class X11PaneFrame extends PaneContentFrame {
             // Behind the page is the wallpaper (or the surface base colour), never a pane's own
             // frost, so the mask is fed the frame and nothing else.
             if (style != null) {
-                mCornerMask.setGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
+                // The panes' frost when there is one; otherwise the wallpaper itself, unblurred,
+                // which is what the wall shows between its panes; otherwise the flat colour. The
+                // arcs are never left open, or the surface would show square through them.
+                android.graphics.Bitmap frame = style.paneGlassBlurFrame();
+                boolean frosted = frame != null;
+                if (frame == null) frame = style.wallBehindFrame();
+                mCornerMask.setGlass(frame, style.paneGlassBlurFrameRect(),
                     android.graphics.Color.TRANSPARENT, null, radiusPx,
-                    style.paneGlassFrostFilter());
+                    frosted ? style.paneGlassFrostFilter() : null);
+                mCornerMask.setCornerMaskFallbackColor(style.wallBehindColor());
             }
             mCornerMask.invalidateGlassPosition();
         }

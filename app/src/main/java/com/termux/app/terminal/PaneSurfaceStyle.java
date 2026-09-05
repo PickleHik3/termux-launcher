@@ -28,4 +28,14 @@ public interface PaneSurfaceStyle {
     float paneGlassCornerRadiusPx();
     /** Gap between tiled panes, in dp — the surface editor's Inner padding. */
     int paneGapDp();
+
+    /**
+     * What sits behind a page where no pane is: the wallpaper as the wall shows it, unblurred,
+     * or null when a flat colour is behind. A page whose content cannot be clipped paints its
+     * corner arcs with this.
+     */
+    @Nullable default android.graphics.Bitmap wallBehindFrame() { return null; }
+
+    /** The flat colour behind a page when {@link #wallBehindFrame()} is null. */
+    default int wallBehindColor() { return android.graphics.Color.TRANSPARENT; }
 }

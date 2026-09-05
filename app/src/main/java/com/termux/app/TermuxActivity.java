@@ -584,6 +584,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mTerminalGlassActive = false;
     /** The blur frame the panes are painting from; kept out of the cache's recycler. */
     @Nullable private Bitmap mPaneGlassFrame;
+    /** The unblurred wallpaper frame the Display page's corner mask paints; held so no eviction recycles it under a draw. */
+    @Nullable private Bitmap mWallBehindFrame;
 
     private float mTerminalToolbarDefaultHeight;
     private final Handler mAzGestureHandler = new Handler(Looper.getMainLooper());
@@ -774,6 +776,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onCacheCleared() {
             mPaneGlassFrame = null;
+            mWallBehindFrame = null;
         }
 
         @Override public boolean isActivityVisible() {
@@ -1779,6 +1782,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override @Nullable public ColorFilter paneGlassFrostFilter() {
                 return com.termux.app.chrome.GlassFilters.frost();
+            }
+
+            @Override @Nullable public Bitmap wallBehindFrame() {
+                View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+                if (!shouldUseWallpaperPassthroughMode() || wallpaperFrame == null) return null;
+                // Radius 0 is the capture itself: the wallpaper as the wall shows it.
+                Bitmap frame = mChrome.blurCache().obtain(0, wallpaperFrame);
+                mWallBehindFrame = frame != null && !frame.isRecycled() ? frame : null;
+                return mWallBehindFrame;
+            }
+
+            @Override public int wallBehindColor() {
+                return shouldUseWallpaperPassthroughMode() ? Color.TRANSPARENT
+                    : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
+                        R.color.termux_surface_base);
             }
 
             @Override public int paneGlassTintColor() {
@@ -4130,6 +4148,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             frameRect.height(), () -> {
                 if (isFinishing() || isDestroyed()) return;
                 mChrome.blurCache().clear();
+                // The panes and the wall's pages hold the frame they were dressed with; they
+                // need the one that now exists, not only the accessory backdrops.
+                updateTerminalGlassFrost();
                 mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             });
         mManagedWallpaperPending = sourceBitmap == null && mManagedWallpaperSource.isReading();
@@ -4380,7 +4401,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (frame == null) {
             return false;
         }
-        if (frame == mPaneGlassFrame) {
+        if (frame == mPaneGlassFrame || frame == mWallBehindFrame) {
             return true;   // a pane is drawing it right now; recycling it would crash its next draw
         }
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
