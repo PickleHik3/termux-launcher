@@ -1,5 +1,6 @@
 package com.termux.app.launcher.widget;
 
+import android.appwidget.AppWidgetHostView;
 import android.appwidget.AppWidgetProviderInfo;
 import android.graphics.Rect;
 import android.os.Build;
@@ -221,7 +222,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             return;
         }
         Rect bounds = pane.grid().metrics().boundsFor(placement.rect);
-        Bundle options = initialOptions(bounds.width(), bounds.height());
+        // The first options describe the same area the grid will report once the cell is laid
+        // out: inside the cell's gutter and the framework's own widget padding. Sizing the bind
+        // to the bare cell told the provider it had room it would never get.
+        Rect padding = hostPadding(item.info);
+        int gutter = WidgetCellView.gutterPx(pane.getResources());
+        Bundle options = initialOptions(
+            bounds.width() - 2 * gutter - padding.left - padding.right,
+            bounds.height() - 2 * gutter - padding.top - padding.bottom);
         liveOrigin = UUID.randomUUID().toString();
         host.captureWidgetSurfaceOrigin();
         LauncherWidgetHostController.AddResult result = widgets.beginAdd(item.info, placement.rect,
@@ -235,6 +243,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             pane.picker().showNoSpace(item.columnSpan, item.rowSpan, repository.gridDefinition());
         } else {
             pane.showNotice(messageFor(result)); liveOrigin = null;
+        }
+    }
+
+    /** The padding the framework's host view will put around this provider's widget. */
+    @NonNull private Rect hostPadding(@NonNull AppWidgetProviderInfo info) {
+        try {
+            return AppWidgetHostView.getDefaultPaddingForWidget(pane.getContext(), info.provider,
+                null);
+        } catch (RuntimeException exception) {
+            return new Rect();
         }
     }
 

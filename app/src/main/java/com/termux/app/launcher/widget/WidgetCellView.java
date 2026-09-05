@@ -1,5 +1,6 @@
 package com.termux.app.launcher.widget;
 
+import android.appwidget.AppWidgetHostView;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.content.res.Resources;
@@ -62,7 +63,7 @@ public final class WidgetCellView extends FrameLayout {
 
     public WidgetCellView(@NonNull Context context) {
         super(context);
-        gutter = Math.max(1, Math.round(2f * getResources().getDisplayMetrics().density));
+        gutter = gutterPx(getResources());
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         cornerRadius = systemWidgetRadius(context);
         setPadding(gutter, gutter, gutter, gutter);
@@ -128,6 +129,36 @@ public final class WidgetCellView extends FrameLayout {
         removeAllViews();
         if (child.getParent() instanceof ViewGroup) ((ViewGroup) child.getParent()).removeView(child);
         addView(child, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+    }
+
+    /** The gutter every cell keeps between its edge and the provider's view. */
+    public static int gutterPx(@NonNull Resources resources) {
+        return Math.max(1, Math.round(2f * resources.getDisplayMetrics().density));
+    }
+
+    /**
+     * The width the provider really draws into. The framework's host view pads every widget on
+     * its own ({@code AppWidgetHostView.setAppWidget}), and that padding is space the provider
+     * never gets — so a size reported from the cell alone told wide widgets they had more room
+     * than they did, and their edges went under the clip.
+     */
+    public int providerContentWidth() {
+        int width = getWidth() - getPaddingLeft() - getPaddingRight();
+        View content = getChildCount() == 1 ? getChildAt(0) : null;
+        if (content instanceof AppWidgetHostView) {
+            width -= content.getPaddingLeft() + content.getPaddingRight();
+        }
+        return Math.max(1, width);
+    }
+
+    /** The height the provider really draws into; see {@link #providerContentWidth()}. */
+    public int providerContentHeight() {
+        int height = getHeight() - getPaddingTop() - getPaddingBottom();
+        View content = getChildCount() == 1 ? getChildAt(0) : null;
+        if (content instanceof AppWidgetHostView) {
+            height -= content.getPaddingTop() + content.getPaddingBottom();
+        }
+        return Math.max(1, height);
     }
 
     @NonNull public DownRegion classifyDown(float x, float y) {

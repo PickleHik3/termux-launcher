@@ -55,10 +55,18 @@ public class WidgetGridHostViewIntegrationTest {
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         WidgetCellView cell = grid.cellForId(20);
         assertNotNull(cell);
+        // The framework pads every host view on its own; the provider lays out inside that
+        // padding, so the size it is told must be inside it too.
+        View host = cell.getChildAt(0);
+        assertTrue(host instanceof android.appwidget.AppWidgetHostView);
+        assertTrue("the framework host view pads its content",
+            host.getPaddingLeft() + host.getPaddingRight() > 0);
         int expectedWidthDp = Math.round((cell.getWidth() - cell.getPaddingLeft()
-            - cell.getPaddingRight()) / activity.getResources().getDisplayMetrics().density);
+            - cell.getPaddingRight() - host.getPaddingLeft() - host.getPaddingRight())
+            / activity.getResources().getDisplayMetrics().density);
         int expectedHeightDp = Math.round((cell.getHeight() - cell.getPaddingTop()
-            - cell.getPaddingBottom()) / activity.getResources().getDisplayMetrics().density);
+            - cell.getPaddingBottom() - host.getPaddingTop() - host.getPaddingBottom())
+            / activity.getResources().getDisplayMetrics().density);
         assertEquals(expectedWidthDp,
             platform.lastOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH));
         assertEquals(expectedHeightDp,

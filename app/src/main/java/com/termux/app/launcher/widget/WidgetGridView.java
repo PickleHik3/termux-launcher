@@ -202,11 +202,8 @@ public final class WidgetGridView extends ViewGroup {
             child.layout(bounds.left, bounds.top, bounds.right, bounds.bottom);
             if (record.state == LauncherWidgetRecord.State.ACTIVE) {
                 final int orientation = getResources().getConfiguration().orientation;
-                final int contentWidth = Math.max(1, child.getWidth() - child.getPaddingLeft()
-                    - child.getPaddingRight());
-                final int contentHeight = Math.max(1, child.getHeight() - child.getPaddingTop()
-                    - child.getPaddingBottom());
-                long packed = packSize(contentWidth, contentHeight, orientation);
+                long packed = packSize(child.providerContentWidth(),
+                    child.providerContentHeight(), orientation);
                 Long previous = committedSizes.put(record.appWidgetId, packed);
                 if (previous == null || previous.longValue() != packed
                     || packed != deliveredSizes.getOrDefault(record.appWidgetId, Long.MIN_VALUE)) {
@@ -220,10 +217,12 @@ public final class WidgetGridView extends ViewGroup {
     private boolean sizeDeliveryPending;
 
     /**
-     * Tell each provider the size its widget really has, once the grid is on screen. The grid is
-     * first laid out while its page waits off screen, so this cannot happen in that layout pass
-     * and must run again when the page comes into view — a provider that never hears its size
-     * lays out for the size it assumed and shows up cut off at the edges.
+     * Tell each provider the size its widget really has — the cell less the gutter and less the
+     * host view's own padding, which is what the framework measures its layout by — once the
+     * grid is on screen. The grid is first laid out while its page waits off screen, so this
+     * cannot happen in that layout pass and must run again when the page comes into view — a
+     * provider that never hears its size lays out for the size it assumed and shows up cut off
+     * at the edges.
      */
     private void deliverCommittedSizes() {
         if (controller == null || !isShown()) return;
@@ -238,12 +237,8 @@ public final class WidgetGridView extends ViewGroup {
             }
             WidgetCellView child = cells.get(record.appWidgetId);
             if (child == null) continue;
-            int contentWidth = Math.max(1, child.getWidth() - child.getPaddingLeft()
-                - child.getPaddingRight());
-            int contentHeight = Math.max(1, child.getHeight() - child.getPaddingTop()
-                - child.getPaddingBottom());
-            controller.onHostSizeCommitted(record.appWidgetId, contentWidth, contentHeight,
-                orientation);
+            controller.onHostSizeCommitted(record.appWidgetId, child.providerContentWidth(),
+                child.providerContentHeight(), orientation);
             deliveredSizes.put(record.appWidgetId, packed);
         }
     }

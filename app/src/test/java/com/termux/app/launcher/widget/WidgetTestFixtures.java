@@ -102,6 +102,10 @@ final class WidgetTestFixtures {
         @Override public AppWidgetHostView createView(int id, AppWidgetProviderInfo info) {
             AppWidgetHostView view = new AppWidgetHostView(activity);
             view.setAppWidget(id, info);
+            // Robolectric's framework resources give the host view no default padding; a real
+            // device pads every widget, and the grid's size reports must stay inside it.
+            int pad = Math.round(8f * activity.getResources().getDisplayMetrics().density);
+            view.setPadding(pad, pad, pad, pad);
             return view;
         }
         @Override public void updateOptions(int id, Bundle options) {
