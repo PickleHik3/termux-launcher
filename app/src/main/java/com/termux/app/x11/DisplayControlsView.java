@@ -22,8 +22,9 @@ import com.termux.shared.termux.font.NerdFontSpans;
 /**
  * The Display page's controls: the tab a terminal pane drops from its top edge when its border is
  * tapped, drawn here over the X surface with two buttons - power, which starts, stops or turns the
- * display on, and a cog for its settings. Same size, same fill and stroke, same motion as the
- * panes', so the wall's places answer a border tap the same way.
+ * display on, and a cog for its settings. Same fill and stroke, same motion as the panes' tab, so
+ * the wall's places answer a border tap the same way; a little larger, because it has to be hit
+ * over a live X surface.
  */
 public final class DisplayControlsView extends View {
 
@@ -56,7 +57,7 @@ public final class DisplayControlsView extends View {
         super(context);
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
-        mGlyphPaint.setTextSize(dp(11.5f));
+        mGlyphPaint.setTextSize(dp(14));
         setWillNotDraw(false);
         setClickable(false);
         setFocusable(false);
@@ -124,20 +125,25 @@ public final class DisplayControlsView extends View {
         mAnimator.start();
     }
 
-    /** The pane's tab, at the top-trailing corner: two buttons of 22.4dp in a 24dp tab. */
+    /**
+     * The tab at the top-trailing corner: two 30dp buttons a finger's width apart in a 32dp tab.
+     * Roomier than a pane's tab on purpose - these two sit over a live X surface with no other
+     * chrome to steady the thumb, and the 22dp pair was missed as often as hit.
+     */
     private void computeGeometry() {
-        float button = dp(22.4f);
-        float width = button * 2 + dp(4.8f);
+        float button = dp(30);
+        float gap = dp(8);
+        float pad = dp(5);
+        float width = pad + button + gap + button + pad;
         float right = getWidth() - dp(3);
         float left = Math.max(dp(3), right - width);
-        float height = dp(24);
+        float height = dp(32);
         float top = -height * (1f - mProgress);
         mTab.set(left, top, right, top + height);
-        float x = left + dp(2.4f);
-        for (RectF b : mButtons) {
-            b.set(x, top, x + button, top + dp(22));
-            x += button;
-        }
+        // Each button's hit rectangle takes half the gap and the full tab height, so a thumb that
+        // lands between or just below the glyphs still counts.
+        mButtons[0].set(left, top, left + pad + button + gap / 2f, top + height);
+        mButtons[1].set(left + pad + button + gap / 2f, top, right, top + height);
     }
 
     @Override
