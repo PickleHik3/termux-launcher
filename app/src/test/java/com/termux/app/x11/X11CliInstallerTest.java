@@ -32,6 +32,12 @@ import java.nio.file.Files;
 public class X11CliInstallerTest {
 
     private static final byte[] LOADER = "PK a loader".getBytes(StandardCharsets.UTF_8);
+    private static final String GPU_SETUP = "#!/usr/bin/env bash\necho tried every profile\n";
+
+    private static X11CliInstaller.AssetSource assets(byte[] loader) {
+        return name -> new ByteArrayInputStream(name.endsWith("loader.apk") ? loader
+            : GPU_SETUP.getBytes(StandardCharsets.UTF_8));
+    }
 
     @Rule public TemporaryFolder temp = new TemporaryFolder();
 
@@ -43,7 +49,7 @@ public class X11CliInstallerTest {
         bin = temp.newFolder("usr", "bin");
         libexec = new File(temp.getRoot(), "usr/libexec/termux-launcher/x11");
         installer = new X11CliInstaller(bin, libexec, "com.termux.test",
-            () -> new ByteArrayInputStream(LOADER));
+            assets(LOADER));
     }
 
     private static String text(File file) throws IOException {
@@ -61,6 +67,10 @@ public class X11CliInstallerTest {
         assertTrue(installer.serverScript().canExecute());
         assertTrue(installer.preferenceScript().canExecute());
         assertTrue(text(installer.preferenceScript()).contains("LoriePreferences"));
+        assertTrue(installer.gpuSetupScript().canExecute());
+        assertEquals("the shebang points at this prefix's bash",
+            "#!" + new File(bin, "bash").getPath() + "\necho tried every profile\n",
+            text(installer.gpuSetupScript()));
         assertArrayEquals(LOADER, Files.readAllBytes(installer.loaderFile().toPath()));
         assertTrue(text(installer.openboxRc()).contains("<maximized>yes</maximized>"));
         assertFalse("ART refuses a writable dex on CLASSPATH", installer.loaderFile().canWrite());
@@ -84,7 +94,7 @@ public class X11CliInstallerTest {
         Files.write(installer.markerFile().toPath(),
             (X11CliInstaller.MARKER_PREAMBLE + " v2 com.termux.test\n").getBytes(StandardCharsets.UTF_8));
         installer = new X11CliInstaller(bin, libexec, "com.termux.test",
-            () -> new ByteArrayInputStream("a newer loader".getBytes(StandardCharsets.UTF_8)));
+            assets("a newer loader".getBytes(StandardCharsets.UTF_8)));
 
         assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
 
@@ -131,7 +141,7 @@ public class X11CliInstallerTest {
 
     @Test public void noBinDirectoryMeansNoPrefixYet() {
         installer = new X11CliInstaller(new File(temp.getRoot(), "missing/bin"), libexec,
-            "com.termux.test", () -> new ByteArrayInputStream(LOADER));
+            "com.termux.test", assets(LOADER));
 
         assertEquals(X11CliInstaller.Result.NO_PREFIX, installer.install());
     }
@@ -141,6 +151,7 @@ public class X11CliInstallerTest {
         installer.uninstall();
         assertFalse(installer.serverScript().exists());
         assertFalse(installer.preferenceScript().exists());
+        assertFalse(installer.gpuSetupScript().exists());
         assertFalse(installer.loaderFile().exists());
         assertFalse(installer.openboxRc().exists());
         assertFalse(installer.markerFile().exists());

@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # x11-gpu-setup.sh — find the graphics setting that works best on this phone for Linux apps.
 #
 # Run this from a Termux shell on the phone, once, before you start using Linux apps on the

@@ -43,15 +43,18 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 4;
+    @VisibleForTesting static final int VERSION = 5;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
     private static final String LIBEXEC_DIR = PREFIX + "/libexec/termux-launcher/x11";
     private static final String LOADER_ASSET = "x11/loader.apk";
+    private static final String GPU_SETUP_ASSET = "x11/x11-gpu-setup.sh";
 
     static final String SERVER_SCRIPT_PATH = BIN_DIR + "/termux-x11";
     static final String PREFERENCE_SCRIPT_PATH = BIN_DIR + "/termux-x11-preference";
+    /** The script that tries every GPU profile on this phone and keeps the best. */
+    public static final String GPU_SETUP_SCRIPT_PATH = BIN_DIR + "/termux-x11-gpu-setup";
     static final String LOADER_PATH = LIBEXEC_DIR + "/loader.apk";
     /** openbox's configuration for the display: every window maximised, none decorated. */
     public static final String OPENBOX_RC_PATH = LIBEXEC_DIR + "/openbox-rc.xml";
@@ -79,23 +82,23 @@ public final class X11CliInstaller {
         FAILED
     }
 
-    /** Where the loader's bytes come from: the app's assets, or a fixture. */
-    interface LoaderSource {
-        @NonNull InputStream open() throws IOException;
+    /** Where the shipped files' bytes come from: the app's assets, or a fixture. */
+    interface AssetSource {
+        @NonNull InputStream open(@NonNull String name) throws IOException;
     }
 
     @NonNull private final File binDir;
     @NonNull private final File libexecDir;
     @NonNull private final String applicationId;
-    @NonNull private final LoaderSource loader;
+    @NonNull private final AssetSource assets;
 
     @VisibleForTesting
     X11CliInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull String applicationId,
-                    @NonNull LoaderSource loader) {
+                    @NonNull AssetSource assets) {
         this.binDir = binDir;
         this.libexecDir = libexecDir;
         this.applicationId = applicationId;
-        this.loader = loader;
+        this.assets = assets;
     }
 
     /** The installer for this launcher's own prefix. */
@@ -103,7 +106,7 @@ public final class X11CliInstaller {
     static X11CliInstaller forPrefix(@NonNull Context context) {
         Context app = context.getApplicationContext();
         return new X11CliInstaller(new File(BIN_DIR), new File(LIBEXEC_DIR), app.getPackageName(),
-            () -> app.getAssets().open(LOADER_ASSET));
+            name -> app.getAssets().open(name));
     }
 
     // ---- The static face the launcher uses -------------------------------------------------
@@ -146,6 +149,7 @@ public final class X11CliInstaller {
 
     @NonNull File serverScript() { return new File(binDir, "termux-x11"); }
     @NonNull File preferenceScript() { return new File(binDir, "termux-x11-preference"); }
+    @NonNull File gpuSetupScript() { return new File(binDir, "termux-x11-gpu-setup"); }
     @NonNull File loaderFile() { return new File(libexecDir, "loader.apk"); }
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
     @NonNull File openboxRc() { return new File(libexecDir, "openbox-rc.xml"); }
@@ -165,11 +169,12 @@ public final class X11CliInstaller {
             }
             // The loader must end up read-only: ART refuses a writable dex on CLASSPATH
             // ("Writable dex file ... is not allowed") and aborts app_process before main.
-            try (InputStream in = loader.open()) {
+            try (InputStream in = assets.open(LOADER_ASSET)) {
                 writeAtomically(loaderFile(), in, false, false);
             }
             writeAtomically(serverScript(), bytes(serverScript(applicationId)), true, true);
             writeAtomically(preferenceScript(), bytes(preferenceScript(applicationId)), true, true);
+            writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
             writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
@@ -181,8 +186,8 @@ public final class X11CliInstaller {
 
     void uninstall() {
         if (isForeignCommand()) return;
-        for (File file : new File[]{serverScript(), preferenceScript(), loaderFile(), openboxRc(),
-                markerFile()}) {
+        for (File file : new File[]{serverScript(), preferenceScript(), gpuSetupScript(),
+                loaderFile(), openboxRc(), markerFile()}) {
             if (!file.exists() && !Files.isSymbolicLink(file.toPath())) continue;
             file.setWritable(true, true);
             if (!file.delete()) {
@@ -322,6 +327,31 @@ public final class X11CliInstaller {
             //noinspection ResultOfMethodCallIgnored
             temp.delete();
         }
+    }
+
+    /** The shipped script's text, as written in the tree. */
+    @NonNull
+    private String readText(@NonNull String asset) throws IOException {
+        try (InputStream in = assets.open(asset)) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
+    }
+
+    /**
+     * Point a script's {@code #!} line at this prefix's bash. The tree keeps
+     * {@code #!/usr/bin/env bash} so the file runs on a PC too; on the phone the kernel needs
+     * the real path, and it differs per edition.
+     */
+    @NonNull
+    String withPrefixShebang(@NonNull String script) {
+        if (!script.startsWith("#!")) return script;
+        int newline = script.indexOf('\n');
+        if (newline < 0) return script;
+        return "#!" + new File(binDir, "bash").getPath() + script.substring(newline);
     }
 
     @NonNull
