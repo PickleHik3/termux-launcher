@@ -196,9 +196,11 @@ public final class X11PaneFrame extends PaneContentFrame {
         boolean glass = PaneGlass.isActive(style);
         float radiusPx = glass
             ? PaneGlass.radiusPx(style, getResources().getDisplayMetrics().density) : 0f;
-        // The frame's own outline still rounds the empty state; the surface underneath fills the
-        // frame and needs the mask on top of it either way.
-        setPaneShape(radiusPx, glass);
+        // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
+        // rounded outline, so a clipping frame cut away the very paint that rounds the surface,
+        // which no clip reaches. The page has no slab of its own to keep square, and the rim
+        // draws the rounded edge whichever way the frame is set.
+        setPaneShape(radiusPx, false);
         if (mCornerMask != null) {
             mCornerMask.setCornerMaskRadius(radiusPx);
             // Behind the page is the wallpaper (or the surface base colour), never a pane's own
