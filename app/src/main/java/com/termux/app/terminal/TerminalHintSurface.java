@@ -28,8 +28,12 @@ public final class TerminalHintSurface {
 
     /** Alpha a hint settles at: enough to read, not enough to hide the transcript behind it. */
     public static final float REST_ALPHA = 0.94f;
-    /** Flat material, so the fill and the hairline are the whole surface. */
-    private static final int SURFACE_ALPHA = 224;
+    /**
+     * Flat material, so the fill and the hairline are the whole surface. Near opaque: at 224 the
+     * transcript's glyphs still read through the card beside its own words, and a line of the
+     * legend with a URL showing between its letters looked like two things drawn on one spot.
+     */
+    private static final int SURFACE_ALPHA = 246;
     /**
      * The same material for a panel that is worked in rather than read past: the session prompts and
      * the search bar carry a field, a list and the answer the user is about to give, and at a hint's
