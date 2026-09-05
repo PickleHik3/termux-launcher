@@ -11700,7 +11700,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             () -> ActivityUtils.startActivity(this,
                 com.termux.app.activities.SettingsActivity.createFragmentIntent(this,
                     com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment.class,
-                    R.string.settings_x11_display_options_title))));
+                    R.string.settings_destination_display))));
         float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
         com.termux.app.x11.DisplayActionStripView strip =
             new com.termux.app.x11.DisplayActionStripView(this,

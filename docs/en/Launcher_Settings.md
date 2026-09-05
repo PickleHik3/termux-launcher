@@ -133,6 +133,16 @@ Open-Meteo attribution.
 
 Keyboard height is remembered separately for portrait and landscape.
 
+## Display
+
+The Linux display has its own page: the **Linux display** switch runs a Linux desktop or X11 apps
+as the third place of the home screen — see [The Linux display](X11_Display.md). Under it sit touch
+mode, resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
+the window manager started with the display, the mark on the Display place's badge in the status
+bar, starting the display with the launcher, the start command, pointing new shells at the
+display, two compatibility switches, and what your GPU can do for Linux apps. To have the phone
+try every graphics profile and keep the best, run `termux-x11-gpu-setup` in a shell.
+
 ## Launcher & apps
 
 - **Customize dock appearance:** shared surface shape and live dock tuning.
@@ -144,13 +154,6 @@ Keyboard height is remembered separately for portrait and landscape.
   re-run row counts the apps installed since the last run, and the drawer mentions them once when
   more than five are waiting.
 - **Widget pane:** keep a page of home-screen widgets beside the terminal.
-- **Linux display** and **Display options:** run a Linux desktop or X11 apps as the third place
-  of the home screen — see [The Linux display](X11_Display.md). Options cover touch mode,
-  resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer, the
-  window manager started with the display, the mark on the Display place's badge in the status
-  bar, starting the display with the launcher, the start command, pointing new shells at the
-  display, two compatibility switches, and what your GPU can do for Linux apps. To have the phone
-  try every graphics profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

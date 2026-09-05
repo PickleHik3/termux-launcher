@@ -71,7 +71,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   display never starts on its own unless you turn on **Start with the launcher**.
 - **The display survives switching away.** Your X apps keep running while you are on the
   terminal or the widget grid; only the picture is put away.
-- **Options.** Settings → Launcher & apps → **Display options** holds touch mode, resolution,
+- **Options.** Settings → **Display** holds the switch, touch mode, resolution,
   text size, clipboard sharing and how the launcher starts a display: with the launcher, with a
   command of your choosing, pointing new shells at it (`DISPLAY` set in every new shell while a
   display runs), and two compatibility switches. A running display picks a change up at once.
@@ -100,7 +100,7 @@ the proot's login shell). The launcher never sets these for you.
 
 The launcher can pick for you: `launcherctl x11 gpu` says which row fits this phone and what is
 installed, and `launcherctl x11 gpu --env` prints the exports to paste or `eval`. The same
-answer is at the bottom of Display options in Settings.
+answer is at the bottom of the Display page in Settings.
 
 Or let the phone decide by trying: `termux-x11-gpu-setup` installs the drivers for every row that
 fits this phone, runs a short 3D test with each on a private display, keeps the one that really
@@ -125,7 +125,7 @@ running, opens the app on it full size, and takes you to the Display place — n
 They can be pinned and searched like any other app. `pkg install firefox`, and Firefox is in the
 drawer the next time you return to the launcher.
 
-Two things make this work and can be changed in Display options:
+Two things make this work and can be changed on the Display page in Settings:
 
 - **Window manager.** The launcher starts a small window manager with the display so windows
   open full size and dialogs stay on screen. It is `openbox` by default (install it with

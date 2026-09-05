@@ -24,6 +24,8 @@
     <string name="settings_destination_terminal_status_summary">Display, panes, clock, CPU, memory, weather, margins, and Recents</string>
     <string name="settings_destination_keyboard_input">Keyboard &amp; input</string>
     <string name="settings_destination_keyboard_input_summary">Input method, keyboard appearance, layout, feedback, and test typing</string>
+    <string name="settings_destination_display">Display</string>
+    <string name="settings_destination_display_summary">Linux display on or off, touch, resolution, clipboard, and how it starts</string>
     <string name="settings_destination_launcher_apps">Launcher &amp; apps</string>
     <string name="settings_destination_launcher_apps_summary">Pinned apps, A–Z index, notification dots, search, and home behavior</string>
     <string name="settings_destination_services_permissions">Services &amp; permissions</string>
@@ -182,8 +184,6 @@
     <string name="settings_x11_display_title">Linux display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
-    <string name="settings_x11_display_options_title">Display options</string>
-    <string name="settings_x11_display_options_summary">Touch, resolution, clipboard, and how the display starts.</string>
     <string name="settings_x11_category_display">Display</string>
     <string name="settings_x11_touch_mode_title">Touch</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>

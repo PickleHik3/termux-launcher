@@ -26,8 +26,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The Linux display's options: how touch is read, how big the X screen is, whether the clipboard
- * is shared, and how the launcher starts a display when asked to.
+ * The Linux display's page: the switch that turns it on, how touch is read, how big the X screen
+ * is, whether the clipboard is shared, and how the launcher starts a display when asked to.
  *
  * <p>The display rows write into the store the display server and {@code termux-x11-preference}
  * read — one store, so the three never disagree — and a running display picks a change up at
@@ -207,6 +207,9 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                 return;
             }
             switch (key) {
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_ENABLED:
+                    launcher.setX11DisplayEnabled(value);
+                    break;
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART:
                     launcher.setX11DisplayAutostartEnabled(value);
                     break;
@@ -234,6 +237,8 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
             if (key == null) return defValue;
             if (isDisplayKey(key)) return display.keys.get(key).asBoolean().get();
             switch (key) {
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_ENABLED:
+                    return launcher.isX11DisplayEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART:
                     return launcher.isX11DisplayAutostartEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_SET_DISPLAY_ENV:

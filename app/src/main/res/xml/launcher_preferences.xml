@@ -87,16 +87,6 @@
             app:title="@string/settings_widget_pane_enabled_title"
             app:summary="@string/settings_widget_pane_enabled_summary"
             android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="x11_display_enabled"
-            app:title="@string/settings_x11_display_title"
-            app:summary="@string/settings_x11_display_summary"
-            android:defaultValue="false" />
-        <Preference
-            app:key="x11_display_options"
-            app:title="@string/settings_x11_display_options_title"
-            app:summary="@string/settings_x11_display_options_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_launcher_search_header">

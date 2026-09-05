@@ -30,6 +30,13 @@
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment" />
 
         <Preference
+            app:key="display"
+            app:icon="@drawable/ic_symbol_desktop_windows"
+            app:title="@string/settings_destination_display"
+            app:summary="@string/settings_destination_display_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
+
+        <Preference
             app:key="launcher_apps"
             app:icon="@drawable/ic_symbol_apps"
             app:title="@string/settings_destination_launcher_apps"
