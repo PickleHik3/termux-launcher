@@ -52,6 +52,12 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   touch, by the place icons, or with Home.
 - **The menu.** Hold the display and a short strip appears at the bottom edge of the terminal
   area with Start or Stop and Display settings; tap anywhere else to put it away.
+- **Mouse mode.** The **Mouse mode** action — put it on the extra-keys row, the in-app keyboard
+  as a `tool:mouse.toggle` key, or a chord — swaps the keyboard for a touchpad of the same size
+  while the display is showing: a finger moves the pointer, a tap clicks, two fingers scroll and
+  two fingers tapping together click the right button; hold, then move, to drag. The arrow in its
+  corner brings the keyboard back. In the terminal the same action makes every touch the mouse
+  for programs that take one, with none of the usual scrolling until it is switched off.
 - **Back** is the display's: it toggles the keyboard, as in Termux:X11. Change that with
   `termux-x11-preference`.
 - **Stop** from the long-press menu on the display, or with `pkill termux-x11`. Everything running on the display closes with it. The

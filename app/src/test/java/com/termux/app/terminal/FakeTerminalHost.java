@@ -839,6 +839,13 @@ class FakeTerminalHost implements TerminalHost {
         record("showExtraKeysRowEditor");
     }
 
+    boolean mouseMode;
+    @Override public boolean toggleMouseMode() {
+        record("toggleMouseMode");
+        mouseMode = !mouseMode;
+        return mouseMode;
+    }
+
     @Override public boolean toggleKeyInspector() {
         record("toggleKeyInspector");
         return keyInspectorOpen;

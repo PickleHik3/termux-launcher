@@ -202,6 +202,18 @@ public final class TerminalView extends View {
 
     private MotionEvent mTouchMouseDragArmEvent;
 
+    /**
+     * Mouse mode: every touch is the mouse. A finger down is the left button down at its cell, a
+     * move is the button held and moved, a lift is the release; two fingers turn the wheel. None
+     * of the view's own touch behaviour - scrolling the transcript, selecting text, the long-press
+     * menu - applies while it is on, and it all comes back when it is off.
+     */
+    private boolean mTouchMouseMode;
+    private boolean mTouchMouseModePressed;
+    private int mTouchMouseModeLastCol, mTouchMouseModeLastRow;
+    private float mTouchMouseWheelStartY;
+    private int mTouchMouseWheelSent;
+
     private final int mTouchSlopSquared;
 
     /**
@@ -1111,6 +1123,81 @@ public final class TerminalView extends View {
             - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
     }
 
+    /** Turn mouse mode on or off; see {@link #mTouchMouseMode}. */
+    public void setTouchMouseMode(boolean enabled) {
+        if (mTouchMouseMode == enabled) return;
+        if (mTouchMouseModePressed && mEmulator != null) {
+            sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
+                mTouchMouseModeLastRow, false);
+        }
+        mTouchMouseModePressed = false;
+        mTouchMouseMode = enabled;
+    }
+
+    public boolean isTouchMouseMode() {
+        return mTouchMouseMode;
+    }
+
+    /**
+     * The whole of a touch stream in mouse mode. One finger is the left button: down at the cell
+     * under it, held while it moves cell to cell, released where it lifts. A second finger makes
+     * the gesture the wheel instead - one notch per line of travel - and releases the button.
+     */
+    private void handleTouchMouseMode(MotionEvent event) {
+        int action = event.getActionMasked();
+        int column = getColumnForX(event.getX());
+        int row = getRowForY(event.getY());
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+                mTouchMouseModePressed = true;
+                mTouchMouseModeLastCol = column;
+                mTouchMouseModeLastRow = row;
+                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, column, row, true);
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (mTouchMouseModePressed) {
+                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
+                        mTouchMouseModeLastRow, false);
+                    mTouchMouseModePressed = false;
+                }
+                mTouchMouseWheelStartY = event.getY();
+                mTouchMouseWheelSent = 0;
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (event.getPointerCount() >= 2) {
+                    float lineHeight = mRenderer == null ? 0f : mRenderer.mFontLineSpacing;
+                    if (lineHeight <= 0f) break;
+                    int notches = Math.round((mTouchMouseWheelStartY - event.getY()) / lineHeight);
+                    while (mTouchMouseWheelSent < notches) {
+                        sendMouseEventAt(TerminalEmulator.MOUSE_WHEELUP_BUTTON, column, row, true);
+                        mTouchMouseWheelSent++;
+                    }
+                    while (mTouchMouseWheelSent > notches) {
+                        sendMouseEventAt(TerminalEmulator.MOUSE_WHEELDOWN_BUTTON, column, row, true);
+                        mTouchMouseWheelSent--;
+                    }
+                    break;
+                }
+                if (mTouchMouseModePressed
+                    && (column != mTouchMouseModeLastCol || row != mTouchMouseModeLastRow)) {
+                    mTouchMouseModeLastCol = column;
+                    mTouchMouseModeLastRow = row;
+                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, column, row, true);
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (mTouchMouseModePressed) {
+                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
+                        mTouchMouseModeLastRow, false);
+                    mTouchMouseModePressed = false;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
     /**
      * Send a single mouse event code to the terminal.
      */
@@ -1425,6 +1512,11 @@ public final class TerminalView extends View {
             mTouchMouseDragActive = false;
             mTouchMouseDragReported = false;
             clearArmedTouchMouseDrag();
+        }
+        if (mTouchMouseMode && !event.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            if (isSelectingText()) stopTextSelectionMode();
+            handleTouchMouseMode(event);
+            return true;
         }
         if (isSelectingText()) {
             updateFloatingToolbarVisibility(event);

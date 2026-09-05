@@ -762,6 +762,19 @@ public class TerminalPaneController {
         return mActiveWindow != null && mActiveWindow.active != null ? mActiveWindow.active.session : null;
     }
 
+    /** Whether every pane treats touch as the mouse; see {@link TerminalView#setTouchMouseMode}. */
+    private boolean mTouchMouseMode;
+
+    /** Turn mouse mode on or off for every pane there is and every pane to come. */
+    public void setTouchMouseMode(boolean enabled) {
+        mTouchMouseMode = enabled;
+        for (TerminalView view : mPaneViews.values()) view.setTouchMouseMode(enabled);
+    }
+
+    public boolean isTouchMouseMode() {
+        return mTouchMouseMode;
+    }
+
     @Nullable public TerminalView getActivePaneView() {
         TerminalSession s = getActiveSession();
         return s == null ? null : mPaneViews.get(s);
@@ -2708,6 +2721,7 @@ public class TerminalPaneController {
             mHost.configureAttachedPaneView(view, session);
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
+            (view).setTouchMouseMode(mTouchMouseMode);
             PaneGlass.followLayout(frame.findViewById(R.id.terminal_pane_glass));
             applyPaneGlass();
         } else {

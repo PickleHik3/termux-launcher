@@ -457,6 +457,10 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void showExtraKeysRowEditor();
 
+    /** Flip mouse mode; returns the new state. */
+
+    boolean toggleMouseMode();
+
     /** Toggles the key inspector, answering whether it is now open. */
     boolean toggleKeyInspector();
 

@@ -395,6 +395,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WALL_WIDGETS = "wall.widgets";
     public static final String TOOL_WALL_TERMINAL = "wall.terminal";
     public static final String TOOL_WALL_DISPLAY = "wall.display";
+    public static final String TOOL_MOUSE_TOGGLE = "mouse.toggle";
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_PANE_OPEN = "pane.open";
     public static final String TOOL_PANE_LIST = "pane.list";
@@ -630,6 +631,12 @@ public final class LauncherToolRegistry {
             "Show the pane wall's Display place.",
             schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WALL, R.string.tool_wall_display, R.string.tool_desc_wall_display, null);
+        // The mouse key: bindable on the row, the in-app keyboard and a chord. In the terminal
+        // it makes every touch the mouse; on the Display place it swaps the keyboard for a touchpad.
+        addUi(map, TOOL_MOUSE_TOGGLE,
+            "Turn mouse mode on or off: touches become mouse clicks and drags in the terminal, and a touchpad takes the keyboard's place on the display.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_mouse_toggle, R.string.tool_desc_mouse_toggle, null);
         add(map, TOOL_PANE_MOVE_TO_EDGE,
             "Move the focused pane to an outer edge of the current window.",
             schemaObject()

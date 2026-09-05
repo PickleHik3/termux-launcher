@@ -63,7 +63,7 @@ public class LauncherToolRegistryTest {
         // the row editor's in-terminal entry, then by terminal.select_at_cursor and
         // terminal.select_all, which gave selection an entry point outside a long-press, and
         // finally by the keyboard layout pair.
-        assertEquals(71, registry.getUiTools().size());
+        assertEquals(72, registry.getUiTools().size());
     }
 
     @Test

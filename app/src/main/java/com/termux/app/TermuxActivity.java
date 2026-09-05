@@ -7150,6 +7150,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ViewGroup.LayoutParams.WRAP_CONTENT));
             mAttachedInAppKeyboardView = keyboardView;
             mKeyboardGeometry.discardMeasuredHeight();
+            keyboardView.setAlpha(1f);
+            // A fresh keyboard view drops the touchpad that was over the old one; put it back.
+            if (mDisplayTouchpad != null) {
+                mDisplayTouchpad = null;
+                host.post(TermuxActivity.this::syncDisplayTouchpad);
+            }
         }
 
         @Override
@@ -7158,6 +7164,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (host != null)
                 host.removeAllViews();
             mAttachedInAppKeyboardView = null;
+            mDisplayTouchpad = null;
             mKeyboardGeometry.discardMeasuredHeight();
         }
 
@@ -10981,6 +10988,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     dismissDisplayActionStrip();
                     syncPlaceBar();
                     syncWallKeyboard(page);
+                    syncDisplayTouchpad();
                     mLastWallPage = page;
                     // The window chips belong to the place on screen: terminal windows on the
                     // terminal, the display's apps on the Display place.
@@ -11396,6 +11404,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? null : mPaneWallController.displayPage();
             if (frame != null) frame.applyRunning(running);
             syncPlaceBar();
+            syncDisplayTouchpad();
             syncDisplayEnvironment();
             if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
             syncDisplayWindowList(running);
@@ -11455,6 +11464,115 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The Display place's menu while it is up. */
     @Nullable private com.termux.app.x11.DisplayActionStripView mDisplayActionStrip;
+
+    /**
+     * Mouse mode, flipped by the Mouse mode action. In the terminal every touch is the mouse; on
+     * the Display place a touchpad takes the keyboard's place. It is a session choice, not a
+     * setting: the app starts with it off.
+     */
+    private boolean mMouseMode;
+    @Nullable private com.termux.app.x11.DisplayTouchpadView mDisplayTouchpad;
+
+    /** Flip mouse mode and say so; returns the new state. */
+    boolean toggleMouseMode() {
+        setMouseMode(!mMouseMode);
+        showSessionSwitchIndicator(getString(mMouseMode
+            ? R.string.termux_mouse_mode_on : R.string.termux_mouse_mode_off));
+        return mMouseMode;
+    }
+
+    void setMouseMode(boolean enabled) {
+        if (mMouseMode == enabled) return;
+        mMouseMode = enabled;
+        if (mPaneController != null) mPaneController.setTouchMouseMode(enabled);
+        syncDisplayTouchpad();
+    }
+
+    public boolean isMouseMode() {
+        return mMouseMode;
+    }
+
+    /**
+     * The touchpad is there exactly while mouse mode is on, the wall rests on the Display place
+     * and a display is running. It lies over the in-app keyboard inside the keyboard's host, so
+     * it has the keyboard's size — whatever the user set — and the keyboard's place; the keys
+     * fade under it and come back when it goes.
+     */
+    private void syncDisplayTouchpad() {
+        FrameLayout host = findViewById(R.id.inapp_keyboard_view_host);
+        boolean wanted = mMouseMode && isDisplayPageShowing() && isEmbeddedDisplayRunning()
+            && mInAppKeyboard != null && host != null;
+        com.termux.app.x11.DisplayTouchpadView pad = mDisplayTouchpad;
+        long duration = com.termux.app.terminal.Motion.FLOAT_DEPTH_MS;
+        android.view.animation.Interpolator settle = com.termux.app.terminal.Motion.settle();
+        boolean reduced = isReducedMotionEnabled();
+        if (!wanted) {
+            if (pad == null) return;
+            final com.termux.app.x11.DisplayTouchpadView leaving = pad;
+            mDisplayTouchpad = null;
+            View keys = mAttachedInAppKeyboardView;
+            if (keys != null) {
+                keys.animate().cancel();
+                if (reduced) keys.setAlpha(1f);
+                else keys.animate().alpha(1f).setDuration(duration).setInterpolator(settle).start();
+            }
+            Runnable detach = () -> {
+                if (leaving.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) leaving.getParent()).removeView(leaving);
+                }
+            };
+            leaving.animate().cancel();
+            if (reduced) detach.run();
+            else leaving.animate().alpha(0f).translationY(dpToPx(12)).setDuration(duration)
+                .setInterpolator(settle).withEndAction(detach).start();
+            return;
+        }
+        // The keyboard is the touchpad's frame: it has to be up for the pad to have a size.
+        if (!mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .ShowReason.KEYBOARD_ACTION);
+        }
+        if (pad != null && pad.getParent() == host) return;
+        if (pad == null) {
+            pad = new com.termux.app.x11.DisplayTouchpadView(this,
+                () -> {
+                    com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+                        ? null : mPaneWallController.displayPage();
+                    return frame == null || !isEmbeddedDisplayRunning() ? null : frame.display();
+                },
+                isInAppKeyboardCapsule(),
+                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanel,
+                    R.color.termux_surface_panel),
+                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                    R.color.termux_on_surface),
+                com.termux.app.statusbar.StatusBarLensView.accentFor(this,
+                    com.termux.app.wall.PaneWallPage.DISPLAY));
+            pad.setListener(() -> {
+                setMouseMode(false);
+                showSessionSwitchIndicator(getString(R.string.termux_mouse_mode_off));
+            });
+            mDisplayTouchpad = pad;
+        }
+        if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
+        host.addView(pad, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        View keys = mAttachedInAppKeyboardView;
+        if (keys != null) {
+            keys.animate().cancel();
+            if (reduced) keys.setAlpha(0f);
+            else keys.animate().alpha(0f).setDuration(duration).setInterpolator(settle).start();
+        }
+        pad.animate().cancel();
+        if (reduced) {
+            pad.setAlpha(1f);
+            pad.setTranslationY(0f);
+            return;
+        }
+        pad.setAlpha(0f);
+        pad.setTranslationY(dpToPx(12));
+        pad.animate().alpha(1f).translationY(0f).setDuration(duration).setInterpolator(settle)
+            .start();
+    }
 
     /**
      * Long-press on the Display page: start it, stop it, or go to its settings. The menu is a
@@ -14019,6 +14137,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void showCommandPalette() {
             com.termux.app.terminal.TerminalCommandPalette.show(TermuxActivity.this);
+        }
+
+        @Override public boolean toggleMouseMode() {
+            return TermuxActivity.this.toggleMouseMode();
         }
 
         @Override public void showExtraKeysRowEditor() {

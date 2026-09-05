@@ -1341,6 +1341,7 @@
     <string name="tool_wall_widgets">Go to Widgets</string>
     <string name="tool_wall_terminal">Go to Terminal</string>
     <string name="tool_wall_display">Go to Display</string>
+    <string name="tool_mouse_toggle">Mouse mode</string>
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
     <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>
@@ -1407,6 +1408,9 @@
     <string name="tool_desc_wall_widgets">Show the widget grid.</string>
     <string name="tool_desc_wall_terminal">Show the terminal.</string>
     <string name="tool_desc_wall_display">Show the Linux display.</string>
+    <string name="tool_desc_mouse_toggle">Touches become mouse clicks in the terminal, and a touchpad takes the keyboard\'s place on the display.</string>
+    <string name="termux_mouse_mode_on">Mouse mode on</string>
+    <string name="termux_mouse_mode_off">Mouse mode off</string>
     <string name="tool_desc_pane_next_layout">Cycle this window to the next automatic pane layout and keep it applied as panes are added or closed.</string>
     <string name="tool_desc_pane_toggle_float">Detach the focused pane into a movable floating window above the tiled panes, or dock a floating pane back into the layout.</string>
     <string name="tool_desc_terminal_toggle_scratchpad">Show or hide a dedicated floating terminal; its shell keeps running while hidden.</string>
