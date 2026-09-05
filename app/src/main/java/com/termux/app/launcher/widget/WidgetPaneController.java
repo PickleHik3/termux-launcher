@@ -110,30 +110,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     int currentPage() { return currentPage; }
 
-    /**
-     * What the page on screen holds, by provider label in reading order, for the status bar's
-     * chips and summary. A widget whose provider is gone is named by its package.
-     */
-    @NonNull public List<String> labelsOnCurrentPage() {
-        List<LauncherWidgetRecord> records = new java.util.ArrayList<>(
-            widgets.repository().recordsOnPage(currentPage));
-        records.sort(java.util.Comparator.comparingInt((LauncherWidgetRecord r) -> r.cell.top)
-            .thenComparingInt(r -> r.cell.left));
-        List<String> labels = new java.util.ArrayList<>(records.size());
-        android.content.pm.PackageManager packages = pane.getContext().getPackageManager();
-        for (LauncherWidgetRecord record : records) {
-            AppWidgetProviderInfo info = widgets.providerInfo(record.appWidgetId);
-            String label = null;
-            if (info != null) {
-                try { label = String.valueOf(info.loadLabel(packages)); }
-                catch (RuntimeException ignored) { label = null; }
-            }
-            if (label == null || label.trim().isEmpty()) label = record.provider.getPackageName();
-            labels.add(label.trim());
-        }
-        return labels;
-    }
-
     void setCurrentPage(int page) {
         int clamped = Math.max(0, Math.min(widgets.repository().pageCount() - 1, page));
         if (clamped == currentPage) return;

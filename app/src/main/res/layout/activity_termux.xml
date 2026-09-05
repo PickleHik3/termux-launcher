@@ -161,14 +161,6 @@
                             android:contentDescription="@string/termux_top_pane_media_content_description"
                             android:visibility="gone" />
 
-                        <!-- One line beside the clock saying what the place on screen holds. It
-                             slides with the wall, hugs its content and gives way to pinned
-                             notifications and media. -->
-                        <com.termux.app.statusbar.TopPanePlaceSummaryView
-                            android:id="@+id/terminal_place_summary"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:visibility="gone" />
                     </com.termux.app.statusbar.TopPaneWidgetSlot>
 
                     <!-- Bottom status row. Order is fixed: sessions indicator, window pills, then

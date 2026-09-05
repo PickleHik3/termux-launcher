@@ -11049,8 +11049,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncPlaceBar() {
         com.termux.app.wall.PaneWallPage page = currentWallPage();
         int accent = com.termux.app.statusbar.StatusBarLensView.accentFor(this, page);
-        // The terminal is the bar's own colour; the other places bring theirs.
-        Integer placeAccent = page == com.termux.app.wall.PaneWallPage.TERMINAL ? null : accent;
+        // One colour per place, worn by everything that is the place's: the home icon, the
+        // badge and the chips agree, so the row reads as one thing rather than three.
+        Integer placeAccent = accent;
         // The row's badge is the terminal session's and shows nowhere else; the chips are the
         // terminal's windows or the display's apps, and the Widgets place has none: its widgets
         // speak for themselves.
@@ -11070,18 +11071,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bindPlaceBadge(sessions);
         View slotView = findViewById(R.id.terminal_top_widget_area);
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
-        if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
-            com.termux.app.statusbar.TopPaneWidgetSlot slot =
-                (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
-            slot.setPlaceSummary(placeSummary(page), accent);
-            if (lens != null) {
-                lens.setCardsPresent(slot.getSlotMode()
-                    != com.termux.app.statusbar.TopPaneSlotMode.CLOCK_ONLY);
-            }
+        if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot && lens != null) {
+            lens.setCardsPresent(((com.termux.app.statusbar.TopPaneWidgetSlot) slotView)
+                .getSlotMode() != com.termux.app.statusbar.TopPaneSlotMode.CLOCK_ONLY);
         }
         if (lens != null) {
             lens.setDisplayRunning(isEmbeddedDisplayRunning());
             lens.setDisplayGlyph(displayRuntimeGlyph());
+            // The icons are chips of the same kit as the badge beside them: same corner.
+            lens.setChipRadiusPx(resolveStatusIndicatorCornerRadiusPx(Math.round(dpToPx(20)),
+                isRoundedDockStyle()));
             if (mStatusBarCollapseAnimator == null) {
                 lens.setExpansion(mPreferences != null && mPreferences.isTopPaneClockCollapsed()
                     ? 0f : 1f);
@@ -11125,13 +11124,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             strip.setTranslationX(offsetPx);
             strip.setAlpha(alpha);
         }
-        View slotView = findViewById(R.id.terminal_top_widget_area);
-        if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
-            com.termux.app.statusbar.TopPaneWidgetSlot slot =
-                (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
-            slot.setPlaceOffset(offsetPx);
-            if (slot.placeSummary() != null) slot.placeSummary().setAlpha(alpha);
-        }
         if (mPaneWallController == null) return;
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
@@ -11162,15 +11154,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (badge == null || currentWallPage() != com.termux.app.wall.PaneWallPage.TERMINAL) return;
         int sessionIndex = mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession);
         badge.setSession(currentStatusSessionName(), mWSessions.size(), sessionIndex);
-    }
-
-    /** What the place holds, for the line beside the clock: the widgets on the page, or nothing. */
-    @NonNull
-    private CharSequence placeSummary(@NonNull com.termux.app.wall.PaneWallPage page) {
-        if (page != com.termux.app.wall.PaneWallPage.WIDGETS || mWidgetPaneController == null) {
-            return "";
-        }
-        return android.text.TextUtils.join(" · ", mWidgetPaneController.labelsOnCurrentPage());
     }
 
     /** The Display place's icon: Termux X11's prompt, or the chosen distribution's mark. */

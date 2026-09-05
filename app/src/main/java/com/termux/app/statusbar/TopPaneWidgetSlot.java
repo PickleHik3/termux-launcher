@@ -36,7 +36,6 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     private static final Interpolator INTERPOLATOR = new PathInterpolator(.16f, 1f, .3f, 1f);
 
     private final Rect mClockBounds = new Rect();
-    private final Rect mSummaryBounds = new Rect();
     private final Rect mNotificationBounds = new Rect();
     private final Rect mMediaBounds = new Rect();
 
@@ -45,7 +44,6 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private MediaWidgetView mMedia;
     @Nullable private PinnedNotificationIconCache mIcons;
     @Nullable private ViewPropertyAnimator mClockFade;
-    @Nullable private TopPanePlaceSummaryView mSummary;
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
     @Nullable private Runnable mModeListener;
@@ -74,9 +72,6 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         super.dispatchDraw(canvas);
         TerminalClockWidget clock = mClock;
         if (clock == null || clock.getVisibility() != VISIBLE || clock.getAlpha() <= 0f) return;
-        // With the place summary sharing the slot there is no plane left for the line to span:
-        // carrying it under the summary would draw the clock's own detail across it.
-        if (!mSummaryBounds.isEmpty()) return;
         float ruleY = clock.fullRuleCenterYPx();
         if (ruleY < 0f) return;
         float y = clock.getTop() + clock.getTranslationY() + ruleY;
@@ -106,29 +101,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             mNotifications.setOpenListener(this::openPinned);
         }
         if (mMedia != null) mMedia.setVisibility(GONE);
-        mSummary = findViewById(R.id.terminal_place_summary);
         applyFeed(false);
-    }
-
-    @Nullable
-    public TopPanePlaceSummaryView placeSummary() {
-        return mSummary;
-    }
-
-    /**
-     * What the place on screen holds, beside the clock; empty takes the line away and gives the
-     * clock the slot. The summary slides with the wall like the rest of the place's content.
-     */
-    public void setPlaceSummary(@Nullable CharSequence text, int accent) {
-        if (mSummary == null) return;
-        boolean had = mSummary.hasSummary();
-        mSummary.setSummary(text, accent);
-        if (had != mSummary.hasSummary()) requestLayout();
-    }
-
-    /** The wall moved; the summary goes with it. */
-    public void setPlaceOffset(float offsetPx) {
-        if (mSummary != null) mSummary.setTranslationX(offsetPx);
     }
 
     /** The clock alignment decides the cell order; the tiles read the same preference it does. */
@@ -317,7 +290,6 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
-        applyPlaceSummary(width, height, gutter, gap, homeCell);
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) return;
 
         if (stacked) {
@@ -377,53 +349,6 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);
     }
 
-    /** Height of the place summary's line. */
-    private static final float PLACE_SUMMARY_HEIGHT_DP = 20f;
-    /** The compact clock's face; less than this beside the summary and the summary stands down. */
-    private static final float PLACE_SUMMARY_MIN_CLOCK_DP = 96f;
-    /** The summary never takes more than this much of the slot from the clock. */
-    private static final float PLACE_SUMMARY_MAX_FRACTION = .5f;
-
-    /**
-     * Give the place summary its hugging spot beside the clock, or take it away. The clock drops
-     * to its compact face when what the summary leaves cannot hold its full one — at a large font
-     * scale on a narrow screen it cannot, which is why the fit is measured.
-     */
-    private void applyPlaceSummary(int width, int height, int gutter, int gap, int homeCell) {
-        boolean shown = mMode.showsTiles(true) && mSummary != null && mSummary.hasSummary();
-        if (!shown) {
-            mSummaryBounds.setEmpty();
-            if (mSummary != null) mSummary.setVisibility(GONE);
-            return;
-        }
-        int summaryHeight = Math.min(height, Math.round(dp(PLACE_SUMMARY_HEIGHT_DP)));
-        // The clock and the summary share what is left after the home icon's cell.
-        int shared = Math.max(0, width - homeCell);
-        int maxWidth = Math.max(0, Math.round((shared - gutter * 2) * PLACE_SUMMARY_MAX_FRACTION));
-        mSummary.measure(MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.AT_MOST),
-            MeasureSpec.makeMeasureSpec(summaryHeight, MeasureSpec.EXACTLY));
-        int clockDesired = mClock == null ? 0 : Math.max(1, Math.round(mClock.contentWidth()));
-        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-        TopPaneAsideLayoutPolicy.Result result = TopPaneAsideLayoutPolicy.calculate(shared, height,
-            gutter, gap, mClockAlignment, mSummary.getMeasuredWidth(), summaryHeight,
-            clockDesired, Math.round(dp(PLACE_SUMMARY_MIN_CLOCK_DP)), rtl);
-        mClockBounds.set(result.clock);
-        mSummaryBounds.set(result.place);
-        // Back into the slot's own coordinates: the shared area starts after the home cell.
-        int shift = rtl ? 0 : homeCell;
-        mClockBounds.offset(shift, 0);
-        if (!mSummaryBounds.isEmpty()) mSummaryBounds.offset(shift, 0);
-        applyClockForm(result.clockCompact ? TopPaneClockForm.COMPACT : TopPaneClockForm.FULL,
-            false);
-        if (mClock != null && !mClockBounds.isEmpty()) measureExact(mClock, mClockBounds);
-        if (mSummaryBounds.isEmpty()) {
-            mSummary.setVisibility(GONE);
-        } else {
-            mSummary.setVisibility(VISIBLE);
-            measureExact(mSummary, mSummaryBounds);
-        }
-    }
-
     private void measureExact(@NonNull View view, @NonNull Rect bounds) {
         view.measure(MeasureSpec.makeMeasureSpec(bounds.width(), MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(bounds.height(), MeasureSpec.EXACTLY));
@@ -440,10 +365,6 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         }
         if (mMedia != null && !mMediaBounds.isEmpty()) {
             mMedia.layout(mMediaBounds.left, mMediaBounds.top, mMediaBounds.right, mMediaBounds.bottom);
-        }
-        if (mSummary != null && !mSummaryBounds.isEmpty()) {
-            mSummary.layout(mSummaryBounds.left, mSummaryBounds.top,
-                mSummaryBounds.right, mSummaryBounds.bottom);
         }
     }
 

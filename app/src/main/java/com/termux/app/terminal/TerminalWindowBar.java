@@ -698,13 +698,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     private void addCreateButton(boolean firstItem) {
         Context context = getContext();
-        int tertiary = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary,
-            ContextCompat.getColor(context, R.color.termux_primary));
+        // The plus is the place's too: the same accent as the chips beside it, a little quieter.
+        int accent = mPlaceAccent != null ? mPlaceAccent
+            : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+                ContextCompat.getColor(context, R.color.termux_primary));
         AppCompatImageButton add = new AppCompatImageButton(context);
         add.setImageResource(R.drawable.ic_status_bar_add_window);
         ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(
-            ColorUtils.setAlphaComponent(tertiary, 184)));
+            ColorUtils.setAlphaComponent(accent, 184)));
         add.setScaleType(ImageView.ScaleType.CENTER);
         add.setBackground(null);
         add.setPadding(0, 0, 0, 0);
@@ -836,6 +837,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 child.setBackground(buildUnselectedChip());
                 ((TextView) child).setTextColor(child.isSelected()
                     ? mSelectedTextColor : mUnselectedTextColor);
+            } else if (child instanceof AppCompatImageButton) {
+                int tint = accent != null ? accent
+                    : MaterialColors.getColor(getContext(), com.termux.shared.R.attr.termuxColorPrimary,
+                        ContextCompat.getColor(getContext(), R.color.termux_primary));
+                ImageViewCompat.setImageTintList((AppCompatImageButton) child,
+                    ColorStateList.valueOf(ColorUtils.setAlphaComponent(tint, 184)));
             }
         }
         invalidate();

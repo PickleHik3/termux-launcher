@@ -78,6 +78,8 @@ public final class StatusBarLensView extends View {
     private float mExpansion = 1f;
     private boolean mCardsPresent;
     private boolean mDisplayRunning;
+    /** The status row's chip corner; the icons take it so they and the badge are one kit. */
+    private float mChipRadiusPx = -1f;
     @NonNull private String mDisplayGlyph = "";
     @Nullable private Listener mListener;
     @Nullable private PaneWallPage mPressed;
@@ -120,6 +122,13 @@ public final class StatusBarLensView extends View {
     public void setCardsPresent(boolean present) {
         if (mCardsPresent == present) return;
         mCardsPresent = present;
+        invalidate();
+    }
+
+    /** The corner the bar's chips wear; the icons round themselves the same way. */
+    public void setChipRadiusPx(float radiusPx) {
+        if (mChipRadiusPx == radiusPx) return;
+        mChipRadiusPx = radiusPx;
         invalidate();
     }
 
@@ -213,11 +222,16 @@ public final class StatusBarLensView extends View {
             mTile.set(centerX - size / 2f, centerY - size / 2f, centerX + size / 2f, centerY + size / 2f);
             if (page != mCurrent) mHitRects[page.ordinal()].set(mTile);
             int accent = accentFor(getContext(), page);
-            boolean quiet = page == PaneWallPage.DISPLAY && !mDisplayRunning;
-            float ink = quiet ? alpha * 0.6f : alpha;
-            float radius = size * 0.32f;
-            mTilePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(46 * ink)));
-            mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(110 * ink)));
+            // Weight says what matters: the icon at home is the place you are on and reads full;
+            // the two peeking in are where you could go and read quieter; a display that is not
+            // running is quieter still.
+            float ink = alpha * (1f - 0.38f * presence);
+            if (page == PaneWallPage.DISPLAY && !mDisplayRunning) ink *= 0.6f;
+            float radius = mChipRadiusPx >= 0f
+                ? Math.min(size / 2f, mChipRadiusPx * (size / dp(COMPACT_ICON_DP)))
+                : size * 0.32f;
+            mTilePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(56 * ink)));
+            mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(150 * ink)));
             mGlyphPaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(255 * ink)));
             mGlyphPaint.setTextSize(size * 0.52f);
             canvas.drawRoundRect(mTile, radius, radius, mTilePaint);

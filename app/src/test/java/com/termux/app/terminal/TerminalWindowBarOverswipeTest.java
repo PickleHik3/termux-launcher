@@ -59,14 +59,15 @@ public class TerminalWindowBarOverswipeTest {
         Host host = new Host();
         bar.setOnEdgeOverswipeListener(host);
 
+        int slop = android.view.ViewConfiguration.get(bar.getContext()).getScaledTouchSlop();
         touch(bar, MotionEvent.ACTION_DOWN, 100f);
         touch(bar, MotionEvent.ACTION_MOVE, 140f);
-        assertEquals("the slop that proved the intent is not travel",
+        assertEquals("the slop that proved the intent is not travel; the rest of the move is",
             Arrays.asList("begin", "drag"), host.events);
-        assertEquals(0f, host.lastDx, 0.01f);
+        assertEquals(40f - slop, host.lastDx, 0.01f);
 
         touch(bar, MotionEvent.ACTION_MOVE, 170f);
-        assertEquals(30f, host.lastDx, 0.01f);
+        assertEquals(70f - slop, host.lastDx, 0.01f);
         touch(bar, MotionEvent.ACTION_UP, 170f);
         assertEquals(Arrays.asList("begin", "drag", "drag", "end"), host.events);
     }
