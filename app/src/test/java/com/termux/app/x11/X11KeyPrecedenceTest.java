@@ -37,7 +37,6 @@ public class X11KeyPrecedenceTest {
         boolean claim;
 
         @Override public void startDisplay() { }
-        @Override public void showDisplayMenu(float rawX, float rawY) { }
         @Override public boolean consumeLauncherKey(android.view.KeyEvent event) {
             offered.add(event);
             return claim;

@@ -52,8 +52,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   showing, and a hardware keyboard is the display's entirely: every key and every chord goes to
   X, and the launcher's shortcuts and their hints stay out of the way. Leave the display by
   touch, by the place icons, or with Home.
-- **The menu.** Hold the display and a short strip appears at the bottom edge of the terminal
-  area with Start or Stop and Display settings; tap anywhere else to put it away.
+- **The controls.** Tap the display's edge and two buttons drop from its top corner, as they do
+  on a terminal pane: power starts, stops or turns on the display, and the cog opens its
+  settings. Tap anywhere else to put them away.
 - **Mouse mode.** The **Mouse mode** action — put it on the extra-keys row, the in-app keyboard
   as a `tool:mouse.toggle` key, or a chord — swaps the keyboard for a touchpad of the same size
   while the display is showing. Its gestures are a laptop's: a finger moves the pointer and a tap

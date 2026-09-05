@@ -27,7 +27,8 @@ import com.termux.x11.LorieView;
  * rim so a maximised X window meets the same corners the panes have.
  *
  * <p>While no server is running the page shows its empty state, which is where a home screen
- * rests: the launcher never starts a display on its own.
+ * rests: the launcher never starts a display on its own. A tap on the page's border drops the
+ * same two-button tab a pane's border does: power, and the display's settings.
  */
 public final class X11PaneFrame extends PaneContentFrame {
 
@@ -37,8 +38,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         void startDisplay();
         /** Switch the Linux display on — the page's button while the setting is off. */
         default void turnOnDisplay() { }
-        /** The page was long-pressed; show its menu at these screen coordinates. */
-        void showDisplayMenu(float rawX, float rawY);
+        /** The power button: turn the display on, start one, or stop the one running. */
+        default void toggleDisplayPower() { }
+        /** The cog: open the display's settings. */
+        default void openDisplaySettings() { }
         /**
          * True when one of the launcher's own chords claimed this key, in which case X must not
          * see it. Everything else is the display's.
@@ -46,7 +49,15 @@ public final class X11PaneFrame extends PaneContentFrame {
         default boolean consumeLauncherKey(@NonNull android.view.KeyEvent event) { return false; }
     }
 
+    /** A tap this close to the frame's edge, inside it, is for the page rather than for X. */
+    private static final float BORDER_BAND_DP = 12f;
+
     private final PaneRim mRim = new PaneRim();
+    @Nullable private DisplayControlsView mControls;
+    private int mPressedAction = DisplayControlsView.ACTION_NONE;
+    private boolean mBorderPressed;
+    private boolean mTouchMoved;
+    private float mDownX, mDownY;
     @Nullable private LorieView mDisplay;
     @Nullable private PaneGlassBackdropView mCornerMask;
     @Nullable private View mEmptyState;
@@ -86,12 +97,93 @@ public final class X11PaneFrame extends PaneContentFrame {
             if (mEnabled) mHost.startDisplay();
             else mHost.turnOnDisplay();
         });
-        setOnLongClickListener(v -> {
-            if (mHost == null) return false;
-            mHost.showDisplayMenu(getX() + getWidth() / 2f, getY() + getHeight() / 2f);
-            return true;
+        // The controls tab sits above everything, drawn only while shown; the frame itself
+        // answers the taps, so the view never stands between a finger and X.
+        mControls = new DisplayControlsView(getContext());
+        mControls.setListener(new DisplayControlsView.Listener() {
+            @Override public void onPower() { if (mHost != null) mHost.toggleDisplayPower(); }
+            @Override public void onSettings() { if (mHost != null) mHost.openDisplaySettings(); }
         });
+        addView(mControls, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         applyRunning(false);
+    }
+
+    /**
+     * A tap on the page's border drops the controls from its top edge, as a tap on a pane's border
+     * does; a tap on one of them runs it, and a tap anywhere else puts them away and goes on to
+     * X. Only those touches are taken from the display: everything inside the border band that is
+     * not a control is X's, as before.
+     */
+    @Override
+    public boolean onInterceptTouchEvent(@NonNull android.view.MotionEvent event) {
+        if (event.getActionMasked() != android.view.MotionEvent.ACTION_DOWN) {
+            return mPressedAction != DisplayControlsView.ACTION_NONE || mBorderPressed;
+        }
+        mPressedAction = DisplayControlsView.ACTION_NONE;
+        mBorderPressed = false;
+        mTouchMoved = false;
+        mDownX = event.getX();
+        mDownY = event.getY();
+        if (mControls != null && mControls.isControlsShown()) {
+            int action = mControls.actionAt(mDownX, mDownY);
+            if (action != DisplayControlsView.ACTION_NONE) {
+                mPressedAction = action;
+                return true;
+            }
+            mControls.dismiss();
+        }
+        if (isNearBorder(mDownX, mDownY)) {
+            mBorderPressed = true;
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean onTouchEvent(@NonNull android.view.MotionEvent event) {
+        if (mPressedAction == DisplayControlsView.ACTION_NONE && !mBorderPressed) {
+            return super.onTouchEvent(event);
+        }
+        float slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (Math.hypot(event.getX() - mDownX, event.getY() - mDownY) > slop) mTouchMoved = true;
+                return true;
+            case android.view.MotionEvent.ACTION_UP:
+                if (mControls != null && !mTouchMoved) {
+                    if (mPressedAction != DisplayControlsView.ACTION_NONE) {
+                        if (mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
+                            performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+                            mControls.dismiss();
+                            mControls.activate(mPressedAction);
+                        }
+                    } else if (mBorderPressed) {
+                        performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+                        if (mControls.isControlsShown()) mControls.dismiss();
+                        else mControls.show();
+                    }
+                }
+                mPressedAction = DisplayControlsView.ACTION_NONE;
+                mBorderPressed = false;
+                return true;
+            case android.view.MotionEvent.ACTION_CANCEL:
+                mPressedAction = DisplayControlsView.ACTION_NONE;
+                mBorderPressed = false;
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private boolean isNearBorder(float x, float y) {
+        float band = BORDER_BAND_DP * getResources().getDisplayMetrics().density;
+        if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) return false;
+        return Math.min(Math.min(x, getWidth() - x), Math.min(y, getHeight() - y)) <= band;
+    }
+
+    /** Put the controls away, for a host that moved the wall on. */
+    public void dismissControls() {
+        if (mControls != null) mControls.dismiss();
     }
 
     public void setHost(@Nullable Host host) {
@@ -120,6 +212,7 @@ public final class X11PaneFrame extends PaneContentFrame {
      */
     public void applyRunning(boolean running) {
         mRunning = running;
+        if (mControls != null) mControls.setRunning(running);
         if (mDisplay != null) mDisplay.setVisibility(running ? VISIBLE : INVISIBLE);
         if (mCornerMask != null) mCornerMask.setVisibility(running ? VISIBLE : GONE);
         if (mEmptyState != null) mEmptyState.setVisibility(running ? GONE : VISIBLE);
