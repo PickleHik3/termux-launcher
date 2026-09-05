@@ -2,6 +2,10 @@ package com.termux.app.launcher.widget;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.content.res.Resources;
+import android.os.Build;
+import android.graphics.RectF;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.SystemClock;
 import android.view.HapticFeedbackConstants;
@@ -42,6 +46,10 @@ public final class WidgetCellView extends FrameLayout {
 
     private final int gutter;
     private final int touchSlop;
+    /** The corner every widget wears, the radius the platform gives widget backgrounds. */
+    private final float cornerRadius;
+    private final Path clipPath = new Path();
+    private final RectF clipRect = new RectF();
     private boolean touchStreamAccepted;
     @Nullable private LongPressListener longPressListener;
     @Nullable private EditorFocusListener editorFocusListener;
@@ -56,6 +64,7 @@ public final class WidgetCellView extends FrameLayout {
         super(context);
         gutter = Math.max(1, Math.round(2f * getResources().getDisplayMetrics().density));
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        cornerRadius = systemWidgetRadius(context);
         setPadding(gutter, gutter, gutter, gutter);
         setClipChildren(true);
         setClipToPadding(true);
@@ -140,14 +149,36 @@ public final class WidgetCellView extends FrameLayout {
         return interactive ? DownRegion.INTERACTIVE_PROVIDER : DownRegion.NON_INTERACTIVE_PROVIDER;
     }
 
+    /**
+     * The radius the platform hands widgets for their own backgrounds, so a widget that draws
+     * its corners and one that does not end up the same shape; 16dp where the platform has no
+     * say (before Android 12).
+     */
+    private static float systemWidgetRadius(@NonNull Context context) {
+        float density = context.getResources().getDisplayMetrics().density;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                return context.getResources().getDimension(
+                    android.R.dimen.system_app_widget_background_radius);
+            } catch (Resources.NotFoundException ignored) {
+                // Fall through to the fixed radius.
+            }
+        }
+        return 16f * density;
+    }
+
     @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);
         setClipBounds(new Rect(0, 0, width, height));
+        clipRect.set(0f, 0f, width, height);
+        clipPath.reset();
+        clipPath.addRoundRect(clipRect, cornerRadius, cornerRadius, Path.Direction.CW);
     }
 
     @Override protected void dispatchDraw(@NonNull Canvas canvas) {
         int save = canvas.save();
-        canvas.clipRect(0, 0, getWidth(), getHeight());
+        if (clipPath.isEmpty()) canvas.clipRect(0, 0, getWidth(), getHeight());
+        else canvas.clipPath(clipPath);
         super.dispatchDraw(canvas);
         canvas.restoreToCount(save);
     }

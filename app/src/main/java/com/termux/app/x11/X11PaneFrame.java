@@ -54,6 +54,8 @@ public final class X11PaneFrame extends PaneContentFrame {
     private boolean mRunning;
     /** The Linux display setting. Off, the page is still a place — it just says so. */
     private boolean mEnabled = true;
+    /** The display's size while the frame around it animates; unset when it follows the frame. */
+    private int mFrozenWidth = -1, mFrozenHeight = -1;
 
     public X11PaneFrame(Context context) {
         super(context);
@@ -136,6 +138,49 @@ public final class X11PaneFrame extends PaneContentFrame {
 
     public boolean isRunning() {
         return mRunning;
+    }
+
+    /**
+     * The frame is about to change height over several frames (the status bar expanding or
+     * folding). The display keeps the size it has, pinned to the page's bottom edge, so the X
+     * screen is resized once at the end instead of on every frame; until then the bar simply
+     * covers it.
+     */
+    public void beginHostResize() {
+        if (mDisplay == null || mDisplay.getWidth() <= 0 || mDisplay.getHeight() <= 0) return;
+        if (mFrozenWidth < 0) {
+            mFrozenWidth = mDisplay.getWidth();
+            mFrozenHeight = mDisplay.getHeight();
+        }
+    }
+
+    /** The frame has its final height: the display takes it, in one resize. */
+    public void finishHostResize() {
+        if (mFrozenWidth < 0) return;
+        mFrozenWidth = -1;
+        mFrozenHeight = -1;
+        requestLayout();
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if (mFrozenWidth > 0 && mDisplay != null) {
+            mDisplay.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        if (mFrozenWidth > 0 && mDisplay != null) {
+            // Where the frame put it, but at its frozen size and hanging from the bottom edge:
+            // the picture stays exactly where it was on screen while the bar moves over it.
+            int l = mDisplay.getLeft();
+            int b = mDisplay.getBottom();
+            mDisplay.layout(l, b - mFrozenHeight, l + mFrozenWidth, b);
+        }
     }
 
     /**

@@ -52,8 +52,8 @@ public final class WidgetGridView extends ViewGroup {
 
     public WidgetGridView(@NonNull Context context) {
         super(context);
-        edgePadding = Math.round(4f * getResources().getDisplayMetrics().density);
-        gap = Math.round(4f * getResources().getDisplayMetrics().density);
+        edgePadding = Math.round(6f * getResources().getDisplayMetrics().density);
+        gap = Math.round(8f * getResources().getDisplayMetrics().density);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setClipChildren(true);
         setClipToPadding(true);
@@ -208,21 +208,56 @@ public final class WidgetGridView extends ViewGroup {
                     - child.getPaddingBottom());
                 long packed = packSize(contentWidth, contentHeight, orientation);
                 Long previous = committedSizes.put(record.appWidgetId, packed);
-                if (previous == null || previous.longValue() != packed) {
-                    final int id = record.appWidgetId;
-                    post(() -> {
-                        Long current = committedSizes.get(id);
-                        if (current == null || current.longValue() != packed
-                            || packed == deliveredSizes.getOrDefault(id, Long.MIN_VALUE)) return;
-                        if (controller != null && isShown()) {
-                            controller.onHostSizeCommitted(id, contentWidth, contentHeight,
-                                orientation);
-                            deliveredSizes.put(id, packed);
-                        }
-                    });
+                if (previous == null || previous.longValue() != packed
+                    || packed != deliveredSizes.getOrDefault(record.appWidgetId, Long.MIN_VALUE)) {
+                    sizeDeliveryPending = true;
                 }
             }
         }
+        if (sizeDeliveryPending) post(this::deliverCommittedSizes);
+    }
+
+    private boolean sizeDeliveryPending;
+
+    /**
+     * Tell each provider the size its widget really has, once the grid is on screen. The grid is
+     * first laid out while its page waits off screen, so this cannot happen in that layout pass
+     * and must run again when the page comes into view — a provider that never hears its size
+     * lays out for the size it assumed and shows up cut off at the edges.
+     */
+    private void deliverCommittedSizes() {
+        if (controller == null || !isShown()) return;
+        sizeDeliveryPending = false;
+        int orientation = getResources().getConfiguration().orientation;
+        for (LauncherWidgetRecord record : records) {
+            if (record.state != LauncherWidgetRecord.State.ACTIVE) continue;
+            Long packed = committedSizes.get(record.appWidgetId);
+            if (packed == null
+                || packed == deliveredSizes.getOrDefault(record.appWidgetId, Long.MIN_VALUE)) {
+                continue;
+            }
+            WidgetCellView child = cells.get(record.appWidgetId);
+            if (child == null) continue;
+            int contentWidth = Math.max(1, child.getWidth() - child.getPaddingLeft()
+                - child.getPaddingRight());
+            int contentHeight = Math.max(1, child.getHeight() - child.getPaddingTop()
+                - child.getPaddingBottom());
+            controller.onHostSizeCommitted(record.appWidgetId, contentWidth, contentHeight,
+                orientation);
+            deliveredSizes.put(record.appWidgetId, packed);
+        }
+    }
+
+    @Override
+    protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        if (visibility == VISIBLE && sizeDeliveryPending) post(this::deliverCommittedSizes);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (sizeDeliveryPending) post(this::deliverCommittedSizes);
     }
 
     private static long packSize(int width, int height, int orientation) {

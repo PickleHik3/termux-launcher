@@ -230,6 +230,9 @@ public final class TermuxPreferenceConstants {
         /** Defines the key for the pane wall's Widgets and Display buttons in the status bar. */
         public static final String KEY_TOP_PANE_WALL_TILES = "top_pane_wall_tiles";
 
+        /** The place the pane wall last rested on; the home screen comes back to it. */
+        public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
+
         public static final boolean DEFAULT_TOP_PANE_WALL_TILES = true;
 
         /**

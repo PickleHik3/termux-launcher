@@ -1075,8 +1075,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // alpha, scale and translation, so a drawer left open across HOME would strand faded
             // pinned icons.
             mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
-            // HOME means the home screen, which is the terminal: the wall comes back to it.
-            if (mPaneWallController != null) mPaneWallController.returnToTerminal(true);
+            // HOME means the home screen as it was left: the wall stays on its place, whichever
+            // of the three that is.
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
@@ -10940,6 +10940,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             page == com.termux.app.wall.PaneWallPage.WIDGETS);
                     }
                     syncDisplayPageAttachment(page);
+                    // Where the wall rests is where the home screen comes back to, across Home
+                    // presses and across launches alike.
+                    if (mPreferences != null) mPreferences.setWallLastPage(page.name());
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
                     syncPlaceSwitchThumb(offsetPx);
@@ -10977,10 +10980,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (com.termux.BuildConfig.X11_SERVER) attachDisplayPage();
         installLinuxAppRunner();
         mPaneWallController.applyStyle(paneSurfaceStyle());
-        if (mPendingWallPage != null) {
+        // A recreated activity comes back to the page it showed; a fresh launch comes back to
+        // the place the wall last rested on.
+        String initialPage = mPendingWallPage != null ? mPendingWallPage
+            : mPreferences != null ? mPreferences.getWallLastPage() : null;
+        mPendingWallPage = null;
+        if (initialPage != null) {
             Bundle state = new Bundle();
-            state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, mPendingWallPage);
-            mPendingWallPage = null;
+            state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, initialPage);
             mPaneWallController.restoreInstanceState(state);
         }
     }
@@ -11589,6 +11596,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int beginStatusBarTerminalResize() {
         int generation = ++mStatusBarTerminalResizeGeneration;
         if (mPaneController != null) mPaneController.beginHostSurfaceResize();
+        // The display page shares the wall's height: without this every animation frame would
+        // resize the X screen, and the bar's motion would judder along with it.
+        com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (display != null) display.beginHostResize();
         return generation;
     }
 
@@ -11597,6 +11609,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // exactly one final row/column update instead of a SIGWINCH for every animation frame.
         host.post(() -> {
             if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
+            com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
+                ? null : mPaneWallController.displayPage();
+            if (display != null) display.finishHostResize();
         });
     }
 

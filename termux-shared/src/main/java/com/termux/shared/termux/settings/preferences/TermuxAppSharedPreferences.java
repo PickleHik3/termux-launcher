@@ -721,6 +721,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, value, false);
     }
 
+    /** The name of the wall place last rested on, or null when none was recorded. */
+    @Nullable
+    public String getWallLastPage() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_WALL_LAST_PAGE, null, false);
+        return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
+    public void setWallLastPage(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_WALL_LAST_PAGE,
+            value == null ? "" : value, false);
+    }
+
     public boolean isX11KeyboardShown() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, false);
     }
