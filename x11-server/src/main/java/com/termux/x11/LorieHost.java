@@ -119,8 +119,22 @@ public class LorieHost extends ContextWrapper {
     }
 
     public void setLorieView(@Nullable LorieView view) {
+        LorieView previous = this.view;
         this.view = view;
-        if (view == null) return;
+        if (view == null) {
+            // The page went away but its view may still get window-focus and preference
+            // callbacks; they must find no handler, because the handler reaches for the view.
+            mInputHandler = null;
+            mInjector = null;
+            if (previous != null) {
+                previous.setOnTouchListener(null);
+                previous.setOnHoverListener(null);
+                previous.setOnGenericMotionListener(null);
+                previous.setOnCapturedPointerListener(null);
+                previous.setCallback(null);
+            }
+            return;
+        }
         // A page can be inflated before its host exists, so the view's own lookup may have come
         // back empty; hand it the host here rather than relying on construction order.
         view.activity = this;

@@ -281,7 +281,9 @@ public class TouchInputHandler {
                 });
         android.util.Log.d("DEVICES", "requesting stylus " + stylusAvailable.get());
         android.util.Log.d("DEVICES", "external keyboard connected " + externalKeyboardAvailable.get());
-        mActivity.getLorieView().requestStylusEnabled(stylusAvailable.get());
+        // The view can already be gone: a window-focus change on a detached page still lands here.
+        LorieView view = mActivity.getLorieView();
+        if (view != null) view.requestStylusEnabled(stylusAvailable.get());
         mActivity.setExternalKeyboardConnected(externalKeyboardAvailable.get());
     }
 
