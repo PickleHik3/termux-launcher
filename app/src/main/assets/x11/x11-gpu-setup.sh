@@ -65,16 +65,28 @@ result() { printf '   -> %s\n' "$*"; }
 : > "$LOG"
 
 # ---------------------------------------------------------------------------------------------
+# Termux comes with either apt (the default) or pacman. Both are driven the same way here, and
+# neither ever gets to ask a question.
+if command -v pacman >/dev/null && [ -f "$PREFIX/etc/pacman.conf" ] && ! command -v dpkg >/dev/null; then PM=pacman; else PM=apt; fi
+installed_before() {
+  if [ $PM = pacman ]; then pacman -Qq "$1" >/dev/null 2>&1
+  else dpkg -s "$1" 2>/dev/null | grep -q '^Status: install ok installed'; fi
+}
+pm_refresh() { if [ $PM = pacman ]; then pacman -Sy --noconfirm; else apt-get update; fi; }
+pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else pkg install -y "$@"; fi; }
+pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else pkg uninstall -y "$@" && apt-get autoremove -y; fi; }
+# With apt the X11 packages live in a repository that is itself a package; pacman has it built in.
+REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
+
 # Keep track of what we install so it can be removed again. A package that was already on the
 # phone before we started is never touched.
-installed_before() { dpkg -s "$1" 2>/dev/null | grep -q '^Status: install ok installed'; }
 WE_INSTALLED=()
 install_pkgs() {
   local missing=()
   for p in "$@"; do installed_before "$p" || missing+=("$p"); done
   [ ${#missing[@]} -eq 0 ] && return 0
   detail "Installing: ${missing[*]}"
-  if pkg install -y "${missing[@]}" >>"$LOG" 2>&1; then
+  if pm_install "${missing[@]}" >>"$LOG" 2>&1; then
     WE_INSTALLED+=("${missing[@]}")
     return 0
   fi
@@ -105,6 +117,7 @@ elif [[ $VENDORS == *emulation* || $VENDORS == *swiftshader* || $VENDORS == *ang
 fi
 GPU_NAME=${KGSL_MODEL:-${EGL:-unknown}}
 detail "Graphics chip: $GPU_NAME  (family: $GPU_KIND$( [ -n "$VULKAN" ] && echo ", has a Vulkan driver"))"
+detail "Package manager: $PM"
 
 # ---------------------------------------------------------------------------------------------
 step 2 "Deciding what to try"
@@ -153,14 +166,14 @@ for c in "${CANDIDATES[@]}"; do detail "  $n. $c — ${WHY[$c]}"; n=$((n+1)); do
 detail "  $n. software — ${WHY[software]}"
 [ ${#CANDIDATES[@]} -eq 0 ] && detail "(This looks like an emulator, so only software rendering will be checked.)"
 
-ALL_PKGS="x11-repo xkeyboard-config glmark2 ${PKGS[software]}"
+ALL_PKGS="$REPO_PKG xkeyboard-config glmark2 ${PKGS[software]}"
 for c in "${CANDIDATES[@]}"; do ALL_PKGS="$ALL_PKGS ${PKGS[$c]}"; done
 # shellcheck disable=SC2086
 ALL_PKGS=$(printf '%s\n' $ALL_PKGS | awk '!seen[$0]++' | tr '\n' ' ')
 detail "Packages needed for the tests: $ALL_PKGS"
 if [ $KEEP = 0 ]; then
   detail "The test program and the drivers that lose will be removed again at the end."
-  detail "(x11-repo and xkeyboard-config stay: the display itself needs them.)"
+  detail "(xkeyboard-config${REPO_PKG:+ and $REPO_PKG} stay: the display itself needs them.)"
 fi
 if [ $YES = 0 ]; then
   printf '\nContinue? [Y/n] '; read -r answer
@@ -169,8 +182,13 @@ fi
 
 # ---------------------------------------------------------------------------------------------
 step 3 "Installing the test program and drivers"
-# shellcheck disable=SC2086
-install_pkgs x11-repo && pkg update -y >>"$LOG" 2>&1
+if [ $PM = apt ]; then
+  install_pkgs x11-repo || { say "The X11 package repository could not be added, so the drivers cannot be installed."; exit 1; }
+elif ! grep -q '^\[x11\]' "$PREFIX/etc/pacman.conf"; then
+  say "pacman.conf has no [x11] repository, so the display's packages cannot be installed. Add it and run again."; exit 1
+fi
+detail "Refreshing the package lists."
+pm_refresh >>"$LOG" 2>&1 || detail "Refreshing the package lists failed; trying with what is cached (details in $LOG)."
 # shellcheck disable=SC2086
 install_pkgs xkeyboard-config glmark2 ${PKGS[software]} || { say "The display's own packages could not be installed, so the tests cannot run."; exit 1; }
 AVAILABLE=()
@@ -353,7 +371,7 @@ stop_display
 if [ $KEEP = 1 ]; then
   detail "Keeping every package, as asked."
 else
-  KEEP_PKGS="x11-repo xkeyboard-config ${PKGS[$WINNER]}"
+  KEEP_PKGS="$REPO_PKG xkeyboard-config ${PKGS[$WINNER]}"
   [ "$PROOT_WINNER" = virgl ] && KEEP_PKGS="$KEEP_PKGS virglrenderer-android"
   REMOVE=()
   for p in "${WE_INSTALLED[@]}"; do
@@ -361,12 +379,11 @@ else
   done
   if [ ${#REMOVE[@]} -gt 0 ]; then
     detail "Removing what was only needed for the tests: ${REMOVE[*]}"
-    pkg uninstall -y "${REMOVE[@]}" >>"$LOG" 2>&1 || detail "Some packages could not be removed; see $LOG."
-    apt-get autoremove -y >>"$LOG" 2>&1 || true
+    pm_remove "${REMOVE[@]}" >>"$LOG" 2>&1 || detail "Some packages could not be removed; see $LOG."
   else
     detail "Nothing to remove."
   fi
-  detail "Kept: $KEEP_PKGS"
+  detail "Kept:$( for p in $KEEP_PKGS; do printf ' %s' "$p"; done )"
 fi
 
 say "Done. Summary:"

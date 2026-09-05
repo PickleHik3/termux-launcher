@@ -11490,11 +11490,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mMouseMode;
     @Nullable private com.termux.app.x11.DisplayTouchpadView mDisplayTouchpad;
 
-    /** Flip mouse mode and say so; returns the new state. */
+    /** Flip mouse mode; returns the new state. The mark at the end of the stats is the announcement. */
     boolean toggleMouseMode() {
         setMouseMode(!mMouseMode);
-        showSessionSwitchIndicator(getString(mMouseMode
-            ? R.string.termux_mouse_mode_on : R.string.termux_mouse_mode_off));
         return mMouseMode;
     }
 
@@ -11584,10 +11582,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     R.color.termux_on_surface),
                 com.termux.app.statusbar.StatusBarLensView.accentFor(this,
                     com.termux.app.wall.PaneWallPage.DISPLAY));
-            pad.setListener(() -> {
-                setMouseMode(false);
-                showSessionSwitchIndicator(getString(R.string.termux_mouse_mode_off));
-            });
+            pad.setListener(() -> setMouseMode(false));
             mDisplayTouchpad = pad;
         }
         if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
