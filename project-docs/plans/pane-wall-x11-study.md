@@ -153,11 +153,13 @@ The decisions above held. What the two implementation plans added, and why:
   (Adreno → turnip-zink, Mali → virgl over ANGLE and the wrapped Vulkan driver, others → ANGLE,
   emulators → software) with the exact environment each needs, behind `launcherctl x11 gpu
   [--env]` and a settings row. The launcher never writes any of it into a shell.
-- **Still owed (Phase 4):** the verification set on a real device (`check-display.sh` on pong,
-  the arm64 library and `AHardwareBuffer` hand-off, `turnip-zink` on Adreno, `dumpsys meminfo`
-  against the 171 MB baseline), and Phosh in an Arch proot — `phoc` with `WLR_BACKEND=x11`,
-  pixman first, Vulkan on a KGSL Turnip second, with phosh-termux-gpu's wlroots patches as the
-  documented requirement, not vendored.
+- **Phase 4 ran on pong (2026-09-05).** `check-display.sh` passes 6/6 on the arm64 library with
+  both the software and the `turnip-zink` profile — the `AHardwareBuffer` hand-off and a GPU
+  client presenting through the display on a real Adreno — and the launcher's own memory does not
+  move for it. `phoc` from a stock Debian proot runs on the display with pixman; its Vulkan
+  renderer fails for the documented reason (no DRI3, so no DRM FD; a distro Turnip drives
+  DRM/msm, not KGSL), which is what phosh-termux-gpu's patched wlroots and KGSL Turnip exist for.
+  Neither is vendored. See `project-docs/verification/x11/results.md`.
 
 ## Sources
 

@@ -121,8 +121,14 @@ WLR_RENDERER=pixman phoc          # works everywhere, software rendering
 The GPU path (`WLR_RENDERER=vulkan` on an Adreno phone) needs a Mesa built for the Android
 kernel driver (`-Dfreedreno-kmds=kgsl`) and the wlroots patches from
 [phosh-termux-gpu](https://github.com/Azkali/phosh-termux-gpu), which copies each frame out of
-Vulkan into the display over shared memory. Stock distro packages fall back to software. Keep
-apps on `GSK_RENDERER=cairo`.
+Vulkan into the display over shared memory. Stock distro packages fail with "no DRM FD
+available" — the display has no DRI3 to offer — and their Turnip sees only llvmpipe. Keep apps on
+`GSK_RENDERER=cairo`.
+
+Checked on a Nothing Phone 2: `phoc` from a Debian trixie proot (`proot-distro install
+debian:trixie`, then `apt install phoc`) comes up on the display with the pixman renderer,
+unpatched. Newer `proot-distro` builds name images Docker-style (`debian:trixie`, `ubuntu:24.04`);
+the container is then just `debian`.
 
 ## When something is off
 

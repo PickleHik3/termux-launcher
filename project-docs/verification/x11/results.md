@@ -15,6 +15,8 @@ the display, present frames and receive input at all.
 | 2026-09-05 | emulator `tl_test`, Android 16 | x86_64 | none (`xeyes`, `xclock` only; `6054b0be`) | — | — | by eye: Turn on → Start display → clients on the page; three rotations keep the display attached with `Activities: 1`, `Death Recipients: 1`; `termux-x11-preference list` / `touchMode:2` and `launcherctl x11 gpu --env` answer from a shell |
 | 2026-09-05 | **pong**, Nothing Phone 2 (A065), Adreno 730, Android 16 | arm64-v8a | software, page showing (`0b86a679`) | `llvmpipe (LLVM 21.1.8, 128 bits)`, Mesa 26.0.6, OpenGL ES 3.2 | 163 / 186 FPS, score 173 | 6/6 pass |
 | 2026-09-05 | **pong**, as above | arm64-v8a | `turnip-zink`, page showing (`MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=noconform`, `mesa-vulkan-icd-freedreno` from pacman's main repo, no separate loader) | `zink Vulkan 1.4(Turnip Adreno (TM) 725 (MESA_TURNIP))`, Mesa 26.0.6, OpenGL ES 3.2 | 91 / 91 FPS, score 90 | 6/6 pass |
+| 2026-09-05 | **pong**, as above | arm64-v8a | phoc 0.4x from a Debian trixie proot (`proot-distro install debian:trixie`, `--shared-tmp`), `WLR_BACKEND=x11 WLR_X11_OUTPUTS=1 WLR_NO_HARDWARE_CURSORS=1 WLR_RENDERER=pixman` | pixman | — | compositor up: "Running compositor on wayland display 'wayland-0'", output `X11-1` added, ran until its 40 s timeout; `Failed to open DRI3` logged and harmless |
+| 2026-09-05 | **pong**, as above | arm64-v8a | same, `WLR_RENDERER=vulkan` with Debian's `mesa-vulkan-drivers` | — | — | **fails as documented**: `Cannot create Vulkan renderer: no DRM FD available` (no DRI3), and the proot's Vulkan sees only `llvmpipe` — Debian's Turnip drives DRM/msm, not KGSL |
 
 An emulator has no GPU: its host GL is swiftshader/swangle and its guest GL is llvmpipe, so single
 digits are the expected floor and say nothing about a phone. The rows exist to prove the path, not
@@ -52,6 +54,17 @@ with the Display place showing; 184 MB and then 201 MB with the page hidden agai
 apart. The spread between readings of the same state (±10 MB, the terminal's own churn) is wider
 than any difference between states: the server is its own process, and the launcher's cost for
 the display is its surface while shown, which does not register against the noise.
+
+## Phosh
+
+phoc — Phosh's compositor — runs on the display as an X11 client with the pixman renderer, from
+a stock Debian proot with nothing patched: that is the software path the plan asked to prove
+first. The GPU path needs exactly what phosh-termux-gpu documents: a wlroots patched to render
+with Vulkan into a `VkImage` and copy it into an XShm buffer (Xlorie has no DRI3 to hand a DRM FD
+over), and a Turnip built for the Android kernel driver (`-Dfreedreno-kmds=kgsl`); a distro's
+Turnip drives DRM/msm and falls back to llvmpipe. Neither is vendored here. `phosh` itself was
+not started: it wants a logind session and D-Bus the proot does not have, and the compositor was
+the question.
 
 ## Owed
 
