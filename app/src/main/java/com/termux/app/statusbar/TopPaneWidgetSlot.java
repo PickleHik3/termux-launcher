@@ -47,6 +47,12 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
     @Nullable private Runnable mModeListener;
+    @Nullable private HomeAnchorListener mHomeAnchorListener;
+
+    /** Where the bar's home place icon belongs: on the clock's time line, at the band's height. */
+    public interface HomeAnchorListener {
+        void onHomeAnchor(float centerYPx, float sizePx);
+    }
     private int mPinnedCount;
     @Nullable private String mClockAlignment;
 
@@ -119,6 +125,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     /** Told whenever the slot's mode changes: the bar's place icons keep clear of the cards. */
     public void setModeListener(@Nullable Runnable listener) {
         mModeListener = listener;
+    }
+
+    /** Told after every layout where the home icon should sit; see {@link HomeAnchorListener}. */
+    public void setHomeAnchorListener(@Nullable HomeAnchorListener listener) {
+        mHomeAnchorListener = listener;
     }
 
     @Override
@@ -265,11 +276,14 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         int gutter = Math.round(dp(GUTTER_DP));
         int gap = Math.round(dp(GAP_DP));
-        // The bar's home place icon sits at the slot's start, beside the clock, whatever the
-        // clock's alignment; the clock and everything else lay out after it.
-        int homeCell = StatusBarLensView.homeCellWidthPx(getContext());
+        // The bar's place icons come first: the left neighbour's, then the one at home, both
+        // beside the clock whatever its alignment; the clock and everything else lay out after
+        // them. Beside cards the right neighbour's icon needs its room too.
+        int homeCell = StatusBarLensView.leadingCellWidthPx(getContext());
         int contentStart = gutter + homeCell;
-        int available = Math.max(0, width - contentStart - gutter);
+        int contentEnd = width - gutter - (mMode == TopPaneSlotMode.CLOCK_ONLY ? 0
+            : StatusBarLensView.trailingCellWidthPx(getContext()));
+        int available = Math.max(0, contentEnd - contentStart);
         boolean stacked = mMode.showsNotifications() && mPinnedCount >= TopPaneSlotMode.MAX_PINNED;
 
         int clockWidth;
@@ -295,7 +309,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (stacked) {
             int stackHeight = Math.min(height, Math.round(dp(STACK_HEIGHT_DP)));
             mNotificationBounds.set(contentStart, Math.max(0, (height - stackHeight) / 2),
-                width - gutter, Math.max(0, (height - stackHeight) / 2) + stackHeight);
+                contentEnd, Math.max(0, (height - stackHeight) / 2) + stackHeight);
             if (mNotifications != null) {
                 mNotifications.setHeaderInsetStart(clockWidth + gap);
                 measureExact(mNotifications, mNotificationBounds);
@@ -304,7 +318,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         }
 
         int contentLeft = contentStart + clockWidth + gap;
-        int contentRight = width - gutter;
+        int contentRight = contentEnd;
         int contentWidth = Math.max(0, contentRight - contentLeft);
         if (mNotifications != null) mNotifications.setHeaderInsetStart(0f);
 
@@ -358,6 +372,15 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         if (mClock != null) {
             mClock.layout(mClockBounds.left, mClockBounds.top, mClockBounds.right, mClockBounds.bottom);
+            if (mHomeAnchorListener != null) {
+                // On the time's own line at the digits' height while the clock shows its full
+                // face; a compact face beside cards has no band, so the icon centres on it.
+                float band = mClock.fullBandCenterYPx();
+                float bandHeight = mClock.fullBandHeightPx();
+                float centerY = band >= 0f ? mClock.getTop() + band : mClockBounds.exactCenterY();
+                float size = bandHeight > 0f ? bandHeight : dp(28f);
+                mHomeAnchorListener.onHomeAnchor(centerY, size);
+            }
         }
         if (mNotifications != null && !mNotificationBounds.isEmpty()) {
             mNotifications.layout(mNotificationBounds.left, mNotificationBounds.top,

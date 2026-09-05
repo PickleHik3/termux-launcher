@@ -642,6 +642,29 @@ public final class TerminalClockWidget extends View {
     }
 
     /**
+     * Center Y, in view pixels, of the FULL-form time band — the digits' line, above the date
+     * row — so the status bar's place icon can sit beside the time on its line rather than on
+     * the slot's. -1 in any other form.
+     */
+    public float fullBandCenterYPx() {
+        if (mForm != TopPaneClockForm.FULL || getHeight() <= 0) return -1f;
+        float bandDp = fullBandHeightDp();
+        float columnDp = bandDp + fullDateGapDp() + fullDateBlockDp();
+        float scale = Math.min(1f, getHeight() / dp(columnDp));
+        float translate = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+        return translate + dp(bandDp / 2f) * scale;
+    }
+
+    /** Height, in view pixels, of the FULL-form time band; -1 in any other form. */
+    public float fullBandHeightPx() {
+        if (mForm != TopPaneClockForm.FULL || getHeight() <= 0) return -1f;
+        float bandDp = fullBandHeightDp();
+        float columnDp = bandDp + fullDateGapDp() + fullDateBlockDp();
+        float scale = Math.min(1f, getHeight() / dp(columnDp));
+        return dp(bandDp) * scale;
+    }
+
+    /**
      * Center Y, in view pixels, of the FULL-form date hairline — for the slot's edge-to-edge
      * extensions. -1 when the current form/style draws no hairline (compact forms, tape).
      */

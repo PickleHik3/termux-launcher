@@ -27,18 +27,19 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The status bar's place icons and lens edges. Three square icons show at any time: the place on
- * screen wears its icon at home, beside the clock at the bar's start, and its two neighbours peek
- * in from the edges, half past them, saying where each direction leads. A drag moves the three
- * along one line — the arriving icon travels to home as the one at home leaves through the far
- * edge — and a tap on a peeking icon slides the wall to its place.
+ * The status bar's place icons and lens edges. Three square icons show at any time, all on the
+ * clock's own line: the left neighbour's at the bar's leading inset, then the place on screen at
+ * home beside the clock — sized to the clock's time band — and the right neighbour's at the
+ * trailing inset. The neighbours are smaller and quieter: peeking is a matter of weight, never of
+ * being cut by the edge. A drag moves the three along one line — the arriving icon travels to home
+ * as the one at home leaves through the far edge — and a tap on a neighbour slides the wall to
+ * its place.
  *
  * <p>The outer strip of the glass on each side is a lens: a specular hairline over a brighter
- * wash. When a pinned notification or a media session holds the slot beside the clock, the
- * peeking icons drop into the status row's band so nothing crosses the cards.
+ * wash.
  *
- * <p>The view lies over the whole bar but owns only the peeking icons' touches; everything else
- * falls through to the bar's own drag.
+ * <p>The view lies over the whole bar but owns only the neighbours' touches; everything else falls
+ * through to the bar's own drag.
  */
 public final class StatusBarLensView extends View {
 
@@ -46,18 +47,18 @@ public final class StatusBarLensView extends View {
         void onPlaceIconTapped(@NonNull PaneWallPage page);
     }
 
-    /** The home icon's size in the expanded bar, and the cell the slot keeps clear for it. */
+    /** The home icon's largest size in the expanded bar; the clock's band can ask for less. */
     public static final float ICON_DP = 36f;
-    /** The gap between the home icon and the clock. */
-    public static final float ICON_GAP_DP = 10f;
-    /** Every icon's size in the compact bar, and of the peeking icons in the row band. */
+    /** A neighbour's size as a share of the home icon's. */
+    public static final float PEEK_SHARE = 0.78f;
+    /** The gap between an icon and what comes after it. */
+    public static final float ICON_GAP_DP = 8f;
+    /** Every icon's size in the compact bar. */
     public static final float COMPACT_ICON_DP = 20f;
-    /** The home icon's left edge: the slot's gutter. */
-    public static final float HOME_X_DP = 12f;
-    /** The expanded bar's slot height; the home icon centres on it. */
+    /** The icons' inset from the bar's edges: the slot's gutter. */
+    public static final float EDGE_INSET_DP = 12f;
+    /** The expanded bar's slot height; the home icon centres on it until the clock says where. */
     private static final float SLOT_HEIGHT_DP = 68f;
-    /** Where the row band's centre sits above the expanded bar's bottom edge. */
-    private static final float ROW_CENTER_FROM_BOTTOM_DP = 14f;
     private static final float HAIRLINE_DP = 1.5f;
     private static final float WASH_DP = 20f;
 
@@ -76,7 +77,9 @@ public final class StatusBarLensView extends View {
     private int mWallWidthPx;
     /** 0 in the compact bar, 1 in the expanded one, in between while it folds. */
     private float mExpansion = 1f;
-    private boolean mCardsPresent;
+    /** Where the clock puts the home icon in the expanded bar: its time line and band height. */
+    private float mHomeCenterYPx = -1f;
+    private float mHomeSizePx = -1f;
     private boolean mDisplayRunning;
     /** The status row's chip corner; the icons take it so they and the badge are one kit. */
     private float mChipRadiusPx = -1f;
@@ -118,10 +121,11 @@ public final class StatusBarLensView extends View {
         invalidate();
     }
 
-    /** A pinned notification or media session holds the slot: the peeking icons keep clear. */
-    public void setCardsPresent(boolean present) {
-        if (mCardsPresent == present) return;
-        mCardsPresent = present;
+    /** The clock's time line and band height, from the slot's layout; the home icon sits there. */
+    public void setHomeAnchor(float centerYPx, float sizePx) {
+        if (mHomeCenterYPx == centerYPx && mHomeSizePx == sizePx) return;
+        mHomeCenterYPx = centerYPx;
+        mHomeSizePx = sizePx;
         invalidate();
     }
 
@@ -171,10 +175,29 @@ public final class StatusBarLensView extends View {
         }
     }
 
-    /** The width the slot keeps clear at its start for the home icon and its gap. */
-    public static int homeCellWidthPx(@NonNull Context context) {
+    /** What the slot keeps clear at its start: the left neighbour, the home icon, their gaps. */
+    public static int leadingCellWidthPx(@NonNull Context context) {
         float density = context.getResources().getDisplayMetrics().density;
-        return Math.round((ICON_DP + ICON_GAP_DP) * density);
+        return Math.round((ICON_DP * PEEK_SHARE + ICON_GAP_DP + ICON_DP + ICON_GAP_DP) * density);
+    }
+
+    /** What the slot keeps clear at its end beside cards: the right neighbour and its gap. */
+    public static int trailingCellWidthPx(@NonNull Context context) {
+        float density = context.getResources().getDisplayMetrics().density;
+        return Math.round((ICON_DP * PEEK_SHARE + ICON_GAP_DP) * density);
+    }
+
+    /** What the compact row keeps clear at its start: two icons and their gaps. */
+    public static int compactLeadingWidthPx(@NonNull Context context) {
+        float density = context.getResources().getDisplayMetrics().density;
+        return Math.round((EDGE_INSET_DP + COMPACT_ICON_DP + ICON_GAP_DP + COMPACT_ICON_DP
+            + ICON_GAP_DP) * density);
+    }
+
+    /** What the compact row keeps clear at its end: one icon and its gap. */
+    public static int compactTrailingWidthPx(@NonNull Context context) {
+        float density = context.getResources().getDisplayMetrics().density;
+        return Math.round((EDGE_INSET_DP + COMPACT_ICON_DP + ICON_GAP_DP) * density);
     }
 
     @Override
@@ -195,28 +218,28 @@ public final class StatusBarLensView extends View {
         for (RectF rect : mHitRects) rect.setEmpty();
         if (mWallWidthPx <= 0 || mPages.isEmpty()) return;
 
-        // The home icon grows from the compact row's square to the slot's as the bar unfolds, and
-        // its centre rises from the row to the slot with it.
-        float homeSize = lerp(dp(COMPACT_ICON_DP), dp(ICON_DP), mExpansion);
-        float homeCenterY = lerp(height / 2f, dp(SLOT_HEIGHT_DP) / 2f, mExpansion);
-        // Peeking icons share the home icon's line, unless cards hold the slot: then they keep to
-        // the row band, and stay small, so nothing ever crosses a notification or the media strip.
-        boolean rowBand = mCardsPresent && mExpansion > 0.5f;
-        float peekSize = rowBand ? dp(COMPACT_ICON_DP) : homeSize;
-        float peekCenterY = rowBand ? height - dp(ROW_CENTER_FROM_BOTTOM_DP) : homeCenterY;
-        float home = dp(HOME_X_DP);
+        // The home icon grows from the compact row's square to the clock's band as the bar
+        // unfolds, and its centre rises from the row to the time's line with it. Its neighbours
+        // share the line, smaller; in the compact row all three are the same square.
+        float expandedHome = mHomeSizePx > 0f ? Math.min(dp(ICON_DP), mHomeSizePx) : dp(ICON_DP);
+        float expandedLine = mHomeCenterYPx >= 0f ? mHomeCenterYPx : dp(SLOT_HEIGHT_DP) / 2f;
+        float homeSize = lerp(dp(COMPACT_ICON_DP), expandedHome, mExpansion);
+        float peekSize = lerp(dp(COMPACT_ICON_DP), expandedHome * PEEK_SHARE, mExpansion);
+        float line = lerp(height / 2f, expandedLine, mExpansion);
+        float inset = dp(EDGE_INSET_DP);
+        float gap = dp(ICON_GAP_DP);
+        float home = inset + peekSize + gap;
         for (PaneWallPage page : mPages) {
             float t = StatusBarLensPolicy.distance(mPages, mCurrent, page, mOffsetPx, mWallWidthPx);
             float alpha = StatusBarLensPolicy.alpha(t);
             if (alpha <= 0.01f) continue;
-            // An icon on its way between home and an edge takes the size and line of the end it
-            // is nearer, so the arriving one is already square-and-small in the band before it
-            // reaches the cards and grows only as it takes the home spot.
+            // An icon on its way between home and a side takes the size of the end it is nearer,
+            // so the arriving one grows as it takes the home spot and the leaving one shrinks.
             float presence = StatusBarLensPolicy.presence(t);
             float size = lerp(homeSize, peekSize, presence) * StatusBarLensPolicy.scale(t);
-            float centerY = lerp(homeCenterY, peekCenterY, presence);
-            float leftPeek = -size / 2f;
-            float rightPeek = width - size / 2f;
+            float centerY = line;
+            float leftPeek = inset;
+            float rightPeek = width - inset - size;
             float x = StatusBarLensPolicy.iconX(t, home, leftPeek, rightPeek, size);
             float centerX = x + size / 2f;
             mTile.set(centerX - size / 2f, centerY - size / 2f, centerX + size / 2f, centerY + size / 2f);
@@ -230,10 +253,12 @@ public final class StatusBarLensView extends View {
             float radius = mChipRadiusPx >= 0f
                 ? Math.min(size / 2f, mChipRadiusPx * (size / dp(COMPACT_ICON_DP)))
                 : size * 0.32f;
-            mTilePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(56 * ink)));
-            mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(150 * ink)));
+            // Light: a tint and a thin line, so the icon marks the place without weighing on the
+            // clock beside it; the glyph carries the identity.
+            mTilePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(31 * ink)));
+            mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(84 * ink)));
             mGlyphPaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(255 * ink)));
-            mGlyphPaint.setTextSize(size * 0.52f);
+            mGlyphPaint.setTextSize(size * 0.5f);
             canvas.drawRoundRect(mTile, radius, radius, mTilePaint);
             canvas.drawRoundRect(mTile, radius, radius, mStrokePaint);
             float baseline = centerY - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
@@ -301,7 +326,7 @@ public final class StatusBarLensView extends View {
             if (page == mCurrent) continue;
             RectF rect = mHitRects[page.ordinal()];
             if (rect.isEmpty()) continue;
-            // Half of a peeking icon is past the edge; the whole lens width is its target.
+            // A neighbour is a small target; give it a little air on every side.
             float slop = dp(8f);
             if (x >= rect.left - slop && x <= rect.right + slop && y >= rect.top - slop
                 && y <= rect.bottom + slop) return page;

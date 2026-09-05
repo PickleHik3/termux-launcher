@@ -11077,12 +11077,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? View.GONE : View.VISIBLE);
         }
         bindPlaceBadge(sessions);
-        View slotView = findViewById(R.id.terminal_top_widget_area);
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
-        if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot && lens != null) {
-            lens.setCardsPresent(((com.termux.app.statusbar.TopPaneWidgetSlot) slotView)
-                .getSlotMode() != com.termux.app.statusbar.TopPaneSlotMode.CLOCK_ONLY);
-        }
         if (lens != null) {
             lens.setDisplayRunning(isEmbeddedDisplayRunning());
             lens.setDisplayGlyph(displayRuntimeGlyph());
@@ -11100,18 +11095,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The row's place content starts after the lens — and, in the compact bar, after the home
-     * icon too, which lives in the row there instead of in the slot above.
+     * The row's place content starts after the lens — and, in the compact bar, after the two
+     * place icons that live in the row there instead of on the clock's line; the stat widgets at
+     * the row's end keep clear of the third the same way.
      */
     private void applyPlaceStripInset(float expansion) {
         View strip = findViewById(R.id.terminal_status_place_content);
         if (strip == null) return;
+        float folded = 1f - Math.max(0f, Math.min(1f, expansion));
         float lens = dpToPx(com.termux.app.statusbar.PlaceContentStrip.LENS_WIDTH_DP);
-        float compactIcon = dpToPx(com.termux.app.statusbar.StatusBarLensView.COMPACT_ICON_DP + 6f);
-        int start = Math.round(lens + compactIcon * (1f - Math.max(0f, Math.min(1f, expansion))));
+        int compactStart = com.termux.app.statusbar.StatusBarLensView.compactLeadingWidthPx(this);
+        int start = Math.round(lens + (compactStart - lens) * folded);
         if (strip.getPaddingStart() != start) {
             strip.setPaddingRelative(start, strip.getPaddingTop(), strip.getPaddingEnd(),
                 strip.getPaddingBottom());
+        }
+        View stats = findViewById(R.id.terminal_status_widgets);
+        if (stats != null && stats.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            int expandedEnd = Math.round(dpToPx(12));
+            int compactEnd = com.termux.app.statusbar.StatusBarLensView.compactTrailingWidthPx(this);
+            int end = Math.round(expandedEnd + (compactEnd - expandedEnd) * folded);
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) stats.getLayoutParams();
+            if (params.getMarginEnd() != end) {
+                params.setMarginEnd(end);
+                stats.setLayoutParams(params);
+            }
         }
     }
 
@@ -11783,10 +11791,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
             View slotView = findViewById(R.id.terminal_top_widget_area);
             if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
-                com.termux.app.statusbar.TopPaneWidgetSlot slot =
-                    (com.termux.app.statusbar.TopPaneWidgetSlot) slotView;
-                slot.setModeListener(() -> lens.setCardsPresent(slot.getSlotMode()
-                    != com.termux.app.statusbar.TopPaneSlotMode.CLOCK_ONLY));
+                // The home icon sits on the clock's time line at the band's height; the slot
+                // says where that is after every layout.
+                ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setHomeAnchorListener(
+                    lens::setHomeAnchor);
             }
         }
         syncWallGestureAvailability();
