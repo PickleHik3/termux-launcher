@@ -32,10 +32,27 @@ public final class LauncherAppLauncher {
         boolean run(@NonNull LauncherAppEntry entry);
     }
 
+    /**
+     * Process-wide, because the drawer and the launcherctl API both arrive here. Two instances of
+     * the owning activity can be alive at once - a home relaunch out of a plain task, an adb
+     * start - and the first one's onDestroy runs after the second one's onCreate, so an instance
+     * may only ever take out the runner it put in ({@link #clearLinuxAppRunner}); one that set
+     * null on the way out left every Linux app in the drawer dead until the launcher restarted.
+     */
     @Nullable private static volatile LinuxAppRunner linuxAppRunner;
 
-    public static void setLinuxAppRunner(@Nullable LinuxAppRunner runner) {
+    public static void setLinuxAppRunner(@NonNull LinuxAppRunner runner) {
         linuxAppRunner = runner;
+    }
+
+    /** Take {@code runner} out, if it is still the one installed; another instance's stays. */
+    public static void clearLinuxAppRunner(@NonNull LinuxAppRunner runner) {
+        if (linuxAppRunner == runner) linuxAppRunner = null;
+    }
+
+    @Nullable
+    static LinuxAppRunner linuxAppRunner() {
+        return linuxAppRunner;
     }
 
     public static boolean launchEntry(@NonNull Context context, @NonNull LauncherAppEntry entry) {

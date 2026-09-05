@@ -307,6 +307,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
     /** Runs a Linux app from the drawer on the display, starting the display when needed. */
     @Nullable private com.termux.app.x11.X11LinuxAppRunner mLinuxApps;
+    /** What this instance installed in {@code LauncherAppLauncher}; taken out again on destroy. */
+    @Nullable private com.termux.app.launcher.LauncherAppLauncher.LinuxAppRunner mLinuxAppRunnerHook;
     /** The apps open on the display, shown as the window chips while the Display place is up. */
     @Nullable private com.termux.app.x11.X11WindowList mX11Windows;
     @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
@@ -5243,7 +5245,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLinuxApps != null) {
             mLinuxApps.destroy();
             mLinuxApps = null;
-            com.termux.app.launcher.LauncherAppLauncher.setLinuxAppRunner(null);
+        }
+        // Only this instance's hook: a second instance may already have installed its own.
+        if (mLinuxAppRunnerHook != null) {
+            com.termux.app.launcher.LauncherAppLauncher.clearLinuxAppRunner(mLinuxAppRunnerHook);
+            mLinuxAppRunnerHook = null;
         }
         clearAccessoryRenderEffectBackdrop();
         removeDecorNavBarSurfaceOverlay();
@@ -11406,7 +11412,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void showNotice(@NonNull String message) { showToast(message, true); }
             });
-        com.termux.app.launcher.LauncherAppLauncher.setLinuxAppRunner(entry -> {
+        mLinuxAppRunnerHook = entry -> {
             if (mLinuxApps == null) return false;
             java.util.List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
                 com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.applicationDirs());
@@ -11419,7 +11425,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             mLinuxApps.run(app);
             return true;
-        });
+        };
+        com.termux.app.launcher.LauncherAppLauncher.setLinuxAppRunner(mLinuxAppRunnerHook);
     }
 
     /** The page's own "Turn on": the setting flips and the display comes alive in place. */
