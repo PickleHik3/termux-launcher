@@ -47,6 +47,13 @@ public final class TerminalHintSurface {
      * rectangle rather than as a tab — the same 4dp the glass slabs fall back to for that reason.
      */
     private static final float MIN_FREE_CORNER_DP = 4f;
+    /**
+     * And the most a free corner rounds. Past this the notch a free corner leaves over the
+     * transcript is deep enough to show a word of it right against the legend's own first
+     * glyph - two texts on one spot - so the free corners follow the knob only this far while
+     * the corner that sits on the terminal's still takes the terminal's radius whole.
+     */
+    private static final float MAX_FREE_CORNER_DP = 8f;
 
     /**
      * The radius a hint's free corners take.
@@ -62,8 +69,9 @@ public final class TerminalHintSurface {
      */
     public static float freeCornerRadiusPx(@NonNull Context context, float terminalRadiusPx,
                                            int heightPx) {
-        float minimum = MIN_FREE_CORNER_DP * context.getResources().getDisplayMetrics().density;
-        float free = Math.max(minimum, terminalRadiusPx);
+        float density = context.getResources().getDisplayMetrics().density;
+        float minimum = MIN_FREE_CORNER_DP * density;
+        float free = Math.min(Math.max(minimum, terminalRadiusPx), MAX_FREE_CORNER_DP * density);
         return heightPx > 0 ? Math.min(free, heightPx / 2f) : free;
     }
 
