@@ -19,6 +19,8 @@
     <color name="termux_accent_container">#D8E3FF</color>
     <color name="termux_on_accent_container">#0B1F44</color>
     <color name="termux_error">#BA1A1A</color>
+    <!-- The Display place's accent in the status bar: warm, where the theme's roles are cool. -->
+    <color name="termux_place_display">#F0B48A</color>
     <color name="termux_error_container">#FFDAD6</color>
     <color name="termux_on_error_container">#410002</color>
     <color name="termux_scrollbar">#66FFFFFF</color>

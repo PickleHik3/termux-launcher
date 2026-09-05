@@ -246,6 +246,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mSelectedStrokeColor;
     private int mBusyColor;
     private int mAttentionColor;
+    @Nullable private Integer mPlaceAccent;
     @Nullable private ValueAnimator mSelectionAnimator;
     @Nullable private ValueAnimator mBusyAnimator;
     /**
@@ -819,10 +820,30 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
     }
 
+    /**
+     * The colour of the place whose chips these are — the wall's Widgets, Terminal and Display
+     * each have one — for the selected chip's fill and stroke. Null is the theme's primary.
+     */
+    public void setPlaceAccent(@Nullable Integer accent) {
+        if (accent == null ? mPlaceAccent == null : accent.equals(mPlaceAccent)) return;
+        mPlaceAccent = accent;
+        updatePalette();
+        for (int i = 0; i < mTabs.getChildCount(); i++) {
+            View child = mTabs.getChildAt(i);
+            if (child instanceof TextView) {
+                child.setBackground(buildUnselectedChip());
+                ((TextView) child).setTextColor(child.isSelected()
+                    ? mSelectedTextColor : mUnselectedTextColor);
+            }
+        }
+        invalidate();
+    }
+
     private void updatePalette() {
         Context context = getContext();
-        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(context, R.color.termux_primary));
+        int primary = mPlaceAccent != null ? mPlaceAccent
+            : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+                ContextCompat.getColor(context, R.color.termux_primary));
         int onSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
         int onSurfaceVariant = MaterialColors.getColor(context,

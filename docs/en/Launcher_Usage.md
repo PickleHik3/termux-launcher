@@ -60,12 +60,13 @@ as new attention.
 ## Move between the terminal and the widget grid
 
 The terminal is one of three places in a ring — Widgets, Terminal, Display — so from any of them
-the other two are one step away, one to each side. Swipe left or right anywhere on the status
-surface to move between them, or expand the status panel and use the **place switch** beside the
-clock: one pill with the three places on it and a marker under the one you are on. The marker
-follows your finger as you swipe and slides across when you tap another place. The Display
-segment reads quieter until a display is running and carries a dot while one is; hold it to stop
-the display. The Home key always brings the terminal back.
+the other two are one step away, one to each side. The status bar is the pager: swipe left or
+right anywhere on it and the bar's own content slides with the place, and the two glyphs in the
+bar's edges show where each direction leads — a grid for Widgets, a prompt for Terminal, a screen
+for Display. Tap a glyph to go there. The Display glyph reads quieter until a display is running.
+The badge and the chips at the start of the bar belong to the place on screen: your session and
+windows on the terminal, the page number and its widgets on Widgets, the display's runtime mark
+and its apps on Display. Where the wall rests is where the home screen comes back to.
 
 Exactly one place is on screen at a time, and the terminal never changes size for the others, so
 nothing reflows in your shells when you move. Your session keeps running while you are away.

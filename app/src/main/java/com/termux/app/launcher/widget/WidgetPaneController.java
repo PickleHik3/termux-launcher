@@ -33,6 +33,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         default void onWidgetEditorFocused(@NonNull View editor) { }
         /** The editor lost focus; restore the terminal's IME arrangement. */
         default void onWidgetEditorClosed() { }
+        /** The page on screen was drawn again: its number or its widgets may have changed. */
+        default void onWidgetPageRendered() { }
     }
 
     private final WidgetPaneView pane;
@@ -107,6 +109,33 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     public void destroy() { widgets.setListener(null); catalog.cancel(); dismissPaneMenu(); }
 
     int currentPage() { return currentPage; }
+
+    /** One-based number of the page on screen, for the status bar's badge. */
+    public int currentPageNumber() { return currentPage + 1; }
+
+    /**
+     * What the page on screen holds, by provider label in reading order, for the status bar's
+     * chips and summary. A widget whose provider is gone is named by its package.
+     */
+    @NonNull public List<String> labelsOnCurrentPage() {
+        List<LauncherWidgetRecord> records = new java.util.ArrayList<>(
+            widgets.repository().recordsOnPage(currentPage));
+        records.sort(java.util.Comparator.comparingInt((LauncherWidgetRecord r) -> r.cell.top)
+            .thenComparingInt(r -> r.cell.left));
+        List<String> labels = new java.util.ArrayList<>(records.size());
+        android.content.pm.PackageManager packages = pane.getContext().getPackageManager();
+        for (LauncherWidgetRecord record : records) {
+            AppWidgetProviderInfo info = widgets.providerInfo(record.appWidgetId);
+            String label = null;
+            if (info != null) {
+                try { label = String.valueOf(info.loadLabel(packages)); }
+                catch (RuntimeException ignored) { label = null; }
+            }
+            if (label == null || label.trim().isEmpty()) label = record.provider.getPackageName();
+            labels.add(label.trim());
+        }
+        return labels;
+    }
 
     void setCurrentPage(int page) {
         int clamped = Math.max(0, Math.min(widgets.repository().pageCount() - 1, page));
@@ -477,6 +506,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
         pane.setReducedMotion(host.reducedMotion());
         pane.render(widgets.repository(), widgets.capability(), currentPage);
+        host.onWidgetPageRendered();
     }
 
     @NonNull private String messageFor(LauncherWidgetHostController.AddResult result) {

@@ -69,6 +69,14 @@
             app:dialogMessage="@string/settings_x11_window_manager_summary"
             android:defaultValue="openbox"
             app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="x11_runtime_badge"
+            app:title="@string/settings_x11_runtime_badge_title"
+            app:dialogMessage="@string/settings_x11_runtime_badge_summary"
+            android:defaultValue="termux"
+            app:entries="@array/x11_runtime_badge_entries"
+            app:entryValues="@array/x11_runtime_badge_values"
+            app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_x11_category_starting">

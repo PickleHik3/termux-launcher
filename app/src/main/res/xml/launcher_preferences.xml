@@ -97,11 +97,6 @@
             app:title="@string/settings_x11_display_options_title"
             app:summary="@string/settings_x11_display_options_summary"
             app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
-        <SwitchPreferenceCompat
-            app:key="top_pane_wall_tiles"
-            app:title="@string/settings_wall_tiles_title"
-            app:summary="@string/settings_wall_tiles_summary"
-            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_launcher_search_header">

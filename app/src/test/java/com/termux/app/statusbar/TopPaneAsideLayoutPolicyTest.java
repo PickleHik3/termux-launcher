@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config;
 /** The clock keeps the slot; the place switch hugs its content at the other end, or stands down. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
-public class TopPaneSwitchLayoutPolicyTest {
+public class TopPaneAsideLayoutPolicyTest {
 
     private static final int WIDTH = 360;
     private static final int HEIGHT = 68;
@@ -25,7 +25,7 @@ public class TopPaneSwitchLayoutPolicyTest {
     private static final int GAP = 12;
 
     @Test public void noSwitchGivesTheClockTheWholeUsableWidth() {
-        TopPaneSwitchLayoutPolicy.Result r = TopPaneSwitchLayoutPolicy.calculate(
+        TopPaneAsideLayoutPolicy.Result r = TopPaneAsideLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "left", 0, 36, 100, 80, false);
         assertEquals(new Rect(GUTTER, 0, WIDTH - GUTTER, HEIGHT), r.clock);
         assertTrue(r.place.isEmpty());
@@ -34,7 +34,7 @@ public class TopPaneSwitchLayoutPolicyTest {
 
     @Test public void aLeftOrCentredClockPutsTheSwitchAtTheTrailingEnd() {
         for (String alignment : new String[]{"left", "center"}) {
-            TopPaneSwitchLayoutPolicy.Result r = TopPaneSwitchLayoutPolicy.calculate(
+            TopPaneAsideLayoutPolicy.Result r = TopPaneAsideLayoutPolicy.calculate(
                 WIDTH, HEIGHT, GUTTER, GAP, alignment, 150, 36, 100, 80, false);
             assertEquals(alignment, new Rect(WIDTH - GUTTER - 150, 16, WIDTH - GUTTER, 52), r.place);
             assertEquals(alignment, new Rect(GUTTER, 0, WIDTH - GUTTER - 150 - GAP, HEIGHT), r.clock);
@@ -43,29 +43,29 @@ public class TopPaneSwitchLayoutPolicyTest {
     }
 
     @Test public void aRightAlignedClockPutsTheSwitchAtTheLeadingEnd() {
-        TopPaneSwitchLayoutPolicy.Result r = TopPaneSwitchLayoutPolicy.calculate(
+        TopPaneAsideLayoutPolicy.Result r = TopPaneAsideLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "right", 150, 36, 100, 80, false);
         assertEquals(new Rect(GUTTER, 16, GUTTER + 150, 52), r.place);
         assertEquals(new Rect(GUTTER + 150 + GAP, 0, WIDTH - GUTTER, HEIGHT), r.clock);
     }
 
     @Test public void theClockGoesCompactWhenItsFullFaceNoLongerFits() {
-        TopPaneSwitchLayoutPolicy.Result r = TopPaneSwitchLayoutPolicy.calculate(
+        TopPaneAsideLayoutPolicy.Result r = TopPaneAsideLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "left", 150, 36, 200, 80, false);
         assertTrue(r.clockCompact);
     }
 
     @Test public void aSwitchThatLeavesLessThanTheCompactClockStandsDown() {
-        TopPaneSwitchLayoutPolicy.Result r = TopPaneSwitchLayoutPolicy.calculate(
+        TopPaneAsideLayoutPolicy.Result r = TopPaneAsideLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "left", 270, 36, 100, 80, false);
         assertTrue(r.place.isEmpty());
         assertEquals(new Rect(GUTTER, 0, WIDTH - GUTTER, HEIGHT), r.clock);
     }
 
     @Test public void rtlMirrorsBothRects() {
-        TopPaneSwitchLayoutPolicy.Result ltr = TopPaneSwitchLayoutPolicy.calculate(
+        TopPaneAsideLayoutPolicy.Result ltr = TopPaneAsideLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "left", 150, 36, 100, 80, false);
-        TopPaneSwitchLayoutPolicy.Result rtl = TopPaneSwitchLayoutPolicy.calculate(
+        TopPaneAsideLayoutPolicy.Result rtl = TopPaneAsideLayoutPolicy.calculate(
             WIDTH, HEIGHT, GUTTER, GAP, "left", 150, 36, 100, 80, true);
         assertEquals(WIDTH - ltr.place.right, rtl.place.left);
         assertEquals(WIDTH - ltr.clock.right, rtl.clock.left);

@@ -227,13 +227,16 @@ public final class TermuxPreferenceConstants {
         /** Whether the keyboard was up the last time the user left the Display place. */
         public static final String KEY_X11_KEYBOARD_SHOWN = "x11_keyboard_shown";
 
-        /** Defines the key for the pane wall's Widgets and Display buttons in the status bar. */
-        public static final String KEY_TOP_PANE_WALL_TILES = "top_pane_wall_tiles";
+        /**
+         * The mark the status bar's Display badge wears: the Termux X11 glyph for native apps, or
+         * the glyph of the proot distribution the display is used for.
+         */
+        public static final String KEY_X11_RUNTIME_BADGE = "x11_runtime_badge";
+
+        public static final String DEFAULT_X11_RUNTIME_BADGE = "termux";
 
         /** The place the pane wall last rested on; the home screen comes back to it. */
         public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
-
-        public static final boolean DEFAULT_TOP_PANE_WALL_TILES = true;
 
         /**
          * Defines the key for the launcher / terminal-only use case the user picked. Stored rather

@@ -83,10 +83,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     public void setAnotherSurfaceEngaged(boolean engaged) { mAnotherSurfaceEngaged = engaged; }
 
-    /**
-     * Whether the pane wall has a place to go from here. Off, a sideways drag keeps its older
-     * meaning and toggles the bar's own form; on, it moves the wall.
-     */
+    /** Whether the pane wall has a place to go from here; off, a sideways drag means nothing. */
     public void setWallAvailable(boolean available) {
         mWallAvailable = available;
         if (!available && mWallDragActive) {
@@ -222,7 +219,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (gesture == null) return false;
         switch (gesture.claim()) {
             case PENDING:
-            case HORIZONTAL_SWIPE:
             case WALL_HORIZONTAL:
             case EXPAND_SWIPE:
             case COLLAPSE_SWIPE:
@@ -320,13 +316,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 mListener.onWallDragEnd(velocity);
             }
             mWallDragActive = false;
-        } else if (gesture != null
-            && gesture.claim() == StatusBarGesturePolicy.Claim.HORIZONTAL_SWIPE) {
-            boolean collapsed = gesture.horizontalDelta() < 0f;
-            if (collapsed != (gesture.down().state == TopStatusBarState.COMPACT)
-                && mListener != null) {
-                mListener.onCollapsedStateRequested(collapsed);
-            }
         } else if (gesture != null
             && gesture.claim() == StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE) {
             if (mListener != null) mListener.onCollapsedStateRequested(true);

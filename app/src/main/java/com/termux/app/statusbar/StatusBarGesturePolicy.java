@@ -5,8 +5,7 @@ import androidx.annotation.NonNull;
 /** Pure one-way status gesture arbitration over one immutable DOWN snapshot. */
 public final class StatusBarGesturePolicy {
     public enum Claim {
-        PENDING, HORIZONTAL_SWIPE, WALL_HORIZONTAL, EXPAND_SWIPE, COLLAPSE_SWIPE,
-        CHILD_OWNED, CANCELLED
+        PENDING, WALL_HORIZONTAL, EXPAND_SWIPE, COLLAPSE_SWIPE, CHILD_OWNED, CANCELLED
     }
 
     public static final class Down {
@@ -29,9 +28,9 @@ public final class StatusBarGesturePolicy {
          */
         public final boolean verticalEligible;
         /**
-         * The pane wall has somewhere to go and this point may drag it there. It supersedes the
-         * horizontal collapse/expand swipe: a wall with places beside the terminal is what a
-         * sideways drag on the status bar means.
+         * The pane wall has somewhere to go and this point may drag it there. A sideways drag on
+         * the status bar means the wall and nothing else: the bar is the pager, and its own form
+         * changes only by the vertical drag.
          */
         public final boolean wallEligible;
         public final int touchSlop;
@@ -74,6 +73,15 @@ public final class StatusBarGesturePolicy {
         }
     }
 
+    /**
+     * With the wall in reach, the form toggle asks for a clearly vertical drag: twice the slop
+     * of travel, at least twice as far up or down as sideways. A sideways swipe across the bar
+     * often starts with a small curl, and a claim made on that first slop of vertical movement
+     * folded the pane the user was only trying to slide.
+     */
+    static final float WALL_VERTICAL_SLOP_FACTOR = 2f;
+    static final float WALL_VERTICAL_DOMINANCE = 2f;
+
     @NonNull private final Down down;
     @NonNull private Claim claim;
     private float horizontalDelta;
@@ -95,7 +103,10 @@ public final class StatusBarGesturePolicy {
         float dy = localY - down.localY;
         float ax = Math.abs(dx);
         float ay = Math.abs(dy);
-        if (ay > down.touchSlop && ay > ax) {
+        boolean vertical = down.wallEligible
+            ? ay > down.touchSlop * WALL_VERTICAL_SLOP_FACTOR && ay > ax * WALL_VERTICAL_DOMINANCE
+            : ay > down.touchSlop && ay > ax;
+        if (vertical) {
             // One vertical gesture with two directions: down expands the pane, up collapses it.
             // Both share the same vetoes, so both work along the bar's entire length.
             if (!down.verticalEligible) claim = Claim.CHILD_OWNED;
@@ -109,15 +120,12 @@ public final class StatusBarGesturePolicy {
         } else if (ax > down.touchSlop && ax > ay) {
             // The wall takes the sideways drag wherever it has a place to go: moving between the
             // terminal and the pages beside it is what a horizontal swipe on the bar means. With
-            // no wall — a terminal-only install, or the feature off — it keeps its older meaning
-            // and toggles the bar's own form.
+            // no wall — a terminal-only install — a sideways drag means nothing; it used to fold
+            // and unfold the bar, and that older meaning surfacing under a wall drag is how a
+            // place change kept undoing the form the user had chosen.
             if (down.wallEligible) {
                 horizontalDelta = dx;
                 claim = Claim.WALL_HORIZONTAL;
-            } else if (down.eligible()) {
-                // A stream only the vertical drag could claim stays a child's otherwise.
-                horizontalDelta = dx;
-                claim = Claim.HORIZONTAL_SWIPE;
             } else {
                 claim = Claim.CHILD_OWNED;
             }

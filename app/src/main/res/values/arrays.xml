@@ -168,6 +168,20 @@
         <item>litert-lm</item>
         <item>mnn-llm</item>
     </string-array>
+    <string-array name="x11_runtime_badge_entries">
+        <item>Termux X11</item>
+        <item>Arch Linux</item>
+        <item>Ubuntu</item>
+        <item>Debian</item>
+        <item>Fedora</item>
+    </string-array>
+    <string-array name="x11_runtime_badge_values">
+        <item>termux</item>
+        <item>arch</item>
+        <item>ubuntu</item>
+        <item>debian</item>
+        <item>fedora</item>
+    </string-array>
     <string-array name="x11_touch_mode_entries">
         <item>Trackpad</item>
         <item>Touchscreen</item>

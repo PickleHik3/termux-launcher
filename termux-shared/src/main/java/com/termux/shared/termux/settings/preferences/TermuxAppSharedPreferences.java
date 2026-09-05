@@ -747,14 +747,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_X11_DISPLAY_DPI);
     }
 
-    public boolean isTopPaneWallTilesEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_TOP_PANE_WALL_TILES, TERMUX_APP.DEFAULT_TOP_PANE_WALL_TILES);
+    /** One of termux, arch, ubuntu, debian, fedora; anything else reads as termux. */
+    public String getX11RuntimeBadge() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_RUNTIME_BADGE, TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE, false);
+        return value == null || value.trim().isEmpty()
+            ? TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE : value.trim();
     }
 
-    public void setTopPaneWallTilesEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_TOP_PANE_WALL_TILES, value, false);
+    public void setX11RuntimeBadge(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_X11_RUNTIME_BADGE,
+            value == null ? TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE : value.trim(), false);
     }
 
     public String getAppLauncherUseCaseMode() {

@@ -1,8 +1,8 @@
 # The Linux display
 
 The launcher can show a Linux desktop or any X11 app beside the terminal, as the **Display**
-place of the pane wall — swipe left on the status bar from the terminal, or tap **Display** in
-the expanded status bar. The display server runs in your shell like any other command, so
+place of the pane wall — swipe left on the status bar from the terminal, or tap the screen glyph
+in the status bar's right edge. The display server runs in your shell like any other command, so
 everything you know from Termux:X11 (its flags, its preferences, `pkill termux-x11`) works the
 same way. This page is the short route from switching it on to running a desktop in a proot.
 
@@ -50,8 +50,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   Ctrl+Alt shortcuts, so the ways back to the terminal always work.
 - **Back** is the display's: it toggles the keyboard, as in Termux:X11. Change that with
   `termux-x11-preference`.
-- **Stop** by holding the Display segment of the place switch, from the long-press menu on the
-  display, or with `pkill termux-x11`. Everything running on the display closes with it. The
+- **Stop** from the long-press menu on the display, or with `pkill termux-x11`. Everything running on the display closes with it. The
   display never starts on its own unless you turn on **Start with the launcher**.
 - **The display survives switching away.** Your X apps keep running while you are on the
   terminal or the widget grid; only the picture is put away.

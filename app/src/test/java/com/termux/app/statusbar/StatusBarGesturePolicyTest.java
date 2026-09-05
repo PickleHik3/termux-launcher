@@ -31,11 +31,12 @@ public class StatusBarGesturePolicyTest {
     }
 
     @Test public void horizontalMultiAndNestedAreOneWay() {
+        // With no wall a sideways drag means nothing: the bar's form is the vertical drag's alone.
         StatusBarGesturePolicy horizontal = policy(false, false, false, false,
             TopStatusBarState.COMPACT);
-        assertEquals(StatusBarGesturePolicy.Claim.HORIZONTAL_SWIPE, horizontal.move(30, 12));
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, horizontal.move(30, 12));
         assertEquals("a claim never changes once made",
-            StatusBarGesturePolicy.Claim.HORIZONTAL_SWIPE, horizontal.move(12, 90));
+            StatusBarGesturePolicy.Claim.CHILD_OWNED, horizontal.move(12, 90));
 
         StatusBarGesturePolicy multi = policy(false, false, false, false,
             TopStatusBarState.EXPANDED);
@@ -103,10 +104,9 @@ public class StatusBarGesturePolicyTest {
         assertEquals(-70f, overChild.horizontalDelta(), 0.01f);
     }
 
-    @Test public void withNoWallTheSidewaysDragKeepsItsOlderMeaning() {
-        assertEquals(StatusBarGesturePolicy.Claim.HORIZONTAL_SWIPE,
+    @Test public void withNoWallTheSidewaysDragNeverTouchesTheForm() {
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
             wallPolicy(false, false).move(60, 12));
-        // ...but never over an interactive child, which owns its own taps.
         assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
             wallPolicy(false, true).move(60, 12));
     }
@@ -114,5 +114,22 @@ public class StatusBarGesturePolicyTest {
     @Test public void theWallNeverStealsAVerticalDrag() {
         assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
             wallPolicy(true, false).move(12, -60));
+    }
+
+    @Test public void aSidewaysSwipeThatStartsWithACurlSlidesTheWallInsteadOfFoldingTheBar() {
+        // The first slop of travel is upward, as a thumb arcing across the bar often is. With
+        // the wall in reach that is not yet a collapse: the stream stays open and the sideways
+        // movement that follows takes it.
+        StatusBarGesturePolicy curl = wallPolicy(true, false);
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, curl.move(10, 1));
+        assertEquals(StatusBarGesturePolicy.Claim.WALL_HORIZONTAL, curl.move(70, 1));
+        // A drag that is plainly vertical still folds the bar once it has travelled twice the
+        // slop, and so does one with a little sideways drift.
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, wallPolicy(true, false).move(10, -2));
+        assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
+            wallPolicy(true, false).move(15, -10));
+        // Without the wall the older, quicker rule stands: one slop of vertical travel decides.
+        assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
+            wallPolicy(false, false).move(10, 1));
     }
 }

@@ -15,6 +15,7 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 import androidx.core.content.ContextCompat;
@@ -35,6 +36,7 @@ public final class SessionsIndicatorView extends LinearLayout {
     private boolean mCapsuleSurface;
     private float mStatusBarRadiusPx;
     private boolean mShowingSessionNumber = true;
+    @Nullable private Integer mAccent;
 
     public SessionsIndicatorView(Context context) {
         this(context, null);
@@ -72,6 +74,28 @@ public final class SessionsIndicatorView extends LinearLayout {
         mCapsuleSurface = capsule;
         mStatusBarRadiusPx = radius;
         applyColors();
+    }
+
+    /**
+     * The colour of the place whose badge this is: the wall's Widgets, Terminal and Display each
+     * have one. Null goes back to the theme's own chip colours.
+     */
+    public void setAccent(@Nullable Integer accent) {
+        if (accent == null ? mAccent == null : accent.equals(mAccent)) return;
+        mAccent = accent;
+        applyColors();
+    }
+
+    /**
+     * A one-glyph badge with a description of its own: the Display place's runtime mark, or the
+     * Widgets place's page number given as text. It keeps the square shape of a number.
+     */
+    public void setBadge(@NonNull CharSequence glyph, @NonNull CharSequence description) {
+        mShowingSessionNumber = true;
+        mLabel.setText(NerdFontSpans.span(getContext(), glyph));
+        setContentDescription(description);
+        syncWidthToCurrentLabel();
+        requestLayout();
     }
 
     /** currentIndex is 0-based; label is the session name or one-based fallback number. */
@@ -135,14 +159,18 @@ public final class SessionsIndicatorView extends LinearLayout {
         int secondary = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
-        int tertiary = MaterialColors.getColor(context,
+        int tertiary = mAccent != null ? mAccent : MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorTertiary, primary);
-        int tertiaryContainer = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiaryContainer, secondary);
-        int onTertiaryContainer = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnTertiaryContainer,
-            MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
-                ContextCompat.getColor(context, R.color.termux_on_surface)));
+        int tertiaryContainer = mAccent != null
+            ? ColorUtils.blendARGB(mAccent, Color.BLACK, .55f)
+            : MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorTertiaryContainer, secondary);
+        int onSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
+            ContextCompat.getColor(context, R.color.termux_on_surface));
+        int onTertiaryContainer = mAccent != null
+            ? ColorUtils.blendARGB(onSurface, mAccent, .35f)
+            : MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorOnTertiaryContainer, onSurface);
         GradientDrawable chip = new GradientDrawable();
         // The caller resolves the shape (the chip-radius knob, or the bar's own shape while that
         // knob is untouched), so the indicator and the window pills beside it always agree.

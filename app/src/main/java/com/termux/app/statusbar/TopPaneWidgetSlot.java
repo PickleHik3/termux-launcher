@@ -36,7 +36,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     private static final Interpolator INTERPOLATOR = new PathInterpolator(.16f, 1f, .3f, 1f);
 
     private final Rect mClockBounds = new Rect();
-    private final Rect mPlaceSwitchBounds = new Rect();
+    private final Rect mSummaryBounds = new Rect();
     private final Rect mNotificationBounds = new Rect();
     private final Rect mMediaBounds = new Rect();
 
@@ -45,11 +45,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private MediaWidgetView mMedia;
     @Nullable private PinnedNotificationIconCache mIcons;
     @Nullable private ViewPropertyAnimator mClockFade;
-    @Nullable private WallPlaceSwitchView mPlaceSwitch;
+    @Nullable private TopPanePlaceSummaryView mSummary;
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
     private int mPinnedCount;
-    private boolean mPlaceSwitchRequested;
     @Nullable private String mClockAlignment;
 
     public TopPaneWidgetSlot(Context context) {
@@ -74,9 +73,9 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         super.dispatchDraw(canvas);
         TerminalClockWidget clock = mClock;
         if (clock == null || clock.getVisibility() != VISIBLE || clock.getAlpha() <= 0f) return;
-        // With the place switch sharing the slot there is no plane left for the line to span:
-        // carrying it under the switch would draw the clock's own detail across a control.
-        if (!mPlaceSwitchBounds.isEmpty()) return;
+        // With the place summary sharing the slot there is no plane left for the line to span:
+        // carrying it under the summary would draw the clock's own detail across it.
+        if (!mSummaryBounds.isEmpty()) return;
         float ruleY = clock.fullRuleCenterYPx();
         if (ruleY < 0f) return;
         float y = clock.getTop() + clock.getTranslationY() + ruleY;
@@ -106,20 +105,29 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             mNotifications.setOpenListener(this::openPinned);
         }
         if (mMedia != null) mMedia.setVisibility(GONE);
-        mPlaceSwitch = findViewById(R.id.terminal_wall_place_switch);
+        mSummary = findViewById(R.id.terminal_place_summary);
         applyFeed(false);
     }
 
     @Nullable
-    public WallPlaceSwitchView placeSwitch() {
-        return mPlaceSwitch;
+    public TopPanePlaceSummaryView placeSummary() {
+        return mSummary;
     }
 
-    /** Whether the user wants the wall's place switch in the slot at all. */
-    public void setPlaceSwitchRequested(boolean requested) {
-        if (mPlaceSwitchRequested == requested) return;
-        mPlaceSwitchRequested = requested;
-        requestLayout();
+    /**
+     * What the place on screen holds, beside the clock; empty takes the line away and gives the
+     * clock the slot. The summary slides with the wall like the rest of the place's content.
+     */
+    public void setPlaceSummary(@Nullable CharSequence text, int accent) {
+        if (mSummary == null) return;
+        boolean had = mSummary.hasSummary();
+        mSummary.setSummary(text, accent);
+        if (had != mSummary.hasSummary()) requestLayout();
+    }
+
+    /** The wall moved; the summary goes with it. */
+    public void setPlaceOffset(float offsetPx) {
+        if (mSummary != null) mSummary.setTranslationX(offsetPx);
     }
 
     /** The clock alignment decides the cell order; the tiles read the same preference it does. */
@@ -297,7 +305,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
-        applyPlaceSwitch(width, height, gutter, gap);
+        applyPlaceSummary(width, height, gutter, gap);
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) return;
 
         if (stacked) {
@@ -357,42 +365,44 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);
     }
 
-    /** Height of the place switch's pill: a chip, not a bar. */
-    private static final float PLACE_SWITCH_HEIGHT_DP = 36f;
-    /** The compact clock's face; less than this beside the switch and the switch stands down. */
-    private static final float PLACE_SWITCH_MIN_CLOCK_DP = 96f;
+    /** Height of the place summary's line. */
+    private static final float PLACE_SUMMARY_HEIGHT_DP = 20f;
+    /** The compact clock's face; less than this beside the summary and the summary stands down. */
+    private static final float PLACE_SUMMARY_MIN_CLOCK_DP = 96f;
+    /** The summary never takes more than this much of the slot from the clock. */
+    private static final float PLACE_SUMMARY_MAX_FRACTION = .5f;
 
     /**
-     * Give the wall's place switch its hugging spot beside the clock, or take it away. The clock
-     * drops to its compact face when what the switch leaves cannot hold its full one — at a large
-     * font scale on a narrow screen it cannot, which is why the fit is measured.
+     * Give the place summary its hugging spot beside the clock, or take it away. The clock drops
+     * to its compact face when what the summary leaves cannot hold its full one — at a large font
+     * scale on a narrow screen it cannot, which is why the fit is measured.
      */
-    private void applyPlaceSwitch(int width, int height, int gutter, int gap) {
-        boolean shown = mMode.showsTiles(mPlaceSwitchRequested) && mPlaceSwitch != null
-            && !mPlaceSwitch.places().isEmpty();
+    private void applyPlaceSummary(int width, int height, int gutter, int gap) {
+        boolean shown = mMode.showsTiles(true) && mSummary != null && mSummary.hasSummary();
         if (!shown) {
-            mPlaceSwitchBounds.setEmpty();
-            if (mPlaceSwitch != null) mPlaceSwitch.setVisibility(GONE);
+            mSummaryBounds.setEmpty();
+            if (mSummary != null) mSummary.setVisibility(GONE);
             return;
         }
-        int switchHeight = Math.min(height, Math.round(dp(PLACE_SWITCH_HEIGHT_DP)));
-        mPlaceSwitch.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
-            MeasureSpec.makeMeasureSpec(switchHeight, MeasureSpec.EXACTLY));
+        int summaryHeight = Math.min(height, Math.round(dp(PLACE_SUMMARY_HEIGHT_DP)));
+        int maxWidth = Math.max(0, Math.round((width - gutter * 2) * PLACE_SUMMARY_MAX_FRACTION));
+        mSummary.measure(MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.AT_MOST),
+            MeasureSpec.makeMeasureSpec(summaryHeight, MeasureSpec.EXACTLY));
         int clockDesired = mClock == null ? 0 : Math.max(1, Math.round(mClock.contentWidth()));
-        TopPaneSwitchLayoutPolicy.Result result = TopPaneSwitchLayoutPolicy.calculate(width, height,
-            gutter, gap, mClockAlignment, mPlaceSwitch.getMeasuredWidth(), switchHeight,
-            clockDesired, Math.round(dp(PLACE_SWITCH_MIN_CLOCK_DP)),
+        TopPaneAsideLayoutPolicy.Result result = TopPaneAsideLayoutPolicy.calculate(width, height,
+            gutter, gap, mClockAlignment, mSummary.getMeasuredWidth(), summaryHeight,
+            clockDesired, Math.round(dp(PLACE_SUMMARY_MIN_CLOCK_DP)),
             getLayoutDirection() == LAYOUT_DIRECTION_RTL);
         mClockBounds.set(result.clock);
-        mPlaceSwitchBounds.set(result.place);
+        mSummaryBounds.set(result.place);
         applyClockForm(result.clockCompact ? TopPaneClockForm.COMPACT : TopPaneClockForm.FULL,
             false);
         if (mClock != null && !mClockBounds.isEmpty()) measureExact(mClock, mClockBounds);
-        if (mPlaceSwitchBounds.isEmpty()) {
-            mPlaceSwitch.setVisibility(GONE);
+        if (mSummaryBounds.isEmpty()) {
+            mSummary.setVisibility(GONE);
         } else {
-            mPlaceSwitch.setVisibility(VISIBLE);
-            measureExact(mPlaceSwitch, mPlaceSwitchBounds);
+            mSummary.setVisibility(VISIBLE);
+            measureExact(mSummary, mSummaryBounds);
         }
     }
 
@@ -413,9 +423,9 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mMedia != null && !mMediaBounds.isEmpty()) {
             mMedia.layout(mMediaBounds.left, mMediaBounds.top, mMediaBounds.right, mMediaBounds.bottom);
         }
-        if (mPlaceSwitch != null && !mPlaceSwitchBounds.isEmpty()) {
-            mPlaceSwitch.layout(mPlaceSwitchBounds.left, mPlaceSwitchBounds.top,
-                mPlaceSwitchBounds.right, mPlaceSwitchBounds.bottom);
+        if (mSummary != null && !mSummaryBounds.isEmpty()) {
+            mSummary.layout(mSummaryBounds.left, mSummaryBounds.top,
+                mSummaryBounds.right, mSummaryBounds.bottom);
         }
     }
 

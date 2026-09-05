@@ -146,11 +146,9 @@ Keyboard height is remembered separately for portrait and landscape.
 - **Linux display** and **Display options:** run a Linux desktop or X11 apps as the third place
   of the home screen — see [The Linux display](X11_Display.md). Options cover touch mode,
   resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer, the
-  window manager started with the display, starting the display with the launcher, the start
-  command, pointing new shells at the display, two compatibility switches, and what your GPU can
-  do for Linux apps.
-- **Place switch:** show the Widgets · Terminal · Display switch beside the clock in the expanded
-  status bar. It gives way to a media session or a pinned notification; the swipe always works.
+  window manager started with the display, the mark on the Display place's badge in the status
+  bar, starting the display with the launcher, the start command, pointing new shells at the
+  display, two compatibility switches, and what your GPU can do for Linux apps.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

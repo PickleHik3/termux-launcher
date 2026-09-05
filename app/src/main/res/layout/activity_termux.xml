@@ -110,6 +110,15 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
 
+                    <!-- The place's tint over the glass: the bar drifts towards the colour of the
+                         place coming in as the wall moves, and rests on the colour of the one on
+                         screen. Painted by the activity from the wall's offset. -->
+                    <View
+                        android:id="@+id/terminal_status_place_tint"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:importantForAccessibility="no" />
+
                     <!-- Stable modular slot: clocks render only here. A later widget editor can
                          resize/reorder this host without coupling widget code to the pane. The slot
                          owns the clock / media / pinned-notification contention; the pane height
@@ -152,12 +161,11 @@
                             android:contentDescription="@string/termux_top_pane_media_content_description"
                             android:visibility="gone" />
 
-                        <!-- The pane wall's place switch: one pill, a segment per place, the thumb
-                             under the one on screen. It hugs its content beside the clock and gives
-                             way to pinned notifications and media: the swipe remains the way across
-                             while those hold the slot. -->
-                        <com.termux.app.statusbar.WallPlaceSwitchView
-                            android:id="@+id/terminal_wall_place_switch"
+                        <!-- One line beside the clock saying what the place on screen holds. It
+                             slides with the wall, hugs its content and gives way to pinned
+                             notifications and media. -->
+                        <com.termux.app.statusbar.TopPanePlaceSummaryView
+                            android:id="@+id/terminal_place_summary"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:visibility="gone" />
@@ -183,20 +191,33 @@
                         android:clipChildren="true"
                         android:clipToPadding="true">
 
-                        <com.termux.app.statusbar.SessionsIndicatorView
-                            android:id="@+id/terminal_sessions_indicator"
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:layout_marginStart="3dp" />
-
-                        <com.termux.app.terminal.TerminalWindowBar
-                            android:id="@+id/terminal_window_bar"
+                        <!-- The place's own row content: its badge and its chips. The strip slides
+                             with the pane wall and dissolves at the bar's edges, so one place's row
+                             leaves through the lens and the next arrives through it, while the
+                             stat widgets beside it hold still. -->
+                        <com.termux.app.statusbar.PlaceContentStrip
+                            android:id="@+id/terminal_status_place_content"
                             android:layout_width="0dp"
                             android:layout_height="match_parent"
                             android:layout_weight="1"
-                            android:layout_marginStart="6dp"
-                            android:background="@android:color/transparent"
-                            android:contentDescription="@string/termux_window_bar_content_description" />
+                            android:paddingStart="14dp"
+                            android:paddingEnd="8dp"
+                            android:gravity="center_vertical">
+
+                            <com.termux.app.statusbar.SessionsIndicatorView
+                                android:id="@+id/terminal_sessions_indicator"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent" />
+
+                            <com.termux.app.terminal.TerminalWindowBar
+                                android:id="@+id/terminal_window_bar"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:layout_marginStart="6dp"
+                                android:background="@android:color/transparent"
+                                android:contentDescription="@string/termux_window_bar_content_description" />
+                        </com.termux.app.statusbar.PlaceContentStrip>
 
                         <LinearLayout
                             android:id="@+id/terminal_status_widgets"
@@ -270,6 +291,16 @@
 
                         </LinearLayout>
                     </LinearLayout>
+
+                    <!-- The lens edges: a specular hairline over a brighter strip at each side, and
+                         in each the glyph of the place that direction leads to. Over everything
+                         in the bar; it owns only the glyphs' touches. -->
+                    <com.termux.app.statusbar.StatusBarLensView
+                        android:id="@+id/terminal_status_lens"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:elevation="7dp"
+                        android:outlineProvider="none" />
 
                 </com.termux.app.statusbar.StatusBarSwipeLayout>
 

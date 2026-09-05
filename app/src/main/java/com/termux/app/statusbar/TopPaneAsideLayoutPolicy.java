@@ -8,16 +8,16 @@ import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 /**
- * Where the clock and the wall's place switch sit inside the 68dp top slot, applied by
- * {@link TopPaneWidgetSlot#onLayout}.
+ * Where the clock and the thing beside it — the place summary — sit inside the 68dp top slot,
+ * applied by {@link TopPaneWidgetSlot#onLayout}.
  *
- * <p>The switch hugs its content and sits at the end opposite the clock's alignment (a centred
+ * <p>The aside hugs its content and sits at the end opposite the clock's alignment (a centred
  * clock gives it the trailing end), vertically centred; the clock keeps the rest and aligns its
  * own face inside it, dropping to its compact face when the full one no longer fits. When even the
- * compact clock would not fit beside the switch, the switch stands down and the clock has the slot
- * to itself — the swipe remains the way across.
+ * compact clock would not fit beside the aside, the aside stands down and the clock has the slot
+ * to itself.
  */
-public final class TopPaneSwitchLayoutPolicy {
+public final class TopPaneAsideLayoutPolicy {
 
     public static final class Result {
         @NonNull public final Rect clock;
@@ -31,11 +31,11 @@ public final class TopPaneSwitchLayoutPolicy {
         }
     }
 
-    private TopPaneSwitchLayoutPolicy() {}
+    private TopPaneAsideLayoutPolicy() {}
 
     /**
-     * @param switchWidthPx  the switch's own measured width; 0 when it is not shown
-     * @param switchHeightPx the switch's height, centred in the slot
+     * @param switchWidthPx  the aside's own measured width; 0 when it is not shown
+     * @param switchHeightPx the aside's height, centred in the slot
      * @param clockMinWidthPx the least the clock can live with — its compact face
      */
     @NonNull

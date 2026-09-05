@@ -36,29 +36,19 @@ import org.robolectric.Shadows;
 public class StatusBarSwipeLayoutTest {
 
     @Test
-    public void rightSwipe_expandsCollapsedPanel() {
+    public void sidewaysSwipes_neverChangeTheForm() {
+        // The bar is the pager: a sideways drag moves the wall or nothing. Folding and unfolding
+        // belong to the vertical drag alone, whichever form the bar is in.
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         view.setCollapsed(true);
         view.setListener(requests::add);
-
         swipe(view, 30f, 160f, 40f, 40f);
+        assertEquals(0, requests.size());
 
-        assertEquals(1, requests.size());
-        assertEquals(Boolean.FALSE, requests.get(0));
-    }
-
-    @Test
-    public void leftSwipe_collapsesExpandedPanel() {
-        StatusBarSwipeLayout view = createView();
-        List<Boolean> requests = new ArrayList<>();
         view.setCollapsed(false);
-        view.setListener(requests::add);
-
         swipe(view, 160f, 30f, 40f, 40f);
-
-        assertEquals(1, requests.size());
-        assertEquals(Boolean.TRUE, requests.get(0));
+        assertEquals(0, requests.size());
     }
 
     @Test
@@ -126,8 +116,7 @@ public class StatusBarSwipeLayoutTest {
         swipe(view, 100f, 105f, 70f, 15f);
         assertEquals(0, requests.size());
 
-        // A sideways drag with no wall to move keeps its older meaning, and asking for the form
-        // the bar is already in is not a request.
+        // A sideways drag with no wall to move is nobody's, and never a form change.
         requests.clear();
         swipe(view, 160f, 30f, 40f, 40f);
         assertEquals(0, requests.size());
