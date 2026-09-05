@@ -74,7 +74,6 @@ public class X11CliInstallerTest {
         assertArrayEquals(LOADER, Files.readAllBytes(installer.loaderFile().toPath()));
         assertTrue(text(installer.openboxRc()).contains("<maximized>yes</maximized>"));
         assertTrue(text(installer.openboxRc()).contains("<keybind key=\"A-Tab\">"));
-        assertTrue(X11CliInstaller.openboxRcContent(7).contains("<margins><top>7</top>"));
         assertFalse("ART refuses a writable dex on CLASSPATH", installer.loaderFile().canWrite());
         assertEquals(X11CliInstaller.MARKER_PREAMBLE + " v" + X11CliInstaller.VERSION
             + " com.termux.test\n", text(installer.markerFile()));

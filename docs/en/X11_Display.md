@@ -130,9 +130,10 @@ Two things make this work and can be changed on the Display page in Settings:
 
 - **Window manager.** The launcher starts a small window manager with the display so windows
   open full size and dialogs stay on screen. It is `openbox` by default (install it with
-  `pkg install openbox`), with a launcher-owned rule that maximises every window and a margin
-  that keeps them clear of the frame's rounded corners, so a terminal's first and last cells are
-  never under an arc; put another command there, or clear it to have none.
+  `pkg install openbox`), with a launcher-owned rule that maximises every window; put another
+  command there, or clear it to have none. Windows fill the display to its rounded corners, as on
+  any rounded desktop, so a terminal that wants its first and last cells clear of the arcs pads
+  its own window (`window_padding_width` in kitty, `window.padding` in alacritty).
 - **Linux apps in the drawer** can be switched off if you would rather start apps from a shell.
 
 When an app is started from the drawer, the launcher exports the GPU settings from the table
