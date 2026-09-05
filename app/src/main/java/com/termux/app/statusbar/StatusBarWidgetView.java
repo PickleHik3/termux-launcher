@@ -41,6 +41,8 @@ public final class StatusBarWidgetView extends LinearLayout {
     private boolean mAccent;
     private boolean mMuted;
     @NonNull private ColorRole mColorRole = ColorRole.PRIMARY;
+    /** The stats share a floor so a value ticking between widths does not shift its neighbours. */
+    private static final int MIN_WIDTH_WITH_VALUE_DP = 34;
 
     public StatusBarWidgetView(Context context) {
         this(context, null);
@@ -55,7 +57,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         setClipToPadding(false);
         setClipChildren(false);
         setPadding(dp(5), dp(1), dp(5), dp(1));
-        setMinimumWidth(dp(34));
+        setMinimumWidth(dp(MIN_WIDTH_WITH_VALUE_DP));
 
         mIcon = new ImageView(context);
         mIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -179,7 +181,15 @@ public final class StatusBarWidgetView extends LinearLayout {
         super.onDetachedFromWindow();
     }
 
+    /**
+     * The text after the icon. An empty value leaves the widget an icon alone: the text and its
+     * margin go, and so does the minimum width the stats share, which would otherwise hold
+     * twenty-odd dp of nothing to the right of the glyph.
+     */
     public void setValue(@NonNull CharSequence value) {
+        boolean empty = android.text.TextUtils.isEmpty(value);
+        mValue.setVisibility(empty ? GONE : VISIBLE);
+        setMinimumWidth(empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
         if (android.text.TextUtils.equals(mValue.getText(), value)) return;
         mValue.setText(value);
     }

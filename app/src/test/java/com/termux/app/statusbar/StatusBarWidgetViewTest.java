@@ -12,6 +12,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -36,6 +37,33 @@ public class StatusBarWidgetViewTest {
                 (child.getTop() + child.getBottom()) / 2f, .51f);
             assertEquals(0f, child.getTranslationY(), .01f);
         }
+    }
+
+    /** The mouse mark is a glyph alone; it must not carry the stats' shared floor width. */
+    @Test
+    public void glyphWithoutValue_takesOnlyTheGlyphAndPadding() {
+        StatusBarWidgetView widget = new StatusBarWidgetView(
+            ApplicationProvider.getApplicationContext(), null);
+        widget.setIconGlyph("\uf245");
+        widget.setValue("");
+        widget.measure(atMost(400), exact(24));
+        int glyphWidth = 0;
+        for (int i = 0; i < widget.getChildCount(); i++) {
+            View child = widget.getChildAt(i);
+            if (child.getVisibility() == View.GONE) continue;
+            glyphWidth += child.getMeasuredWidth();
+        }
+        assertEquals(widget.getPaddingLeft() + glyphWidth + widget.getPaddingRight(),
+            widget.getMeasuredWidth());
+
+        widget.setValue("88%");
+        widget.measure(atMost(400), exact(24));
+        assertTrue(widget.getMeasuredWidth() >= widget.getMinimumWidth());
+        assertTrue(widget.getMinimumWidth() > 0);
+    }
+
+    private static int atMost(int size) {
+        return View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.AT_MOST);
     }
 
     private static int exact(int size) {

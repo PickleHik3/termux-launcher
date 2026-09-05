@@ -203,19 +203,38 @@ public final class TerminalView extends View {
     private MotionEvent mTouchMouseDragArmEvent;
 
     /**
-     * Mouse mode: every touch is the mouse. A finger down is the left button down at its cell, a
-     * move is the button held and moved, a lift is the release; two fingers turn the wheel, one
-     * notch per {@link #TOUCH_MOUSE_WHEEL_NOTCH_DP} of travel in the natural direction - the
-     * content follows the fingers. None of the view's own touch behaviour - scrolling the
-     * transcript, selecting text, the long-press menu - applies while it is on, and it all comes
-     * back when it is off.
+     * Mouse mode: every touch is the mouse, for a program that asked for one. A finger down is
+     * the left button down at its cell, a move is the button held and moved, a lift is the
+     * release; two fingers turn the wheel, one notch per line of travel in the natural direction
+     * - the content follows the fingers - and a fast lift lets it run on, as the transcript
+     * does. A program that is not tracking the mouse gets none of this typed at it: a finger
+     * does nothing and two fingers scroll the transcript instead. None of the view's own touch
+     * behaviour - dragging the transcript, selecting text, the long-press menu - applies while
+     * it is on, and it all comes back when it is off.
      */
-    private static final float TOUCH_MOUSE_WHEEL_NOTCH_DP = 26f;
     private boolean mTouchMouseMode;
     private boolean mTouchMouseModePressed;
     private int mTouchMouseModeLastCol, mTouchMouseModeLastRow;
+    /** Two fingers are down and their travel is the wheel. */
+    private boolean mTouchMouseWheelActive;
     private float mTouchMouseWheelStartY;
     private int mTouchMouseWheelSent;
+    private int mTouchMouseWheelCol, mTouchMouseWheelRow;
+    private android.view.VelocityTracker mTouchMouseWheelVelocity;
+    /** Carries the wheel on after a fast two-finger lift; its axis is finger travel in pixels. */
+    private Scroller mTouchMouseWheelFling;
+    private int mTouchMouseWheelFlingSent;
+    private final Runnable mTouchMouseWheelFlingStep = new Runnable() {
+        @Override
+        public void run() {
+            if (mTouchMouseWheelFling == null || mEmulator == null) return;
+            if (!mTouchMouseWheelFling.computeScrollOffset()) return;
+            int notches = Math.round(mTouchMouseWheelFling.getCurrY() / touchMouseWheelNotchPx());
+            turnWheel(notches - mTouchMouseWheelFlingSent, mTouchMouseWheelCol, mTouchMouseWheelRow);
+            mTouchMouseWheelFlingSent = notches;
+            if (!mTouchMouseWheelFling.isFinished()) postOnAnimation(this);
+        }
+    };
 
     private final int mTouchSlopSquared;
 
@@ -1134,6 +1153,8 @@ public final class TerminalView extends View {
                 mTouchMouseModeLastRow, false);
         }
         mTouchMouseModePressed = false;
+        mTouchMouseWheelActive = false;
+        stopTouchMouseWheelFling();
         mTouchMouseMode = enabled;
     }
 
@@ -1144,14 +1165,25 @@ public final class TerminalView extends View {
     /**
      * The whole of a touch stream in mouse mode. One finger is the left button: down at the cell
      * under it, held while it moves cell to cell, released where it lifts. A second finger makes
-     * the gesture the wheel instead - one notch per line of travel - and releases the button.
+     * the gesture the wheel instead - one notch per line of travel, from the fingers' midpoint -
+     * and releases the button; lifting fast lets the wheel run on. Nothing is typed at a program
+     * that did not ask for the mouse: see {@link #turnWheel}.
      */
     private void handleTouchMouseMode(MotionEvent event) {
         int action = event.getActionMasked();
         int column = getColumnForX(event.getX());
         int row = getRowForY(event.getY());
+        boolean tracking = mEmulator.isMouseTrackingActive();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
+                stopTouchMouseWheelFling();
+                if (mTouchMouseWheelVelocity == null) {
+                    mTouchMouseWheelVelocity = android.view.VelocityTracker.obtain();
+                } else {
+                    mTouchMouseWheelVelocity.clear();
+                }
+                mTouchMouseWheelVelocity.addMovement(event);
+                if (!tracking) break;
                 mTouchMouseModePressed = true;
                 mTouchMouseModeLastCol = column;
                 mTouchMouseModeLastRow = row;
@@ -1163,23 +1195,21 @@ public final class TerminalView extends View {
                         mTouchMouseModeLastRow, false);
                     mTouchMouseModePressed = false;
                 }
-                mTouchMouseWheelStartY = event.getY();
+                if (mTouchMouseWheelVelocity != null) mTouchMouseWheelVelocity.addMovement(event);
+                mTouchMouseWheelActive = true;
+                mTouchMouseWheelStartY = meanY(event);
                 mTouchMouseWheelSent = 0;
+                mTouchMouseWheelCol = column;
+                mTouchMouseWheelRow = row;
                 break;
             case MotionEvent.ACTION_MOVE:
-                if (event.getPointerCount() >= 2) {
-                    float notch = TOUCH_MOUSE_WHEEL_NOTCH_DP
-                        * getResources().getDisplayMetrics().density;
+                if (mTouchMouseWheelVelocity != null) mTouchMouseWheelVelocity.addMovement(event);
+                if (mTouchMouseWheelActive && event.getPointerCount() >= 2) {
                     // Fingers moving up bring the content up, which is the wheel turning down.
-                    int notches = Math.round((mTouchMouseWheelStartY - event.getY()) / notch);
-                    while (mTouchMouseWheelSent < notches) {
-                        sendMouseEventAt(TerminalEmulator.MOUSE_WHEELDOWN_BUTTON, column, row, true);
-                        mTouchMouseWheelSent++;
-                    }
-                    while (mTouchMouseWheelSent > notches) {
-                        sendMouseEventAt(TerminalEmulator.MOUSE_WHEELUP_BUTTON, column, row, true);
-                        mTouchMouseWheelSent--;
-                    }
+                    int notches = Math.round((mTouchMouseWheelStartY - meanY(event))
+                        / touchMouseWheelNotchPx());
+                    turnWheel(notches - mTouchMouseWheelSent, mTouchMouseWheelCol, mTouchMouseWheelRow);
+                    mTouchMouseWheelSent = notches;
                     break;
                 }
                 if (mTouchMouseModePressed
@@ -1189,17 +1219,88 @@ public final class TerminalView extends View {
                     sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, column, row, true);
                 }
                 break;
+            case MotionEvent.ACTION_POINTER_UP:
+                if (mTouchMouseWheelActive) {
+                    mTouchMouseWheelActive = false;
+                    flingTouchMouseWheel();
+                }
+                break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
+                if (mTouchMouseWheelActive) {
+                    mTouchMouseWheelActive = false;
+                    if (action == MotionEvent.ACTION_UP) flingTouchMouseWheel();
+                }
                 if (mTouchMouseModePressed) {
                     sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
                         mTouchMouseModeLastRow, false);
                     mTouchMouseModePressed = false;
                 }
+                if (mTouchMouseWheelVelocity != null) {
+                    mTouchMouseWheelVelocity.recycle();
+                    mTouchMouseWheelVelocity = null;
+                }
                 break;
             default:
                 break;
         }
+    }
+
+    /** The midpoint of every finger down, so one finger drifting does not jolt the wheel. */
+    private static float meanY(MotionEvent event) {
+        int count = event.getPointerCount();
+        float sum = 0f;
+        for (int i = 0; i < count; i++) sum += event.getY(i);
+        return count == 0 ? 0f : sum / count;
+    }
+
+    /** One wheel notch is one line of finger travel: content follows the fingers. */
+    private float touchMouseWheelNotchPx() {
+        float lineHeight = mRenderer == null ? 0f : mRenderer.mFontLineSpacing;
+        return lineHeight > 0f ? lineHeight : 16f * getResources().getDisplayMetrics().density;
+    }
+
+    /**
+     * Turn the wheel {@code notches} clicks, down for positive. A program tracking the mouse gets
+     * wheel buttons at the gesture's cell; the transcript scrolls itself otherwise, or arrow keys
+     * stand in on the alternate screen, exactly as a two-finger drag does outside mouse mode.
+     */
+    private void turnWheel(int notches, int column, int row) {
+        if (notches == 0 || mEmulator == null) return;
+        boolean down = notches > 0;
+        int amount = Math.abs(notches);
+        for (int i = 0; i < amount; i++) {
+            if (mEmulator.isMouseTrackingActive()) {
+                sendMouseEventAt(down ? TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
+                    : TerminalEmulator.MOUSE_WHEELUP_BUTTON, column, row, true);
+            } else if (mEmulator.isAlternateBufferActive()) {
+                handleKeyCode(down ? KeyEvent.KEYCODE_DPAD_DOWN : KeyEvent.KEYCODE_DPAD_UP, 0);
+            } else {
+                mTopRow = Math.min(0, Math.max(-(mEmulator.getScreen().getActiveTranscriptRows()),
+                    mTopRow + (down ? 1 : -1)));
+                if (!awakenScrollBars()) invalidate();
+            }
+        }
+    }
+
+    /** Let the wheel run on from the fingers' speed at the lift, slowing as a fling does. */
+    private void flingTouchMouseWheel() {
+        if (mTouchMouseWheelVelocity == null) return;
+        mTouchMouseWheelVelocity.computeCurrentVelocity(1000);
+        float velocityY = mTouchMouseWheelVelocity.getYVelocity();
+        int minimum = ViewConfiguration.get(getContext()).getScaledMinimumFlingVelocity();
+        if (Math.abs(velocityY) < minimum) return;
+        if (mTouchMouseWheelFling == null) mTouchMouseWheelFling = new Scroller(getContext());
+        // The fling's axis is finger travel upwards, the same sign as the notch count.
+        mTouchMouseWheelFling.fling(0, 0, 0, Math.round(-velocityY), 0, 0,
+            Integer.MIN_VALUE / 2, Integer.MAX_VALUE / 2);
+        mTouchMouseWheelFlingSent = 0;
+        postOnAnimation(mTouchMouseWheelFlingStep);
+    }
+
+    private void stopTouchMouseWheelFling() {
+        removeCallbacks(mTouchMouseWheelFlingStep);
+        if (mTouchMouseWheelFling != null) mTouchMouseWheelFling.abortAnimation();
     }
 
     /**

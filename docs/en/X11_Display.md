@@ -57,7 +57,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   while the display is showing: a finger moves the pointer, a tap clicks, two fingers scroll and
   two fingers tapping together click the right button; hold, then move, to drag. The arrow in its
   corner brings the keyboard back. In the terminal the same action makes every touch the mouse
-  for programs that take one, with none of the usual scrolling until it is switched off.
+  for programs that take one: a finger is the left button, two fingers are the wheel, and a fast
+  lift keeps it turning. A program that has not asked for the mouse gets nothing typed at it;
+  two fingers scroll the transcript there instead. A small mouse at the end of the status bar
+  says the mode is on; tap it, or the action again, to switch it off.
 - **Back** is the display's: it toggles the keyboard, as in Termux:X11. Change that with
   `termux-x11-preference`.
 - **Stop** from the long-press menu on the display, or with `pkill termux-x11`. Everything running on the display closes with it. The
