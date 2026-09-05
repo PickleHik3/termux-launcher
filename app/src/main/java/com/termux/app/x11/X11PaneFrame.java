@@ -23,7 +23,8 @@ import com.termux.x11.LorieView;
  * corners are painted rather than clipped: a {@code SurfaceView}'s surface is composited outside
  * the view hierarchy, so no parent outline reaches it, and there is no public
  * {@code SurfaceView} corner radius at compileSdk 36 (checked, not assumed). The mask paints what
- * sits behind the page over the four arcs instead.
+ * sits behind the page over the four arcs instead, and the surface fills the frame flush to its
+ * rim so a maximised X window meets the same corners the panes have.
  *
  * <p>While no server is running the page shows its empty state, which is where a home screen
  * rests: the launcher never starts a display on its own.
@@ -74,7 +75,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         mDisplay = findViewById(R.id.x11_display_view);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
-        setPaneContent(mDisplay);
+        // The display is not registered as the pane's content on purpose: that clearance keeps a
+        // terminal's text out of the arcs, but an X screen wants to fill the frame to its rim,
+        // with the corner mask painting the arcs over it - not sit as a square inside a rounded
+        // one.
         PaneGlass.followLayout(mCornerMask);
         View start = findViewById(R.id.x11_pane_start);
         if (start != null) start.setOnClickListener(v -> {
@@ -192,8 +196,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         boolean glass = PaneGlass.isActive(style);
         float radiusPx = glass
             ? PaneGlass.radiusPx(style, getResources().getDisplayMetrics().density) : 0f;
-        // The frame's own outline still rounds the empty state and takes the content inset; the
-        // surface underneath needs the mask on top of it either way.
+        // The frame's own outline still rounds the empty state; the surface underneath fills the
+        // frame and needs the mask on top of it either way.
         setPaneShape(radiusPx, glass);
         if (mCornerMask != null) {
             mCornerMask.setCornerMaskRadius(radiusPx);
