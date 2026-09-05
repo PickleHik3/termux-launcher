@@ -71,11 +71,17 @@ You can open the app settings in either of these ways:
 Keeping **Show in Recents when not the default launcher** enabled is useful while testing the app
 before making it the default Home app.
 
-## 5. Learn the four main surfaces
+## 5. Learn the three places and the four surfaces
 
-From top to bottom in portrait:
+The home screen is three places side by side: **Widgets** on the left, the **Terminal** in the
+middle and a Linux **Display** on the right. Swipe left or right on the status bar to move between
+them, or tap the place icon peeking in from the bar's edge. The launcher opens on the place you
+left it on.
 
-- **Status row:** session number, terminal windows, a `+` window button, CPU, memory, and weather.
+From top to bottom in portrait, on the terminal:
+
+- **Status row:** the place icon and clock, session number, terminal windows, CPU, memory, and
+  weather.
 - **Terminal:** the focused Termux shell or the current pane layout.
 - **Dock:** pinned Android apps, the A–Z app index, and the terminal action row.
 - **Keyboard:** the built-in terminal keyboard by default on a fresh installation.
@@ -93,6 +99,8 @@ workspaces.
 - At an idle shell prompt, type `%settings` to filter the dock for apps matching “settings”. `%` is
   the default prefix and can be changed under **Settings → Launcher & apps → App search prefix**.
 - Tap `+` in the top row to create another terminal window.
+- Swipe left on the status bar for your widgets, right for the Linux display. The display is off
+  until you tap **Turn on** there; [The Linux display](X11_Display.md) takes it from there.
 - Open the command palette by long-pressing the terminal and choosing **Command palette**. With a
   hardware keyboard, use `Ctrl+Alt+Shift+P`.
 - Search the palette for `split`, `workspace`, `font`, or `settings` instead of memorizing every

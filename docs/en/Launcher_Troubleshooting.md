@@ -206,6 +206,16 @@ tells you that none is published for it yet. Delete `~/.local/bin/fastfetch` fir
 clean check — the Termux `fastfetch` package still works, it just sends only the first frame of an
 animated logo.
 
+## The Linux display will not start, or apps cannot reach it
+
+The Display place hides its Start button until the keyboard layouts are installed:
+`pkg install x11-repo xkeyboard-config` (on pacman, `pacman -S xkeyboard-config`). A server that
+runs but no program can reach usually has its socket in the wrong place — a shell with `TMPDIR`
+set away from `$PREFIX/tmp`, or a socket left behind by an earlier server. If Linux apps draw in
+software, run `termux-x11-gpu-setup` in a shell: it tries every graphics profile that fits the
+phone and keeps the best. [The Linux display](X11_Display.md#when-something-is-off) has each case
+in detail.
+
 ## Collect useful diagnostics
 
 Open **Settings → Advanced & diagnostics**:

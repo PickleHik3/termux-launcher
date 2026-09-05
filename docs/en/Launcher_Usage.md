@@ -36,6 +36,16 @@ shell prompts:
 - **Pinch to zoom** changes the focused pane's font size, with jitter filtering so two-finger
   scrolling does not zoom by accident.
 
+**Mouse mode** turns every touch into the mouse for programs that take one — a full-screen editor,
+a file manager, a TUI with clickable panes. A finger down is the left button at that cell, held as
+it moves and released where it lifts; two fingers turn the wheel, and a fast lift keeps it turning.
+A program that has not asked for the mouse gets nothing typed at it, and two fingers scroll the
+transcript as usual. A small mouse at the end of the status bar shows the mode is on. Switch it on
+and off with the **Mouse mode** action: on the shipped extra-keys row it is the keyboard key's
+swipe-up, and it can also sit on the in-app keyboard as a `tool:mouse.toggle` key or on a chord.
+On the Display place the same action swaps the keyboard for a touchpad — see
+[The Linux display](X11_Display.md#every-day).
+
 ## Use the status row
 
 The top surface is both status display and navigation:
@@ -45,6 +55,12 @@ The top surface is both status display and navigation:
 - Tap `+` to create a window.
 - Tap CPU, memory, or weather to open its detail panel.
 - In the expanded status panel, tap the clock to open Android's clock app or the cog to open Settings.
+- A small mouse at the end of the stats means mouse mode is on; tap it to switch the mode off.
+
+The row belongs to the place on screen. On the terminal it holds the session badge and the window
+pills; on the Display place it lists the apps open on the display, front one selected, and a tap
+brings one forward; on Widgets it holds only the stats and the weather, centred under the clock,
+with the weather written out in full.
 
 The CPU and memory values describe the Android device, not only the foreground shell. Weather needs
 location permission and credits Open-Meteo in its detail view.
@@ -81,11 +97,15 @@ A swipe that starts on the window pills scrolls those, and only those. When the 
 or the strip already rests at the end you pull past, the swipe moves the wall instead.
 
 The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
-a widget to move or resize it, and swipe inside the grid to reach its other pages.
+a widget to move or resize it, and swipe inside the grid to reach its other pages. The in-app
+keyboard goes away while you are on Widgets — nothing there takes typing — and comes back with the
+terminal.
 
-On the display page a hardware keyboard types into whatever Linux program is running there, so
-the launcher keeps only its own `Ctrl+Alt` shortcuts — the ones that move you between places and
-around your panes. Everything else, `Ctrl+C` and `Alt+Tab` included, reaches the program.
+The Display place shows the Linux display. Its keyboard, hardware or on-screen, is the display's
+entirely: every key and every chord reaches the Linux program, and the launcher's shortcuts stay
+out of the way. Leave it by swiping the status bar, tapping a place icon or pressing Home. The
+place remembers whether the keyboard was up when you left. [The Linux display](X11_Display.md)
+covers turning it on, its menu, the touchpad and GPU acceleration.
 
 ## Launch Android apps
 
@@ -258,9 +278,11 @@ Review a hand-edited workspace before agreeing to run recorded commands.
 
 ## Use the built-in keyboard and action row
 
-The built-in keyboard is the default on a fresh install. The action row above it exposes keyboard,
-workspace, split, layout, navigation, and scratchpad actions. A long-press or swipe can reveal the
-popup action assigned to a key.
+The built-in keyboard is the default on a fresh install. The action row above it ships with seven
+keys: keyboard (swipe up for mouse mode), new session (swipe up for a new window), Widgets,
+Terminal, Display, split (swipe up for a side-by-side split) and workspaces (swipe up to save one).
+A long-press or swipe reveals the popup action assigned to a key. Search, the prompt jumps and the
+scratchpad keep their chords and the command palette.
 
 Open **Settings → Keyboard & input** to change input method, appearance, colors, typeface, extra keys,
 feedback, and `~/.termux/keyboard/layout.xml` support.

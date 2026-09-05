@@ -120,7 +120,8 @@ Open-Meteo attribution.
 - **Edit extra keys:** the terminal key row, previewed as it will look. Add common keys
   such as CTRL with one tap, search for any other key or launcher action, drag keys to
   reorder them, give a key a swipe-up action and a label, and start from presets including
-  the classic Termux row. Page two of the row is edited on the same screen.
+  the classic Termux row. Page two of the row is edited on the same screen. **Go to Widgets**,
+  **Go to Terminal**, **Go to Display** and **Mouse mode** are among the actions a key can carry.
 - **Extra keys:** choose editing and navigation keys shown on the built-in layout.
 - **Custom layout:** load `~/.termux/keyboard/layout.xml`.
 - **Learn where you tap:** off by default. The keyboard learns where your taps land on each key
@@ -148,7 +149,8 @@ Keyboard height is remembered separately for portrait and landscape.
   resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer, the
   window manager started with the display, the mark on the Display place's badge in the status
   bar, starting the display with the launcher, the start command, pointing new shells at the
-  display, two compatibility switches, and what your GPU can do for Linux apps.
+  display, two compatibility switches, and what your GPU can do for Linux apps. To have the phone
+  try every graphics profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

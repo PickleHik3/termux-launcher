@@ -19,7 +19,9 @@ same way. This page is the short route from switching it on to running a desktop
    pkg install xkeyboard-config
    ```
 
-   Until they are installed the Display place says so and the Start button is hidden.
+   On a pacman-based install the X11 repository is already configured, so `pacman -S
+   xkeyboard-config` is all it takes. Until the layouts are installed the Display place says so
+   and the Start button is hidden.
 3. Start a display from any shell:
 
    ```sh
@@ -178,6 +180,17 @@ the container is then just `debian`.
 - **"No display is running" although you started one.** The server exits before it opens a port
   when the keyboard layouts are missing — install `xkeyboard-config`. Run `termux-x11 :0` in the
   foreground to read its message.
+- **Apps say they cannot open the display, though the server is running.** X programs look for
+  the display's socket in `$PREFIX/tmp`. If your shell sets `TMPDIR` somewhere else, a server
+  started from that shell puts its socket there and no program finds it; start the server with
+  `TMPDIR=$PREFIX/tmp termux-x11 :0`, or leave `TMPDIR` alone. A socket left behind by a server
+  that has exited causes the same symptom — remove it from `$PREFIX/tmp/.X11-unix/`.
+- **`termux-x11-gpu-setup` says even software rendering did not finish.** The test could not talk
+  to a display at all; the two causes above are the usual ones, and the full log it names shows
+  the test program's own message.
+- **A profile's package is "not available here".** Not every package source carries every driver
+  — pacman's repositories have no `vulkan-wrapper-android`, for instance. The script skips that
+  profile and tries the rest.
 - **A black display.** Start the server with `-legacy-drawing`; if that helps, keep it in the
   start command.
 - **Apps cannot open the display from a proot.** Log in with `--shared-tmp`, and check

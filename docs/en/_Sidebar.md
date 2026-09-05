@@ -1,9 +1,9 @@
 # Termux Launcher
 
 - [Home](index.md)
-- [What’s new in 0.2.31](Whats_New_0.2.31.md)
 - [Getting started](Launcher_Getting_Started.md)
 - [Using the launcher](Launcher_Usage.md)
+- [Linux display](X11_Display.md)
 - [Settings map](Launcher_Settings.md)
 - [Shizuku](Shizuku.md)
 - [Troubleshooting](Launcher_Troubleshooting.md)
@@ -13,7 +13,6 @@
 - [Modern terminal guide](Terminal_Modernization.md)
 - [Terminal fonts](Terminal_Fonts.md)
 - [Kitty protocols](Terminal_Kitty_Protocols.md)
-- [Linux display](X11_Display.md)
 - [Nix: beginner's guide](Nix_Getting_Started.md)
 - [Nix package management](Nix_Package_Management.md)
 - [Nix fork differences](Nix_Fork_Differences.md)
