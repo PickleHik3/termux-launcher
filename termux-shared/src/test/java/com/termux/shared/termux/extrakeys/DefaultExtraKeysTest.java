@@ -21,8 +21,9 @@ public class DefaultExtraKeysTest {
             TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         ExtraKeyButton[][] matrix = info.getMatrix();
         assertEquals(1, matrix.length);
-        // The row carries what no key on the in-app keyboard reaches: the keyboard toggle, a new
-        // session, the wall's three places, a split, and the workspaces. Window and session
+        // The row carries what no key on the in-app keyboard reaches: the keyboard toggle (with
+        // mouse mode on its swipe), a new session, the wall's three places, a split, and the
+        // workspaces. Window and session
         // switching live on the keyboard's space-bar swipes; search, prompt jumps and the
         // scratchpad have chords and the palette.
         String[] expectedKeys = {
@@ -35,7 +36,7 @@ public class DefaultExtraKeysTest {
             "tool:workspace.picker",
         };
         String[] expectedPopups = {
-            "tool:terminal.select_at_cursor",
+            "tool:mouse.toggle",
             "tool:window.new",
             null,
             null,

@@ -54,6 +54,39 @@ public class PaneWallLayoutTest {
     }
 
     @Test
+    public void aJumpAcrossTheRingBringsThePageInFromTheSideItSitsOn() {
+        // Widgets, Terminal, Display make a ring. From Display, Widgets is the place to the
+        // right, so a jump straight to it starts with the wall a whole width to the right - the
+        // page slides in from the right edge; from Widgets, Display is the place to the left and
+        // comes in from the left. The same sides a swipe reaches them from.
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.setReducedMotion(false);
+        wall.goTo(PaneWallPage.DISPLAY, false);
+        assertEquals(0f, display.getTranslationX(), EPS);
+
+        wall.goTo(PaneWallPage.WIDGETS, true);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals("Widgets starts a width to the right and slides in from there",
+            WIDTH, wall.offsetPx(), EPS);
+        wall.goTo(PaneWallPage.DISPLAY, false);
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PaneWallPage.DISPLAY, true);
+        assertEquals("Display starts a width to the left and slides in from there",
+            -WIDTH, wall.offsetPx(), EPS);
+
+        // Between neighbours the side is the plain one: from the terminal, Widgets is to the left
+        // and Display to the right.
+        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PaneWallPage.WIDGETS, true);
+        assertEquals(-WIDTH, wall.offsetPx(), EPS);
+        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PaneWallPage.DISPLAY, true);
+        assertEquals(WIDTH, wall.offsetPx(), EPS);
+    }
+
+    @Test
     public void theTerminalRestsOnScreenAndItsNeighboursRestOffIt() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         assertEquals(PaneWallPage.TERMINAL, wall.currentPage());

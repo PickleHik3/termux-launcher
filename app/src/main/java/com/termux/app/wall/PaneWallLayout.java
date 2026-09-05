@@ -150,6 +150,14 @@ public final class PaneWallLayout extends ViewGroup {
         return mDragging;
     }
 
+    /**
+     * Signed distance of the wall from the current page's rest, in px: positive when the pages
+     * sit to the right of where they will land, so the current page is arriving from the right.
+     */
+    public float offsetPx() {
+        return mOffsetPx;
+    }
+
     /** Off while another surface owns the gesture (the surface editor, for one). */
     public void setGesturesEnabled(boolean enabled) {
         mGesturesEnabled = enabled;
