@@ -4106,16 +4106,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         );
     }
 
+    /**
+     * The managed wallpaper file decoded once, off the main thread, at the frame's size. Reading
+     * it in place on every blur-cache miss was the launcher's "not responding" after a large
+     * wallpaper was set.
+     */
+    private final com.termux.app.chrome.ManagedWallpaperSource mManagedWallpaperSource =
+        new com.termux.app.chrome.ManagedWallpaperSource(
+            java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "managed-wallpaper-decode");
+                thread.setPriority(Thread.NORM_PRIORITY - 1);
+                return thread;
+            }),
+            runnable -> new Handler(Looper.getMainLooper()).post(runnable));
+    /** Set by the managed path when its read is in flight: draw nothing, a sync follows. */
+    private boolean mManagedWallpaperPending;
+
     @Nullable
     private Bitmap createManagedWallpaperBackdropBitmapForRect(@NonNull Rect targetRect, @NonNull View wallpaperFrame) {
         File sourceFile = getManagedWallpaperExactFile();
-        Bitmap sourceBitmap = BitmapFactory.decodeFile(sourceFile.getAbsolutePath());
+        Rect frameRect = getManagedWallpaperFrameRect();
+        Bitmap sourceBitmap = mManagedWallpaperSource.obtain(sourceFile, frameRect.width(),
+            frameRect.height(), () -> {
+                if (isFinishing() || isDestroyed()) return;
+                mChrome.blurCache().clear();
+                mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            });
+        mManagedWallpaperPending = sourceBitmap == null && mManagedWallpaperSource.isReading();
         if (sourceBitmap == null) {
             return null;
         }
 
-        try {
-            Rect frameRect = getManagedWallpaperFrameRect();
+        {
             int targetWidth = Math.max(1, targetRect.width());
             int targetHeight = Math.max(1, targetRect.height());
 
@@ -4149,8 +4171,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             paint.setShader(shader);
             canvas.drawRect(0f, 0f, targetWidth, targetHeight, paint);
             return bitmap;
-        } finally {
-            sourceBitmap.recycle();
         }
     }
 
@@ -4268,6 +4288,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (managedBackdrop != null) {
                 return managedBackdrop;
             }
+            // While the file is being read there is nothing to draw yet; the system drawable
+            // would be the same picture decoded again, on this thread, for a frame about to be
+            // replaced.
+            if (mManagedWallpaperPending) return null;
         }
 
         WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
@@ -5162,6 +5186,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onDestroy");
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());
         mTerminalFrameMetricsMonitor.stop();
+        mManagedWallpaperSource.clear();
         // The inspector holds this Activity strongly for the life of its overlay, so it has to go
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();

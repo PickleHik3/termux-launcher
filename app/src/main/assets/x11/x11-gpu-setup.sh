@@ -44,7 +44,9 @@ for arg in "$@"; do
 done
 
 PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
-TMPDIR=${TMPDIR:-$PREFIX/tmp}
+# X programs in Termux look for the display's socket in the prefix's tmp, whatever TMPDIR a shell
+# has set, so the display the script starts must put it there too.
+export TMPDIR=$PREFIX/tmp
 ICD_DIR=$PREFIX/share/vulkan/icd.d
 OUT_DIR=$HOME/.config/termux-launcher
 OUT_FILE=$OUT_DIR/x11-gpu.env
@@ -80,7 +82,7 @@ REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
 
 # Keep track of what we install so it can be removed again. A package that was already on the
 # phone before we started is never touched.
-WE_INSTALLED=()
+WE_INSTALLED=(); NOT_AVAILABLE=()
 install_pkgs() {
   local missing=()
   for p in "$@"; do installed_before "$p" || missing+=("$p"); done
@@ -90,6 +92,7 @@ install_pkgs() {
     WE_INSTALLED+=("${missing[@]}")
     return 0
   fi
+  NOT_AVAILABLE+=("${missing[@]}")
   detail "Could not install ${missing[*]} (details in $LOG)."
   return 1
 }
@@ -97,7 +100,10 @@ install_pkgs() {
 # Background helpers we start and must stop again.
 SERVER_PID=""; VIRGL_PID=""
 stop_virgl()   { [ -n "$VIRGL_PID" ] && kill "$VIRGL_PID" 2>/dev/null; VIRGL_PID=""; pkill -f virgl_test_server_android 2>/dev/null; true; }
-stop_display() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null; SERVER_PID=""; true; }
+stop_display() {
+  [ -n "$SERVER_PID" ] && { kill "$SERVER_PID" 2>/dev/null; sleep 1; rm -f "$TMPDIR/.X11-unix/X$DISPLAY_NO"; }
+  SERVER_PID=""; true
+}
 cleanup_processes() { stop_virgl; stop_display; }
 trap cleanup_processes EXIT
 
@@ -201,21 +207,28 @@ if [ "$(ls "$ICD_DIR" 2>/dev/null | wc -l)" -gt 1 ]; then
   ENV[turnip-zink]="${ENV[turnip-zink]} VK_ICD_FILENAMES=$ICD_DIR/freedreno_icd.aarch64.json"
 fi
 ALREADY=""
-for p in $ALL_PKGS; do case " ${WE_INSTALLED[*]} " in *" $p "*) ;; *) ALREADY="$ALREADY $p" ;; esac; done
-result "newly installed: ${WE_INSTALLED[*]:-none}; already on the phone:${ALREADY:- none}"
+for p in $ALL_PKGS; do case " ${WE_INSTALLED[*]} ${NOT_AVAILABLE[*]} " in *" $p "*) ;; *) ALREADY="$ALREADY $p" ;; esac; done
+result "newly installed: ${WE_INSTALLED[*]:-none}; already on the phone:${ALREADY:- none}; not available here: ${NOT_AVAILABLE[*]:-none}"
 
 # ---------------------------------------------------------------------------------------------
 step 4 "Starting a private display for the tests"
-if [ -S "$TMPDIR/.X11-unix/X$DISPLAY_NO" ]; then
+SOCKET=$TMPDIR/.X11-unix/X$DISPLAY_NO
+# A socket file alone proves nothing: an earlier run may have left one behind. Ask the display.
+display_answers() { DISPLAY=$TEST_DISPLAY timeout 10 glmark2-es2 --off-screen -s 64x64 -b build:duration=0.2 >/dev/null 2>&1; }
+if [ -S "$SOCKET" ] && display_answers; then
   detail "A display $TEST_DISPLAY is already running; using it."
 else
+  if [ -e "$SOCKET" ]; then
+    detail "Removing a leftover socket from an earlier run."
+    rm -f "$SOCKET" "$HOME/.tmp/.X11-unix/X$DISPLAY_NO"
+  fi
   if ! command -v termux-x11 >/dev/null; then
     say "The display command (termux-x11) is not installed. Turn the Linux display on in the launcher's settings first."; exit 1
   fi
   termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
   SERVER_PID=$!
-  for _ in $(seq 1 20); do [ -S "$TMPDIR/.X11-unix/X$DISPLAY_NO" ] && break; sleep 0.5; done
-  if [ ! -S "$TMPDIR/.X11-unix/X$DISPLAY_NO" ]; then
+  for _ in $(seq 1 20); do [ -S "$SOCKET" ] && break; sleep 0.5; done
+  if [ ! -S "$SOCKET" ]; then
     say "The display did not start. Its messages are in $LOG."; exit 1
   fi
   detail "Display $TEST_DISPLAY is up. Nothing is shown on screen; the tests draw off-screen."
@@ -237,7 +250,7 @@ run_test() {
   printf '\n### %s (exit %s)\n%s\n' "$name" "$rc" "$out" >>"$LOG"
   stop_virgl
   RENDERER=$(echo "$out" | sed -n 's/^ *GL_RENDERER: *//p' | head -1)
-  SCORE=$(echo "$out" | sed -n 's/^ *glmark2 Score: *//p' | head -1); SCORE=${SCORE:-0}
+  SCORE=$(echo "$out" | sed -n 's/^ *glmark2 Score: *//p' | head -1 | tr -d ' \r'); SCORE=${SCORE:-0}
   if [ $rc = 124 ]; then STATUS="timed out"
   elif [ $rc != 0 ] || [ -z "$SCORE" ] || [ "$SCORE" = 0 ]; then STATUS="crashed"
   elif [ "$name" != software ] && echo "$RENDERER" | grep -qiE 'llvmpipe|lavapipe|softpipe'; then STATUS="not accelerated"
@@ -322,7 +335,7 @@ else
       out=$(pd env DISPLAY=$TEST_DISPLAY XDG_RUNTIME_DIR=/tmp $envs timeout $TEST_TIMEOUT $TEST_CMD 2>&1); rc=$?
       printf '\n### debian: %s (exit %s)\n%s\n' "$envs" "$rc" "$out" >>"$LOG"
       RENDERER=$(echo "$out" | sed -n 's/^ *GL_RENDERER: *//p' | head -1)
-      SCORE=$(echo "$out" | sed -n 's/^ *glmark2 Score: *//p' | head -1); SCORE=${SCORE:-0}
+      SCORE=$(echo "$out" | sed -n 's/^ *glmark2 Score: *//p' | head -1 | tr -d ' \r'); SCORE=${SCORE:-0}
       if [ $rc = 124 ]; then STATUS="timed out"; elif [ $rc != 0 ] || [ "$SCORE" = 0 ]; then STATUS="crashed"; else STATUS="ok"; fi
     }
     pd_test "${ENV[software]}"
