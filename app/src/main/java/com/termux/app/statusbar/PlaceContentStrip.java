@@ -11,8 +11,11 @@ import android.widget.LinearLayout;
  */
 public final class PlaceContentStrip extends LinearLayout {
 
-    /** The lens is the outer 14dp of the bar; content at rest keeps clear of it. */
-    public static final float LENS_WIDTH_DP = 14f;
+    /**
+     * How far the row's content starts from the bar's edge: just past the visible half of the
+     * icon peeking there. Portrait width is scarce, so the two sit close.
+     */
+    public static final float LENS_WIDTH_DP = 10f;
 
     public PlaceContentStrip(Context context, AttributeSet attrs) {
         super(context, attrs);

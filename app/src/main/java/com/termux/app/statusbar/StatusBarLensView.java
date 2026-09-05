@@ -2,6 +2,7 @@ package com.termux.app.statusbar;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -67,6 +68,8 @@ public final class StatusBarLensView extends View {
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** Fades a neighbour towards the edge it peeks past: DST_IN over the icon's own layer. */
+    private final Paint mFadePaint = new Paint();
     private final RectF mTile = new RectF();
     private final RectF mGlow = new RectF();
     private final int mNeutral;
@@ -100,6 +103,8 @@ public final class StatusBarLensView extends View {
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
         mNeutral = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
             ContextCompat.getColor(context, R.color.termux_on_surface_variant));
+        mFadePaint.setXfermode(new android.graphics.PorterDuffXfermode(
+            android.graphics.PorterDuff.Mode.DST_IN));
         for (int i = 0; i < mHitRects.length; i++) mHitRects[i] = new RectF();
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         setWillNotDraw(false);
@@ -173,9 +178,9 @@ public final class StatusBarLensView extends View {
     @NonNull
     private String glyphFor(@NonNull PaneWallPage page) {
         switch (page) {
-            case WIDGETS: return "";
+            case WIDGETS: return "\uf015";
             case DISPLAY: return mDisplayGlyph;
-            default: return "";
+            default: return "\uf120";
         }
     }
 
@@ -249,10 +254,31 @@ public final class StatusBarLensView extends View {
             mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(84 * ink)));
             mGlyphPaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(255 * ink)));
             mGlyphPaint.setTextSize(size * 0.5f);
+            // A neighbour dissolves towards the edge it peeks past: its own layer, then a
+            // gradient that keeps the inner side and lets the outer side go. The fade is as
+            // strong as the icon is far from home, so an arriving icon becomes whole as it lands.
+            boolean fades = presence > 0.05f && t != 0f;
+            int layer = -1;
+            if (fades) {
+                layer = canvas.saveLayer(mTile.left - 1f, mTile.top - 1f, mTile.right + 1f,
+                    mTile.bottom + 1f, null);
+            }
             canvas.drawRoundRect(mTile, radius, radius, mTilePaint);
             canvas.drawRoundRect(mTile, radius, radius, mStrokePaint);
             float baseline = centerY - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
             canvas.drawText(glyphFor(page), centerX, baseline, mGlyphPaint);
+            if (fades) {
+                boolean fromLeft = t < 0f;
+                float outer = fromLeft ? mTile.left : mTile.right;
+                float inner = fromLeft ? mTile.right : mTile.left;
+                int outerColor = ColorUtils.setAlphaComponent(Color.WHITE,
+                    Math.round(255 * (1f - presence)));
+                mFadePaint.setShader(new LinearGradient(outer, 0f, inner, 0f, outerColor,
+                    Color.WHITE, Shader.TileMode.CLAMP));
+                canvas.drawRect(mTile.left - 1f, mTile.top - 1f, mTile.right + 1f, mTile.bottom + 1f,
+                    mFadePaint);
+                canvas.restoreToCount(layer);
+            }
         }
     }
 

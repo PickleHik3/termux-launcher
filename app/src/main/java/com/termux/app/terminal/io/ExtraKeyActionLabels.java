@@ -63,7 +63,7 @@ public final class ExtraKeyActionLabels {
     @Nullable
     public static String defaultCapGlyph(@NonNull String toolName) {
         switch (toolName) {
-            case LauncherToolRegistry.TOOL_WALL_WIDGETS: return "\uf00a";
+            case LauncherToolRegistry.TOOL_WALL_WIDGETS: return "\uf015";
             case LauncherToolRegistry.TOOL_WALL_TERMINAL: return "\uf120";
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return "\uf108";
             case LauncherToolRegistry.TOOL_MOUSE_TOGGLE: return "\uf245";

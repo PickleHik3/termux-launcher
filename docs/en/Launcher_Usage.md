@@ -61,7 +61,7 @@ as new attention.
 
 The terminal is one of three places in a ring — Widgets, Terminal, Display — so from any of them
 the other two are one step away, one to each side. The status bar is the pager. The icon beside
-the clock names the place you are on — a grid for Widgets, a prompt for Terminal, a screen for
+the clock names the place you are on — a house for Widgets, a prompt for Terminal, a screen for
 Display — and the other two peek in from the bar's edges on the side each place slides in from.
 Swipe left or right anywhere on the bar and the icons move together: the one arriving takes the
 spot beside the clock as the one that was there leaves. Tap a peeking icon to go there. The Display
