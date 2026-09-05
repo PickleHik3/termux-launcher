@@ -4869,7 +4869,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastDisplayCutoutInsetLeft = cutoutInsets.left;
         mLastDisplayCutoutInsetRight = cutoutInsets.right;
         mLastNavigationBarInsetBottom = insetsCompat.getInsets(Type.navigationBars()).bottom;
-        boolean railActive = isDockRailActive();
+        // Only a rail that actually shows icons claims its column; an empty rail is gone, and the
+        // content then keeps just the cutout inset on that side like any other edge.
+        boolean railActive = isDockRailShown();
         boolean railOnRight = isDockRailOnRight();
         int railWidthPx = railActive ? getDockLayout().railWidthPx : 0;
         int leftContentInsetPx = railActive && !railOnRight ? railWidthPx : cutoutInsets.left;
@@ -5341,6 +5343,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The listener is attached to the decor view and can outlive the state the pass reads —
         // a rotation delivered while the activity is tearing down still draws once.
         if (mProperties == null) return;
+        // The insets this activity cached were dispatched for the outgoing orientation; the cutout
+        // has since changed sides. Ask for a fresh dispatch so the content padding and the rail
+        // column are recomputed now rather than whenever the system next happens to resend them
+        // (which left the rail's icons over the terminal for a few seconds after a rotation).
+        if (mTermuxActivityRootView != null)
+            ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         setTerminalToolbarHeight();
         updateDockRailView();
         // The render state hides the apps and A-Z rows in landscape and shows them in portrait, and
@@ -7573,6 +7581,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mPreferences.isAppLauncherAppsRowEnabled();
     }
 
+    /** The rail is active and has at least one icon to show, so it occupies its edge column. */
+    private boolean isDockRailShown() {
+        return isDockRailActive() && mSuggestionBarView != null
+            && !mSuggestionBarView.getDockRailEntries().isEmpty();
+    }
+
     private boolean isDockRailOnRight() {
         return mPreferences != null && mPreferences.isAppLauncherDockRailOnRight();
     }
@@ -7631,8 +7645,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         if (!isDockRailActive() || mSuggestionBarView == null) {
             railScroll.setDrawerPullListener(null);
+            boolean wasShown = railScroll.getVisibility() == View.VISIBLE;
             railScroll.setVisibility(View.GONE);
             railList.removeAllViews();
+            if (wasShown && mTermuxActivityRootView != null)
+                ViewCompat.requestApplyInsets(mTermuxActivityRootView);
             return;
         }
         DockLayout dockLayout = getDockLayout();
@@ -7680,7 +7697,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             railList.addView(iconView, iconParams);
             iconView.setOnClickListener(v -> mSuggestionBarView.launchEntryFromRail(entry, v));
         }
-        railScroll.setVisibility(railList.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+        int visibility = railList.getChildCount() > 0 ? View.VISIBLE : View.GONE;
+        if (railScroll.getVisibility() != visibility) {
+            railScroll.setVisibility(visibility);
+            // The content root's edge padding is decided from whether the rail shows, so a rail that
+            // just gained or lost its last icon needs the insets pass to run again.
+            if (mTermuxActivityRootView != null)
+                ViewCompat.requestApplyInsets(mTermuxActivityRootView);
+        }
     }
 
     /**
