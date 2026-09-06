@@ -4,7 +4,7 @@
   // Animated GIF rendered natively with the Kitty graphics protocol.
   "logo": {
     "type": "kitty",
-    "source": "/data/data/com.termux/files/home/Pictures/gif/skel.gif",
+    "source": "~/Pictures/gif/skel.gif",
     "width": 21,
     "printRemaining": false,
     "padding": {
