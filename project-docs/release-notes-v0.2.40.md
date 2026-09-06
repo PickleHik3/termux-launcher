@@ -33,6 +33,8 @@
 
 - The session browser, the workspace panels, scrollback search and quick select rise out of the terminal's bottom edge instead of floating over it.
 - A window pill shows one short item — the open file, the process or the directory — and its ring, bell, tick and cross all sit in the icon's spot.
+- `tlstore` (or `tl`, `tls`) installs and updates the shell setup, dev tools and showcase tools the launcher shows off, with a picker when you don't name anything.
+- Claude Code is one of the things `tlstore install` can put on your phone.
 
 ### Local AI
 

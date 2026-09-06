@@ -41,6 +41,7 @@ access; skip it if command-line tools do not need your shared files.
 - [Terminal fonts](Terminal_Fonts.md)
 - [Kitty protocols and terminal compatibility](Terminal_Kitty_Protocols.md)
 - [Install showcase tools](Building_Terminal_Showcase_Tools.md)
+- [Tlstore, the tool store](Tlstore.md)
 
 ## Nix edition
 

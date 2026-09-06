@@ -1,4 +1,6 @@
 #!/system/bin/sh
+# tlstore (in the app since the next release) supersedes this script; see
+# docs/en/Tlstore.md.
 # setup-launcher — installs the showcase shell environment: everything, the
 # shell essentials, or one item at a time.
 #
