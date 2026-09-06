@@ -737,7 +737,7 @@ do_fisher() {
         return 1
     fi
     say "installing $ii_name"
-    if ! fish -c "fisher install $ii_source"; then
+    if ! fish -c "fisher install $ii_source" </dev/null; then
         err "could not install $ii_name"
         return 1
     fi
@@ -872,7 +872,7 @@ remove_item() {
     if [ "$ri_kind" = fisher ]; then
         ri_item=$(row "$ri_name")
         if [ -n "$ri_item" ] && have fish; then
-            fish -c "fisher remove $(field "$ri_item" 5)" >/dev/null 2>&1 || true
+            fish -c "fisher remove $(field "$ri_item" 5)" </dev/null >/dev/null 2>&1 || true
         fi
     fi
     for ri_f in $ri_files; do
