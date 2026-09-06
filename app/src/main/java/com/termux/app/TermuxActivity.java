@@ -8212,7 +8212,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int rootHeightPx = root != null ? root.getHeight() : 0;
         if (rootHeightPx <= 0)
             return Integer.MAX_VALUE;
-        View windowBarHost = findViewById(R.id.terminal_window_bar_host);
+        // A bar standing in a column takes no height from the stack at all; only a row does.
+        View windowBarHost = isStatusBarVertical() ? null
+            : findViewById(R.id.terminal_window_bar_host);
         int windowBarPx = windowBarHost != null && windowBarHost.getVisibility() == View.VISIBLE
             ? windowBarHost.getHeight() : 0;
         int minTerminalPx = Math.round(dpToPx(72));
@@ -12737,7 +12739,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             background.setBackground(joinsDock
                 ? mChrome.glass().dockSurface(opacity, 0f, 1f, false)
                 : mChrome.glass().statusBarSurface(opacity,
-                    capsuleStatusBar ? 0f : terminalWindowGlassStatusFraction(host), 1f, true));
+                    capsuleStatusBar || isStatusBarVertical()
+                        ? 0f : terminalWindowGlassStatusFraction(host), 1f, true));
         }
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();

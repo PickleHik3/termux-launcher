@@ -8,7 +8,6 @@ import android.graphics.drawable.GradientDrawable;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -56,6 +55,9 @@ public final class StatusBarWindowColumn extends ScrollView {
         setVerticalScrollBarEnabled(false);
         setOverScrollMode(OVER_SCROLL_NEVER);
         setClipToPadding(false);
+        // The bar's own gesture owns a drag down the column: that is how the wall is paged there,
+        // and a scroll container in the way would swallow it before the bar ever saw it.
+        setNestedScrollingEnabled(false);
         mStack = new LinearLayout(context);
         mStack.setOrientation(LinearLayout.VERTICAL);
         mStack.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -110,11 +112,14 @@ public final class StatusBarWindowColumn extends ScrollView {
             chip.setOnClickListener(v -> {
                 if (mListener != null) mListener.onWindowSelected(index);
             });
+            // A raised font scale is what clips fixed chrome; the chip's one glyph shrinks to fit
+            // its box rather than spilling out of it.
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(chip,
+                8, 11, 1, TypedValue.COMPLEX_UNIT_SP);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
             params.topMargin = i == 0 ? 0 : gap;
             mStack.addView(chip, params);
         }
-        setVisibility(mItems.isEmpty() ? View.INVISIBLE : View.VISIBLE);
     }
 
     /**
