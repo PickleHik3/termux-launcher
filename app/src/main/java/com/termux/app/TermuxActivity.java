@@ -11352,6 +11352,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean reversed = com.termux.app.statusbar.StatusStatsClusterPolicy
             .centeredReversed(currentWallPage());
         spacer.setVisibility(reversed ? View.VISIBLE : View.GONE);
+        // The two flexible sides share the leftover width equally, but the strip on the left
+        // carries its own padding and the end widgets on the right theirs; the spacer's minimum
+        // width makes up the difference so the cluster's centre is the row's centre.
+        View strip = findViewById(R.id.terminal_status_place_content);
+        View endWidgets = findViewById(R.id.terminal_status_widgets);
+        if (strip != null && endWidgets != null) {
+            int stripPad = strip.getPaddingStart() + strip.getPaddingEnd();
+            int endPad = endWidgets.getPaddingEnd()
+                + (endWidgets.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
+                    ? ((ViewGroup.MarginLayoutParams) endWidgets.getLayoutParams()).getMarginEnd() : 0);
+            spacer.setMinimumWidth(Math.max(0, stripPad - endPad));
+        }
         int count = cluster.getChildCount();
         boolean currentlyReversed = count > 0
             && cluster.getChildAt(0).getId() == R.id.terminal_status_widget_weather;
