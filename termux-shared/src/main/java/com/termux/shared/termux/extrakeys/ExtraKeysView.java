@@ -395,6 +395,21 @@ public final class ExtraKeysView extends GridLayout {
         mToolbarTextInputSwipeListener = listener;
     }
 
+    /** True when the keys stand in a column on a screen edge instead of lying in a row. */
+    private boolean mVertical;
+
+    /**
+     * Lay the keys out as a column: each configured row becomes a column and the keys in it run
+     * top to bottom. Takes effect on the next {@link #reload}.
+     */
+    public void setVertical(boolean vertical) {
+        mVertical = vertical;
+    }
+
+    public boolean isVertical() {
+        return mVertical;
+    }
+
     /**
      * Set {@link #mExtraKeysViewClient}.
      */
@@ -632,8 +647,9 @@ public final class ExtraKeysView extends GridLayout {
         mGlowLevels.clear();
         removeAllViews();
         ExtraKeyButton[][] buttons = extraKeysInfo.getMatrix();
-        setRowCount(buttons.length);
-        setColumnCount(maximumLength(buttons));
+        // A column transposes the matrix: the configured rows stand side by side as columns.
+        setRowCount(mVertical ? maximumLength(buttons) : buttons.length);
+        setColumnCount(mVertical ? buttons.length : maximumLength(buttons));
         for (int row = 0; row < buttons.length; row++) {
             for (int col = 0; col < buttons[row].length; col++) {
                 final ExtraKeyButton buttonInfo = buttons[row][col];
@@ -797,8 +813,8 @@ public final class ExtraKeysView extends GridLayout {
                     param.height = 0;
                 }
                 param.setMargins(0, 0, 0, 0);
-                param.columnSpec = GridLayout.spec(col, GridLayout.FILL, 1.f);
-                param.rowSpec = GridLayout.spec(row, GridLayout.FILL, 1.f);
+                param.columnSpec = GridLayout.spec(mVertical ? row : col, GridLayout.FILL, 1.f);
+                param.rowSpec = GridLayout.spec(mVertical ? col : row, GridLayout.FILL, 1.f);
                 button.setLayoutParams(param);
                 addView(button);
             }

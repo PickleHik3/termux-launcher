@@ -1035,6 +1035,17 @@
                 android:gravity="center_horizontal" />
         </com.termux.app.launcher.drawer.DockRailScrollView>
 
+        <!-- The Display place's extra keys, standing in a column on one edge when its setting asks
+             for that. A sibling of the padded content root like the rail, for the same reason;
+             syncDisplayExtraKeysColumn() fills, sizes and places it. -->
+        <FrameLayout
+            android:id="@+id/display_extra_keys_column"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:clipToPadding="false"
+            android:visibility="gone" />
+
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
              deliberately NOT part of the accessory stack: the drawer animates with transforms only,

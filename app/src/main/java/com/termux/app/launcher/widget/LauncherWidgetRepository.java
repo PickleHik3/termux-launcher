@@ -91,6 +91,50 @@ public final class LauncherWidgetRepository {
             && WidgetGridPlacementPolicy.canPlace(grid, recordsOnPage(page), cell, -1);
     }
 
+    /**
+     * Adopts new grid dimensions. Every widget keeps its place while it still fits; one that no
+     * longer does is shrunk to the grid and moved to the first free spot on its page, or onto a
+     * new page when its page is full — the grid can always change, and no widget is lost for it.
+     * Refused while an add is in flight, since its reservation was made against the old grid.
+     */
+    public synchronized boolean setGridDefinition(@NonNull WidgetGridDefinition next) {
+        if (next.equals(grid)) return true;
+        if (pending != null) return false;
+        int pages = pageCount;
+        LinkedHashMap<Integer, LauncherWidgetRecord> relaid = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : records.values()) {
+            WidgetCellRect cell = record.cell;
+            int columnSpan = Math.min(cell.columnSpan(), next.columns);
+            int rowSpan = Math.min(cell.rowSpan(), next.rows);
+            int left = Math.max(0, Math.min(cell.left, next.columns - columnSpan));
+            int top = Math.max(0, Math.min(cell.top, next.rows - rowSpan));
+            WidgetCellRect kept = new WidgetCellRect(left, top, left + columnSpan, top + rowSpan);
+            int page = record.page;
+            List<LauncherWidgetRecord> onPage = recordsOnPage(relaid, page);
+            if (WidgetGridPlacementPolicy.canPlace(next, onPage, kept, -1)) {
+                relaid.put(record.appWidgetId, record.withCell(kept));
+                continue;
+            }
+            WidgetGridPlacementPolicy.Result placement =
+                WidgetGridPlacementPolicy.findPlacement(next, onPage, columnSpan, rowSpan);
+            if (placement.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) {
+                page = pages++;
+                placement = WidgetGridPlacementPolicy.findPlacement(next,
+                    Collections.emptyList(), columnSpan, rowSpan);
+            }
+            if (placement.rect == null) return false;
+            relaid.put(record.appWidgetId, record.withPage(page).withCell(placement.rect));
+        }
+        return commitValidated(relaid, null, next, pages, revision + 1);
+    }
+
+    private static List<LauncherWidgetRecord> recordsOnPage(
+            Map<Integer, LauncherWidgetRecord> values, int page) {
+        ArrayList<LauncherWidgetRecord> out = new ArrayList<>();
+        for (LauncherWidgetRecord record : values.values()) if (record.page == page) out.add(record);
+        return out;
+    }
+
     /** Appends an empty page after the last one; returns the new page index or -1 on failure. */
     public synchronized int addPage() {
         int appended = pageCount;

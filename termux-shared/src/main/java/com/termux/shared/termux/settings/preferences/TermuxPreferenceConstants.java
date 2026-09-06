@@ -171,6 +171,23 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
+        /** The widget pane's grid: how many columns across and rows down a page has. */
+        public static final String KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS = "app_launcher_widget_grid_columns";
+
+        public static final int DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS = 4;
+
+        public static final int MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS = 2;
+
+        public static final int MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS = 8;
+
+        public static final String KEY_APP_LAUNCHER_WIDGET_GRID_ROWS = "app_launcher_widget_grid_rows";
+
+        public static final int DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS = 5;
+
+        public static final int MIN_APP_LAUNCHER_WIDGET_GRID_ROWS = 2;
+
+        public static final int MAX_APP_LAUNCHER_WIDGET_GRID_ROWS = 12;
+
         /**
          * Defines the key for the embedded Linux display: the wall's Display page, the
          * {@code termux-x11} command the launcher writes into the prefix, and the display
@@ -232,6 +249,25 @@ public final class TermuxPreferenceConstants {
          * the glyph of the proot distribution the display is used for.
          */
         public static final String KEY_X11_RUNTIME_BADGE = "x11_runtime_badge";
+
+        /**
+         * Where the extra keys sit while the Display place is showing: along the bottom as usual,
+         * or as a column on one screen edge so the display keeps its height.
+         */
+        public static final String KEY_X11_EXTRA_KEYS_SIDE = "x11_extra_keys_side";
+
+        public static final String X11_EXTRA_KEYS_SIDE_BOTTOM = "bottom";
+
+        public static final String X11_EXTRA_KEYS_SIDE_LEFT = "left";
+
+        public static final String X11_EXTRA_KEYS_SIDE_RIGHT = "right";
+
+        public static final String DEFAULT_X11_EXTRA_KEYS_SIDE = X11_EXTRA_KEYS_SIDE_BOTTOM;
+
+        /** Hide the launcher's status bar while the Display place is showing. */
+        public static final String KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
+
+        public static final boolean DEFAULT_X11_HIDE_STATUS_BAR = false;
 
         public static final String DEFAULT_X11_RUNTIME_BADGE = "termux";
 

@@ -93,6 +93,7 @@ import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.chrome.SurfaceDirtyLedger;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.x11.DisplayExtraKeysColumnGeometry;
 import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
@@ -389,6 +390,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** One entry per key page of the terminal toolbar pager, in page order. */
     final java.util.List<ExtraKeysView> mExtraKeysViews = new java.util.ArrayList<>();
     ExtraKeysView mExtraKeysView;
+
+    /** The Display place's extra keys column, while its setting stands the keys on an edge. */
+    @Nullable private ExtraKeysView mDisplayExtraKeysView;
 
     SuggestionBarView mSuggestionBarView;
     private boolean mSuggestionBarExplicitSearchActive;
@@ -885,6 +889,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // host at all — no binding, no listening, no widget providers reconciled.
         if (mPreferences.isAppLauncherWidgetPaneEnabled()) {
             mWidgetHostController = new com.termux.app.launcher.widget.LauncherWidgetHostController(this);
+            applyWidgetGridPreference();
         }
         mPreferences.migrateTerminalMarginAdjustmentDefaultIfNeeded();
         mLauncherTransitionController = new LauncherTransitionController(this, mPreferences);
@@ -3115,8 +3120,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !isLandscapeOrientation();
         boolean azRowEnabled = mPreferences.isAppLauncherAzRowEnabled()
             && !isLandscapeOrientation();
+        // The Display place can stand the keys in a column on an edge instead; the row then
+        // collapses like a disabled one and the column is laid out beside the content root.
         boolean extraKeysRowEnabled = mPreferences.isAppLauncherExtraKeysRowEnabled()
-            && mPreferences.shouldShowTerminalToolbar();
+            && mPreferences.shouldShowTerminalToolbar()
+            && !isDisplayExtraKeysColumnActive();
         boolean dockShown = appsRowEnabled || azRowEnabled || extraKeysRowEnabled;
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         float barAlpha = mPreferences.getAppBarOpacity() / 100f;
@@ -4876,6 +4884,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int railWidthPx = railActive ? getDockLayout().railWidthPx : 0;
         int leftContentInsetPx = railActive && !railOnRight ? railWidthPx : cutoutInsets.left;
         int rightContentInsetPx = railActive && railOnRight ? railWidthPx : cutoutInsets.right;
+        // The Display place's extra keys column claims its edge the same way, standing past the
+        // rail when the two share one.
+        leftContentInsetPx = Math.max(leftContentInsetPx, displayExtraKeysColumnFootprintPx(false));
+        rightContentInsetPx = Math.max(rightContentInsetPx, displayExtraKeysColumnFootprintPx(true));
+        syncDisplayExtraKeysColumn();
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
         if (rootRelativeLayout != null
             && (rootRelativeLayout.getPaddingLeft() != leftContentInsetPx
@@ -5351,6 +5364,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         setTerminalToolbarHeight();
         updateDockRailView();
+        syncDisplayExtraKeysColumn();
         // The render state hides the apps and A-Z rows in landscape and shows them in portrait, and
         // it is derived, not stored — so it has to be rebuilt here too. Without this the rows a
         // landscape session collapsed stayed collapsed after rotating back, with their preferences
@@ -7559,6 +7573,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
+    /** The widget grid's columns and rows are the user's; the repository only remembers them. */
+    private void applyWidgetGridPreference() {
+        if (mWidgetHostController == null || mPreferences == null) return;
+        mWidgetHostController.applyGrid(mPreferences.getAppLauncherWidgetGridRows(),
+            mPreferences.getAppLauncherWidgetGridColumns());
+    }
+
     private void updateAppLauncherBarHeight() {
         if (mPreferences == null)
             return;
@@ -7704,6 +7725,141 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // just gained or lost its last icon needs the insets pass to run again.
             if (mTermuxActivityRootView != null)
                 ViewCompat.requestApplyInsets(mTermuxActivityRootView);
+        }
+    }
+
+    /**
+     * Whether the extra keys stand in a column on a screen edge: only on the Display place, only
+     * while the row is on at all, and only when the display's setting names an edge.
+     */
+    private boolean isDisplayExtraKeysColumnActive() {
+        return isDisplayPageShowing() && mPreferences != null
+            && mPreferences.isAppLauncherExtraKeysRowEnabled()
+            && mPreferences.shouldShowTerminalToolbar()
+            && !TermuxPreferenceConstants.TERMUX_APP.X11_EXTRA_KEYS_SIDE_BOTTOM.equals(
+                mPreferences.getX11ExtraKeysSide());
+    }
+
+    private boolean isDisplayExtraKeysColumnOnRight() {
+        return mPreferences != null && TermuxPreferenceConstants.TERMUX_APP.X11_EXTRA_KEYS_SIDE_RIGHT
+            .equals(mPreferences.getX11ExtraKeysSide());
+    }
+
+    /** The Display place can take the top of the screen too. */
+    private boolean isDisplayStatusBarHidden() {
+        return isDisplayPageShowing() && mPreferences != null && mPreferences.isX11HideStatusBar();
+    }
+
+    /** The keys' width in the column: the row's height turned on its side. */
+    private int displayExtraKeysColumnKeysWidthPx() {
+        int matrix = 0;
+        if (mTermuxTerminalExtraKeys != null && mTermuxTerminalExtraKeys.getExtraKeysInfo() != null) {
+            matrix = mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix().length;
+        }
+        return AccessoryStackLayoutPolicy.computeTerminalToolbarHeightPx(
+            Math.round(mTerminalToolbarDefaultHeight), matrix,
+            mProperties == null ? 1f : mProperties.getTerminalToolbarHeightScaleFactor());
+    }
+
+    /** The column starts past the cutout, or past the rail when the rail holds the same edge. */
+    private int displayExtraKeysColumnEdgeInsetPx(boolean right) {
+        if (isDockRailShown() && isDockRailOnRight() == right) return getDockLayout().railWidthPx;
+        return right ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft;
+    }
+
+    /** How far in from its edge the column reaches — what the content on that side is inset by. */
+    private int displayExtraKeysColumnFootprintPx(boolean right) {
+        if (!isDisplayExtraKeysColumnActive() || isDisplayExtraKeysColumnOnRight() != right) return 0;
+        return DisplayExtraKeysColumnGeometry.footprintPx(displayExtraKeysColumnEdgeInsetPx(right),
+            Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP)),
+            displayExtraKeysColumnKeysWidthPx());
+    }
+
+    /**
+     * Fills, sizes and places the Display place's extra keys column, or takes it down. It sits
+     * beside the padded content root like the rail, so the display is inset from it rather than
+     * covered by it. Returns whether the column appeared or went, which the row and the terminal
+     * then have to be re-laid for.
+     */
+    private boolean syncDisplayExtraKeysColumn() {
+        FrameLayout column = findViewById(R.id.display_extra_keys_column);
+        if (column == null) return false;
+        boolean wasShown = column.getVisibility() == View.VISIBLE;
+        if (!isDisplayExtraKeysColumnActive()) {
+            if (!wasShown) return false;
+            column.setVisibility(View.GONE);
+            if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
+            return true;
+        }
+        boolean right = isDisplayExtraKeysColumnOnRight();
+        ExtraKeysView keys = mDisplayExtraKeysView;
+        if (keys == null || keys.getParent() != column) {
+            column.removeAllViews();
+            keys = (ExtraKeysView) getLayoutInflater().inflate(
+                R.layout.view_terminal_toolbar_extra_keys, column, false);
+            keys.setVertical(true);
+            keys.setExtraKeysViewClient(getTermuxTerminalExtraKeys(0));
+            keys.setButtonTextAllCaps(mProperties != null && mProperties.shouldExtraKeysTextBeAllCaps());
+            applyExtraKeysFeedbackAccent(keys);
+            keys.reload(getTermuxTerminalExtraKeys(0).getExtraKeysInfo(), mTerminalToolbarDefaultHeight);
+            column.addView(keys);
+            mDisplayExtraKeysView = keys;
+        }
+        // Padded like the rail: the docked edge carries its inset plus a margin, and the keys stay
+        // clear of the status and navigation bars.
+        int marginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
+        int edgePadPx = displayExtraKeysColumnEdgeInsetPx(right) + marginPx;
+        int verticalPadPx = Math.round(dpToPx(10));
+        column.setPadding(right ? marginPx : edgePadPx, mLastStatusBarInsetTop + verticalPadPx,
+            right ? edgePadPx : marginPx, mLastNavigationBarInsetBottom + verticalPadPx);
+        ViewGroup.LayoutParams columnParams = column.getLayoutParams();
+        if (columnParams instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams frameParams = (FrameLayout.LayoutParams) columnParams;
+            int gravity = (right ? Gravity.END : Gravity.START) | Gravity.TOP;
+            if (frameParams.gravity != gravity) {
+                frameParams.gravity = gravity;
+                column.setLayoutParams(frameParams);
+            }
+        }
+        // The keys are centred in the column at their preferred height, shrinking only when the
+        // column is too short for all of them.
+        View container = findViewById(R.id.terminal_root_container);
+        int availablePx = container == null ? 0
+            : container.getHeight() - column.getPaddingTop() - column.getPaddingBottom();
+        int keyCount = keys.getRowCount();
+        int keyHeightPx = DisplayExtraKeysColumnGeometry.keyHeightPx(availablePx, keyCount,
+            Math.round(dpToPx(DisplayExtraKeysColumnGeometry.KEY_HEIGHT_DP)));
+        int keysWidthPx = displayExtraKeysColumnKeysWidthPx();
+        int keysHeightPx = keyHeightPx * keyCount;
+        ViewGroup.LayoutParams keysParams = keys.getLayoutParams();
+        if (!(keysParams instanceof FrameLayout.LayoutParams)
+            || keysParams.width != keysWidthPx || keysParams.height != keysHeightPx
+            || ((FrameLayout.LayoutParams) keysParams).gravity != Gravity.CENTER_VERTICAL) {
+            keys.setLayoutParams(new FrameLayout.LayoutParams(keysWidthPx, keysHeightPx,
+                Gravity.CENTER_VERTICAL));
+        }
+        if (wasShown) return false;
+        column.setVisibility(View.VISIBLE);
+        // The content root's edge padding is decided from the column, so the insets pass reruns.
+        if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
+        return true;
+    }
+
+    /**
+     * Re-lays the chrome the Display place's settings shape — the status bar and the extra keys —
+     * when the wall lands on or leaves that place.
+     */
+    private void syncDisplayChrome() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        boolean barShown = isSplitPanesEnabled() && !isDisplayStatusBarHidden();
+        if (host != null && (host.getVisibility() == View.VISIBLE) != barShown) {
+            refreshTerminalWindowBar();
+        }
+        if (syncDisplayExtraKeysColumn()) {
+            // The row collapses or comes back with the column, and the render state that hides it
+            // is derived, so both are rebuilt here.
+            setTerminalToolbarHeight();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
         }
     }
 
@@ -9982,8 +10138,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return page >= 0 && page < mExtraKeysViews.size() ? mExtraKeysViews.get(page) : null;
     }
 
-    /** The first key page — the one the styling and geometry passes speak for. */
+    /**
+     * The first key page — the one the styling and geometry passes speak for. While the Display
+     * place stands the keys in a column, the column is the page: its modifiers are the ones held.
+     */
     private ExtraKeysView getExtraKeysView() {
+        if (mDisplayExtraKeysView != null && isDisplayExtraKeysColumnActive()) {
+            return mDisplayExtraKeysView;
+        }
         return mExtraKeysView;
     }
 
@@ -10041,6 +10203,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             pager.getAdapter().notifyDataSetChanged();
             pager.setCurrentItem(page, false);
         }
+        // The Display place's column is built from the same keys, so it is rebuilt with them.
+        View column = findViewById(R.id.display_extra_keys_column);
+        if (column instanceof ViewGroup) ((ViewGroup) column).removeAllViews();
+        mDisplayExtraKeysView = null;
+        syncDisplayExtraKeysColumn();
         setTerminalToolbarHeight();
     }
 
@@ -11058,6 +11225,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     syncPlaceBar();
                     syncWallKeyboard(page);
                     syncDisplayTouchpad();
+                    syncDisplayChrome();
                     mLastWallPage = page;
                     // The window chips belong to the place on screen: terminal windows on the
                     // terminal, the display's apps on the Display place.
@@ -12054,7 +12222,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Re-applied here, not only at setup, so a lazy-mode toggle takes effect on the
         // settings-return refresh instead of waiting for the activity to be recreated.
         applyLazyMode();
-        boolean visible = isSplitPanesEnabled();
+        boolean visible = isSplitPanesEnabled() && !isDisplayStatusBarHidden();
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) {
             applyTerminalSurfaceAppearance();
@@ -15105,6 +15273,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mAppDrawerController != null)
             mAppDrawerController.onPreferencesReloaded();
+        applyWidgetGridPreference();
         applySuggestionBarInputChar();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
         applySeamlessStatusBackgroundModeIfNeeded();

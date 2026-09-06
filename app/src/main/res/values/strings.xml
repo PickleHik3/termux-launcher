@@ -173,6 +173,11 @@
     <string name="settings_home_widgets_header">Home widgets</string>
     <string name="settings_widget_pane_enabled_title">Widget pane</string>
     <string name="settings_widget_pane_enabled_summary">Keep a page of home screen widgets beside the terminal.</string>
+    <string name="settings_widget_grid_columns_title">Grid columns</string>
+    <string name="settings_widget_grid_columns_summary">How many widget columns fit across a page.</string>
+    <string name="settings_widget_grid_rows_title">Grid rows</string>
+    <string name="settings_widget_grid_rows_summary">How many widget rows fit down a page.</string>
+    <string name="widget_picker_no_space">No room for a %1$d × %2$d widget on this %3$d × %4$d page. You can make the grid bigger in Settings.</string>
     <string name="termux_x11_no_display">No display is running.</string>
     <string name="termux_x11_needs_keyboard_data">The display needs the keyboard layout package before it can start; the Linux display guide names it.</string>
     <string name="termux_x11_start_display">Start display</string>
@@ -196,6 +201,12 @@
     <string name="settings_x11_clipboard_title">Share the clipboard</string>
     <string name="settings_x11_clipboard_summary">Copy and paste between the display and Android.</string>
     <string name="settings_x11_category_starting">Starting</string>
+    <string name="settings_x11_category_layout">Layout</string>
+    <string name="settings_x11_extra_keys_side_title">Extra keys bar</string>
+    <string name="settings_x11_extra_keys_side_summary">Where the extra keys sit while the display is showing.</string>
+    <string name="settings_x11_extra_keys_side_bottom">Bottom</string>
+    <string name="settings_x11_hide_status_bar_title">Hide status bar</string>
+    <string name="settings_x11_hide_status_bar_summary">Hides the status bar while the display is showing. Switch places from the extra keys.</string>
     <string name="settings_x11_category_apps">Apps</string>
     <string name="settings_x11_drawer_apps_title">Linux apps in the drawer</string>
     <string name="settings_x11_drawer_apps_summary">List installed Linux apps beside your Android apps; tapping one opens it on the display.</string>
@@ -244,7 +255,7 @@
     <string name="settings_keyboard_colors_title">Keyboard colors</string>
     <string name="settings_keyboard_colors_summary">Edit keyboard colors with a persistent live preview.</string>
     <string name="settings_typeface_title">Typeface</string>
-    <string name="settings_keyboard_bottom_padding_title">Space under the keys</string>
+    <string name="settings_keyboard_bottom_padding_title">Bottom padding</string>
     <string name="settings_keyboard_bottom_padding_summary">Lift the bottom key row away from the edge of the screen.</string>
     <string name="settings_layout_header">Layout</string>
     <string name="settings_extra_keys_title">Extra keys</string>
@@ -339,8 +350,8 @@
     <string name="settings_pinned_apps_header">Dock rows</string>
     <string name="settings_show_pinned_apps_title">Apps row</string>
     <string name="settings_show_pinned_apps_summary">Shows pinned apps in the launcher dock.</string>
-    <string name="settings_dock_rail_side_title">Landscape rail side</string>
-    <string name="settings_dock_rail_side_summary">Which edge the landscape apps rail docks to. Swipe off the rail, away from that edge, to open the app drawer.</string>
+    <string name="settings_dock_rail_side_title">Apps bar side</string>
+    <string name="settings_dock_rail_side_summary">Which edge the apps bar sits on in landscape. Swipe off it, away from that edge, to open the app drawer.</string>
     <string name="settings_dock_rail_side_left">Left</string>
     <string name="settings_dock_rail_side_right">Right</string>
     <string name="settings_show_extra_keys_row_title">Extra keys row</string>
@@ -1183,7 +1194,7 @@
                 <string name="termux_surface_tuning_edges">Margin</string>
                 <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
                 <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
-                <string name="termux_surface_tuning_keyboard_chin_handle">Drag to change the space under the keys</string>
+                <string name="termux_surface_tuning_keyboard_chin_handle">Drag to change the bottom padding</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
@@ -1198,7 +1209,7 @@
                      narrow for that, and there the heading disambiguates anyway. -->
                 <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
                 <string name="termux_surface_tuning_peek_keyboard_height">Keyboard height</string>
-                <string name="termux_surface_tuning_peek_keyboard_chin">Space under the keys</string>
+                <string name="termux_surface_tuning_peek_keyboard_chin">Bottom padding</string>
                 <string name="termux_surface_tuning_unsaved_title">Unsaved changes</string>
                 <string name="termux_surface_tuning_unsaved_message">Discard them and put every surface back to how it looked when you opened the editor, or save and close?</string>
                 <string name="termux_surface_tuning_unsaved_discard">Discard</string>

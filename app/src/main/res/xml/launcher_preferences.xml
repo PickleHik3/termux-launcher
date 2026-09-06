@@ -87,6 +87,24 @@
             app:title="@string/settings_widget_pane_enabled_title"
             app:summary="@string/settings_widget_pane_enabled_summary"
             android:defaultValue="true" />
+        <SeekBarPreference
+            app:key="app_launcher_widget_grid_columns"
+            app:title="@string/settings_widget_grid_columns_title"
+            app:summary="@string/settings_widget_grid_columns_summary"
+            app:dependency="app_launcher_widget_pane_enabled"
+            android:defaultValue="4"
+            app:min="2"
+            android:max="8"
+            app:showSeekBarValue="true" />
+        <SeekBarPreference
+            app:key="app_launcher_widget_grid_rows"
+            app:title="@string/settings_widget_grid_rows_title"
+            app:summary="@string/settings_widget_grid_rows_summary"
+            app:dependency="app_launcher_widget_pane_enabled"
+            android:defaultValue="5"
+            app:min="2"
+            android:max="12"
+            app:showSeekBarValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_launcher_search_header">

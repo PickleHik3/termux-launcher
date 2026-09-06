@@ -50,7 +50,7 @@ public class LauncherDockRailSidePreferenceTest {
 
         Preference side = screen.findPreference(KEY);
         assertTrue(KEY, side instanceof SegmentedPillPreference);
-        assertEquals("Landscape rail side", side.getTitle().toString());
+        assertEquals("Apps bar side", side.getTitle().toString());
         // No rail without the pinned row it is built from.
         assertEquals("app_launcher_apps_row_enabled", side.getDependency());
     }

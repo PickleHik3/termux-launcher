@@ -303,6 +303,14 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setSessionsOpacity(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_widget_grid_columns":
+                mPreferences.setAppLauncherWidgetGridColumns(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
+            case "app_launcher_widget_grid_rows":
+                mPreferences.setAppLauncherWidgetGridRows(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             default:
                 break;
         }
@@ -317,6 +325,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch (key) {
             case "sessions_opacity":
                 return mPreferences.getSessionsOpacity();
+            case "app_launcher_widget_grid_columns":
+                return mPreferences.getAppLauncherWidgetGridColumns();
+            case "app_launcher_widget_grid_rows":
+                return mPreferences.getAppLauncherWidgetGridRows();
             default:
                 return defValue;
         }

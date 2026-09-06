@@ -14,7 +14,9 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
 import com.termux.R;
+import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.x11.X11GpuProbe;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -40,6 +42,8 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
     private static final String KEY_RESOLUTION_EXACT = "displayResolutionExact";
     private static final String KEY_RESOLUTION_CUSTOM = "displayResolutionCustom";
     private static final String KEY_GPU = "x11_gpu";
+    private static final String KEY_EXTRA_KEYS_SIDE =
+        TermuxPreferenceConstants.TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE;
 
     private final ExecutorService probeExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "x11-gpu-probe");
@@ -64,6 +68,14 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                 return true;
             });
         }
+        SegmentedPillPreference extraKeysSide = findPreference(KEY_EXTRA_KEYS_SIDE);
+        if (extraKeysSide != null) extraKeysSide.setSegments(
+            new String[]{
+                TermuxPreferenceConstants.TERMUX_APP.X11_EXTRA_KEYS_SIDE_BOTTOM,
+                TermuxPreferenceConstants.TERMUX_APP.X11_EXTRA_KEYS_SIDE_LEFT,
+                TermuxPreferenceConstants.TERMUX_APP.X11_EXTRA_KEYS_SIDE_RIGHT},
+            new int[]{R.string.settings_x11_extra_keys_side_bottom,
+                R.string.settings_dock_rail_side_left, R.string.settings_dock_rail_side_right});
         probeGpu(context);
     }
 
@@ -152,7 +164,15 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                 launcher.setX11WindowManager(value);
             } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_RUNTIME_BADGE.equals(key)) {
                 launcher.setX11RuntimeBadge(value);
+            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE.equals(key)) {
+                launcher.setX11ExtraKeysSide(value);
+                relayoutLauncher();
             }
+        }
+
+        /** The Display place's chrome is laid out from these; the launcher re-reads them on resume. */
+        private void relayoutLauncher() {
+            TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
         }
 
         @Override
@@ -171,6 +191,9 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_RUNTIME_BADGE.equals(key)) {
                 return launcher.getX11RuntimeBadge();
+            }
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE.equals(key)) {
+                return launcher.getX11ExtraKeysSide();
             }
             return defValue;
         }
@@ -227,6 +250,10 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                     com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context)
                         .refreshAsync(null, null);
                     break;
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_HIDE_STATUS_BAR:
+                    launcher.setX11HideStatusBar(value);
+                    relayoutLauncher();
+                    break;
                 default:
                     break;
             }
@@ -249,6 +276,8 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                     return launcher.isX11ForceBgraEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
                     return launcher.isX11DrawerAppsEnabled();
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_HIDE_STATUS_BAR:
+                    return launcher.isX11HideStatusBar();
                 default:
                     return defValue;
             }

@@ -87,8 +87,8 @@ public final class WidgetPickerSheetView extends FrameLayout {
         else { title.setText("Add widget"); notice.setVisibility(GONE); }
     }
     public void showNoSpace(int columns, int rows, WidgetGridDefinition grid) {
-        showNotice("No " + columns + " × " + rows + " space in the " + grid.rows + " × "
-            + grid.columns + " grid. Widget wasn’t added.");
+        showNotice(getContext().getString(R.string.widget_picker_no_space, columns, rows,
+            grid.columns, grid.rows));
     }
     public void showNotice(@NonNull String message) {
         notice.setText(message); notice.setContentDescription(message); notice.setVisibility(VISIBLE);

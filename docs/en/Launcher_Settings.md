@@ -114,8 +114,8 @@ Open-Meteo attribution.
 - **On-screen keyboard:** built-in terminal keyboard, Android keyboard, or none.
 - **Hide the on-screen keyboard:** hide it while a physical keyboard is connected.
 - **Customize keyboard appearance:** live size, spacing, radius, and color tuning.
-- **Space under the keys:** lift the bottom key row away from the edge of the screen. The surface
-  editor sets the same space by dragging the pill under the last key row.
+- **Bottom padding:** lift the bottom key row away from the edge of the screen. The surface
+  editor sets the same padding by dragging the pill under the last key row.
 - **Theme**, **Keyboard colors**, and **Typeface**.
 - **Edit extra keys:** the terminal key row, previewed as it will look. Add common keys
   such as CTRL with one tap, search for any other key or launcher action, drag keys to
@@ -140,20 +140,26 @@ as the third place of the home screen — see [The Linux display](X11_Display.md
 mode, resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
 the window manager started with the display, the mark on the Display place's badge in the status
 bar, starting the display with the launcher, the start command, pointing new shells at the
-display, two compatibility switches, and what your GPU can do for Linux apps. To have the phone
+display, two compatibility switches, and what your GPU can do for Linux apps. Under **Layout**,
+**Extra keys bar** puts the extra keys along the bottom or in a column on the left or right edge
+while the display is showing, and **Hide status bar** gives the display the top of the screen as
+well; with the bar hidden, the extra keys' place buttons are the way back to the terminal. To have the phone
 try every graphics profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 
 ## Launcher & apps
 
 - **Customize dock appearance:** shared surface shape and live dock tuning.
-- **Show pinned apps row** and **Edit pinned apps**.
+- **Show pinned apps row** and **Edit pinned apps**. **Apps bar side** picks the edge the pinned
+  apps stand on in landscape; the app drawer opens by swiping off it, away from that edge.
 - **App drawer:** swipe down on the pinned row to open it; choose the drawer layout. **Open the
   keyboard with the drawer** brings the keyboard up as the drawer opens; **Search with the Android
   keyboard** searches through your Android keyboard, with its suggestions and swipe typing. With the
   categories layout, **Sort apps into categories** and **Re-run categorization** appear here too; the
   re-run row counts the apps installed since the last run, and the drawer mentions them once when
   more than five are waiting.
-- **Widget pane:** keep a page of home-screen widgets beside the terminal.
+- **Widget pane:** keep a page of home-screen widgets beside the terminal. **Grid columns** and
+  **Grid rows** set how many cells a page has; widgets that no longer fit a smaller grid are moved
+  to free space or onto a new page, never dropped.
 - **Alphabets row:** show or hide the A–Z index.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.

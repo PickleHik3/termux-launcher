@@ -104,6 +104,21 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     }
 
     @NonNull public Capability capability() { return capability; }
+
+    /**
+     * Adopts the grid the user set in Settings, re-laying widgets that no longer fit, and tells the
+     * pane to redraw. Out-of-range values are pulled into the grid's bounds rather than refused.
+     */
+    public boolean applyGrid(int rows, int columns) {
+        WidgetGridDefinition next = new WidgetGridDefinition(
+            Math.max(WidgetGridDefinition.MIN_ROWS, Math.min(WidgetGridDefinition.MAX_ROWS, rows)),
+            Math.max(WidgetGridDefinition.MIN_COLUMNS,
+                Math.min(WidgetGridDefinition.MAX_COLUMNS, columns)));
+        if (next.equals(repository.gridDefinition())) return true;
+        boolean applied = repository.setGridDefinition(next);
+        if (applied) notifyChanged(AddResult.IGNORED);
+        return applied;
+    }
     @NonNull public LauncherWidgetRepository repository() { return repository; }
     @NonNull public LauncherAppWidgetHost host() { return host; }
     public void setListener(@Nullable Listener value) { listener = value; }

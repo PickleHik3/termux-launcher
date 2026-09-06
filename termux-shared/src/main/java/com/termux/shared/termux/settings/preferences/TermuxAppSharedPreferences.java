@@ -605,6 +605,38 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED, value, false);
     }
 
+    /** Columns across a widget page, clamped to the range the grid can lay out. */
+    public int getAppLauncherWidgetGridColumns() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS);
+        return Math.max(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+            Math.min(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS, value));
+    }
+
+    public void setAppLauncherWidgetGridColumns(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+            Math.max(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+                Math.min(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS, value)), false);
+    }
+
+    /** Rows down a widget page, clamped to the range the grid can lay out. */
+    public int getAppLauncherWidgetGridRows() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_GRID_ROWS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
+        return Math.max(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
+            Math.min(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS, value));
+    }
+
+    public void setAppLauncherWidgetGridRows(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_GRID_ROWS,
+            Math.max(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
+                Math.min(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS, value)), false);
+    }
+
     public boolean isAppLauncherWidgetPaneEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED,
@@ -711,6 +743,39 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setX11WindowManager(String value) {
         SharedPreferenceUtils.setString(mSharedPreferences,
             TERMUX_APP.KEY_X11_WINDOW_MANAGER, value == null ? "" : value.trim(), false);
+    }
+
+    /**
+     * @return {@code "bottom"}, {@code "left"} or {@code "right"}; anything else stored reads back
+     * as the bottom row, so the keys are never nowhere.
+     */
+    @NonNull
+    public String getX11ExtraKeysSide() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, TERMUX_APP.DEFAULT_X11_EXTRA_KEYS_SIDE, true);
+        return normalizeX11ExtraKeysSide(value);
+    }
+
+    public void setX11ExtraKeysSide(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, normalizeX11ExtraKeysSide(value), false);
+    }
+
+    @NonNull
+    private static String normalizeX11ExtraKeysSide(String value) {
+        if (TERMUX_APP.X11_EXTRA_KEYS_SIDE_LEFT.equals(value)) return TERMUX_APP.X11_EXTRA_KEYS_SIDE_LEFT;
+        if (TERMUX_APP.X11_EXTRA_KEYS_SIDE_RIGHT.equals(value)) return TERMUX_APP.X11_EXTRA_KEYS_SIDE_RIGHT;
+        return TERMUX_APP.X11_EXTRA_KEYS_SIDE_BOTTOM;
+    }
+
+    public boolean isX11HideStatusBar() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_HIDE_STATUS_BAR, TERMUX_APP.DEFAULT_X11_HIDE_STATUS_BAR);
+    }
+
+    public void setX11HideStatusBar(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_HIDE_STATUS_BAR, value, false);
     }
 
     public boolean areX11DefaultsApplied() {
