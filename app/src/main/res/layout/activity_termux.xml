@@ -163,6 +163,18 @@
 
                     </com.termux.app.statusbar.TopPaneWidgetSlot>
 
+                    <!-- The clock a bar standing in a column wears, in place of the widget slot
+                         above: the hour over the minutes with the date beneath. Shown only while
+                         such a bar is open; lifted over the glass like the slot and the row. -->
+                    <com.termux.app.statusbar.StatusBarStackedClockView
+                        android:id="@+id/terminal_status_column_clock"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top"
+                        android:elevation="6dp"
+                        android:outlineProvider="none"
+                        android:visibility="gone" />
+
                     <!-- Bottom status row. Order is fixed: sessions indicator, window pills, then
                          the compact CPU/RAM/weather trailing widgets. The reserved rows above stay
                          empty until the next design pass. -->
@@ -208,6 +220,18 @@
                                 android:layout_weight="1"
                                 android:layout_marginStart="6dp"
                                 android:background="@android:color/transparent"
+                                android:contentDescription="@string/termux_window_bar_content_description" />
+
+                            <!-- The same window list for a bar standing in a column, where a pill
+                                 carrying a whole label does not fit: one chip per window, stacked.
+                                 Only one of the two is ever shown. -->
+                            <com.termux.app.statusbar.StatusBarWindowColumn
+                                android:id="@+id/terminal_status_window_column"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:layout_marginTop="6dp"
+                                android:visibility="gone"
                                 android:contentDescription="@string/termux_window_bar_content_description" />
                         </com.termux.app.statusbar.PlaceContentStrip>
 

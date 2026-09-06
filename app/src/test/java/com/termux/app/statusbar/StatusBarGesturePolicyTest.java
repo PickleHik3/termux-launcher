@@ -95,13 +95,13 @@ public class StatusBarGesturePolicyTest {
     }
 
     @Test public void aSidewaysDragGoesToTheWallWhereverItHasSomewhereToGo() {
-        assertEquals(StatusBarGesturePolicy.Claim.WALL_HORIZONTAL,
+        assertEquals(StatusBarGesturePolicy.Claim.WALL_PAGING,
             wallPolicy(true, false).move(60, 12));
         // Over the clock or a tile too: a horizontal drag on one of those is not a tap.
         StatusBarGesturePolicy overChild = wallPolicy(true, true);
         assertEquals(StatusBarGesturePolicy.Claim.PENDING, overChild.claim());
-        assertEquals(StatusBarGesturePolicy.Claim.WALL_HORIZONTAL, overChild.move(-60, 12));
-        assertEquals(-70f, overChild.horizontalDelta(), 0.01f);
+        assertEquals(StatusBarGesturePolicy.Claim.WALL_PAGING, overChild.move(-60, 12));
+        assertEquals(-70f, overChild.pagingDelta(), 0.01f);
     }
 
     @Test public void withNoWallTheSidewaysDragNeverTouchesTheForm() {
@@ -122,7 +122,7 @@ public class StatusBarGesturePolicyTest {
         // movement that follows takes it.
         StatusBarGesturePolicy curl = wallPolicy(true, false);
         assertEquals(StatusBarGesturePolicy.Claim.PENDING, curl.move(10, 1));
-        assertEquals(StatusBarGesturePolicy.Claim.WALL_HORIZONTAL, curl.move(70, 1));
+        assertEquals(StatusBarGesturePolicy.Claim.WALL_PAGING, curl.move(70, 1));
         // A drag that is plainly vertical still folds the bar once it has travelled twice the
         // slop, and so does one with a little sideways drift.
         assertEquals(StatusBarGesturePolicy.Claim.PENDING, wallPolicy(true, false).move(10, -2));

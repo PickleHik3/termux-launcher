@@ -42,8 +42,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * The Layout page: every row is exposed, the Display tab only appears once the Linux display is
- * on, and the two rows phases 4 and 5 have not built rendering for yet stay invisible even though
- * they are fully wired to the store.
+ * on, and the one row phase 5 has not built rendering for yet stays invisible even though it is
+ * fully wired to the store.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -81,9 +81,10 @@ public class LayoutPreferencesFragmentTest {
         assertTrue(screen.findPreference("layout_grid_rows") instanceof SeekBarPreference);
         assertNotNull(screen.findPreference("layout_look"));
 
-        // Phases 4 and 5 have not built rendering for these yet, so the rows stay invisible even
-        // though they are wired all the way through the store.
-        assertFalse("status bar row", screen.findPreference("layout_status_bar").isVisible());
+        // The bar now stands on any of the four edges, so its row is live.
+        assertTrue("status bar row", screen.findPreference("layout_status_bar").isVisible());
+        // Phase 5 has not built the overlay keyboard yet, so that row stays invisible even though
+        // it is wired all the way through the store.
         assertFalse("keyboard mode row", screen.findPreference("layout_keyboard_mode").isVisible());
 
         // The default selection is Terminal, not Home, so the widget grid has nothing to show yet.

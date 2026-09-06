@@ -22,11 +22,25 @@ public final class PlaceContentStrip extends LinearLayout {
         setOrientation(HORIZONTAL);
         setClipChildren(true);
         setClipToPadding(false);
-        setHorizontalFadingEdgeEnabled(true);
         setFadingEdgeLength(Math.round(LENS_WIDTH_DP * getResources().getDisplayMetrics().density));
+        setHorizontalFadingEdgeEnabled(true);
+    }
+
+    /**
+     * Whether the strip stacks its content down a column rather than along a row. The dissolve
+     * follows: the strip always fades at the two ends the places arrive and leave through.
+     */
+    public void setVertical(boolean vertical) {
+        setOrientation(vertical ? VERTICAL : HORIZONTAL);
+        setHorizontalFadingEdgeEnabled(!vertical);
+        setVerticalFadingEdgeEnabled(vertical);
     }
 
     @Override protected float getLeftFadingEdgeStrength() { return 1f; }
 
     @Override protected float getRightFadingEdgeStrength() { return 1f; }
+
+    @Override protected float getTopFadingEdgeStrength() { return 1f; }
+
+    @Override protected float getBottomFadingEdgeStrength() { return 1f; }
 }

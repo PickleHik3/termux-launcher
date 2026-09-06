@@ -35,16 +35,12 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
  * The Layout page: what is on screen and where, per place (Home / Terminal / Display) and, for
  * arrangement, per orientation. The overview at the top picks which place and orientation the
  * rows below describe; every row reads and writes {@link PlaceLayoutStore} for that selection.
- *
- * <p>The status bar edge row is wired all the way through the store, the same as every other row,
- * but kept invisible: the launcher does not render a status bar anywhere but the top yet
- * ({@link #SHOW_STATUS_BAR_EDGE_ROW}, phase 4).
  */
 @Keep
 public final class LayoutPreferencesFragment extends MaterialPreferenceFragment {
 
-    /** Phase 4 (feat/status-bar-positions) flips this on. */
-    static final boolean SHOW_STATUS_BAR_EDGE_ROW = false;
+    /** Every row is live; these stay as switches so a row can be taken off the page in a hurry. */
+    static final boolean SHOW_STATUS_BAR_EDGE_ROW = true;
     /** The Display place is the only one a keyboard can float over, so the only one that offers it. */
     static final boolean SHOW_KEYBOARD_MODE_ROW = true;
 

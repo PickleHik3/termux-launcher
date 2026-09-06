@@ -55,7 +55,7 @@ public final class StatusBarLensView extends View {
     public static final float ICON_GAP_DP = 8f;
     /** Every icon's size in the compact bar. */
     public static final float COMPACT_ICON_DP = 20f;
-    /** The home icon's left edge, clear of the neighbour peeking past the left edge. */
+    /** The home icon's leading edge, clear of the neighbour peeking past the bar's near edge. */
     public static final float HOME_X_DP = 20f;
     /** The expanded bar's slot height; the home icon centres on it until the clock says where. */
     private static final float SLOT_HEIGHT_DP = 68f;
@@ -88,6 +88,8 @@ public final class StatusBarLensView extends View {
     private boolean mDisplayRunning;
     /** The status row's chip corner; the icons take it so they and the badge are one kit. */
     private float mChipRadiusPx = -1f;
+    /** The bar stands in a column, so the icons travel down its length instead of across it. */
+    private boolean mVertical;
     @NonNull private String mDisplayGlyph = "";
     @Nullable private Listener mListener;
     @Nullable private PaneWallPage mPressed;
@@ -127,6 +129,17 @@ public final class StatusBarLensView extends View {
         float clamped = Math.max(0f, Math.min(1f, expansion));
         if (mExpansion == clamped) return;
         mExpansion = clamped;
+        invalidate();
+    }
+
+    /**
+     * Whether the bar the lens lives in stands in a column. The places then queue along the bar's
+     * height — the one above waiting past the top edge, the one below past the bottom — which is
+     * the same line the wall is paged along there.
+     */
+    public void setVertical(boolean vertical) {
+        if (mVertical == vertical) return;
+        mVertical = vertical;
         invalidate();
     }
 
@@ -199,15 +212,22 @@ public final class StatusBarLensView extends View {
         for (RectF rect : mHitRects) rect.setEmpty();
         if (mWallWidthPx <= 0 || mPages.isEmpty()) return;
 
+        // The two axes the lens is drawn in: the places queue along the bar's length, and the
+        // line they share runs across it. On a row that is x and y; on a column it is y and x.
+        float along = mVertical ? height : width;
+        float across = mVertical ? width : height;
+
         // In the expanded bar the home icon takes the clock's band and its line; its neighbours
         // share the line, smaller, half past the edges. The compact row is the place's own content
         // and carries no home icon: there the neighbours alone peek in, and an icon fades as it
         // arrives at home, so the row is never crowded.
         float expandedHome = mHomeSizePx > 0f ? Math.min(dp(ICON_DP), mHomeSizePx) : dp(ICON_DP);
-        float expandedLine = mHomeCenterYPx >= 0f ? mHomeCenterYPx : dp(SLOT_HEIGHT_DP) / 2f;
+        float expandedLine = mHomeCenterYPx >= 0f && !mVertical
+            ? mHomeCenterYPx : dp(SLOT_HEIGHT_DP) / 2f;
         float homeSize = lerp(dp(COMPACT_ICON_DP), expandedHome, mExpansion);
         float peekSize = lerp(dp(COMPACT_ICON_DP), expandedHome * PEEK_SHARE, mExpansion);
-        float line = lerp(height / 2f, expandedLine, mExpansion);
+        // A column's line is simply its middle: there is no clock band beside the icons there.
+        float line = mVertical ? across / 2f : lerp(across / 2f, expandedLine, mExpansion);
         float home = dp(HOME_X_DP);
         for (PaneWallPage page : mPages) {
             float t = StatusBarLensPolicy.distance(mPages, mCurrent, page, mOffsetPx, mWallWidthPx);
@@ -219,11 +239,12 @@ public final class StatusBarLensView extends View {
             // An icon on its way between home and a side takes the size of the end it is nearer,
             // so the arriving one grows as it takes the home spot and the leaving one shrinks.
             float size = lerp(homeSize, peekSize, presence) * StatusBarLensPolicy.scale(t);
-            float centerY = line;
-            float leftPeek = -size / 2f;
-            float rightPeek = width - size / 2f;
-            float x = StatusBarLensPolicy.iconX(t, home, leftPeek, rightPeek, size);
-            float centerX = x + size / 2f;
+            float nearPeek = -size / 2f;
+            float farPeek = along - size / 2f;
+            float travelled = StatusBarLensPolicy.iconX(t, home, nearPeek, farPeek, size)
+                + size / 2f;
+            float centerX = mVertical ? line : travelled;
+            float centerY = mVertical ? travelled : line;
             mTile.set(centerX - size / 2f, centerY - size / 2f, centerX + size / 2f, centerY + size / 2f);
             if (page != mCurrent) mHitRects[page.ordinal()].set(mTile);
             // Weight and colour say what matters: the icon at home is the place you are on, in
@@ -268,13 +289,20 @@ public final class StatusBarLensView extends View {
             float baseline = centerY - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
             canvas.drawText(glyphFor(page), centerX, baseline, mGlyphPaint);
             if (fades) {
-                boolean fromLeft = t < 0f;
-                float outer = fromLeft ? mTile.left : mTile.right;
-                float inner = fromLeft ? mTile.right : mTile.left;
+                boolean fromNear = t < 0f;
+                float outer = mVertical
+                    ? (fromNear ? mTile.top : mTile.bottom)
+                    : (fromNear ? mTile.left : mTile.right);
+                float inner = mVertical
+                    ? (fromNear ? mTile.bottom : mTile.top)
+                    : (fromNear ? mTile.right : mTile.left);
                 int outerColor = ColorUtils.setAlphaComponent(Color.WHITE,
                     Math.round(255 * (1f - presence)));
-                mFadePaint.setShader(new LinearGradient(outer, 0f, inner, 0f, outerColor,
-                    Color.WHITE, Shader.TileMode.CLAMP));
+                mFadePaint.setShader(mVertical
+                    ? new LinearGradient(0f, outer, 0f, inner, outerColor, Color.WHITE,
+                        Shader.TileMode.CLAMP)
+                    : new LinearGradient(outer, 0f, inner, 0f, outerColor, Color.WHITE,
+                        Shader.TileMode.CLAMP));
                 canvas.drawRect(mTile.left - 1f, mTile.top - 1f, mTile.right + 1f, mTile.bottom + 1f,
                     mFadePaint);
                 canvas.restoreToCount(layer);

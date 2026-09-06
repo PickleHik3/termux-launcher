@@ -6,19 +6,26 @@ import android.view.ViewOutlineProvider;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.place.PlaceLayout.Edge;
+
 /** Mutable, allocation-free outline for the status pane's geometry. */
 public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
     private float radiusPx;
     private boolean innerEdgeOnly;
+    @NonNull private Edge edge = Edge.TOP;
 
     /**
-     * Docked keeps the pane flush with the screen on three sides, so only its bottom edge - the one
-     * facing the terminal - carries corners. See
-     * {@link com.termux.app.surfaces.InnerEdgeOutlineProvider} for why the top two are pushed
-     * outside the view rather than described with a per-corner path.
+     * Docked keeps the pane flush with the screen on three sides, so only the edge facing the
+     * terminal carries corners. See {@link com.termux.app.surfaces.InnerEdgeOutlineProvider} for
+     * why the other two are pushed outside the view rather than described with a per-corner path.
      */
     public void setInnerEdgeOnly(boolean innerEdgeOnly) {
         this.innerEdgeOnly = innerEdgeOnly;
+    }
+
+    /** The screen edge the bar stands on; the corners land on the opposite side of the view. */
+    public void setEdge(@NonNull Edge edge) {
+        this.edge = edge;
     }
 
     /** The radius the pane's every layer — live blur and wallpaper frost included — clips to. */
@@ -28,9 +35,16 @@ public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
 
     @Override
     public void getOutline(View view, @NonNull Outline outline) {
-        int top = innerEdgeOnly && radiusPx > 0f ? -Math.round(radiusPx) : 0;
-        outline.setRoundRect(0, top, Math.max(0, view.getWidth()),
-            Math.max(0, view.getHeight()), radiusPx);
+        int width = Math.max(0, view.getWidth());
+        int height = Math.max(0, view.getHeight());
+        // Overshoot the outer edge — the one the bar stands on — by the radius, so only the two
+        // corners facing the terminal land on screen.
+        int overshoot = innerEdgeOnly && radiusPx > 0f ? Math.round(radiusPx) : 0;
+        int left = edge == Edge.LEFT ? -overshoot : 0;
+        int top = edge == Edge.TOP ? -overshoot : 0;
+        int right = edge == Edge.RIGHT ? width + overshoot : width;
+        int bottom = edge == Edge.BOTTOM ? height + overshoot : height;
+        outline.setRoundRect(left, top, right, bottom, radiusPx);
     }
 
     public boolean clipsCorners() { return radiusPx > 0f; }

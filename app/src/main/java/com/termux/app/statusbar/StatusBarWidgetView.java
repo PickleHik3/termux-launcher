@@ -90,6 +90,25 @@ public final class StatusBarWidgetView extends LinearLayout {
         applyColors();
     }
 
+    /**
+     * Stacks the mark over its value instead of setting them side by side, for the status bar
+     * standing in a column: there the widget has a finger's width and a whole column of height.
+     */
+    public void setStacked(boolean stacked) {
+        int orientation = stacked ? VERTICAL : HORIZONTAL;
+        if (getOrientation() == orientation) return;
+        setOrientation(orientation);
+        setGravity(stacked ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
+        setMinimumWidth(stacked ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
+        setPadding(dp(stacked ? 1 : 5), dp(stacked ? 3 : 1), dp(stacked ? 1 : 5),
+            dp(stacked ? 3 : 1));
+        mValue.setGravity(stacked ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
+        LayoutParams valueParams = (LayoutParams) mValue.getLayoutParams();
+        valueParams.setMarginStart(stacked ? 0 : dp(2));
+        valueParams.topMargin = stacked ? dp(1) : 0;
+        mValue.setLayoutParams(valueParams);
+    }
+
     /** Material vector resource shown before the value. */
     public void setIconResource(@DrawableRes int drawableRes) {
         mIcon.setImageResource(drawableRes);
