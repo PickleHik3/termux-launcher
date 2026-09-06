@@ -1176,6 +1176,16 @@
                      the row back on the shared layer. -->
                 <string name="termux_surface_tuning_link_detached">↺</string>
                 <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Base again.</string>
+                <!-- The editor opened on one place. A row still wearing the shared look carries the
+                     quiet mark; once the place has its own value the mark becomes the way back. -->
+                <string name="termux_surface_editor_place_shared_mark">◦</string>
+                <string name="termux_surface_editor_place_shared_description">Shared with every place.</string>
+                <string name="termux_surface_editor_place_own_description">%1$s has its own. Tap to share it again.</string>
+                <string name="termux_surface_editor_place_title">%1$s · %2$s</string>
+                <string name="termux_surface_editor_place_shared_note">Presets and these sliders change every place.</string>
+                <string name="termux_surface_editor_place_overrides_one">%1$s has its own.</string>
+                <string name="termux_surface_editor_place_overrides_two">%1$s and %2$s have their own.</string>
+                <string name="termux_surface_editor_place_overrides_three">%1$s, %2$s and %3$s have their own.</string>
                 <!-- One shape for the two chips on the status row: the sessions indicator and the
                      window pills. Content inside the bar, not a surface, so it has its own knob. -->
                 <string name="termux_surface_tuning_indicator_radius">Chip radius</string>

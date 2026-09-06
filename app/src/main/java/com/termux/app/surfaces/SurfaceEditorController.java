@@ -50,6 +50,8 @@ import com.termux.app.surfaces.SurfaceEditorProperties.Kind;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.place.PlaceLookPreferences;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -91,6 +93,11 @@ public final class SurfaceEditorController {
         @NonNull Context context();
         @Nullable <T extends View> T findView(int viewId);
         @Nullable TermuxAppSharedPreferences preferences();
+        /**
+         * The look layer of the places, or null before the preferences exist. The editor sets the
+         * scope it is open on here, and every read the chrome makes resolves through it.
+         */
+        @Nullable PlaceLookPreferences lookPreferences();
         @Nullable TermuxInAppKeyboard inAppKeyboard();
         @Nullable View attachedInAppKeyboardView();
         boolean isInAppKeyboardShown();
@@ -103,11 +110,12 @@ public final class SurfaceEditorController {
         int themeColor(int attr, int fallbackRes);
         void refreshPaneLayout();
         /**
-         * Bring the pane wall back to the terminal and hold its gestures, or hand them back. The
-         * editor tunes the surface the terminal is drawn on, so it edits the terminal's own page
-         * — the same reason it collapses the status pane on entry.
+         * Bring the pane wall to the place the editor is open on and hold its gestures, or hand
+         * them back. What the editor tunes is what the user is looking at — the same reason it
+         * collapses the status pane on entry — so the wall stands still on that place. A null place
+         * is the shared layer, which the terminal stands in for.
          */
-        void holdPaneWallOnTerminal(boolean held);
+        void holdPaneWallOnPlace(@Nullable PaneWallPage place, boolean held);
         void applyTerminalSurfaceAppearance();
         void refreshTerminalWindowBar();
         /** Re-applies the sessions panel background at its stored opacity. */
@@ -172,6 +180,44 @@ public final class SurfaceEditorController {
         return mHost.inAppKeyboard();
     }
 
+    @Nullable
+    private PlaceLookPreferences look() {
+        return mHost.lookPreferences();
+    }
+
+    /** The place this session is editing, or null while it is on the shared layer. */
+    @Nullable
+    private PaneWallPage editPlace() {
+        return mSurfaceEditorOpen ? mEditPlace : null;
+    }
+
+    /** Runs one action against the shared layer, whatever place the editor was opened on. */
+    private void runShared(@NonNull Runnable action) {
+        PlaceLookPreferences look = look();
+        if (look == null) action.run();
+        else look.runShared(action);
+    }
+
+    /**
+     * Runs a row's read or write in the layer that row belongs to. A row with keys of its own is
+     * the place's while a place is open; a row without — Base's five, the action rows — is
+     * everyone's, and so are the side effects it writes.
+     */
+    private void runInScopeOf(@NonNull Control control, @NonNull Runnable action) {
+        if (control.scopeKeys.isEmpty()) runShared(action);
+        else action.run();
+    }
+
+    /** The name a place is known by on the wall. */
+    @StringRes
+    private static int placeLabel(@NonNull PaneWallPage place) {
+        switch (place) {
+            case WIDGETS: return R.string.termux_wall_tile_widgets;
+            case DISPLAY: return R.string.termux_wall_tile_display;
+            default: return R.string.termux_wall_tile_terminal;
+        }
+    }
+
     private String getString(@StringRes int res, Object... args) {
         return mHost.context().getString(res, args);
     }
@@ -220,6 +266,13 @@ public final class SurfaceEditorController {
     /** Last anchor geometry the layout listener acted on; layouts that move nothing are skipped. */
     private long mSurfaceEditorAnchorSignature = Long.MIN_VALUE;
     private final int[] mTmpAnchorLocation = new int[2];
+
+    /**
+     * The place this editor session is editing, or null for the shared layer. Set on entry and
+     * held for the session: it decides which layer every scopable row reads and writes, and it is
+     * also the place the wall is held on, so the live preview is the place's own look.
+     */
+    @Nullable private PaneWallPage mEditPlace;
 
     /** The surface the card is pointing at, or null for the shared layer. */
     @Nullable private SurfaceSlot mSelectedSlot;
@@ -297,6 +350,7 @@ public final class SurfaceEditorController {
         final ImageView reset;
         final ImageView done;
         final ImageView close;
+        final TextView sharedNote;
         final ViewGroup presets;
         final View pills;
         final MaterialButtonToggleGroup shape;
@@ -319,6 +373,7 @@ public final class SurfaceEditorController {
             reset = root.findViewById(R.id.surface_editor_pill_reset);
             done = root.findViewById(R.id.surface_editor_pill_done);
             close = root.findViewById(R.id.surface_editor_pill_close);
+            sharedNote = root.findViewById(R.id.surface_editor_pill_shared_note);
             presets = root.findViewById(R.id.surface_editor_pill_presets);
             pills = root.findViewById(R.id.surface_editor_pill_pills);
             shape = root.findViewById(R.id.surface_editor_pill_shape);
@@ -330,7 +385,7 @@ public final class SurfaceEditorController {
 
         boolean complete() {
             return header != null && title != null && save != null && reset != null && done != null
-                && close != null && presets != null && pills != null
+                && close != null && sharedNote != null && presets != null && pills != null
                 && shape != null && material != null && rowsHost != null
                 && floatPalette != null && floatDone != null;
         }
@@ -379,10 +434,20 @@ public final class SurfaceEditorController {
 
     public void enter() {
         // No section asked for: the editor opens at rest, every surface outlined and the card down.
-        enter(null);
+        enter(null, null);
     }
 
     public void enter(@Nullable String initialSection) {
+        enter(initialSection, null);
+    }
+
+    /**
+     * Opens the editor on one place, or on the shared layer for a null place. On a place, every
+     * scopable row reads and writes that place's own look and the wall is held there, so the live
+     * preview is what the place will wear; the shared layer's own controls — Base, the material,
+     * the presets — stay everyone's either way.
+     */
+    public void enter(@Nullable String initialSection, @Nullable PaneWallPage place) {
         if (prefs() == null)
             return;
         Panel panel = panel();
@@ -399,7 +464,10 @@ public final class SurfaceEditorController {
             mHasEntryStatusCollapsed = true;
         }
         mSurfaceEditorOpen = true;
-        if (freshEditorSession) mHost.holdPaneWallOnTerminal(true);
+        // A second intent can name a different place; the scope follows it, and the snapshot below
+        // does not — it already holds every place's look, so it stays the thing Discard returns to.
+        boolean scopeMoved = applyEditScope(place, freshEditorSession);
+        if (freshEditorSession || scopeMoved) mHost.holdPaneWallOnPlace(mEditPlace, true);
         panel.host.setVisibility(View.VISIBLE);
 
         if (freshEditorSession || mSurfaceEditorEntrySignature == null) {
@@ -428,6 +496,23 @@ public final class SurfaceEditorController {
             positionSelectionRings(false);
             syncGlow();
         });
+        if (scopeMoved) syncEditorAfterBulkWrite();
+    }
+
+    /**
+     * Points the look layer at the place this session edits. Returns whether what the chrome reads
+     * actually moved — opening on the place already on screen changes nothing to re-apply.
+     */
+    private boolean applyEditScope(@Nullable PaneWallPage place, boolean freshEditorSession) {
+        if (!freshEditorSession && place == null)
+            return false;
+        mEditPlace = place;
+        PlaceLookPreferences look = look();
+        if (look == null)
+            return false;
+        PaneWallPage before = look.effectivePlace();
+        look.beginEdit(place);
+        return look.effectivePlace() != before;
     }
 
     /**
@@ -462,6 +547,38 @@ public final class SurfaceEditorController {
      */
     @NonNull
     private Runnable captureEntryState() {
+        final PlaceLookPreferences look = look();
+        // Every place's look, not just the one being edited: Reset held and a preset both clear
+        // all of them, and ↺ has to be able to put those back too.
+        final Map<String, Object> looks = look == null ? null : look.capture();
+        final Runnable[] shared = new Runnable[1];
+        // Captured and restored with the scope lifted, so the shared layer is snapshotted as the
+        // shared layer whichever place the editor was opened on.
+        runShared(() -> shared[0] = captureSharedEntryState());
+        return () -> {
+            if (prefs() == null)
+                return;
+            runShared(shared[0]);
+            if (look != null && looks != null) look.restore(looks);
+            mHost.refreshPaneLayout();
+            mHost.applyTerminalSurfaceAppearance();
+            // One place re-reads the clock's face, alignment, 12-hour and lazy mode — and restyles
+            // the row's chips.
+            mHost.refreshTerminalWindowBar();
+            if (keyboard() != null) {
+                keyboard().previewSurfaceEditorHeightScale(prefs().getInAppKeyboardHeightScale());
+                keyboard().previewSurfaceEditorKeyOpacity(prefs().getInAppKeyboardKeyOpacity());
+                // The colour scheme and theme are read at render time, so the keyboard has to be
+                // told to re-read them; the preview calls above only touch geometry.
+                keyboard().onPreferencesReloaded();
+            }
+            applySurfaceEditorStructuralPreview();
+        };
+    }
+
+    /** The shared layer's half of the entry snapshot. Only ever run with the place scope lifted. */
+    @NonNull
+    private Runnable captureSharedEntryState() {
         final TermuxAppSharedPreferences prefs = prefs();
         final String links = surfaceEditorLinkSignature();
         final int initialBlur = prefs.getExtraKeysBlurRadius();
@@ -540,19 +657,6 @@ public final class SurfaceEditorController {
                 prefs().setSurfaceBaseValue(property, initialBase[property.ordinal()]);
             prefs().setSurfaceMaterial(initialMaterial);
             prefs().setSurfaceMaterialIntensity(initialMaterialIntensity);
-            mHost.refreshPaneLayout();
-            mHost.applyTerminalSurfaceAppearance();
-            // One place re-reads the clock's face, alignment, 12-hour and lazy mode — and restyles
-            // the row's chips.
-            mHost.refreshTerminalWindowBar();
-            if (keyboard() != null) {
-                keyboard().previewSurfaceEditorHeightScale(initialKeyboardHeight);
-                keyboard().previewSurfaceEditorKeyOpacity(initialKeyboardKeyOpacity);
-                // The colour scheme and theme are read at render time, so the keyboard has to be
-                // told to re-read them; the preview calls above only touch geometry.
-                keyboard().onPreferencesReloaded();
-            }
-            applySurfaceEditorStructuralPreview();
         };
     }
 
@@ -943,6 +1047,8 @@ public final class SurfaceEditorController {
                 .inflate(R.layout.surface_editor_switch_row, into, false);
             ((TextView) row.findViewById(R.id.surface_editor_row_label)).setText(control.labelRes);
             MaterialSwitch toggle = row.findViewById(R.id.surface_editor_row_switch);
+            TextView switchLink = row.findViewById(R.id.surface_editor_row_chip);
+            TextView switchNote = row.findViewById(R.id.surface_editor_row_note);
             toggle.setOnCheckedChangeListener((button, checked) -> {
                 if (mRestatingToggles || prefs() == null)
                     return;
@@ -950,6 +1056,16 @@ public final class SurfaceEditorController {
                     return;
                 writeControl(slot, control, checked ? 1 : 0);
                 // The frame decides whether the terminal's blur and grain rows exist at all.
+                syncPanel();
+            });
+            switchLink.setOnClickListener(view -> {
+                PaneWallPage place = editPlace();
+                PlaceLookPreferences look = look();
+                if (place == null || look == null || control.scopeKeys.isEmpty()
+                    || !look.hasOverride(place, control.scopeKeys))
+                    return;
+                look.clearOverride(place, control.scopeKeys);
+                applySurfaceEditorStructuralPreview();
                 syncPanel();
             });
             syncs.add(() -> {
@@ -964,6 +1080,7 @@ public final class SurfaceEditorController {
                         mRestatingToggles = false;
                     }
                 }
+                syncRowMark(control, slot, switchLink, switchNote);
             });
             into.addView(row);
             syncs.get(syncs.size() - 1).run();
@@ -976,6 +1093,7 @@ public final class SurfaceEditorController {
         SeekBar slider = rowView.findViewById(R.id.surface_editor_row_slider);
         TextView value = rowView.findViewById(R.id.surface_editor_row_value);
         TextView link = rowView.findViewById(R.id.surface_editor_row_chip);
+        TextView note = rowView.findViewById(R.id.surface_editor_row_note);
         label.setText(control.labelRes);
         slider.setContentDescription(getString(control.labelRes));
 
@@ -989,20 +1107,22 @@ public final class SurfaceEditorController {
             if (slider.getProgress() != shown)
                 slider.setProgress(shown);
             value.setText(valueText(control, shown));
-            boolean own = slot != null && control.cell != null && hasOwnValue(slot, control);
-            link.setVisibility(own ? View.VISIBLE : View.INVISIBLE);
-            link.setClickable(own);
-            link.setFocusable(own);
-            if (own)
-                link.setContentDescription(getString(
-                    R.string.termux_surface_tuning_link_detached_description,
-                    getString(SurfaceEditorRows.slotLabel(slot))));
+            syncRowMark(control, slot, link, note);
         };
         link.setOnClickListener(view -> {
-            if (prefs() == null || slot == null || control.cell == null
-                || prefs().isSurfaceInheriting(slot, control.cell.property))
-                return;
-            prefs().setSurfaceInheriting(slot, control.cell.property, true);
+            PaneWallPage place = editPlace();
+            if (place != null && !control.scopeKeys.isEmpty()) {
+                // The way back out of a place's own value: the row goes back to the shared look.
+                PlaceLookPreferences look = look();
+                if (look == null || !look.hasOverride(place, control.scopeKeys))
+                    return;
+                look.clearOverride(place, control.scopeKeys);
+            } else {
+                if (prefs() == null || slot == null || control.cell == null
+                    || prefs().isSurfaceInheriting(slot, control.cell.property))
+                    return;
+                prefs().setSurfaceInheriting(slot, control.cell.property, true);
+            }
             applySurfaceEditorStructuralPreview();
             syncPanel();
         });
@@ -1012,8 +1132,7 @@ public final class SurfaceEditorController {
                 if (!fromUser)
                     return;
                 writeControl(slot, control, progress);
-                link.setVisibility(slot != null && control.cell != null
-                    && hasOwnValue(slot, control) ? View.VISIBLE : View.INVISIBLE);
+                syncRowMark(control, slot, link, note);
             }
         });
         into.addView(rowView);
@@ -1043,7 +1162,14 @@ public final class SurfaceEditorController {
         // The heading names the surface, or — on the shared layer — wears the palette glyph that
         // opened the card and says nothing more: the strip under it is what the layer is.
         boolean shared = mSelectedSlot == null;
-        String title = shared ? "" : getString(SurfaceEditorRows.slotLabel(mSelectedSlot));
+        PaneWallPage place = editPlace();
+        // On a place, the heading names it beside the surface: what the card moves is that place's,
+        // and the header is the only thing on screen that can say so.
+        String title = shared ? ""
+            : place == null ? getString(SurfaceEditorRows.slotLabel(mSelectedSlot))
+            : getString(R.string.termux_surface_editor_place_title,
+                getString(SurfaceEditorRows.slotLabel(mSelectedSlot)),
+                getString(placeLabel(place)));
         if (!title.equals(panel.shownTitle)) {
             panel.shownTitle = title;
             panel.title.setText(title);
@@ -1058,6 +1184,10 @@ public final class SurfaceEditorController {
             panel.presets.setVisibility(sharedVisibility);
         if (panel.pills.getVisibility() != sharedVisibility)
             panel.pills.setVisibility(sharedVisibility);
+        // Presets and Base are everyone's even here, and on a place that is worth one line.
+        int noteVisibility = shared && place != null ? View.VISIBLE : View.GONE;
+        if (panel.sharedNote.getVisibility() != noteVisibility)
+            panel.sharedNote.setVisibility(noteVisibility);
         if (shared) {
             if (panel.presets.getChildCount() == 0)
                 buildPresetsStrip(mHost.context(), panel.presets);
@@ -1084,6 +1214,69 @@ public final class SurfaceEditorController {
         int size = dp(20);
         icon.setBounds(0, 0, size, size);
         return icon;
+    }
+
+    /**
+     * The mark at the end of a row, which says which layer the row is speaking for.
+     *
+     * <p>On the shared layer it is the link back to Base, drawn only once a surface has taken its
+     * own value — and, under the row, the note naming the places that have taken this row for
+     * themselves. Opened on a place it is that place's mark instead: quiet while the row still
+     * wears the shared look, and the tap that gives it back once the place has its own.
+     */
+    private void syncRowMark(@NonNull Control control, @Nullable SurfaceSlot slot,
+                             @NonNull TextView link, @NonNull TextView note) {
+        PaneWallPage place = editPlace();
+        PlaceLookPreferences look = look();
+        boolean scopable = !control.scopeKeys.isEmpty();
+        if (place != null && scopable) {
+            boolean own = look != null && look.hasOverride(place, control.scopeKeys);
+            link.setText(own ? R.string.termux_surface_tuning_link_detached
+                : R.string.termux_surface_editor_place_shared_mark);
+            link.setAlpha(own ? 1f : 0.4f);
+            link.setVisibility(View.VISIBLE);
+            link.setClickable(own);
+            link.setFocusable(own);
+            link.setContentDescription(own
+                ? getString(R.string.termux_surface_editor_place_own_description,
+                    getString(placeLabel(place)))
+                : getString(R.string.termux_surface_editor_place_shared_description));
+            note.setVisibility(View.GONE);
+            return;
+        }
+        link.setText(R.string.termux_surface_tuning_link_detached);
+        link.setAlpha(1f);
+        boolean own = slot != null && control.cell != null && hasOwnValue(slot, control);
+        link.setVisibility(own ? View.VISIBLE : View.INVISIBLE);
+        link.setClickable(own);
+        link.setFocusable(own);
+        if (own)
+            link.setContentDescription(getString(
+                R.string.termux_surface_tuning_link_detached_description,
+                getString(SurfaceEditorRows.slotLabel(slot))));
+        String overrides = look == null || !scopable
+            ? null : placesNote(look.placesOverriding(control.scopeKeys));
+        note.setText(overrides == null ? "" : overrides);
+        note.setVisibility(overrides == null ? View.GONE : View.VISIBLE);
+    }
+
+    /** "Terminal and Display have their own", or nothing at all when no place has. */
+    @Nullable
+    private String placesNote(@NonNull List<PaneWallPage> places) {
+        switch (places.size()) {
+            case 1:
+                return getString(R.string.termux_surface_editor_place_overrides_one,
+                    getString(placeLabel(places.get(0))));
+            case 2:
+                return getString(R.string.termux_surface_editor_place_overrides_two,
+                    getString(placeLabel(places.get(0))), getString(placeLabel(places.get(1))));
+            case 3:
+                return getString(R.string.termux_surface_editor_place_overrides_three,
+                    getString(placeLabel(places.get(0))), getString(placeLabel(places.get(1))),
+                    getString(placeLabel(places.get(2))));
+            default:
+                return null;
+        }
     }
 
     /** Whether the selected surface has taken its own value for this row. */
@@ -1128,8 +1321,17 @@ public final class SurfaceEditorController {
         return control.max;
     }
 
-    /** Where a row's slider should sit: the resolved number, capped to its own track. */
+    /**
+     * Where a row's slider should sit: the resolved number, capped to its own track — read from
+     * the layer the row speaks for, so a shared row on a place's card still shows the shared value.
+     */
     private int shownValueOf(@Nullable SurfaceSlot slot, @NonNull Control control) {
+        int[] shown = new int[1];
+        runInScopeOf(control, () -> shown[0] = readShownValue(slot, control));
+        return shown[0];
+    }
+
+    private int readShownValue(@Nullable SurfaceSlot slot, @NonNull Control control) {
         if (prefs() == null)
             return 0;
         if (SurfaceEditorProperties.ID_CHIP_RADIUS.equals(control.id))
@@ -1207,9 +1409,13 @@ public final class SurfaceEditorController {
     private void writeControl(@Nullable SurfaceSlot slot, @NonNull Control control, int value) {
         if (prefs() == null || !isAvailable(slot, control))
             return;
-        if (control.cell != null && slot != null)
-            detachSurfaceRowForEdit(slot, control.cell.property);
-        control.write(prefs(), value);
+        // A row with keys of its own lands in the place the editor is open on; one without — Base's
+        // five, whose whole point is "everything" — lands on the shared layer, side effects and all.
+        runInScopeOf(control, () -> {
+            if (control.cell != null && slot != null)
+                detachSurfaceRowForEdit(slot, control.cell.property);
+            control.write(prefs(), value);
+        });
         afterWrite(slot, control);
         requestSurfaceEditorPreview(control.previewScopes);
     }
@@ -2481,7 +2687,7 @@ public final class SurfaceEditorController {
     private void saveCurrentLook() {
         if (prefs() == null)
             return;
-        SurfacePresets.saveCustom(prefs());
+        runShared(() -> SurfacePresets.saveCustom(prefs()));
         refreshPresetPreviews();
         syncPresetSelection();
         AppNotice.success(mHost.context(), getString(R.string.termux_surface_preset_saved));
@@ -2507,11 +2713,17 @@ public final class SurfaceEditorController {
      * Shipped defaults for everything the editor owns. Every surface goes back on Base first, then
      * Base itself takes the shipped numbers — the fresh-install state — so no legacy per-surface key
      * needs writing at all: an attached link never reads its raw key, and writing one through the
-     * link would move Base twice.
+     * link would move Base twice. Every place gives its own look back too: one page, one reset means
+     * the whole launcher, not the place the editor happens to be open on.
      */
     private void resetEverything() {
         if (prefs() == null)
             return;
+        if (look() != null) look().clearAllOverrides();
+        runShared(this::resetSharedLook);
+    }
+
+    private void resetSharedLook() {
         for (SurfaceSlot slot : SurfaceSlot.values())
             prefs().reattachSurface(slot);
         prefs().setSurfaceBaseValue(SurfaceProperty.BLUR,
@@ -2797,11 +3009,15 @@ public final class SurfaceEditorController {
     private void syncPresetSelection() {
         if (prefs() == null || mPresetItems.isEmpty())
             return;
-        for (SurfacePresets.Preset preset : SurfacePresets.presets())
-            setPresetCardSelected(preset.id, SurfacePresets.matches(prefs(), preset));
-        SurfacePresets.Preset custom = customPreset();
-        setPresetCardSelected(SurfacePresets.CUSTOM_ID,
-            custom != null && SurfacePresets.matches(prefs(), custom));
+        // The ring says "the shared look is exactly this preset", so it is read off the shared
+        // layer whichever place the editor was opened on — a preset never describes one place.
+        runShared(() -> {
+            for (SurfacePresets.Preset preset : SurfacePresets.presets())
+                setPresetCardSelected(preset.id, SurfacePresets.matches(prefs(), preset));
+            SurfacePresets.Preset custom = customPreset();
+            setPresetCardSelected(SurfacePresets.CUSTOM_ID,
+                custom != null && SurfacePresets.matches(prefs(), custom));
+        });
     }
 
     private void setPresetCardSelected(@NonNull String id, boolean selected) {
@@ -2839,7 +3055,10 @@ public final class SurfaceEditorController {
         if (prefs() == null)
             return;
         final Runnable undo = capturePresetUndo();
-        SurfacePresets.apply(prefs(), preset);
+        // A preset is a complete look for the whole launcher: it lands on the shared layer, and
+        // every place goes back to wearing it.
+        if (look() != null) look().clearAllOverrides();
+        runShared(() -> SurfacePresets.apply(prefs(), preset));
         syncEditorAfterBulkWrite();
         // The confirmation goes to the app's own notice chip, not a snackbar: a snackbar lands
         // bottom-centre — on top of the dock, under the soft keyboard, into the display cutouts, in
@@ -2861,6 +3080,18 @@ public final class SurfaceEditorController {
      */
     @NonNull
     private Runnable capturePresetUndo() {
+        final PlaceLookPreferences look = look();
+        final Map<String, Object> looks = look == null ? null : look.capture();
+        final Runnable[] shared = new Runnable[1];
+        runShared(() -> shared[0] = captureSharedPresetUndo());
+        return () -> {
+            runShared(shared[0]);
+            if (look != null && looks != null) look.restore(looks);
+        };
+    }
+
+    @NonNull
+    private Runnable captureSharedPresetUndo() {
         final String links = surfaceEditorLinkSignature();
         final SurfaceProperty[] properties = SurfaceProperty.values();
         final int[] base = new int[properties.length];
@@ -3149,6 +3380,10 @@ public final class SurfaceEditorController {
      * Every preference the editor can move, in one string. Compared against the value captured on
      * entry to answer "is there anything to lose here?" — cheaper and far harder to get wrong than
      * thirty hand-written field comparisons, and it only has to be kept in step in one place.
+     *
+     * <p>Read in the scope the session is editing, so a place's card is dirty when that place's
+     * numbers move; the whole look layer rides along at the end, so a preset clearing another
+     * place's overrides counts as something to lose too.
      */
     @NonNull
     private String surfaceEditorStateSignature() {
@@ -3193,7 +3428,8 @@ public final class SurfaceEditorController {
             .append(prefs().getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS)).append('|')
             .append(prefs().getSurfaceBaseValue(SurfaceProperty.SIDE_GAP)).append('|')
             .append(prefs().getSurfaceMaterial()).append('|')
-            .append(prefs().getSurfaceMaterialIntensity())
+            .append(prefs().getSurfaceMaterialIntensity()).append('|')
+            .append(look() == null ? "" : look().signature())
             .toString();
     }
 
@@ -3288,7 +3524,15 @@ public final class SurfaceEditorController {
         mSelectedSlot = null;
         mCardShown = false;
         mSurfaceEditorOpen = false;
-        mHost.holdPaneWallOnTerminal(false);
+        PaneWallPage editedPlace = mEditPlace;
+        mEditPlace = null;
+        boolean scopeMoved = false;
+        if (look() != null) {
+            PaneWallPage before = look().effectivePlace();
+            look().endEdit();
+            scopeMoved = look().effectivePlace() != before;
+        }
+        mHost.holdPaneWallOnPlace(editedPlace, false);
         syncGlow();
         setSurfaceTuningGestureOverlayVisible(false);
         unregisterSurfaceEditorLayoutListener();
@@ -3310,6 +3554,13 @@ public final class SurfaceEditorController {
             mPanel.host.setVisibility(View.GONE);
         restoreExpandedStatusAfterSurfaceEditor();
         mHasEntryStatusCollapsed = false;
+        // Editing the shared layer showed the shared layer; the chrome goes back to the place on
+        // screen on the way out.
+        if (scopeMoved) {
+            if (keyboard() != null) keyboard().onPreferencesReloaded();
+            requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_ALL
+                | SurfaceEditorProperties.PREVIEW_GEOMETRY_COMMIT);
+        }
     }
 
     /** Hands the status pane back the shape it had before the editor borrowed it. */

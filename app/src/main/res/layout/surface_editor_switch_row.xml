@@ -1,24 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A row that is on or off rather than a number — the terminal's frame. Same height and label
-     column as the slider rows so the panel reads as one list. -->
+<!-- A row that is on or off rather than a number — the terminal's frame. Same height, label
+     column, mark and note as the slider rows so the panel reads as one list. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="32dp"
-    android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/surface_editor_row_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?attr/termuxColorOnSurface"
+            android:textSize="12.5sp" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/surface_editor_row_switch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/surface_editor_row_chip"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:text="@string/termux_surface_tuning_link_detached"
+            android:textColor="?attr/termuxColorPrimary"
+            android:textSize="12sp"
+            android:visibility="invisible" />
+    </LinearLayout>
 
     <TextView
-        android:id="@+id/surface_editor_row_label"
-        android:layout_width="0dp"
+        android:id="@+id/surface_editor_row_note"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
+        android:layout_marginBottom="4dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="?attr/termuxColorOnSurface"
-        android:textSize="12.5sp" />
-
-    <com.google.android.material.materialswitch.MaterialSwitch
-        android:id="@+id/surface_editor_row_switch"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content" />
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="11sp"
+        android:visibility="gone" />
 </LinearLayout>

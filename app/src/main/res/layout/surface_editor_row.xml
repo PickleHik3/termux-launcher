@@ -1,49 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- One slider row on the surface editor's panel: label, track, number, and the link back to Base
      where the row has one. Every row on every panel is this layout, so a shared row and a surface's
-     own row read as the same control. Generated per entry in SurfaceEditorProperties. -->
+     own row read as the same control. Generated per entry in SurfaceEditorProperties.
+
+     The note under the track is the row's second line and is normally gone: on the shared layer it
+     names the places holding a value of their own for this row. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="32dp"
-    android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/surface_editor_row_label"
-        android:layout_width="78dp"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="?attr/termuxColorOnSurface"
-        android:textSize="12.5sp" />
-
-    <SeekBar
-        android:id="@+id/surface_editor_row_slider"
-        android:layout_width="0dp"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="32dp"
-        android:layout_weight="1"
-        android:splitTrack="false" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/surface_editor_row_label"
+            android:layout_width="78dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?attr/termuxColorOnSurface"
+            android:textSize="12.5sp" />
+
+        <SeekBar
+            android:id="@+id/surface_editor_row_slider"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:splitTrack="false" />
+
+        <TextView
+            android:id="@+id/surface_editor_row_value"
+            android:layout_width="42dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="end|center_vertical"
+            android:maxLines="1"
+            android:textColor="?attr/termuxColorOnSurfaceVariant"
+            android:textSize="11.5sp" />
+
+        <!-- On the shared layer: only rendered once this surface has taken its own value, and
+             tapping it puts the row back on Base. Opened on a place it is the place's mark
+             instead — quiet while the row still wears the shared look, and the way back once the
+             place has its own. -->
+        <TextView
+            android:id="@+id/surface_editor_row_chip"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:text="@string/termux_surface_tuning_link_detached"
+            android:textColor="?attr/termuxColorPrimary"
+            android:textSize="12sp"
+            android:visibility="invisible" />
+    </LinearLayout>
 
     <TextView
-        android:id="@+id/surface_editor_row_value"
-        android:layout_width="42dp"
+        android:id="@+id/surface_editor_row_note"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
         android:ellipsize="end"
-        android:gravity="end|center_vertical"
         android:maxLines="1"
         android:textColor="?attr/termuxColorOnSurfaceVariant"
-        android:textSize="11.5sp" />
-
-    <!-- Only rendered once this surface has taken its own value: tapping it puts the row back on
-         the shared layer. Invisible while the row still follows Base, which is the quiet default. -->
-    <TextView
-        android:id="@+id/surface_editor_row_chip"
-        android:layout_width="26dp"
-        android:layout_height="26dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:gravity="center"
-        android:text="@string/termux_surface_tuning_link_detached"
-        android:textColor="?attr/termuxColorPrimary"
-        android:textSize="12sp"
-        android:visibility="invisible" />
+        android:textSize="11sp"
+        android:visibility="gone" />
 </LinearLayout>

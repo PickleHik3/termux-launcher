@@ -99,6 +99,12 @@ public final class SurfaceEditorProperties {
         public final int max;
         /** The inheritance cell this edits, or null when the control stands outside Base. */
         @Nullable public final SurfaceEditorRows.Row cell;
+        /**
+         * The preference keys a place may take for itself when the editor is open on one. Empty
+         * for a row that is shared by definition — Base's own five, and the action rows — which is
+         * also what tells the editor to read and write that row with the place scope lifted.
+         */
+        @NonNull public final List<String> scopeKeys;
         @Nullable private final ToIntFunction<TermuxAppSharedPreferences> read;
         @Nullable private final ObjIntConsumer<TermuxAppSharedPreferences> write;
         public final int previewScopes;
@@ -107,7 +113,8 @@ public final class SurfaceEditorProperties {
                         @Nullable SurfaceEditorRows.Row cell,
                         @Nullable ToIntFunction<TermuxAppSharedPreferences> read,
                         @Nullable ObjIntConsumer<TermuxAppSharedPreferences> write,
-                        int previewScopes) {
+                        int previewScopes, @NonNull List<String> scopeKeys) {
+            this.scopeKeys = Collections.unmodifiableList(new ArrayList<>(scopeKeys));
             this.id = id;
             this.labelRes = labelRes;
             this.kind = kind;
@@ -192,7 +199,7 @@ public final class SurfaceEditorProperties {
         if (row == null)
             throw new IllegalArgumentException("no row for " + slot + "/" + property);
         return new Control(id, labelRes, Kind.SLIDER, row.dp ? Unit.DP : Unit.PERCENT, row.max,
-            row, null, null, previewScopes);
+            row, null, null, previewScopes, SurfaceEditorRows.scopeKeys(row));
     }
 
     /** A control outside the cascade: its own accessors, and no link to Base. */
@@ -200,8 +207,9 @@ public final class SurfaceEditorProperties {
                                int max,
                                @Nullable ToIntFunction<TermuxAppSharedPreferences> read,
                                @Nullable ObjIntConsumer<TermuxAppSharedPreferences> write,
-                               int previewScopes) {
-        return new Control(id, labelRes, kind, unit, max, null, read, write, previewScopes);
+                               int previewScopes, String... scopeKeys) {
+        return new Control(id, labelRes, kind, unit, max, null, read, write, previewScopes,
+            Arrays.asList(scopeKeys));
     }
 
     private static boolean floating(@NonNull TermuxAppSharedPreferences prefs) {
@@ -265,7 +273,7 @@ public final class SurfaceEditorProperties {
             100,
             TermuxAppSharedPreferences::getWallpaperBackdropDim,
             TermuxAppSharedPreferences::setWallpaperBackdropDim,
-            PREVIEW_SURFACES)));
+            PREVIEW_SURFACES, TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM)));
 
     private static final EnumMap<SurfaceSlot, List<Control>> PANELS =
         new EnumMap<>(SurfaceSlot.class);
@@ -290,14 +298,14 @@ public final class SurfaceEditorProperties {
             own(ID_APPS, R.string.termux_dock_tuning_icons, Kind.SLIDER, Unit.COUNT, 20,
                 TermuxAppSharedPreferences::getAppLauncherButtonCount,
                 (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
-                PREVIEW_GEOMETRY),
+                PREVIEW_GEOMETRY, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT),
             own(ID_SIZE, R.string.termux_dock_tuning_size, Kind.SLIDER, Unit.DOCK_SIZE,
                 DockLayoutPolicy.sizePresetCount() - 1,
                 prefs -> DockLayoutPolicy.nearestSizePresetIndex(
                     prefs.getAppLauncherBarHeightScale()),
                 (prefs, value) -> prefs.setAppLauncherBarHeightScale(
                     DockLayoutPolicy.sizePreset(value)),
-                PREVIEW_GEOMETRY)));
+                PREVIEW_GEOMETRY, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT)));
 
         // The keyboard renders the dock's material — one blurred backdrop, one grain, the dock
         // capsule's shape — so it owns an opacity and a margin and nothing else of the glass. Its
@@ -316,12 +324,12 @@ public final class SurfaceEditorProperties {
                 Unit.DP_TENTHS, 240,
                 prefs -> Math.round(prefs.getInAppKeyboardKeyCornerRadiusDp() * 10f),
                 (prefs, value) -> prefs.setInAppKeyboardKeyCornerRadiusDp(value / 10f),
-                0),
+                0, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP),
             own(ID_KEYBOARD_KEY_OPACITY, R.string.termux_surface_tuning_keyboard_key_opacity,
                 Kind.SLIDER, Unit.PERCENT, 100,
                 TermuxAppSharedPreferences::getInAppKeyboardKeyOpacity,
                 TermuxAppSharedPreferences::setInAppKeyboardKeyOpacity,
-                0),
+                0, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY),
             own(ID_KEYBOARD_SPACING, R.string.termux_surface_tuning_keyboard_spacing, Kind.SLIDER,
                 Unit.PERCENT, 100,
                 prefs -> SurfaceEditorController.keyboardEditorProgress(
@@ -332,7 +340,7 @@ public final class SurfaceEditorProperties {
                     SurfaceEditorController.keyboardEditorValue(value,
                         TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
                         TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE)),
-                0),
+                0, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE),
             own(ID_KEYBOARD_COLORS, R.string.settings_keyboard_colors_title, Kind.ACTION,
                 Unit.NONE, 0, null, null, 0)));
 
@@ -356,7 +364,7 @@ public final class SurfaceEditorProperties {
                 Unit.DP, TERMUX_APP.MAX_STATUS_INDICATOR_CORNER_RADIUS,
                 TermuxAppSharedPreferences::getStatusIndicatorCornerRadius,
                 TermuxAppSharedPreferences::setStatusIndicatorCornerRadius,
-                0)));
+                0, TERMUX_APP.KEY_STATUS_INDICATOR_CORNER_RADIUS)));
 
         PANELS.put(SurfaceSlot.CANVAS, panel(
             cell(ID_OPACITY, SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
@@ -371,18 +379,19 @@ public final class SurfaceEditorProperties {
             own(ID_CORNERS, R.string.termux_dock_tuning_radius, Kind.SLIDER, Unit.DP, 40,
                 TermuxAppSharedPreferences::getTerminalCornerRadius,
                 TermuxAppSharedPreferences::setTerminalCornerRadius,
-                PREVIEW_SURFACES),
+                PREVIEW_SURFACES, TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS),
             own(ID_MARGIN, R.string.termux_surface_tuning_edges, Kind.SLIDER, Unit.DP,
                 MAX_TERMINAL_MARGIN_DP,
                 TermuxAppSharedPreferences::getTerminalPaneGap,
                 TermuxAppSharedPreferences::setTerminalPaneGap,
-                PREVIEW_SURFACES),
+                PREVIEW_SURFACES, TERMUX_APP.KEY_TERMINAL_PANE_GAP),
             // Last, and a switch rather than a number: it is the frame the glass above it lives
             // inside, so the rows it enables read down into it rather than out of it.
             own(ID_BORDER, R.string.termux_dock_tuning_terminal_border, Kind.SWITCH, Unit.NONE, 1,
                 prefs -> prefs.isTerminalBorderEnabled() ? 1 : 0,
                 (prefs, value) -> prefs.setTerminalBorderEnabled(value != 0),
-                PREVIEW_ALL | PREVIEW_GEOMETRY_COMMIT)));
+                PREVIEW_ALL | PREVIEW_GEOMETRY_COMMIT,
+                TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED)));
     }
 
     /** Sorts one surface's declared rows into the shared order and freezes them. */

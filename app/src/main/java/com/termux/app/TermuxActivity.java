@@ -98,6 +98,7 @@ import com.termux.app.place.KeyboardOnEnter;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceLookPreferences;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
@@ -212,6 +213,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         "com.termux.app.extra.DOCK_TUNING";
     public static final String EXTRA_SURFACE_EDITOR_SECTION =
         "com.termux.app.extra.DOCK_TUNING_SECTION";
+    /**
+     * The place the surface editor should open on — {@code widgets}, {@code terminal} or
+     * {@code display}, as {@link com.termux.app.wall.PaneWallPage#toolName()} names them. Absent or
+     * unknown opens the editor on the shared look every place wears.
+     */
+    public static final String EXTRA_SURFACE_EDITOR_PLACE =
+        "com.termux.app.extra.SURFACE_EDITOR_PLACE";
     /** Opens the extra-keys row editor over the live terminal, from Settings. */
     public static final String EXTRA_EDIT_EXTRA_KEYS =
         "com.termux.app.extra.EDIT_EXTRA_KEYS";
@@ -325,6 +333,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallPage.TERMINAL;
     /** Every place's arrangement and memory; built on the preferences the first time it is asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
+
+    /**
+     * The look layer sitting under {@link #mPreferences}: every surface value the chrome reads
+     * resolves through the place on screen before it falls back to the shared look. Held here so
+     * the wall can point it at the place it settles on, and the surface editor at the place it is
+     * open on.
+     */
+    @Nullable private PlaceLookPreferences mLookPreferences;
     /** The last resolved layout, kept while nothing the store answers from has moved. */
     @Nullable private PlaceLayout mCachedPlaceLayout;
     @Nullable private com.termux.app.wall.PaneWallPage mCachedPlaceLayoutPlace;
@@ -886,7 +902,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         reloadProperties();
 
         // Load preferences BEFORE setting theme (needed to check wallpaper preference)
-        mPreferences = TermuxAppSharedPreferences.build(this, false);
+        mPreferences = buildPlaceScopedPreferences(false);
 
         // Apply wallpaper or normal theme based on preference
         setActivityThemeAndWindow();
@@ -895,7 +911,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Load termux shared preferences
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
         if (mPreferences == null) {
-            mPreferences = TermuxAppSharedPreferences.build(this, true);
+            mPreferences = buildPlaceScopedPreferences(true);
         }
         if (mPreferences == null) {
             // An AlertDialog should have shown to kill the app, so we don't continue running activity code
@@ -6857,9 +6873,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (intent == null || !intent.getBooleanExtra(EXTRA_SURFACE_EDITOR, false))
             return;
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
+        com.termux.app.wall.PaneWallPage place =
+            parseSurfaceEditorPlace(intent.getStringExtra(EXTRA_SURFACE_EDITOR_PLACE));
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
-        mSurfaceEditor.enter(initialSection);
+        intent.removeExtra(EXTRA_SURFACE_EDITOR_PLACE);
+        mSurfaceEditor.enter(initialSection, place);
+    }
+
+    /**
+     * The place a surface-editor intent names, or null for the shared look. Anything the wall does
+     * not have a place for is not an error: the editor opens on the shared layer, which is what an
+     * unnamed place means anyway.
+     */
+    @Nullable
+    @VisibleForTesting
+    static com.termux.app.wall.PaneWallPage parseSurfaceEditorPlace(@Nullable String name) {
+        if (name == null) return null;
+        for (com.termux.app.wall.PaneWallPage page : com.termux.app.wall.PaneWallPage.values()) {
+            if (page.toolName().equalsIgnoreCase(name.trim())) return page;
+        }
+        return null;
     }
 
     /** The activity's half of the surface editor's seam: its views, its prefs, its render pipeline. */
@@ -6874,6 +6908,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Nullable @Override public TermuxAppSharedPreferences preferences() {
             return mPreferences;
+        }
+
+        @Nullable @Override public PlaceLookPreferences lookPreferences() {
+            return mLookPreferences;
         }
 
         @Nullable @Override public com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() {
@@ -6908,9 +6946,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return getTermuxThemeColor(attr, fallbackRes);
         }
 
-        @Override public void holdPaneWallOnTerminal(boolean held) {
+        @Override public void holdPaneWallOnPlace(
+                @Nullable com.termux.app.wall.PaneWallPage place, boolean held) {
             if (mPaneWallController == null) return;
-            if (held) mPaneWallController.returnToTerminal(false);
+            if (held) {
+                if (place == null) mPaneWallController.returnToTerminal(false);
+                else mPaneWallController.goTo(place, false);
+            }
             mPaneWallController.setGesturesEnabled(!held);
             syncWallGestureAvailability();
         }
@@ -7590,6 +7632,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The launcher's preferences, reading through the place on screen.
+     *
+     * <p>Looks are shared until a place is given one of its own, and this is the one seam where
+     * that resolution happens: the preferences the activity hands to the chrome, the dock policy,
+     * the keyboard and the surface editor are backed by {@link PlaceLookPreferences} rather than
+     * the preference file directly, so every existing getter answers for the place being drawn
+     * without a single per-place branch above it. Settings screens keep building their own
+     * unscoped instance, which is what makes their sliders the shared look.
+     */
+    @Nullable
+    private TermuxAppSharedPreferences buildPlaceScopedPreferences(boolean exitAppOnError) {
+        TermuxAppSharedPreferences base = TermuxAppSharedPreferences.build(this, exitAppOnError);
+        if (base == null || base.getSharedPreferences() == null)
+            return base;
+        mLookPreferences = new PlaceLookPreferences(base.getSharedPreferences());
+        return new TermuxAppSharedPreferences(base.getContext(), mLookPreferences,
+            base.getMultiProcessSharedPreferences());
+    }
+
+    /**
      * The widget grid's columns and rows are the user's; the repository only remembers them. The
      * grid belongs to the home place and to this orientation, so a turn of the screen re-applies it.
      */
@@ -7921,6 +7983,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * screen turns. One entry point: the layout is resolved once and each surface applies its part.
      */
     private void syncPlaceLayout() {
+        // The look layer follows the wall too: a place wearing its own dock, keyboard or status
+        // surface puts it on as the wall settles on it. Nothing to re-apply when no place has one.
+        boolean lookChanged = mLookPreferences != null
+            && mLookPreferences.setRenderPlace(currentWallPlace())
+            && mLookPreferences.hasAnyOverrides();
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
@@ -7934,6 +8001,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setTerminalToolbarHeight();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
         }
+        if (lookChanged) applyPlaceLook();
+    }
+
+    /** Every surface re-read for the place the wall has just settled on. */
+    private void applyPlaceLook() {
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight(true);
+        applyTerminalSurfaceAppearance();
+        refreshTerminalWindowBar();
+        applySessionsSurfaceAlpha();
+        applySuggestionBarSurfaceStyling();
+        if (mPaneController != null) mPaneController.refreshPaneLayout();
+        if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
+        mChrome.requestSync(ChromeRenderer.SCOPE_WALLPAPER_BLUR_CACHE
+            | ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
+            | ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     /**
@@ -8782,7 +8865,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 showKillSessionDialog(session);
                 return true;
             case CONTEXT_MENU_SURFACE_EDITOR_ID:
-                mSurfaceEditor.enter();
+                openSurfaceEditor();
                 return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
                 com.termux.app.terminal.TerminalCommandPalette.show(this);
@@ -11050,7 +11133,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     void openSurfaceEditor() {
-        mSurfaceEditor.enter();
+        // From inside the launcher the editor is opened on the place the user is looking at; the
+        // shared look is what the Settings row opens.
+        mSurfaceEditor.enter(null, currentWallPlace());
     }
 
     void openSettings() {
@@ -11397,6 +11482,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, initialPage);
             mPaneWallController.restoreInstanceState(state);
         }
+        // A cold start can land on the place the wall last rested on without a page change to
+        // announce it, so the look layer is pointed at it before the first chrome pass rather than
+        // after one drawn in the shared look.
+        if (mLookPreferences != null) mLookPreferences.setRenderPlace(currentWallPlace());
     }
 
     /**
