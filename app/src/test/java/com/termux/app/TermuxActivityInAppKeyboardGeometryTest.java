@@ -145,6 +145,12 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertTrue(TermuxActivity.shouldRequestTerminalResize(true, false, false, true));
         assertFalse(TermuxActivity.shouldRequestTerminalResize(true, false, false, false));
         assertFalse(TermuxActivity.shouldRequestTerminalResize(false, true, true, true));
+        // A floating keyboard changes the stack's height without changing the room left for the
+        // content, so it must not reach the panes; the dock rows moving under it still do.
+        assertFalse(TermuxActivity.shouldRequestTerminalResize(true, true, false, true, true, false));
+        assertTrue(TermuxActivity.shouldRequestTerminalResize(true, true, false, true, true, true));
+        assertTrue(TermuxActivity.shouldRequestTerminalResize(true, true, false, true, false, false));
+        assertFalse(TermuxActivity.shouldRequestTerminalResize(false, true, true, true, true, true));
     }
 
     @Test
