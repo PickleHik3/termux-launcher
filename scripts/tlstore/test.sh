@@ -22,6 +22,12 @@
 #                            wrapper — is exercised for real. Nothing else is
 #                            stubbed: curl, sha256sum, sha512sum, tar, base64,
 #                            od and minisign are the real tools.
+#   TLSTORE_ASSUME_TTY=1   — the questions tlstore only asks a person (replace
+#                            this config file? remove the build tools?) are
+#                            skipped when stdin is not a terminal. The suite has
+#                            no pty, so it sets this knob and pipes the answers
+#                            in; without it the "nobody is there" paths are what
+#                            get tested, and both are.
 # The catalog signature tests need minisign. Without it they are skipped, and
 # the suite says so instead of passing quietly.
 
@@ -64,13 +70,14 @@ sha512_b64() {
     fi
 }
 
-# write_catalog <file> <serial> <fakebin version> <fakebin payload>
+# write_catalog <file> <serial> <version> <fakebin payload> — the version is the
+# one hello and fakebin carry, so a newer catalog moves a config item on too.
 write_catalog() {
     local out="$1" serial="$2" fbver="$3" fbfile="$4"
     {
         printf '# tlstore catalog\tserial=%s\n' "$serial"
         printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\n'
-        printf 'hello\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\n' "$FX" "$(sha "$FX/hello.conf")"
+        printf 'hello\tfile\t%s\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\n' "$fbver" "$FX" "$(sha "$FX/hello.conf")"
         printf 'mine\tfile-once\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/mine.conf\t-\t-\tYours to edit, installed once.\n' "$FX" "$(sha "$FX/mine.conf")"
         printf 'fakebin\tbinary\t%s\t*\tfile://%s/%s\t%s\t-\t-\t-\tA small tool for the terminal.\n' "$fbver" "$FX" "$fbfile" "$(sha "$FX/$fbfile")"
         printf 'badsum\tbinary\t1\t*\tfile://%s/hello.conf\t%s\t~/.local/bin/badsum\t-\t-\tNever installs, on purpose.\n' "$FX" "0000000000000000000000000000000000000000000000000000000000000000"
@@ -170,6 +177,7 @@ tl() {
             TLSTORE_NPM_REGISTRY="file://$FX/registry" \
             TLSTORE_ARCH=aarch64 \
             TLSTORE_PATCHELF=true \
+            TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" 2>&1)"
     else
         OUT="$(env -i \
@@ -179,10 +187,12 @@ tl() {
             TLSTORE_NPM_REGISTRY="file://$FX/registry" \
             TLSTORE_ARCH=aarch64 \
             TLSTORE_PATCHELF=true \
+            TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" < /dev/null 2>&1)"
     fi
     ST=$?
     STDIN_TEXT=""
+    TTY_KNOB=0
     return 0
 }
 
@@ -242,17 +252,66 @@ run_suite() {
     expect_out "info names where the file goes" ".config/hello.conf"
     expect_out "info names the checksum" "$(sha "$FX/hello.conf")"
 
-    # --- a file, over an existing one ---
+    # --- a file, where there is none yet ---
     mkdir -p "$TESTHOME/.config"
-    printf 'the users own greeting\n' > "$TESTHOME/.config/hello.conf"
     tl install hello -y
     expect_status "install a file" 0
-    expect_content "the file was replaced" "$TESTHOME/.config/hello.conf" "greeting from the catalog"
-    if ls "$TESTHOME/.config/hello.conf".bak-* >/dev/null 2>&1; then pass; else fail "the old file was kept beside it"; fi
+    expect_content "the file was written" "$TESTHOME/.config/hello.conf" "greeting from the catalog"
     tl list -i
     expect_out "list -i shows what is installed" "hello"
     tl list -a
-    expect_no_out "list -a hides what is installed" "^hello"
+    expect_no_out "list -a hides what is installed" "hello"
+
+    # --- a config file that already differs: never replaced silently ---
+    # Each case starts as a first install over a file tlstore did not put there,
+    # which is what a user with their own config.fish actually has.
+    forget_state() { rm -f "$TESTHOME/.local/share/tlstore/installed.tsv"; }
+
+    printf 'the users own greeting\n' > "$TESTHOME/.config/hello.conf"
+
+    # nobody there to ask: kept, one line, still recorded
+    forget_state
+    tl install hello -y
+    expect_status "a config that differs, with nobody to ask" 0
+    expect_content "the users own config is kept" "$TESTHOME/.config/hello.conf" "the users own greeting"
+    expect_out "and it says so" "kept your hello.conf"
+    expect_no_out "-y does not answer the config question" "Replace your"
+
+    # asked, and answered no
+    forget_state
+    TTY_KNOB=1
+    STDIN_TEXT='n
+'
+    tl install hello -y
+    expect_status "a config that differs, answered no" 0
+    expect_out "the change is shown" "greeting from the catalog"
+    expect_out "and the question is asked" "Replace your hello.conf"
+    expect_content "answering no keeps the users file" "$TESTHOME/.config/hello.conf" "the users own greeting"
+
+    # asked, and answered yes
+    forget_state
+    TTY_KNOB=1
+    STDIN_TEXT='y
+'
+    tl install hello -y
+    expect_status "a config that differs, answered yes" 0
+    expect_content "answering yes takes the new file" "$TESTHOME/.config/hello.conf" "greeting from the catalog"
+    if ls "$TESTHOME/.config/hello.conf".bak-* >/dev/null 2>&1; then pass; else fail "the old config was kept beside it"; fi
+
+    # identical: nothing to show, nothing to ask
+    forget_state
+    tl install hello -y
+    expect_status "a config that is already identical" 0
+    expect_no_out "an identical config asks nothing" "Replace your"
+    expect_no_out "an identical config shows nothing" "^---"
+
+    # --configs answers it without a person
+    printf 'changed again\n' > "$TESTHOME/.config/hello.conf"
+    forget_state
+    tl install hello -y --configs
+    expect_status "--configs" 0
+    expect_content "--configs takes the new config" "$TESTHOME/.config/hello.conf" "greeting from the catalog"
+    expect_no_out "--configs does not ask" "Replace your"
 
     # --- a file-once, twice ---
     printf 'already mine\n' > "$TESTHOME/.config/mine.conf"
@@ -295,18 +354,22 @@ run_suite() {
     # --- remove, with the backup put back ---
     tl remove hello -y
     expect_status "remove" 0
-    expect_content "the users own file came back" "$TESTHOME/.config/hello.conf" "the users own greeting"
+    expect_content "the file that was there came back" "$TESTHOME/.config/hello.conf" "changed again"
     tl list -i
-    expect_no_out "a removed item is no longer installed" "^hello"
+    expect_no_out "a removed item is no longer installed" "hello"
     tl remove hello -y
     expect_status "removing something twice is not an error" 0
     expect_out "removing something twice says so" "not installed"
 
     # --- update ---
+    # Put a config item back first, from the catalog the app ships, so the
+    # refresh below has something whose shipped version has moved on.
+    tl install hello -y --configs
     tl update --check
     expect_status "update --check" 0
     expect_out "update --check took the newer item list" "Updated the list of items"
     expect_out "update --check names what is out of date" "fakebin"
+    expect_out "a config with a new version says the change will be shown" "hello has a new version"
     tl version
     expect_out "the refreshed item list is in use" "2026090602"
     tl update -y

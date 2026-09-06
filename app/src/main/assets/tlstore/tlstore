@@ -19,6 +19,8 @@
 #   TLSTORE_NPM_REGISTRY npm registry base (default https://registry.npmjs.org)
 #   TLSTORE_ARCH        override uname -m (tests exercise aarch64 items on a host)
 #   TLSTORE_PATCHELF    the patchelf command (tests pass a no-op)
+#   TLSTORE_ASSUME_TTY  1 = answer questions from stdin even when it is not a
+#                       terminal (the test suite pipes them in)
 
 set -u
 
@@ -55,6 +57,12 @@ BINARIES_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher-binar
 
 ASSUME_YES="${TLSTORE_ASSUME_YES:-0}"
 [ "$ASSUME_YES" = 1 ] || ASSUME_YES=0
+
+ASSUME_TTY="${TLSTORE_ASSUME_TTY:-0}"
+[ "$ASSUME_TTY" = 1 ] || ASSUME_TTY=0
+
+# -y never answers "replace my config file?"; --configs does, and only that.
+REPLACE_CONFIGS=0
 
 ARCH="${TLSTORE_ARCH:-$(uname -m 2>/dev/null || echo unknown)}"
 case "$ARCH" in
@@ -342,15 +350,47 @@ download() {
     return 0
 }
 
+# Is someone there to answer a question?
+interactive() {
+    [ "$ASSUME_TTY" = 1 ] && return 0
+    [ -t 0 ]
+}
+
+yes_reply() {
+    case "$1" in
+        y|Y|yes|YES) return 0 ;;
+    esac
+    return 1
+}
+
+# A question that goes ahead unless you say no. -y answers it.
 ask_yn() {
     [ "$ASSUME_YES" = 1 ] && return 0
     printf '%s [Y/n] ' "$1"
     read -r ay_answer || ay_answer=""
     [ -n "$ay_answer" ] || ay_answer=y
-    case "$ay_answer" in
-        y|Y|yes|YES) return 0 ;;
-        *) return 1 ;;
-    esac
+    yes_reply "$ay_answer"
+}
+
+# A question that does nothing unless you say yes. -y answers it; with nobody
+# there to ask, the answer is no.
+ask_ny() {
+    [ "$ASSUME_YES" = 1 ] && return 0
+    interactive || return 1
+    printf '%s [y/N] ' "$1"
+    read -r an_answer || an_answer=""
+    yes_reply "$an_answer"
+}
+
+# Two files with the same contents.
+same_file() {
+    if have cmp; then
+        cmp -s "$1" "$2"
+        return $?
+    fi
+    sf_a=$(file_digest "$1")
+    sf_b=$(file_digest "$2")
+    [ -n "$sf_a" ] && [ "$sf_a" = "$sf_b" ]
 }
 
 install_pkg() {
@@ -379,6 +419,28 @@ upgrade_pkg() {
     else
         err "no package manager here — cannot update $*"
         return 1
+    fi
+}
+
+remove_pkg() {
+    if have pacman; then
+        # shellcheck disable=SC2068
+        pacman -R --noconfirm $@
+    elif have apt; then
+        # shellcheck disable=SC2068
+        apt remove -y $@
+    else
+        return 1
+    fi
+}
+
+pkg_present() {
+    if have pacman; then
+        pacman -Q "$1" >/dev/null 2>&1
+    elif have dpkg; then
+        dpkg -s "$1" >/dev/null 2>&1
+    else
+        have "$1"
     fi
 }
 
@@ -526,6 +588,29 @@ do_binary() {
     return 0
 }
 
+# Shows what would change in a config file and asks. Only --configs answers this
+# for you; -y deliberately does not, because a config is the user's own work.
+# confirm_replace <name> <current> <new>
+confirm_replace() {
+    cf_name="$1"
+    cf_cur="$2"
+    cf_new="$3"
+    [ "$REPLACE_CONFIGS" = 1 ] && return 0
+    interactive || return 1
+    say "$cf_name"
+    if have diff; then
+        diff -u "$cf_cur" "$cf_new" || true
+    else
+        say "  before:"
+        head -25 "$cf_cur" | sed 's/^/    /'
+        say "  after:"
+        head -25 "$cf_new" | sed 's/^/    /'
+    fi
+    printf 'Replace your %s? [y/N] ' "$(basename "$cf_cur")"
+    read -r cf_answer || cf_answer=""
+    yes_reply "$cf_answer"
+}
+
 # do_file <once>
 do_file() {
     df_once="$1"
@@ -539,6 +624,32 @@ do_file() {
     if [ "$df_once" = 1 ] && [ -e "$df_dest" ]; then
         say "kept your $(basename "$df_dest") — it is yours to edit"
         is_installed "$ii_name" || state_record "$ii_name" file-once "$ii_version"
+        return 0
+    fi
+    # A config file you already have is never replaced without being shown the
+    # change first. It is recorded either way, so declining is not asked again
+    # until the shipped file itself moves on.
+    if [ "$df_once" = 0 ] && [ -e "$df_dest" ]; then
+        mkdir -p "$CACHE_DIR"
+        df_new="$CACHE_DIR/$ii_name.new"
+        download "$(source_url "$ii_source")" "$df_new" "$ii_digest" || return 1
+        if same_file "$df_dest" "$df_new"; then
+            rm -f "$df_new"
+            state_record "$ii_name" file "$ii_version" "$df_dest"
+            return 0
+        fi
+        if ! confirm_replace "$ii_name" "$df_dest" "$df_new"; then
+            rm -f "$df_new"
+            say "kept your $(basename "$df_dest")"
+            state_record "$ii_name" file "$ii_version" "$df_dest"
+            return 0
+        fi
+        backup_existing "$df_dest"
+        cp "$df_new" "$df_dest" || return 1
+        rm -f "$df_new"
+        chmod "$df_mode" "$df_dest"
+        state_record "$ii_name" file "$ii_version" "$df_dest"
+        say "  $df_dest"
         return 0
     fi
     say "installing $ii_name"
@@ -862,7 +973,7 @@ tlstore installs the tools and configs the launcher shows off.
   tlstore doctor              check that everything is in place
   tlstore version
 
-Add -y to skip the confirmation.
+Add -y to skip the confirmation, --configs to take every new config file too.
 EOF
 }
 
@@ -931,6 +1042,7 @@ cmd_install() {
     for ci_a in "$@"; do
         case "$ci_a" in
             -y|--yes) ASSUME_YES=1 ;;
+            --configs) REPLACE_CONFIGS=1 ;;
             -*) err "unknown option: $ci_a"; return 2 ;;
             *) ci_names="$ci_names $ci_a" ;;
         esac
@@ -1023,6 +1135,7 @@ cmd_update() {
         case "$cu_a" in
             --check) cu_check=1 ;;
             --offline) cu_offline=1 ;;
+            --configs) REPLACE_CONFIGS=1 ;;
             -y|--yes) ASSUME_YES=1 ;;
             -*) err "unknown option: $cu_a"; return 2 ;;
             *) cu_names="$cu_names $cu_a" ;;
@@ -1075,7 +1188,11 @@ cmd_update() {
         else
             for cu_n in $cu_out; do
                 cu_row=$(row "$cu_n")
-                say "$cu_n $(field "$cu_row" 3) is available; you have $(installed_version "$cu_n")"
+                if [ "$(field "$cu_row" 2)" = file ]; then
+                    say "$cu_n has a new version; update shows the change and asks"
+                else
+                    say "$cu_n $(field "$cu_row" 3) is available; you have $(installed_version "$cu_n")"
+                fi
             done
         fi
         [ -z "$(printf '%s' "$cu_pkgs" | tr -d ' ')" ] || say "Packages are checked by the package manager when you update."
