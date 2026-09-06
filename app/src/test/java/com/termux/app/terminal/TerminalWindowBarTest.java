@@ -276,6 +276,42 @@ public class TerminalWindowBarTest {
     }
 
     /**
+     * Regression: a process whose own icon already names it (pacman) must not vanish into a bare
+     * spinning ring the moment it starts working. Before this fix the Activity's window-bar caller
+     * (now {@link TerminalWindowBar#itemForForegroundProcess}) left the text empty whenever the
+     * glyph "named" the process, so once busy the ring — which only ever covers the leading glyph
+     * run — had no label left beside it to leave visible. Goes through the real factory, not a
+     * hand-built {@link TerminalWindowBar.WindowItem}, so it exercises the actual label policy.
+     */
+    @Test
+    public void busyPillForAGlyphNamedProcessStillShowsItsName() {
+        TerminalWindowBar.WindowItem item =
+            TerminalWindowBar.itemForForegroundProcess("pacman", null).withBusy(true);
+        assertTrue("the label must carry \"pacman\" beside its icon, not the icon alone",
+            item.label.endsWith(" pacman"));
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Collections.singletonList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.text.Spanned text = (android.text.Spanned) ((TextView) tabs.getChildAt(0)).getText();
+        android.text.style.ReplacementSpan[] rings =
+            text.getSpans(0, text.length(), android.text.style.ReplacementSpan.class);
+        assertEquals(1, rings.length);
+        // The ring covers only the leading glyph run; "pacman" itself stays on the page.
+        assertTrue(text.getSpanEnd(rings[0]) < text.length());
+        assertTrue(text.toString().endsWith("pacman"));
+    }
+
+    /** The real policy's other branch: an editor's open file outranks its own process name. */
+    @Test
+    public void itemForForegroundProcessPrefersTheOpenFileForEditors() {
+        TerminalWindowBar.WindowItem item =
+            TerminalWindowBar.itemForForegroundProcess("nvim", "app.js");
+        assertTrue(item.label.endsWith(" app.js"));
+        assertEquals("nvim editing app.js", item.spokenLabel);
+    }
+
+    /**
      * A shell that reports a percentage gets a filling ring rather than a turning one, so nothing
      * needs frames — and the number is spoken, since the ring cannot be.
      */

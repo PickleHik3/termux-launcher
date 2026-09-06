@@ -13213,17 +13213,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return com.termux.app.terminal.TerminalWindowBar.itemForNamed(windowName, process);
         }
         if (info != null && !info.idle && info.processName != null) {
-            if (info.openFile != null) {
-                return com.termux.app.terminal.TerminalWindowBar.itemForResolved(info.processName,
-                    com.termux.app.terminal.TerminalWindowBar.truncateFile(info.openFile),
-                    info.processName + " editing " + info.openFile);
-            }
-            // A process its glyph names is shown by the glyph alone; the name is text only when
-            // the slot would otherwise hold the plain terminal glyph.
-            String text = com.termux.app.terminal.TerminalWindowBar.glyphNamesProcess(info.processName)
-                ? "" : com.termux.app.terminal.TerminalWindowBar.truncateProcess(info.processName);
-            return com.termux.app.terminal.TerminalWindowBar.itemForResolved(info.processName, text,
-                info.processName);
+            return com.termux.app.terminal.TerminalWindowBar.itemForForegroundProcess(
+                info.processName, info.openFile);
         }
         // Idle or not yet resolved: directory basename via the existing title/cwd derivation.
         return com.termux.app.terminal.TerminalWindowBar.itemFor(session, index);

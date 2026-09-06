@@ -11,11 +11,14 @@ import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.privileged.PrivilegedBackendManager;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Resolves, per shell pid, what is running in the foreground of that pane so the window pills can
@@ -27,6 +30,10 @@ import java.util.Map;
  * or su/rish) so they work past Android's hidepid/ptrace restrictions. Results are cached; refreshes
  * are throttled and coalesced so the privileged IPC does not run more than once per
  * {@link #MIN_INTERVAL_MS}.
+ *
+ * <p>A shebang-launched tool (npm's {@code codex}, pip's console-script entry points, ...) reports
+ * as its interpreter, not itself: the kernel rewrites argv to put {@code node} or {@code python}
+ * first. {@link #unwrapInterpreter} recovers the intended name from the script path that follows.
  */
 public final class WindowForegroundResolver {
 
@@ -290,6 +297,8 @@ public final class WindowForegroundResolver {
         String process = basename(argv[0]);
         if (process.isEmpty()) return null;
         process = process.toLowerCase(Locale.ROOT);
+        String wrapped = unwrapInterpreter(process, argv);
+        if (wrapped != null) process = wrapped;
         String openFile = null;
         if (TerminalWindowBar.isEditor(process)) {
             for (int i = argv.length - 1; i >= 1; i--) {
@@ -347,6 +356,86 @@ public final class WindowForegroundResolver {
         } catch (Throwable ignored) {
         }
         return 100d;
+    }
+
+    /**
+     * Scripting runtimes whose own comm/argv[0] names nothing a user asked for: a shebang line
+     * rewrites argv to put the interpreter first, so {@code codex} (a {@code #!/usr/bin/env node}
+     * script) reports as plain {@code node} — same pill, same icon, for every such tool. Shells are
+     * deliberately excluded: their own glyph already names them, and a shell's argv is at least as
+     * often {@code -c "..."} as a script path.
+     */
+    private static final Set<String> INTERPRETERS = new HashSet<>(Arrays.asList(
+        "node", "nodejs", "bun", "deno", "python", "python3", "python2", "ruby", "perl", "php"));
+
+    /**
+     * The one interpreter flag confidently parseable without knowing the rest of the command line:
+     * Python's {@code -m}, whose value is a module name to run — the identity itself, never a path
+     * to open. Every other flag (an interpreter's own {@code -c}/{@code -e}/{@code --eval}/
+     * {@code -p}/{@code --print}, or anything not recognized at all) takes {@link #unwrapInterpreter}
+     * straight to bailing out: its value could just as easily be a code string or an unrelated flag
+     * argument as a script path, and a wrong guess mislabels the pill worse than the plain
+     * interpreter name it would otherwise show.
+     */
+    private static final String MODULE_FLAG = "-m";
+
+    /** Path segments and bare filenames too generic to stand in for the tool that owns them. */
+    private static final Set<String> GENERIC_ENTRYPOINT_NAMES = new HashSet<>(Arrays.asList(
+        "index", "cli", "main", "app", "run", "start", "server", "__main__", "entry"));
+
+    private static final Set<String> GENERIC_PATH_SEGMENTS = new HashSet<>(Arrays.asList(
+        "bin", "dist", "build", "lib", "libexec", "out", "src", "scripts", ".bin", "node_modules"));
+
+    /**
+     * The real program a scripting runtime was told to run, or null when {@code interpreter} is not
+     * one of {@link #INTERPRETERS}, or the one confidently-parseable shape below does not match.
+     * Recognizes exactly two shapes of {@code argv[1]}: a bare script path — climbed from its
+     * basename toward the tool's own name, so a path whose last segment already names the tool
+     * ({@code bin/codex.js}) resolves on the first try, and a generic entrypoint
+     * ({@code bin/cli.js}, {@code bin/index.js}) climbs past it and past the generic
+     * {@code bin}/{@code dist}-style directory to the package directory beside it — or
+     * {@link #MODULE_FLAG} followed by a module name. Anything else starting with {@code -} bails
+     * out rather than guessing: an eval flag's value is code, not a name, and an argument after an
+     * unrecognized flag could just as easily be that flag's own value as a script path.
+     */
+    @Nullable
+    @VisibleForTesting
+    static String unwrapInterpreter(@NonNull String interpreter, @NonNull String[] argv) {
+        if (!INTERPRETERS.contains(interpreter) || argv.length < 2) return null;
+        String first = argv[1];
+        if (first.isEmpty()) return null;
+        if (first.equals(MODULE_FLAG)) {
+            if (argv.length < 3 || argv[2].isEmpty() || argv[2].startsWith("-")) return null;
+            String normalized = argv[2].toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._+-]", "");
+            return normalized.isEmpty() ? null : normalized;
+        }
+        if (first.startsWith("-")) return null;
+        String[] segments = first.split("/");
+        for (int i = segments.length - 1; i >= 0; i--) {
+            String segment = segments[i];
+            if (segment.isEmpty()) continue;
+            String candidate = i == segments.length - 1 ? stripScriptExtension(segment) : segment;
+            String normalized = candidate.toLowerCase(Locale.ROOT);
+            if (normalized.equals(interpreter) || normalized.startsWith("@")
+                || GENERIC_ENTRYPOINT_NAMES.contains(normalized)
+                || GENERIC_PATH_SEGMENTS.contains(normalized)) continue;
+            String sanitized = normalized.replaceAll("[^a-z0-9._+-]", "");
+            if (!sanitized.isEmpty()) return sanitized;
+        }
+        return null;
+    }
+
+    @NonNull
+    private static String stripScriptExtension(@NonNull String filename) {
+        int dot = filename.lastIndexOf('.');
+        if (dot <= 0) return filename;
+        switch (filename.substring(dot + 1).toLowerCase(Locale.ROOT)) {
+            case "js": case "mjs": case "cjs": case "ts": case "tsx": case "jsx":
+            case "py": case "rb": case "pl": case "php":
+                return filename.substring(0, dot);
+            default:
+                return filename;
+        }
     }
 
     @NonNull

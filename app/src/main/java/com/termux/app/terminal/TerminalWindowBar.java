@@ -1209,6 +1209,24 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             spokenLabel);
     }
 
+    /**
+     * The window-bar policy for a pane whose foreground the resolver identified: the open file for
+     * an editor, otherwise the process name itself — always as visible text, even when
+     * {@code processName}'s own glyph already depicts it. That "always" matters once a pane starts
+     * working: {@link #tabText} only ever replaces the leading glyph run with the progress ring, so
+     * a pill whose only content was that glyph (pacman mid-update, say) went blank but for a
+     * spinning ring the moment it became busy, with nothing left beside the ring to read.
+     */
+    @NonNull
+    public static WindowItem itemForForegroundProcess(@NonNull String processName,
+                                                       @Nullable String openFile) {
+        if (openFile != null) {
+            return itemForResolved(processName, truncateFile(openFile),
+                processName + " editing " + openFile);
+        }
+        return itemForResolved(processName, truncateProcess(processName), processName);
+    }
+
     /** Terminal editors whose foreground presence means "show the open file, not the process". */
     public static boolean isEditor(@Nullable String process) {
         if (process == null) return false;
@@ -1250,14 +1268,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     @NonNull
     public static String truncateProcess(@NonNull String process) {
         return middleEllipsize(process, LABEL_MAX_CHARS);
-    }
-
-    /**
-     * Whether the glyph for {@code process} names it on its own, so a pill running it needs no
-     * text: the python icon says python. The fallback terminal glyph names nothing.
-     */
-    public static boolean glyphNamesProcess(@Nullable String process) {
-        return process != null && !processGlyph(process).equals(processGlyph(null));
     }
 
     /**
