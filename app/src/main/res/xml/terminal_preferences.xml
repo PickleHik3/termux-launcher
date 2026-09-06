@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_terminal_display_header">
+        <SwitchPreferenceCompat
+            app:key="fullscreen"
+            app:title="@string/settings_full_screen_title"
+            app:summary="@string/termux_fullscreen_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="terminal_margin_adjustment"
+            app:title="@string/settings_adjust_keyboard_title"
+            app:summary="@string/settings_adjust_keyboard_summary" />
+        <SwitchPreferenceCompat
+            app:key="show_in_recents_when_not_default"
+            app:title="@string/settings_show_recents_title"
+            app:summary="@string/settings_show_recents_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_sessions_panes_header">
+        <SwitchPreferenceCompat
+            app:key="split_pane_controls"
+            app:title="@string/settings_split_pane_controls_title"
+            app:summary="@string/settings_split_pane_controls_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="show_key_hints"
+            app:title="@string/settings_show_key_hints_title"
+            app:summary="@string/settings_show_key_hints_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="pane_dwindle_default"
+            app:title="@string/settings_pane_dwindle_default_title"
+            app:summary="@string/settings_pane_dwindle_default_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="pane_focus_grows"
+            app:title="@string/settings_pane_focus_grows_title"
+            app:summary="@string/settings_pane_focus_grows_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="pane_agent_api"
+            app:title="@string/settings_pane_agent_api_title"
+            app:summary="@string/settings_pane_agent_api_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_lazy_mode_header">
+        <SwitchPreferenceCompat
+            app:key="lazy_mode"
+            app:icon="@drawable/ic_symbol_battery_saver"
+            app:title="@string/settings_lazy_mode_title"
+            app:summary="@string/settings_lazy_mode_summary"
+            app:defaultValue="false" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

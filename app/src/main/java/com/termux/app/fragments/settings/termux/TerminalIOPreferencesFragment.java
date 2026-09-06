@@ -23,7 +23,7 @@ public class TerminalIOPreferencesFragment extends MaterialPreferenceFragment {
         preferenceManager.setPreferenceDataStore(TerminalIOPreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.termux_terminal_io_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
-        // Same two switches as the Terminal & status page, so they answer the same Shizuku check.
+        // Same two switches as the Status bar page, so they answer the same Shizuku check.
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
     }
