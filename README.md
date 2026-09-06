@@ -92,12 +92,16 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 ### Quick start script
 
-[`setup-launcher`](docs/en/examples/setup-launcher) install my personal shell setup (fish, Oh My Posh with wallpaper Material colors, zoxide, eza, Neovim + AstroNvim, and the binaries — sigye, the animated-logo fastfetch, kitten). Every config it replaces gets a timestamped `.bak` first.
+`tlstore`, the launcher's own tool store, installs my personal shell setup (fish, Oh My Posh with wallpaper Material colors, zoxide, eza, Neovim + AstroNvim, and the binaries — sigye, the animated-logo fastfetch, kitten) and Claude Code. Every config it replaces gets a timestamped `.bak` first. It's already on your phone — no download needed:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher
-sh setup-launcher
+tlstore shell
+tlstore install
 ```
+
+The first line installs the shell setup in one go; the second opens a picker for everything else, including Claude Code. See the [tlstore guide](docs/en/Tlstore.md) for the full command list.
+
+[`setup-launcher`](docs/en/examples/setup-launcher) still works if you're on an older release without tlstore.
 
 Its highly recommended that you use the in-app font picker (**Settings › Terminal › Font**) to install a nerd font since it will configure it properly for seamless font rendering using kitty protocol related features.
 
