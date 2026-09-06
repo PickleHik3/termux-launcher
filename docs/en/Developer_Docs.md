@@ -215,17 +215,18 @@ set -g status-style "fg=#{E:TERMUX_MATERIAL_ON_SURFACE},bg=#{E:TERMUX_MATERIAL_S
 set -g window-status-current-style "fg=#{E:TERMUX_MATERIAL_SURFACE},bg=#{E:TERMUX_MATERIAL_PRIMARY}"
 ```
 
-## Optional Helper Scripts
+## Optional Helper Files
 
-The helper scripts in `docs/en/examples/` are not installed by the APK. The beginner setup downloads them when requested.
+The files in `docs/en/examples/` are not bundled in the APK. `tlstore`'s catalog installs some of
+them (pinned to a tag in this repository); the app seeds the rest into place directly. Fish, Oh My
+Posh, zoxide, eza, the Neovim colour scheme, and the showcase binaries (sigye, fastfetch, kitten)
+all come from `tlstore install` — see `docs/en/Tlstore.md`.
 
-Scripts:
+Files:
 
-- `setup-launcher`: interactive installer for the current shell setup, offering all of it, the shell essentials, or single items — fish, Oh My Posh, zoxide, eza, Neovim through `setup-nvim`, and the showcase binaries (sigye, fastfetch, kitten) as digest-pinned release assets. `fastfetch` is published once per edition and chosen by `$PREFIX` — it resolves its libraries and home directory through paths fixed at link time, so the build for one edition's prefix does not start under another's; an edition with no published build is skipped with a hint to `recipes/cross/build-fastfetch.sh`. It deliberately installs nothing under `~/.termux`; the app seeds those files and would lose in-app edits if a script rewrote them.
-- `setup-nvim`: interactive Neovim setup. Installs AstroNvim (default), NvChad, LazyVim, kickstart, or a stock config, plus launcher integrations: OSC 52 clipboard, always-on line wrap, and — on AstroNvim and NvChad — a colorscheme generated from `~/.termux/material-colors.sh` that retints live on wallpaper changes.
 - `config.fish`, `conf.d-personal.fish`, and `aliens-material.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. It is the Termux-edition copy — the Nix edition ships its own, with nix-on-droid shortcuts in place of the `pkg`/`pacman` ones.
 
-Refresh installed helper scripts after an APK or docs update by re-running `setup-launcher`, or by re-downloading the single script from `docs/en/examples/`. Every template it replaces gets a timestamped `.bak` first.
+Refresh installed files after an APK or docs update with `tlstore update`.
 
 ## Shizuku and rish
 
