@@ -52,6 +52,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   showing, and a hardware keyboard is the display's entirely: every key and every chord goes to
   X, and the launcher's shortcuts and their hints stay out of the way. Leave the display by
   touch, by the place icons, or with Home.
+- **The keyboard floats.** In landscape the keyboard comes up over the display instead of
+  squeezing it, so the picture keeps the size it was given and nothing on it moves as you type. In
+  portrait the display makes room for the keyboard instead. Either place can be set the other way
+  under **Settings → Layout**, on the Display tab, with the orientation you want it for selected.
 - **The controls.** Tap the display's edge and two buttons drop from its top corner, as they do
   on a terminal pane: power starts, stops or turns on the display, and the cog opens its
   settings. Tap anywhere else to put them away.

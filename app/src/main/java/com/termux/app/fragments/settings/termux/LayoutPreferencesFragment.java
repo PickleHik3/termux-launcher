@@ -36,19 +36,17 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
  * arrangement, per orientation. The overview at the top picks which place and orientation the
  * rows below describe; every row reads and writes {@link PlaceLayoutStore} for that selection.
  *
- * <p>The status bar edge and the keyboard mode rows are wired all the way through the store, the
- * same as every other row, but kept invisible: the launcher does not render a status bar anywhere
- * but the top yet ({@link #SHOW_STATUS_BAR_EDGE_ROW}, phase 4), and Display's keyboard always
- * resizes or overlays by its own rule, not a user choice, until phase 5
- * ({@link #SHOW_KEYBOARD_MODE_ROW}) gives the display an overlay switch of its own.
+ * <p>The status bar edge row is wired all the way through the store, the same as every other row,
+ * but kept invisible: the launcher does not render a status bar anywhere but the top yet
+ * ({@link #SHOW_STATUS_BAR_EDGE_ROW}, phase 4).
  */
 @Keep
 public final class LayoutPreferencesFragment extends MaterialPreferenceFragment {
 
     /** Phase 4 (feat/status-bar-positions) flips this on. */
     static final boolean SHOW_STATUS_BAR_EDGE_ROW = false;
-    /** Phase 5 (feat/display-keyboard-overlay) flips this on. */
-    static final boolean SHOW_KEYBOARD_MODE_ROW = false;
+    /** The Display place is the only one a keyboard can float over, so the only one that offers it. */
+    static final boolean SHOW_KEYBOARD_MODE_ROW = true;
 
     private static final String KEY_OVERVIEW = "layout_overview";
     private static final String KEY_STATUS_BAR = "layout_status_bar";

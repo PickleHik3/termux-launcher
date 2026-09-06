@@ -95,6 +95,7 @@ import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.place.ExtraKeysColumnGeometry;
 import com.termux.app.place.KeyboardOnEnter;
+import com.termux.app.place.KeyboardOverlayPolicy;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
@@ -724,6 +725,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryGeometryApplyUptimeMs;
     private int mAppliedTerminalFlushPaddingPx;
+    /**
+     * The room the accessory stack last took from the content root, after the keyboard overlay
+     * handed its share back. -1 until the first geometry pass, so that pass always counts as a
+     * change.
+     */
+    private int mAppliedContentReservationPx = -1;
     /** Set when {@link WallpaperManager#getDrawable()} threw for want of the storage permission. */
     private boolean mWallpaperReadPermissionDenied;
     private boolean mWallpaperReadPermissionPromptShowing;
@@ -8083,6 +8090,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mProperties.getTerminalToolbarHeightScaleFactor()
         );
         ChromeSpec state = buildChromeSpec();
+        // The Linux display is floated over rather than squeezed: the keyboard's height is given
+        // straight back to the content root as a negative bottom margin, so the display keeps the
+        // bounds it has with the keyboard closed and the stack draws over it. Everywhere else, and
+        // whenever the keyboard is down, this is zero and the geometry below is what it always was.
+        // The system IME is not this keyboard: it never raises state.keyboardShown, so it keeps
+        // resizing the window the way it does on every other place.
+        boolean keyboardOverlays = KeyboardOverlayPolicy.overlays(currentWallPlace(),
+            currentPlaceLayout());
+        int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
+            keyboardOverlays, state.keyboardShown, state.keyboardHeight);
         int toolbarHeightPx = state.extraKeysRowEnabled ? measuredToolbarHeightPx : 0;
         toolbarLayoutParams.height = toolbarHeightPx;
         terminalToolbarViewPager.setLayoutParams(toolbarLayoutParams);
@@ -8097,8 +8114,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int projectedStackPx = computeAccessoryStackHeight(
             dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled),
             0, state.keyboardHeight);
-        if (projectedStackPx > maxAccessoryStackPx) {
-            dockMetrics = buildDockLayout(-(projectedStackPx - maxAccessoryStackPx));
+        // The ceiling exists to keep a usable slice of content under the stack. A floating keyboard
+        // takes none of that slice, so only what the stack really costs the content is measured
+        // against it — otherwise the apps row sheds height to protect room nothing is taking.
+        if (projectedStackPx - keyboardOverlapPx > maxAccessoryStackPx) {
+            dockMetrics = buildDockLayout(
+                -(projectedStackPx - keyboardOverlapPx - maxAccessoryStackPx));
         }
         applyDockLayout(dockMetrics);
         int dockContentHeightPx = state.toolbarShown
@@ -8141,9 +8162,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryStackContainer,
             accessoryBottomMarginPx
         );
+        applyContentKeyboardOverlap(keyboardOverlapPx);
+        int contentReservationPx = KeyboardOverlayPolicy.contentReservationPx(
+            combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
+        boolean contentReservationChanged = contentReservationPx != mAppliedContentReservationPx;
+        mAppliedContentReservationPx = contentReservationPx;
         boolean keyboardShownChanged = mKeyboardGeometry.applyKeyboardShown(state.keyboardShown);
         if (shouldRequestTerminalResize(requestTerminalResize, accessoryHeightChanged,
-            accessoryMarginChanged, keyboardShownChanged) && mTerminalView != null) {
+            accessoryMarginChanged, keyboardShownChanged, keyboardOverlays,
+            contentReservationChanged) && mTerminalView != null) {
             // Bottom-anchored, like the window-bar collapse: the keyboard or dock changing height
             // must not strand a prompt that a shell placed against the bottom edge — growing the
             // pane with a plain resize pads the screen with blank rows below the cursor whenever
@@ -8160,6 +8187,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     static boolean shouldRequestTerminalResize(boolean requested, boolean heightChanged,
                                                boolean marginChanged, boolean keyboardShownChanged) {
         return requested && (heightChanged || marginChanged || keyboardShownChanged);
+    }
+
+    /**
+     * Whether the panes have to be re-measured. A floating keyboard moves the stack without moving
+     * anything the content is measured from, so what counts there is the room actually left for the
+     * content — the dock rows still take theirs, and a change to those still reaches the terminal.
+     */
+    static boolean shouldRequestTerminalResize(boolean requested, boolean heightChanged,
+                                               boolean marginChanged, boolean keyboardShownChanged,
+                                               boolean keyboardOverlays,
+                                               boolean contentReservationChanged) {
+        if (!requested) return false;
+        if (keyboardOverlays) return contentReservationChanged;
+        return shouldRequestTerminalResize(true, heightChanged, marginChanged, keyboardShownChanged);
+    }
+
+    /**
+     * Lets the content root reach past the accessory stack's top by {@code overlapPx}, as a negative
+     * bottom margin against the {@code layout_above} rule that otherwise couples the two. The stack
+     * is the later sibling, so it draws over what the content keeps.
+     */
+    private void applyContentKeyboardOverlap(int overlapPx) {
+        View content = findViewById(R.id.drawer_layout);
+        if (content == null) return;
+        ViewGroup.LayoutParams layoutParams = content.getLayoutParams();
+        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return;
+        ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
+        int bottomMargin = -Math.max(0, overlapPx);
+        if (marginParams.bottomMargin == bottomMargin) return;
+        marginParams.bottomMargin = bottomMargin;
+        content.setLayoutParams(marginParams);
     }
 
     private int resolveTerminalFlushDockPaddingPx(int accessoryContentHeightPx,
