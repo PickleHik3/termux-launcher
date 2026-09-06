@@ -56,6 +56,7 @@ public final class PlaceMiniatureView extends View {
     private final Paint mFramePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mFrameRect = new RectF();
+    private final android.graphics.Path mClipPath = new android.graphics.Path();
     private final Map<Block, RectF> mBlockRects = new EnumMap<>(Block.class);
     private RectF mRemaining = new RectF();
 
@@ -196,11 +197,18 @@ public final class PlaceMiniatureView extends View {
             R.color.termux_on_surface_variant));
         canvas.drawRoundRect(mFrameRect, radius, radius, mFillPaint);
 
+        // The blocks are clipped to the frame's rounded outline, so a strip that reaches a corner
+        // follows the curve instead of poking a square corner past it.
+        mClipPath.reset();
+        mClipPath.addRoundRect(mFrameRect, radius, radius, android.graphics.Path.Direction.CW);
+        int saved = canvas.save();
+        canvas.clipPath(mClipPath);
         drawBlock(canvas, Block.CANVAS, com.termux.shared.R.attr.termuxColorSurfacePanelHigh);
         drawBlock(canvas, Block.EXTRA_KEYS, com.termux.shared.R.attr.termuxColorTertiaryContainer);
         drawBlock(canvas, Block.APPS_ROW, com.termux.shared.R.attr.termuxColorSecondary);
         drawBlock(canvas, Block.ALPHABETS_ROW, com.termux.shared.R.attr.termuxColorAccentContainer);
         drawBlock(canvas, Block.STATUS_BAR, com.termux.shared.R.attr.termuxColorPrimary);
+        canvas.restoreToCount(saved);
 
         canvas.drawRoundRect(mFrameRect, radius, radius, mFramePaint);
     }
