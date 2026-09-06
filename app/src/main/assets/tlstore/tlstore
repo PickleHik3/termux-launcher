@@ -19,6 +19,8 @@
 #   TLSTORE_NPM_REGISTRY npm registry base (default https://registry.npmjs.org)
 #   TLSTORE_ARCH        override uname -m (tests exercise aarch64 items on a host)
 #   TLSTORE_PATCHELF    the patchelf command (tests pass a no-op)
+#   TLSTORE_ASSUME_TTY  1 = answer questions from stdin even when it is not a
+#                       terminal (the test suite pipes them in)
 
 set -u
 
@@ -55,6 +57,15 @@ BINARIES_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher-binar
 
 ASSUME_YES="${TLSTORE_ASSUME_YES:-0}"
 [ "$ASSUME_YES" = 1 ] || ASSUME_YES=0
+
+ASSUME_TTY="${TLSTORE_ASSUME_TTY:-0}"
+[ "$ASSUME_TTY" = 1 ] || ASSUME_TTY=0
+
+# -y never answers "replace my config file?"; --configs does, and only that.
+REPLACE_CONFIGS=0
+
+# Packages this run installed only so something else could be built.
+BUILD_ADDED=""
 
 ARCH="${TLSTORE_ARCH:-$(uname -m 2>/dev/null || echo unknown)}"
 case "$ARCH" in
@@ -136,6 +147,18 @@ rows() {
     ' "$CATALOG"
 }
 
+# The rows a user picks from. The rest are plumbing: parts other items pull in,
+# never listed and never installed by name.
+visible_rows() {
+    rows | awk -F "$TAB" '$9 !~ /(^|;)hidden=1(;|$)/'
+}
+
+hidden_item() {
+    hi_row=$(row "$1")
+    [ -n "$hi_row" ] || return 1
+    [ "$(opt "$(field "$hi_row" 9)" hidden)" = 1 ]
+}
+
 # row <name> — the row for one item, empty when it has none here.
 row() {
     rows | awk -F "$TAB" -v want="$1" '$1 == want { print; exit }'
@@ -169,6 +192,9 @@ opt() {
 }
 
 commas() { printf '%s' "$1" | tr ',' ' '; }
+
+# " a  b " → "a, b", for reading out a list of names.
+words_list() { printf '%s' "$1" | sed 's/^ *//; s/ *$//; s/  */, /g'; }
 
 # A leading ~ in a target is this user's home, not a shell expansion.
 # shellcheck disable=SC2088
@@ -204,7 +230,7 @@ source_url() {
 # package (claude-code installs the command `claude`).
 item_targets() {
     case "$2" in
-        binary|file|file-once|script)
+        binary|file|file-once)
             if [ "$3" = "-" ] || [ -z "$3" ]; then
                 [ "$2" = binary ] || return 0
                 printf '%s' "$BIN_DIR/$1"
@@ -342,15 +368,47 @@ download() {
     return 0
 }
 
+# Is someone there to answer a question?
+interactive() {
+    [ "$ASSUME_TTY" = 1 ] && return 0
+    [ -t 0 ]
+}
+
+yes_reply() {
+    case "$1" in
+        y|Y|yes|YES) return 0 ;;
+    esac
+    return 1
+}
+
+# A question that goes ahead unless you say no. -y answers it.
 ask_yn() {
     [ "$ASSUME_YES" = 1 ] && return 0
     printf '%s [Y/n] ' "$1"
     read -r ay_answer || ay_answer=""
     [ -n "$ay_answer" ] || ay_answer=y
-    case "$ay_answer" in
-        y|Y|yes|YES) return 0 ;;
-        *) return 1 ;;
-    esac
+    yes_reply "$ay_answer"
+}
+
+# A question that does nothing unless you say yes. -y answers it; with nobody
+# there to ask, the answer is no.
+ask_ny() {
+    [ "$ASSUME_YES" = 1 ] && return 0
+    interactive || return 1
+    printf '%s [y/N] ' "$1"
+    read -r an_answer || an_answer=""
+    yes_reply "$an_answer"
+}
+
+# Two files with the same contents.
+same_file() {
+    if have cmp; then
+        cmp -s "$1" "$2"
+        return $?
+    fi
+    sf_a=$(file_digest "$1")
+    sf_b=$(file_digest "$2")
+    [ -n "$sf_a" ] && [ "$sf_a" = "$sf_b" ]
 }
 
 install_pkg() {
@@ -379,6 +437,28 @@ upgrade_pkg() {
     else
         err "no package manager here — cannot update $*"
         return 1
+    fi
+}
+
+remove_pkg() {
+    if have pacman; then
+        # shellcheck disable=SC2068
+        pacman -R --noconfirm $@
+    elif have apt; then
+        # shellcheck disable=SC2068
+        apt remove -y $@
+    else
+        return 1
+    fi
+}
+
+pkg_present() {
+    if have pacman; then
+        pacman -Q "$1" >/dev/null 2>&1
+    elif have dpkg; then
+        dpkg -s "$1" >/dev/null 2>&1
+    else
+        have "$1"
     fi
 }
 
@@ -430,36 +510,84 @@ plan_for() {
     printf '%s' "$pf_plan" | sed 's/^ *//'
 }
 
-# What a name needs before it: its requires, plus anything naming it in post=.
+# What a name needs installed before it.
 item_deps() {
     id_row=$(row "$1")
     [ -n "$id_row" ] || return 0
     id_req=$(commas "$(field "$id_row" 8)")
     [ "$id_req" = "-" ] && id_req=""
-    id_post=$(opt "$(field "$id_row" 9)" post)
-    printf '%s %s' "$id_req" "$id_post"
+    printf '%s' "$id_req"
 }
 
 deps_ready() {
-    dr_name="$1"
-    dr_closure="$2"
-    dr_plan="$3"
-    dr_row=$(row "$dr_name")
-    [ -n "$dr_row" ] || return 0
-    dr_req=$(commas "$(field "$dr_row" 8)")
-    [ "$dr_req" = "-" ] && dr_req=""
-    for dr_d in $dr_req; do
-        in_list "$dr_closure" "$dr_d" || continue
-        in_list "$dr_plan" "$dr_d" || return 1
+    for dr_d in $(item_deps "$1"); do
+        in_list "$2" "$dr_d" || continue
+        in_list "$3" "$dr_d" || return 1
     done
-    # An item that names this one in post= runs first.
-    for dr_m in $dr_closure; do
-        [ "$dr_m" = "$dr_name" ] && continue
-        dr_mrow=$(row "$dr_m")
-        [ -n "$dr_mrow" ] || continue
-        [ "$(opt "$(field "$dr_mrow" 9)" post)" = "$dr_name" ] || continue
-        in_list "$dr_plan" "$dr_m" || return 1
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Tools that are only needed while installing
+# ---------------------------------------------------------------------------
+
+# Is this item already here in the version the list offers?
+already_here() {
+    ah_row=$(row "$1")
+    [ -n "$ah_row" ] || return 1
+    is_installed "$1" || return 1
+    case "$(field "$ah_row" 2)" in
+        pkg|bundle|fisher) return 0 ;;
+    esac
+    [ "$(installed_version "$1")" = "$(field "$ah_row" 3)" ]
+}
+
+# build_tools_for <names> <force> — the build= packages the plan will really
+# need, each named once. Nothing is fetched for an item that is already here.
+build_tools_for() {
+    bt_out=""
+    for bt_n in $1; do
+        bt_row=$(row "$bt_n")
+        [ -n "$bt_row" ] || continue
+        if [ "$2" = 0 ] && already_here "$bt_n"; then
+            continue
+        fi
+        for bt_p in $(commas "$(opt "$(field "$bt_row" 9)" build)"); do
+            [ "$bt_p" = "-" ] && continue
+            in_list "$bt_out" "$bt_p" || bt_out="$bt_out $bt_p"
+        done
     done
+    printf '%s' "$bt_out" | sed 's/^ *//'
+}
+
+# Installs the ones that are not here already, remembering which those were so
+# they can be offered back afterwards.
+# add_build_tools <names> <force>
+add_build_tools() {
+    ab_missing=""
+    for ab_p in $(build_tools_for "$1" "$2"); do
+        pkg_present "$ab_p" || ab_missing="$ab_missing $ab_p"
+    done
+    [ -n "$(printf '%s' "$ab_missing" | tr -d ' ')" ] || return 0
+    say "Installing what is needed to build:$ab_missing"
+    # shellcheck disable=SC2086
+    if ! install_pkg $ab_missing; then
+        err "could not install what is needed to build:$ab_missing"
+        return 1
+    fi
+    BUILD_ADDED="$BUILD_ADDED$ab_missing"
+    return 0
+}
+
+drop_build_tools() {
+    db_pkgs=$(printf '%s' "$BUILD_ADDED" | sed 's/^ *//')
+    BUILD_ADDED=""
+    [ -n "$db_pkgs" ] || return 0
+    ask_ny "Remove the tools that were only needed for installing ($(words_list "$db_pkgs"))?" || return 0
+    # shellcheck disable=SC2086
+    remove_pkg $db_pkgs >/dev/null 2>&1 || true
+    rm -rf "${CACHE_DIR:?}"/* 2>/dev/null || true
+    say "Removed them, and cleared what was downloaded."
     return 0
 }
 
@@ -481,12 +609,9 @@ install_item() {
     ii_target="$it_target"
     ii_options="$it_options"
 
-    if [ "$ii_force" = 0 ] && is_installed "$ii_name"; then
-        ii_have=$(installed_version "$ii_name")
-        if [ "$ii_have" = "$ii_version" ] || [ "$ii_kind" = pkg ] || [ "$ii_kind" = bundle ]; then
-            say "$ii_name is already installed"
-            return 0
-        fi
+    if [ "$ii_force" = 0 ] && already_here "$ii_name"; then
+        say "$ii_name is already installed"
+        return 0
     fi
 
     case "$ii_kind" in
@@ -494,7 +619,7 @@ install_item() {
         binary) do_binary ;;
         file) do_file 0 ;;
         file-once) do_file 1 ;;
-        script) do_script ;;
+        fisher) do_fisher ;;
         npm-musl) do_npm_musl ;;
         bundle) do_bundle ;;
         *) err "$ii_name cannot be installed here"; return 1 ;;
@@ -526,6 +651,29 @@ do_binary() {
     return 0
 }
 
+# Shows what would change in a config file and asks. Only --configs answers this
+# for you; -y deliberately does not, because a config is the user's own work.
+# confirm_replace <name> <current> <new>
+confirm_replace() {
+    cf_name="$1"
+    cf_cur="$2"
+    cf_new="$3"
+    [ "$REPLACE_CONFIGS" = 1 ] && return 0
+    interactive || return 1
+    say "$cf_name"
+    if have diff; then
+        diff -u "$cf_cur" "$cf_new" || true
+    else
+        say "  before:"
+        head -25 "$cf_cur" | sed 's/^/    /'
+        say "  after:"
+        head -25 "$cf_new" | sed 's/^/    /'
+    fi
+    printf 'Replace your %s? [y/N] ' "$(basename "$cf_cur")"
+    read -r cf_answer || cf_answer=""
+    yes_reply "$cf_answer"
+}
+
 # do_file <once>
 do_file() {
     df_once="$1"
@@ -539,6 +687,32 @@ do_file() {
     if [ "$df_once" = 1 ] && [ -e "$df_dest" ]; then
         say "kept your $(basename "$df_dest") — it is yours to edit"
         is_installed "$ii_name" || state_record "$ii_name" file-once "$ii_version"
+        return 0
+    fi
+    # A config file you already have is never replaced without being shown the
+    # change first. It is recorded either way, so declining is not asked again
+    # until the shipped file itself moves on.
+    if [ "$df_once" = 0 ] && [ -e "$df_dest" ]; then
+        mkdir -p "$CACHE_DIR"
+        df_new="$CACHE_DIR/$ii_name.new"
+        download "$(source_url "$ii_source")" "$df_new" "$ii_digest" || return 1
+        if same_file "$df_dest" "$df_new"; then
+            rm -f "$df_new"
+            state_record "$ii_name" file "$ii_version" "$df_dest"
+            return 0
+        fi
+        if ! confirm_replace "$ii_name" "$df_dest" "$df_new"; then
+            rm -f "$df_new"
+            say "kept your $(basename "$df_dest")"
+            state_record "$ii_name" file "$ii_version" "$df_dest"
+            return 0
+        fi
+        backup_existing "$df_dest"
+        cp "$df_new" "$df_dest" || return 1
+        rm -f "$df_new"
+        chmod "$df_mode" "$df_dest"
+        state_record "$ii_name" file "$ii_version" "$df_dest"
+        say "  $df_dest"
         return 0
     fi
     say "installing $ii_name"
@@ -555,25 +729,19 @@ do_file() {
     return 0
 }
 
-do_script() {
-    ds_dest=$(item_targets "$ii_name" script "$ii_target")
-    if [ -z "$ds_dest" ]; then
-        err "$ii_name has nowhere to go"
+# Plugins fish's own plugin manager fetches. Keeping them current is fisher's
+# job, not tlstore's, so update never touches them.
+do_fisher() {
+    if ! have fish; then
+        err "$ii_name needs fish — install it first"
         return 1
     fi
     say "installing $ii_name"
-    mkdir -p "$(dirname "$ds_dest")"
-    backup_existing "$ds_dest"
-    download "$(source_url "$ii_source")" "$ds_dest" "$ii_digest" || return 1
-    chmod 755 "$ds_dest"
-    state_record "$ii_name" script "$ii_version" "$ds_dest"
-    ds_args=$(opt "$ii_options" args)
-    # shellcheck disable=SC2086
-    if ! "$ds_dest" $ds_args; then
-        err "$ii_name did not finish — run $ds_dest yourself"
+    if ! fish -c "fisher install $ii_source"; then
+        err "could not install $ii_name"
         return 1
     fi
-    say "  $ds_dest"
+    state_record "$ii_name" fisher "$ii_version"
     return 0
 }
 
@@ -701,6 +869,12 @@ remove_item() {
     fi
     ri_kind=$(field "$ri_row" 2)
     ri_files=$(field "$ri_row" 5)
+    if [ "$ri_kind" = fisher ]; then
+        ri_item=$(row "$ri_name")
+        if [ -n "$ri_item" ] && have fish; then
+            fish -c "fisher remove $(field "$ri_item" 5)" >/dev/null 2>&1 || true
+        fi
+    fi
     for ri_f in $ri_files; do
         if [ -d "$ri_f" ]; then
             rm -rf "$ri_f"
@@ -858,11 +1032,13 @@ tlstore installs the tools and configs the launcher shows off.
   tlstore remove <name...>    remove items tlstore installed
   tlstore update [name...]    bring what you have up to date
   tlstore refresh             update the list of items
-  tlstore shell               install the shell setup
+  tlstore shell               install the fish shell setup
+  tlstore display             set up graphics for Linux apps
   tlstore doctor              check that everything is in place
   tlstore version
 
-Add -y to skip the confirmation.
+  -y          say yes to everything except a config file of yours
+  --configs   take the new version of every config file too
 EOF
 }
 
@@ -876,16 +1052,18 @@ cmd_list() {
         esac
     done
     need_catalog
-    rows | awk -F "$TAB" '{ printf "%s\t%s\n", $1, $10 }' |
-    while IFS="$TAB" read -r cl_name cl_summary; do
+    visible_rows | awk -F "$TAB" '{ printf "%s\t%s\t%s\n", $1, $9, $10 }' |
+    while IFS="$TAB" read -r cl_name cl_options cl_summary; do
         if is_installed "$cl_name"; then
             [ "$cl_mode" = available ] && continue
-            cl_state=installed
+            cl_mark="*"
         else
             [ "$cl_mode" = installed ] && continue
-            cl_state="-"
+            cl_mark=" "
         fi
-        printf '%-16s %-10s %s\n' "$cl_name" "$cl_state" "$cl_summary"
+        printf '%s %-14s %s\n' "$cl_mark" "$cl_name" "$cl_summary"
+        cl_build=$(opt "$cl_options" build)
+        [ -z "$cl_build" ] || printf '    needs while installing: %s\n' "$cl_build"
     done
     return 0
 }
@@ -893,10 +1071,10 @@ cmd_list() {
 cmd_search() {
     [ $# -ge 1 ] || { err "search needs something to look for"; return 2; }
     need_catalog
-    rows | awk -F "$TAB" -v term="$1" '
+    visible_rows | awk -F "$TAB" -v term="$1" '
         BEGIN { t = tolower(term) }
         index(tolower($1), t) > 0 || index(tolower($10), t) > 0 {
-            printf "%-16s %s\n", $1, $10
+            printf "  %-14s %s\n", $1, $10
         }'
     return 0
 }
@@ -914,14 +1092,16 @@ cmd_info() {
     [ -n "$ci_where" ] || ci_where="-"
     say "$it_name"
     say "  $it_summary"
-    printf '  %-10s %s\n' Kind "$it_kind"
-    printf '  %-10s %s\n' Version "$it_version"
-    printf '  %-10s %s\n' From "$it_source"
-    printf '  %-10s %s\n' Checksum "$it_digest"
-    printf '  %-10s %s\n' Needs "$it_requires"
-    printf '  %-10s %s\n' Files "$ci_where"
+    printf '  %-11s %s\n' Kind "$it_kind"
+    printf '  %-11s %s\n' Version "$it_version"
+    printf '  %-11s %s\n' From "$it_source"
+    printf '  %-11s %s\n' Checksum "$it_digest"
+    printf '  %-11s %s\n' Needs "$it_requires"
+    ci_build=$(opt "$it_options" build)
+    [ -z "$ci_build" ] || printf '  %-11s %s\n' "Builds with" "$ci_build"
+    printf '  %-11s %s\n' Files "$ci_where"
     if is_installed "$it_name"; then
-        printf '  %-10s %s\n' Installed "$(installed_version "$it_name")"
+        printf '  %-11s %s\n' Installed "$(installed_version "$it_name")"
     fi
     return 0
 }
@@ -931,6 +1111,7 @@ cmd_install() {
     for ci_a in "$@"; do
         case "$ci_a" in
             -y|--yes) ASSUME_YES=1 ;;
+            --configs) REPLACE_CONFIGS=1 ;;
             -*) err "unknown option: $ci_a"; return 2 ;;
             *) ci_names="$ci_names $ci_a" ;;
         esac
@@ -943,7 +1124,7 @@ cmd_install() {
         ci_chosen="$CACHE_DIR/chosen"
         # Only what is not installed yet: the picker is for adding.
         : > "$ci_cand"
-        rows | awk -F "$TAB" '{ printf "%s\t%s\n", $1, $10 }' |
+        visible_rows | awk -F "$TAB" '{ printf "%s\t%s\n", $1, $10 }' |
         while IFS="$TAB" read -r ci_pn ci_ps; do
             is_installed "$ci_pn" || printf '%s\t%s\n' "$ci_pn" "$ci_ps" >> "$ci_cand"
         done
@@ -964,15 +1145,18 @@ cmd_install() {
 
     for ci_n in $ci_names; do
         [ -n "$(row "$ci_n")" ] || { err "$ci_n is not in the list"; return 1; }
+        ! hidden_item "$ci_n" || { err "$ci_n is part of another item"; return 1; }
     done
 
     # shellcheck disable=SC2086  # a list of names, split on purpose
     ci_plan=$(plan_for $ci_names)
-    say "Installing: $(printf '%s' "$ci_plan" | tr ' ' ',' | sed 's/,/, /g')"
+    say "Installing: $(words_list "$ci_plan")"
     ask_yn "Go ahead?" || { say "Nothing was installed."; return 0; }
+    add_build_tools "$ci_plan" 0 || return 1
     for ci_n in $ci_plan; do
         install_item "$ci_n" || FAILED=1
     done
+    drop_build_tools
     [ "$FAILED" = 0 ] || return 1
     return 0
 }
@@ -1006,7 +1190,7 @@ cmd_remove() {
         done
     done
 
-    say "Removing: $(printf '%s' "$cr_all" | sed 's/^ *//' | tr ' ' ',' | sed 's/,/, /g')"
+    say "Removing: $(words_list "$cr_all")"
     ask_yn "Go ahead?" || { say "Nothing was removed."; return 0; }
     for cr_n in $cr_all; do
         remove_item "$cr_n" || FAILED=1
@@ -1023,6 +1207,7 @@ cmd_update() {
         case "$cu_a" in
             --check) cu_check=1 ;;
             --offline) cu_offline=1 ;;
+            --configs) REPLACE_CONFIGS=1 ;;
             -y|--yes) ASSUME_YES=1 ;;
             -*) err "unknown option: $cu_a"; return 2 ;;
             *) cu_names="$cu_names $cu_a" ;;
@@ -1053,7 +1238,7 @@ cmd_update() {
         cu_have=$(installed_version "$cu_n")
         case "$cu_kind" in
             pkg) cu_pkgs="$cu_pkgs $(field "$cu_row" 5)" ;;
-            bundle) ;;
+            bundle|fisher) ;;
             npm-musl)
                 # An item pinned to latest is whatever its source says today,
                 # so only the install itself can tell; --check does not guess.
@@ -1075,7 +1260,11 @@ cmd_update() {
         else
             for cu_n in $cu_out; do
                 cu_row=$(row "$cu_n")
-                say "$cu_n $(field "$cu_row" 3) is available; you have $(installed_version "$cu_n")"
+                if [ "$(field "$cu_row" 2)" = file ]; then
+                    say "$cu_n has a new version; update shows the change and asks"
+                else
+                    say "$cu_n $(field "$cu_row" 3) is available; you have $(installed_version "$cu_n")"
+                fi
             done
         fi
         [ -z "$(printf '%s' "$cu_pkgs" | tr -d ' ')" ] || say "Packages are checked by the package manager when you update."
@@ -1094,9 +1283,11 @@ cmd_update() {
     if [ -z "$(printf '%s' "$cu_out" | tr -d ' ')" ]; then
         [ -n "$(printf '%s' "$cu_pkgs" | tr -d ' ')" ] || say "Everything is up to date."
     else
+        add_build_tools "$cu_out" 1 || return 1
         for cu_n in $cu_out; do
             install_item "$cu_n" 1 || FAILED=1
         done
+        drop_build_tools
     fi
     [ "$FAILED" = 0 ] || return 1
     return 0
@@ -1146,7 +1337,7 @@ cmd_doctor() {
             cd_bad=1
         fi
     done
-    for cd_t in fzf patchelf minisign; do
+    for cd_t in fzf minisign; do
         if have "$cd_t"; then
             cd_line "$cd_t" ready
         else
@@ -1189,6 +1380,15 @@ cmd_doctor() {
     return 0
 }
 
+cmd_display() {
+    cy_setup="$PREFIX/bin/termux-x11-gpu-setup"
+    if [ ! -x "$cy_setup" ]; then
+        err "graphics setup is not here yet — update the app and try again"
+        return 1
+    fi
+    "$cy_setup" "$@"
+}
+
 cmd_version() {
     pick_catalog || true
     say "tlstore $TLSTORE_VERSION"
@@ -1213,7 +1413,8 @@ main() {
         remove|uninstall) cmd_remove "$@" ;;
         update|upgrade) cmd_update "$@" ;;
         refresh) cmd_refresh "$@" ;;
-        shell) cmd_install shell-setup "$@" ;;
+        shell) cmd_install fish-shell "$@" ;;
+        display) cmd_display "$@" ;;
         doctor) cmd_doctor "$@" ;;
         version|--version|-v) cmd_version ;;
         help|--help|-h) usage ;;

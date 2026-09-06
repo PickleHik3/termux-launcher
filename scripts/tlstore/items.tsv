@@ -4,44 +4,47 @@
 # Tab separated, the catalog's columns minus the digest:
 #   name  kind  version  prefixes  source  target  requires  options  summary
 #
-# kind      pkg 	 binary 	 file 	 file-once 	 script 	 npm-musl 	 bundle
-# version   - for pkg and bundles; the upstream version for a binary; the
-#           launcher tag for a template; latest or a pin for npm-musl
+# kind      pkg 	 binary 	 file 	 file-once 	 fisher 	 npm-musl 	 bundle
+# version   - for pkg, bundle and fisher; the upstream version for a binary; the
+#           launcher tag or commit for a template; latest or a pin for npm-musl
 # prefixes  * or a comma list of app packages; one row per (name, prefix set),
 #           so the per-edition builds are two rows sharing a name
-# source    pkg: package names. binary/file/script: launcher:<repo path>@<tag>
-#           or binaries:<asset>@<tag> or a URL. npm-musl: npm:<package>#<exe>
+# source    pkg: package names. binary/file: launcher:<path>@<tag or commit>,
+#           binaries:<asset>@<tag>, or a URL. npm-musl: npm:<package>#<exe>.
+#           fisher: the plugin list, space separated
 # target    where it lands, ~ allowed; - means the default
 # requires  comma list installed first; a bundle's members live here
 # options   ;-separated key=value: env=K=V (comma repeats), tz=1, mode=755,
-#           args=<what a script is run with>, post=<script item to run after>
+#           build=<packages needed only while installing>, hidden=1
 # summary   one plain sentence — it is what list and search show the user
 #
-# The binaries tag 2026.09.06 is cut by the maintainer after this lands; the two
-# musl loaders live under it. Every other asset is already published.
+# Seven items are visible, in the order they appear here: claude-code, fastfetch,
+# fish-shell, kitten, nvim-theme, omp-theme, sigye. Everything else is hidden=1 —
+# a part another item pulls in, never listed and never installed by name.
 #
 # fastfetch links libandroid-glob and dlopens ImageMagick and Chafa for the
-# image logo, so its libraries are a pkg item it requires rather than a note
+# animated logo, so its libraries are a pkg item it requires rather than a note
 # nobody reads.
-fish	pkg	-	*	fish	-	-	-	The fish shell, with the launcher's own configuration.
-oh-my-posh	pkg	-	*	oh-my-posh	-	-	-	A prompt that follows your wallpaper colours.
-zoxide	pkg	-	*	zoxide	-	-	-	Jump to the directories you use most by name.
-eza	pkg	-	*	eza	-	-	-	A colourful, icon-aware replacement for ls.
-neovim	pkg	-	*	neovim git build-essential ripgrep fd unzip wget	-	-	-	Neovim, with the tools its plugins expect.
-build-tools	pkg	-	*	build-essential git cmake autoconf automake libtool m4 bison flex patchelf binutils python	-	-	-	Everything you need to build software on the phone.
-patchelf	pkg	-	*	patchelf	-	-	-	A small tool other items use while they install.
-fastfetch-libs	pkg	-	*	imagemagick chafa libandroid-glob zlib	-	-	-	The image libraries fastfetch needs for its logo.
-config-fish	file	v0.2.39	*	launcher:docs/en/examples/config.fish@v0.2.39	~/.config/fish/config.fish	fish	-	The launcher's fish configuration, refreshed on every install.
-personal-fish	file-once	v0.2.39	*	launcher:docs/en/examples/conf.d-personal.fish@v0.2.39	~/.config/fish/conf.d/personal.fish	fish	-	A place for your own fish settings, installed once and then left alone.
-omp-theme	file	v0.2.39	*	launcher:docs/en/examples/aliens-material.omp.json@v0.2.39	~/.config/ohmyposh/aliens-material.omp.json	oh-my-posh	-	The prompt theme that retints with your wallpaper.
-setup-nvim	script	v0.2.39	*	launcher:docs/en/examples/setup-nvim@v0.2.39	~/.local/bin/setup-nvim	neovim	mode=755;args=--distro astronvim --yes	Sets Neovim up with AstroNvim, themed to match.
-sigye	binary	0.6.0	*	binaries:sigye@2026.09.02	-	-	-	A clock for the terminal.
+claude-code	npm-musl	latest	com.termux,io.vaj.tl	npm:@anthropic-ai/claude-code-linux-arm64-musl#claude	-	musl-loader	env=DISABLE_AUTOUPDATER=1;tz=1;build=patchelf	Anthropic's Claude Code, about 200 MB.
+fastfetch	binary	2.67.0	com.termux	binaries:fastfetch@2026.09.02	-	fastfetch-libs,fastfetch-config,fastfetch-logo	-	System information beside an animated logo.
+fastfetch	binary	2.67.0	io.vaj.tl	binaries:fastfetch-io.vaj.tl@2026.09.02	-	fastfetch-libs,fastfetch-config,fastfetch-logo	-	System information beside an animated logo.
+fish-shell	bundle	-	*	-	-	fish,config-fish,personal-fish,oh-my-posh,omp-theme,eza,zoxide,fisher,fish-plugins	-	The fish shell with the launcher's setup: the wallpaper prompt, a nicer ls and quicker directory jumping.
 kitten	binary	0.48.2	*	binaries:kitten@2026.09.02	-	-	-	Kitty's companion tool, for images and files in the terminal.
-fastfetch	binary	2.67.0	com.termux	binaries:fastfetch@2026.09.02	-	fastfetch-libs	-	System information with an animated logo.
-fastfetch	binary	2.67.0	io.vaj.tl	binaries:fastfetch-io.vaj.tl@2026.09.02	-	fastfetch-libs	-	System information with an animated logo.
-musl-loader	binary	1.2.5	com.termux	binaries:musl-loader@2026.09.06	~/.local/lib/musl/ld-musl-aarch64.so.1	-	-	What tools built for other Linux systems need to start here.
-musl-loader	binary	1.2.5	io.vaj.tl	binaries:musl-loader-io.vaj.tl@2026.09.06	~/.local/lib/musl/ld-musl-aarch64.so.1	-	-	What tools built for other Linux systems need to start here.
-claude-code	npm-musl	latest	com.termux,io.vaj.tl	npm:@anthropic-ai/claude-code-linux-arm64-musl#claude	-	musl-loader,patchelf	env=DISABLE_AUTOUPDATER=1;tz=1	Anthropic's Claude Code, about 200 MB.
-shell-setup	bundle	-	*	-	-	fish,oh-my-posh,zoxide,eza,config-fish,omp-theme,personal-fish	-	The whole shell setup: fish, the prompt, zoxide and eza.
-dev-tools	bundle	-	*	-	-	build-tools,neovim,setup-nvim	-	Compilers, git and a configured Neovim.
-showcase	bundle	-	*	-	-	sigye,fastfetch,kitten	-	The tools the launcher shows off: a clock, fastfetch and kitten.
+nvim-theme	bundle	-	*	-	-	nvim-palette,nvim-colors	-	A Neovim colour scheme that follows your wallpaper — turn it on with :colorscheme launcher-material.
+omp-theme	file	v0.2.39	*	launcher:docs/en/examples/aliens-material.omp.json@v0.2.39	~/.config/ohmyposh/aliens-material.omp.json	oh-my-posh	-	The prompt theme that retints with your wallpaper.
+sigye	binary	0.6.0	*	binaries:sigye@2026.09.02	-	-	-	A clock for the terminal.
+config-fish	file	v0.2.39	*	launcher:docs/en/examples/config.fish@v0.2.39	~/.config/fish/config.fish	fish	hidden=1	The launcher's fish configuration.
+eza	pkg	-	*	eza	-	-	hidden=1	A colourful, icon-aware replacement for ls.
+fastfetch-config	file-once	v0.2.39	*	launcher:docs/en/examples/fastfetch.jsonc@v0.2.39	~/.config/fastfetch/config.jsonc	-	hidden=1	The fastfetch layout, yours to edit.
+fastfetch-libs	pkg	-	*	imagemagick chafa libandroid-glob zlib	-	-	hidden=1	The image libraries fastfetch needs for its logo.
+fastfetch-logo	file-once	1	*	https://raw.githubusercontent.com/PickleHik3/nix-on-droid/67e57bd287c0dff63be25ce9ca8f0761afaccc11/templates/launcher/config/fastfetch/logo.gif	~/Pictures/gif/skel.gif	-	hidden=1	The animated logo fastfetch shows, yours to replace.
+fish	pkg	-	*	fish	-	-	hidden=1	The fish shell itself.
+fish-plugins	fisher	-	*	nickeb96/puffer-fish jorgebucaran/autopair.fish	-	fisher,fish	hidden=1	Shorter path shortcuts and automatic bracket pairing in fish.
+fisher	file	4.4.8	*	https://raw.githubusercontent.com/jorgebucaran/fisher/4.4.8/functions/fisher.fish	~/.config/fish/functions/fisher.fish	fish	hidden=1	The plugin manager fish uses.
+musl-loader	binary	1.2.5	com.termux	binaries:musl-loader@2026.09.06	~/.local/lib/musl/ld-musl-aarch64.so.1	-	hidden=1	What tools built for other Linux systems need to start here.
+musl-loader	binary	1.2.5	io.vaj.tl	binaries:musl-loader-io.vaj.tl@2026.09.06	~/.local/lib/musl/ld-musl-aarch64.so.1	-	hidden=1	What tools built for other Linux systems need to start here.
+nvim-colors	file	631aab19	*	launcher:docs/en/examples/nvim/colors/launcher-material.lua@631aab19766c7cd5d058c0d8ee4b026bc2d98dd5	~/.config/nvim/colors/launcher-material.lua	-	hidden=1	The colour scheme itself.
+nvim-palette	file	631aab19	*	launcher:docs/en/examples/nvim/lua/launcher/material_palette.lua@631aab19766c7cd5d058c0d8ee4b026bc2d98dd5	~/.config/nvim/lua/launcher/material_palette.lua	-	hidden=1	Turns your wallpaper colours into editor colours.
+oh-my-posh	pkg	-	*	oh-my-posh	-	-	hidden=1	The prompt oh-my-posh draws.
+personal-fish	file-once	v0.2.39	*	launcher:docs/en/examples/conf.d-personal.fish@v0.2.39	~/.config/fish/conf.d/personal.fish	fish	hidden=1	A place for your own fish settings, left alone once it is there.
+zoxide	pkg	-	*	zoxide	-	-	hidden=1	Jump to the directories you use most by name.

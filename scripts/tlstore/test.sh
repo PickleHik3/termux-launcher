@@ -22,6 +22,12 @@
 #                            wrapper — is exercised for real. Nothing else is
 #                            stubbed: curl, sha256sum, sha512sum, tar, base64,
 #                            od and minisign are the real tools.
+#   TLSTORE_ASSUME_TTY=1   — the questions tlstore only asks a person (replace
+#                            this config file? remove the build tools?) are
+#                            skipped when stdin is not a terminal. The suite has
+#                            no pty, so it sets this knob and pipes the answers
+#                            in; without it the "nobody is there" paths are what
+#                            get tested, and both are.
 # The catalog signature tests need minisign. Without it they are skipped, and
 # the suite says so instead of passing quietly.
 
@@ -64,13 +70,14 @@ sha512_b64() {
     fi
 }
 
-# write_catalog <file> <serial> <fakebin version> <fakebin payload>
+# write_catalog <file> <serial> <version> <fakebin payload> — the version is the
+# one hello and fakebin carry, so a newer catalog moves a config item on too.
 write_catalog() {
     local out="$1" serial="$2" fbver="$3" fbfile="$4"
     {
         printf '# tlstore catalog\tserial=%s\n' "$serial"
         printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\n'
-        printf 'hello\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\n' "$FX" "$(sha "$FX/hello.conf")"
+        printf 'hello\tfile\t%s\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\n' "$fbver" "$FX" "$(sha "$FX/hello.conf")"
         printf 'mine\tfile-once\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/mine.conf\t-\t-\tYours to edit, installed once.\n' "$FX" "$(sha "$FX/mine.conf")"
         printf 'fakebin\tbinary\t%s\t*\tfile://%s/%s\t%s\t-\t-\t-\tA small tool for the terminal.\n' "$fbver" "$FX" "$fbfile" "$(sha "$FX/$fbfile")"
         printf 'badsum\tbinary\t1\t*\tfile://%s/hello.conf\t%s\t~/.local/bin/badsum\t-\t-\tNever installs, on purpose.\n' "$FX" "0000000000000000000000000000000000000000000000000000000000000000"
@@ -79,8 +86,10 @@ write_catalog() {
         printf 'ghost\tbinary\t1\tio.vaj.tl\tfile://%s/other.bin\t%s\t-\t-\t-\tOnly for another edition.\n' "$FX" "$(sha "$FX/other.bin")"
         printf 'demo-pkg\tpkg\t-\t*\tdemo-one demo-two\t-\t-\t-\t-\tTwo packages from the package manager.\n'
         printf 'musl-loader\tbinary\t1\tcom.termux\tfile://%s/loader.bin\t%s\t~/.local/lib/musl/ld-musl-aarch64.so.1\t-\t-\tWhat tools from other systems need to start.\n' "$FX" "$(sha "$FX/loader.bin")"
-        printf 'claude-code\tnpm-musl\tlatest\t*\tnpm:demo-cli#claude\t-\t-\tmusl-loader,demo-pkg\tenv=DEMO_FLAG=1;tz=1\tA tool that comes from npm.\n'
-        printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg\t-\tA few things at once.\n'
+        printf 'claude-code\tnpm-musl\tlatest\t*\tnpm:demo-cli#claude\t-\t-\tmusl-loader,demo-pkg\tenv=DEMO_FLAG=1;tz=1;build=demo-build\tA tool that comes from npm.\n'
+        printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg,secret\t-\tA few things at once.\n'
+        printf 'plug\tfisher\t-\t*\tdemo/one demo/two\t-\t-\t-\t-\tPlugins for the shell.\n'
+        printf 'secret\tfile\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/secret.conf\t-\thidden=1\tA part of something else.\n' "$FX" "$(sha "$FX/mine.conf")"
     } > "$out"
 }
 
@@ -111,8 +120,25 @@ echo "\$@" >> "$ROOT/pkg.log"
 exit 0
 EOF
     chmod +x "$FIXBIN/pkg"
-    cp "$FIXBIN/pkg" "$FIXBIN/pacman"
     cp "$FIXBIN/pkg" "$FIXBIN/apt"
+    # pacman is the one tlstore prefers, and the only one it asks whether a
+    # package is already there: -Q says no for the build tool, yes for the rest.
+    cat > "$FIXBIN/pacman" <<EOF
+#!/bin/sh
+echo "\$@" >> "$ROOT/pkg.log"
+[ "\${1:-}" = -Q ] || exit 0
+[ "\${2:-}" = demo-build ] && exit 1
+exit 0
+EOF
+    chmod +x "$FIXBIN/pacman"
+
+    # A fake fish, so the plugin manager's install and remove can be seen.
+    cat > "$FIXBIN/fish" <<EOF
+#!/bin/sh
+echo "\$@" >> "$ROOT/fish.log"
+exit 0
+EOF
+    chmod +x "$FIXBIN/fish"
 
     # A fake npm registry: one package document and its tarball.
     mkdir -p "$FX/registry/demo-cli" "$FX/pkgsrc/package"
@@ -170,6 +196,7 @@ tl() {
             TLSTORE_NPM_REGISTRY="file://$FX/registry" \
             TLSTORE_ARCH=aarch64 \
             TLSTORE_PATCHELF=true \
+            TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" 2>&1)"
     else
         OUT="$(env -i \
@@ -179,10 +206,12 @@ tl() {
             TLSTORE_NPM_REGISTRY="file://$FX/registry" \
             TLSTORE_ARCH=aarch64 \
             TLSTORE_PATCHELF=true \
+            TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" < /dev/null 2>&1)"
     fi
     ST=$?
     STDIN_TEXT=""
+    TTY_KNOB=0
     return 0
 }
 
@@ -231,6 +260,17 @@ run_suite() {
     expect_out "list shows a file item" "hello"
     expect_out "list shows a bundle" "kit"
     expect_no_out "list hides another edition's item" "ghost"
+    expect_no_out "list hides the parts of other items" "secret"
+    expect_out "list leaves room for the installed mark" "^  hello"
+    expect_out "list hints at what an item builds with" "needs while installing: demo-build"
+    tl search part
+    expect_no_out "search hides them too" "secret"
+    tl info secret
+    expect_status "info still explains a part" 0
+    expect_out "info names the part" "part of something else"
+    tl install secret -y
+    expect_status "installing a part by name is refused" 1
+    expect_out "and says why" "part of another item"
     tl info twin
     expect_out "the row for this prefix wins" "twin.bin"
     expect_no_out "the other edition's row is not used" "other.bin"
@@ -242,17 +282,66 @@ run_suite() {
     expect_out "info names where the file goes" ".config/hello.conf"
     expect_out "info names the checksum" "$(sha "$FX/hello.conf")"
 
-    # --- a file, over an existing one ---
+    # --- a file, where there is none yet ---
     mkdir -p "$TESTHOME/.config"
-    printf 'the users own greeting\n' > "$TESTHOME/.config/hello.conf"
     tl install hello -y
     expect_status "install a file" 0
-    expect_content "the file was replaced" "$TESTHOME/.config/hello.conf" "greeting from the catalog"
-    if ls "$TESTHOME/.config/hello.conf".bak-* >/dev/null 2>&1; then pass; else fail "the old file was kept beside it"; fi
+    expect_content "the file was written" "$TESTHOME/.config/hello.conf" "greeting from the catalog"
     tl list -i
     expect_out "list -i shows what is installed" "hello"
     tl list -a
-    expect_no_out "list -a hides what is installed" "^hello"
+    expect_no_out "list -a hides what is installed" "hello"
+
+    # --- a config file that already differs: never replaced silently ---
+    # Each case starts as a first install over a file tlstore did not put there,
+    # which is what a user with their own config.fish actually has.
+    forget_state() { rm -f "$TESTHOME/.local/share/tlstore/installed.tsv"; }
+
+    printf 'the users own greeting\n' > "$TESTHOME/.config/hello.conf"
+
+    # nobody there to ask: kept, one line, still recorded
+    forget_state
+    tl install hello -y
+    expect_status "a config that differs, with nobody to ask" 0
+    expect_content "the users own config is kept" "$TESTHOME/.config/hello.conf" "the users own greeting"
+    expect_out "and it says so" "kept your hello.conf"
+    expect_no_out "-y does not answer the config question" "Replace your"
+
+    # asked, and answered no
+    forget_state
+    TTY_KNOB=1
+    STDIN_TEXT='n
+'
+    tl install hello -y
+    expect_status "a config that differs, answered no" 0
+    expect_out "the change is shown" "greeting from the catalog"
+    expect_out "and the question is asked" "Replace your hello.conf"
+    expect_content "answering no keeps the users file" "$TESTHOME/.config/hello.conf" "the users own greeting"
+
+    # asked, and answered yes
+    forget_state
+    TTY_KNOB=1
+    STDIN_TEXT='y
+'
+    tl install hello -y
+    expect_status "a config that differs, answered yes" 0
+    expect_content "answering yes takes the new file" "$TESTHOME/.config/hello.conf" "greeting from the catalog"
+    if ls "$TESTHOME/.config/hello.conf".bak-* >/dev/null 2>&1; then pass; else fail "the old config was kept beside it"; fi
+
+    # identical: nothing to show, nothing to ask
+    forget_state
+    tl install hello -y
+    expect_status "a config that is already identical" 0
+    expect_no_out "an identical config asks nothing" "Replace your"
+    expect_no_out "an identical config shows nothing" "^---"
+
+    # --configs answers it without a person
+    printf 'changed again\n' > "$TESTHOME/.config/hello.conf"
+    forget_state
+    tl install hello -y --configs
+    expect_status "--configs" 0
+    expect_content "--configs takes the new config" "$TESTHOME/.config/hello.conf" "greeting from the catalog"
+    expect_no_out "--configs does not ask" "Replace your"
 
     # --- a file-once, twice ---
     printf 'already mine\n' > "$TESTHOME/.config/mine.conf"
@@ -276,9 +365,21 @@ run_suite() {
     tl install kit -y
     expect_status "install a bundle" 0
     expect_out "the bundle installs its members" "demo-pkg"
+    expect_file "a bundle brings its hidden parts in" "$TESTHOME/.config/secret.conf"
     if grep -q demo-one "$ROOT/pkg.log" 2>/dev/null; then pass; else fail "the package manager was asked for the packages"; fi
     tl list -i
     expect_out "the bundle is recorded" "kit"
+    expect_out "list marks what you have" "^\* kit"
+
+    # --- fish plugins, which fisher fetches and fisher keeps current ---
+    tl install plug -y
+    expect_status "install fish plugins" 0
+    if grep -q -- "-c fisher install demo/one demo/two" "$ROOT/fish.log" 2>/dev/null; then pass; else fail "fisher was asked to install the plugins"; fi
+    tl install plug -y
+    expect_out "installing them again says they are there" "already installed"
+    tl remove plug -y
+    expect_status "remove fish plugins" 0
+    if grep -q -- "-c fisher remove demo/one demo/two" "$ROOT/fish.log" 2>/dev/null; then pass; else fail "fisher was asked to remove the plugins"; fi
 
     # --- npm-musl ---
     tl install claude-code -y
@@ -287,26 +388,67 @@ run_suite() {
     expect_file "the package executable is in place" "$TESTHOME/.local/lib/claude-code/claude"
     expect_content "the installed version is recorded" "$TESTHOME/.local/lib/claude-code/version" "1.0.0"
     expect_file "the wrapper is named after the command" "$TESTHOME/.local/bin/claude"
+    expect_out "the build tool is installed first" "Installing what is needed to build: demo-build"
+    expect_out "-y also answers the cleanup question" "Removed them"
     OUT="$("$TESTHOME/.local/bin/claude" 2>&1)"; ST=$?
     expect_status "the wrapper runs" 0
     expect_out "the wrapper runs the package executable" "demo-cli 1.0.0"
     expect_out "the wrapper exports the options" "DEMO_FLAG=1"
+    if grep -q -- "-S --needed --noconfirm demo-build" "$ROOT/pkg.log"; then pass; else fail "the build tool was installed"; fi
+    if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then pass; else fail "the build tool was removed again"; fi
+    tl info claude-code
+    expect_out "info names the build tools" "Builds with demo-build"
+
+    # --- build tools, with nobody to ask and with an answer ---
+    : > "$ROOT/pkg.log"
+    tl install claude-code
+    expect_status "reinstall with nobody to ask" 0
+    expect_no_out "nobody there means the build tools stay" "Removed them"
+    if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then fail "the build tool should have stayed"; else pass; fi
+
+    : > "$ROOT/pkg.log"
+    TTY_KNOB=1
+    STDIN_TEXT='y
+n
+'
+    tl install claude-code
+    expect_status "reinstall, cleanup declined" 0
+    expect_out "the cleanup question names the packages" "only needed for installing (demo-build)"
+    if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then fail "answering no should keep them"; else pass; fi
+
+    : > "$ROOT/pkg.log"
+    TTY_KNOB=1
+    STDIN_TEXT='y
+y
+'
+    tl install claude-code
+    expect_status "reinstall, cleanup accepted" 0
+    if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then pass; else fail "answering yes should remove them"; fi
+
+    # An item already here asks for nothing to build with.
+    : > "$ROOT/pkg.log"
+    tl install fakebin -y
+    expect_no_out "nothing is built for what is already installed" "needed to build"
 
     # --- remove, with the backup put back ---
     tl remove hello -y
     expect_status "remove" 0
-    expect_content "the users own file came back" "$TESTHOME/.config/hello.conf" "the users own greeting"
+    expect_content "the file that was there came back" "$TESTHOME/.config/hello.conf" "changed again"
     tl list -i
-    expect_no_out "a removed item is no longer installed" "^hello"
+    expect_no_out "a removed item is no longer installed" "hello"
     tl remove hello -y
     expect_status "removing something twice is not an error" 0
     expect_out "removing something twice says so" "not installed"
 
     # --- update ---
+    # Put a config item back first, from the catalog the app ships, so the
+    # refresh below has something whose shipped version has moved on.
+    tl install hello -y --configs
     tl update --check
     expect_status "update --check" 0
     expect_out "update --check took the newer item list" "Updated the list of items"
     expect_out "update --check names what is out of date" "fakebin"
+    expect_out "a config with a new version says the change will be shown" "hello has a new version"
     tl version
     expect_out "the refreshed item list is in use" "2026090602"
     tl update -y
@@ -345,6 +487,16 @@ run_suite() {
     else
         skip "catalog signature tests" "minisign is not installed"
     fi
+
+    # --- graphics setup, which the app installs and tlstore only runs ---
+    tl display
+    expect_status "display without the app's script" 1
+    expect_out "and says what to do" "update the app"
+    printf '#!/bin/sh\necho "gpu-setup $*"\n' > "$TPREFIX/bin/termux-x11-gpu-setup"
+    chmod +x "$TPREFIX/bin/termux-x11-gpu-setup"
+    tl display --yes --keep
+    expect_status "display runs the app's script" 0
+    expect_out "and passes the arguments through" "gpu-setup --yes --keep"
 
     # --- doctor ---
     tl doctor
@@ -404,6 +556,98 @@ for entry in "${shells[@]}"; do
         echo "   all checks passed"
     fi
 done
+
+echo
+# ---------------------------------------------------------------------------
+# The Neovim colour scheme nvim-theme installs
+# ---------------------------------------------------------------------------
+
+NVIMDIR="$repo/docs/en/examples/nvim"
+if command -v nvim >/dev/null 2>&1; then
+    echo "== the Neovim colour scheme"
+    SHELL_LABEL=nvim
+    nvroot="$(mktemp -d)"
+    mkdir -p "$nvroot/home/.termux"
+    cat > "$nvroot/probe.lua" <<'PROBE'
+vim.cmd.colorscheme "launcher-material"
+-- Every group the scheme promises to paint, in the families a config actually
+-- reads: buffer, syntax, chrome, diagnostics, treesitter, git.
+local need = {
+  "Normal", "NormalFloat", "Comment", "Constant", "String", "Identifier",
+  "Function", "Statement", "Keyword", "Type", "Special", "Error", "Todo",
+  "LineNr", "CursorLine", "Visual", "Search", "Pmenu", "PmenuSel",
+  "StatusLine", "StatusLineNC", "DiagnosticError", "DiagnosticWarn",
+  "DiagnosticInfo", "DiagnosticHint", "@keyword", "@string", "@function",
+  "@type", "@comment", "GitSignsAdd", "DiffAdd", "DiffChange", "DiffDelete",
+}
+local missing = {}
+for _, group in ipairs(need) do
+  local hl = vim.api.nvim_get_hl(0, { name = group, link = false })
+  if not (hl.fg or hl.bg or hl.sp) then
+    table.insert(missing, group)
+  end
+end
+local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+io.stdout:write(("colors_name=%s missing=%s normal_fg=%06X\n"):format(
+  tostring(vim.g.colors_name),
+  #missing == 0 and "none" or table.concat(missing, ","),
+  normal.fg or 0))
+PROBE
+    cat > "$nvroot/palette.sh" <<'PALETTE'
+export TERMUX_MATERIAL_TERMINAL_BACKGROUND='#1A1111'
+export TERMUX_MATERIAL_TERMINAL_FOREGROUND='#F1DEDD'
+export TERMUX_MATERIAL_TERMINAL_COLOR1='#FF5449'
+export TERMUX_MATERIAL_TERMINAL_COLOR2='#4CAF50'
+export TERMUX_MATERIAL_TERMINAL_COLOR3='#FFC107'
+export TERMUX_MATERIAL_TERMINAL_COLOR4='#4D9BE6'
+export TERMUX_MATERIAL_TERMINAL_COLOR5='#C77DFF'
+export TERMUX_MATERIAL_TERMINAL_COLOR6='#4DD0E1'
+export TERMUX_MATERIAL_TERMINAL_COLOR8='#8C7A78'
+export TERMUX_MATERIAL_TERMINAL_COLOR9='#FF8A80'
+export TERMUX_MATERIAL_TERMINAL_COLOR10='#81C784'
+export TERMUX_MATERIAL_TERMINAL_COLOR11='#FFD54F'
+export TERMUX_MATERIAL_TERMINAL_COLOR12='#82B1FF'
+export TERMUX_MATERIAL_TERMINAL_COLOR13='#E1BEE7'
+export TERMUX_MATERIAL_TERMINAL_COLOR14='#80DEEA'
+export TERMUX_MATERIAL_TERMINAL_COLOR15='#FFFFFF'
+export TERMUX_MATERIAL_ON_SURFACE_VARIANT='#D8C2C0'
+export TERMUX_MATERIAL_SURFACE_CONTAINER='#271D1D'
+export TERMUX_MATERIAL_SURFACE_CONTAINER_HIGH='#322828'
+export TERMUX_MATERIAL_SURFACE_CONTAINER_HIGHEST='#3D3232'
+export TERMUX_MATERIAL_OUTLINE='#A08C8B'
+export TERMUX_MATERIAL_OUTLINE_VARIANT='#534343'
+export TERMUX_MATERIAL_PRIMARY='#FFB4AB'
+export TERMUX_MATERIAL_TERTIARY='#E7BF8F'
+export TERMUX_MATERIAL_ERROR='#FF5449'
+PALETTE
+
+    nvprobe() {
+        OUT="$(HOME="$nvroot/home" nvim --headless -u NONE \
+            --cmd "set rtp^=$NVIMDIR" -l "$nvroot/probe.lua" 2>&1)"
+        ST=$?
+    }
+
+    # No palette yet — plain Termux, or before the first wallpaper.
+    rm -f "$nvroot/home/.termux/material-colors.sh"
+    nvprobe
+    expect_status "the colour scheme loads with no wallpaper palette" 0
+    expect_out "it names itself" "colors_name=launcher-material"
+    expect_out "every group it promises is painted" "missing=none"
+    expect_out "the fixed palette is used" "normal_fg=ABB2BF"
+
+    # With the palette the launcher writes on a wallpaper change.
+    cp "$nvroot/palette.sh" "$nvroot/home/.termux/material-colors.sh"
+    nvprobe
+    expect_status "the colour scheme loads from the wallpaper palette" 0
+    expect_out "it still names itself" "colors_name=launcher-material"
+    expect_out "every group is still painted" "missing=none"
+    expect_out "the wallpaper's foreground is used" "normal_fg=F1DEDD"
+
+    rm -rf "$nvroot"
+else
+    echo "== nvim is not installed — the colour scheme was not loaded"
+    SKIP=$((SKIP + 1))
+fi
 
 echo
 if command -v shellcheck >/dev/null 2>&1; then

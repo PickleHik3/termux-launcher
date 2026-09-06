@@ -5,10 +5,15 @@
 #
 # Digests are never hand-written: a launcher: source is hashed from the file in
 # this checkout, a binaries: source is looked up in the SHA256SUMS of the
-# termux-launcher-binaries checkout passed as the first argument. pkg, bundle
-# and npm-musl items carry no digest — apt and the npm registry's own sha512 are
-# the check there. A source whose digest cannot be computed stops the build:
-# an unpinned payload must never reach a phone.
+# termux-launcher-binaries checkout passed as the first argument, and a plain
+# http(s) source is downloaded once and hashed here (so building needs the
+# network when one of those changes). pkg, bundle, fisher and npm-musl items
+# carry no digest — apt, fisher and the npm registry's own sha512 are the check
+# there. A source whose digest cannot be computed stops the build: an unpinned
+# payload must never reach a phone.
+#
+# A plain URL must name an immutable revision — a tag or a commit — for the same
+# reason a launcher: source does.
 #
 # The serial is YYYYMMDDNN and only ever moves forward; a second build on the
 # same day gets NN + 1, because tlstore accepts a refreshed catalog only when
@@ -46,10 +51,13 @@ if [ -n "$sums" ]; then
     done < "$sums"
 fi
 
+fetched="$(mktemp -d)"
+trap 'rm -rf "$fetched"' EXIT
+
 digest_for() {
     local kind="$1" source="$2" name="$3" path tag asset
     case "$kind" in
-        pkg|bundle|npm-musl) echo "-"; return 0 ;;
+        pkg|bundle|fisher|npm-musl) echo "-"; return 0 ;;
     esac
     case "$source" in
         launcher:*)
@@ -71,6 +79,17 @@ digest_for() {
             fi
             echo "${binary_digest["$asset-aarch64"]}"
             ;;
+        http://*|https://*)
+            path="$fetched/$name.payload"
+            if [ ! -f "$path" ]; then
+                if ! curl -fsSL -o "$path" "$source"; then
+                    rm -f "$path"
+                    echo "$name: could not download $source" >&2
+                    return 1
+                fi
+            fi
+            sha256sum "$path" | cut -d' ' -f1
+            ;;
         *)
             echo "$name: cannot compute a digest for $source" >&2
             return 1
@@ -80,7 +99,7 @@ digest_for() {
 
 # --- rows -----------------------------------------------------------------
 tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp"; rm -rf "$fetched"' EXIT
 
 {
     printf '# tlstore catalog\tserial=%s\n' "$serial"
@@ -103,7 +122,7 @@ while IFS=$'\t' read -r name kind version prefixes source target requires option
         *) echo "$name: a name is [a-z0-9][a-z0-9-]*" >&2; failed=1; continue ;;
     esac
     case "$kind" in
-        pkg|binary|file|file-once|script|npm-musl|bundle) ;;
+        pkg|binary|file|file-once|fisher|npm-musl|bundle) ;;
         *) echo "$name: unknown kind $kind" >&2; failed=1; continue ;;
     esac
     if ! digest="$(digest_for "$kind" "$source" "$name")"; then
