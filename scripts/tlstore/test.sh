@@ -558,6 +558,98 @@ for entry in "${shells[@]}"; do
 done
 
 echo
+# ---------------------------------------------------------------------------
+# The Neovim colour scheme nvim-theme installs
+# ---------------------------------------------------------------------------
+
+NVIMDIR="$repo/docs/en/examples/nvim"
+if command -v nvim >/dev/null 2>&1; then
+    echo "== the Neovim colour scheme"
+    SHELL_LABEL=nvim
+    nvroot="$(mktemp -d)"
+    mkdir -p "$nvroot/home/.termux"
+    cat > "$nvroot/probe.lua" <<'PROBE'
+vim.cmd.colorscheme "launcher-material"
+-- Every group the scheme promises to paint, in the families a config actually
+-- reads: buffer, syntax, chrome, diagnostics, treesitter, git.
+local need = {
+  "Normal", "NormalFloat", "Comment", "Constant", "String", "Identifier",
+  "Function", "Statement", "Keyword", "Type", "Special", "Error", "Todo",
+  "LineNr", "CursorLine", "Visual", "Search", "Pmenu", "PmenuSel",
+  "StatusLine", "StatusLineNC", "DiagnosticError", "DiagnosticWarn",
+  "DiagnosticInfo", "DiagnosticHint", "@keyword", "@string", "@function",
+  "@type", "@comment", "GitSignsAdd", "DiffAdd", "DiffChange", "DiffDelete",
+}
+local missing = {}
+for _, group in ipairs(need) do
+  local hl = vim.api.nvim_get_hl(0, { name = group, link = false })
+  if not (hl.fg or hl.bg or hl.sp) then
+    table.insert(missing, group)
+  end
+end
+local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+io.stdout:write(("colors_name=%s missing=%s normal_fg=%06X\n"):format(
+  tostring(vim.g.colors_name),
+  #missing == 0 and "none" or table.concat(missing, ","),
+  normal.fg or 0))
+PROBE
+    cat > "$nvroot/palette.sh" <<'PALETTE'
+export TERMUX_MATERIAL_TERMINAL_BACKGROUND='#1A1111'
+export TERMUX_MATERIAL_TERMINAL_FOREGROUND='#F1DEDD'
+export TERMUX_MATERIAL_TERMINAL_COLOR1='#FF5449'
+export TERMUX_MATERIAL_TERMINAL_COLOR2='#4CAF50'
+export TERMUX_MATERIAL_TERMINAL_COLOR3='#FFC107'
+export TERMUX_MATERIAL_TERMINAL_COLOR4='#4D9BE6'
+export TERMUX_MATERIAL_TERMINAL_COLOR5='#C77DFF'
+export TERMUX_MATERIAL_TERMINAL_COLOR6='#4DD0E1'
+export TERMUX_MATERIAL_TERMINAL_COLOR8='#8C7A78'
+export TERMUX_MATERIAL_TERMINAL_COLOR9='#FF8A80'
+export TERMUX_MATERIAL_TERMINAL_COLOR10='#81C784'
+export TERMUX_MATERIAL_TERMINAL_COLOR11='#FFD54F'
+export TERMUX_MATERIAL_TERMINAL_COLOR12='#82B1FF'
+export TERMUX_MATERIAL_TERMINAL_COLOR13='#E1BEE7'
+export TERMUX_MATERIAL_TERMINAL_COLOR14='#80DEEA'
+export TERMUX_MATERIAL_TERMINAL_COLOR15='#FFFFFF'
+export TERMUX_MATERIAL_ON_SURFACE_VARIANT='#D8C2C0'
+export TERMUX_MATERIAL_SURFACE_CONTAINER='#271D1D'
+export TERMUX_MATERIAL_SURFACE_CONTAINER_HIGH='#322828'
+export TERMUX_MATERIAL_SURFACE_CONTAINER_HIGHEST='#3D3232'
+export TERMUX_MATERIAL_OUTLINE='#A08C8B'
+export TERMUX_MATERIAL_OUTLINE_VARIANT='#534343'
+export TERMUX_MATERIAL_PRIMARY='#FFB4AB'
+export TERMUX_MATERIAL_TERTIARY='#E7BF8F'
+export TERMUX_MATERIAL_ERROR='#FF5449'
+PALETTE
+
+    nvprobe() {
+        OUT="$(HOME="$nvroot/home" nvim --headless -u NONE \
+            --cmd "set rtp^=$NVIMDIR" -l "$nvroot/probe.lua" 2>&1)"
+        ST=$?
+    }
+
+    # No palette yet — plain Termux, or before the first wallpaper.
+    rm -f "$nvroot/home/.termux/material-colors.sh"
+    nvprobe
+    expect_status "the colour scheme loads with no wallpaper palette" 0
+    expect_out "it names itself" "colors_name=launcher-material"
+    expect_out "every group it promises is painted" "missing=none"
+    expect_out "the fixed palette is used" "normal_fg=ABB2BF"
+
+    # With the palette the launcher writes on a wallpaper change.
+    cp "$nvroot/palette.sh" "$nvroot/home/.termux/material-colors.sh"
+    nvprobe
+    expect_status "the colour scheme loads from the wallpaper palette" 0
+    expect_out "it still names itself" "colors_name=launcher-material"
+    expect_out "every group is still painted" "missing=none"
+    expect_out "the wallpaper's foreground is used" "normal_fg=F1DEDD"
+
+    rm -rf "$nvroot"
+else
+    echo "== nvim is not installed — the colour scheme was not loaded"
+    SKIP=$((SKIP + 1))
+fi
+
+echo
 if command -v shellcheck >/dev/null 2>&1; then
     echo "== shellcheck -s sh"
     if shellcheck -s sh "$TLSTORE"; then
