@@ -35,7 +35,7 @@ omp-theme	file	v0.2.39	*	launcher:docs/en/examples/aliens-material.omp.json@v0.2
 sigye	binary	0.6.0	*	binaries:sigye@2026.09.02	-	-	-	A clock for the terminal.
 config-fish	file	v0.2.39	*	launcher:docs/en/examples/config.fish@v0.2.39	~/.config/fish/config.fish	fish	hidden=1	The launcher's fish configuration.
 eza	pkg	-	*	eza	-	-	hidden=1	A colourful, icon-aware replacement for ls.
-fastfetch-config	file-once	v0.2.39	*	launcher:docs/en/examples/fastfetch.jsonc@v0.2.39	~/.config/fastfetch/config.jsonc	-	hidden=1	The fastfetch layout, yours to edit.
+fastfetch-config	file-once	4b598870	*	launcher:docs/en/examples/fastfetch.jsonc@4b598870df5cb44947e9fc475d8b245a59324cf6	~/.config/fastfetch/config.jsonc	-	hidden=1	The fastfetch layout, yours to edit.
 fastfetch-libs	pkg	-	*	imagemagick chafa libandroid-glob zlib	-	-	hidden=1	The image libraries fastfetch needs for its logo.
 fastfetch-logo	file-once	1	*	https://raw.githubusercontent.com/PickleHik3/nix-on-droid/67e57bd287c0dff63be25ce9ca8f0761afaccc11/templates/launcher/config/fastfetch/logo.gif	~/Pictures/gif/skel.gif	-	hidden=1	The animated logo fastfetch shows, yours to replace.
 fish	pkg	-	*	fish	-	-	hidden=1	The fish shell itself.
