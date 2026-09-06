@@ -142,14 +142,19 @@ public final class TlstoreInstaller {
     @NonNull
     static TlstoreInstaller forPrefix(@NonNull Context context) {
         Context app = context.getApplicationContext();
+        // versionName plus the APK's install time: a release rewrites the files, and so does
+        // any reinstall of the same version during development, when the assets may have moved.
         String release;
         try {
-            release = app.getPackageManager().getPackageInfo(app.getPackageName(), 0).versionName;
+            android.content.pm.PackageInfo info =
+                app.getPackageManager().getPackageInfo(app.getPackageName(), 0);
+            release = (info.versionName == null ? "unknown" : info.versionName)
+                + "/" + info.lastUpdateTime;
         } catch (Exception e) {
             release = "unknown";
         }
         return new TlstoreInstaller(new File(BIN_DIR), new File(LIBEXEC_DIR),
-            new File(DATA_HOME_DIR), app.getPackageName(), release == null ? "unknown" : release,
+            new File(DATA_HOME_DIR), app.getPackageName(), release,
             name -> app.getAssets().open(name));
     }
 
