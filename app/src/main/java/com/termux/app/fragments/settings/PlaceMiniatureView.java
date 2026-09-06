@@ -77,8 +77,20 @@ public final class PlaceMiniatureView extends View {
         if (layout.equals(mLayout) && orientation == mOrientation) return;
         mLayout = layout;
         mOrientation = orientation;
+        // The blocks are laid out from the frame, and the frame from the view's size; a new
+        // arrangement or orientation at the same size never reaches onSizeChanged, so the blocks
+        // are recomputed here or the old picture would be drawn again.
+        if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
         requestLayout();
         invalidate();
+    }
+
+    /** The rectangle a block is drawn in, in view pixels, or null while it is not on the picture. */
+    @Nullable
+    @androidx.annotation.VisibleForTesting
+    public RectF blockRect(@NonNull Block block) {
+        RectF rect = mBlockRects.get(block);
+        return rect == null ? null : new RectF(rect);
     }
 
     public void setOnBlockTappedListener(@Nullable OnBlockTappedListener listener) {
