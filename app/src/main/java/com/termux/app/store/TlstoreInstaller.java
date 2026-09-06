@@ -206,8 +206,8 @@ public final class TlstoreInstaller {
     private boolean isForeignScript(@NonNull File file) {
         if (Files.isSymbolicLink(file.toPath())) return true;
         if (!file.exists()) return false;
-        String content = read(file);
-        return content == null || !content.contains(MARKER_PREAMBLE);
+        String head = readHead(file, 4096);
+        return head == null || !head.contains(MARKER_PREAMBLE);
     }
 
     /** True while a {@code tl}/{@code tls} exists that is not our symlink to {@code tlstore}. */
@@ -282,6 +282,21 @@ public final class TlstoreInstaller {
     @NonNull
     private static InputStream bytes(@NonNull String content) {
         return new java.io.ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** The first {@code limit} bytes as text: the marker sits in a script's opening lines. */
+    @Nullable
+    private static String readHead(@NonNull File file, int limit) {
+        if (!file.isFile()) return null;
+        try (InputStream in = new java.io.FileInputStream(file)) {
+            byte[] buffer = new byte[limit];
+            int total = 0;
+            int read;
+            while (total < limit && (read = in.read(buffer, total, limit - total)) > 0) total += read;
+            return new String(buffer, 0, total, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Nullable
