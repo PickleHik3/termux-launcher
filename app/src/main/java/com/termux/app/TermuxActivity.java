@@ -7982,6 +7982,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View accessoryStackContainer = findViewById(R.id.accessory_stack_container);
         if (terminalToolbarViewPager == null || accessoryStackContainer == null)
             return;
+        // Not before setTerminalToolbarView() has read the pager's XML height: a pass this early
+        // (a wall page restored during creation, an insets dispatch) would write a zero height
+        // that the capture then reads back, and the row would stay collapsed for the session.
+        if (mTerminalToolbarDefaultHeight <= 0)
+            return;
         ViewGroup.LayoutParams toolbarLayoutParams = terminalToolbarViewPager.getLayoutParams();
 
         int matrix = 0;
