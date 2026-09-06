@@ -42,6 +42,11 @@
     <string name="settings_layout_keyboard_mode_overlay">Overlay</string>
     <string name="settings_layout_look_title">Look of this place</string>
     <string name="settings_layout_look_summary">Open the surface editor for what\'s on screen here.</string>
+    <string name="settings_layout_miniature_status">Status</string>
+    <string name="settings_layout_miniature_apps">Apps</string>
+    <string name="settings_layout_miniature_alphabets">A–Z</string>
+    <string name="settings_layout_miniature_keys">Keys</string>
+    <string name="settings_layout_miniature_grid_format">%1$d×%2$d</string>
     <string name="settings_destination_appearance">Look</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons, keyboard look, and sessions opacity</string>
     <string name="settings_destination_terminal">Terminal</string>
