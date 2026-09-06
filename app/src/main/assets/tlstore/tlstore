@@ -430,7 +430,7 @@ upgrade_pkg() {
         pacman -S --needed --noconfirm $@
     elif have apt; then
         # shellcheck disable=SC2068
-        apt-get install -y -qq --only-upgrade $@ 2>&1 | grep -v "^$" || true
+        apt-get install -y -qq --only-upgrade $@
     elif have pkg; then
         # shellcheck disable=SC2068
         pkg install -y $@
