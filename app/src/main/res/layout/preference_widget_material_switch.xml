@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Replaces androidx.preference's SwitchCompat widget with the Material 3 switch: its on state is
+     a filled primary track, the same role the segmented pills use for their selected segment. The
+     id is the one SwitchPreferenceCompat looks for when it syncs the checked state. -->
+<com.google.android.material.materialswitch.MaterialSwitch
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@id/switchWidget"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@null"
+    android:clickable="false"
+    android:focusable="false" />

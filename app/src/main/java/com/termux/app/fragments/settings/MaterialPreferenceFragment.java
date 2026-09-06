@@ -36,6 +36,12 @@ public abstract class MaterialPreferenceFragment extends PreferenceFragmentCompa
         // flicker, and on Nothing OS (Android 16) as a ghost insertion cursor over the last
         // glyph of every freshly bound button label.
         recyclerView.setItemAnimator(null);
+        // The last row scrolls fully clear of the bottom edge, with room to spare, instead of
+        // ending flush against the navigation bar.
+        int bottom = Math.round(24f * recyclerView.getResources().getDisplayMetrics().density);
+        recyclerView.setClipToPadding(false);
+        recyclerView.setPadding(recyclerView.getPaddingLeft(), recyclerView.getPaddingTop(),
+            recyclerView.getPaddingRight(), recyclerView.getPaddingBottom() + bottom);
         return recyclerView;
     }
 }

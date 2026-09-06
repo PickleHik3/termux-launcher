@@ -103,6 +103,13 @@ public final class SettingsLayoutUtils {
         // PillPreference keeps its own trailing pill widget.
         if (preference instanceof PillPreference) return;
 
+        // Switches: the Material 3 switch, whose on state is a filled primary track — the same role
+        // the segmented pills' selected segment uses — instead of appcompat's pale track + thumb.
+        if (preference instanceof SwitchPreferenceCompat) {
+            preference.setWidgetLayoutResource(R.layout.preference_widget_material_switch);
+            return;
+        }
+
         if (usesChevron(preference)) {
             preference.setWidgetLayoutResource(R.layout.preference_widget_chevron);
         }

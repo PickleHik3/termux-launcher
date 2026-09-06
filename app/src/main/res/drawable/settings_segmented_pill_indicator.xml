@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The selected segment. Filled with the primary role, the same colour the on state of every
+     settings switch uses, so "selected" and "on" read as one thing across the page. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="?attr/termuxColorPrimaryContainer" />
+    <solid android:color="?attr/termuxColorPrimary" />
     <corners android:radius="20dp" />
 </shape>

@@ -125,17 +125,40 @@ public class PlaceMiniatureViewTest {
     }
 
     @Test
-    public void aPillDropsItsWordWhenTheBandIsTooShortButKeepsItWhenThereIsRoom() {
-        PlaceMiniatureView roomy = sized();
-        roomy.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+    public void theAlphabetsRowSitsBetweenThePinnedAppsAndTheExtraKeys() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        assertTrue("plenty of room: the apps row pill keeps its word",
-            roomy.isPillLabelShown(PlaceMiniatureView.Block.APPS_ROW));
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        assertNotNull(apps);
+        assertNotNull(az);
+        assertNotNull(keys);
+        // The real dock, top to bottom: pinned apps, the A–Z index, then the extra keys.
+        assertTrue("A–Z below the pinned apps", az.top >= apps.bottom - 0.5f);
+        assertTrue("A–Z above the extra keys", az.bottom <= keys.top + 0.5f);
+    }
 
-        PlaceMiniatureView cramped = sized(70, 55);
-        cramped.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+    @Test
+    public void everyBlockHasALegendRowAndHiddenOnesAreMarked() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        assertTrue("too little room: the apps row pill drops to glyph-only",
-            !cramped.isPillLabelShown(PlaceMiniatureView.Block.APPS_ROW));
+        for (PlaceMiniatureView.Block block : PlaceMiniatureView.Block.values()) {
+            assertNotNull("legend row for " + block, view.legendRect(block));
+        }
+        assertTrue("hidden apps row is marked", view.isBlockHidden(PlaceMiniatureView.Block.APPS_ROW));
+        assertTrue("A–Z cannot show without a bottom apps row",
+            view.isBlockHidden(PlaceMiniatureView.Block.ALPHABETS_ROW));
+        assertTrue("extra keys are on screen", !view.isBlockHidden(PlaceMiniatureView.Block.EXTRA_KEYS));
+        assertNull("a hidden block is off the picture",
+            view.blockRect(PlaceMiniatureView.Block.APPS_ROW));
+
+        // The legend stands beside the phone, never over it.
+        RectF frame = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF legend = view.legendRect(PlaceMiniatureView.Block.STATUS_BAR);
+        assertNotNull(frame);
+        assertTrue("legend clear of the phone", legend.left >= frame.right);
     }
 }

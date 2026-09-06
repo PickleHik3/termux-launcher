@@ -146,7 +146,7 @@ public final class SegmentedPillPreference extends Preference {
 
     private void updateLabelColors(TextView[] labels) {
         if (labels == null) return;
-        int selected = resolveColor(com.termux.shared.R.attr.termuxColorOnAccentContainer,
+        int selected = resolveColor(com.termux.shared.R.attr.termuxColorOnPrimary,
             R.color.termux_on_primary);
         int idle = resolveColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
             R.color.termux_on_surface_variant);

@@ -8,6 +8,8 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -35,13 +37,14 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * A phone-shaped miniature of one place's resolved {@link PlaceLayout}: a faithful, small
- * rendering of the launcher's own chrome — status bar, apps row, alphabets row, extra keys and the
- * place-specific canvas underneath them — every band tinted with the app's own theme attrs so it
- * reads correctly in every theme. Every interactive band carries a small glyph+word pill so a user
- * never has to decode it from shape or colour alone; the pill drops its word and keeps the glyph
- * when the band is too short to hold both. Tapping a block reports which one, so the settings page
- * can scroll to its row.
+ * A phone-shaped miniature of one place's resolved {@link PlaceLayout} with a legend beside it.
+ * The phone is a faithful, small rendering of the launcher's own chrome — status bar, pinned apps,
+ * A–Z index, extra keys and the place-specific canvas underneath them — every band tinted with the
+ * app's own theme attrs so it reads correctly in every theme. Nothing is written over the bands:
+ * each one is named in the legend by a swatch of its colour, its glyph and its word, and a row the
+ * arrangement leaves out is still listed there, dimmed and marked hidden, so the picture never
+ * silently drops one. Tapping a band or its legend row reports the block, so the settings page can
+ * scroll to its row.
  */
 public final class PlaceMiniatureView extends View {
 
@@ -56,13 +59,17 @@ public final class PlaceMiniatureView extends View {
         void onBlockTapped(@NonNull Block block);
     }
 
-    private static final float STATUS_BAR_FRACTION = 0.12f;
-    private static final float ROW_FRACTION = 0.17f;
-    private static final float ALPHABETS_FRACTION = 0.09f;
+    /** Legend order, top to bottom: the way the rows stack on a default portrait screen. */
+    private static final Block[] LEGEND_ORDER = {
+        Block.STATUS_BAR, Block.CANVAS, Block.APPS_ROW, Block.ALPHABETS_ROW, Block.EXTRA_KEYS};
+
+    private static final float STATUS_BAR_FRACTION = 0.11f;
+    private static final float ROW_FRACTION = 0.15f;
+    private static final float ALPHABETS_FRACTION = 0.08f;
     /** Portrait: narrow and tall; landscape: wide and short — a phone silhouette either way. */
     private static final float PORTRAIT_ASPECT = 9f / 19.5f;
     private static final float LANDSCAPE_ASPECT = 19.5f / 9f;
-    private static final float DEFAULT_HEIGHT_DP = 172f;
+    private static final float DEFAULT_HEIGHT_DP = 188f;
 
     private static final String[] ALPHABETS_SAMPLE = {"A", "F", "M", "S", "Z"};
     /**
@@ -78,10 +85,15 @@ public final class PlaceMiniatureView extends View {
     private static final int DISPLAY_KEY_GRID_COLUMNS = 6;
     private static final int DISPLAY_KEY_GRID_ROWS = 2;
 
-    private static final float PILL_LABEL_SP = 8f;
-    private static final float PILL_MAX_FONT_SCALE = 1.3f;
-    /** A pill never claims more of its band's length than this, so it never touches the ends. */
-    private static final float PILL_MAX_BAND_FRACTION = 0.86f;
+    private static final float LEGEND_TEXT_SP = 12f;
+    private static final float LEGEND_MAX_FONT_SCALE = 1.3f;
+    private static final float LEGEND_SWATCH_DP = 20f;
+    private static final float LEGEND_SWATCH_GAP_DP = 8f;
+    private static final float LEGEND_ROW_GAP_DP = 6f;
+    private static final float LEGEND_TO_FRAME_GAP_DP = 18f;
+    /** The legend never claims more than this share of the width; longer labels are ellipsized. */
+    private static final float LEGEND_MAX_WIDTH_FRACTION = 0.52f;
+    private static final int HIDDEN_ALPHA = 110;
 
     @Nullable private PlaceLayout mLayout;
     @NonNull private PlaceOrientation mOrientation = PlaceOrientation.PORTRAIT;
@@ -94,6 +106,7 @@ public final class PlaceMiniatureView extends View {
     private final Paint mLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mNerdPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final TextPaint mLegendPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mFrameRect = new RectF();
     private final Path mClipPath = new Path();
     /** Reused scratch rects for whatever a draw call is computing right now; never read across
@@ -101,9 +114,10 @@ public final class PlaceMiniatureView extends View {
     private final RectF mScratchRectA = new RectF();
     private final RectF mScratchRectB = new RectF();
     private final Map<Block, RectF> mBlockRects = new EnumMap<>(Block.class);
-    private final Map<Block, Boolean> mShowPillLabel = new EnumMap<>(Block.class);
+    private final Map<Block, RectF> mLegendRects = new EnumMap<>(Block.class);
     private RectF mRemaining = new RectF();
     private boolean mGridCollapsed;
+    private float mLegendLabelWidth;
 
     @Nullable private final Typeface mNerdTypeface;
     @NonNull private final Drawable mIconStatus;
@@ -111,6 +125,7 @@ public final class PlaceMiniatureView extends View {
     @NonNull private final Drawable mIconKeys;
     @NonNull private final Drawable mIconHomeGrid;
     @NonNull private final Drawable mIconDisplay;
+    @NonNull private final Drawable mIconTerminal;
 
     public PlaceMiniatureView(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -125,6 +140,8 @@ public final class PlaceMiniatureView extends View {
         mLinePaint.setStyle(Paint.Style.STROKE);
         mLinePaint.setStrokeWidth(dp(1.3f));
         mTextPaint.setStyle(Paint.Style.FILL);
+        mLegendPaint.setStyle(Paint.Style.FILL);
+        mLegendPaint.setTextAlign(Paint.Align.LEFT);
         mNerdTypeface = NerdFontSpans.typeface(context);
         mNerdPaint.setStyle(Paint.Style.FILL);
         mNerdPaint.setTextAlign(Paint.Align.CENTER);
@@ -135,6 +152,7 @@ public final class PlaceMiniatureView extends View {
         mIconKeys = loadIcon(R.drawable.ic_symbol_keyboard);
         mIconHomeGrid = loadIcon(R.drawable.ic_symbol_grid_view);
         mIconDisplay = loadIcon(R.drawable.ic_symbol_desktop_windows);
+        mIconTerminal = loadIcon(R.drawable.ic_symbol_terminal);
     }
 
     public PlaceMiniatureView(@NonNull Context context) {
@@ -158,7 +176,7 @@ public final class PlaceMiniatureView extends View {
      * Redraws only when one of the three actually changed.
      */
     public void setLayout(@NonNull PlaceLayout layout, @NonNull PlaceOrientation orientation,
-                           @NonNull PaneWallPage place) {
+                          @NonNull PaneWallPage place) {
         if (layout.equals(mLayout) && orientation == mOrientation && place == mPlace) return;
         mLayout = layout;
         mOrientation = orientation;
@@ -177,6 +195,29 @@ public final class PlaceMiniatureView extends View {
     public RectF blockRect(@NonNull Block block) {
         RectF rect = mBlockRects.get(block);
         return rect == null ? null : new RectF(rect);
+    }
+
+    /** The legend row naming a block, in view pixels; every block has one once a layout is set. */
+    @Nullable
+    @VisibleForTesting
+    public RectF legendRect(@NonNull Block block) {
+        RectF rect = mLegendRects.get(block);
+        return rect == null ? null : new RectF(rect);
+    }
+
+    /** Whether the arrangement leaves this block off the screen — the legend then marks it so. */
+    @VisibleForTesting
+    public boolean isBlockHidden(@NonNull Block block) {
+        if (mLayout == null) return false;
+        switch (block) {
+            case APPS_ROW: return mLayout.appsRow == RowPlacement.HIDDEN;
+            case EXTRA_KEYS: return mLayout.extraKeys == RowPlacement.HIDDEN;
+            case ALPHABETS_ROW:
+                return !(mLayout.appsRow == RowPlacement.BOTTOM && mLayout.azRowShown);
+            case STATUS_BAR:
+            case CANVAS:
+            default: return false;
+        }
     }
 
     public void setOnBlockTappedListener(@Nullable OnBlockTappedListener listener) {
@@ -207,13 +248,6 @@ public final class PlaceMiniatureView extends View {
         return mGridCollapsed;
     }
 
-    /** Whether the given block's pill is currently showing its word, rather than glyph-only. */
-    @VisibleForTesting
-    public boolean isPillLabelShown(@NonNull Block block) {
-        Boolean shown = mShowPillLabel.get(block);
-        return shown != null && shown;
-    }
-
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -230,140 +264,153 @@ public final class PlaceMiniatureView extends View {
         layoutFrame(w, h);
     }
 
+    // ---- Geometry ------------------------------------------------------------------------------
+
+    /**
+     * Places the phone and the legend side by side, centred as one group: the legend takes the
+     * width its longest label needs (capped), the phone takes what is left at its orientation's
+     * aspect. In RTL the legend stands on the left and the phone on the right.
+     */
     private void layoutFrame(int viewWidth, int viewHeight) {
-        float pad = dp(8);
+        float pad = dp(4);
         float availableWidth = Math.max(0f, viewWidth - 2 * pad);
         float availableHeight = Math.max(0f, viewHeight - 2 * pad);
+
+        mLegendPaint.setTextSize(legendTextSizePx());
+        mLegendPaint.setTypeface(Typeface.DEFAULT);
+        float swatch = dp(LEGEND_SWATCH_DP);
+        float swatchGap = dp(LEGEND_SWATCH_GAP_DP);
+        float longest = 0f;
+        for (Block block : LEGEND_ORDER) {
+            String label = legendLabel(block);
+            if (label != null) longest = Math.max(longest, mLegendPaint.measureText(label));
+        }
+        float legendWidth = Math.min(swatch + swatchGap + longest,
+            availableWidth * LEGEND_MAX_WIDTH_FRACTION);
+        mLegendLabelWidth = Math.max(0f, legendWidth - swatch - swatchGap);
+        float legendGap = dp(LEGEND_TO_FRAME_GAP_DP);
+
+        float frameAreaWidth = Math.max(0f, availableWidth - legendWidth - legendGap);
         float aspect = mOrientation == PlaceOrientation.LANDSCAPE
             ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
-        float frameWidth = availableHeight * aspect;
         float frameHeight = availableHeight;
-        if (frameWidth > availableWidth) {
-            frameWidth = availableWidth;
-            frameHeight = availableWidth / aspect;
+        float frameWidth = frameHeight * aspect;
+        if (frameWidth > frameAreaWidth) {
+            frameWidth = frameAreaWidth;
+            frameHeight = frameWidth / aspect;
         }
-        float left = (viewWidth - frameWidth) / 2f;
-        float top = (viewHeight - frameHeight) / 2f;
-        mFrameRect.set(left, top, left + frameWidth, top + frameHeight);
+
+        float groupWidth = frameWidth + legendGap + legendWidth;
+        float groupLeft = (viewWidth - groupWidth) / 2f;
+        float frameLeft;
+        float legendLeft;
+        if (isRtl()) {
+            legendLeft = groupLeft;
+            frameLeft = groupLeft + legendWidth + legendGap;
+        } else {
+            frameLeft = groupLeft;
+            legendLeft = groupLeft + frameWidth + legendGap;
+        }
+        float frameTop = (viewHeight - frameHeight) / 2f;
+        mFrameRect.set(frameLeft, frameTop, frameLeft + frameWidth, frameTop + frameHeight);
+
+        layoutLegend(legendLeft, legendWidth, viewHeight, swatch);
         computeBlocks();
+    }
+
+    private void layoutLegend(float left, float width, int viewHeight, float swatch) {
+        mLegendRects.clear();
+        if (mLayout == null) return;
+        float textHeight = mLegendPaint.getFontMetrics(null);
+        float rowHeight = Math.max(swatch, textHeight) + dp(LEGEND_ROW_GAP_DP);
+        float total = rowHeight * LEGEND_ORDER.length;
+        float y = (viewHeight - total) / 2f;
+        for (Block block : LEGEND_ORDER) {
+            mLegendRects.put(block, new RectF(left, y, left + width, y + rowHeight));
+            y += rowHeight;
+        }
     }
 
     private void computeBlocks() {
         mBlockRects.clear();
         mRemaining = new RectF(mFrameRect);
         if (mLayout == null) {
-            mShowPillLabel.clear();
             mGridCollapsed = false;
             return;
         }
         takeEdgeStrip(Block.STATUS_BAR, mLayout.statusBarEdge, STATUS_BAR_FRACTION);
+        // Strips are claimed from the outside in, so the order here is the real dock's stacking
+        // order read from the screen edge: extra keys lowest, the A–Z index above them, and the
+        // pinned apps above that.
         if (mLayout.extraKeys != RowPlacement.HIDDEN) {
             takeEdgeStrip(Block.EXTRA_KEYS, edgeOf(mLayout.extraKeys), ROW_FRACTION);
         }
+        if (!isBlockHidden(Block.ALPHABETS_ROW)) {
+            takeEdgeStrip(Block.ALPHABETS_ROW, Edge.BOTTOM, ALPHABETS_FRACTION);
+        }
         if (mLayout.appsRow != RowPlacement.HIDDEN) {
             takeEdgeStrip(Block.APPS_ROW, edgeOf(mLayout.appsRow), ROW_FRACTION);
-        }
-        if (mLayout.appsRow == RowPlacement.BOTTOM && mLayout.azRowShown) {
-            takeEdgeStrip(Block.ALPHABETS_ROW, Edge.BOTTOM, ALPHABETS_FRACTION);
         }
         mBlockRects.put(Block.CANVAS, new RectF(mRemaining));
         computeContent();
     }
 
-    /** Decisions that do not need a {@link Canvas} to make: the grid collapse and every pill's
-     *  glyph-only-or-with-word call. Recomputed whenever the blocks move, so {@code onDraw} only
-     *  ever reads them. */
+    /** Decisions that do not need a {@link Canvas} to make, recomputed whenever the blocks move. */
     private void computeContent() {
-        mShowPillLabel.clear();
         mGridCollapsed = false;
-        if (mLayout == null) return;
-
-        if (canvasKind() == CanvasKind.HOME_GRID) {
-            RectF canvasRect = mBlockRects.get(Block.CANVAS);
-            if (canvasRect != null) {
-                int columns = Math.max(1, mLayout.widgetColumns);
-                int rows = Math.max(1, mLayout.widgetRows);
-                float cellWidth = canvasRect.width() / columns;
-                float cellHeight = canvasRect.height() / rows;
-                mGridCollapsed = Math.min(cellWidth, cellHeight) < dp(4);
-            }
-        }
-
-        mShowPillLabel.put(Block.STATUS_BAR, fitsPill(Block.STATUS_BAR,
-            isVerticalEdge(mLayout.statusBarEdge), pillLabel(Block.STATUS_BAR), true));
-        mShowPillLabel.put(Block.APPS_ROW, fitsPill(Block.APPS_ROW,
-            mLayout.appsRow.isOnSide(), pillLabel(Block.APPS_ROW), true));
-        mShowPillLabel.put(Block.ALPHABETS_ROW, fitsPill(Block.ALPHABETS_ROW,
-            false, pillLabel(Block.ALPHABETS_ROW), false));
-        mShowPillLabel.put(Block.EXTRA_KEYS, fitsPill(Block.EXTRA_KEYS,
-            mLayout.extraKeys.isOnSide(), pillLabel(Block.EXTRA_KEYS), true));
-        String canvasLabel = canvasPillLabel();
-        if (canvasLabel != null) {
-            mShowPillLabel.put(Block.CANVAS, fitsPill(Block.CANVAS, false, canvasLabel, true));
-        }
+        if (mLayout == null || canvasKind() != CanvasKind.HOME_GRID) return;
+        RectF canvasRect = mBlockRects.get(Block.CANVAS);
+        if (canvasRect == null) return;
+        int columns = Math.max(1, mLayout.widgetColumns);
+        int rows = Math.max(1, mLayout.widgetRows);
+        float cellWidth = canvasRect.width() / columns;
+        float cellHeight = canvasRect.height() / rows;
+        mGridCollapsed = Math.min(cellWidth, cellHeight) < dp(4);
     }
 
-    private boolean fitsPill(@NonNull Block block, boolean vertical, @Nullable String label,
-                              boolean hasGlyph) {
-        if (label == null) return false;
-        RectF rect = mBlockRects.get(block);
-        if (rect == null || rect.isEmpty()) return false;
-        float bandLength = vertical ? rect.height() : rect.width();
-        float bandThickness = vertical ? rect.width() : rect.height();
-        mTextPaint.setTextSize(pillTextSizePx());
-        float textWidth = mTextPaint.measureText(label);
-        float glyphSpace = hasGlyph ? pillGlyphSizePx(bandThickness) + pillGapPx() : 0f;
-        float needed = pillPaddingPx() * 2f + glyphSpace + textWidth;
-        return needed <= bandLength * PILL_MAX_BAND_FRACTION;
-    }
-
+    /** The legend's word for a block, marked hidden when the arrangement leaves it out. */
     @Nullable
-    private String pillLabel(@NonNull Block block) {
-        switch (block) {
-            case STATUS_BAR: return getContext().getString(R.string.settings_layout_miniature_status);
-            case APPS_ROW: return getContext().getString(R.string.settings_layout_miniature_apps);
-            case ALPHABETS_ROW:
-                return getContext().getString(R.string.settings_layout_miniature_alphabets);
-            case EXTRA_KEYS: return getContext().getString(R.string.settings_layout_miniature_keys);
-            default: return null;
-        }
-    }
-
-    /** The Home/Display canvas's own chip label; {@code null} on Terminal, which needs none. */
-    @Nullable
-    private String canvasPillLabel() {
+    private String legendLabel(@NonNull Block block) {
         if (mLayout == null) return null;
+        String label;
+        switch (block) {
+            case STATUS_BAR: label = getContext().getString(R.string.settings_layout_miniature_status); break;
+            case APPS_ROW: label = getContext().getString(R.string.settings_layout_miniature_apps); break;
+            case ALPHABETS_ROW:
+                label = getContext().getString(R.string.settings_layout_miniature_alphabets); break;
+            case EXTRA_KEYS: label = getContext().getString(R.string.settings_layout_miniature_keys); break;
+            case CANVAS:
+            default: label = canvasLabel(); break;
+        }
+        if (isBlockHidden(block)) {
+            return getContext().getString(R.string.settings_layout_miniature_hidden_format, label);
+        }
+        return label;
+    }
+
+    @NonNull
+    private String canvasLabel() {
         switch (canvasKind()) {
             case HOME_GRID:
                 return getContext().getString(R.string.settings_layout_miniature_grid_format,
-                    mLayout.widgetColumns, mLayout.widgetRows);
+                    mLayout == null ? 0 : mLayout.widgetColumns,
+                    mLayout == null ? 0 : mLayout.widgetRows);
             case DISPLAY:
-                return getContext().getString(mLayout.keyboardMode == KeyboardMode.OVERLAY
-                    ? R.string.settings_layout_keyboard_mode_overlay
-                    : R.string.settings_layout_keyboard_mode_resize);
+                return getContext().getString(
+                    mLayout != null && mLayout.keyboardMode == KeyboardMode.OVERLAY
+                        ? R.string.settings_layout_miniature_display_overlay
+                        : R.string.settings_layout_miniature_display);
             case TERMINAL:
             default:
-                return null;
+                return getContext().getString(R.string.settings_layout_miniature_terminal);
         }
     }
 
-    private float pillTextSizePx() {
+    private float legendTextSizePx() {
         float fontScale = getResources().getConfiguration().fontScale;
         if (fontScale <= 0f) fontScale = 1f;
-        float clamped = Math.min(fontScale, PILL_MAX_FONT_SCALE);
-        return PILL_LABEL_SP * getResources().getDisplayMetrics().density * clamped;
-    }
-
-    private float pillGlyphSizePx(float bandThickness) {
-        return Math.max(dp(6), Math.min(dp(11), bandThickness - dp(4)));
-    }
-
-    private float pillGapPx() {
-        return dp(3);
-    }
-
-    private float pillPaddingPx() {
-        return dp(5);
+        float clamped = Math.min(fontScale, LEGEND_MAX_FONT_SCALE);
+        return LEGEND_TEXT_SP * getResources().getDisplayMetrics().density * clamped;
     }
 
     private static boolean isVerticalEdge(@NonNull Edge edge) {
@@ -409,6 +456,52 @@ public final class PlaceMiniatureView extends View {
         mBlockRects.put(block, rect);
     }
 
+    // ---- Colours -------------------------------------------------------------------------------
+
+    /** The band's fill; the legend swatch uses the same one so the two are read as one thing. */
+    @ColorInt
+    private int bandFill(@NonNull Block block) {
+        switch (block) {
+            case STATUS_BAR:
+                return themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
+            case APPS_ROW:
+                return themeColor(com.termux.shared.R.attr.termuxColorSecondary, R.color.termux_secondary);
+            case ALPHABETS_ROW:
+                return themeColor(com.termux.shared.R.attr.termuxColorAccentContainer,
+                    R.color.termux_accent_container);
+            case EXTRA_KEYS:
+                return themeColor(com.termux.shared.R.attr.termuxColorTertiaryContainer,
+                    R.color.termux_tertiary_container);
+            case CANVAS:
+            default:
+                return themeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                    R.color.termux_surface_panel_high);
+        }
+    }
+
+    @ColorInt
+    private int bandOnFill(@NonNull Block block) {
+        switch (block) {
+            case STATUS_BAR:
+                return themeColor(com.termux.shared.R.attr.termuxColorOnPrimary, R.color.termux_on_primary);
+            case APPS_ROW:
+                return themeColor(com.termux.shared.R.attr.termuxColorOnSecondary,
+                    R.color.termux_on_secondary);
+            case ALPHABETS_ROW:
+                return themeColor(com.termux.shared.R.attr.termuxColorOnAccentContainer,
+                    R.color.termux_on_accent_container);
+            case EXTRA_KEYS:
+                return themeColor(com.termux.shared.R.attr.termuxColorOnTertiaryContainer,
+                    R.color.termux_on_tertiary_container);
+            case CANVAS:
+            default:
+                return themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                    R.color.termux_on_surface_variant);
+        }
+    }
+
+    // ---- Drawing -------------------------------------------------------------------------------
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
@@ -434,6 +527,8 @@ public final class PlaceMiniatureView extends View {
         mFramePaint.setColor(themeColor(com.termux.shared.R.attr.termuxColorOutlineVariant,
             R.color.termux_outline_variant));
         canvas.drawRoundRect(mFrameRect, radius, radius, mFramePaint);
+
+        drawLegend(canvas);
     }
 
     // ---- Status bar --------------------------------------------------------------------------
@@ -441,17 +536,13 @@ public final class PlaceMiniatureView extends View {
     private void drawStatusBarBlock(@NonNull Canvas canvas) {
         RectF rect = mBlockRects.get(Block.STATUS_BAR);
         if (rect == null || rect.isEmpty() || mLayout == null) return;
-        int fill = themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
-        int onFill = themeColor(com.termux.shared.R.attr.termuxColorOnPrimary, R.color.termux_on_primary);
-        mFillPaint.setColor(fill);
+        mFillPaint.setColor(bandFill(Block.STATUS_BAR));
         canvas.drawRect(rect, mFillPaint);
 
         boolean vertical = isVerticalEdge(mLayout.statusBarEdge);
         int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
-        drawClockAndDots(canvas, mScratchRectA, onFill);
+        drawClockAndDots(canvas, mScratchRectA, bandOnFill(Block.STATUS_BAR));
         endBandOrientation(canvas, saved);
-
-        drawPill(canvas, Block.STATUS_BAR, rect, vertical, mIconStatus, onFill, fill);
     }
 
     private void drawClockAndDots(@NonNull Canvas canvas, @NonNull RectF local, int color) {
@@ -477,18 +568,14 @@ public final class PlaceMiniatureView extends View {
     private void drawAppsRowBlock(@NonNull Canvas canvas) {
         RectF rect = mBlockRects.get(Block.APPS_ROW);
         if (rect == null || rect.isEmpty() || mLayout == null) return;
-        int fill = themeColor(com.termux.shared.R.attr.termuxColorSecondary, R.color.termux_secondary);
-        int onFill = themeColor(com.termux.shared.R.attr.termuxColorOnSecondary, R.color.termux_on_secondary);
         int active = themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
-        mFillPaint.setColor(fill);
+        mFillPaint.setColor(bandFill(Block.APPS_ROW));
         canvas.drawRect(rect, mFillPaint);
 
         boolean vertical = mLayout.appsRow.isOnSide();
         int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
-        drawAppIcons(canvas, mScratchRectA, onFill, active);
+        drawAppIcons(canvas, mScratchRectA, bandOnFill(Block.APPS_ROW), active);
         endBandOrientation(canvas, saved);
-
-        drawPill(canvas, Block.APPS_ROW, rect, vertical, mIconApps, onFill, fill);
     }
 
     private void drawAppIcons(@NonNull Canvas canvas, @NonNull RectF local, int color, int activeColor) {
@@ -512,14 +599,10 @@ public final class PlaceMiniatureView extends View {
     private void drawAlphabetsRowBlock(@NonNull Canvas canvas) {
         RectF rect = mBlockRects.get(Block.ALPHABETS_ROW);
         if (rect == null || rect.isEmpty()) return;
-        int fill = themeColor(com.termux.shared.R.attr.termuxColorAccentContainer,
-            R.color.termux_accent_container);
-        int onFill = themeColor(com.termux.shared.R.attr.termuxColorOnAccentContainer,
-            R.color.termux_on_accent_container);
-        mFillPaint.setColor(fill);
+        mFillPaint.setColor(bandFill(Block.ALPHABETS_ROW));
         canvas.drawRect(rect, mFillPaint);
 
-        mTextPaint.setColor(onFill);
+        mTextPaint.setColor(bandOnFill(Block.ALPHABETS_ROW));
         mTextPaint.setTypeface(Typeface.MONOSPACE);
         mTextPaint.setTextAlign(Paint.Align.CENTER);
         mTextPaint.setTextSize(Math.min(dp(7), rect.height() * 0.62f));
@@ -531,8 +614,6 @@ public final class PlaceMiniatureView extends View {
             float x = rect.left + inset + slot * (i + 0.5f);
             canvas.drawText(ALPHABETS_SAMPLE[i], x, baseline, mTextPaint);
         }
-
-        drawPill(canvas, Block.ALPHABETS_ROW, rect, false, null, onFill, fill);
     }
 
     // ---- Extra keys ---------------------------------------------------------------------------
@@ -540,19 +621,13 @@ public final class PlaceMiniatureView extends View {
     private void drawExtraKeysBlock(@NonNull Canvas canvas) {
         RectF rect = mBlockRects.get(Block.EXTRA_KEYS);
         if (rect == null || rect.isEmpty() || mLayout == null) return;
-        int fill = themeColor(com.termux.shared.R.attr.termuxColorTertiaryContainer,
-            R.color.termux_tertiary_container);
-        int onFill = themeColor(com.termux.shared.R.attr.termuxColorOnTertiaryContainer,
-            R.color.termux_on_tertiary_container);
-        mFillPaint.setColor(fill);
+        mFillPaint.setColor(bandFill(Block.EXTRA_KEYS));
         canvas.drawRect(rect, mFillPaint);
 
         boolean vertical = mLayout.extraKeys.isOnSide();
         int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
-        drawExtraKeyGlyphs(canvas, mScratchRectA, onFill);
+        drawExtraKeyGlyphs(canvas, mScratchRectA, bandOnFill(Block.EXTRA_KEYS));
         endBandOrientation(canvas, saved);
-
-        drawPill(canvas, Block.EXTRA_KEYS, rect, vertical, mIconKeys, onFill, fill);
     }
 
     private void drawExtraKeyGlyphs(@NonNull Canvas canvas, @NonNull RectF local, int color) {
@@ -575,16 +650,12 @@ public final class PlaceMiniatureView extends View {
     private void drawCanvasBlock(@NonNull Canvas canvas) {
         RectF rect = mBlockRects.get(Block.CANVAS);
         if (rect == null || rect.isEmpty() || mLayout == null) return;
-        int fill = themeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-            R.color.termux_surface_panel_high);
-        int onVariant = themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            R.color.termux_on_surface_variant);
+        int onVariant = bandOnFill(Block.CANVAS);
         int accent = themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
-        mFillPaint.setColor(fill);
+        mFillPaint.setColor(bandFill(Block.CANVAS));
         canvas.drawRect(rect, mFillPaint);
 
-        CanvasKind kind = canvasKind();
-        switch (kind) {
+        switch (canvasKind()) {
             case HOME_GRID:
                 drawHomeGrid(canvas, rect, accent, onVariant);
                 break;
@@ -596,17 +667,10 @@ public final class PlaceMiniatureView extends View {
                 drawTerminalCard(canvas, rect, onVariant, accent);
                 break;
         }
-
-        if (canvasPillLabel() != null) {
-            int onPrimary = themeColor(com.termux.shared.R.attr.termuxColorOnPrimary,
-                R.color.termux_on_primary);
-            Drawable icon = kind == CanvasKind.HOME_GRID ? mIconHomeGrid : mIconDisplay;
-            drawPill(canvas, Block.CANVAS, rect, false, icon, accent, onPrimary);
-        }
     }
 
     private void drawTerminalCard(@NonNull Canvas canvas, @NonNull RectF rect, int lineColor,
-                                   int accent) {
+                                  int accent) {
         float pad = dp(8);
         RectF card = mScratchRectA;
         card.set(rect.left + pad, rect.top + pad, rect.right - pad, rect.bottom - pad);
@@ -650,7 +714,7 @@ public final class PlaceMiniatureView extends View {
             mFillPaint.setAlpha(70);
             canvas.drawRoundRect(area, dp(6), dp(6), mFillPaint);
             mFillPaint.setAlpha(255);
-            return; // the "n×m" text rides on the canvas pill instead of a second label here
+            return; // the "n×m" figure is in the legend, so nothing else is written here
         }
         int columns = Math.max(1, mLayout.widgetColumns);
         int rows = Math.max(1, mLayout.widgetRows);
@@ -669,7 +733,7 @@ public final class PlaceMiniatureView extends View {
     }
 
     private void drawDisplayCanvas(@NonNull Canvas canvas, @NonNull RectF rect, int lineColor,
-                                    int accent) {
+                                   int accent) {
         if (mLayout == null) return;
         float pad = dp(9);
         RectF desk = mScratchRectA;
@@ -719,72 +783,97 @@ public final class PlaceMiniatureView extends View {
         }
     }
 
-    // ---- Pills ----------------------------------------------------------------------------------
+    // ---- Legend ----------------------------------------------------------------------------------
 
     /**
-     * Draws the band's high-contrast identifier: a themed pill holding the block's glyph and, when
-     * there is room, its one-word label; on a vertical band the whole pill rotates to lie along it.
-     * Falls back to glyph-only rather than clipping, and to a small accent dot when a block (the
-     * alphabets strip) has no glyph of its own and no room for the word either.
+     * One row per block beside the phone: a swatch in the band's own colour carrying the band's
+     * glyph, then its word. A block the arrangement leaves out keeps its row, dimmed and worded as
+     * hidden, so a reader can tell "hidden" from "not shown here" at a glance.
      */
-    private void drawPill(@NonNull Canvas canvas, @NonNull Block block, @NonNull RectF rect,
-                           boolean vertical, @Nullable Drawable icon, int bgColor, int contentColor) {
-        String label = block == Block.CANVAS ? canvasPillLabel() : pillLabel(block);
-        boolean showLabel = label != null && isPillLabelShown(block);
-        if (label == null && icon == null) return;
-
-        int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
-        RectF local = mScratchRectA;
-        if (local.width() < dp(6) || local.height() < dp(6)) {
-            endBandOrientation(canvas, saved);
-            return;
-        }
-        float cx = local.centerX();
-        float cy = local.centerY();
-
-        if (icon == null && !showLabel) {
-            mFillPaint.setColor(bgColor);
-            canvas.drawCircle(cx, cy, Math.min(dp(3), Math.min(local.width(), local.height()) * 0.3f),
-                mFillPaint);
-            endBandOrientation(canvas, saved);
-            return;
-        }
-
-        mTextPaint.setTypeface(Typeface.DEFAULT_BOLD);
-        mTextPaint.setTextSize(pillTextSizePx());
-        mTextPaint.setTextAlign(Paint.Align.LEFT);
-        float textWidth = showLabel ? mTextPaint.measureText(label) : 0f;
-        float glyphSize = icon != null ? pillGlyphSizePx(local.height()) : 0f;
-        float gap = (icon != null && showLabel) ? pillGapPx() : 0f;
-        float pad = pillPaddingPx();
-        float contentWidth = glyphSize + gap + textWidth;
-        float pillHeight = Math.max(dp(4), Math.min(Math.max(glyphSize, mTextPaint.getTextSize()) + pad,
-            local.height() - dp(2)));
-        float pillWidth = Math.max(pillHeight,
-            Math.min(contentWidth + pad * 2f, Math.max(dp(4), local.width() - dp(4))));
-
-        mScratchRectB.set(cx - pillWidth / 2f, cy - pillHeight / 2f, cx + pillWidth / 2f, cy + pillHeight / 2f);
-        mFillPaint.setColor(bgColor);
-        canvas.drawRoundRect(mScratchRectB, pillHeight / 2f, pillHeight / 2f, mFillPaint);
-
+    private void drawLegend(@NonNull Canvas canvas) {
+        if (mLayout == null) return;
+        float swatch = dp(LEGEND_SWATCH_DP);
+        float swatchGap = dp(LEGEND_SWATCH_GAP_DP);
+        float swatchRadius = dp(5);
+        int onSurface = themeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface);
+        int outline = themeColor(com.termux.shared.R.attr.termuxColorOutlineVariant,
+            R.color.termux_outline_variant);
         boolean rtl = isRtl();
-        float contentLeft = cx - contentWidth / 2f;
-        float iconLeft = rtl ? contentLeft + textWidth + gap : contentLeft;
-        float textLeft = rtl ? contentLeft : contentLeft + glyphSize + gap;
+        mLegendPaint.setTextSize(legendTextSizePx());
+        mLegendPaint.setTypeface(Typeface.DEFAULT);
+        float textBaselineOffset = -(mLegendPaint.ascent() + mLegendPaint.descent()) / 2f;
 
-        if (icon != null) {
-            DrawableCompat.setTint(icon, contentColor);
-            int top = Math.round(cy - glyphSize / 2f);
-            int left = Math.round(iconLeft);
-            icon.setBounds(left, top, left + Math.round(glyphSize), top + Math.round(glyphSize));
-            icon.draw(canvas);
+        for (Block block : LEGEND_ORDER) {
+            RectF row = mLegendRects.get(block);
+            String label = legendLabel(block);
+            if (row == null || label == null) continue;
+            boolean hidden = isBlockHidden(block);
+            float cy = row.centerY();
+
+            float swatchLeft = rtl ? row.right - swatch : row.left;
+            mScratchRectA.set(swatchLeft, cy - swatch / 2f, swatchLeft + swatch, cy + swatch / 2f);
+            if (hidden) {
+                mLinePaint.setColor(outline);
+                canvas.drawRoundRect(mScratchRectA, swatchRadius, swatchRadius, mLinePaint);
+            } else {
+                mFillPaint.setColor(bandFill(block));
+                canvas.drawRoundRect(mScratchRectA, swatchRadius, swatchRadius, mFillPaint);
+                if (block == Block.CANVAS) {
+                    mLinePaint.setColor(outline);
+                    canvas.drawRoundRect(mScratchRectA, swatchRadius, swatchRadius, mLinePaint);
+                }
+            }
+            drawSwatchGlyph(canvas, block, mScratchRectA, hidden ? outline : bandOnFill(block));
+
+            float textLeft = rtl ? row.left : swatchLeft + swatch + swatchGap;
+            CharSequence shown = TextUtils.ellipsize(label, mLegendPaint, mLegendLabelWidth,
+                TextUtils.TruncateAt.END);
+            mLegendPaint.setColor(onSurface);
+            mLegendPaint.setAlpha(hidden ? HIDDEN_ALPHA : 255);
+            if (rtl) {
+                float width = mLegendPaint.measureText(shown, 0, shown.length());
+                textLeft = swatchLeft - swatchGap - width;
+            }
+            canvas.drawText(shown, 0, shown.length(), textLeft, cy + textBaselineOffset, mLegendPaint);
+            mLegendPaint.setAlpha(255);
         }
-        if (showLabel) {
-            mTextPaint.setColor(contentColor);
-            canvas.drawText(label, textLeft, cy + mTextPaint.getTextSize() * 0.32f, mTextPaint);
-        }
-        endBandOrientation(canvas, saved);
     }
+
+    private void drawSwatchGlyph(@NonNull Canvas canvas, @NonNull Block block, @NonNull RectF swatch,
+                                 int color) {
+        if (block == Block.ALPHABETS_ROW) {
+            mTextPaint.setColor(color);
+            mTextPaint.setTypeface(Typeface.DEFAULT_BOLD);
+            mTextPaint.setTextAlign(Paint.Align.CENTER);
+            mTextPaint.setTextSize(swatch.height() * 0.5f);
+            canvas.drawText("AZ", swatch.centerX(), swatch.centerY() + mTextPaint.getTextSize() * 0.36f,
+                mTextPaint);
+            return;
+        }
+        Drawable icon;
+        switch (block) {
+            case STATUS_BAR: icon = mIconStatus; break;
+            case APPS_ROW: icon = mIconApps; break;
+            case EXTRA_KEYS: icon = mIconKeys; break;
+            case CANVAS:
+            default:
+                switch (canvasKind()) {
+                    case HOME_GRID: icon = mIconHomeGrid; break;
+                    case DISPLAY: icon = mIconDisplay; break;
+                    case TERMINAL:
+                    default: icon = mIconTerminal; break;
+                }
+                break;
+        }
+        float size = swatch.height() * 0.62f;
+        int left = Math.round(swatch.centerX() - size / 2f);
+        int top = Math.round(swatch.centerY() - size / 2f);
+        DrawableCompat.setTint(icon, color);
+        icon.setBounds(left, top, left + Math.round(size), top + Math.round(size));
+        icon.draw(canvas);
+    }
+
+    // ---- Shared drawing helpers --------------------------------------------------------------
 
     /**
      * Rotates the canvas so a vertical band can be drawn with the same horizontal-strip code as a
@@ -793,7 +882,7 @@ public final class PlaceMiniatureView extends View {
      * {@link #endBandOrientation}, or -1 when the band is already horizontal (no rotation done).
      */
     private int beginBandOrientation(@NonNull Canvas canvas, @NonNull RectF rect, boolean vertical,
-                                      @NonNull RectF outLocal) {
+                                     @NonNull RectF outLocal) {
         if (!vertical) {
             outLocal.set(rect);
             return -1;
@@ -835,8 +924,13 @@ public final class PlaceMiniatureView extends View {
 
     @Nullable
     private Block blockAt(float x, float y) {
+        // A legend row is the block it names — and a hidden block's only tap target.
+        for (Block block : LEGEND_ORDER) {
+            RectF rect = mLegendRects.get(block);
+            if (rect != null && rect.contains(x, y)) return block;
+        }
         // Smaller, more specific blocks first, so a corner where two strips meet resolves to the
-        // narrower one (the alphabets row rides a thin strip inside the wider apps row).
+        // narrower one (the alphabets row rides a thin strip between two wider ones).
         Block[] order = {Block.ALPHABETS_ROW, Block.STATUS_BAR, Block.EXTRA_KEYS,
             Block.APPS_ROW, Block.CANVAS};
         for (Block block : order) {

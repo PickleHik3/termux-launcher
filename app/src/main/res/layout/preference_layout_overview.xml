@@ -4,14 +4,23 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:paddingStart="24dp"
-    android:paddingTop="12dp"
+    android:paddingTop="6dp"
     android:paddingEnd="24dp"
-    android:paddingBottom="14dp">
+    android:paddingBottom="10dp">
+
+    <TextView
+        android:id="@+id/layout_overview_caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="@string/settings_layout_overview_caption"
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="13sp" />
 
     <FrameLayout
         android:id="@+id/layout_overview_places_track"
         android:layout_width="match_parent"
-        android:layout_height="46dp"
+        android:layout_height="44dp"
         android:background="@drawable/settings_segmented_pill_track"
         android:padding="3dp">
 
@@ -67,8 +76,8 @@
     <FrameLayout
         android:id="@+id/layout_overview_orientation_track"
         android:layout_width="match_parent"
-        android:layout_height="46dp"
-        android:layout_marginTop="8dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="6dp"
         android:background="@drawable/settings_segmented_pill_track"
         android:padding="3dp">
 
@@ -109,11 +118,20 @@
         </LinearLayout>
     </FrameLayout>
 
+    <TextView
+        android:id="@+id/layout_overview_editing"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="sans-serif-medium"
+        android:textColor="?attr/termuxColorOnSurface"
+        android:textSize="14sp" />
+
     <com.termux.app.fragments.settings.PlaceMiniatureView
         android:id="@+id/layout_overview_miniature"
         android:layout_width="match_parent"
-        android:layout_height="172dp"
-        android:layout_marginTop="14dp"
+        android:layout_height="188dp"
+        android:layout_marginTop="6dp"
         android:clickable="true"
         android:focusable="true" />
 

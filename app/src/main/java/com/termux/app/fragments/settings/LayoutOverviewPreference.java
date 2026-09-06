@@ -42,6 +42,8 @@ public final class LayoutOverviewPreference extends Preference {
     private boolean mDisplayTabVisible = false;
     @Nullable private PlaceLayout mLayout;
     @Nullable private Listener mListener;
+    /** The bound "Editing … in …" line; refreshed in place when a pill changes the selection. */
+    @Nullable private TextView mEditingLine;
 
     public LayoutOverviewPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -133,6 +135,9 @@ public final class LayoutOverviewPreference extends Preference {
                 });
         }
 
+        mEditingLine = (TextView) holder.findViewById(R.id.layout_overview_editing);
+        updateEditingLine();
+
         PlaceMiniatureView miniature =
             (PlaceMiniatureView) holder.findViewById(R.id.layout_overview_miniature);
         if (miniature != null) {
@@ -144,7 +149,27 @@ public final class LayoutOverviewPreference extends Preference {
     }
 
     private void notifySelectionChanged() {
+        updateEditingLine();
         if (mListener != null) mListener.onSelectionChanged(mSelectedPlace, mSelectedOrientation);
+    }
+
+    /** Says which place and orientation the rows below now describe. */
+    private void updateEditingLine() {
+        if (mEditingLine == null) return;
+        mEditingLine.setText(getContext().getString(R.string.settings_layout_editing_format,
+            getContext().getString(placeLabel(mSelectedPlace)),
+            getContext().getString(mSelectedOrientation == PlaceOrientation.LANDSCAPE
+                ? R.string.settings_layout_orientation_landscape_lower
+                : R.string.settings_layout_orientation_portrait_lower)));
+    }
+
+    private static int placeLabel(@NonNull PaneWallPage place) {
+        switch (place) {
+            case WIDGETS: return R.string.settings_layout_tab_home;
+            case DISPLAY: return R.string.settings_layout_tab_display;
+            case TERMINAL:
+            default: return R.string.settings_layout_tab_terminal;
+        }
     }
 
     private interface IndexSelected {
@@ -190,7 +215,7 @@ public final class LayoutOverviewPreference extends Preference {
     }
 
     private void updateLabelColors(@NonNull TextView[] segments, int selectedIndex) {
-        int selected = resolveColor(com.termux.shared.R.attr.termuxColorOnAccentContainer,
+        int selected = resolveColor(com.termux.shared.R.attr.termuxColorOnPrimary,
             R.color.termux_on_primary);
         int idle = resolveColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
             R.color.termux_on_surface_variant);
