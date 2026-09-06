@@ -87,7 +87,9 @@ write_catalog() {
         printf 'demo-pkg\tpkg\t-\t*\tdemo-one demo-two\t-\t-\t-\t-\tTwo packages from the package manager.\n'
         printf 'musl-loader\tbinary\t1\tcom.termux\tfile://%s/loader.bin\t%s\t~/.local/lib/musl/ld-musl-aarch64.so.1\t-\t-\tWhat tools from other systems need to start.\n' "$FX" "$(sha "$FX/loader.bin")"
         printf 'claude-code\tnpm-musl\tlatest\t*\tnpm:demo-cli#claude\t-\t-\tmusl-loader,demo-pkg\tenv=DEMO_FLAG=1;tz=1;build=demo-build\tA tool that comes from npm.\n'
-        printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg\t-\tA few things at once.\n'
+        printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg,secret\t-\tA few things at once.\n'
+        printf 'plug\tfisher\t-\t*\tdemo/one demo/two\t-\t-\t-\t-\tPlugins for the shell.\n'
+        printf 'secret\tfile\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/secret.conf\t-\thidden=1\tA part of something else.\n' "$FX" "$(sha "$FX/mine.conf")"
     } > "$out"
 }
 
@@ -129,6 +131,14 @@ echo "\$@" >> "$ROOT/pkg.log"
 exit 0
 EOF
     chmod +x "$FIXBIN/pacman"
+
+    # A fake fish, so the plugin manager's install and remove can be seen.
+    cat > "$FIXBIN/fish" <<EOF
+#!/bin/sh
+echo "\$@" >> "$ROOT/fish.log"
+exit 0
+EOF
+    chmod +x "$FIXBIN/fish"
 
     # A fake npm registry: one package document and its tarball.
     mkdir -p "$FX/registry/demo-cli" "$FX/pkgsrc/package"
@@ -250,6 +260,17 @@ run_suite() {
     expect_out "list shows a file item" "hello"
     expect_out "list shows a bundle" "kit"
     expect_no_out "list hides another edition's item" "ghost"
+    expect_no_out "list hides the parts of other items" "secret"
+    expect_out "list leaves room for the installed mark" "^  hello"
+    expect_out "list hints at what an item builds with" "needs while installing: demo-build"
+    tl search part
+    expect_no_out "search hides them too" "secret"
+    tl info secret
+    expect_status "info still explains a part" 0
+    expect_out "info names the part" "part of something else"
+    tl install secret -y
+    expect_status "installing a part by name is refused" 1
+    expect_out "and says why" "part of another item"
     tl info twin
     expect_out "the row for this prefix wins" "twin.bin"
     expect_no_out "the other edition's row is not used" "other.bin"
@@ -344,9 +365,21 @@ run_suite() {
     tl install kit -y
     expect_status "install a bundle" 0
     expect_out "the bundle installs its members" "demo-pkg"
+    expect_file "a bundle brings its hidden parts in" "$TESTHOME/.config/secret.conf"
     if grep -q demo-one "$ROOT/pkg.log" 2>/dev/null; then pass; else fail "the package manager was asked for the packages"; fi
     tl list -i
     expect_out "the bundle is recorded" "kit"
+    expect_out "list marks what you have" "^\* kit"
+
+    # --- fish plugins, which fisher fetches and fisher keeps current ---
+    tl install plug -y
+    expect_status "install fish plugins" 0
+    if grep -q -- "-c fisher install demo/one demo/two" "$ROOT/fish.log" 2>/dev/null; then pass; else fail "fisher was asked to install the plugins"; fi
+    tl install plug -y
+    expect_out "installing them again says they are there" "already installed"
+    tl remove plug -y
+    expect_status "remove fish plugins" 0
+    if grep -q -- "-c fisher remove demo/one demo/two" "$ROOT/fish.log" 2>/dev/null; then pass; else fail "fisher was asked to remove the plugins"; fi
 
     # --- npm-musl ---
     tl install claude-code -y
@@ -454,6 +487,16 @@ y
     else
         skip "catalog signature tests" "minisign is not installed"
     fi
+
+    # --- graphics setup, which the app installs and tlstore only runs ---
+    tl display
+    expect_status "display without the app's script" 1
+    expect_out "and says what to do" "update the app"
+    printf '#!/bin/sh\necho "gpu-setup $*"\n' > "$TPREFIX/bin/termux-x11-gpu-setup"
+    chmod +x "$TPREFIX/bin/termux-x11-gpu-setup"
+    tl display --yes --keep
+    expect_status "display runs the app's script" 0
+    expect_out "and passes the arguments through" "gpu-setup --yes --keep"
 
     # --- doctor ---
     tl doctor
