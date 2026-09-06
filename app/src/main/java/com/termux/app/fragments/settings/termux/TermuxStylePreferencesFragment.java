@@ -120,6 +120,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private final Context mContext;
 
     private final TermuxAppSharedPreferences mPreferences;
+    private com.termux.app.place.PlaceLayoutStore mPlaces;
     private boolean mPendingRecreateActivity;
     private final Runnable mStyleSyncRunnable;
     private final Runnable mDrawerSyncRunnable;
@@ -135,6 +136,14 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, recreateActivity);
         };
         mDrawerSyncRunnable = () -> TermuxActivity.requestAppDrawerReloadOnNextResume(mContext);
+    }
+
+    /** Where every place's arrangement lives; built lazily, so the migration runs once. */
+    private com.termux.app.place.PlaceLayoutStore places() {
+        if (mPlaces == null && mPreferences != null) {
+            mPlaces = new com.termux.app.place.PlaceLayoutStore(mPreferences);
+        }
+        return mPlaces;
     }
 
     public static synchronized TermuxStylePreferencesDataStore getInstance(Context context) {
@@ -364,7 +373,17 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 scheduleTermuxActivityStylingSync(true);
                 break;
             case "app_launcher_dock_rail_side":
-                mPreferences.setAppLauncherDockRailSide(value);
+                // One row, every place: the landscape apps bar stands on the same edge everywhere
+                // until the Layout page can set them apart.
+                com.termux.app.place.PlaceLayout.RowPlacement side =
+                    com.termux.app.place.PlaceLayout.RowPlacement.parse(value,
+                        com.termux.app.place.PlaceLayout.RowPlacement.LEFT);
+                if (!side.isOnSide()) side = com.termux.app.place.PlaceLayout.RowPlacement.LEFT;
+                for (com.termux.app.wall.PaneWallPage place
+                        : com.termux.app.wall.PaneWallPage.values()) {
+                    places().setAppsRow(place,
+                        com.termux.app.place.PlaceOrientation.LANDSCAPE, side);
+                }
                 // The side moves the rail's layout gravity and the content root's cutout padding,
                 // both of which are applied from an insets pass; recreate rather than restyle so
                 // the terminal is re-inset from the edge the rail just left.
@@ -411,7 +430,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_use_case_mode":
                 return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
             case "app_launcher_dock_rail_side":
-                return mPreferences.getAppLauncherDockRailSide();
+                return places().appsRow(com.termux.app.wall.PaneWallPage.TERMINAL,
+                    com.termux.app.place.PlaceOrientation.LANDSCAPE).storageValue();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
             case "app_launcher_default_buttons":

@@ -768,16 +768,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.X11_EXTRA_KEYS_SIDE_BOTTOM;
     }
 
-    public boolean isX11HideStatusBar() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_X11_HIDE_STATUS_BAR, TERMUX_APP.DEFAULT_X11_HIDE_STATUS_BAR);
-    }
-
-    public void setX11HideStatusBar(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_X11_HIDE_STATUS_BAR, value, false);
-    }
-
     public boolean areX11DefaultsApplied() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, false);
     }
@@ -797,14 +787,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setWallLastPage(@Nullable String value) {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_WALL_LAST_PAGE,
             value == null ? "" : value, false);
-    }
-
-    public boolean isX11KeyboardShown() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, false);
-    }
-
-    public void setX11KeyboardShown(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, value, false);
     }
 
     /** Whether the user has ever set the display's text size; unset reads as the default 0. */

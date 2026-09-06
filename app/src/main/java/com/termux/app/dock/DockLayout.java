@@ -15,8 +15,8 @@ public final class DockLayout {
 
     /** True when the rounded (capsule) dock style is selected. */
     public final boolean capsule;
-    /** True when the window is landscape, where the horizontal dock rows collapse for the rail. */
-    public final boolean landscape;
+    /** True when the pinned apps stand on a screen edge, where the horizontal rows collapse. */
+    public final boolean appsRowOnEdge;
     public final float density;
 
     // --- Row metrics (the old DockLayoutMetrics) ---
@@ -28,7 +28,7 @@ public final class DockLayout {
     public final int interRowGapPx;
     /** The apps row's usable (icon) height: the row minus its own vertical padding. */
     public final int appsBarHeightHintPx;
-    /** Row switches after the landscape gate, mirroring the render state's collapse. */
+    /** Row switches after the edge gate, mirroring the render state's collapse. */
     public final boolean appsRowEnabled;
     public final boolean azRowEnabled;
 
@@ -59,7 +59,7 @@ public final class DockLayout {
     /** The gap a floating capsule keeps below itself. */
     public final int capsuleBottomGapPx;
 
-    // --- Landscape rail ---
+    // --- Apps rail ---
     public final boolean railActive;
     public final boolean railOnRight;
     public final AppDrawerGestureArbiter.Pull railPull;
@@ -74,7 +74,7 @@ public final class DockLayout {
 
     DockLayout(Builder b) {
         this.capsule = b.capsule;
-        this.landscape = b.landscape;
+        this.appsRowOnEdge = b.appsRowOnEdge;
         this.density = b.density;
         this.appsBarHeightPx = Math.max(0, b.appsBarHeightPx);
         this.indicatorBandHeightPx = Math.max(0, b.indicatorBandHeightPx);
@@ -131,7 +131,7 @@ public final class DockLayout {
 
     static final class Builder {
         boolean capsule;
-        boolean landscape;
+        boolean appsRowOnEdge;
         float density;
         int appsBarHeightPx;
         int indicatorBandHeightPx;

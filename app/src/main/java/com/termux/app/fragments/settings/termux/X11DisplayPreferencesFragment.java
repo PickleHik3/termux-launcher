@@ -18,6 +18,10 @@ import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.app.x11.X11GpuProbe;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -119,6 +123,7 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
         @NonNull private final Context context;
         @NonNull private final TermuxAppSharedPreferences launcher;
         @Nullable private final Prefs display;
+        @Nullable private PlaceLayoutStore places;
 
         X11DisplayPreferencesDataStore(@NonNull Context context) {
             this.context = context.getApplicationContext();
@@ -134,6 +139,13 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
 
         private boolean isDisplayKey(@Nullable String key) {
             return display != null && key != null && display.keys.containsKey(key);
+        }
+
+        /** Where the Display place's chrome is arranged; built lazily, so it migrates once. */
+        @NonNull
+        private PlaceLayoutStore placeLayoutStore() {
+            if (places == null) places = new PlaceLayoutStore(launcher);
+            return places;
         }
 
         /** A running display re-reads its preferences the way it does for termux-x11-preference. */
@@ -165,7 +177,16 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
             } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_RUNTIME_BADGE.equals(key)) {
                 launcher.setX11RuntimeBadge(value);
             } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE.equals(key)) {
-                launcher.setX11ExtraKeysSide(value);
+                // Where the keys stand is the Display place's own arrangement, and it is the same
+                // answer whichever way the phone is held until the Layout page splits the two.
+                PlaceLayout.RowPlacement placement = PlaceLayout.RowPlacement.parse(value,
+                    PlaceLayout.RowPlacement.BOTTOM);
+                if (placement == PlaceLayout.RowPlacement.HIDDEN) {
+                    placement = PlaceLayout.RowPlacement.BOTTOM;
+                }
+                for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                    placeLayoutStore().setExtraKeys(PaneWallPage.DISPLAY, orientation, placement);
+                }
                 relayoutLauncher();
             }
         }
@@ -193,7 +214,8 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                 return launcher.getX11RuntimeBadge();
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE.equals(key)) {
-                return launcher.getX11ExtraKeysSide();
+                return placeLayoutStore()
+                    .extraKeys(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).storageValue();
             }
             return defValue;
         }
@@ -250,10 +272,6 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                     com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context)
                         .refreshAsync(null, null);
                     break;
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_HIDE_STATUS_BAR:
-                    launcher.setX11HideStatusBar(value);
-                    relayoutLauncher();
-                    break;
                 default:
                     break;
             }
@@ -276,8 +294,6 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                     return launcher.isX11ForceBgraEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
                     return launcher.isX11DrawerAppsEnabled();
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_HIDE_STATUS_BAR:
-                    return launcher.isX11HideStatusBar();
                 default:
                     return defValue;
             }

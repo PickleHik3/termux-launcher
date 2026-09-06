@@ -2,6 +2,7 @@ package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -13,10 +14,13 @@ import android.os.Build;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
-import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
+import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -31,9 +35,9 @@ import org.robolectric.annotation.ConscryptMode;
 import java.util.List;
 
 /**
- * The Display page's layout rows: where the extra keys stand and whether the status bar stays
- * while the display is showing. Both are the launcher's own, not the display server's, and both
- * reshape the activity, so writing one asks the launcher to re-lay itself on resume.
+ * The Display page's layout row: where the extra keys stand while the display is showing. It is the
+ * launcher's own arrangement, not the display server's, and it reshapes the activity, so writing it
+ * asks the launcher to re-lay itself on resume. The status bar has no hidden state to switch.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -44,7 +48,7 @@ public class X11DisplayLayoutPreferencesTest {
     private static final String KEY_HIDE_STATUS_BAR = "x11_hide_status_bar";
 
     @Test
-    public void xmlExposesBothRows() {
+    public void xmlExposesTheKeysRowAndNoStatusBarSwitch() {
         Application app = RuntimeEnvironment.getApplication();
         PreferenceManager manager = new PreferenceManager(app);
         manager.setPreferenceDataStore(
@@ -54,35 +58,36 @@ public class X11DisplayLayoutPreferencesTest {
         Preference side = screen.findPreference(KEY_SIDE);
         assertTrue(KEY_SIDE, side instanceof SegmentedPillPreference);
         assertEquals("Extra keys bar", side.getTitle().toString());
-        Preference hide = screen.findPreference(KEY_HIDE_STATUS_BAR);
-        assertTrue(KEY_HIDE_STATUS_BAR, hide instanceof SwitchPreferenceCompat);
-        assertEquals("Hide status bar", hide.getTitle().toString());
+        // The bar moves rather than hides, so the wall's paging gesture always has one.
+        assertNull(KEY_HIDE_STATUS_BAR, screen.findPreference(KEY_HIDE_STATUS_BAR));
     }
 
     @Test
-    public void freshInstallKeepsTheRowAtTheBottomAndTheBarShown() {
+    public void freshInstallKeepsTheKeysAlongTheBottomInBothOrientations() {
         Application app = RuntimeEnvironment.getApplication();
-        SharedPreferences store = app.getSharedPreferences(
+        SharedPreferences prefs = app.getSharedPreferences(
             "x11-display-layout-test", Context.MODE_PRIVATE);
-        store.edit().clear().commit();
-        TermuxAppSharedPreferences preferences = new TermuxAppSharedPreferences(app, store, null);
-        assertEquals("bottom", preferences.getX11ExtraKeysSide());
-        assertFalse(preferences.isX11HideStatusBar());
+        prefs.edit().clear().commit();
+        PlaceLayoutStore places =
+            new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
 
-        preferences.setX11ExtraKeysSide("right");
-        assertEquals("right", preferences.getX11ExtraKeysSide());
-        preferences.setX11ExtraKeysSide("left");
-        assertEquals("left", preferences.getX11ExtraKeysSide());
-        // Anything else stored reads back as the row, so the keys are never nowhere.
-        preferences.setX11ExtraKeysSide("sideways");
-        assertEquals("bottom", preferences.getX11ExtraKeysSide());
-
-        preferences.setX11HideStatusBar(true);
-        assertTrue(preferences.isX11HideStatusBar());
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            assertEquals(orientation.storageValue(), PlaceLayout.RowPlacement.BOTTOM,
+                places.extraKeys(PaneWallPage.DISPLAY, orientation));
+        }
+        places.setExtraKeys(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE,
+            PlaceLayout.RowPlacement.RIGHT);
+        assertEquals(PlaceLayout.RowPlacement.RIGHT,
+            places.extraKeys(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+        // Anything else stored — a hand-edited prefs file, an older build — reads back as the row,
+        // so the keys are never nowhere.
+        prefs.edit().putString("place.display.landscape.extra_keys", "sideways").commit();
+        assertEquals(PlaceLayout.RowPlacement.BOTTOM,
+            places.extraKeys(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
-    public void writingEitherRowAsksTheLauncherToRelayoutInPlace() {
+    public void writingTheRowStandsTheKeysThereAndRelayoutsInPlace() {
         Application app = RuntimeEnvironment.getApplication();
         X11DisplayPreferencesFragment.X11DisplayPreferencesDataStore store =
             new X11DisplayPreferencesFragment.X11DisplayPreferencesDataStore(app);
@@ -90,18 +95,14 @@ public class X11DisplayLayoutPreferencesTest {
         int before = Shadows.shadowOf(app).getBroadcastIntents().size();
         store.putString(KEY_SIDE, "left");
         assertEquals("left", store.getString(KEY_SIDE, "bottom"));
-        store.putBoolean(KEY_HIDE_STATUS_BAR, true);
-        assertTrue(store.getBoolean(KEY_HIDE_STATUS_BAR, false));
 
         List<Intent> broadcasts = Shadows.shadowOf(app).getBroadcastIntents();
-        assertEquals(before + 2, broadcasts.size());
-        for (int i = before; i < broadcasts.size(); i++) {
-            Intent styling = broadcasts.get(i);
-            assertEquals(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.ACTION_RELOAD_STYLE,
-                styling.getAction());
-            // Both are applied by the activity's own layout passes, so no recreate is needed.
-            assertFalse(styling.getBooleanExtra(
-                TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
-        }
+        assertEquals(before + 1, broadcasts.size());
+        Intent styling = broadcasts.get(broadcasts.size() - 1);
+        assertEquals(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.ACTION_RELOAD_STYLE,
+            styling.getAction());
+        // Applied by the activity's own layout passes, so no recreate is needed.
+        assertFalse(styling.getBooleanExtra(
+            TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
     }
 }

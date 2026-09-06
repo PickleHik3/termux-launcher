@@ -12,7 +12,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
  *
  * <p>The activity snapshots the inputs at the points it used to call its ~20 {@code resolveDock*}
  * helpers and then reads fields off the layout, so the numbers below are the single source of truth
- * for row heights, paddings, insets, the landscape rail column, the capsule radius and the icon
+ * for row heights, paddings, insets, the apps rail column, the capsule radius and the icon
  * scale curves.
  */
 public final class DockLayoutPolicy {
@@ -59,7 +59,8 @@ public final class DockLayoutPolicy {
         public final boolean preferencesAvailable;
         /** Rounded (capsule) dock style selected. */
         public final boolean capsule;
-        public final boolean landscape;
+        /** The pinned apps stand as a column on a screen edge — the rail — not as a bottom row. */
+        public final boolean appsRowOnEdge;
         public final float density;
         /** The dock size preset, as stored (a raw scale, not a progress). */
         public final float barHeightScale;
@@ -67,7 +68,7 @@ public final class DockLayoutPolicy {
         public final int dockHorizontalInsetDp;
         /** Configured dock corner radius in dp, negative for the follow-the-style radius. */
         public final int configuredCornerRadiusDp;
-        /** Row switches as stored, before the landscape gate. */
+        /** Row switches as resolved for the place, before the edge gate. */
         public final boolean appsRowEnabledPref;
         public final boolean azRowEnabledPref;
         /**
@@ -87,7 +88,7 @@ public final class DockLayoutPolicy {
         private DockInputs(Builder b) {
             this.preferencesAvailable = b.preferencesAvailable;
             this.capsule = b.capsule;
-            this.landscape = b.landscape;
+            this.appsRowOnEdge = b.appsRowOnEdge;
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
@@ -109,7 +110,7 @@ public final class DockLayoutPolicy {
         public static final class Builder {
             private boolean preferencesAvailable = true;
             private boolean capsule;
-            private boolean landscape;
+            private boolean appsRowOnEdge;
             private float density = 1f;
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
@@ -129,7 +130,7 @@ public final class DockLayoutPolicy {
 
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
             public Builder capsule(boolean v) { this.capsule = v; return this; }
-            public Builder landscape(boolean v) { this.landscape = v; return this; }
+            public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
@@ -155,7 +156,7 @@ public final class DockLayoutPolicy {
         boolean capsule = in.capsule;
         DockLayout.Builder out = new DockLayout.Builder();
         out.capsule = capsule;
-        out.landscape = in.landscape;
+        out.appsRowOnEdge = in.appsRowOnEdge;
         out.density = density;
         out.configuredCornerRadiusDp = in.configuredCornerRadiusDp;
 
@@ -196,11 +197,12 @@ public final class DockLayoutPolicy {
             capsule ? out.capsuleAppsBottomPaddingPx : out.defaultAppsBottomPaddingPx;
         out.capsuleBottomGapPx = Math.round(density * 6f);
 
-        // Row metrics. The horizontal rows collapse in landscape, where the rail is the launcher
-        // surface instead, and collapse outright before a preference store exists.
+        // Row metrics. The horizontal rows collapse when the pinned apps stand on a screen edge,
+        // where the rail is the launcher surface instead, and collapse outright before a
+        // preference store exists.
         boolean appsRowEnabled =
-            in.preferencesAvailable && in.appsRowEnabledPref && !in.landscape;
-        boolean azRowEnabled = in.preferencesAvailable && in.azRowEnabledPref && !in.landscape;
+            in.preferencesAvailable && in.appsRowEnabledPref && !in.appsRowOnEdge;
+        boolean azRowEnabled = in.preferencesAvailable && in.azRowEnabledPref && !in.appsRowOnEdge;
         out.appsRowEnabled = appsRowEnabled;
         out.azRowEnabled = azRowEnabled;
         if (in.preferencesAvailable) {
@@ -224,8 +226,8 @@ public final class DockLayoutPolicy {
             ? iconScaleFor(capsule, capsule ? sizeProgress : defaultDockProgress)
             : FALLBACK_ICON_SCALE;
 
-        // Landscape rail.
-        boolean railActive = in.landscape && in.preferencesAvailable && in.appsRowEnabledPref;
+        // The apps rail.
+        boolean railActive = in.appsRowOnEdge && in.preferencesAvailable && in.appsRowEnabledPref;
         out.railActive = railActive;
         out.railOnRight = in.railOnRight;
         out.railPull = railActive
