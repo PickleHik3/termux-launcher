@@ -67,15 +67,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         configurePermissionActions(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
-        Preference customizeDock = findPreference("customize_dock_surface");
-        if (customizeDock != null) customizeDock.setOnPreferenceClickListener(preference -> {
-            Intent intent = new Intent(context, TermuxActivity.class);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, "dock");
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-            return true;
-        });
 
         SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
         if (notificationDotsPreference != null) {

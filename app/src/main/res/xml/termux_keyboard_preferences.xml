@@ -30,37 +30,6 @@
             app:summary="@string/settings_hide_keyboard_hardware_summary" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:key="keyboard_appearance" app:title="@string/termux_keyboard_appearance_header">
-        <Preference
-            app:key="customize_keyboard_surface"
-            app:icon="@drawable/ic_symbol_palette"
-            app:persistent="false"
-            app:title="@string/settings_customize_keyboard_title"
-            app:summary="@string/settings_customize_keyboard_summary" />
-        <ListPreference
-            app:key="in_app_keyboard_theme"
-            app:entries="@array/termux_in_app_keyboard_theme_entries"
-            app:entryValues="@array/termux_in_app_keyboard_theme_values"
-            app:useSimpleSummaryProvider="true"
-            app:title="@string/termux_in_app_keyboard_theme_title" />
-        <Preference
-            app:key="in_app_keyboard_color_scheme_editor"
-            app:icon="@drawable/ic_symbol_palette"
-            app:fragment="com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment"
-            app:summary="@string/settings_keyboard_colors_summary"
-            app:title="@string/settings_keyboard_colors_title" />
-        <Preference
-            app:key="in_app_keyboard_font"
-            app:title="@string/settings_typeface_title" />
-        <SeekBarPreference
-            app:key="in_app_keyboard_bottom_padding"
-            app:title="@string/settings_keyboard_bottom_padding_title"
-            app:summary="@string/settings_keyboard_bottom_padding_summary"
-            app:showSeekBarValue="true"
-            android:max="48"
-            android:defaultValue="0" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:key="keyboard_layout" app:title="@string/settings_layout_header">
         <MultiSelectListPreference
             app:key="in_app_keyboard_extra_keys"
