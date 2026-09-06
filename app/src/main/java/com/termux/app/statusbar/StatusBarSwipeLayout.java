@@ -203,9 +203,11 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             : HINT_INSET_DP * density + travel;
         int chevronLayer = vertical ? canvas.save() : -1;
         if (vertical) {
-            // One rotation, so the chevron path below stays the single description of the shape.
-            canvas.rotate(90f, 0f, 0f);
-            canvas.translate(0f, -getWidth());
+            // One rotation, so the chevron path below stays the single description of the shape:
+            // (x, y) drawn here lands at (y, height - x) on screen, which turns the row's
+            // "along the width, across the height" into the column's own two axes.
+            canvas.rotate(-90f, 0f, 0f);
+            canvas.translate(-getHeight(), 0f);
         }
         int color = pullHintColor();
         for (int pass = 0; pass < 2; pass++) {

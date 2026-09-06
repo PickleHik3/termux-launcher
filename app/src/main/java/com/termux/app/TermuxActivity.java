@@ -2888,7 +2888,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     sessionParams.width = targetSessionWidth;
                     if (sessionParams instanceof android.widget.LinearLayout.LayoutParams) {
                         ((android.widget.LinearLayout.LayoutParams) sessionParams).gravity =
-                            Gravity.CENTER_VERTICAL;
+                            vertical ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL;
                     }
                     sessions.setLayoutParams(sessionParams);
                 }
@@ -8170,7 +8170,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(host instanceof ViewGroup)) return;
         PlaceLayout.Edge edge = layout.statusBarEdge;
         boolean edgeChanged = edge != mStatusBarEdge;
-        if (!edgeChanged && mStatusBarEdgeApplied) return;
+        if (!edgeChanged && mStatusBarEdgeApplied) {
+            // The edge has not moved, but a column is measured against the screen's height, which
+            // a turn changes; the style pass is what re-derives that.
+            if (isStatusBarVertical()) applyStatusBarStyle(host);
+            return;
+        }
         if (edgeChanged && mStatusBarCollapseAnimator != null) {
             mStatusBarCollapseAnimator.cancel();
             mStatusBarCollapseAnimator = null;
@@ -12618,7 +12623,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 topWidgets.setClipBounds(null);
                 topWidgets.setAlpha(1f);
                 topWidgets.setTranslationY(0f);
-                topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
+                topWidgets.setVisibility(collapsed || isStatusBarVertical()
+                    ? View.GONE : View.VISIBLE);
             }
             refreshTerminalWindowBar();
             if (host != null) finishStatusBarTerminalResizeAfterLayout(host,
@@ -12661,7 +12667,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     topWidgets.setClipBounds(null);
                     topWidgets.setAlpha(1f);
                     topWidgets.setTranslationY(0f);
-                    topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
+                    topWidgets.setVisibility(collapsed || isStatusBarVertical()
+                        ? View.GONE : View.VISIBLE);
                 }
                 mStatusBarCollapseAnimator = null;
                 refreshTerminalWindowBar();
