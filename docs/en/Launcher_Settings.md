@@ -3,9 +3,9 @@
 Open Settings by long-pressing inside the terminal and choosing **Settings**. You can also long-press
 the app icon in another launcher and choose the **Settings** shortcut.
 
-This map uses the exact top-level labels shown by v0.2.31. Use **Search settings** at the top when you
-know what you want but not where it lives. Search indexes the preferences inside every destination,
-so `fonts`, `ligatures`, or `Shizuku` can find the containing section.
+This map uses the current top-level labels. Use **Search settings** at the top when you know what you
+want but not where it lives. Search indexes the preferences inside every destination, so `fonts`,
+`ligatures`, or `Shizuku` can find the containing section.
 
 ## Layout
 
@@ -24,13 +24,14 @@ between the two. A miniature shows the result, and tapping a part of it jumps to
   space or a new page rather than being dropped.
 - **Look of this place**: opens the surface editor for what is on screen here.
 
-## Appearance
+## Look
 
 Use this section for visible surfaces and colors:
 
 - **Surface editor:** tune the dock, keyboard, status panel, and terminal while looking at the real
   home screen. Tap the floating palette to style every surface at once, or tap a surface to style
-  it on its own.
+  it on its own. This edits the shared look every place starts from; a look that differs between
+  Home, Terminal and Display is edited from the **Layout** page's **Look of this place** row instead.
 - **Terminal fonts:** install one of fourteen curated multi-face families with pinned SHA-256
   verification and visible license information, enable Nerd Font icons, choose ligature behavior,
   and adjust weight where supported.
@@ -43,6 +44,13 @@ Use this section for visible surfaces and colors:
 - **Terminal contrast:** choose Softer, Default, or Harder for the generated wallpaper palette.
 - **Wallpaper:** show or hide the system wallpaper behind launcher surfaces.
 - **Icon appearance:** monochrome icons, system or custom icon pack, and pinned-app icon behavior.
+- **Keyboard look:** **Theme**, **Keyboard colors**, and **Typeface** for the built-in keyboard,
+  **Bottom padding** to lift its bottom key row away from the edge of the screen (the surface editor
+  sets the same padding by dragging the pill under the last key row), and **Customize keyboard
+  appearance** for live size, spacing, radius, and color tuning. These rows are only enabled while
+  the built-in keyboard is the chosen input method on the **Keyboard** page.
+- **Sessions opacity:** background opacity of the legacy sessions drawer, shown only while split
+  panes are off.
 
 The font picker writes its managed selection to `~/.termux/fonts.d/10-launcher.conf`. **Use font.ttf
 / Termux:Styling** removes that one managed config; it does not delete your own `fonts.conf` or
@@ -87,13 +95,14 @@ The tokens are `surface`, `surface_dim`, `surface_bright`, `surface_container_lo
 `error` families spelled the same way, plus `inverse_surface`, `inverse_on_surface` and
 `inverse_primary`.
 
-## Terminal & status
+## Terminal
 
-Use this section for terminal geometry and the top row:
+Use this section for terminal geometry, panes, and how the launcher behaves as an app:
 
-- **Customize status appearance:** status blur, opacity, grain, radius, and shared surface shape.
+- **System keyboard compatibility:** workaround for Android system keyboards, padding the layout so
+  the terminal and key rows stay visible above the on-screen keyboard.
 - **Full screen:** hide Android system bars while using the launcher.
-- **Adjust for on-screen keyboard:** keep terminal content above the Android keyboard.
+- **Show in Recents when not the default launcher**.
 - **Split-pane controls:** enable native windows, panes, and their tmux-style shortcuts. Turning this
   off returns to single-pane compatibility behavior and closes secondary panes, so finish their work
   first.
@@ -105,9 +114,6 @@ Use this section for terminal geometry and the top row:
   pane it drives to switch which one is big. Turning it off puts every divider back to 1:1.
 - **Let scripts open panes:** whether `launcherctl pane …` and the `/v1/panes` routes of the local
   API may open and drive panes. On by default; off answers those routes with 403.
-- **Clock style** and **Use 12-hour time**.
-- **CPU usage**, **Memory usage**, and **Weather** status cards.
-- **Media and pinned notifications** and their essential notification rules.
 - **Battery → Lazy mode:** stop the launcher animating while you are only looking at it. The clock
   swaps its digits instead of folding them, a working window's rim holds lit instead of breathing,
   the status readings sample less often, and the weather icon rests on its last frame. Nothing on
@@ -120,20 +126,25 @@ needs is people running it on other devices and reporting anything that looks st
 wrong — a clock that stops updating, a status reading that freezes, a rim that never lights.
 [Open an issue](https://github.com/PickleHik3/termux-launcher/issues) if you find one.
 
+## Status bar
+
+Use this section for the top row's clock and readouts. Its surface — blur, opacity, grain, and
+radius — is tuned per place from the **Layout** page's **Look of this place** row now.
+
+- **Clock style**, **Clock alignment**, and **Use 12-hour time**.
+- **CPU usage**, **Memory usage**, and **Weather** status cards.
+- **Media and pinned notifications** and their essential notification rules.
+
 The expanded status panel's clock opens Android's clock app and its cog opens Settings. Window pills
 also show CPU-based working state and bell-based attention state; those indicators need no toggle.
 
 Weather requires location permission. Tap the weather value in the status row for details and the
 Open-Meteo attribution.
 
-## Keyboard & input
+## Keyboard
 
 - **On-screen keyboard:** built-in terminal keyboard, Android keyboard, or none.
 - **Hide the on-screen keyboard:** hide it while a physical keyboard is connected.
-- **Customize keyboard appearance:** live size, spacing, radius, and color tuning.
-- **Bottom padding:** lift the bottom key row away from the edge of the screen. The surface
-  editor sets the same padding by dragging the pill under the last key row.
-- **Theme**, **Keyboard colors**, and **Typeface**.
 - **Edit extra keys:** the terminal key row, previewed as it will look. Add common keys
   such as CTRL with one tap, search for any other key or launcher action, drag keys to
   reorder them, give a key a swipe-up action and a label, and start from presets including
@@ -148,25 +159,16 @@ Open-Meteo attribution.
 - **Layout documentation** and **Supported key values**.
 - **Haptic feedback** and **Keypress sound**.
 
-Keyboard height is remembered separately for portrait and landscape.
+The keyboard's look — theme, colors, typeface, and bottom padding — moved to the **Look** page,
+alongside the launcher's other visual choices; **Theme**, **Keyboard colors**, **Typeface** and
+**Customize keyboard appearance** are greyed out here while the on-screen keyboard is not the
+built-in one. Keyboard height is remembered separately for portrait and landscape.
 
-## Display
+## Apps
 
-The Linux display has its own page: the **Linux display** switch runs a Linux desktop or X11 apps
-as the third place of the home screen — see [The Linux display](X11_Display.md). Under it sit touch
-mode, resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
-the window manager started with the display, the mark on the Display place's badge in the status
-bar, starting the display with the launcher, the start command, pointing new shells at the
-display, two compatibility switches, and what your GPU can do for Linux apps. Where the extra keys
-stand while the display is showing, and everything else about its arrangement, lives on the
-**Layout** page's Display tab once the switch above is on. To have the phone try every graphics
-profile and keep the best, run `termux-x11-gpu-setup` in a shell.
-
-## Launcher & apps
-
-- **Customize dock appearance:** shared surface shape and live dock tuning. Where the pinned apps
-  stand, the alphabets row, and the widget grid's size are all on the **Layout** page now, one place
-  and orientation at a time.
+- **What this app is for:** Launcher or Terminal only. Terminal only hides the pinned apps row,
+  alphabets row, app drawer and widget pane, and keeps the app in Recents; every switch below stays
+  editable, so you can bring any of them back.
 - **Edit pinned apps**.
 - **App drawer:** swipe down on the pinned row to open it; choose the drawer layout. **Open the
   keyboard with the drawer** brings the keyboard up as the drawer opens; **Search with the Android
@@ -182,7 +184,22 @@ profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 - **Reset usage ranking:** clear learned rankings without changing pins.
 - **Set as default launcher:** open Android's default Home app screen.
 - **Double tap A–Z Row to lock screen:** choose and configure the available lock backend.
-- **Show in Recents when not the default launcher**.
+
+Where the pinned apps stand, the alphabets row, and the widget grid's size are all on the **Layout**
+page now, one place and orientation at a time, and its dock look is tuned from the same page's
+**Look of this place** row.
+
+## Linux display
+
+The Linux display has its own page: the **Linux display** switch runs a Linux desktop or X11 apps
+as the third place of the home screen — see [The Linux display](X11_Display.md). Under it sit touch
+mode, resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
+the window manager started with the display, the mark on the Display place's badge in the status
+bar, starting the display with the launcher, the start command, pointing new shells at the
+display, two compatibility switches, and what your GPU can do for Linux apps. Where the extra keys
+stand while the display is showing, and everything else about its arrangement, lives on the
+**Layout** page's Display tab once the switch above is on. To have the phone try every graphics
+profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 
 ## Services & permissions
 

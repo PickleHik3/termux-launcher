@@ -130,7 +130,7 @@ Names are usually identical; where they are not, the search above finds them. Th
 
 ## 6. Switch the home app over, then remove VAJ
 
-1. Make the Nix edition your launcher: in-app **Settings → Launcher & apps → Set as default
+1. Make the Nix edition your launcher: in-app **Settings → Apps → Set as default
    launcher**, then pick it on Android's Home app screen.
 2. Use it for a few days. Nothing is lost while `io.vaj.tl` is still installed.
 3. When you are sure, uninstall the VAJ app and its `-vaj` companions. **Uninstalling deletes its

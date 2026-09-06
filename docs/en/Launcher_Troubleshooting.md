@@ -44,14 +44,14 @@ private home directory.
 
 ## The keyboard is missing or the wrong keyboard opens
 
-Open **Settings → Keyboard & input → On-screen keyboard** and choose the built-in keyboard, Android
+Open **Settings → Keyboard → On-screen keyboard** and choose the built-in keyboard, Android
 keyboard, or none.
 
 Also check:
 
 - **Hide the on-screen keyboard** if a hardware keyboard is attached;
 - the keyboard toggle in the terminal action row;
-- **Adjust for on-screen keyboard** under **Terminal & status** for Android-keyboard overlap; and
+- **System keyboard compatibility** under **Terminal** for Android-keyboard overlap; and
 - the independently remembered portrait and landscape keyboard heights.
 
 If a custom layout fails, temporarily move `~/.termux/keyboard/layout.xml`, reload settings, and test
@@ -64,7 +64,7 @@ termux-reload-settings
 
 ## Pane or window actions are unavailable
 
-Open **Settings → Terminal & status → Split-pane controls**. Native pane and window actions are
+Open **Settings → Terminal → Split-pane controls**. Native pane and window actions are
 disabled in single-pane compatibility behavior.
 
 Remember that some actions have structural safeguards:
@@ -108,16 +108,16 @@ important. Deleting a saved workspace removes its JSON definition but does not c
 
 ## App search does not start
 
-Search is designed for an idle shell prompt. Confirm the current prefix under **Settings → Launcher &
-apps → App search prefix**; `%` is the default. If the prefix conflicts with shell input, choose a
+Search is designed for an idle shell prompt. Confirm the current prefix under **Settings → Apps →
+App search prefix**; `%` is the default. If the prefix conflicts with shell input, choose a
 different single character.
 
-For browsing without terminal input, use the A–Z row or enable it under **Launcher & apps →
+For browsing without terminal input, use the A–Z row or enable it under **Settings → Layout →
 Alphabets row**.
 
 ## CPU, memory, weather, media, or notifications are missing
 
-Open **Settings → Terminal & status** and enable the desired status card. Then check **Settings →
+Open **Settings → Status bar** and enable the desired status card. Then check **Settings →
 Services & permissions**:
 
 - weather requires location access;
@@ -129,7 +129,7 @@ Tap **Fix** only for features you intend to use. Weather data is provided by Ope
 
 ## The launcher uses CPU or battery while it sits idle
 
-Turn on **Settings → Terminal & status → Battery → Lazy mode**, then leave the launcher on screen
+Turn on **Settings → Terminal → Battery → Lazy mode**, then leave the launcher on screen
 and check again.
 
 By default the clock folds its seconds, which means the launcher redraws continuously for as long
@@ -145,7 +145,7 @@ working state. Check what the visible session is running before treating it as a
 
 ## Blur, wallpaper colors, or transparency look wrong
 
-Open **Settings → Appearance → Surface editor** and test against the real home screen.
+Open **Settings → Look → Surface editor** and test against the real home screen.
 
 - Live wallpapers can limit or disable dock blur.
 - GPU blur requires Android 12 or later; older Android versions use a simpler surface.
@@ -161,7 +161,7 @@ The terminal resolves font configuration in this order:
 2. `~/.termux/fonts.d/*.conf`, including the picker-managed `10-launcher.conf`; and
 3. `~/.termux/font.ttf`, Termux:Styling, or Android monospace.
 
-A higher item can override the picker. Open **Settings → Appearance → Terminal fonts** to see the
+A higher item can override the picker. Open **Settings → Look → Terminal fonts** to see the
 managed state. **Use font.ttf / Termux:Styling** removes only `10-launcher.conf`.
 
 After manual changes, run:

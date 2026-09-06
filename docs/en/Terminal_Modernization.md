@@ -30,7 +30,7 @@ Session
 - A **pane** is one live shell inside a window. Panes can be split recursively in either direction.
 
 Split panes are enabled by default. To restore traditional single-pane Termux behavior, open
-**Settings → Terminal & status → Split-pane controls** and turn the controls off. This closes
+**Settings → Terminal → Split-pane controls** and turn the controls off. This closes
 secondary panes and disables window/pane commands, so finish or save work in those shells first.
 
 The fastest way to discover commands is the **Command palette**:
@@ -143,7 +143,7 @@ The following layouts act on the current window without restarting any shell:
 through `grid`, `dwindle`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window
 with no layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
 
-**Automatic tiling** in Settings → Terminal & Status → Sessions and panes makes `dwindle` the layout
+**Automatic tiling** in Settings → Terminal → Sessions and panes makes `dwindle` the layout
 every new window starts under. **Focused pane grows** (same section) gives the focused pane 70% of
 every split on its way to the window edge, animated, whichever layout is in use — tap a pane and it
 becomes the big one.
@@ -495,7 +495,7 @@ toast summary. The file is limited to 256 KiB, 4,096 lines, and 4,096 characters
 
 There are three ways to set the terminal font, listed here by how much work they are, least first:
 
-1. **The in-app picker** — **Settings → Appearance → Terminal fonts**. Downloads a font family and
+1. **The in-app picker** — **Settings → Look → Terminal fonts**. Downloads a font family and
    writes `~/.termux/fonts.d/10-launcher.conf` for you.
 2. **`~/.termux/font.ttf`** plus the optional `~/.termux/font-italic.ttf`, which is also what
    Termux:Styling writes.
@@ -509,7 +509,7 @@ therefore continue to work untouched, and so does a `fonts.conf` written before 
 
 ### The in-app font picker
 
-**Settings → Appearance → Terminal fonts** installs a complete multi-face font without a shell.
+**Settings → Look → Terminal fonts** installs a complete multi-face font without a shell.
 
 - **Families** is the install path, and the only one. A curated family list — Maple Mono, Hack,
   JetBrains Mono, Fira Code, Victor Mono, Cascadia Code and more — each with its download
@@ -821,7 +821,7 @@ label. Paste one into **display** in the extra-keys editor, or into `extra-keys`
 escapes are not interpreted and could not reach the astral ranges anyway. The editor re-spans the
 field as you type, so an icon is drawn rather than boxed while you are still editing it.
 
-**Finding an icon.** The glyph picker (**Settings → Terminal & status → Edit extra keys**, then a
+**Finding an icon.** The glyph picker (**Settings → Keyboard → Edit extra keys**, then a
 key's glyph field) ships the whole bundled set: **10,512 icons**, searchable by name (`keyboard`),
 by family (`md`, `fa`, `oct`, `cod`, `dev`, `weather`), or by exact Nerd Font name
 (`nf-md-folder`). Browsing shows a shelf of the set with the rest behind search, because a grid of
@@ -933,7 +933,7 @@ shortcut, including the one you might later assign to it.
 
 ### A shortcut reaches the shell instead of the app
 
-- Check whether **Settings → Terminal & status → Split-pane controls** changes the shortcut's
+- Check whether **Settings → Terminal → Split-pane controls** changes the shortcut's
   meaning.
 - Open **Key inspector** and press the shortcut.
 - Check `~/.termux/termux-launcher-bindings.conf` for an override or `unmap`.
@@ -943,7 +943,7 @@ shortcut, including the one you might later assign to it.
 
 - Check `ls ~/.termux/fonts.d/`. A drop-in is read before `fonts.conf`, so a directive you set there
   wins — but a directive only present in a drop-in is still active. `10-launcher.conf` is written by
-  the in-app picker; remove it from **Settings → Appearance → Terminal fonts → Use font.ttf /
+  the in-app picker; remove it from **Settings → Look → Terminal fonts → Use font.ttf /
   Termux:Styling**, not by hand-editing it, since the next picker action rewrites it.
 - Use `path=` for downloaded font files; Android may not know their family name.
 - Check that Termux can read the file and that it is non-empty and below 64 MiB.

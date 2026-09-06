@@ -8,7 +8,7 @@ same way. This page is the short route from switching it on to running a desktop
 
 ## Turn it on
 
-1. Swipe to the Display place and tap **Turn on**, or open **Settings → Launcher & apps** and
+1. Swipe to the Display place and tap **Turn on**, or open **Settings → Linux display** and
    switch on **Linux display**. The Display place is always there; switching the display on puts
    the `termux-x11` and `termux-x11-preference` commands in your `$PREFIX/bin` so a display can
    be started from it.
@@ -72,7 +72,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   display never starts on its own unless you turn on **Start with the launcher**.
 - **The display survives switching away.** Your X apps keep running while you are on the
   terminal or the widget grid; only the picture is put away.
-- **Options.** Settings → **Display** holds the switch, touch mode, resolution,
+- **Options.** Settings → **Linux display** holds the switch, touch mode, resolution,
   text size, clipboard sharing and how the launcher starts a display: with the launcher, with a
   command of your choosing, pointing new shells at it (`DISPLAY` set in every new shell while a
   display runs), and two compatibility switches. A running display picks a change up at once.
