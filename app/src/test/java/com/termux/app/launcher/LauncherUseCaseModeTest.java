@@ -5,6 +5,10 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.place.PlaceLayout.RowPlacement;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -33,6 +37,31 @@ public class LauncherUseCaseModeTest {
         preferences = new TermuxAppSharedPreferences(context, sharedPreferences, null);
     }
 
+    private PlaceLayoutStore places() {
+        return new PlaceLayoutStore(preferences);
+    }
+
+    private void assertAppsRowEverywhere(RowPlacement expected) {
+        PlaceLayoutStore places = places();
+        for (PaneWallPage place : PaneWallPage.values()) {
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                assertEquals(place + " " + orientation, expected,
+                    places.resolve(place, orientation).appsRow);
+            }
+        }
+    }
+
+    /** Bottom in portrait, the left rail in landscape — the shipped default on every place. */
+    private void assertAppsRowAtShippedDefault() {
+        PlaceLayoutStore places = places();
+        for (PaneWallPage place : PaneWallPage.values()) {
+            assertEquals(place + " portrait", RowPlacement.BOTTOM,
+                places.resolve(place, PlaceOrientation.PORTRAIT).appsRow);
+            assertEquals(place + " landscape", RowPlacement.LEFT,
+                places.resolve(place, PlaceOrientation.LANDSCAPE).appsRow);
+        }
+    }
+
     @Test
     public void freshInstallIsLauncherMode() {
         assertFalse(LauncherUseCaseMode.isTerminalOnly(preferences));
@@ -45,7 +74,7 @@ public class LauncherUseCaseModeTest {
 
         LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL);
 
-        assertFalse(preferences.isAppLauncherAppsRowEnabled());
+        assertAppsRowEverywhere(RowPlacement.HIDDEN);
         assertFalse(preferences.isAppLauncherAzRowEnabled());
         assertFalse(preferences.isAppLauncherDrawerEnabled());
         assertFalse(preferences.isAppLauncherWidgetPaneEnabled());
@@ -63,17 +92,18 @@ public class LauncherUseCaseModeTest {
     }
 
     @Test
-    public void switchingBackRestoresTheLayoutFromBeforeTheSwitch() {
-        preferences.setAppLauncherAppsRowEnabled(true);
+    public void switchingBackPutsTheAppsRowBackAtItsShippedDefaultOnEveryPlace() {
         preferences.setAppLauncherAzRowEnabled(false);
         preferences.setAppLauncherDrawerEnabled(true);
         preferences.setAppLauncherWidgetPaneEnabled(false);
         preferences.setShowInRecentsWhenNotDefaultEnabled(false);
 
         LauncherUseCaseMode.applyTerminalOnly(preferences, true);
+        assertAppsRowEverywhere(RowPlacement.HIDDEN);
+
         LauncherUseCaseMode.applyTerminalOnly(preferences, false);
 
-        assertTrue(preferences.isAppLauncherAppsRowEnabled());
+        assertAppsRowAtShippedDefault();
         assertFalse(preferences.isAppLauncherAzRowEnabled());
         assertTrue(preferences.isAppLauncherDrawerEnabled());
         assertFalse(preferences.isAppLauncherWidgetPaneEnabled());
@@ -88,7 +118,7 @@ public class LauncherUseCaseModeTest {
         LauncherUseCaseMode.applyTerminalOnly(preferences, true);
         LauncherUseCaseMode.applyTerminalOnly(preferences, false);
 
-        assertTrue(preferences.isAppLauncherAppsRowEnabled());
+        assertAppsRowAtShippedDefault();
         assertFalse(preferences.isAppLauncherAzRowEnabled());
         assertTrue(preferences.isAppLauncherDrawerEnabled());
         assertTrue(preferences.isAppLauncherWidgetPaneEnabled());
@@ -97,14 +127,13 @@ public class LauncherUseCaseModeTest {
     @Test
     public void switchingBackWithNoSnapshotEnablesEverySurface() {
         preferences.setAppLauncherUseCaseMode(LauncherUseCaseMode.MODE_TERMINAL);
-        preferences.setAppLauncherAppsRowEnabled(false);
         preferences.setAppLauncherAzRowEnabled(false);
         preferences.setAppLauncherDrawerEnabled(false);
         preferences.setAppLauncherWidgetPaneEnabled(false);
 
         LauncherUseCaseMode.applyTerminalOnly(preferences, false);
 
-        assertTrue(preferences.isAppLauncherAppsRowEnabled());
+        assertAppsRowAtShippedDefault();
         assertTrue(preferences.isAppLauncherAzRowEnabled());
         assertTrue(preferences.isAppLauncherDrawerEnabled());
         assertTrue(preferences.isAppLauncherWidgetPaneEnabled());
@@ -122,14 +151,14 @@ public class LauncherUseCaseModeTest {
 
     /** The bug this mode was rewritten for: a mid-mode surface flip must not eat the snapshot. */
     @Test
-    public void surfaceFlipInTerminalModeDoesNotCostTheAppsRowOnTheWayBack() {
+    public void surfaceFlipInTerminalModeDoesNotCostTheOtherSurfacesOnTheWayBack() {
         LauncherUseCaseMode.applyTerminalOnly(preferences, true);
         preferences.setAppLauncherAzRowEnabled(true);
         LauncherUseCaseMode.applyTerminalOnly(preferences, true); // no-op, mode unchanged
 
         LauncherUseCaseMode.applyTerminalOnly(preferences, false);
 
-        assertTrue(preferences.isAppLauncherAppsRowEnabled());
+        assertAppsRowAtShippedDefault();
         assertTrue(preferences.isAppLauncherDrawerEnabled());
         assertTrue(preferences.isAppLauncherWidgetPaneEnabled());
     }
@@ -150,7 +179,7 @@ public class LauncherUseCaseModeTest {
     @Test
     public void malformedSnapshotFallsBackToDefaults() {
         assertEquals(null, LauncherUseCaseMode.parseSnapshot(""));
-        assertEquals(null, LauncherUseCaseMode.parseSnapshot("1,0,1"));
-        assertEquals(null, LauncherUseCaseMode.parseSnapshot("1,0,1,0,yes"));
+        assertEquals(null, LauncherUseCaseMode.parseSnapshot("1,0"));
+        assertEquals(null, LauncherUseCaseMode.parseSnapshot("1,0,1,yes"));
     }
 }

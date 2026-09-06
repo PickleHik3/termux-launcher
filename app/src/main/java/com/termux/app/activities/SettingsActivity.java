@@ -237,6 +237,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
          */
         private static final Map<String, int[]> CHILD_XML_RESOURCES = new HashMap<>();
         static {
+            CHILD_XML_RESOURCES.put("layout", new int[]{
+                R.xml.layout_preferences});
             CHILD_XML_RESOURCES.put("appearance", new int[]{
                 R.xml.termux_style_preferences, R.xml.termux_fonts_preferences});
             CHILD_XML_RESOURCES.put("terminal_status", new int[]{

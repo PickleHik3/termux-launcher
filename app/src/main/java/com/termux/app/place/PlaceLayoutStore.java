@@ -25,10 +25,10 @@ import java.util.Locale;
  * key falls back to the shared value the launcher used to keep globally, and then to the shipped
  * default, so nothing has to be written before a place reads the way it always looked.
  *
- * <p>The rows that can still be switched off globally — the pinned apps row, the alphabets row and
- * the extra keys — keep those switches as a master gate: a scoped value only says <em>where</em> a
- * row goes, never that a switched-off row comes back. Phase 2 gives every place its own Hidden and
- * the global switches go away.
+ * <p>The pinned apps row and the extra keys used to have a global on/off switch on top of the scoped
+ * placement; the Layout page replaced both with a per-place, per-orientation Hidden placement, so a
+ * switched-off row from before the Layout page migrates to Hidden everywhere, once, and the scoped
+ * placement is the only thing {@link #resolve} reads afterwards.
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -36,7 +36,7 @@ import java.util.Locale;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the scoped ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 1;
+    @VisibleForTesting static final int MIGRATION_VERSION = 2;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -99,10 +99,8 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public PlaceLayout resolve(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        RowPlacement appsRow = mPreferences.isAppLauncherAppsRowEnabled()
-            ? appsRow(place, orientation) : RowPlacement.HIDDEN;
-        RowPlacement extraKeys = mPreferences.isAppLauncherExtraKeysRowEnabled()
-            && mPreferences.shouldShowTerminalToolbar()
+        RowPlacement appsRow = appsRow(place, orientation);
+        RowPlacement extraKeys = mPreferences.shouldShowTerminalToolbar()
             ? extraKeys(place, orientation) : RowPlacement.HIDDEN;
         return new PlaceLayout(
             statusBarEdge(place, orientation),
@@ -283,52 +281,79 @@ public final class PlaceLayoutStore {
     // ---------------------------------------------------------------- migration
 
     /**
-     * Folds the launcher's old single-place keys into the scoped ones, once. Everything here was a
-     * global that only ever described one place, or one place at a time.
+     * Folds the launcher's old single-place keys into the scoped ones, once. Each step is gated on
+     * the version it was introduced at, so an install already migrated to an earlier version only
+     * runs the steps added since — re-running an earlier step would stomp scoped choices the user
+     * has made since migrating to it.
      */
     private void migrateIfNeeded() {
         if (mStore == null) return;
-        if (mStore.getInt(KEY_MIGRATED, 0) >= MIGRATION_VERSION) return;
+        int fromVersion = mStore.getInt(KEY_MIGRATED, 0);
+        if (fromVersion >= MIGRATION_VERSION) return;
         SharedPreferences.Editor editor = mStore.edit();
 
-        // The landscape rail's edge was the only place-and-orientation setting the launcher had.
-        // It described every place, because there was only one rail.
-        if (mStore.contains(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE)) {
-            RowPlacement side = RowPlacement.parse(
-                mStore.getString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE, null),
-                RowPlacement.LEFT);
-            if (!side.isOnSide()) side = RowPlacement.LEFT;
-            for (PaneWallPage place : PaneWallPage.values()) {
-                editor.putString(arrangementKey(place, PlaceOrientation.LANDSCAPE, KEY_APPS_ROW),
-                    side.storageValue());
+        if (fromVersion < 1) {
+            // The landscape rail's edge was the only place-and-orientation setting the launcher
+            // had. It described every place, because there was only one rail.
+            if (mStore.contains(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE)) {
+                RowPlacement side = RowPlacement.parse(
+                    mStore.getString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE, null),
+                    RowPlacement.LEFT);
+                if (!side.isOnSide()) side = RowPlacement.LEFT;
+                for (PaneWallPage place : PaneWallPage.values()) {
+                    editor.putString(arrangementKey(place, PlaceOrientation.LANDSCAPE, KEY_APPS_ROW),
+                        side.storageValue());
+                }
+            }
+
+            // The display's extra keys column, which is now every place's.
+            if (mStore.contains(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE)) {
+                RowPlacement side = RowPlacement.parse(
+                    mStore.getString(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, null), RowPlacement.BOTTOM);
+                if (side == RowPlacement.HIDDEN) side = RowPlacement.BOTTOM;
+                for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                    editor.putString(arrangementKey(PaneWallPage.DISPLAY, orientation, KEY_EXTRA_KEYS),
+                        side.storageValue());
+                }
+            }
+
+            // There is no hidden status bar any more: the bar moves instead, so the wall's paging
+            // gesture survives every arrangement.
+            editor.remove(LEGACY_KEY_X11_HIDE_STATUS_BAR);
+
+            if (mStore.contains(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN)) {
+                editor.putBoolean(memoryKey(PaneWallPage.DISPLAY, KEY_KEYBOARD_OPEN),
+                    mStore.getBoolean(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, false));
+                editor.remove(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN);
+            }
+
+            if (mStore.contains(TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED)) {
+                boolean compact = mStore.getBoolean(TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED, false);
+                for (PaneWallPage place : PaneWallPage.values()) {
+                    editor.putBoolean(memoryKey(place, KEY_STATUS_COMPACT), compact);
+                }
             }
         }
 
-        // The display's extra keys column, which is now every place's.
-        if (mStore.contains(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE)) {
-            RowPlacement side = RowPlacement.parse(
-                mStore.getString(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, null), RowPlacement.BOTTOM);
-            if (side == RowPlacement.HIDDEN) side = RowPlacement.BOTTOM;
-            for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                editor.putString(arrangementKey(PaneWallPage.DISPLAY, orientation, KEY_EXTRA_KEYS),
-                    side.storageValue());
+        if (fromVersion < 2) {
+            // The Layout page replaced the global apps-row and extra-keys switches with a Hidden
+            // placement every place and orientation can set on its own. A master that was off
+            // becomes Hidden everywhere, once; resolve() has no more use for the master afterwards.
+            if (!mPreferences.isAppLauncherAppsRowEnabled()) {
+                for (PaneWallPage place : PaneWallPage.values()) {
+                    for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                        editor.putString(arrangementKey(place, orientation, KEY_APPS_ROW),
+                            RowPlacement.HIDDEN.storageValue());
+                    }
+                }
             }
-        }
-
-        // There is no hidden status bar any more: the bar moves instead, so the wall's paging
-        // gesture survives every arrangement.
-        editor.remove(LEGACY_KEY_X11_HIDE_STATUS_BAR);
-
-        if (mStore.contains(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN)) {
-            editor.putBoolean(memoryKey(PaneWallPage.DISPLAY, KEY_KEYBOARD_OPEN),
-                mStore.getBoolean(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, false));
-            editor.remove(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN);
-        }
-
-        if (mStore.contains(TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED)) {
-            boolean compact = mStore.getBoolean(TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED, false);
-            for (PaneWallPage place : PaneWallPage.values()) {
-                editor.putBoolean(memoryKey(place, KEY_STATUS_COMPACT), compact);
+            if (!mPreferences.isAppLauncherExtraKeysRowEnabled()) {
+                for (PaneWallPage place : PaneWallPage.values()) {
+                    for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                        editor.putString(arrangementKey(place, orientation, KEY_EXTRA_KEYS),
+                            RowPlacement.HIDDEN.storageValue());
+                    }
+                }
             }
         }
 

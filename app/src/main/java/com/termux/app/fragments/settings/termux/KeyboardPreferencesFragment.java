@@ -467,11 +467,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setInAppKeyboardTapCorrectionEnabled(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
                 break;
-            case "app_launcher_extra_keys_row_enabled":
-                mPreferences.setAppLauncherExtraKeysRowEnabled(value);
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(
-                    mContext, false);
-                break;
             case "extra_keys_text_all_caps":
                 // A property, not a preference: the row reads it from termux.properties, so this
                 // writes there and the styling reload picks it up like any hand edit would.
@@ -501,8 +496,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardKeySoundEnabled();
             case "in_app_keyboard_tap_correction":
                 return mPreferences.isInAppKeyboardTapCorrectionEnabled();
-            case "app_launcher_extra_keys_row_enabled":
-                return mPreferences.isAppLauncherExtraKeysRowEnabled();
             case "extra_keys_text_all_caps": {
                 String stored = termuxProperties()
                     .getProperty(TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Per place, per orientation arrangement: what stands on screen and where. Tabs and the
+     orientation pill at the top choose which place and orientation the rows below describe; the
+     miniature shows the result and tapping a block scrolls to its row. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <com.termux.app.fragments.settings.LayoutOverviewPreference
+        app:key="layout_overview"
+        app:persistent="false" />
+
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="layout_status_bar"
+        app:title="@string/settings_layout_status_bar_title"
+        app:summary="@string/settings_layout_status_bar_summary"
+        app:defaultValue="top" />
+
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="layout_apps_row"
+        app:title="@string/settings_show_pinned_apps_title"
+        app:summary="@string/settings_layout_apps_row_summary"
+        app:defaultValue="bottom" />
+
+    <SwitchPreferenceCompat
+        app:key="layout_alphabets_row"
+        app:title="@string/settings_show_az_index_title"
+        app:summary="@string/settings_show_az_index_summary"
+        android:defaultValue="true" />
+
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="layout_extra_keys"
+        app:title="@string/settings_x11_extra_keys_side_title"
+        app:summary="@string/settings_layout_extra_keys_summary"
+        app:defaultValue="bottom" />
+
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="layout_keyboard_on_enter"
+        app:title="@string/settings_layout_keyboard_on_enter_title"
+        app:summary="@string/settings_layout_keyboard_on_enter_summary"
+        app:defaultValue="as_left" />
+
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="layout_keyboard_mode"
+        app:title="@string/settings_layout_keyboard_mode_title"
+        app:summary="@string/settings_layout_keyboard_mode_summary"
+        app:defaultValue="resize" />
+
+    <SeekBarPreference
+        app:key="layout_grid_columns"
+        app:title="@string/settings_widget_grid_columns_title"
+        app:summary="@string/settings_widget_grid_columns_summary"
+        android:defaultValue="4"
+        app:min="2"
+        android:max="8"
+        app:showSeekBarValue="true" />
+
+    <SeekBarPreference
+        app:key="layout_grid_rows"
+        app:title="@string/settings_widget_grid_rows_title"
+        app:summary="@string/settings_widget_grid_rows_summary"
+        android:defaultValue="5"
+        app:min="2"
+        android:max="12"
+        app:showSeekBarValue="true" />
+
+    <Preference
+        app:key="layout_look"
+        app:icon="@drawable/ic_symbol_palette"
+        app:persistent="false"
+        app:title="@string/settings_layout_look_title"
+        app:summary="@string/settings_layout_look_summary" />
+
+</PreferenceScreen>

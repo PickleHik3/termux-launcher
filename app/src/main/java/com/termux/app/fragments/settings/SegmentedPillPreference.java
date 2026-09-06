@@ -33,6 +33,7 @@ public final class SegmentedPillPreference extends Preference {
     private String[] mValues = {VALUE_DEFAULT, VALUE_ROUNDED};
     /** 0 keeps the label text the layout declares; anything else overrides it. */
     private int[] mLabelResIds = {0, 0};
+    private static final int MAX_SEGMENTS = 4;
     private String mValue = VALUE_DEFAULT;
     private ValueAnimator mIndicatorAnimator;
 
@@ -52,8 +53,9 @@ public final class SegmentedPillPreference extends Preference {
      * restored on attach was normalized against the default Default / Rounded pair.
      */
     public void setSegments(@NonNull String[] values, @NonNull int[] labelResIds) {
-        if (values.length < 2 || values.length > 3 || values.length != labelResIds.length)
-            throw new IllegalArgumentException("SegmentedPillPreference needs 2 or 3 segments");
+        if (values.length < 2 || values.length > MAX_SEGMENTS || values.length != labelResIds.length)
+            throw new IllegalArgumentException("SegmentedPillPreference needs 2 to "
+                + MAX_SEGMENTS + " segments");
         mValues = values;
         mLabelResIds = labelResIds;
         mValue = normalize(getPersistedString(mValues[0]));
@@ -98,8 +100,9 @@ public final class SegmentedPillPreference extends Preference {
         TextView first = (TextView) holder.findViewById(R.id.segmented_pill_default);
         TextView second = (TextView) holder.findViewById(R.id.segmented_pill_capsule);
         TextView third = (TextView) holder.findViewById(R.id.segmented_pill_third);
-        if (first == null || second == null || third == null) return null;
-        return new TextView[]{first, second, third};
+        TextView fourth = (TextView) holder.findViewById(R.id.segmented_pill_fourth);
+        if (first == null || second == null || third == null || fourth == null) return null;
+        return new TextView[]{first, second, third, fourth};
     }
 
     private void setValue(@NonNull String value, @NonNull FrameLayout track,
@@ -125,7 +128,8 @@ public final class SegmentedPillPreference extends Preference {
         updateLabelColors(new TextView[]{
             track.findViewById(R.id.segmented_pill_default),
             track.findViewById(R.id.segmented_pill_capsule),
-            track.findViewById(R.id.segmented_pill_third)});
+            track.findViewById(R.id.segmented_pill_third),
+            track.findViewById(R.id.segmented_pill_fourth)});
     }
 
     private void updateIndicatorWidth(@NonNull FrameLayout track, @NonNull View indicator) {

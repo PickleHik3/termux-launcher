@@ -10,11 +10,6 @@
             app:title="@string/settings_edit_extra_keys_title"
             app:summary="@string/settings_edit_extra_keys_summary" />
         <SwitchPreferenceCompat
-            app:key="app_launcher_extra_keys_row_enabled"
-            app:title="@string/settings_show_extra_keys_row_title"
-            app:summary="@string/settings_show_extra_keys_row_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
             app:key="extra_keys_text_all_caps"
             app:title="@string/settings_extra_keys_all_caps_title"
             app:summary="@string/settings_extra_keys_all_caps_summary"

@@ -212,6 +212,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         "com.termux.app.extra.DOCK_TUNING";
     public static final String EXTRA_SURFACE_EDITOR_SECTION =
         "com.termux.app.extra.DOCK_TUNING_SECTION";
+    /**
+     * Which place the surface editor opens on ({@link com.termux.app.wall.PaneWallPage#toolName()}),
+     * set by the Layout page's "Look of this place" row. Phase 3 (the per-place surface editor)
+     * consumes it; until then the editor still opens on the shared layer as it does today.
+     */
+    public static final String EXTRA_SURFACE_EDITOR_PLACE =
+        "com.termux.app.extra.SURFACE_EDITOR_PLACE";
     /** Opens the extra-keys row editor over the live terminal, from Settings. */
     public static final String EXTRA_EDIT_EXTRA_KEYS =
         "com.termux.app.extra.EDIT_EXTRA_KEYS";
@@ -15418,7 +15425,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mAppDrawerController != null)
             mAppDrawerController.onPreferencesReloaded();
-        applyWidgetGridPreference();
+        // Re-lays every piece of chrome the arrangement decides — a superset of the widget grid
+        // alone, so a Layout page write (apps row, extra keys, keyboard-on-enter, the grid) reaches
+        // the running launcher on the way back from Settings, without a recreate.
+        syncPlaceLayout();
         applySuggestionBarInputChar();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
         applySeamlessStatusBackgroundModeIfNeeded();
