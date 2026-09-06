@@ -64,6 +64,9 @@ ASSUME_TTY="${TLSTORE_ASSUME_TTY:-0}"
 # -y never answers "replace my config file?"; --configs does, and only that.
 REPLACE_CONFIGS=0
 
+# Packages this run installed only so something else could be built.
+BUILD_ADDED=""
+
 ARCH="${TLSTORE_ARCH:-$(uname -m 2>/dev/null || echo unknown)}"
 case "$ARCH" in
     aarch64|arm64) ARCH_OK=1 ;;
@@ -177,6 +180,9 @@ opt() {
 }
 
 commas() { printf '%s' "$1" | tr ',' ' '; }
+
+# " a  b " → "a, b", for reading out a list of names.
+words_list() { printf '%s' "$1" | sed 's/^ *//; s/ *$//; s/  */, /g'; }
 
 # A leading ~ in a target is this user's home, not a shell expansion.
 # shellcheck disable=SC2088
@@ -526,6 +532,70 @@ deps_ready() {
 }
 
 # ---------------------------------------------------------------------------
+# Tools that are only needed while installing
+# ---------------------------------------------------------------------------
+
+# Is this item already here in the version the list offers?
+already_here() {
+    ah_row=$(row "$1")
+    [ -n "$ah_row" ] || return 1
+    is_installed "$1" || return 1
+    case "$(field "$ah_row" 2)" in
+        pkg|bundle) return 0 ;;
+    esac
+    [ "$(installed_version "$1")" = "$(field "$ah_row" 3)" ]
+}
+
+# build_tools_for <names> <force> — the build= packages the plan will really
+# need, each named once. Nothing is fetched for an item that is already here.
+build_tools_for() {
+    bt_out=""
+    for bt_n in $1; do
+        bt_row=$(row "$bt_n")
+        [ -n "$bt_row" ] || continue
+        if [ "$2" = 0 ] && already_here "$bt_n"; then
+            continue
+        fi
+        for bt_p in $(commas "$(opt "$(field "$bt_row" 9)" build)"); do
+            [ "$bt_p" = "-" ] && continue
+            in_list "$bt_out" "$bt_p" || bt_out="$bt_out $bt_p"
+        done
+    done
+    printf '%s' "$bt_out" | sed 's/^ *//'
+}
+
+# Installs the ones that are not here already, remembering which those were so
+# they can be offered back afterwards.
+# add_build_tools <names> <force>
+add_build_tools() {
+    ab_missing=""
+    for ab_p in $(build_tools_for "$1" "$2"); do
+        pkg_present "$ab_p" || ab_missing="$ab_missing $ab_p"
+    done
+    [ -n "$(printf '%s' "$ab_missing" | tr -d ' ')" ] || return 0
+    say "Installing what is needed to build:$ab_missing"
+    # shellcheck disable=SC2086
+    if ! install_pkg $ab_missing; then
+        err "could not install what is needed to build:$ab_missing"
+        return 1
+    fi
+    BUILD_ADDED="$BUILD_ADDED$ab_missing"
+    return 0
+}
+
+drop_build_tools() {
+    db_pkgs=$(printf '%s' "$BUILD_ADDED" | sed 's/^ *//')
+    BUILD_ADDED=""
+    [ -n "$db_pkgs" ] || return 0
+    ask_ny "Remove the tools that were only needed for installing ($(words_list "$db_pkgs"))?" || return 0
+    # shellcheck disable=SC2086
+    remove_pkg $db_pkgs >/dev/null 2>&1 || true
+    rm -rf "${CACHE_DIR:?}"/* 2>/dev/null || true
+    say "Removed them, and cleared what was downloaded."
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Installing
 # ---------------------------------------------------------------------------
 
@@ -543,12 +613,9 @@ install_item() {
     ii_target="$it_target"
     ii_options="$it_options"
 
-    if [ "$ii_force" = 0 ] && is_installed "$ii_name"; then
-        ii_have=$(installed_version "$ii_name")
-        if [ "$ii_have" = "$ii_version" ] || [ "$ii_kind" = pkg ] || [ "$ii_kind" = bundle ]; then
-            say "$ii_name is already installed"
-            return 0
-        fi
+    if [ "$ii_force" = 0 ] && already_here "$ii_name"; then
+        say "$ii_name is already installed"
+        return 0
     fi
 
     case "$ii_kind" in
@@ -1030,6 +1097,8 @@ cmd_info() {
     printf '  %-10s %s\n' From "$it_source"
     printf '  %-10s %s\n' Checksum "$it_digest"
     printf '  %-10s %s\n' Needs "$it_requires"
+    ci_build=$(opt "$it_options" build)
+    [ -z "$ci_build" ] || printf '  %-10s %s\n' "Builds with" "$ci_build"
     printf '  %-10s %s\n' Files "$ci_where"
     if is_installed "$it_name"; then
         printf '  %-10s %s\n' Installed "$(installed_version "$it_name")"
@@ -1080,11 +1149,13 @@ cmd_install() {
 
     # shellcheck disable=SC2086  # a list of names, split on purpose
     ci_plan=$(plan_for $ci_names)
-    say "Installing: $(printf '%s' "$ci_plan" | tr ' ' ',' | sed 's/,/, /g')"
+    say "Installing: $(words_list "$ci_plan")"
     ask_yn "Go ahead?" || { say "Nothing was installed."; return 0; }
+    add_build_tools "$ci_plan" 0 || return 1
     for ci_n in $ci_plan; do
         install_item "$ci_n" || FAILED=1
     done
+    drop_build_tools
     [ "$FAILED" = 0 ] || return 1
     return 0
 }
@@ -1118,7 +1189,7 @@ cmd_remove() {
         done
     done
 
-    say "Removing: $(printf '%s' "$cr_all" | sed 's/^ *//' | tr ' ' ',' | sed 's/,/, /g')"
+    say "Removing: $(words_list "$cr_all")"
     ask_yn "Go ahead?" || { say "Nothing was removed."; return 0; }
     for cr_n in $cr_all; do
         remove_item "$cr_n" || FAILED=1
@@ -1211,9 +1282,11 @@ cmd_update() {
     if [ -z "$(printf '%s' "$cu_out" | tr -d ' ')" ]; then
         [ -n "$(printf '%s' "$cu_pkgs" | tr -d ' ')" ] || say "Everything is up to date."
     else
+        add_build_tools "$cu_out" 1 || return 1
         for cu_n in $cu_out; do
             install_item "$cu_n" 1 || FAILED=1
         done
+        drop_build_tools
     fi
     [ "$FAILED" = 0 ] || return 1
     return 0
@@ -1263,7 +1336,7 @@ cmd_doctor() {
             cd_bad=1
         fi
     done
-    for cd_t in fzf patchelf minisign; do
+    for cd_t in fzf minisign; do
         if have "$cd_t"; then
             cd_line "$cd_t" ready
         else

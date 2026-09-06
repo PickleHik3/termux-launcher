@@ -86,7 +86,7 @@ write_catalog() {
         printf 'ghost\tbinary\t1\tio.vaj.tl\tfile://%s/other.bin\t%s\t-\t-\t-\tOnly for another edition.\n' "$FX" "$(sha "$FX/other.bin")"
         printf 'demo-pkg\tpkg\t-\t*\tdemo-one demo-two\t-\t-\t-\t-\tTwo packages from the package manager.\n'
         printf 'musl-loader\tbinary\t1\tcom.termux\tfile://%s/loader.bin\t%s\t~/.local/lib/musl/ld-musl-aarch64.so.1\t-\t-\tWhat tools from other systems need to start.\n' "$FX" "$(sha "$FX/loader.bin")"
-        printf 'claude-code\tnpm-musl\tlatest\t*\tnpm:demo-cli#claude\t-\t-\tmusl-loader,demo-pkg\tenv=DEMO_FLAG=1;tz=1\tA tool that comes from npm.\n'
+        printf 'claude-code\tnpm-musl\tlatest\t*\tnpm:demo-cli#claude\t-\t-\tmusl-loader,demo-pkg\tenv=DEMO_FLAG=1;tz=1;build=demo-build\tA tool that comes from npm.\n'
         printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg\t-\tA few things at once.\n'
     } > "$out"
 }
@@ -118,8 +118,17 @@ echo "\$@" >> "$ROOT/pkg.log"
 exit 0
 EOF
     chmod +x "$FIXBIN/pkg"
-    cp "$FIXBIN/pkg" "$FIXBIN/pacman"
     cp "$FIXBIN/pkg" "$FIXBIN/apt"
+    # pacman is the one tlstore prefers, and the only one it asks whether a
+    # package is already there: -Q says no for the build tool, yes for the rest.
+    cat > "$FIXBIN/pacman" <<EOF
+#!/bin/sh
+echo "\$@" >> "$ROOT/pkg.log"
+[ "\${1:-}" = -Q ] || exit 0
+[ "\${2:-}" = demo-build ] && exit 1
+exit 0
+EOF
+    chmod +x "$FIXBIN/pacman"
 
     # A fake npm registry: one package document and its tarball.
     mkdir -p "$FX/registry/demo-cli" "$FX/pkgsrc/package"
@@ -346,10 +355,47 @@ run_suite() {
     expect_file "the package executable is in place" "$TESTHOME/.local/lib/claude-code/claude"
     expect_content "the installed version is recorded" "$TESTHOME/.local/lib/claude-code/version" "1.0.0"
     expect_file "the wrapper is named after the command" "$TESTHOME/.local/bin/claude"
+    expect_out "the build tool is installed first" "Installing what is needed to build: demo-build"
+    expect_out "-y also answers the cleanup question" "Removed them"
     OUT="$("$TESTHOME/.local/bin/claude" 2>&1)"; ST=$?
     expect_status "the wrapper runs" 0
     expect_out "the wrapper runs the package executable" "demo-cli 1.0.0"
     expect_out "the wrapper exports the options" "DEMO_FLAG=1"
+    if grep -q -- "-S --needed --noconfirm demo-build" "$ROOT/pkg.log"; then pass; else fail "the build tool was installed"; fi
+    if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then pass; else fail "the build tool was removed again"; fi
+    tl info claude-code
+    expect_out "info names the build tools" "Builds with demo-build"
+
+    # --- build tools, with nobody to ask and with an answer ---
+    : > "$ROOT/pkg.log"
+    tl install claude-code
+    expect_status "reinstall with nobody to ask" 0
+    expect_no_out "nobody there means the build tools stay" "Removed them"
+    if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then fail "the build tool should have stayed"; else pass; fi
+
+    : > "$ROOT/pkg.log"
+    TTY_KNOB=1
+    STDIN_TEXT='y
+n
+'
+    tl install claude-code
+    expect_status "reinstall, cleanup declined" 0
+    expect_out "the cleanup question names the packages" "only needed for installing (demo-build)"
+    if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then fail "answering no should keep them"; else pass; fi
+
+    : > "$ROOT/pkg.log"
+    TTY_KNOB=1
+    STDIN_TEXT='y
+y
+'
+    tl install claude-code
+    expect_status "reinstall, cleanup accepted" 0
+    if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then pass; else fail "answering yes should remove them"; fi
+
+    # An item already here asks for nothing to build with.
+    : > "$ROOT/pkg.log"
+    tl install fakebin -y
+    expect_no_out "nothing is built for what is already installed" "needed to build"
 
     # --- remove, with the backup put back ---
     tl remove hello -y
