@@ -43,8 +43,16 @@ public class TlstoreInstallerTest {
     private static final byte[] TRUSTED_KEY =
         "untrusted comment: test key\nRWtesttesttesttesttesttesttesttesttesttesttesttest\n"
             .getBytes(StandardCharsets.UTF_8);
+    private static final byte[] MOTD =
+        "#!/system/bin/sh\nprintf '%s\\n' 'Welcome to Termux Launcher.'\n"
+            .getBytes(StandardCharsets.UTF_8);
 
     private static TlstoreInstaller.AssetSource assets(byte[] script, boolean includeTrustedKey) {
+        return assets(script, includeTrustedKey, MOTD);
+    }
+
+    private static TlstoreInstaller.AssetSource assets(byte[] script, boolean includeTrustedKey,
+                                                        byte[] motd) {
         return name -> {
             if (name.equals("tlstore/tlstore")) return new ByteArrayInputStream(script);
             if (name.equals("tlstore/catalog.tsv")) return new ByteArrayInputStream(CATALOG);
@@ -52,6 +60,7 @@ public class TlstoreInstallerTest {
                 if (!includeTrustedKey) throw new FileNotFoundException(name);
                 return new ByteArrayInputStream(TRUSTED_KEY);
             }
+            if (name.equals("tlstore/motd.sh")) return new ByteArrayInputStream(motd);
             throw new FileNotFoundException(name);
         };
     }
@@ -60,12 +69,16 @@ public class TlstoreInstallerTest {
 
     private File bin;
     private File libexec;
+    /** {@code ~/.termux}; its parent ({@code home}) is the simulated home directory. */
+    private File dataHome;
     private TlstoreInstaller installer;
 
     @Before public void prefix() throws IOException {
         bin = temp.newFolder("usr", "bin");
         libexec = new File(temp.getRoot(), "usr/libexec/termux-launcher/tlstore");
-        installer = new TlstoreInstaller(bin, libexec, "com.termux.test", "0.0-test",
+        File home = temp.newFolder("home");
+        dataHome = new File(home, ".termux");
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
             assets(TLSTORE_SCRIPT, true));
     }
 
@@ -110,7 +123,7 @@ public class TlstoreInstallerTest {
                 .getBytes(StandardCharsets.UTF_8));
         byte[] newerScript = ("#!/usr/bin/env sh\n" + TlstoreInstaller.MARKER_PREAMBLE
             + "\necho newer\n").getBytes(StandardCharsets.UTF_8);
-        installer = new TlstoreInstaller(bin, libexec, "com.termux.test", "0.0-test",
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
             assets(newerScript, true));
 
         assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
@@ -134,14 +147,14 @@ public class TlstoreInstallerTest {
     }
 
     @Test public void noBinDirectoryMeansNoPrefixYet() {
-        installer = new TlstoreInstaller(new File(temp.getRoot(), "missing/bin"), libexec,
+        installer = new TlstoreInstaller(new File(temp.getRoot(), "missing/bin"), libexec, dataHome,
             "com.termux.test", "0.0-test", assets(TLSTORE_SCRIPT, true));
 
         assertEquals(TlstoreInstaller.Result.NO_PREFIX, installer.install());
     }
 
     @Test public void aMissingTrustedKeyAssetStillInstallsEverythingElse() throws IOException {
-        installer = new TlstoreInstaller(bin, libexec, "com.termux.test", "0.0-test",
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
             assets(TLSTORE_SCRIPT, false));
 
         assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
@@ -150,6 +163,63 @@ public class TlstoreInstallerTest {
         assertTrue(Files.isSymbolicLink(installer.tlAlias().toPath()));
         assertTrue(installer.catalogFile().exists());
         assertFalse("the key may ship later", installer.trustedKeyFile().exists());
+        assertTrue(installer.markerFile().exists());
+    }
+
+    @Test public void aFreshInstallWritesTheMotdWithTheAssetBytesAndMode() throws IOException {
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertArrayEquals(MOTD, Files.readAllBytes(installer.motdFile().toPath()));
+        assertFalse(Files.isSymbolicLink(installer.motdFile().toPath()));
+        assertTrue(installer.motdFile().canExecute());
+    }
+
+    @Test public void aChangedMotdAssetRewritesAnUntouchedFile() throws IOException {
+        installer.install();
+        // A previous launcher wrote an older version; the marker mismatch must trigger a rewrite,
+        // the same way it does for the CLI script in aBumpedVersionRewritesInPlace.
+        Files.write(installer.markerFile().toPath(),
+            (TlstoreInstaller.MARKER_PREAMBLE + " v0 com.termux.test\n")
+                .getBytes(StandardCharsets.UTF_8));
+        byte[] newerMotd = "#!/system/bin/sh\nprintf '%s\\n' 'newer motd'\n"
+            .getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, newerMotd));
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertArrayEquals(newerMotd, Files.readAllBytes(installer.motdFile().toPath()));
+    }
+
+    @Test public void aUserEditedMotdIsLeftAloneAcrossAVersionBump() throws IOException {
+        installer.install();
+        Files.write(installer.motdFile().toPath(), "# mine now\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(installer.markerFile().toPath(),
+            (TlstoreInstaller.MARKER_PREAMBLE + " v0 com.termux.test\n")
+                .getBytes(StandardCharsets.UTF_8));
+        byte[] newerMotd = "#!/system/bin/sh\nprintf '%s\\n' 'newer motd'\n"
+            .getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, newerMotd));
+
+        TlstoreInstaller.Result result = installer.install();
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, result);
+        assertEquals("the user's own motd.sh must survive", "# mine now\n",
+            text(installer.motdFile()));
+    }
+
+    @Test public void aMissingHomeDirectorySkipsTheMotdButInstallsTheRest() throws IOException {
+        File noHomeYetDataHome = new File(temp.getRoot(), "no-home-yet/.termux");
+        installer = new TlstoreInstaller(bin, libexec, noHomeYetDataHome, "com.termux.test",
+            "0.0-test", assets(TLSTORE_SCRIPT, true));
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertFalse("nothing to write into; the home directory itself is missing",
+            noHomeYetDataHome.exists());
+        assertTrue(installer.tlstoreScript().exists());
+        assertTrue(installer.catalogFile().exists());
         assertTrue(installer.markerFile().exists());
     }
 

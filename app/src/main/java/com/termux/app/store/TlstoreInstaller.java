@@ -36,6 +36,13 @@ import java.util.function.Consumer;
  * moved into place, so a reader never sees a half-written command, and a destination that is a
  * foreign symlink is never followed.
  *
+ * <p>It also drops {@code ~/.termux/motd.sh}, the greeting Termux's {@code login} script prints
+ * on every new session, so a user meets {@code tlstore} without having to go looking for it. The
+ * file follows the same never-overwrite-a-user's-own-thing rule as the CLI: it is written the
+ * first time and rewritten only while its sha256 still matches what this class wrote last time
+ * (recorded in {@code .motd-sha256} beside the marker); a file that has drifted from that — the
+ * user edited or replaced it — is left alone for good.
+ *
  * <p>All of it is disk I/O; {@link #installAsync} keeps it off the main thread.
  */
 public final class TlstoreInstaller {
@@ -48,10 +55,12 @@ public final class TlstoreInstaller {
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
     private static final String LIBEXEC_DIR = PREFIX + "/libexec/termux-launcher/tlstore";
+    private static final String DATA_HOME_DIR = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH;
 
     private static final String TLSTORE_ASSET = "tlstore/tlstore";
     private static final String CATALOG_ASSET = "tlstore/catalog.tsv";
     private static final String TRUSTED_KEY_ASSET = "tlstore/trusted.pub";
+    private static final String MOTD_ASSET = "tlstore/motd.sh";
 
     /** The name every alias points at; also the {@code #!}-less command itself. */
     private static final String TLSTORE_NAME = "tlstore";
@@ -110,16 +119,20 @@ public final class TlstoreInstaller {
 
     @NonNull private final File binDir;
     @NonNull private final File libexecDir;
+    /** {@code ~/.termux}, where {@code motd.sh} goes; its parent is the user's home directory. */
+    @NonNull private final File dataHomeDir;
     @NonNull private final String applicationId;
     /** The app's versionName: every release rewrites the files, so a changed asset ships. */
     @NonNull private final String release;
     @NonNull private final AssetSource assets;
 
     @VisibleForTesting
-    TlstoreInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull String applicationId,
-                     @NonNull String release, @NonNull AssetSource assets) {
+    TlstoreInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull File dataHomeDir,
+                     @NonNull String applicationId, @NonNull String release,
+                     @NonNull AssetSource assets) {
         this.binDir = binDir;
         this.libexecDir = libexecDir;
+        this.dataHomeDir = dataHomeDir;
         this.applicationId = applicationId;
         this.release = release;
         this.assets = assets;
@@ -135,8 +148,9 @@ public final class TlstoreInstaller {
         } catch (Exception e) {
             release = "unknown";
         }
-        return new TlstoreInstaller(new File(BIN_DIR), new File(LIBEXEC_DIR), app.getPackageName(),
-            release == null ? "unknown" : release, name -> app.getAssets().open(name));
+        return new TlstoreInstaller(new File(BIN_DIR), new File(LIBEXEC_DIR),
+            new File(DATA_HOME_DIR), app.getPackageName(), release == null ? "unknown" : release,
+            name -> app.getAssets().open(name));
     }
 
     // ---- The static face the launcher uses -------------------------------------------------
@@ -162,6 +176,8 @@ public final class TlstoreInstaller {
     @NonNull File catalogFile() { return new File(libexecDir, "catalog.tsv"); }
     @NonNull File trustedKeyFile() { return new File(libexecDir, "trusted.pub"); }
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
+    @NonNull File motdFile() { return new File(dataHomeDir, "motd.sh"); }
+    @NonNull File motdShaFile() { return new File(libexecDir, ".motd-sha256"); }
 
     @NonNull
     Result install() {
@@ -191,6 +207,7 @@ public final class TlstoreInstaller {
             } catch (IOException e) {
                 Logger.logInfo(LOG_TAG, "No trusted.pub asset yet; installing tlstore without it");
             }
+            installMotd();
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
         } catch (Exception e) {
@@ -226,6 +243,70 @@ public final class TlstoreInstaller {
             return !TLSTORE_NAME.equals(Files.readSymbolicLink(file.toPath()).toString());
         } catch (IOException e) {
             return true;
+        }
+    }
+
+    // ---- The greeting ------------------------------------------------------------------------
+
+    /**
+     * Write {@code ~/.termux/motd.sh} the first time, and rewrite it on an asset change only
+     * while its sha256 still matches the sha256 this class recorded the last time it wrote the
+     * file — proof the user never touched it. Anything else about the existing file (missing
+     * record, mismatched sha) means someone else owns it now, so it is left alone; the whole
+     * install still counts as {@link Result.Kind#INSTALLED}. A missing home directory (the
+     * bootstrap has not run) is not an error: there is nowhere to put the file yet.
+     */
+    private void installMotd() {
+        File home = dataHomeDir.getParentFile();
+        if (home == null || !home.isDirectory()) {
+            Logger.logDebug(LOG_TAG, "Skipping motd.sh: " + home + " does not exist yet");
+            return;
+        }
+        try {
+            byte[] asset;
+            try (InputStream in = assets.open(MOTD_ASSET)) {
+                asset = readAll(in);
+            }
+            String assetSha = sha256Hex(asset);
+            File motd = motdFile();
+            if (motd.isFile()) {
+                String currentSha = sha256Hex(Files.readAllBytes(motd.toPath()));
+                String previousSha = read(motdShaFile());
+                if (previousSha == null || !previousSha.equals(currentSha)) {
+                    Logger.logDebug(LOG_TAG, "Leaving " + motd + " alone; its content does not "
+                        + "match what this launcher last wrote there");
+                    return;
+                }
+                if (currentSha.equals(assetSha)) return; // already the current asset
+            }
+            if (!dataHomeDir.isDirectory() && !dataHomeDir.mkdirs()) {
+                throw new IOException("Failed to create " + dataHomeDir);
+            }
+            writeAtomically(motd, new java.io.ByteArrayInputStream(asset), true, true);
+            writeAtomically(motdShaFile(), bytes(assetSha), true, false);
+        } catch (IOException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to install motd.sh: " + e.getMessage());
+        }
+    }
+
+    @NonNull
+    private static byte[] readAll(@NonNull InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
+        return out.toByteArray();
+    }
+
+    @NonNull
+    private static String sha256Hex(@NonNull byte[] data) {
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(data);
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is a required Java algorithm", e);
         }
     }
 
