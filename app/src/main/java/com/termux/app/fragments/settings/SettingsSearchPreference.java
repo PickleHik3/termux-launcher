@@ -38,6 +38,12 @@ public final class SettingsSearchPreference extends Preference {
         mListener = listener;
     }
 
+    /** Exposed for tests driving a query without a bound view. */
+    @Nullable
+    public OnQueryChangedListener getOnQueryChangedListener() {
+        return mListener;
+    }
+
     @Override
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
