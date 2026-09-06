@@ -39,7 +39,7 @@ public class LauncherDrawerViewTypePreferenceTest {
         PreferenceManager manager = new PreferenceManager(app);
         PreferenceScreen root = manager.inflateFromResource(app, R.xml.root_preferences, null);
         Preference launcher = root.findPreference("launcher_apps");
-        assertEquals("Launcher & apps", launcher.getTitle().toString());
+        assertEquals("Apps", launcher.getTitle().toString());
         assertEquals(LauncherPreferencesFragment.class.getName(), launcher.getFragment());
 
         manager = new PreferenceManager(app);

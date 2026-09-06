@@ -6,7 +6,7 @@ features, or custom metrics.
 
 ## Install a font from Settings
 
-Open **Settings → Appearance → Terminal fonts**. Version 0.2.31 offers fourteen curated families with:
+Open **Settings → Look → Terminal fonts**. Version 0.2.31 offers fourteen curated families with:
 
 - download size and upstream license shown before installation;
 - a pinned SHA-256 check for every download;

@@ -60,7 +60,7 @@ Finishing or skipping the v0.2.31 tour records it as complete so it does not app
 
 ## 4. Make it the Home app
 
-Open **Settings → Launcher & apps → Set as default launcher**, then select Termux Launcher in
+Open **Settings → Apps → Set as default launcher**, then select Termux Launcher in
 Android's default Home app screen.
 
 You can open the app settings in either of these ways:
@@ -97,7 +97,7 @@ workspaces.
 - Tap a pinned app to launch it.
 - Scrub across the A–Z row to browse installed apps.
 - At an idle shell prompt, type `%settings` to filter the dock for apps matching “settings”. `%` is
-  the default prefix and can be changed under **Settings → Launcher & apps → App search prefix**.
+  the default prefix and can be changed under **Settings → Apps → App search prefix**.
 - Tap `+` in the top row to create another terminal window.
 - Swipe right on the status bar for your widgets, left for the Linux display. The display is off
   until you tap **Turn on** there; [The Linux display](X11_Display.md) takes it from there.
@@ -108,7 +108,7 @@ workspaces.
 
 ## 7. Choose the keyboard behavior
 
-Fresh installations use the built-in terminal keyboard. Open **Settings → Keyboard & input →
+Fresh installations use the built-in terminal keyboard. Open **Settings → Keyboard →
 On-screen keyboard** to choose:
 
 - **Built-in terminal keyboard**;
@@ -125,7 +125,7 @@ None of these are required for the basic launcher and terminal:
 - **Termux:API:** install the matching package/signing-family build when shell scripts need Android
   APIs.
 - **Termux:Styling:** still works with `~/.termux/font.ttf`; the launcher's own font picker is under
-  **Settings → Appearance → Terminal fonts**.
+  **Settings → Look → Terminal fonts**.
 - **Shizuku:** optional privileged backend for features such as the Shizuku lock method. Normal
   launching, panes, workspaces, and the terminal do not need it.
 - **TAI / Termux AI:** optional local model host under **Settings → Services & permissions → TAI ·

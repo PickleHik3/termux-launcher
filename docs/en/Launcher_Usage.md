@@ -114,13 +114,13 @@ covers turning it on, its menu, the touchpad and GPU acceleration.
 Tap an icon in the dock to open it. Long-press an app for actions such as pinning, moving, or placing
 it in a folder. Long-press empty space in the pinned row to open the list editor.
 
-Manage the whole row under **Settings → Launcher & apps → Edit pinned apps**. The same page controls
+Manage the whole row under **Settings → Apps → Edit pinned apps**. The same page controls
 the pinned row, most-used page, notification dots, and icon browsing behavior.
 
 ### A–Z index
 
 Scrub horizontally across the A–Z row to jump to installed apps beginning with a letter. The index is
-a browsing control, not a text field. It can be hidden under **Settings → Launcher & apps →
+a browsing control, not a text field. It can be hidden under **Settings → Layout →
 Alphabets row**.
 
 ### Search from the shell prompt
@@ -133,7 +133,7 @@ At an idle prompt, type the app-search prefix followed by a query:
 ```
 
 The default prefix is `%`. Results replace the normal dock content; choose an app to launch it. Clear
-the query to return to the normal dock. Change the prefix under **Settings → Launcher & apps → App
+the query to return to the normal dock. Change the prefix under **Settings → Apps → App
 search prefix** if `%` conflicts with a shell workflow.
 
 ### Bind an app to a key
@@ -284,8 +284,9 @@ Terminal, Display, split (swipe up for the other direction) and workspaces (swip
 A long-press or swipe reveals the popup action assigned to a key. Search, the prompt jumps and the
 scratchpad keep their chords and the command palette.
 
-Open **Settings → Keyboard & input** to change input method, appearance, colors, typeface, extra keys,
-feedback, and `~/.termux/keyboard/layout.xml` support.
+Open **Settings → Keyboard** to change input method, layouts, typing, feedback, extra keys, and
+`~/.termux/keyboard/layout.xml` support; its look — theme, colors, and typeface — is on **Settings →
+Look** now.
 
 The extra keys editor gives the **Display label** and **Swipe-up label** fields a glyph picker
 (the `Ω` button) with a searchable catalogue of arrows, box drawing, blocks, shapes, Powerline
@@ -308,11 +309,11 @@ keeps usable rows.
 
 Long-press a surface to reach its editor, or start from Settings:
 
-- **Appearance** controls wallpaper colors, terminal fonts, icons, surfaces, and Glass Lab.
-- **Terminal & status** controls full screen, pane support, clock, CPU, memory, weather, and status
-  behavior.
-- **Keyboard & input** controls the on-screen input method and built-in keyboard.
-- **Launcher & apps** controls pinned apps, A–Z browsing, search, notification dots, and Home behavior.
+- **Look** controls wallpaper colors, terminal fonts, icons, keyboard look, surfaces, and Glass Lab.
+- **Terminal** controls full screen, pane support, and lazy mode.
+- **Status bar** controls the clock, CPU, memory, weather, and notifications.
+- **Keyboard** controls the on-screen input method, layouts, typing, and feedback.
+- **Apps** controls pinned apps, A–Z browsing, search, notification dots, and Home behavior.
 
 See the [Settings map](Launcher_Settings.md) for every top-level section and the
 [Modern terminal guide](Terminal_Modernization.md) for custom bindings, font configuration, links,

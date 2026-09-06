@@ -241,8 +241,10 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 R.xml.layout_preferences});
             CHILD_XML_RESOURCES.put("appearance", new int[]{
                 R.xml.termux_style_preferences, R.xml.termux_fonts_preferences});
-            CHILD_XML_RESOURCES.put("terminal_status", new int[]{
-                R.xml.terminal_status_preferences});
+            CHILD_XML_RESOURCES.put("terminal", new int[]{
+                R.xml.terminal_preferences});
+            CHILD_XML_RESOURCES.put("status_bar", new int[]{
+                R.xml.status_bar_preferences});
             CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
                 R.xml.termux_keyboard_preferences});
             CHILD_XML_RESOURCES.put("display", new int[]{

@@ -10,15 +10,6 @@
             app:defaultValue="launcher" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_surfaces_header">
-        <Preference
-            app:key="customize_dock_surface"
-            app:icon="@drawable/ic_symbol_palette"
-            app:persistent="false"
-            app:title="@string/settings_customize_dock_title"
-            app:summary="@string/settings_customize_dock_summary" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="@string/settings_pinned_apps_header">
         <SwitchPreferenceCompat
             app:key="app_launcher_row_haptics"

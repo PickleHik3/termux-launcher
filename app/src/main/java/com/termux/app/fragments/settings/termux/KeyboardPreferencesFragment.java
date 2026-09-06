@@ -2,16 +2,12 @@ package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
@@ -25,7 +21,6 @@ import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
-import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.TapCorrectionController;
 import com.termux.app.terminal.inappkeyboard.TapModelStore;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
@@ -34,12 +29,9 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -49,11 +41,15 @@ import java.util.Set;
 
 import juloo.keyboard2.KeyboardData;
 
-/** Standalone settings page for the built-in terminal keyboard. */
+/**
+ * Standalone settings page for the built-in terminal keyboard: input method, layouts, typing, and
+ * feedback. The keyboard's look (theme, colors, typeface, bottom padding, and the "Customize
+ * keyboard appearance" surface entry) moved to the Look page, since it is edited alongside the
+ * launcher's other visual choices there.
+ */
 @Keep
 public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
-    private static final String KEY_FONT = "in_app_keyboard_font";
     private static final String KEY_EXTRA_KEYS = "in_app_keyboard_extra_keys";
     private static final String KEY_CREDITS_GITHUB = "keyboard_credits_github";
     private static final String KEY_CREDITS_PLAY = "keyboard_credits_play";
@@ -70,18 +66,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String DOCS_KEYS_URL =
         "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Possible-key-values.md";
 
-    private static final String FONT_DIR_NAME = "inapp-keyboard";
-    private static final String FONT_FILE_NAME = "label-font.ttf";
-
-    private ActivityResultLauncher<String[]> mFontPickerLauncher;
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mFontPickerLauncher = registerForActivityResult(
-            new ActivityResultContracts.OpenDocument(), this::onFontPicked);
-    }
-
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         Context context = getContext();
@@ -92,32 +76,12 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         store.forgetTermuxProperties();
         preferenceManager.setPreferenceDataStore(store);
         setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
-        refreshThemeEntries();
-
-        Preference customizeSurface = findPreference("customize_keyboard_surface");
-        if (customizeSurface != null) customizeSurface.setOnPreferenceClickListener(preference -> {
-            Intent intent = new Intent(context, TermuxActivity.class);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, "keyboard");
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-            return true;
-        });
 
         ListPreference inputMethodPreference = findPreference("keyboard_input_method");
         if (inputMethodPreference != null) {
             updateBuiltInKeyboardRows("built_in".equals(inputMethodPreference.getValue()));
             inputMethodPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 updateBuiltInKeyboardRows("built_in".equals(newValue));
-                return true;
-            });
-        }
-
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null) {
-            updateFontPreferenceSummary(fontPreference);
-            fontPreference.setOnPreferenceClickListener(preference -> {
-                onFontPreferenceClicked();
                 return true;
             });
         }
@@ -196,10 +160,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void updateBuiltInKeyboardRows(boolean enabled) {
-        Preference appearance = findPreference("keyboard_appearance");
         Preference layout = findPreference("keyboard_layout");
         Preference feedback = findPreference("keyboard_feedback");
-        if (appearance != null) appearance.setEnabled(enabled);
         if (layout != null) layout.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);
     }
@@ -213,33 +175,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         // The file may have been hand-edited while the screen was away.
         if (getContext() != null)
             KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
-        refreshThemeEntries();
-    }
-
-    private void refreshThemeEntries() {
-        Context context = getContext();
-        ListPreference preference = findPreference("in_app_keyboard_theme");
-        if (context == null || preference == null) return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences == null) return;
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
-            preferences.getInAppKeyboardColorScheme());
-        String importedId = scheme.getImportedThemeId();
-        if (importedId.isEmpty()) {
-            preference.setEntries(R.array.termux_in_app_keyboard_theme_entries);
-            preference.setEntryValues(R.array.termux_in_app_keyboard_theme_values);
-            if ("custom".equals(preferences.getInAppKeyboardTheme()))
-                preferences.setInAppKeyboardTheme("system");
-        } else {
-            preference.setEntries(new CharSequence[] {
-                getString(R.string.termux_in_app_keyboard_theme_system),
-                getString(R.string.termux_in_app_keyboard_theme_light),
-                getString(R.string.termux_in_app_keyboard_theme_dark),
-                getString(R.string.termux_in_app_keyboard_theme_imported, importedId)
-            });
-            preference.setEntryValues(new CharSequence[] {"system", "light", "dark", "custom"});
-        }
-        preference.setValue(preferences.getInAppKeyboardTheme());
     }
 
     private void bindLinkPreference(@NonNull String key, @NonNull String url) {
@@ -302,112 +237,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
-    private void onFontPreferenceClicked() {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences == null)
-            return;
-        if (preferences.getInAppKeyboardFontPath().isEmpty()) {
-            launchFontPicker();
-            return;
-        }
-        new MaterialAlertDialogBuilder(requireActivity())
-            .setTitle(R.string.termux_in_app_keyboard_font_title)
-            .setItems(new CharSequence[]{
-                getString(R.string.termux_in_app_keyboard_font_pick),
-                getString(R.string.termux_in_app_keyboard_font_reset)
-            }, (dialog, which) -> {
-                if (which == 0) {
-                    launchFontPicker();
-                } else {
-                    clearCustomFont();
-                }
-            })
-            .show();
-    }
-
-    private void launchFontPicker() {
-        // SAF mime coverage for ttf/otf across providers; octet-stream catches
-        // file managers that don't map font extensions.
-        mFontPickerLauncher.launch(new String[]{
-            "font/ttf", "font/otf", "font/*",
-            "application/x-font-ttf", "application/x-font-otf",
-            "application/octet-stream"
-        });
-    }
-
-    private void onFontPicked(@Nullable Uri uri) {
-        Context context = getContext();
-        if (uri == null || context == null)
-            return;
-        File fontDir = new File(context.getFilesDir(), FONT_DIR_NAME);
-        File fontFile = new File(fontDir, FONT_FILE_NAME);
-        File stagedFile = new File(fontDir, FONT_FILE_NAME + ".tmp");
-        try {
-            if (!fontDir.isDirectory() && !fontDir.mkdirs())
-                throw new java.io.IOException("Cannot create " + fontDir);
-            try (InputStream in = context.getContentResolver().openInputStream(uri);
-                 OutputStream out = new FileOutputStream(stagedFile)) {
-                if (in == null)
-                    throw new java.io.IOException("Cannot open " + uri);
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) != -1)
-                    out.write(buffer, 0, read);
-            }
-            // createFromFile returns DEFAULT (or throws) when the bytes are not a usable font.
-            Typeface typeface = Typeface.createFromFile(stagedFile);
-            if (typeface == null || Typeface.DEFAULT.equals(typeface))
-                throw new java.io.IOException("Unreadable font " + uri);
-            if (!stagedFile.renameTo(fontFile))
-                throw new java.io.IOException("Cannot replace " + fontFile);
-            TermuxAppSharedPreferences preferences =
-                TermuxAppSharedPreferences.build(context, true);
-            if (preferences != null)
-                preferences.setInAppKeyboardFontPath(fontFile.getAbsolutePath());
-        } catch (Exception e) {
-            //noinspection ResultOfMethodCallIgnored
-            stagedFile.delete();
-            AppNotice.show(context, R.string.termux_in_app_keyboard_font_error, false);
-        }
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null)
-            updateFontPreferenceSummary(fontPreference);
-    }
-
-    private void clearCustomFont() {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences != null) {
-            String path = preferences.getInAppKeyboardFontPath();
-            preferences.setInAppKeyboardFontPath("");
-            if (!path.isEmpty()) {
-                //noinspection ResultOfMethodCallIgnored
-                new File(path).delete();
-            }
-        }
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null)
-            updateFontPreferenceSummary(fontPreference);
-    }
-
-    private void updateFontPreferenceSummary(@NonNull Preference fontPreference) {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        String path = preferences == null ? "" : preferences.getInAppKeyboardFontPath();
-        if (path.isEmpty() || !new File(path).isFile()) {
-            fontPreference.setSummary(R.string.termux_in_app_keyboard_font_summary_default);
-        } else {
-            fontPreference.setSummary(getString(
-                R.string.termux_in_app_keyboard_font_summary_custom, new File(path).getName()));
-        }
-    }
 }
 
 class KeyboardPreferencesDataStore extends PreferenceDataStore {
