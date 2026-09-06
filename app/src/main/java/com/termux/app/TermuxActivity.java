@@ -12180,6 +12180,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 showToast(getString(R.string.termux_x11_command_taken), true);
             }
         });
+        // The tool store CLI goes in the same way, on every start.
+        com.termux.app.store.TlstoreInstaller.installAsync(this, result -> {
+            Logger.logDebug(LOG_TAG, "tlstore install: " + result);
+            if (result.kind == com.termux.app.store.TlstoreInstaller.Result.Kind.FOREIGN_COMMAND) {
+                Logger.logWarn(LOG_TAG, "Leaving a foreign " + result.foreignCommand
+                    + " in place; tlstore not installed");
+            }
+        });
         // Built while the wall already rests on the Display page — there is no settle coming to
         // attach the surface, so do it now.
         if (mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.DISPLAY
