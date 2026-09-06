@@ -128,3 +128,96 @@ and remove behave. Not yet run on a device: binary, npm-musl and refresh against
 catalog (the binaries tag `2026.09.06` and the catalog on `main` are not pushed yet).
 
 Side queue: publish `minisign` in the VAJ apt repo (needs the build VM).
+
+## Revision 2 (2026-09-06)
+
+The developer tried the store and asked for a much smaller catalog and stricter handling of config
+files. What follows supersedes the item list and the `script` kind above.
+
+### Seven visible items
+
+`list`, `search` and the picker show exactly `claude-code`, `fastfetch`, `fish-shell`, `kitten`,
+`nvim-theme`, `omp-theme`, `sigye`, alphabetically. Everything else carries `hidden=1` in `options`:
+it is a part another item pulls in through `requires`, never listed, never searched, never offered
+in the picker, and `install <hidden name>` is refused with "that is part of another item". `info` on
+a hidden name still works, because names appear in `Needs` lines.
+
+Gone: `neovim`, `build-tools`, `dev-tools`, `shell-setup`, `showcase`, `setup-nvim`, and the
+standalone `patchelf` pkg item. `config-fish` and `personal-fish` became hidden parts of
+`fish-shell`. `tlstore shell` now means `install fish-shell`.
+
+`list` drops the `installed`/`-` column for a leading `*`, and prints
+`needs while installing: <tools>` indented under an item that declares `build=`.
+
+### New kinds and options
+
+| addition | meaning |
+|---|---|
+| `hidden=1` | a part, not a choice (above) |
+| `build=<pkgs>` | packages needed only while installing |
+| kind `fisher` | `source` is a space-separated plugin list; install runs `fish -c 'fisher install …'`, remove the matching `fisher remove`, version `-`, and `update` leaves it alone — fisher updates are the user's (`fisher update`) |
+
+Removed with them: kind `script` and its `args=` and `post=` options, which only `setup-nvim` used.
+The dependency sort now reasons about `requires` alone.
+
+### Config files are never replaced silently
+
+For a `file` item (not `file-once`, not a binary) whose destination exists and differs, tlstore
+downloads the new file to the cache, prints the item name, shows `diff -u` (a before/after of the
+first 25 lines each where `diff` is missing) and asks `Replace your <basename>? [y/N]`. **`-y` and
+`TLSTORE_ASSUME_YES` do not answer this question** — only the new `--configs` flag on `install` and
+`update` does. With no tty and no `--configs` the file is kept and one line says so.
+
+Either answer records the item at the catalog version, so declining is not asked again until the
+shipped file itself moves; `update --check` reports those as
+`<name> has a new version; update shows the change and asks`. Replacing still leaves the timestamped
+`.bak`.
+
+### Build tools
+
+Before installing, tlstore notes which `build=` packages are missing (`pacman -Q`, else `dpkg -s`,
+else "is the command there") and installs them. When the plan finishes it asks
+`Remove the tools that were only needed for installing (<pkgs>)? [y/N]`, and on yes removes exactly
+those (`pacman -R --noconfirm` / `apt remove -y`) and clears `~/.cache/tlstore`. `-y` may answer
+this one. `info` shows a `Builds with` line. Only `claude-code` declares one, `patchelf`.
+
+### `nvim-theme`
+
+`docs/en/examples/nvim/lua/launcher/material_palette.lua` (lifted out of `setup-nvim` unchanged) and
+`docs/en/examples/nvim/colors/launcher-material.lua` (a real colorscheme that paints the standard
+groups, the `@` treesitter captures, diagnostics and git/diff groups from the palette's base16 and
+base30 tables, keeps the glass default and falls back to a fixed dark palette when the launcher has
+never written wallpaper colours). Both are hidden `file` items required by the visible `nvim-theme`
+bundle; Neovim itself is not installed. The colorscheme overrides the palette module's `reload` so a
+wallpaper change re-applies it rather than base46's, which only NvChad has.
+
+Enabling it in each config — plain, lazy.nvim/LazyVim, AstroNvim, NvChad — is in `docs/en/Tlstore.md`
+rather than the item summary, which stays one sentence.
+
+### `tlstore display`
+
+Runs `$PREFIX/bin/termux-x11-gpu-setup` (installed by the app) with whatever arguments it is given,
+and says the app needs updating when the file is not there.
+
+### Pinning
+
+A file in this repository is pinned to a tag when it has not changed since one, otherwise to the
+commit that added it (`launcher:<path>@<sha>`). `build-catalog.sh` now also hashes a plain `http(s)`
+source by downloading it once, so `fisher` and the fastfetch logo GIF are pinned like everything
+else; such a URL must name a tag or commit, never a branch.
+
+### As built
+
+`catalog.tsv` is regenerated at serial 2026090603 and **unsigned** — `catalog.tsv.minisig` was
+deleted rather than left describing a file it no longer matches. The maintainer signs the new one
+before it ships.
+
+The test suite reads one more documented knob, `TLSTORE_ASSUME_TTY`, because it has no pty to answer
+the two questions that are only asked of a person. 512 checks green under `sh`, `dash`, `busybox sh`
+and `bash --posix`; `shellcheck -s sh` clean. The colorscheme was checked with `nvim --headless`
+0.12, with a wallpaper palette and without one.
+
+`docs/en/examples/fastfetch.jsonc` still names `/data/data/com.termux/files/home/Pictures/gif/skel.gif`
+outright, so on the VAJ edition the logo path does not resolve. Left alone here: changing it would
+need its own commit and a new pin, and fastfetch's handling of `~` in a logo source is not something
+this phase verified.

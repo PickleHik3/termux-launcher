@@ -92,7 +92,7 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 ### Quick start script
 
-`tlstore`, the launcher's own tool store, installs my personal shell setup (fish, Oh My Posh with wallpaper Material colors, zoxide, eza, Neovim + AstroNvim, and the binaries — sigye, the animated-logo fastfetch, kitten) and Claude Code. Every config it replaces gets a timestamped `.bak` first. It's already on your phone — no download needed:
+`tlstore`, the launcher's own tool store, installs my personal shell setup (fish, Oh My Posh with wallpaper Material colors, zoxide, eza and a couple of fish plugins), a Neovim colour scheme that follows your wallpaper, the binaries — sigye, the animated-logo fastfetch, kitten — and Claude Code. A config file of yours is never replaced without showing you the change and asking first, and whatever it does replace gets a timestamped `.bak`. It's already on your phone — no download needed:
 
 ```sh
 tlstore shell
