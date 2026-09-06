@@ -743,7 +743,7 @@ refresh_catalog() {
     mkdir -p "$CACHE_DIR"
     rc_new="$CACHE_DIR/catalog.tsv"
     rc_sig="$CACHE_DIR/catalog.tsv.minisig"
-    if ! curl -fsSL -o "$rc_new" "$CATALOG_URL" || ! curl -fsSL -o "$rc_sig" "$CATALOG_URL.minisig"; then
+    if ! curl -fsL -o "$rc_new" "$CATALOG_URL" 2>/dev/null || ! curl -fsL -o "$rc_sig" "$CATALOG_URL.minisig" 2>/dev/null; then
         rm -f "$rc_new" "$rc_sig"
         [ "$rc_quiet" = 1 ] || say "Could not reach the item list; using the one you have."
         return 1

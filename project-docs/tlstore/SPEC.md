@@ -109,4 +109,22 @@ text, one line per action, product copy (no mechanism talk); errors start with `
 | P4 | orchestrator | minisign key, `trusted.pub` asset, `sign-catalog.sh`, signed catalog on `dev`; queue `minisign` for the VAJ apt repo | — | P1 |
 | gate | — | debug APK on the emulator: tlstore written, `tlstore list/doctor` run; then pong by the developer | — | P1, P2 |
 
-Side queue: none yet.
+## As built (2026-09-06)
+
+Deviations from the text above, all deliberate: an `args=` option passes arguments to a `script`
+item (`setup-nvim`); a `fastfetch-libs` pkg item carries fastfetch's runtime libraries and both
+fastfetch rows require it; the `npm-musl` wrapper is named after the executable in the source
+(`claude`), its directory after the item; `musl-loader` targets `~/.local/lib/musl/` and the
+npm-musl install copies it from there; `claude-code` is limited to the editions with a loader;
+`update --check` does not guess about `latest`-pinned items; a refused refresh exits 1;
+`remove` on a pkg item only stops tracking it; a bundle member with no row on this device is
+skipped with a line; the picker lists only what is not installed; the CLI reads two test knobs,
+`TLSTORE_ARCH` and `TLSTORE_PATCHELF`. The app installer stamps the marker with the app's
+versionName as well, so every release rewrites the files.
+
+Verified 2026-09-06 on the x86_64 emulator (debug build): the app writes `tlstore`, `tl`, `tls`,
+the catalog and key; list, info, doctor, a real apt install, update, a failed refresh, the picker
+and remove behave. Not yet run on a device: binary, npm-musl and refresh against the published
+catalog (the binaries tag `2026.09.06` and the catalog on `main` are not pushed yet).
+
+Side queue: publish `minisign` in the VAJ apt repo (needs the build VM).
