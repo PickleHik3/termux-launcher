@@ -11331,46 +11331,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyPlaceStripInset(mPreferences != null && mPreferences.isTopPaneClockCollapsed()
             ? 0f : 1f);
         syncPlaceBarOffset(mWallOffsetPx);
-        // The weather says more on the Widgets place, and the stats line up under the clock
-        // there; both read the place, so both follow it.
+        // The weather says more on the Widgets place; it reads the place, so it follows it.
         if (mWeatherController != null && mWeatherController.cache().valid) {
             onWeatherUpdated(mWeatherController.cache());
         }
-        View row = findViewById(R.id.terminal_status_row);
-        if (row != null) row.post(this::alignStatsUnderClock);
+        applyStatsClusterArrangement();
     }
 
     /**
-     * On the Widgets place the row holds only the stats and the weather, so they leave the row's
-     * end and line up under the clock — sharing its centre, wherever the clock is set to sit —
-     * and the bar reads as one column. Everywhere else they keep the row's end.
+     * On the Widgets place the CPU/RAM/weather cluster reads Weather · RAM · CPU and centres in
+     * the row, on a spacer that balances the place content strip's own weight; everywhere else it
+     * keeps today's CPU · RAM · Weather order at the row's end. Both are gravity/weight, not a
+     * measured translation, so a stat toggling off in Settings or the weather text changing width
+     * re-centres for free on the next layout pass instead of needing a recompute here.
      */
-    private void alignStatsUnderClock() {
-        View stats = findViewById(R.id.terminal_status_widgets);
-        if (stats == null) return;
-        View slot = findViewById(R.id.terminal_top_widget_area);
-        com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
-        View row = findViewById(R.id.terminal_status_row);
-        boolean underClock = isWidgetsPageShowing() && slot != null && clock != null && row != null
-            && slot.getVisibility() == View.VISIBLE && stats.getWidth() > 0 && clock.getWidth() > 0;
-        float target = 0f;
-        if (underClock) {
-            float clockCenter = slot.getLeft() + clock.getLeft()
-                + (clock.paintedLeftPx() + clock.paintedRightPx()) / 2f;
-            float statsCenter = row.getLeft() + stats.getLeft() + stats.getWidth() / 2f;
-            float shift = clockCenter - statsCenter;
-            // Never past the row's own start.
-            float leftmost = -(stats.getLeft() - row.getPaddingStart());
-            target = Math.max(leftmost, Math.min(0f, shift));
-        }
-        if (stats.getTranslationX() == target) return;
-        if (isReducedMotionEnabled() || stats.getTranslationX() == 0f && !underClock) {
-            stats.setTranslationX(target);
-        } else {
-            stats.animate().translationX(target)
-                .setDuration(com.termux.app.terminal.Motion.FLOAT_DEPTH_MS)
-                .setInterpolator(com.termux.app.terminal.Motion.settle()).start();
-        }
+    private void applyStatsClusterArrangement() {
+        ViewGroup cluster = findViewById(R.id.terminal_status_stats_cluster);
+        View spacer = findViewById(R.id.terminal_status_stats_center_spacer);
+        if (cluster == null || spacer == null) return;
+        boolean reversed = com.termux.app.statusbar.StatusStatsClusterPolicy
+            .centeredReversed(currentWallPage());
+        spacer.setVisibility(reversed ? View.VISIBLE : View.GONE);
+        int count = cluster.getChildCount();
+        boolean currentlyReversed = count > 0
+            && cluster.getChildAt(0).getId() == R.id.terminal_status_widget_weather;
+        if (reversed == currentlyReversed) return;
+        View[] children = new View[count];
+        for (int i = 0; i < count; i++) children[i] = cluster.getChildAt(i);
+        cluster.removeAllViews();
+        for (int i = count - 1; i >= 0; i--) cluster.addView(children[i]);
     }
 
     /**
@@ -12013,16 +12002,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // says where that is after every layout.
                 ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setHomeAnchorListener(
                     lens::setHomeAnchor);
-            }
-            View stats = findViewById(R.id.terminal_status_widgets);
-            if (stats != null) {
-                stats.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-                    if (r - l != or - ol || l != ol) v.post(this::alignStatsUnderClock);
-                });
-            }
-            if (slotView != null) {
-                slotView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
-                    v.post(this::alignStatsUnderClock));
             }
         }
         syncWallGestureAvailability();
@@ -12751,14 +12730,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (cpuRamDot != null) {
-            boolean show = cpuOn && (ramOn || weatherOn);
+            boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
+                .cpuRamDotVisible(cpuOn, ramOn, weatherOn);
             cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
             cpuRamDot.setColorRole(ramOn
                 ? com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY
                 : com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
         }
         if (ramWeatherDot != null) {
-            ramWeatherDot.setVisibility(ramOn && weatherOn ? View.VISIBLE : View.GONE);
+            boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
+                .ramWeatherDotVisible(ramOn, weatherOn);
+            ramWeatherDot.setVisibility(show ? View.VISIBLE : View.GONE);
             ramWeatherDot.setColorRole(
                 com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
         }
@@ -13107,7 +13089,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 widget.setValue("--°");
             }
         }
-        alignStatsUnderClock();
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
             mWeatherCardView.bind(weather);
         }

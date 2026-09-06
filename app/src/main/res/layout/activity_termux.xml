@@ -211,17 +211,17 @@
                                 android:contentDescription="@string/termux_window_bar_content_description" />
                         </com.termux.app.statusbar.PlaceContentStrip>
 
-                        <!-- The stat widgets hold still while the place content slides; the end
-                             margin keeps them clear of the lens and the icon peeking through it. -->
+                        <!-- The CPU/RAM/weather cluster: CPU · RAM · Weather at the row's end
+                             everywhere, except the Widgets place, where TermuxActivity reverses
+                             the child order to Weather · RAM · CPU and shows the centring spacer
+                             after it — see applyStatsClusterArrangement(). -->
                         <LinearLayout
-                            android:id="@+id/terminal_status_widgets"
+                            android:id="@+id/terminal_status_stats_cluster"
                             android:layout_width="wrap_content"
                             android:layout_height="match_parent"
-                            android:layout_marginEnd="10dp"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:paddingStart="3dp"
-                            android:paddingEnd="3dp"
                             android:clipChildren="false"
                             android:clipToPadding="false">
 
@@ -265,6 +265,30 @@
                                 android:layout_marginStart="3dp"
                                 android:visibility="gone"
                                 android:contentDescription="@string/termux_status_widget_weather_content_description" />
+                        </LinearLayout>
+
+                        <!-- Balances the place content strip's weight so the cluster above centres
+                             in the row on the Widgets place; gone (so weightless) everywhere else,
+                             where the cluster keeps hugging the row's end as it does today. -->
+                        <View
+                            android:id="@+id/terminal_status_stats_center_spacer"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:visibility="gone" />
+
+                        <!-- The stat widgets hold still while the place content slides; the end
+                             margin keeps them clear of the lens and the icon peeking through it. -->
+                        <LinearLayout
+                            android:id="@+id/terminal_status_widgets"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginEnd="10dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingEnd="3dp"
+                            android:clipChildren="false"
+                            android:clipToPadding="false">
 
                             <!-- The AI glyph is not a preference: it appears only while a model is
                                  actually resident, so it owns its own visibility and its own dot. -->
