@@ -553,21 +553,55 @@ public final class TerminalClockWidget extends View {
 
     /**
      * The slot lays this view out at the pane's full available width (so alignment can place the
-     * clock left/center/right within it), which leaves blank space beside the painted face. Gate
-     * the click listener to that painted region instead of the whole laid-out view.
+     * clock left/center/right within it), which leaves blank space beside and below the painted
+     * face. Gate the click listener to the time digits instead of the whole laid-out view: the
+     * date row and the slack under it sit directly over the status row's window chips, and a tap
+     * meant for a chip must not open the clock app.
      */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN
-            && !isInsidePaintedContent(event.getX(), event.getY())) {
+            && !isInsideTapTarget(event.getX(), event.getY())) {
             return false;
         }
         return super.onTouchEvent(event);
     }
 
-    private boolean isInsidePaintedContent(float x, float y) {
+    @VisibleForTesting
+    boolean isInsideTapTarget(float x, float y) {
         float[] painted = paintedXRangePx();
-        return x >= painted[0] && x <= painted[1];
+        if (x < painted[0] || x > painted[1]) return false;
+        float[] band = tapYRangePx();
+        return y >= band[0] && y <= band[1];
+    }
+
+    /**
+     * Vertical extent of the tap target, as {top, bottom} in view pixels: the time band alone in
+     * FULL form — the digits, not the date row beneath them — and the painted column in the
+     * compact forms, which draw no date row of their own.
+     */
+    private float[] tapYRangePx() {
+        if (mSnapshot == null) return new float[] {0f, getHeight()};
+        switch (mForm) {
+            case MONO_CHIP: {
+                float rowHeight = dp(17f);
+                float top = Math.max(0f, (getHeight() - rowHeight) / 2f);
+                return new float[] {top, top + rowHeight};
+            }
+            case COMPACT: {
+                float columnDp = compactColumnHeightDp();
+                float scale = Math.min(1f, getHeight() / dp(columnDp));
+                float top = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+                return new float[] {top, top + dp(columnDp) * scale};
+            }
+            default: {
+                float bandDp = fullBandHeightDp();
+                float columnDp = bandDp + fullDateGapDp() + fullDateBlockDp();
+                float scale = Math.min(1f, getHeight() / dp(columnDp));
+                float top = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+                return new float[] {top, top + dp(bandDp) * scale};
+            }
+        }
     }
 
     /**

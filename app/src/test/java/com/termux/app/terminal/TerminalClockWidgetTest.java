@@ -5,6 +5,7 @@ import android.os.Build;
 
 import androidx.test.core.app.ApplicationProvider;
 
+import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 import org.junit.Test;
@@ -134,6 +135,33 @@ public class TerminalClockWidgetTest {
         // The flip date row is its own, so it needs its own guard against re-centering.
         assertTrue("drawFullFlipDateRow must place its date by the alignment",
             body(source, "drawFullFlipDateRow").contains("dateRowTextX("));
+    }
+
+    @Test
+    public void tapTarget_coversTheTimeDigitsButNotTheDateRowBelowThem() {
+        TerminalClockWidget widget = new TerminalClockWidget(
+            ApplicationProvider.getApplicationContext(), null);
+        widget.setStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP);
+        widget.setForm(TopPaneClockForm.FULL);
+        widget.updateTime(1_700_000_000_000L, 1_000L);
+        float density = ApplicationProvider.getApplicationContext().getResources()
+            .getDisplayMetrics().density;
+        int slot = Math.round(68f * density);
+        widget.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(Math.round(360f * density),
+                android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(slot,
+                android.view.View.MeasureSpec.EXACTLY));
+        widget.layout(0, 0, widget.getMeasuredWidth(), widget.getMeasuredHeight());
+
+        // Flip: a 35.5dp band over a 13.8dp gap and an 11.7dp date block, centred in the slot.
+        float top = (slot - 61f * density) / 2f;
+        assertTrue("the digits must be tappable",
+            widget.isInsideTapTarget(density, top + 4f * density));
+        assertTrue("the date row must not open the clock app",
+            !widget.isInsideTapTarget(density, top + 50f * density));
+        assertTrue("the slack above the window chips must not open the clock app",
+            !widget.isInsideTapTarget(density, slot - density));
     }
 
     /** The source of {@code method}, from its signature to the first line that closes it. */
