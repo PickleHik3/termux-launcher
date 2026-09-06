@@ -136,7 +136,7 @@ public final class LayoutOverviewPreference extends Preference {
         PlaceMiniatureView miniature =
             (PlaceMiniatureView) holder.findViewById(R.id.layout_overview_miniature);
         if (miniature != null) {
-            if (mLayout != null) miniature.setLayout(mLayout, mSelectedOrientation);
+            if (mLayout != null) miniature.setLayout(mLayout, mSelectedOrientation, mSelectedPlace);
             miniature.setOnBlockTappedListener(block -> {
                 if (mListener != null) mListener.onBlockTapped(block);
             });

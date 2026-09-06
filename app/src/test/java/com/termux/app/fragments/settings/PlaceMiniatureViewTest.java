@@ -15,6 +15,7 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceOrientation;
+import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -31,11 +32,20 @@ public class PlaceMiniatureViewTest {
         return new PlaceLayout(statusBar, appsRow, true, extraKeys, KeyboardMode.RESIZE, 4, 5);
     }
 
+    private static PlaceLayout layout(RowPlacement appsRow, int widgetColumns, int widgetRows) {
+        return new PlaceLayout(Edge.TOP, appsRow, true, RowPlacement.BOTTOM, KeyboardMode.RESIZE,
+            widgetColumns, widgetRows);
+    }
+
     private static PlaceMiniatureView sized() {
+        return sized(1000, 400);
+    }
+
+    private static PlaceMiniatureView sized(int width, int height) {
         PlaceMiniatureView view = new PlaceMiniatureView(RuntimeEnvironment.getApplication());
-        view.measure(View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
-        view.layout(0, 0, 1000, 400);
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, width, height);
         return view;
     }
 
@@ -85,5 +95,47 @@ public class PlaceMiniatureViewTest {
         RectF landscape = view.blockRect(PlaceMiniatureView.Block.CANVAS);
         assertTrue(portrait.width() < portrait.height() * 1.5f);
         assertTrue(landscape.width() > landscape.height());
+    }
+
+    @Test
+    public void thePlaceChangesWhatTheCanvasDraws() {
+        PlaceMiniatureView view = sized();
+        PlaceLayout arrangement = layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM);
+
+        view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        assertEquals(PlaceMiniatureView.CanvasKind.TERMINAL, view.canvasKind());
+
+        view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
+        assertEquals(PlaceMiniatureView.CanvasKind.HOME_GRID, view.canvasKind());
+
+        view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.DISPLAY);
+        assertEquals(PlaceMiniatureView.CanvasKind.DISPLAY, view.canvasKind());
+    }
+
+    @Test
+    public void theWidgetGridCollapsesOnlyWhenACellWouldBeTooSmall() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(RowPlacement.BOTTOM, 4, 5), PlaceOrientation.PORTRAIT,
+            PaneWallPage.WIDGETS);
+        assertTrue("a modest grid draws real cells", !view.isWidgetGridCollapsed());
+
+        view.setLayout(layout(RowPlacement.BOTTOM, 80, 80), PlaceOrientation.PORTRAIT,
+            PaneWallPage.WIDGETS);
+        assertTrue("an extreme grid collapses to one tinted rect", view.isWidgetGridCollapsed());
+    }
+
+    @Test
+    public void aPillDropsItsWordWhenTheBandIsTooShortButKeepsItWhenThereIsRoom() {
+        PlaceMiniatureView roomy = sized();
+        roomy.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertTrue("plenty of room: the apps row pill keeps its word",
+            roomy.isPillLabelShown(PlaceMiniatureView.Block.APPS_ROW));
+
+        PlaceMiniatureView cramped = sized(70, 55);
+        cramped.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertTrue("too little room: the apps row pill drops to glyph-only",
+            !cramped.isPillLabelShown(PlaceMiniatureView.Block.APPS_ROW));
     }
 }
