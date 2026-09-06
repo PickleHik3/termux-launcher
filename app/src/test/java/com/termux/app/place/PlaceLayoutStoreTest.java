@@ -97,17 +97,22 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void aSwitchedOffRowIsHiddenForEveryPlace() {
+    public void aMasterSwitchedOffBeforeTheMigrationIsHiddenForEveryPlaceThenStopsGating() {
         launcher.setAppLauncherAppsRowEnabled(false);
         launcher.setAppLauncherExtraKeysRowEnabled(false);
         PlaceLayoutStore store = store();
+        for (PaneWallPage place : PaneWallPage.values()) {
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                PlaceLayout layout = store.resolve(place, orientation);
+                assertEquals(place + " " + orientation, RowPlacement.HIDDEN, layout.appsRow);
+                assertEquals(place + " " + orientation, RowPlacement.HIDDEN, layout.extraKeys);
+            }
+        }
+        // The migration folded the master into Hidden once; a scoped write afterwards is a real
+        // placement, not a value the master can still veto.
         store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.RIGHT);
-        PlaceLayout terminal = store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
-        assertEquals(RowPlacement.HIDDEN, terminal.appsRow);
-        assertEquals(RowPlacement.HIDDEN, terminal.extraKeys);
-        // The switch says whether the row exists at all; the scoped value still says where it goes.
         assertEquals(RowPlacement.RIGHT,
-            store.appsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).appsRow);
     }
 
     // ------------------------------------------------------------------ scoped writes
@@ -234,7 +239,7 @@ public class PlaceLayoutStoreTest {
         // There is no hidden status bar any more, and the display's keyboard memory has moved.
         assertFalse(prefs.contains("x11_hide_status_bar"));
         assertFalse(prefs.contains("x11_keyboard_shown"));
-        assertEquals(1, prefs.getInt("place.migrated", 0));
+        assertEquals(2, prefs.getInt("place.migrated", 0));
 
         // A second store over the same preferences must not fold anything again: the user's own
         // choices since the migration stand.
@@ -248,9 +253,29 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
+    public void reachingVersionTwoFromVersionOneOnlyRunsTheStepAddedSince() {
+        // An install already migrated to version 1 keeps its own scoped choice — re-running
+        // version 1's fold would stomp it with the legacy global it was migrated away from.
+        prefs.edit()
+            .putInt("place.migrated", 1)
+            .putString("app_launcher_dock_rail_side", "right")
+            .putString("place.terminal.landscape.apps_row", "left")
+            .commit();
+        launcher.setAppLauncherExtraKeysRowEnabled(false);
+
+        PlaceLayoutStore store = store();
+        assertEquals(RowPlacement.LEFT,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+        // Version 2 still runs: the extra-keys master was off, so it folds to Hidden everywhere.
+        assertEquals(RowPlacement.HIDDEN,
+            store.resolve(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT).extraKeys);
+        assertEquals(2, prefs.getInt("place.migrated", 0));
+    }
+
+    @Test
     public void aFreshInstallHasNothingToFoldAndSaysSo() {
         PlaceLayoutStore store = store();
-        assertEquals(1, prefs.getInt("place.migrated", 0));
+        assertEquals(2, prefs.getInt("place.migrated", 0));
         assertFalse(prefs.contains("place.terminal.landscape.apps_row"));
         assertEquals(RowPlacement.LEFT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);

@@ -2,16 +2,21 @@ package com.termux.app.launcher;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.place.PlaceLayout.RowPlacement;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
  * The launcher-vs-terminal use case switch.
  *
  * <p>Termux Launcher ships as a home launcher, but a large share of users only ever want the
- * terminal. Rather than making them hunt down five scattered switches, this collapses the choice
- * into one: {@link #MODE_TERMINAL} turns off every home surface (pinned apps row, A-Z index, app
- * drawer, widget pane) and turns on "show in recents when not the default launcher", which is what
- * a terminal-only install needs to stay reachable from the task switcher.
+ * terminal. Rather than making them hunt down several scattered switches, this collapses the
+ * choice into one: {@link #MODE_TERMINAL} hides the pinned apps row on every place and
+ * orientation, turns off the A-Z index, the app drawer and the widget pane, and turns on "show in
+ * recents when not the default launcher", which is what a terminal-only install needs to stay
+ * reachable from the task switcher.
  *
  * <p>The mode is <em>not</em> a lock. Each surface stays individually settable afterwards, so a
  * terminal-only user who later wants just the app drawer can have it. The mode is what the user
@@ -20,8 +25,11 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
  * and the next switch then snapshotted that half-on state, so switching back restored a layout
  * with the apps row still missing.
  *
- * <p>The surface states from before the switch are captured in a snapshot preference so switching
- * back restores the user's layout rather than the factory defaults. Same shape as
+ * <p>The apps row is a per-place, per-orientation placement now, not one global switch, so
+ * switching back to launcher mode does not try to restore whatever it was before — it puts the
+ * row back at the shipped default (bottom in portrait, the left rail in landscape) on every place.
+ * The other surfaces are still captured in a snapshot preference so switching back restores the
+ * user's choice for them rather than the factory default. Same shape as
  * {@code TermuxActivity.applyWallpaperModePreferences}, which stashes the wallpaper-era opacities
  * the same way. Re-picking the mode the app is already in does nothing, so the snapshot can never
  * be overwritten with a state the mode itself produced.
@@ -35,7 +43,7 @@ public final class LauncherUseCaseMode {
     public static final String MODE_TERMINAL = "terminal";
 
     private static final String SNAPSHOT_SEPARATOR = ",";
-    private static final int SNAPSHOT_FIELDS = 5;
+    private static final int SNAPSHOT_FIELDS = 4;
 
     private LauncherUseCaseMode() {}
 
@@ -72,9 +80,14 @@ public final class LauncherUseCaseMode {
                                          boolean terminalOnly) {
         if (terminalOnly == isTerminalOnly(preferences)) return;
         preferences.setAppLauncherUseCaseMode(terminalOnly ? MODE_TERMINAL : MODE_LAUNCHER);
+        PlaceLayoutStore places = new PlaceLayoutStore(preferences);
         if (terminalOnly) {
             preferences.setAppLauncherUseCaseSnapshot(captureSnapshot(preferences));
-            preferences.setAppLauncherAppsRowEnabled(false);
+            for (PaneWallPage place : PaneWallPage.values()) {
+                for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                    places.setAppsRow(place, orientation, RowPlacement.HIDDEN);
+                }
+            }
             preferences.setAppLauncherAzRowEnabled(false);
             preferences.setAppLauncherDrawerEnabled(false);
             preferences.setAppLauncherWidgetPaneEnabled(false);
@@ -82,19 +95,24 @@ public final class LauncherUseCaseMode {
             return;
         }
 
+        // The apps row is per place now; there is nothing to restore it to but the shipped
+        // default, on every place — bottom in portrait, the left rail in landscape.
+        for (PaneWallPage place : PaneWallPage.values()) {
+            places.setAppsRow(place, PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+            places.setAppsRow(place, PlaceOrientation.LANDSCAPE, RowPlacement.LEFT);
+        }
+
         boolean[] snapshot = parseSnapshot(preferences.getAppLauncherUseCaseSnapshot());
         if (snapshot == null) {
-            preferences.setAppLauncherAppsRowEnabled(true);
             preferences.setAppLauncherAzRowEnabled(true);
             preferences.setAppLauncherDrawerEnabled(true);
             preferences.setAppLauncherWidgetPaneEnabled(true);
             return;
         }
-        preferences.setAppLauncherAppsRowEnabled(snapshot[0]);
-        preferences.setAppLauncherAzRowEnabled(snapshot[1]);
-        preferences.setAppLauncherDrawerEnabled(snapshot[2]);
-        preferences.setAppLauncherWidgetPaneEnabled(snapshot[3]);
-        preferences.setShowInRecentsWhenNotDefaultEnabled(snapshot[4]);
+        preferences.setAppLauncherAzRowEnabled(snapshot[0]);
+        preferences.setAppLauncherDrawerEnabled(snapshot[1]);
+        preferences.setAppLauncherWidgetPaneEnabled(snapshot[2]);
+        preferences.setShowInRecentsWhenNotDefaultEnabled(snapshot[3]);
         preferences.setAppLauncherUseCaseSnapshot(null);
     }
 
@@ -102,8 +120,7 @@ public final class LauncherUseCaseMode {
     static String captureSnapshot(@NonNull TermuxAppSharedPreferences preferences) {
         // The A-Z choice is captured raw: it is hidden while the apps row is off, and a mode
         // round trip must not quietly rewrite what the user picked for it.
-        return encode(preferences.isAppLauncherAppsRowEnabled())
-            + SNAPSHOT_SEPARATOR + encode(preferences.isAppLauncherAzRowChosen())
+        return encode(preferences.isAppLauncherAzRowChosen())
             + SNAPSHOT_SEPARATOR + encode(preferences.isAppLauncherDrawerEnabled())
             + SNAPSHOT_SEPARATOR + encode(preferences.isAppLauncherWidgetPaneEnabled())
             + SNAPSHOT_SEPARATOR + encode(preferences.isShowInRecentsWhenNotDefaultEnabled());

@@ -40,10 +40,9 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
 
     private static final String KEY_USE_CASE_MODE = "app_launcher_use_case_mode";
-    private static final String KEY_DOCK_RAIL_SIDE = "app_launcher_dock_rail_side";
-    /** The home surfaces the use case switch owns, in screen order. */
+    /** The home surfaces the use case switch owns, in screen order. The apps row is not one of
+     *  them any more: it is per place now, and the mode writes it straight into the layout store. */
     private static final String[] USE_CASE_SURFACE_KEYS = {
-        "app_launcher_apps_row_enabled",
         "app_launcher_az_row_enabled",
         "app_launcher_drawer_enabled",
         "app_launcher_widget_pane_enabled",
@@ -78,23 +77,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             return true;
         });
 
-        SwitchPreferenceCompat appsRowPreference = findPreference("app_launcher_apps_row_enabled");
         SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
-        if (appsRowPreference != null) {
-            updateAppsBarDependentPreferences(appsRowPreference, notificationDotsPreference);
-            appsRowPreference.setOnPreferenceChangeListener((preference, newValue) -> {
-                boolean appsRowEnabled = Boolean.TRUE.equals(newValue);
-                if (notificationDotsPreference != null) {
-                    notificationDotsPreference.setEnabled(appsRowEnabled);
-                }
-                if (!appsRowEnabled) {
-                    if (notificationDotsPreference != null) {
-                        notificationDotsPreference.setChecked(false);
-                    }
-                }
-                return true;
-            });
-        }
         if (notificationDotsPreference != null) {
             notificationDotsPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 boolean enabled = Boolean.TRUE.equals(newValue);
@@ -151,21 +134,8 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
 
-        configureDockRailSide();
-
         // Last: it wraps the surface switches' change listeners, so they must already be set.
         configureUseCaseMode();
-    }
-
-    /** Wires the landscape rail's edge; the app drawer's swipe follows it away from that edge. */
-    private void configureDockRailSide() {
-        SegmentedPillPreference side = findPreference(KEY_DOCK_RAIL_SIDE);
-        if (side == null) return;
-        side.setSegments(
-            new String[]{
-                TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT,
-                TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT},
-            new int[]{R.string.settings_dock_rail_side_left, R.string.settings_dock_rail_side_right});
     }
 
     /**
@@ -201,10 +171,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         if (recents != null) {
             boolean value = store.getBoolean("show_in_recents_when_not_default", true);
             if (recents.isChecked() != value) recents.setChecked(value);
-        }
-        SwitchPreferenceCompat appsRow = findPreference("app_launcher_apps_row_enabled");
-        if (appsRow != null) {
-            updateAppsBarDependentPreferences(appsRow, findPreference("app_launcher_notification_dots"));
         }
     }
 
@@ -294,16 +260,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             preference.setSummary(enabled
                 ? R.string.termux_app_launcher_access_status_on
                 : R.string.termux_app_launcher_access_status_off);
-        }
-    }
-
-    private void updateAppsBarDependentPreferences(
-        SwitchPreferenceCompat appsRowPreference,
-        SwitchPreferenceCompat notificationDotsPreference
-    ) {
-        boolean appsRowEnabled = appsRowPreference.isChecked();
-        if (notificationDotsPreference != null) {
-            notificationDotsPreference.setEnabled(appsRowEnabled);
         }
     }
 

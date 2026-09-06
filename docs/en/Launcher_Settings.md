@@ -7,6 +7,23 @@ This map uses the exact top-level labels shown by v0.2.31. Use **Search settings
 know what you want but not where it lives. Search indexes the preferences inside every destination,
 so `fonts`, `ligatures`, or `Shizuku` can find the containing section.
 
+## Layout
+
+Use this section to arrange what each place shows and where. A place is Home (the widget grid),
+Terminal, or Display (once the Linux display is on); tabs at the top pick which one the rows below
+describe, and a Portrait/Landscape pill picks the orientation, since an arrangement can differ
+between the two. A miniature shows the result, and tapping a part of it jumps to that row.
+
+- **Status bar** and **Apps row**: which edge the row stands on, or hidden. **Alphabets row** shows
+  or hides the A–Z index below the pinned apps, and only while the apps row is along the bottom.
+  **Extra keys**: where the terminal's extra keys stand, or hidden.
+- **Keyboard on enter**: whether the on-screen keyboard comes back the way you left it, opens, or
+  stays closed when you switch to this place. Remembered per place, the same in both orientations.
+- **Grid columns** and **Grid rows** (Home only): how many widgets fit across and down a page, set
+  separately for portrait and landscape; widgets that no longer fit a smaller grid move to free
+  space or a new page rather than being dropped.
+- **Look of this place**: opens the surface editor for what is on screen here.
+
 ## Appearance
 
 Use this section for visible surfaces and colors:
@@ -140,26 +157,24 @@ as the third place of the home screen — see [The Linux display](X11_Display.md
 mode, resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
 the window manager started with the display, the mark on the Display place's badge in the status
 bar, starting the display with the launcher, the start command, pointing new shells at the
-display, two compatibility switches, and what your GPU can do for Linux apps. Under **Layout**,
-**Extra keys bar** puts the extra keys along the bottom or in a column on the left or right edge
-while the display is showing. To have the phone try every graphics profile and keep the best, run
-`termux-x11-gpu-setup` in a shell.
+display, two compatibility switches, and what your GPU can do for Linux apps. Where the extra keys
+stand while the display is showing, and everything else about its arrangement, lives on the
+**Layout** page's Display tab once the switch above is on. To have the phone try every graphics
+profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 
 ## Launcher & apps
 
-- **Customize dock appearance:** shared surface shape and live dock tuning.
-- **Show pinned apps row** and **Edit pinned apps**. **Apps bar side** picks the edge the pinned
-  apps stand on in landscape; the app drawer opens by swiping off it, away from that edge.
+- **Customize dock appearance:** shared surface shape and live dock tuning. Where the pinned apps
+  stand, the alphabets row, and the widget grid's size are all on the **Layout** page now, one place
+  and orientation at a time.
+- **Edit pinned apps**.
 - **App drawer:** swipe down on the pinned row to open it; choose the drawer layout. **Open the
   keyboard with the drawer** brings the keyboard up as the drawer opens; **Search with the Android
   keyboard** searches through your Android keyboard, with its suggestions and swipe typing. With the
   categories layout, **Sort apps into categories** and **Re-run categorization** appear here too; the
   re-run row counts the apps installed since the last run, and the drawer mentions them once when
   more than five are waiting.
-- **Widget pane:** keep a page of home-screen widgets beside the terminal. **Grid columns** and
-  **Grid rows** set how many cells a page has; widgets that no longer fit a smaller grid are moved
-  to free space or onto a new page, never dropped.
-- **Alphabets row:** show or hide the A–Z index.
+- **Widget pane:** keep a page of home-screen widgets beside the terminal.
 - **Launcher haptics** and **Notification dots**.
 - **Most-used apps page:** add a page ranked by launcher usage.
 - **App search prefix:** character that starts app filtering at an idle shell prompt; `%` is the

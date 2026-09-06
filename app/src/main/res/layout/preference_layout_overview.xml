@@ -8,32 +8,15 @@
     android:paddingEnd="24dp"
     android:paddingBottom="14dp">
 
-    <TextView
-        android:id="@android:id/title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fontFamily="sans-serif-medium"
-        android:textColor="?attr/termuxColorOnSurface"
-        android:textSize="16sp" />
-
-    <TextView
-        android:id="@android:id/summary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
-        android:textColor="?attr/termuxColorOnSurfaceVariant"
-        android:textSize="13sp" />
-
     <FrameLayout
-        android:id="@+id/segmented_pill_track"
+        android:id="@+id/layout_overview_places_track"
         android:layout_width="match_parent"
         android:layout_height="46dp"
-        android:layout_marginTop="12dp"
         android:background="@drawable/settings_segmented_pill_track"
         android:padding="3dp">
 
         <View
-            android:id="@+id/segmented_pill_indicator"
+            android:id="@+id/layout_overview_places_indicator"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:background="@drawable/settings_segmented_pill_indicator" />
@@ -44,52 +27,94 @@
             android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/segmented_pill_default"
+                android:id="@+id/layout_overview_tab_home"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:text="@string/termux_app_launcher_dock_style_default"
+                android:text="@string/settings_layout_tab_home"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/segmented_pill_capsule"
+                android:id="@+id/layout_overview_tab_terminal"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:text="@string/termux_app_launcher_dock_style_rounded"
+                android:text="@string/settings_layout_tab_terminal"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/segmented_pill_third"
+                android:id="@+id/layout_overview_tab_display"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
+                android:text="@string/settings_layout_tab_display"
                 android:textSize="13sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/segmented_pill_fourth"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
+                android:textStyle="bold" />
         </LinearLayout>
     </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/layout_overview_orientation_track"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/settings_segmented_pill_track"
+        android:padding="3dp">
+
+        <View
+            android:id="@+id/layout_overview_orientation_indicator"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/settings_segmented_pill_indicator" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/layout_overview_orientation_portrait"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="@string/settings_layout_orientation_portrait"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/layout_overview_orientation_landscape"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="@string/settings_layout_orientation_landscape"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <com.termux.app.fragments.settings.PlaceMiniatureView
+        android:id="@+id/layout_overview_miniature"
+        android:layout_width="match_parent"
+        android:layout_height="140dp"
+        android:layout_marginTop="14dp"
+        android:clickable="true"
+        android:focusable="true" />
+
 </LinearLayout>

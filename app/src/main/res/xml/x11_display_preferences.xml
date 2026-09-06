@@ -63,14 +63,6 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_x11_category_layout">
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="x11_extra_keys_side"
-            app:title="@string/settings_x11_extra_keys_side_title"
-            app:summary="@string/settings_x11_extra_keys_side_summary"
-            app:defaultValue="bottom" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="@string/settings_x11_category_apps">
         <SwitchPreferenceCompat
             app:key="x11_drawer_apps"

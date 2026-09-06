@@ -120,7 +120,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private final Context mContext;
 
     private final TermuxAppSharedPreferences mPreferences;
-    private com.termux.app.place.PlaceLayoutStore mPlaces;
     private boolean mPendingRecreateActivity;
     private final Runnable mStyleSyncRunnable;
     private final Runnable mDrawerSyncRunnable;
@@ -136,14 +135,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, recreateActivity);
         };
         mDrawerSyncRunnable = () -> TermuxActivity.requestAppDrawerReloadOnNextResume(mContext);
-    }
-
-    /** Where every place's arrangement lives; built lazily, so the migration runs once. */
-    private com.termux.app.place.PlaceLayoutStore places() {
-        if (mPlaces == null && mPreferences != null) {
-            mPlaces = new com.termux.app.place.PlaceLayoutStore(mPreferences);
-        }
-        return mPlaces;
     }
 
     public static synchronized TermuxStylePreferencesDataStore getInstance(Context context) {
@@ -190,10 +181,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "show_in_recents_when_not_default":
                 mPreferences.setShowInRecentsWhenNotDefaultEnabled(value);
                 break;
-            case "app_launcher_apps_row_enabled":
-                mPreferences.setAppLauncherAppsRowEnabled(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
             case "app_launcher_display_app_names":
                 mPreferences.setAppLauncherDisplayAppNamesEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -209,10 +196,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_most_used_page":
                 mPreferences.setAppLauncherMostUsedPageEnabled(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_az_row_enabled":
-                mPreferences.setAppLauncherAzRowEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_drawer_enabled":
@@ -269,8 +252,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherBwIconsEnabled();
             case "show_in_recents_when_not_default":
                 return mPreferences.isShowInRecentsWhenNotDefaultEnabled();
-            case "app_launcher_apps_row_enabled":
-                return mPreferences.isAppLauncherAppsRowEnabled();
             case "app_launcher_display_app_names":
                 return mPreferences.isAppLauncherDisplayAppNamesEnabled();
             case "app_launcher_notification_dots":
@@ -279,9 +260,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherNotificationHistoryEnabled();
             case "app_launcher_most_used_page":
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
-            case "app_launcher_az_row_enabled":
-                // Raw: the switch shows what the user picked, the apps row dependency greys it.
-                return mPreferences.isAppLauncherAzRowChosen();
             case "app_launcher_drawer_enabled":
                 return mPreferences.isAppLauncherDrawerEnabled();
             case "app_launcher_drawer_search_on_open":
@@ -312,14 +290,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setSessionsOpacity(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "app_launcher_widget_grid_columns":
-                mPreferences.setAppLauncherWidgetGridColumns(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_widget_grid_rows":
-                mPreferences.setAppLauncherWidgetGridRows(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
             default:
                 break;
         }
@@ -334,10 +304,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch (key) {
             case "sessions_opacity":
                 return mPreferences.getSessionsOpacity();
-            case "app_launcher_widget_grid_columns":
-                return mPreferences.getAppLauncherWidgetGridColumns();
-            case "app_launcher_widget_grid_rows":
-                return mPreferences.getAppLauncherWidgetGridRows();
             default:
                 return defValue;
         }
@@ -370,23 +336,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, value);
                 // Flips the drawer, both dock rows and the widget pane at once: recreate so every
                 // surface is rebuilt against the new state instead of restyled in place.
-                scheduleTermuxActivityStylingSync(true);
-                break;
-            case "app_launcher_dock_rail_side":
-                // One row, every place: the landscape apps bar stands on the same edge everywhere
-                // until the Layout page can set them apart.
-                com.termux.app.place.PlaceLayout.RowPlacement side =
-                    com.termux.app.place.PlaceLayout.RowPlacement.parse(value,
-                        com.termux.app.place.PlaceLayout.RowPlacement.LEFT);
-                if (!side.isOnSide()) side = com.termux.app.place.PlaceLayout.RowPlacement.LEFT;
-                for (com.termux.app.wall.PaneWallPage place
-                        : com.termux.app.wall.PaneWallPage.values()) {
-                    places().setAppsRow(place,
-                        com.termux.app.place.PlaceOrientation.LANDSCAPE, side);
-                }
-                // The side moves the rail's layout gravity and the content root's cutout padding,
-                // both of which are applied from an insets pass; recreate rather than restyle so
-                // the terminal is re-inset from the edge the rail just left.
                 scheduleTermuxActivityStylingSync(true);
                 break;
             case "app_launcher_drawer_view_type":
@@ -429,9 +378,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherAzLockMethod();
             case "app_launcher_use_case_mode":
                 return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
-            case "app_launcher_dock_rail_side":
-                return places().appsRow(com.termux.app.wall.PaneWallPage.TERMINAL,
-                    com.termux.app.place.PlaceOrientation.LANDSCAPE).storageValue();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
             case "app_launcher_default_buttons":

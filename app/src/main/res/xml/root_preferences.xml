@@ -9,6 +9,13 @@
     <PreferenceCategory app:title="@string/settings_root_launcher_header">
 
         <Preference
+            app:key="layout"
+            app:icon="@drawable/ic_symbol_grid_view"
+            app:title="@string/settings_destination_layout"
+            app:summary="@string/settings_destination_layout_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.LayoutPreferencesFragment" />
+
+        <Preference
             app:key="appearance"
             app:icon="@drawable/ic_symbol_palette"
             app:title="@string/settings_destination_appearance"
