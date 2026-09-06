@@ -65,7 +65,7 @@ public class TlstoreInstallerTest {
     @Before public void prefix() throws IOException {
         bin = temp.newFolder("usr", "bin");
         libexec = new File(temp.getRoot(), "usr/libexec/termux-launcher/tlstore");
-        installer = new TlstoreInstaller(bin, libexec, "com.termux.test",
+        installer = new TlstoreInstaller(bin, libexec, "com.termux.test", "0.0-test",
             assets(TLSTORE_SCRIPT, true));
     }
 
@@ -90,7 +90,7 @@ public class TlstoreInstallerTest {
         assertArrayEquals(TRUSTED_KEY, Files.readAllBytes(installer.trustedKeyFile().toPath()));
 
         assertEquals(TlstoreInstaller.MARKER_PREAMBLE + " v" + TlstoreInstaller.VERSION
-            + " com.termux.test\n", text(installer.markerFile()));
+            + " com.termux.test 0.0-test\n", text(installer.markerFile()));
         assertNull(installer.foreignCommandName());
         assertEquals("no temp file left beside the result", 0,
             countTempFiles(bin) + countTempFiles(libexec));
@@ -110,7 +110,7 @@ public class TlstoreInstallerTest {
                 .getBytes(StandardCharsets.UTF_8));
         byte[] newerScript = ("#!/usr/bin/env sh\n" + TlstoreInstaller.MARKER_PREAMBLE
             + "\necho newer\n").getBytes(StandardCharsets.UTF_8);
-        installer = new TlstoreInstaller(bin, libexec, "com.termux.test",
+        installer = new TlstoreInstaller(bin, libexec, "com.termux.test", "0.0-test",
             assets(newerScript, true));
 
         assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
@@ -135,13 +135,13 @@ public class TlstoreInstallerTest {
 
     @Test public void noBinDirectoryMeansNoPrefixYet() {
         installer = new TlstoreInstaller(new File(temp.getRoot(), "missing/bin"), libexec,
-            "com.termux.test", assets(TLSTORE_SCRIPT, true));
+            "com.termux.test", "0.0-test", assets(TLSTORE_SCRIPT, true));
 
         assertEquals(TlstoreInstaller.Result.NO_PREFIX, installer.install());
     }
 
     @Test public void aMissingTrustedKeyAssetStillInstallsEverythingElse() throws IOException {
-        installer = new TlstoreInstaller(bin, libexec, "com.termux.test",
+        installer = new TlstoreInstaller(bin, libexec, "com.termux.test", "0.0-test",
             assets(TLSTORE_SCRIPT, false));
 
         assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());

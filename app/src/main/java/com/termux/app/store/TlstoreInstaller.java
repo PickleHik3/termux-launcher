@@ -111,14 +111,17 @@ public final class TlstoreInstaller {
     @NonNull private final File binDir;
     @NonNull private final File libexecDir;
     @NonNull private final String applicationId;
+    /** The app's versionName: every release rewrites the files, so a changed asset ships. */
+    @NonNull private final String release;
     @NonNull private final AssetSource assets;
 
     @VisibleForTesting
     TlstoreInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull String applicationId,
-                     @NonNull AssetSource assets) {
+                     @NonNull String release, @NonNull AssetSource assets) {
         this.binDir = binDir;
         this.libexecDir = libexecDir;
         this.applicationId = applicationId;
+        this.release = release;
         this.assets = assets;
     }
 
@@ -126,8 +129,14 @@ public final class TlstoreInstaller {
     @NonNull
     static TlstoreInstaller forPrefix(@NonNull Context context) {
         Context app = context.getApplicationContext();
+        String release;
+        try {
+            release = app.getPackageManager().getPackageInfo(app.getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            release = "unknown";
+        }
         return new TlstoreInstaller(new File(BIN_DIR), new File(LIBEXEC_DIR), app.getPackageName(),
-            name -> app.getAssets().open(name));
+            release == null ? "unknown" : release, name -> app.getAssets().open(name));
     }
 
     // ---- The static face the launcher uses -------------------------------------------------
@@ -157,7 +166,7 @@ public final class TlstoreInstaller {
     @NonNull
     Result install() {
         if (!binDir.isDirectory()) return Result.NO_PREFIX;
-        String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + "\n";
+        String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + " " + release + "\n";
         if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
         String foreign = foreignCommandName();
         if (foreign != null) {
