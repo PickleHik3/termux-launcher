@@ -25,7 +25,7 @@
 # fastfetch links libandroid-glob and dlopens ImageMagick and Chafa for the
 # animated logo, so its libraries are a pkg item it requires rather than a note
 # nobody reads.
-claude-code	npm-musl	latest	com.termux,io.vaj.tl	npm:@anthropic-ai/claude-code-linux-arm64-musl#claude	-	musl-loader	env=DISABLE_AUTOUPDATER=1;tz=1;build=patchelf	Anthropic's Claude Code, about 200 MB.
+claude-code	npm-musl	latest	com.termux,io.vaj.tl	npm:@anthropic-ai/claude-code-linux-arm64-musl#claude	-	musl-loader,claude-panes-skill	env=DISABLE_AUTOUPDATER=1;tz=1;build=patchelf	Anthropic's Claude Code, about 200 MB.
 fastfetch	binary	2.67.0	com.termux	binaries:fastfetch@2026.09.02	-	fastfetch-libs,fastfetch-config,fastfetch-logo	-	System information beside an animated logo.
 fastfetch	binary	2.67.0	io.vaj.tl	binaries:fastfetch-io.vaj.tl@2026.09.02	-	fastfetch-libs,fastfetch-config,fastfetch-logo	-	System information beside an animated logo.
 fish-shell	bundle	-	*	-	-	fish,config-fish,personal-fish,oh-my-posh,omp-theme,eza,zoxide,fisher,fish-plugins	-	The fish shell with the launcher's setup: the wallpaper prompt, a nicer ls and quicker directory jumping.
@@ -48,3 +48,4 @@ nvim-palette	file	631aab19	*	launcher:docs/en/examples/nvim/lua/launcher/materia
 oh-my-posh	pkg	-	*	oh-my-posh	-	-	hidden=1	The prompt oh-my-posh draws.
 personal-fish	file-once	v0.2.39	*	launcher:docs/en/examples/conf.d-personal.fish@v0.2.39	~/.config/fish/conf.d/personal.fish	fish	hidden=1	A place for your own fish settings, left alone once it is there.
 zoxide	pkg	-	*	zoxide	-	-	hidden=1	Jump to the directories you use most by name.
+claude-panes-skill	file-once	aea80bf2	*	launcher:resources/agent-skills/termux-launcher-panes/SKILL.md@aea80bf215a6a44951154d9b600abddca56c8c49	~/.claude/skills/termux-launcher-panes/SKILL.md	-	hidden=1	Teaches Claude Code the launcher's pane commands.
