@@ -87,3 +87,9 @@ names stay as aliases so deep links keep working.
 Each phase: worktree off `dev`, sub-agent builds, orchestrator reviews/merges, APK built and checked
 on the emulator before dependent phases start. `stash@{0}` ("landscape-agent-wip 2026-08-18: rails,
 vertical clock, extrakeys glass") holds an earlier vertical-clock attempt worth reading before phase 4.
+
+## Side queue
+
+- Home place status bar: stats order Weather · RAM · CPU, grouped as one cluster, always centred in
+  the row (today: row end, sliding under the clock via `alignStatsUnderClock`). Branch
+  `feat/home-status-stats-centered`.
