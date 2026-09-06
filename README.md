@@ -101,8 +101,6 @@ tlstore install
 
 The first line installs the shell setup in one go; the second opens a picker for everything else, including Claude Code. See the [tlstore guide](docs/en/Tlstore.md) for the full command list.
 
-[`setup-launcher`](docs/en/examples/setup-launcher) still works if you're on an older release without tlstore.
-
 Its highly recommended that you use the in-app font picker (**Settings › Terminal › Font**) to install a nerd font since it will configure it properly for seamless font rendering using kitty protocol related features.
 
 ## Documentation

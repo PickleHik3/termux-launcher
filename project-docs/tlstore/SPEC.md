@@ -221,3 +221,7 @@ and `bash --posix`; `shellcheck -s sh` clean. The colorscheme was checked with `
 outright, so on the VAJ edition the logo path does not resolve. Left alone here: changing it would
 need its own commit and a new pin, and fastfetch's handling of `~` in a logo source is not something
 this phase verified.
+
+**2026-09-06**: `docs/en/examples/setup-launcher`, `docs/en/examples/setup-nvim` and
+`docs/en/examples/update-setup-launcher-digests.sh` — the scripts this store replaces — were
+removed, along with every reference to them (P7).

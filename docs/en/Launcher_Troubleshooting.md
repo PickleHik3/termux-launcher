@@ -195,16 +195,16 @@ tai doctor
 Localhost and LAN security rules differ; LAN bind mode always requires the token. Continue with the
 [TAI user guide](Termux_AI.md) or [LauncherCtl API reference](LauncherCtl_API.md).
 
-## fastfetch does not start after setup-launcher
+## fastfetch does not start after tlstore install
 
 If `fastfetch` exits immediately with a message about `libandroid-glob.so` not being found, the
 installed binary was built for another edition. Each edition installs under its own path, and
 `fastfetch` finds its libraries through a path fixed when it was built.
 
-Re-run `setup-launcher` in the edition you are using; it installs the build for that edition, or
-tells you that none is published for it yet. Delete `~/.local/bin/fastfetch` first if you want a
-clean check — the Termux `fastfetch` package still works, it just sends only the first frame of an
-animated logo.
+Run `tlstore install fastfetch` in the edition you are using; it installs the build for that
+edition, or tells you that none is published for it yet. Delete `~/.local/bin/fastfetch` first if
+you want a clean check — the Termux `fastfetch` package still works, it just sends only the first
+frame of an animated logo.
 
 ## The Linux display will not start, or apps cannot reach it
 

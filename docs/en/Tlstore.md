@@ -200,6 +200,3 @@ last changed it, so the catalog and the payload can never drift apart.
 An item whose payload differs per launcher edition (a build linked against one edition's prefix, an
 edition-specific binary) gets one row per edition, sharing a name but each with its own source and
 digest — never one row trying to serve every edition.
-
-This supersedes [`setup-launcher`](examples/setup-launcher); that script still works for anyone on
-an older release, but new guides and new items should point here.

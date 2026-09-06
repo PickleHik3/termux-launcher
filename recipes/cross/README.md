@@ -16,8 +16,8 @@ NDK plus a sysroot assembled with `dpkg-deb -x`.
 
 `fastfetch` is built once per launcher edition — see below. If you only want the binaries, they are
 published for `aarch64` at
-[termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries) and
-`setup-launcher` installs them with a pinned digest. Build them yourself when you want to audit
+[termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries) and the
+`tlstore` catalog installs them with a pinned digest. Build them yourself when you want to audit
 the result, target another prefix, or move a pin.
 
 ```sh
@@ -53,8 +53,8 @@ TL_SYSROOT=$PWD/sysroot-vaj TL_OUT=$PWD/out-vaj \
 ```
 
 The result is uploaded as `fastfetch-<package name>-aarch64` (`fastfetch-io.vaj.tl-aarch64`), beside
-the unsuffixed `com.termux` asset. `setup-launcher` reads `$PREFIX` to pick between them, and skips
-the item with a build hint for a prefix nothing is published for.
+the unsuffixed `com.termux` asset. The tlstore catalog carries one row per edition and picks between
+them by `$PREFIX`, skipping the item with a build hint for a prefix nothing is published for.
 
 `sigye` and `kitten` are prefix-independent — no `RUNPATH`, no absolute prefix anywhere in either
 binary — so one build of each serves every edition.

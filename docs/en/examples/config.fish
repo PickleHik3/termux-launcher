@@ -1,7 +1,8 @@
-# Termux Launcher — launcher-owned fish config. setup-launcher replaces this
-# file on every run (after a timestamped .bak), so keep only what the launcher
-# integration itself needs here: PATH, the wallpaper Material palette and its
-# per-prompt refresh, the clear/cursor helpers, and the Oh My Posh prompt.
+# Termux Launcher — launcher-owned fish config. tlstore replaces this file on
+# every install or update (after a timestamped .bak), so keep only what the
+# launcher integration itself needs here: PATH, the wallpaper Material palette
+# and its per-prompt refresh, the clear/cursor helpers, and the Oh My Posh
+# prompt.
 #
 # YOUR OWN SETTINGS GO IN ~/.config/fish/conf.d/personal.fish (installed once
 # from the conf.d-personal.fish example and never overwritten). Editor, aliases,
@@ -109,12 +110,13 @@ function clear
 end
 
 if status is-interactive
-    # Mention the Neovim chooser once, only while no config exists. Not a prompt:
-    # a question on every new shell would be worse than no question at all.
+    # Mention the wallpaper colour scheme once, only while Neovim has no config
+    # of its own yet. Not a prompt: a question on every new shell would be
+    # worse than no question at all.
     set -l __tl_config_home (test -n "$XDG_CONFIG_HOME"; and echo "$XDG_CONFIG_HOME"; or echo "$HOME/.config")
-    if type -q setup-nvim; and not test -e "$__tl_config_home/nvim"; and not test -e "$__tl_config_home/.setup-nvim-hinted"
-        echo "Neovim has no config yet — run 'setup-nvim' to pick one (AstroNvim, NvChad, LazyVim, kickstart, or stock)."
-        touch "$__tl_config_home/.setup-nvim-hinted"
+    if type -q nvim; and not test -e "$__tl_config_home/nvim/colors/launcher-material.lua"; and not test -e "$__tl_config_home/.tlstore-nvim-theme-hinted"
+        echo "Neovim has no wallpaper colour scheme yet — run 'tlstore install nvim-theme' to add one."
+        touch "$__tl_config_home/.tlstore-nvim-theme-hinted"
     end
     set -e __tl_config_home
 
