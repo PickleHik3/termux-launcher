@@ -11338,6 +11338,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyStatsClusterArrangement();
     }
 
+    /** Shifts the cluster so its content's centre is the status row's centre. */
+    private void centerStatsClusterOnRow(@NonNull ViewGroup cluster) {
+        View row = findViewById(R.id.terminal_status_row);
+        if (row == null || row.getWidth() == 0 || cluster.getWidth() == 0) return;
+        float contentLeft = cluster.getLeft() + cluster.getPaddingStart();
+        float contentWidth = cluster.getWidth() - cluster.getPaddingStart() - cluster.getPaddingEnd();
+        float shift = row.getWidth() / 2f - (contentLeft + contentWidth / 2f);
+        if (Math.abs(cluster.getTranslationX() - shift) >= 0.5f) cluster.setTranslationX(shift);
+    }
+
     /**
      * On the Widgets place the CPU/RAM/weather cluster reads Weather · RAM · CPU and centres in
      * the row, on a spacer that balances the place content strip's own weight; everywhere else it
@@ -11352,18 +11362,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean reversed = com.termux.app.statusbar.StatusStatsClusterPolicy
             .centeredReversed(currentWallPage());
         spacer.setVisibility(reversed ? View.VISIBLE : View.GONE);
-        // The two flexible sides share the leftover width equally, but the strip on the left
-        // carries its own padding and the end widgets on the right theirs; the spacer's minimum
-        // width makes up the difference so the cluster's centre is the row's centre.
-        View strip = findViewById(R.id.terminal_status_place_content);
-        View endWidgets = findViewById(R.id.terminal_status_widgets);
-        if (strip != null && endWidgets != null) {
-            int stripPad = strip.getPaddingStart() + strip.getPaddingEnd();
-            int endPad = endWidgets.getPaddingEnd()
-                + (endWidgets.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
-                    ? ((ViewGroup.MarginLayoutParams) endWidgets.getLayoutParams()).getMarginEnd() : 0);
-            spacer.setMinimumWidth(Math.max(0, stripPad - endPad));
+        // The spacer only balances the strip's weight; the fixed end widgets and paddings still
+        // pull the cluster off the row's centre by half their width, so the residual is corrected
+        // after every layout from the real bounds.
+        if (cluster.getTag(R.id.terminal_status_stats_cluster) == null) {
+            cluster.setTag(R.id.terminal_status_stats_cluster, Boolean.TRUE);
+            cluster.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (com.termux.app.statusbar.StatusStatsClusterPolicy
+                        .centeredReversed(currentWallPage())) {
+                    centerStatsClusterOnRow((ViewGroup) v);
+                } else if (v.getTranslationX() != 0f) {
+                    v.setTranslationX(0f);
+                }
+            });
         }
+        if (!reversed) cluster.setTranslationX(0f);
+        else cluster.post(() -> centerStatsClusterOnRow(cluster));
         int count = cluster.getChildCount();
         boolean currentlyReversed = count > 0
             && cluster.getChildAt(0).getId() == R.id.terminal_status_widget_weather;
