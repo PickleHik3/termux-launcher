@@ -1035,11 +1035,11 @@
                 android:gravity="center_horizontal" />
         </com.termux.app.launcher.drawer.DockRailScrollView>
 
-        <!-- The Display place's extra keys, standing in a column on one edge when its setting asks
-             for that. A sibling of the padded content root like the rail, for the same reason;
-             syncDisplayExtraKeysColumn() fills, sizes and places it. -->
+        <!-- The extra keys, standing in a column on one edge when the place on screen asks for
+             that. A sibling of the padded content root like the rail, for the same reason;
+             syncExtraKeysColumn() fills, sizes and places it. -->
         <FrameLayout
-            android:id="@+id/display_extra_keys_column"
+            android:id="@+id/place_extra_keys_column"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:layout_gravity="start"

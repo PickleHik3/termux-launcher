@@ -96,6 +96,8 @@ public final class SurfaceEditorController {
         boolean isInAppKeyboardShown();
         boolean isFloatingDock();
         void setTopStatusBarCollapsed(boolean collapsed, boolean animate);
+        /** Whether the status bar is resting compact for the place it is showing for. */
+        boolean isTopStatusBarCollapsed();
         /** The window's top status inset, as last delivered to the activity. */
         int statusBarInsetTop();
         int themeColor(int attr, int fallbackRes);
@@ -393,7 +395,7 @@ public final class SurfaceEditorController {
         // would quietly adopt the user's in-progress edits as the thing Discard returns to.
         final boolean freshEditorSession = !mSurfaceEditorOpen;
         if (freshEditorSession) {
-            mEntryStatusCollapsed = prefs().isTopPaneClockCollapsed();
+            mEntryStatusCollapsed = mHost.isTopStatusBarCollapsed();
             mHasEntryStatusCollapsed = true;
         }
         mSurfaceEditorOpen = true;
@@ -839,7 +841,7 @@ public final class SurfaceEditorController {
         if (prefs() == null || !mSurfaceEditorOpen)
             return;
         boolean collapsed = mSelectedSlot != SurfaceSlot.STATUS;
-        if (prefs().isTopPaneClockCollapsed() != collapsed)
+        if (mHost.isTopStatusBarCollapsed() != collapsed)
             mHost.setTopStatusBarCollapsed(collapsed, animate);
     }
 
@@ -3317,7 +3319,7 @@ public final class SurfaceEditorController {
         // Only the editor's own temporary change is undone here. onStop() also calls this, and
         // without the guard an expanded pane was collapsed — and the collapse persisted — every time
         // the user left the app, so the clock never came back.
-        if (prefs().isTopPaneClockCollapsed() != mEntryStatusCollapsed)
+        if (mHost.isTopStatusBarCollapsed() != mEntryStatusCollapsed)
             mHost.setTopStatusBarCollapsed(mEntryStatusCollapsed, false);
     }
 

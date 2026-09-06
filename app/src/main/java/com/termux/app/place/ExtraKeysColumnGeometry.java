@@ -1,16 +1,16 @@
-package com.termux.app.x11;
+package com.termux.app.place;
 
 /**
- * Sizes for the extra keys when the Display place stands them in a column on a screen edge. Pure,
+ * Sizes for the extra keys when a place stands them in a column on a screen edge. Pure,
  * so the activity only applies the answer: how much of the edge the column claims, and how tall
  * each key gets so the whole column fits between the system bars.
  */
-public final class DisplayExtraKeysColumnGeometry {
+public final class ExtraKeysColumnGeometry {
 
     /** A key's preferred height in the column; keys shrink below it only when they would not fit. */
     public static final float KEY_HEIGHT_DP = 52f;
 
-    private DisplayExtraKeysColumnGeometry() {
+    private ExtraKeysColumnGeometry() {
     }
 
     /**

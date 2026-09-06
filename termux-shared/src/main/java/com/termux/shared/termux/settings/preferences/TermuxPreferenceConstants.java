@@ -241,7 +241,10 @@ public final class TermuxPreferenceConstants {
         /** Set once the phone-sized defaults (text size, touch mode) have been written on first turn-on. */
         public static final String KEY_X11_DEFAULTS_APPLIED = "x11_defaults_applied";
 
-        /** Whether the keyboard was up the last time the user left the Display place. */
+        /**
+         * Whether the keyboard was up the last time the user left the Display place. Retired: every
+         * place remembers its own, and this is read once to carry the old answer over.
+         */
         public static final String KEY_X11_KEYBOARD_SHOWN = "x11_keyboard_shown";
 
         /**
@@ -252,7 +255,8 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Where the extra keys sit while the Display place is showing: along the bottom as usual,
-         * or as a column on one screen edge so the display keeps its height.
+         * or as a column on one screen edge so the display keeps its height. The Display page's row
+         * still carries this key, but the answer lives in the per-place layout store.
          */
         public static final String KEY_X11_EXTRA_KEYS_SIDE = "x11_extra_keys_side";
 
@@ -263,11 +267,6 @@ public final class TermuxPreferenceConstants {
         public static final String X11_EXTRA_KEYS_SIDE_RIGHT = "right";
 
         public static final String DEFAULT_X11_EXTRA_KEYS_SIDE = X11_EXTRA_KEYS_SIDE_BOTTOM;
-
-        /** Hide the launcher's status bar while the Display place is showing. */
-        public static final String KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
-
-        public static final boolean DEFAULT_X11_HIDE_STATUS_BAR = false;
 
         public static final String DEFAULT_X11_RUNTIME_BADGE = "termux";
 

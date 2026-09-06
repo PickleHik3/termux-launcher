@@ -205,8 +205,6 @@
     <string name="settings_x11_extra_keys_side_title">Extra keys bar</string>
     <string name="settings_x11_extra_keys_side_summary">Where the extra keys sit while the display is showing.</string>
     <string name="settings_x11_extra_keys_side_bottom">Bottom</string>
-    <string name="settings_x11_hide_status_bar_title">Hide status bar</string>
-    <string name="settings_x11_hide_status_bar_summary">Hides the status bar while the display is showing. Switch places from the extra keys.</string>
     <string name="settings_x11_category_apps">Apps</string>
     <string name="settings_x11_drawer_apps_title">Linux apps in the drawer</string>
     <string name="settings_x11_drawer_apps_summary">List installed Linux apps beside your Android apps; tapping one opens it on the display.</string>

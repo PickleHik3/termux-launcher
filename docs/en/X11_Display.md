@@ -76,9 +76,8 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   text size, clipboard sharing and how the launcher starts a display: with the launcher, with a
   command of your choosing, pointing new shells at it (`DISPLAY` set in every new shell while a
   display runs), and two compatibility switches. A running display picks a change up at once.
-  Its **Layout** rows shape the launcher around the display: the extra keys can stand in a
-  column on the left or right edge instead of along the bottom, and the status bar can be
-  hidden while the display is showing — the extra keys' place buttons then lead back.
+  Its **Layout** row shapes the launcher around the display: the extra keys can stand in a
+  column on the left or right edge instead of along the bottom.
 - **Preferences from a shell.** `termux-x11-preference list` shows every setting;
   `termux-x11-preference touchMode:2` sets one, exactly as in Termux:X11, and the running
   display follows.

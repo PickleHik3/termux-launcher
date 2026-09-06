@@ -33,10 +33,10 @@ public class DockLayoutPolicyTest {
     private static final int CORNER_DP = -1;        // follow-the-style radius
     private static final int TOOLBAR_PX = 103;      // one extra-keys row, for combinedHeight
 
-    /** {preset, capsule, landscape, cutoutPx} × expected numbers. */
-    @Parameterized.Parameters(name = "{0} preset={1} capsule={2} landscape={3} cutout={4}")
+    /** {preset, capsule, appsRowOnEdge, cutoutPx} × expected numbers. */
+    @Parameterized.Parameters(name = "{0} preset={1} capsule={2} appsRowOnEdge={3} cutout={4}")
     public static List<Object[]> cases() {
-        // preset, capsule, landscape, appsBar, hint, azRow, band, inset, capsuleContentInset,
+        // preset, capsule, appsRowOnEdge, appsBar, hint, azRow, band, inset, capsuleContentInset,
         // appsTop, appsBottom, combined, compactStatusBar, iconScale
         Object[][] rows = {
             {1.72f, false, false, 132, 107, 52, 8, 0, 67, 17, 8, 295, 88, 1.3068f},
@@ -69,7 +69,7 @@ public class DockLayoutPolicyTest {
 
     @Parameterized.Parameter(0) public float preset;
     @Parameterized.Parameter(1) public boolean capsule;
-    @Parameterized.Parameter(2) public boolean landscape;
+    @Parameterized.Parameter(2) public boolean appsRowOnEdge;
     @Parameterized.Parameter(3) public int expectedAppsBarPx;
     @Parameterized.Parameter(4) public int expectedHintPx;
     @Parameterized.Parameter(5) public int expectedAzRowPx;
@@ -84,17 +84,17 @@ public class DockLayoutPolicyTest {
     @Parameterized.Parameter(14) public int cutoutPx;
 
     private DockLayout compute() {
-        return DockLayoutPolicy.compute(inputs(preset, capsule, landscape)
+        return DockLayoutPolicy.compute(inputs(preset, capsule, appsRowOnEdge)
             .displayCutoutInsetLeftPx(cutoutPx)
             .build());
     }
 
     private static DockLayoutPolicy.DockInputs.Builder inputs(float preset, boolean capsule,
-                                                              boolean landscape) {
+                                                              boolean appsRowOnEdge) {
         return DockLayoutPolicy.DockInputs.builder()
             .preferencesAvailable(true)
             .capsule(capsule)
-            .landscape(landscape)
+            .appsRowOnEdge(appsRowOnEdge)
             .density(DENSITY)
             .barHeightScale(preset)
             .dockHorizontalInsetDp(INSET_DP)
@@ -116,9 +116,9 @@ public class DockLayoutPolicyTest {
         // The inter-row gap has always been the indicator band itself.
         assertEquals("interRowGapPx", expectedBandPx, l.interRowGapPx);
         assertEquals("combinedHeight", expectedCombinedPx, l.combinedHeight(TOOLBAR_PX, true));
-        // Landscape collapses the horizontal rows: the rail is the launcher surface there.
-        assertEquals(!landscape, l.appsRowEnabled);
-        assertEquals(!landscape, l.azRowEnabled);
+        // A rail collapses the horizontal rows: it is the launcher surface instead.
+        assertEquals(!appsRowOnEdge, l.appsRowEnabled);
+        assertEquals(!appsRowOnEdge, l.azRowEnabled);
     }
 
     @Test
@@ -146,13 +146,13 @@ public class DockLayoutPolicyTest {
     }
 
     @Test
-    public void rail_ownsOneEdgeInLandscapeOnly() {
+    public void rail_ownsOneEdgeOnlyWhenTheAppsRowStandsOnOne() {
         DockLayout l = compute();
-        assertEquals(landscape, l.railActive);
+        assertEquals(appsRowOnEdge, l.railActive);
         // 38dp icon + 2 × 10dp margin beats the 52dp floor, so the column is 58dp plus the cutout.
         assertEquals("railWidthPx", cutoutPx + 160, l.railWidthPx);
         assertEquals("railEdgeInsetPx", cutoutPx, l.railEdgeInsetPx);
-        assertEquals(landscape ? AppDrawerGestureArbiter.Pull.RIGHT
+        assertEquals(appsRowOnEdge ? AppDrawerGestureArbiter.Pull.RIGHT
             : AppDrawerGestureArbiter.Pull.NONE, l.railPull);
     }
 

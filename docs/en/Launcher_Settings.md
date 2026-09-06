@@ -142,9 +142,8 @@ the window manager started with the display, the mark on the Display place's bad
 bar, starting the display with the launcher, the start command, pointing new shells at the
 display, two compatibility switches, and what your GPU can do for Linux apps. Under **Layout**,
 **Extra keys bar** puts the extra keys along the bottom or in a column on the left or right edge
-while the display is showing, and **Hide status bar** gives the display the top of the screen as
-well; with the bar hidden, the extra keys' place buttons are the way back to the terminal. To have the phone
-try every graphics profile and keep the best, run `termux-x11-gpu-setup` in a shell.
+while the display is showing. To have the phone try every graphics profile and keep the best, run
+`termux-x11-gpu-setup` in a shell.
 
 ## Launcher & apps
 

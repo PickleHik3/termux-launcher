@@ -16,6 +16,10 @@ import androidx.preference.PreferenceScreen;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
+import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -31,8 +35,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The landscape rail's edge preference. It is not decoration: the app drawer's swipe runs away
+ * The landscape apps bar's edge preference. It is not decoration: the app drawer's swipe runs away
  * from whichever edge this names, and in landscape that swipe is the only way to reach the drawer.
+ * One row still sets every place until the Layout page can set them apart.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -56,23 +61,31 @@ public class LauncherDockRailSidePreferenceTest {
     }
 
     @Test
-    public void freshInstallDocksTheRailLeftAndReadsBackWhatWasWritten() {
+    public void freshInstallDocksTheAppsBarLeftInLandscapeOnEveryPlace() {
         Application app = RuntimeEnvironment.getApplication();
-        SharedPreferences store = app.getSharedPreferences(
+        SharedPreferences prefs = app.getSharedPreferences(
             "launcher-dock-rail-side-test", Context.MODE_PRIVATE);
-        store.edit().clear().commit();
-        TermuxAppSharedPreferences preferences =
-            new TermuxAppSharedPreferences(app, store, null);
-        assertEquals("left", preferences.getAppLauncherDockRailSide());
+        prefs.edit().clear().commit();
+        PlaceLayoutStore places =
+            new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
 
-        preferences.setAppLauncherDockRailSide("right");
-        assertEquals("right", preferences.getAppLauncherDockRailSide());
-        assertTrue(preferences.isAppLauncherDockRailOnRight());
+        for (PaneWallPage place : PaneWallPage.values()) {
+            assertEquals(place + " landscape", PlaceLayout.RowPlacement.LEFT,
+                places.appsRow(place, PlaceOrientation.LANDSCAPE));
+            assertEquals(place + " portrait", PlaceLayout.RowPlacement.BOTTOM,
+                places.appsRow(place, PlaceOrientation.PORTRAIT));
+        }
+
+        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE,
+            PlaceLayout.RowPlacement.RIGHT);
+        assertEquals(PlaceLayout.RowPlacement.RIGHT,
+            places.appsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
 
         // Anything else stored — a hand-edited prefs file, an older build — reads back as left
-        // rather than leaving the rail with no edge and the drawer with no gesture.
-        preferences.setAppLauncherDockRailSide("sideways");
-        assertEquals("left", preferences.getAppLauncherDockRailSide());
+        // rather than leaving the bar with no edge and the drawer with no gesture.
+        prefs.edit().putString("place.terminal.landscape.apps_row", "sideways").commit();
+        assertEquals(PlaceLayout.RowPlacement.LEFT,
+            places.appsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
