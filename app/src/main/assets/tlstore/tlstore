@@ -941,7 +941,17 @@ cmd_install() {
         mkdir -p "$CACHE_DIR"
         ci_cand="$CACHE_DIR/choices"
         ci_chosen="$CACHE_DIR/chosen"
-        rows | awk -F "$TAB" '{ printf "%s\t%s\n", $1, $10 }' > "$ci_cand"
+        # Only what is not installed yet: the picker is for adding.
+        : > "$ci_cand"
+        rows | awk -F "$TAB" '{ printf "%s\t%s\n", $1, $10 }' |
+        while IFS="$TAB" read -r ci_pn ci_ps; do
+            is_installed "$ci_pn" || printf '%s\t%s\n' "$ci_pn" "$ci_ps" >> "$ci_cand"
+        done
+        if [ ! -s "$ci_cand" ]; then
+            rm -f "$ci_cand"
+            say "You already have everything in the list."
+            return 0
+        fi
         say "Pick what you want."
         pick_items "$ci_cand" "$ci_chosen"
         ci_names=$(tr '\n' ' ' < "$ci_chosen")
