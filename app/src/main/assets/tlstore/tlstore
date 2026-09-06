@@ -1,0 +1,1214 @@
+#!/system/bin/sh
+# written by termux-launcher
+# tlstore — the launcher's tool store. Installs, lists, updates and removes the
+# tools and configs the launcher shows off but does not ship.
+#
+# The shebang is /system/bin/sh on purpose: the prefix differs per edition and
+# this file is written into it by the app, so it cannot name $PREFIX/bin/sh.
+# POSIX sh only (Termux's sh is dash): no locals, no arrays, no [[ ]].
+# Functions therefore share one variable namespace — every helper prefixes its
+# variables (dl_, bk_, it_, …) so callers and callees cannot clobber each other.
+#
+# Item definitions come from the catalog: the one shipped in the APK, or a newer
+# one refreshed from the repository and verified with minisign.
+#
+# Env:
+#   TLSTORE_PREFIX      install prefix (default $PREFIX) — tests point it at a fake tree
+#   TLSTORE_CATALOG_URL where refresh reads the catalog (file:// works)
+#   TLSTORE_ASSUME_YES  1 = same as -y
+#   TLSTORE_NPM_REGISTRY npm registry base (default https://registry.npmjs.org)
+#   TLSTORE_ARCH        override uname -m (tests exercise aarch64 items on a host)
+#   TLSTORE_PATCHELF    the patchelf command (tests pass a no-op)
+
+set -u
+
+TLSTORE_VERSION=0.1
+
+PREFIX="${TLSTORE_PREFIX:-${PREFIX:-${HOME%/files/home}/files/usr}}"
+HOME="${HOME:?tlstore needs HOME}"
+
+# /data/data/<app package>/files/usr — the edition this prefix belongs to.
+APP_PACKAGE=""
+case "$PREFIX" in
+    */files/usr)
+        APP_PACKAGE="${PREFIX%/files/usr}"
+        APP_PACKAGE="${APP_PACKAGE##*/}"
+        ;;
+esac
+
+BIN_DIR="$HOME/.local/bin"
+LIB_DIR="$HOME/.local/lib"
+DATA_DIR="$HOME/.local/share/tlstore"
+CACHE_DIR="$HOME/.cache/tlstore"
+STORE_DIR="$PREFIX/libexec/termux-launcher/tlstore"
+BASE_CATALOG="$STORE_DIR/catalog.tsv"
+USER_CATALOG="$DATA_DIR/catalog.tsv"
+PUBKEY="$STORE_DIR/trusted.pub"
+STATE="$DATA_DIR/installed.tsv"
+
+CATALOG_URL="${TLSTORE_CATALOG_URL:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/app/src/main/assets/tlstore/catalog.tsv}"
+NPM_REGISTRY="${TLSTORE_NPM_REGISTRY:-https://registry.npmjs.org}"
+PATCHELF="${TLSTORE_PATCHELF:-patchelf}"
+
+LAUNCHER_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher"
+BINARIES_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries"
+
+ASSUME_YES="${TLSTORE_ASSUME_YES:-0}"
+[ "$ASSUME_YES" = 1 ] || ASSUME_YES=0
+
+ARCH="${TLSTORE_ARCH:-$(uname -m 2>/dev/null || echo unknown)}"
+case "$ARCH" in
+    aarch64|arm64) ARCH_OK=1 ;;
+    *) ARCH_OK=0 ;;
+esac
+
+CATALOG=""
+CATALOG_SERIAL=""
+CATALOG_FROM=""
+FAILED=0
+
+TAB=$(printf '\t')
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+
+say() { printf '%s\n' "$*"; }
+err() { printf 'tlstore: %s\n' "$*" >&2; }
+die() { err "$*"; exit 1; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# ---------------------------------------------------------------------------
+# Catalog
+# ---------------------------------------------------------------------------
+
+serial_of() {
+    [ -f "$1" ] || return 1
+    sed -n 's/^#.*serial=\([0-9][0-9]*\).*$/\1/p' "$1" | head -1
+}
+
+# Picks the newer of the refreshed catalog and the one shipped in the app.
+pick_catalog() {
+    pc_base=$(serial_of "$BASE_CATALOG" 2>/dev/null || true)
+    pc_user=$(serial_of "$USER_CATALOG" 2>/dev/null || true)
+    CATALOG=""
+    if [ -f "$USER_CATALOG" ] && [ -n "$pc_user" ]; then
+        if [ -z "$pc_base" ] || [ "$pc_user" -gt "$pc_base" ] 2>/dev/null; then
+            CATALOG="$USER_CATALOG"
+            CATALOG_SERIAL="$pc_user"
+            CATALOG_FROM=refreshed
+        fi
+    fi
+    if [ -z "$CATALOG" ] && [ -f "$BASE_CATALOG" ]; then
+        CATALOG="$BASE_CATALOG"
+        CATALOG_SERIAL="$pc_base"
+        CATALOG_FROM=app
+    fi
+    [ -n "$CATALOG" ]
+}
+
+need_catalog() {
+    pick_catalog || die "the list of items is missing — reopen the app to put it back"
+}
+
+# Every row that applies here: this edition's prefix, this processor, first row
+# per name wins.
+rows() {
+    awk -F "$TAB" -v pkgname="$APP_PACKAGE" -v archok="$ARCH_OK" '
+        function prefix_ok(list,   n, i, parts) {
+            if (list == "*" || list == "") return 1
+            n = split(list, parts, ",")
+            for (i = 1; i <= n; i++) if (parts[i] == pkgname) return 1
+            return 0
+        }
+        function arch_ok(kind) {
+            if (archok == "1") return 1
+            return (kind != "binary" && kind != "npm-musl")
+        }
+        /^[ \t]*#/ { next }
+        /^[ \t]*$/ { next }
+        NF < 10 { next }
+        !prefix_ok($4) { next }
+        !arch_ok($2) { next }
+        seen[$1]++ { next }
+        { print }
+    ' "$CATALOG"
+}
+
+# row <name> — the row for one item, empty when it has none here.
+row() {
+    rows | awk -F "$TAB" -v want="$1" '$1 == want { print; exit }'
+}
+
+# Loads a row into it_* for the rest of the run.
+load_item() {
+    it_row=$(row "$1")
+    [ -n "$it_row" ] || return 1
+    it_name=$(field "$it_row" 1)
+    it_kind=$(field "$it_row" 2)
+    it_version=$(field "$it_row" 3)
+    # shellcheck disable=SC2034  # loaded for completeness; rows() did the matching
+    it_prefixes=$(field "$it_row" 4)
+    it_source=$(field "$it_row" 5)
+    it_digest=$(field "$it_row" 6)
+    it_target=$(field "$it_row" 7)
+    it_requires=$(field "$it_row" 8)
+    it_options=$(field "$it_row" 9)
+    it_summary=$(field "$it_row" 10)
+    return 0
+}
+
+field() {
+    printf '%s\n' "$1" | cut -d "$TAB" -f "$2"
+}
+
+# The value of one ;-separated option, empty when unset.
+opt() {
+    printf '%s' "$1" | tr ';' '\n' | sed -n "s/^$2=//p" | head -1
+}
+
+commas() { printf '%s' "$1" | tr ',' ' '; }
+
+# A leading ~ in a target is this user's home, not a shell expansion.
+# shellcheck disable=SC2088
+expand_path() {
+    case "$1" in
+        '~'|'~/'*) printf '%s' "$HOME${1#\~}" ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+# The URL a source field points at.
+source_url() {
+    case "$1" in
+        launcher:*)
+            su_rest="${1#launcher:}"
+            su_path="${su_rest%@*}"
+            su_tag="${su_rest##*@}"
+            printf '%s/%s/%s' "$LAUNCHER_RAW" "$su_tag" "$su_path"
+            ;;
+        binaries:*)
+            su_rest="${1#binaries:}"
+            su_asset="${su_rest%@*}"
+            su_tag="${su_rest##*@}"
+            printf '%s/%s/bin/%s-aarch64' "$BINARIES_RAW" "$su_tag" "$su_asset"
+            ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+# item_targets <name> <kind> <target> [source] — where an item's payload lands,
+# space separated; empty for pkg and bundles. An npm-musl item lands twice: the
+# directory, then the wrapper, which is named after the executable inside the
+# package (claude-code installs the command `claude`).
+item_targets() {
+    case "$2" in
+        binary|file|file-once|script)
+            if [ "$3" = "-" ] || [ -z "$3" ]; then
+                [ "$2" = binary ] || return 0
+                printf '%s' "$BIN_DIR/$1"
+            else
+                expand_path "$3"
+            fi
+            ;;
+        npm-musl)
+            it_exe="${4:-}"
+            case "$it_exe" in
+                *"#"*) it_exe="${it_exe##*#}" ;;
+                *) it_exe="$1" ;;
+            esac
+            if [ "$3" = "-" ] || [ -z "$3" ]; then
+                printf '%s %s' "$LIB_DIR/$1" "$BIN_DIR/$it_exe"
+            else
+                printf '%s %s' "$(expand_path "$3")" "$BIN_DIR/$it_exe"
+            fi
+            ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
+
+state_row() {
+    [ -f "$STATE" ] || return 1
+    awk -F "$TAB" -v want="$1" '/^#/ { next } $1 == want { print; exit }' "$STATE"
+}
+
+is_installed() {
+    [ -n "$(state_row "$1" 2>/dev/null)" ]
+}
+
+installed_version() {
+    st_row=$(state_row "$1" 2>/dev/null) || return 1
+    [ -n "$st_row" ] || return 1
+    field "$st_row" 3
+}
+
+installed_names() {
+    [ -f "$STATE" ] || return 0
+    awk -F "$TAB" '/^#/ { next } NF > 0 { print $1 }' "$STATE"
+}
+
+# state_record <name> <kind> <version> <files…>
+state_record() {
+    sr_name="$1"
+    sr_kind="$2"
+    sr_version="$3"
+    shift 3
+    sr_files="$*"
+    mkdir -p "$DATA_DIR"
+    [ -f "$STATE" ] || printf '# tlstore installed\tname\tkind\tversion\twhen\tfiles\n' > "$STATE"
+    sr_tmp="$STATE.new"
+    awk -F "$TAB" -v want="$sr_name" '$1 != want' "$STATE" > "$sr_tmp" || return 1
+    printf '%s\t%s\t%s\t%s\t%s\n' "$sr_name" "$sr_kind" "$sr_version" "$(timestamp)" "$sr_files" >> "$sr_tmp"
+    mv "$sr_tmp" "$STATE"
+}
+
+state_forget() {
+    [ -f "$STATE" ] || return 0
+    sf_tmp="$STATE.new"
+    awk -F "$TAB" -v want="$1" '$1 != want' "$STATE" > "$sf_tmp" || return 1
+    mv "$sf_tmp" "$STATE"
+}
+
+# ---------------------------------------------------------------------------
+# Files
+# ---------------------------------------------------------------------------
+
+timestamp() { date +%Y%m%d-%H%M%S; }
+
+file_digest() {
+    if have sha256sum; then
+        sha256sum "$1" | cut -d' ' -f1
+    elif have openssl; then
+        openssl dgst -sha256 "$1" | awk '{print $NF}'
+    else
+        printf ''
+    fi
+}
+
+backup_existing() {
+    bk_target="$1"
+    if [ -e "$bk_target" ]; then
+        bk_copy="$bk_target.bak-$(timestamp)"
+        cp -a "$bk_target" "$bk_copy" || return 1
+        say "  kept a copy of $(basename "$bk_target") beside it"
+    fi
+    return 0
+}
+
+# The newest .bak beside a file, put back in its place.
+restore_backup() {
+    rb_target="$1"
+    rb_newest=""
+    for rb_f in "$rb_target".bak-*; do
+        [ -e "$rb_f" ] || continue
+        rb_newest="$rb_f"
+    done
+    [ -n "$rb_newest" ] || return 1
+    mv "$rb_newest" "$rb_target" || return 1
+    return 0
+}
+
+# download <url> <destination> <sha256 or ->
+download() {
+    dl_url="$1"
+    dl_dest="$2"
+    dl_expect="$3"
+    dl_dir=$(dirname "$dl_dest")
+    mkdir -p "$dl_dir" || return 1
+    dl_tmp="$dl_dir/.$(basename "$dl_dest").part"
+    if ! curl -fsSL -o "$dl_tmp" "$dl_url"; then
+        rm -f "$dl_tmp"
+        err "could not download $(basename "$dl_dest")"
+        return 1
+    fi
+    if [ "$dl_expect" != "-" ] && [ -n "$dl_expect" ]; then
+        dl_actual=$(file_digest "$dl_tmp")
+        if [ -z "$dl_actual" ]; then
+            rm -f "$dl_tmp"
+            err "cannot check what was downloaded — install coreutils and try again"
+            return 1
+        fi
+        if [ "$dl_actual" != "$dl_expect" ]; then
+            rm -f "$dl_tmp"
+            err "$(basename "$dl_dest") does not match what the list expects — nothing was installed"
+            return 1
+        fi
+    fi
+    mv "$dl_tmp" "$dl_dest" || return 1
+    return 0
+}
+
+ask_yn() {
+    [ "$ASSUME_YES" = 1 ] && return 0
+    printf '%s [Y/n] ' "$1"
+    read -r ay_answer || ay_answer=""
+    [ -n "$ay_answer" ] || ay_answer=y
+    case "$ay_answer" in
+        y|Y|yes|YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+install_pkg() {
+    if have pacman; then
+        # shellcheck disable=SC2068
+        pacman -S --needed --noconfirm $@
+    elif have pkg; then
+        # shellcheck disable=SC2068
+        pkg install -y $@
+    else
+        err "no package manager here — cannot install $*"
+        return 1
+    fi
+}
+
+upgrade_pkg() {
+    if have pacman; then
+        # shellcheck disable=SC2068
+        pacman -S --needed --noconfirm $@
+    elif have apt; then
+        # shellcheck disable=SC2068
+        apt install -y --only-upgrade $@
+    elif have pkg; then
+        # shellcheck disable=SC2068
+        pkg install -y $@
+    else
+        err "no package manager here — cannot update $*"
+        return 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Lists of names (space separated; names are [a-z0-9-]+ so words are safe)
+# ---------------------------------------------------------------------------
+
+in_list() {
+    case " $1 " in
+        *" $2 "*) return 0 ;;
+    esac
+    return 1
+}
+
+# The item and everything it needs, in the order they have to be installed.
+plan_for() {
+    pf_closure=""
+    pf_todo="$*"
+    while [ -n "$pf_todo" ]; do
+        pf_next=""
+        for pf_n in $pf_todo; do
+            in_list "$pf_closure" "$pf_n" && continue
+            pf_closure="$pf_closure $pf_n"
+            pf_deps=$(item_deps "$pf_n")
+            pf_next="$pf_next $pf_deps"
+        done
+        pf_todo="$pf_next"
+    done
+
+    pf_plan=""
+    pf_left="$pf_closure"
+    while [ -n "$pf_left" ]; do
+        pf_moved=0
+        pf_rest=""
+        for pf_n in $pf_left; do
+            if deps_ready "$pf_n" "$pf_closure" "$pf_plan"; then
+                pf_plan="$pf_plan $pf_n"
+                pf_moved=1
+            else
+                pf_rest="$pf_rest $pf_n"
+            fi
+        done
+        pf_left=$(printf '%s' "$pf_rest" | sed 's/^ *//')
+        if [ "$pf_moved" = 0 ]; then
+            pf_plan="$pf_plan $pf_left"
+            break
+        fi
+    done
+    printf '%s' "$pf_plan" | sed 's/^ *//'
+}
+
+# What a name needs before it: its requires, plus anything naming it in post=.
+item_deps() {
+    id_row=$(row "$1")
+    [ -n "$id_row" ] || return 0
+    id_req=$(commas "$(field "$id_row" 8)")
+    [ "$id_req" = "-" ] && id_req=""
+    id_post=$(opt "$(field "$id_row" 9)" post)
+    printf '%s %s' "$id_req" "$id_post"
+}
+
+deps_ready() {
+    dr_name="$1"
+    dr_closure="$2"
+    dr_plan="$3"
+    dr_row=$(row "$dr_name")
+    [ -n "$dr_row" ] || return 0
+    dr_req=$(commas "$(field "$dr_row" 8)")
+    [ "$dr_req" = "-" ] && dr_req=""
+    for dr_d in $dr_req; do
+        in_list "$dr_closure" "$dr_d" || continue
+        in_list "$dr_plan" "$dr_d" || return 1
+    done
+    # An item that names this one in post= runs first.
+    for dr_m in $dr_closure; do
+        [ "$dr_m" = "$dr_name" ] && continue
+        dr_mrow=$(row "$dr_m")
+        [ -n "$dr_mrow" ] || continue
+        [ "$(opt "$(field "$dr_mrow" 9)" post)" = "$dr_name" ] || continue
+        in_list "$dr_plan" "$dr_m" || return 1
+    done
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Installing
+# ---------------------------------------------------------------------------
+
+install_item() {
+    ii_name="$1"
+    ii_force="${2:-0}"
+    # Something a bundle asks for that has no row here — another edition's
+    # build, or an aarch64 tool on a different processor — is skipped, not an
+    # error. A name typed on the command line is checked before we get here.
+    load_item "$ii_name" || { say "$ii_name is not available on this device"; return 0; }
+    ii_kind="$it_kind"
+    ii_version="$it_version"
+    ii_source="$it_source"
+    ii_digest="$it_digest"
+    ii_target="$it_target"
+    ii_options="$it_options"
+
+    if [ "$ii_force" = 0 ] && is_installed "$ii_name"; then
+        ii_have=$(installed_version "$ii_name")
+        if [ "$ii_have" = "$ii_version" ] || [ "$ii_kind" = pkg ] || [ "$ii_kind" = bundle ]; then
+            say "$ii_name is already installed"
+            return 0
+        fi
+    fi
+
+    case "$ii_kind" in
+        pkg) do_pkg ;;
+        binary) do_binary ;;
+        file) do_file 0 ;;
+        file-once) do_file 1 ;;
+        script) do_script ;;
+        npm-musl) do_npm_musl ;;
+        bundle) do_bundle ;;
+        *) err "$ii_name cannot be installed here"; return 1 ;;
+    esac
+}
+
+do_pkg() {
+    say "installing $ii_name"
+    # shellcheck disable=SC2086  # the source column is a list of package names
+    if ! install_pkg $ii_source; then
+        err "could not install $ii_name"
+        return 1
+    fi
+    state_record "$ii_name" pkg "$ii_version"
+    return 0
+}
+
+do_binary() {
+    db_dest=$(item_targets "$ii_name" binary "$ii_target")
+    db_mode=$(opt "$ii_options" mode)
+    [ -n "$db_mode" ] || db_mode=755
+    say "installing $ii_name"
+    mkdir -p "$(dirname "$db_dest")"
+    backup_existing "$db_dest"
+    download "$(source_url "$ii_source")" "$db_dest" "$ii_digest" || return 1
+    chmod "$db_mode" "$db_dest"
+    state_record "$ii_name" binary "$ii_version" "$db_dest"
+    say "  $db_dest"
+    return 0
+}
+
+# do_file <once>
+do_file() {
+    df_once="$1"
+    df_dest=$(item_targets "$ii_name" file "$ii_target")
+    if [ -z "$df_dest" ]; then
+        err "$ii_name has nowhere to go"
+        return 1
+    fi
+    df_mode=$(opt "$ii_options" mode)
+    [ -n "$df_mode" ] || df_mode=644
+    if [ "$df_once" = 1 ] && [ -e "$df_dest" ]; then
+        say "kept your $(basename "$df_dest") — it is yours to edit"
+        is_installed "$ii_name" || state_record "$ii_name" file-once "$ii_version"
+        return 0
+    fi
+    say "installing $ii_name"
+    mkdir -p "$(dirname "$df_dest")"
+    backup_existing "$df_dest"
+    download "$(source_url "$ii_source")" "$df_dest" "$ii_digest" || return 1
+    chmod "$df_mode" "$df_dest"
+    if [ "$df_once" = 1 ]; then
+        state_record "$ii_name" file-once "$ii_version" "$df_dest"
+    else
+        state_record "$ii_name" file "$ii_version" "$df_dest"
+    fi
+    say "  $df_dest"
+    return 0
+}
+
+do_script() {
+    ds_dest=$(item_targets "$ii_name" script "$ii_target")
+    if [ -z "$ds_dest" ]; then
+        err "$ii_name has nowhere to go"
+        return 1
+    fi
+    say "installing $ii_name"
+    mkdir -p "$(dirname "$ds_dest")"
+    backup_existing "$ds_dest"
+    download "$(source_url "$ii_source")" "$ds_dest" "$ii_digest" || return 1
+    chmod 755 "$ds_dest"
+    state_record "$ii_name" script "$ii_version" "$ds_dest"
+    ds_args=$(opt "$ii_options" args)
+    # shellcheck disable=SC2086
+    if ! "$ds_dest" $ds_args; then
+        err "$ii_name did not finish — run $ds_dest yourself"
+        return 1
+    fi
+    say "  $ds_dest"
+    return 0
+}
+
+do_bundle() {
+    state_record "$ii_name" bundle "$ii_version"
+    return 0
+}
+
+# Reads one string field out of a single-line npm registry document.
+json_field() {
+    tr -d '\n' | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" | head -1
+}
+
+do_npm_musl() {
+    np_package="${ii_source#npm:}"
+    np_exe="${np_package##*#}"
+    np_package="${np_package%#*}"
+    np_dir=$(item_targets "$ii_name" npm-musl "$ii_target" "$ii_source")
+    np_wrapper="${np_dir##* }"
+    np_dir="${np_dir%% *}"
+
+    for np_tool in curl tar sha512sum base64 od; do
+        have "$np_tool" || { err "$np_tool is missing — install coreutils and tar"; return 1; }
+    done
+    have "$PATCHELF" || { err "patchelf is missing — install it and try again"; return 1; }
+
+    np_loader_row=$(row musl-loader)
+    if [ -z "$np_loader_row" ]; then
+        err "$ii_name has no loader for this device"
+        return 1
+    fi
+
+    say "installing $ii_name"
+    np_want="${ii_version:-latest}"
+    np_meta=$(curl -fsSL "$NPM_REGISTRY/$np_package/$np_want") || {
+        err "could not reach the $ii_name download"
+        return 1
+    }
+    np_version=$(printf '%s' "$np_meta" | json_field version)
+    np_tarball=$(printf '%s' "$np_meta" | json_field tarball)
+    np_integrity=$(printf '%s' "$np_meta" | json_field integrity)
+    case "$np_integrity" in
+        sha512-*) ;;
+        *) err "$ii_name came without a checksum — nothing was installed"; return 1 ;;
+    esac
+    np_expect=$(printf '%s' "${np_integrity#sha512-}" | base64 -d | od -An -v -tx1 | tr -d ' \n')
+
+    if [ -x "$np_dir/$np_exe" ] && [ "$(cat "$np_dir/version" 2>/dev/null)" = "$np_version" ]; then
+        say "  $ii_name $np_version is already here"
+    else
+        say "  downloading $ii_name $np_version"
+        mkdir -p "$(dirname "$np_dir")"
+        np_tmp="$CACHE_DIR/$ii_name.tgz"
+        mkdir -p "$CACHE_DIR"
+        curl -fsSL -o "$np_tmp" "$np_tarball" || { rm -f "$np_tmp"; err "could not download $ii_name"; return 1; }
+        np_actual=$(sha512sum "$np_tmp" | cut -d' ' -f1)
+        if [ "$np_actual" != "$np_expect" ]; then
+            rm -f "$np_tmp"
+            err "$ii_name does not match its checksum — nothing was installed"
+            return 1
+        fi
+        rm -rf "$np_dir.new"
+        mkdir -p "$np_dir.new"
+        if ! tar xzf "$np_tmp" -C "$np_dir.new" --strip-components=1 "package/$np_exe"; then
+            rm -f "$np_tmp"
+            rm -rf "$np_dir.new"
+            err "the $ii_name download is not what was expected"
+            return 1
+        fi
+        tar xzf "$np_tmp" -C "$np_dir.new" --strip-components=1 package/LICENSE.md 2>/dev/null || true
+        rm -f "$np_tmp"
+
+        np_loader="$np_dir.new/ld-musl-aarch64.so.1"
+        np_have_loader=$(item_targets musl-loader binary "$(field "$np_loader_row" 7)")
+        if [ -f "$np_have_loader" ]; then
+            cp -f "$np_have_loader" "$np_loader"
+        elif ! download "$(source_url "$(field "$np_loader_row" 5)")" "$np_loader" "$(field "$np_loader_row" 6)"; then
+            rm -rf "$np_dir.new"
+            return 1
+        fi
+        chmod 755 "$np_loader" "$np_dir.new/$np_exe"
+        if ! "$PATCHELF" --set-interpreter "$np_dir/ld-musl-aarch64.so.1" --set-rpath "$np_dir" "$np_dir.new/$np_exe"; then
+            rm -rf "$np_dir.new"
+            err "could not prepare $ii_name for this device"
+            return 1
+        fi
+        printf '%s\n' "$np_version" > "$np_dir.new/version"
+        rm -rf "$np_dir.old"
+        [ ! -e "$np_dir" ] || mv "$np_dir" "$np_dir.old"
+        mv "$np_dir.new" "$np_dir"
+        rm -rf "$np_dir.old"
+    fi
+
+    mkdir -p "$BIN_DIR"
+    backup_existing "$np_wrapper"
+    np_envs=$(commas "$(opt "$ii_options" env)")
+    {
+        printf '#!%s/bin/sh\n' "$PREFIX"
+        printf '# written by termux-launcher\n'
+        for np_e in $np_envs; do
+            printf 'export %s\n' "$np_e"
+        done
+        if [ "$(opt "$ii_options" tz)" = 1 ]; then
+            # shellcheck disable=SC2016  # written into the wrapper, expanded there
+            printf '%s\n' '[ -n "${TZ:-}" ] || TZ=$(getprop persist.sys.timezone 2>/dev/null) && export TZ'
+        fi
+        printf 'exec "%s" "$@"\n' "$np_dir/$np_exe"
+    } > "$np_wrapper"
+    chmod 755 "$np_wrapper"
+    state_record "$ii_name" npm-musl "$np_version" "$np_dir" "$np_wrapper"
+    say "  $np_wrapper"
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Removing
+# ---------------------------------------------------------------------------
+
+remove_item() {
+    ri_name="$1"
+    ri_row=$(state_row "$ri_name" 2>/dev/null || true)
+    if [ -z "$ri_row" ]; then
+        say "$ri_name is not installed"
+        return 0
+    fi
+    ri_kind=$(field "$ri_row" 2)
+    ri_files=$(field "$ri_row" 5)
+    for ri_f in $ri_files; do
+        if [ -d "$ri_f" ]; then
+            rm -rf "$ri_f"
+        else
+            rm -f "$ri_f"
+        fi
+        restore_backup "$ri_f" && say "  put your own $(basename "$ri_f") back"
+    done
+    state_forget "$ri_name"
+    case "$ri_kind" in
+        pkg) say "$ri_name is no longer tracked; the package itself stays installed" ;;
+        bundle) say "removed $ri_name" ;;
+        *) say "removed $ri_name" ;;
+    esac
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Refresh
+# ---------------------------------------------------------------------------
+
+# refresh_catalog <quiet> — 0 took a newer list, 1 kept the one we had, 2 refused
+# what was offered.
+refresh_catalog() {
+    rc_quiet="${1:-0}"
+    if ! have minisign; then
+        [ "$rc_quiet" = 1 ] && return 1
+        if ask_yn "Updating the list of items needs minisign. Install it?"; then
+            install_pkg minisign >/dev/null 2>&1 || true
+        fi
+        if ! have minisign; then
+            say "Using the list that came with the app."
+            return 1
+        fi
+    fi
+    if [ ! -f "$PUBKEY" ]; then
+        [ "$rc_quiet" = 1 ] || say "Using the list that came with the app."
+        return 1
+    fi
+    mkdir -p "$CACHE_DIR"
+    rc_new="$CACHE_DIR/catalog.tsv"
+    rc_sig="$CACHE_DIR/catalog.tsv.minisig"
+    if ! curl -fsSL -o "$rc_new" "$CATALOG_URL" || ! curl -fsSL -o "$rc_sig" "$CATALOG_URL.minisig"; then
+        rm -f "$rc_new" "$rc_sig"
+        [ "$rc_quiet" = 1 ] || say "Could not reach the item list; using the one you have."
+        return 1
+    fi
+    if ! minisign -Q -V -p "$PUBKEY" -x "$rc_sig" -m "$rc_new" >/dev/null 2>&1; then
+        rm -f "$rc_new" "$rc_sig"
+        err "the downloaded item list is not signed by the launcher — ignoring it"
+        return 2
+    fi
+    rc_serial=$(serial_of "$rc_new" 2>/dev/null || true)
+    case "$rc_serial" in
+        ''|*[!0-9]*)
+            rm -f "$rc_new" "$rc_sig"
+            err "the downloaded item list is unreadable — ignoring it"
+            return 2
+            ;;
+    esac
+    if [ -n "$CATALOG_SERIAL" ] && [ "$rc_serial" -lt "$CATALOG_SERIAL" ]; then
+        rm -f "$rc_new" "$rc_sig"
+        err "the downloaded item list is older than the one you have — ignoring it"
+        return 2
+    fi
+    if [ -n "$CATALOG_SERIAL" ] && [ "$rc_serial" -eq "$CATALOG_SERIAL" ]; then
+        rm -f "$rc_new" "$rc_sig"
+        [ "$rc_quiet" = 1 ] || say "The item list is already up to date."
+        return 1
+    fi
+    mkdir -p "$DATA_DIR"
+    mv "$rc_new" "$USER_CATALOG" || return 1
+    rm -f "$rc_sig"
+    pick_catalog
+    say "Updated the list of items."
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Picker
+# ---------------------------------------------------------------------------
+
+# pick_items <candidates file: name TAB summary> <chosen file>
+pick_items() {
+    pi_list="$1"
+    pi_out="$2"
+    : > "$pi_out"
+    [ -s "$pi_list" ] || return 0
+    if [ -t 0 ] && have fzf; then
+        fzf --multi --prompt='install> ' --with-nth=1.. < "$pi_list" \
+            | cut -d "$TAB" -f1 > "$pi_out"
+        return 0
+    fi
+    pi_count=$(awk 'END { print NR }' "$pi_list")
+    pi_sel=""
+    while :; do
+        say ""
+        awk -F "$TAB" -v sel=" $pi_sel " '
+            { mark = (index(sel, " " NR " ") > 0) ? "x" : " "
+              printf "  [%s] %2d  %-18s %s\n", mark, NR, $1, $2 }
+        ' "$pi_list"
+        say ""
+        say "Type numbers to pick, a for all, n for none, Enter when you are done."
+        printf '> '
+        read -r pi_reply || pi_reply=""
+        case "$pi_reply" in
+            '') break ;;
+            a|A)
+                pi_sel=""
+                pi_i=1
+                while [ "$pi_i" -le "$pi_count" ]; do
+                    pi_sel="$pi_sel $pi_i"
+                    pi_i=$((pi_i + 1))
+                done
+                ;;
+            n|N) pi_sel="" ;;
+            q|Q) pi_sel=""; break ;;
+            *)
+                for pi_tok in $pi_reply; do
+                    case "$pi_tok" in
+                        ''|*[!0-9]*) say "  $pi_tok is not one of the numbers"; continue ;;
+                    esac
+                    if [ "$pi_tok" -lt 1 ] || [ "$pi_tok" -gt "$pi_count" ]; then
+                        say "  $pi_tok is not one of the numbers"
+                        continue
+                    fi
+                    if in_list "$pi_sel" "$pi_tok"; then
+                        pi_sel=$(printf '%s' " $pi_sel " | sed "s/ $pi_tok / /")
+                    else
+                        pi_sel="$pi_sel $pi_tok"
+                    fi
+                done
+                ;;
+        esac
+    done
+    [ -n "$pi_sel" ] || return 0
+    for pi_n in $pi_sel; do
+        awk -F "$TAB" -v want="$pi_n" 'NR == want { print $1 }' "$pi_list" >> "$pi_out"
+    done
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+usage() {
+    cat <<'EOF'
+tlstore installs the tools and configs the launcher shows off.
+
+  tlstore list [-i|-a]        everything, what you have (-i), what you do not (-a)
+  tlstore search <term>       find an item by name or description
+  tlstore info <name>         what an item is and where it goes
+  tlstore install [name...]   install items; with no names, pick from a list
+  tlstore remove <name...>    remove items tlstore installed
+  tlstore update [name...]    bring what you have up to date
+  tlstore refresh             update the list of items
+  tlstore shell               install the shell setup
+  tlstore doctor              check that everything is in place
+  tlstore version
+
+Add -y to skip the confirmation.
+EOF
+}
+
+cmd_list() {
+    cl_mode=all
+    for cl_a in "$@"; do
+        case "$cl_a" in
+            -i) cl_mode=installed ;;
+            -a) cl_mode=available ;;
+            *) err "unknown option: $cl_a"; return 2 ;;
+        esac
+    done
+    need_catalog
+    rows | awk -F "$TAB" '{ printf "%s\t%s\n", $1, $10 }' |
+    while IFS="$TAB" read -r cl_name cl_summary; do
+        if is_installed "$cl_name"; then
+            [ "$cl_mode" = available ] && continue
+            cl_state=installed
+        else
+            [ "$cl_mode" = installed ] && continue
+            cl_state="-"
+        fi
+        printf '%-16s %-10s %s\n' "$cl_name" "$cl_state" "$cl_summary"
+    done
+    return 0
+}
+
+cmd_search() {
+    [ $# -ge 1 ] || { err "search needs something to look for"; return 2; }
+    need_catalog
+    rows | awk -F "$TAB" -v term="$1" '
+        BEGIN { t = tolower(term) }
+        index(tolower($1), t) > 0 || index(tolower($10), t) > 0 {
+            printf "%-16s %s\n", $1, $10
+        }'
+    return 0
+}
+
+cmd_info() {
+    [ $# -eq 1 ] || { err "info needs one name"; return 2; }
+    need_catalog
+    load_item "$1" || { err "$1 is not in the list"; return 1; }
+    ci_files=$(item_targets "$it_name" "$it_kind" "$it_target" "$it_source")
+    ci_where="$ci_files"
+    case "$it_kind" in
+        pkg) ci_where="$it_source" ;;
+        bundle) ci_where="-" ;;
+    esac
+    [ -n "$ci_where" ] || ci_where="-"
+    say "$it_name"
+    say "  $it_summary"
+    printf '  %-10s %s\n' Kind "$it_kind"
+    printf '  %-10s %s\n' Version "$it_version"
+    printf '  %-10s %s\n' From "$it_source"
+    printf '  %-10s %s\n' Checksum "$it_digest"
+    printf '  %-10s %s\n' Needs "$it_requires"
+    printf '  %-10s %s\n' Files "$ci_where"
+    if is_installed "$it_name"; then
+        printf '  %-10s %s\n' Installed "$(installed_version "$it_name")"
+    fi
+    return 0
+}
+
+cmd_install() {
+    ci_names=""
+    for ci_a in "$@"; do
+        case "$ci_a" in
+            -y|--yes) ASSUME_YES=1 ;;
+            -*) err "unknown option: $ci_a"; return 2 ;;
+            *) ci_names="$ci_names $ci_a" ;;
+        esac
+    done
+    need_catalog
+
+    if [ -z "$ci_names" ]; then
+        mkdir -p "$CACHE_DIR"
+        ci_cand="$CACHE_DIR/choices"
+        ci_chosen="$CACHE_DIR/chosen"
+        rows | awk -F "$TAB" '{ printf "%s\t%s\n", $1, $10 }' > "$ci_cand"
+        say "Pick what you want."
+        pick_items "$ci_cand" "$ci_chosen"
+        ci_names=$(tr '\n' ' ' < "$ci_chosen")
+        rm -f "$ci_cand" "$ci_chosen"
+        if [ -z "$(printf '%s' "$ci_names" | tr -d ' ')" ]; then
+            say "Nothing to install."
+            return 0
+        fi
+    fi
+
+    for ci_n in $ci_names; do
+        [ -n "$(row "$ci_n")" ] || { err "$ci_n is not in the list"; return 1; }
+    done
+
+    # shellcheck disable=SC2086  # a list of names, split on purpose
+    ci_plan=$(plan_for $ci_names)
+    say "Installing: $(printf '%s' "$ci_plan" | tr ' ' ',' | sed 's/,/, /g')"
+    ask_yn "Go ahead?" || { say "Nothing was installed."; return 0; }
+    for ci_n in $ci_plan; do
+        install_item "$ci_n" || FAILED=1
+    done
+    [ "$FAILED" = 0 ] || return 1
+    return 0
+}
+
+cmd_remove() {
+    cr_names=""
+    for cr_a in "$@"; do
+        case "$cr_a" in
+            -y|--yes) ASSUME_YES=1 ;;
+            -*) err "unknown option: $cr_a"; return 2 ;;
+            *) cr_names="$cr_names $cr_a" ;;
+        esac
+    done
+    [ -n "$cr_names" ] || { err "remove needs a name"; return 2; }
+    pick_catalog || true
+
+    # A bundle takes the members it brought in with it.
+    cr_all=""
+    for cr_n in $cr_names; do
+        cr_all="$cr_all $cr_n"
+        cr_row=$(state_row "$cr_n" 2>/dev/null || true)
+        [ -n "$cr_row" ] || continue
+        [ "$(field "$cr_row" 2)" = bundle ] || continue
+        [ -n "$CATALOG" ] || continue
+        cr_item=$(row "$cr_n")
+        [ -n "$cr_item" ] || continue
+        for cr_m in $(commas "$(field "$cr_item" 8)"); do
+            [ "$cr_m" = "-" ] && continue
+            is_installed "$cr_m" || continue
+            in_list "$cr_all" "$cr_m" || cr_all="$cr_all $cr_m"
+        done
+    done
+
+    say "Removing: $(printf '%s' "$cr_all" | sed 's/^ *//' | tr ' ' ',' | sed 's/,/, /g')"
+    ask_yn "Go ahead?" || { say "Nothing was removed."; return 0; }
+    for cr_n in $cr_all; do
+        remove_item "$cr_n" || FAILED=1
+    done
+    [ "$FAILED" = 0 ] || return 1
+    return 0
+}
+
+cmd_update() {
+    cu_check=0
+    cu_offline=0
+    cu_names=""
+    for cu_a in "$@"; do
+        case "$cu_a" in
+            --check) cu_check=1 ;;
+            --offline) cu_offline=1 ;;
+            -y|--yes) ASSUME_YES=1 ;;
+            -*) err "unknown option: $cu_a"; return 2 ;;
+            *) cu_names="$cu_names $cu_a" ;;
+        esac
+    done
+    need_catalog
+    [ "$cu_offline" = 1 ] || refresh_catalog 1 || true
+    need_catalog
+
+    [ -n "$cu_names" ] || cu_names=$(installed_names | tr '\n' ' ')
+    if [ -z "$(printf '%s' "$cu_names" | tr -d ' ')" ]; then
+        say "Nothing is installed yet."
+        return 0
+    fi
+
+    cu_out=""
+    cu_pkgs=""
+    cu_latest=""
+    for cu_n in $cu_names; do
+        is_installed "$cu_n" || { say "$cu_n is not installed"; continue; }
+        cu_row=$(row "$cu_n")
+        if [ -z "$cu_row" ]; then
+            say "$cu_n is no longer in the list"
+            continue
+        fi
+        cu_kind=$(field "$cu_row" 2)
+        cu_new=$(field "$cu_row" 3)
+        cu_have=$(installed_version "$cu_n")
+        case "$cu_kind" in
+            pkg) cu_pkgs="$cu_pkgs $(field "$cu_row" 5)" ;;
+            bundle) ;;
+            npm-musl)
+                # An item pinned to latest is whatever its source says today,
+                # so only the install itself can tell; --check does not guess.
+                if [ "$cu_new" = latest ]; then
+                    cu_latest="$cu_latest $cu_n"
+                elif [ "$cu_new" != "$cu_have" ]; then
+                    cu_out="$cu_out $cu_n"
+                fi
+                ;;
+            *)
+                [ "$cu_new" = "$cu_have" ] || cu_out="$cu_out $cu_n"
+                ;;
+        esac
+    done
+
+    if [ "$cu_check" = 1 ]; then
+        if [ -z "$(printf '%s' "$cu_out" | tr -d ' ')" ]; then
+            say "Everything is up to date."
+        else
+            for cu_n in $cu_out; do
+                cu_row=$(row "$cu_n")
+                say "$cu_n $(field "$cu_row" 3) is available; you have $(installed_version "$cu_n")"
+            done
+        fi
+        [ -z "$(printf '%s' "$cu_pkgs" | tr -d ' ')" ] || say "Packages are checked by the package manager when you update."
+        for cu_n in $cu_latest; do
+            say "$cu_n is checked against its source when you update."
+        done
+        return 0
+    fi
+
+    if [ -n "$(printf '%s' "$cu_pkgs" | tr -d ' ')" ]; then
+        say "Updating packages"
+        # shellcheck disable=SC2086
+        upgrade_pkg $cu_pkgs || FAILED=1
+    fi
+    cu_out="$cu_out $cu_latest"
+    if [ -z "$(printf '%s' "$cu_out" | tr -d ' ')" ]; then
+        [ -n "$(printf '%s' "$cu_pkgs" | tr -d ' ')" ] || say "Everything is up to date."
+    else
+        for cu_n in $cu_out; do
+            install_item "$cu_n" 1 || FAILED=1
+        done
+    fi
+    [ "$FAILED" = 0 ] || return 1
+    return 0
+}
+
+cmd_refresh() {
+    for cf_a in "$@"; do
+        case "$cf_a" in
+            -y|--yes) ASSUME_YES=1 ;;
+            *) err "unknown option: $cf_a"; return 2 ;;
+        esac
+    done
+    pick_catalog || true
+    refresh_catalog 0
+    cf_status=$?
+    [ "$cf_status" = 2 ] && return 1
+    return 0
+}
+
+cd_line() { printf '%-13s %s\n' "$1" "$2"; }
+
+cmd_doctor() {
+    pick_catalog || true
+    cd_bad=0
+    cd_line Prefix "$PREFIX"
+    if [ -n "$APP_PACKAGE" ]; then
+        cd_line Edition "$APP_PACKAGE"
+    else
+        cd_line Edition "unknown"
+    fi
+    case ":$PATH:" in
+        *":$BIN_DIR:"*)
+            cd_first=$(printf '%s' "$PATH" | tr ':' '\n' | grep -n -x -e "$BIN_DIR" -e "$PREFIX/bin" | head -1)
+            case "$cd_first" in
+                *"$BIN_DIR") cd_line PATH "$BIN_DIR comes first" ;;
+                *) cd_line PATH "put $BIN_DIR before $PREFIX/bin so the tools here win" ;;
+            esac
+            ;;
+        *) cd_line PATH "add $BIN_DIR to it, or the tools here will not run" ;;
+    esac
+
+    for cd_t in curl tar sha256sum; do
+        if have "$cd_t"; then
+            cd_line "$cd_t" ready
+        else
+            cd_line "$cd_t" missing
+            cd_bad=1
+        fi
+    done
+    for cd_t in fzf patchelf minisign; do
+        if have "$cd_t"; then
+            cd_line "$cd_t" ready
+        else
+            cd_line "$cd_t" "not installed (only some items need it)"
+        fi
+    done
+
+    if [ -n "$CATALOG" ]; then
+        cd_line "Item list" "$CATALOG_SERIAL, $CATALOG_FROM"
+    else
+        cd_line "Item list" "missing — reopen the app to put it back"
+        cd_bad=1
+    fi
+
+    cd_missing=""
+    for cd_n in $(installed_names); do
+        cd_row=$(state_row "$cd_n")
+        for cd_f in $(field "$cd_row" 5); do
+            [ -e "$cd_f" ] || in_list "$cd_missing" "$cd_n" || cd_missing="$cd_missing $cd_n"
+        done
+    done
+    if [ -n "$(printf '%s' "$cd_missing" | tr -d ' ')" ]; then
+        cd_line "Missing" "$(printf '%s' "$cd_missing" | sed 's/^ *//') — install them again"
+        cd_bad=1
+    fi
+
+    if [ "$ARCH_OK" = 1 ] && [ -n "$CATALOG" ]; then
+        cd_row=$(row musl-loader)
+        if [ -n "$cd_row" ]; then
+            cd_loader=$(item_targets musl-loader binary "$(field "$cd_row" 7)")
+            if [ -f "$cd_loader" ]; then
+                cd_line Loader ready
+            else
+                cd_line Loader "not installed (Claude Code needs it)"
+            fi
+        fi
+    fi
+
+    [ "$cd_bad" = 0 ] || return 1
+    return 0
+}
+
+cmd_version() {
+    pick_catalog || true
+    say "tlstore $TLSTORE_VERSION"
+    [ -z "$CATALOG_SERIAL" ] || say "Item list $CATALOG_SERIAL"
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+
+main() {
+    if [ $# -eq 0 ]; then
+        usage
+        return 0
+    fi
+    tl_cmd="$1"
+    shift
+    case "$tl_cmd" in
+        list) cmd_list "$@" ;;
+        search) cmd_search "$@" ;;
+        info) cmd_info "$@" ;;
+        install|add) cmd_install "$@" ;;
+        remove|uninstall) cmd_remove "$@" ;;
+        update|upgrade) cmd_update "$@" ;;
+        refresh) cmd_refresh "$@" ;;
+        shell) cmd_install shell-setup "$@" ;;
+        doctor) cmd_doctor "$@" ;;
+        version|--version|-v) cmd_version ;;
+        help|--help|-h) usage ;;
+        *) err "unknown command: $tl_cmd"; usage >&2; return 2 ;;
+    esac
+}
+
+main "$@"
