@@ -98,6 +98,20 @@
     </LinearLayout>
 
 
+    <!-- Says, while the editor is open on one place, that the shared layer's own controls are still
+         everyone's. Gone the rest of the time. -->
+    <TextView
+        android:id="@+id/surface_editor_pill_shared_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="@string/termux_surface_editor_place_shared_note"
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
     <!-- Complete looks, one tap each, filled in code. The shared layer only: a preset writes every
          surface, which is not an answer to a question asked while editing one of them. -->
     <FrameLayout
