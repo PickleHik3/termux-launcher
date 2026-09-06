@@ -77,6 +77,14 @@ public class StatusBarEdgeGeometryTest {
         assertEquals(0, StatusBarEdgeGeometry.columnTopOffsetPx(Edge.BOTTOM, true, 300));
     }
 
+    @Test public void aSharedColumnIsSplitEvenlyAndNeverBeyondItself() {
+        assertEquals(1200, StatusBarEdgeGeometry.sharedColumnLengthPx(2400, 2.75f));
+        // A short column still leaves the bar a usable stretch, but never more than it has.
+        assertEquals(330, StatusBarEdgeGeometry.sharedColumnLengthPx(600, 2.75f));
+        assertEquals(200, StatusBarEdgeGeometry.sharedColumnLengthPx(200, 2.75f));
+        assertEquals(0, StatusBarEdgeGeometry.sharedColumnLengthPx(0, 2.75f));
+    }
+
     @Test public void contentRidesTheEdgeThatFacesTheTerminal() {
         // A top bar's row sits 40px down inside a 96px bar; a bottom bar's mirrors that, so both
         // sit the same distance from the terminal.

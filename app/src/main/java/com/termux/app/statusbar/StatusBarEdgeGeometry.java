@@ -151,6 +151,24 @@ public final class StatusBarEdgeGeometry {
     }
 
     /**
+     * How much of a shared column the bar's own content takes. The apps rail and the extra keys
+     * are lists that scroll to whatever length they need; the bar's content is a fixed handful of
+     * chips, so an even split is the honest division and it never leaves either side unusable.
+     */
+    public static final float SHARED_COLUMN_SHARE = 0.5f;
+
+    /** The bar's content never takes less than this of a column it shares, nor more than it has. */
+    public static final float SHARED_COLUMN_MIN_DP = 120f;
+
+    /** How far down a column the bar's content reaches when something else shares that column. */
+    public static int sharedColumnLengthPx(int columnLengthPx, float density) {
+        int column = Math.max(0, columnLengthPx);
+        int wanted = Math.max(Math.round(SHARED_COLUMN_MIN_DP * density),
+            Math.round(column * SHARED_COLUMN_SHARE));
+        return Math.min(column, wanted);
+    }
+
+    /**
      * The bar's own thickness laid across the screen the other way: a row's frame is measured
      * from the top, a bottom row's from the bottom, and a column's content is always anchored at
      * the top of its column. This is the offset of a child of length {@code childLengthPx} that

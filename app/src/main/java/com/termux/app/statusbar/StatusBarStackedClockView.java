@@ -87,7 +87,40 @@ public final class StatusBarStackedClockView extends LinearLayout {
         refresh();
     }
 
-    /** Re-reads the time. Driven by whatever already ticks the bar, so nothing ticks on its own. */
+    /**
+     * One tick a minute, and only while the view is attached and shown: the column's clock has no
+     * seconds to move, so a minute is the whole of its animation budget.
+     */
+    private final Runnable mTicker = new Runnable() {
+        @Override public void run() {
+            if (!isAttachedToWindow()) return;
+            refresh();
+            postDelayed(this, 60_000L - System.currentTimeMillis() % 60_000L);
+        }
+    };
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mTicker.run();
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        removeCallbacks(mTicker);
+        super.onDetachedFromWindow();
+    }
+
+    @Override protected void onVisibilityChanged(@NonNull android.view.View changedView,
+                                                 int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        if (visibility == VISIBLE && isAttachedToWindow()) {
+            removeCallbacks(mTicker);
+            mTicker.run();
+        } else if (visibility != VISIBLE) {
+            removeCallbacks(mTicker);
+        }
+    }
+
+    /** Re-reads the time. */
     public void refresh() {
         Calendar now = Calendar.getInstance();
         boolean amPm = mUseAmPm || !DateFormat.is24HourFormat(getContext());
