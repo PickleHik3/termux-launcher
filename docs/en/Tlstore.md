@@ -26,7 +26,7 @@ Seven items, and each one brings whatever it needs along with it.
 | item | what you get |
 | --- | --- |
 | `claude-code` | [Claude Code](https://claude.com/claude-code), Anthropic's coding agent for the terminal. About 200 MB. |
-| `fastfetch` | System information beside an animated logo, with the layout and the GIF. |
+| `fastfetch` | System information beside an animated logo. It brings the layout; drop any GIF of yours at `~/Pictures/gif/skel.gif` and it plays there, otherwise you get text. |
 | `fish-shell` | The fish shell with the launcher's setup: the wallpaper prompt and its theme, `eza`, `zoxide`, and the plugins below. |
 | `kitten` | Kitty's companion tool, for showing images and sending files from the terminal. |
 | `nvim-theme` | A Neovim colour scheme that follows your wallpaper. |
@@ -90,7 +90,7 @@ shows the change and asks*. In a script, or anywhere there is nobody to ask, you
 one line says so — add `--configs` if you want the new one.
 
 A few files are only ever installed once and then left alone for you to edit for good: your
-personal fish settings, the fastfetch layout, and the logo GIF.
+personal fish settings and the fastfetch layout.
 
 ## Tools that are only needed while installing
 

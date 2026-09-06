@@ -26,8 +26,8 @@
 # animated logo, so its libraries are a pkg item it requires rather than a note
 # nobody reads.
 claude-code	npm-musl	latest	com.termux,io.vaj.tl	npm:@anthropic-ai/claude-code-linux-arm64-musl#claude	-	musl-loader,claude-panes-skill	env=DISABLE_AUTOUPDATER=1;tz=1;build=patchelf	Anthropic's Claude Code, about 200 MB.
-fastfetch	binary	2.67.0	com.termux	binaries:fastfetch@2026.09.02	-	fastfetch-libs,fastfetch-config,fastfetch-logo	-	System information beside an animated logo.
-fastfetch	binary	2.67.0	io.vaj.tl	binaries:fastfetch-io.vaj.tl@2026.09.02	-	fastfetch-libs,fastfetch-config,fastfetch-logo	-	System information beside an animated logo.
+fastfetch	binary	2.67.0	com.termux	binaries:fastfetch@2026.09.02	-	fastfetch-libs,fastfetch-config	-	System information beside an animated logo — drop any GIF at ~/Pictures/gif/skel.gif.
+fastfetch	binary	2.67.0	io.vaj.tl	binaries:fastfetch-io.vaj.tl@2026.09.02	-	fastfetch-libs,fastfetch-config	-	System information beside an animated logo — drop any GIF at ~/Pictures/gif/skel.gif.
 fish-shell	bundle	-	*	-	-	fish,config-fish,personal-fish,oh-my-posh,omp-theme,eza,zoxide,fisher,fish-plugins	-	The fish shell with the launcher's setup: the wallpaper prompt, a nicer ls and quicker directory jumping.
 kitten	binary	0.48.2	*	binaries:kitten@2026.09.02	-	-	-	Kitty's companion tool, for images and files in the terminal.
 nvim-theme	bundle	-	*	-	-	nvim-palette,nvim-colors	-	A Neovim colour scheme that follows your wallpaper — turn it on with :colorscheme launcher-material.
@@ -37,7 +37,6 @@ config-fish	file	v0.2.39	*	launcher:docs/en/examples/config.fish@v0.2.39	~/.conf
 eza	pkg	-	*	eza	-	-	hidden=1	A colourful, icon-aware replacement for ls.
 fastfetch-config	file-once	4b598870	*	launcher:docs/en/examples/fastfetch.jsonc@4b598870df5cb44947e9fc475d8b245a59324cf6	~/.config/fastfetch/config.jsonc	-	hidden=1	The fastfetch layout, yours to edit.
 fastfetch-libs	pkg	-	*	imagemagick chafa libandroid-glob zlib	-	-	hidden=1	The image libraries fastfetch needs for its logo.
-fastfetch-logo	file-once	1	*	https://raw.githubusercontent.com/PickleHik3/nix-on-droid/67e57bd287c0dff63be25ce9ca8f0761afaccc11/templates/launcher/config/fastfetch/logo.gif	~/Pictures/gif/skel.gif	-	hidden=1	The animated logo fastfetch shows, yours to replace.
 fish	pkg	-	*	fish	-	-	hidden=1	The fish shell itself.
 fish-plugins	fisher	-	*	nickeb96/puffer-fish jorgebucaran/autopair.fish	-	fisher,fish	hidden=1	Shorter path shortcuts and automatic bracket pairing in fish.
 fisher	file	4.4.8	*	https://raw.githubusercontent.com/jorgebucaran/fisher/4.4.8/functions/fisher.fish	~/.config/fish/functions/fisher.fish	fish	hidden=1	The plugin manager fish uses.
