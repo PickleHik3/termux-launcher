@@ -119,6 +119,13 @@ HTTP 409 with error code `ambiguous` and a `candidates` array containing up to e
 An empty query returns HTTP 400 with `bad_request`. A matched app that Android cannot start returns
 HTTP 500 with `launch_failed`.
 
+A query that matches a Linux (X11) desktop app runs it on the embedded display instead of starting
+an Android component; the display starts first if it was off. This route never goes through the
+terminal action dispatcher, so it does not need the launcher in the foreground either, and the X
+server and any apps already running on it keep going whether or not the terminal is on screen — the
+display's rendering surface simply detaches while the Display page is not the one showing and
+reattaches on its own once it is again.
+
 The route allows 30 requests per minute. The installed shell client reads the endpoint and bearer
 token from `~/.launcherctl`, then sends this request:
 
@@ -133,8 +140,12 @@ launcherctl launch com.example.maps
 
 These routes exist so that something running inside a shell — an AI coding agent, a build, a
 script — can open a pane of its own to show its work in, the way it would open a browser tab, and
-drive that pane while the user watches. Every route runs as one terminal action on the UI thread
-and needs the terminal to be in the foreground (otherwise HTTP 409 `activity_not_running`).
+drive that pane whether or not the user is currently looking at the terminal. Every route runs as
+one terminal action on the UI thread. The launcher does not need to be in the foreground: it only
+needs to be running at all, which covers a plain app switch (the user opened something else, or
+the screen is off) as well as the terminal actually being on screen. `activity_not_running` (HTTP
+409) means the launcher process itself is not there to ask — it was killed, or the Activity was
+destroyed and nothing has recreated it yet — not merely that another app is in front right now.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -404,6 +415,10 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
 - If same app UID ecosystem is compromised, token can be read.
 - LAN mode trusts every device on the local network; it does not implement per-device authentication, and it carries the token in cleartext.
 - Consider Unix domain sockets for tighter local access boundaries in future.
+- The pane routes' exposure window is now the launcher process's lifetime, not just its time on
+  screen. This does not add capabilities — ownership still confines `write`/`text`/`close` to panes
+  opened through the API, and nothing here can bring the launcher to the Android foreground on its
+  own — but the same token now reaches a pane for longer.
 
 ## Troubleshooting
 

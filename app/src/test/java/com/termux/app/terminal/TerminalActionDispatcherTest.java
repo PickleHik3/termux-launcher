@@ -155,6 +155,67 @@ public class TerminalActionDispatcherTest {
         assertTrue(current.called("openSettings"));
     }
 
+    // --- Stopped (alive, not visible) vs. destroyed: the real lifecycle boundary ---
+
+    /**
+     * Regression: a plain {@code onStop()} (the user switched apps; the terminal is still alive,
+     * just not on screen) must not block the pane routes an agent drives through launcherctl —
+     * only a destroyed/finishing Activity may.
+     */
+    @Test
+    public void aStoppedButAliveHostStillRunsBackgroundSafePaneTools() throws Exception {
+        FakeTerminalHost host = attach();
+        host.visible = false;
+
+        assertTrue(dispatcher.isAttached());
+        JSONObject result = dispatcher.execute("pane.list", new JSONObject());
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals(0, result.getJSONArray("windows").length());
+    }
+
+    /**
+     * Every other terminal tool touches on-screen chrome directly, so a stopped-but-alive host
+     * must still refuse them — attachment surviving {@code onStop()} must not silently widen what
+     * an agent can do while the user is elsewhere.
+     */
+    @Test
+    public void aStoppedButAliveHostStillRefusesForegroundOnlyTools() throws Exception {
+        FakeTerminalHost host = attach();
+        host.visible = false;
+
+        JSONObject result = dispatcher.execute("app.open_settings", new JSONObject());
+        assertEquals(409, result.getInt("_statusCode"));
+        assertEquals("activity_not_running", result.getString("error"));
+        assertFalse(host.called("openSettings"));
+        // No hint toast either: nothing to show while nobody is looking.
+        assertFalse(host.called("showTerminalActionHint"));
+    }
+
+    /**
+     * A destroyed/finishing host answers 409 for a background-safe tool exactly as it does for
+     * every other one — {@code backgroundSafe} only relaxes the visibility requirement, never the
+     * liveness one.
+     */
+    @Test
+    public void aDestroyedHostRefusesBackgroundSafeToolsToo() throws Exception {
+        FakeTerminalHost host = attach();
+        host.visible = false;
+        host.alive = false;
+
+        JSONObject result = dispatcher.execute("pane.list", new JSONObject());
+        assertEquals(409, result.getInt("_statusCode"));
+        assertEquals("activity_not_running", result.getString("error"));
+    }
+
+    /** A visible host shows its action hint exactly as before; only the stopped case suppresses it. */
+    @Test
+    public void aVisibleHostStillShowsItsActionHint() throws Exception {
+        FakeTerminalHost host = attach();
+
+        assertTrue(dispatcher.execute("app.open_settings", new JSONObject()).getBoolean("ok"));
+        assertTrue(host.called("showTerminalActionHint"));
+    }
+
     // --- Availability context ---
 
     @Test

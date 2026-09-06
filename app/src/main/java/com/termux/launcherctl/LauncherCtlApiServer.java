@@ -696,6 +696,12 @@ public class LauncherCtlApiServer {
      * and {@code GET /v1/panes/{id}/text}. Each is one terminal action run on the UI thread, and
      * the dispatcher enforces that write, text and close only reach panes opened through this API
      * — the token buys a pane, never the user's shells.
+     *
+     * <p>{@code isAttached()} only fails once the Activity is gone (finishing or destroyed) — every
+     * pane tool is in {@link com.termux.app.terminal.TerminalActionDispatcher}'s background-safe
+     * allowlist, so a stopped-but-alive terminal (the user switched apps) still answers these
+     * routes. {@code activity_not_running} therefore now means the launcher is not running at all,
+     * not merely that it is not on screen.
      */
     private JSONObject runPaneRequest(HttpRequest request) throws JSONException {
         String toolName = paneToolFor(request.method, request.path);
@@ -727,7 +733,7 @@ public class LauncherCtlApiServer {
             com.termux.app.terminal.TerminalActionDispatcher.getInstance();
         if (!dispatcher.isAttached()) {
             JSONObject error = jsonError("activity_not_running",
-                "The terminal is not in the foreground, so panes cannot be driven right now");
+                "The launcher is not running right now, so panes cannot be driven");
             error.put("_statusCode", 409);
             return error;
         }

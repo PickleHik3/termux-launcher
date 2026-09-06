@@ -779,7 +779,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private void animateSelectionSlide(int previousSelected, int selectedIndex) {
-        if (previousSelected < 0 || previousSelected >= mItems.size()
+        // A pane switch driven through the pane API can now land while the bar's window is not
+        // visible (the Activity is stopped, not destroyed; see TerminalActionDispatcher). Same
+        // reasoning as updateBusyAnimator: an invisible window still delivers frame callbacks, so
+        // an ungated animator here would spend real frames sliding a highlight nobody can see.
+        if (!mWindowVisible || previousSelected < 0 || previousSelected >= mItems.size()
             || selectedIndex < 0 || selectedIndex >= mItems.size()) {
             mTabs.snapSelection(selectedIndex);
             applyStableTabSelection();
@@ -828,7 +832,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             View selected = mTabs.getChildAt(selectedIndex);
             int target = Math.max(0, selected.getLeft() - dp(5));
             if (target == getScrollX()) return;
-            animateScrollTo(target);
+            // Same reasoning as animateSelectionSlide: an invisible window still gets animated,
+            // it just never shows it, so skip straight to the end state while nobody can see it.
+            if (mWindowVisible) animateScrollTo(target);
+            else scrollTo(target, 0);
         });
     }
 

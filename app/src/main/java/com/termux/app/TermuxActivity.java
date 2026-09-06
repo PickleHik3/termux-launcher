@@ -5292,7 +5292,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onStop() {
         super.onStop();
         Logger.logDebug(LOG_TAG, "onStop");
-        com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());
+        // Deliberately not detached here: this Activity is stopped, not gone, and the pane routes
+        // an agent drives from a shell (TerminalActionDispatcher.backgroundSafe) need to keep
+        // reaching it while the user is elsewhere. isHostAlive() still answers true — only
+        // onDestroy()'s detach() call actually takes the host away.
         mTerminalFrameMetricsMonitor.stop();
         stopAzEdgePagingLoop();
         cancelAzOverflowRefresh();
@@ -12098,7 +12101,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void showDisplayPlace() {
                     if (mPaneWallController != null) {
-                        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, true);
+                        // A Linux app can now be launched (via launcherctl) while this Activity is
+                        // stopped. Animating a wall transition nobody can see would just spend real
+                        // frames on an invisible window (the same reasoning as
+                        // TerminalWindowBar's animateSelectionSlide); animate only when visible,
+                        // otherwise land on the page directly so it is simply where the user finds
+                        // it on return.
+                        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.DISPLAY, isVisible());
                     }
                 }
                 @Override public void showNotice(@NonNull String message) { showToast(message, true); }

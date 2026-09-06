@@ -35,14 +35,25 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link TerminalHost}.
  *
  * <p>Terminal actions differ from the other tools in {@link LauncherToolRegistry}:
- * they need a foreground Activity and must run on the main thread, while callers
+ * most need a foreground Activity and must run on the main thread, while callers
  * may arrive on arbitrary background threads. This class is the single seam
  * between the two.
  *
- * <p>The host is held weakly and attached only between
- * {@code onResume} and {@code onStop}. When nothing is attached, callers get a
- * {@code 409 activity_not_running} rather than a silent no-op — an agent must be
- * able to tell "did nothing" from "could not act".
+ * <p>The host is held weakly and attached from {@code onResume} to {@code onDestroy} —
+ * it survives {@code onStop}/{@code onStart} cycles, so a backgrounded Activity that is
+ * merely stopped (not finishing, not destroyed) stays reachable. Two independent questions
+ * decide whether a call goes through: whether a host is attached at all
+ * ({@link #isAttached}, backed by {@link TerminalHost#isHostAlive()} — false once the
+ * Activity is finishing or destroyed, true across a plain stop), and whether it is actually
+ * on screen ({@link TerminalHost#isVisible()} — true only between {@code onStart} and
+ * {@code onStop}). A destroyed/absent host always answers {@code 409 activity_not_running}
+ * — silence would leave an agent unable to tell "did nothing" from "could not act". A host
+ * that is alive but not visible answers the same 409 for every tool that touches on-screen
+ * chrome (a picker, a toast, a page switch — meaningless or misleading with nobody looking),
+ * but the small set of pane routes in {@link #backgroundSafe} — the ones a shell-driven agent
+ * uses to open, list, focus, read, write and close a pane of its own — run regardless, since
+ * they only touch session/view state and never bring the app to the Android foreground
+ * themselves. See {@code docs/en/LauncherCtl_API.md#panes} for the caller-facing contract.
  */
 public final class TerminalActionDispatcher {
 
@@ -168,9 +179,11 @@ public final class TerminalActionDispatcher {
     }
 
     /**
-     * Called from {@code TermuxActivity.onStop()} and {@code onDestroy()}. Ignores
-     * the call when a different host has already attached, so an old activity's
-     * teardown cannot detach its replacement during recreation.
+     * Called from {@code TermuxActivity.onDestroy()} only — a plain {@code onStop()} leaves
+     * the host attached, since {@link #isHostAlive} still says yes and the background-safe
+     * pane routes need to keep reaching it. Ignores the call when a different host has
+     * already attached, so an old activity's teardown cannot detach its replacement during
+     * recreation.
      */
     public void detach(@NonNull TerminalHost host) {
         WeakReference<TerminalHost> current = hostRef.get();
@@ -180,9 +193,33 @@ public final class TerminalActionDispatcher {
         }
     }
 
-    /** Whether a foreground Activity is currently able to execute terminal actions. */
+    /** Whether a live host is attached, regardless of whether it is currently visible. */
     public boolean isAttached() {
         return currentHost() != null;
+    }
+
+    /**
+     * Terminal actions that do not need the Activity on screen: the pane routes an agent in a
+     * shell drives through the local API. Each only touches session/view state — opening,
+     * listing, focusing, reading, writing or closing a pane — and never calls anything that
+     * would bring the app to the Android foreground (no {@code startActivity}, no
+     * {@code moveTaskToFront}), so running one while the Activity is merely stopped cannot
+     * steal focus from whatever the user is actually looking at. Every other handled tool
+     * touches on-screen chrome directly (a picker, a toast, a page switch) and still requires
+     * {@link TerminalHost#isVisible()}.
+     */
+    private static boolean backgroundSafe(@NonNull String toolName) {
+        switch (toolName) {
+            case TOOL_PANE_OPEN:
+            case TOOL_PANE_LIST:
+            case TOOL_PANE_FOCUS:
+            case TOOL_PANE_CLOSE:
+            case TOOL_PANE_WRITE:
+            case TOOL_PANE_READ:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /** Whether {@code toolName} is a terminal action handled by this dispatcher. */
@@ -392,7 +429,10 @@ public final class TerminalActionDispatcher {
         JSONObject result = executeOnMainThreadInternal(toolName, arguments);
         if (result != null && result.optBoolean("ok", false)) {
             TerminalHost host = currentHost();
-            if (host != null) host.showTerminalActionHint(toolName);
+            // Not shown while merely stopped: a hint is an on-screen toast, and popping one for
+            // nobody to see is exactly the kind of hidden-UI work a background pane call must not
+            // do — see backgroundSafe and the class doc.
+            if (host != null && host.isVisible()) host.showTerminalActionHint(toolName);
         }
         return result;
     }
@@ -404,6 +444,10 @@ public final class TerminalActionDispatcher {
         if (host == null) {
             return error(409, "activity_not_running",
                 "The terminal UI is not in the foreground, so '" + toolName + "' cannot run");
+        }
+        if (!host.isVisible() && !backgroundSafe(toolName)) {
+            return error(409, "activity_not_running",
+                "The terminal is not in the foreground, so '" + toolName + "' cannot run");
         }
 
         try {
