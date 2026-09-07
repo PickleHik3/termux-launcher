@@ -23,7 +23,9 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
+import com.termux.app.launcher.az.AzScrubGesture;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -143,6 +145,11 @@ public final class LauncherAzGestureFxView extends View {
 
     /** The standalone index's strip of matches: its geometry, its artwork and which slot has focus. */
     @Nullable private AzFloatingStripPolicy.Strip floatingStrip;
+    /**
+     * The edge the bar stands on, as the map between the frame the strip is laid out in and the
+     * screen it is drawn on. A bottom bar is that frame already, so this rests as the identity.
+     */
+    @NonNull private AzBarFrame barFrame = AzBarFrame.bottom(0f, 0f);
     @NonNull private final List<Drawable> floatingStripIcons = new ArrayList<>();
     /**
      * Per-slot contour visuals, parallel to {@link #floatingStripIcons}: resolved once by the caller
@@ -236,6 +243,16 @@ public final class LauncherAzGestureFxView extends View {
         }
         syncBreathing();
         refreshVisibility();
+        invalidate();
+    }
+
+    /**
+     * The edge the alphabets bar stands on. Everything the strip draws is laid out in the canonical
+     * bottom-bar frame and mapped back through this, so what is drawn and what the gesture
+     * hit-tests cannot drift apart on any edge.
+     */
+    public void setBarFrame(@NonNull AzBarFrame frame) {
+        barFrame = frame;
         invalidate();
     }
 
@@ -691,14 +708,21 @@ public final class LauncherAzGestureFxView extends View {
         float iconSize = strip.iconSizePx;
         float plankPadding = dp(9f);
         float plankRadius = (iconSize * 0.5f) + plankPadding;
-        tmpRect.set(strip.left + offsetX - plankPadding, strip.top + offsetY - plankPadding,
-            strip.right + offsetX + plankPadding, strip.bottom + offsetY + plankPadding);
+        AzScrubGesture.Bounds plank = barFrame.toScreen(new AzScrubGesture.Bounds(
+            strip.left - plankPadding, strip.top - plankPadding,
+            strip.right + plankPadding, strip.bottom + plankPadding));
+        tmpRect.set(plank.left + offsetX, plank.top + offsetY,
+            plank.right + offsetX, plank.bottom + offsetY);
 
         int save = canvas.save();
-        // Rises the last few pixels into place, like the preview bubble above it.
-        canvas.translate(0f, lerp(dp(7f), 0f, progress));
+        // Rises the last few pixels into place, like the preview bubble beside it — away from the
+        // bar, which is up off a bottom one and sideways off a column.
+        float rise = lerp(dp(7f), 0f, progress);
+        canvas.translate(rise * barFrame.awayDirectionX(), rise * barFrame.awayDirectionY());
+        // Scaled about the face nearest the bar, so the band grows out of the letters.
         canvas.scale(lerp(0.94f, 1f, progress), lerp(0.94f, 1f, progress),
-            tmpRect.centerX(), tmpRect.bottom);
+            tmpRect.centerX() + (barFrame.awayDirectionX() * tmpRect.width() * 0.5f),
+            tmpRect.centerY() + (barFrame.awayDirectionY() * tmpRect.height() * 0.5f));
 
         previewFillPaint.setColor(withAlpha(Color.BLACK,
             Math.round((darkThemeActive ? 66f : 30f) * alpha)));
@@ -723,8 +747,10 @@ public final class LauncherAzGestureFxView extends View {
                 continue;
             }
             boolean focused = slot == floatingStripFocusedSlot;
-            float cx = strip.slotCenterX(slot) + offsetX;
-            float cy = strip.centerY() + offsetY;
+            float canonicalCx = strip.slotCenterX(slot);
+            float canonicalCy = strip.centerY();
+            float cx = barFrame.screenX(canonicalCx, canonicalCy) + offsetX;
+            float cy = barFrame.screenY(canonicalCx, canonicalCy) + offsetY;
             float drawnSize = focused ? iconSize * 1.06f : iconSize;
             if (focused) {
                 previewRect.set(cx - (iconSize * 0.5f), cy - (iconSize * 0.5f),
@@ -849,9 +875,17 @@ public final class LauncherAzGestureFxView extends View {
             return;
         }
         float progress = clamp01(focusedAppPreviewProgress);
-        float rowTop = appsRowRawBounds.top - locationOnScreen[1];
-        float rowLeft = appsRowRawBounds.left - locationOnScreen[0];
-        float rowRight = appsRowRawBounds.right - locationOnScreen[0];
+        // Down a column the band is a stack, not a row: the name is placed against the focused
+        // icon rather than against the band's top, and it may use the whole width to do it.
+        boolean stackedBand = barFrame.isVertical();
+        boolean haveFocusRect = hasFocus && !focusRawRect.isEmpty();
+        boolean anchorOnIcon = stackedBand && haveFocusRect;
+        float rowTop = (anchorOnIcon ? focusRawRect.top : appsRowRawBounds.top)
+            - locationOnScreen[1];
+        float rowBottom = (anchorOnIcon ? focusRawRect.bottom : appsRowRawBounds.bottom)
+            - locationOnScreen[1];
+        float rowLeft = stackedBand ? 0f : appsRowRawBounds.left - locationOnScreen[0];
+        float rowRight = stackedBand ? getWidth() : appsRowRawBounds.right - locationOnScreen[0];
         float focusCx = hasPreviewPosition
             ? previewDisplayRawX - locationOnScreen[0]
             : (hasFocus && !focusRawRect.isEmpty()
@@ -878,11 +912,30 @@ public final class LauncherAzGestureFxView extends View {
             ? buildFocusedAppPreviewLabelLayout(focusedAppPreviewLabel, sourceIconSize) : null;
         float labelPillHeight = labelLayout == null
             ? 0f : labelLayout.getHeight() + (PREVIEW_LABEL_VERTICAL_PADDING_DP * getResources().getDisplayMetrics().density * 2f);
-        float labelReserve = labelLayout != null && labelSide == AzFloatingStripPolicy.LabelSide.BELOW
-            ? labelPillHeight + dp(5f) : 0f;
-        float top = rowTop - bubbleSize - verticalGap - labelReserve;
+        float labelReserveAbove = labelLayout != null ? labelPillHeight + dp(5f) : 0f;
+        float labelReserve = labelSide == AzFloatingStripPolicy.LabelSide.BELOW
+            ? labelReserveAbove : 0f;
+        // The name reads on the far side of the band from the bar, so it never lands in the gap
+        // between the letters and the icons they matched: above the band for a bottom bar, below it
+        // for a top one, and beside the focused icon down a column.
+        float aboveTop = rowTop - bubbleSize - verticalGap - labelReserve;
+        float belowTop = rowBottom + verticalGap
+            + (labelSide == AzFloatingStripPolicy.LabelSide.ABOVE ? labelReserveAbove : 0f);
+        boolean nameBelowBand = barFrame.awayDirectionY() < 0f;
+        float top = nameBelowBand ? belowTop : aboveTop;
+        // At the top of a column there is no room above the icon, so the bubble drops below it
+        // rather than being clamped onto the icon it is naming.
+        if (!nameBelowBand && stackedBand && top < dp(8f)) {
+            top = belowTop;
+        }
         if (top < dp(8f)) {
             top = dp(8f);
+        }
+        if (!barFrame.isCanonical()) {
+            // And never off the bottom either: the label under it has to stay on screen too.
+            float labelBelow = labelSide == AzFloatingStripPolicy.LabelSide.BELOW
+                ? labelReserveAbove : 0f;
+            top = Math.min(top, Math.max(dp(8f), getHeight() - bubbleSize - labelBelow - dp(8f)));
         }
         top += focusedAppPreviewLaunchDismissing
             ? lerp(dp(-8f), 0f, progress)
@@ -990,9 +1043,9 @@ public final class LauncherAzGestureFxView extends View {
         float pillTop = labelSide == AzFloatingStripPolicy.LabelSide.BELOW
             ? bubbleTop + bubbleSize + dp(5f)
             : bubbleTop - pillHeight - dp(5f);
-        if (pillTop < dp(8f)) {
-            pillTop = dp(8f);
-        }
+        // The name stays on screen at either end of the band, the way the bubble itself does.
+        pillTop = Math.min(Math.max(pillTop, dp(8f)),
+            Math.max(dp(8f), getHeight() - pillHeight - dp(8f)));
 
         tmpRect.set(pillLeft, pillTop, pillLeft + pillWidth, pillTop + pillHeight);
         previewFillPaint.setColor(withAlpha(Color.BLACK, Math.round((darkThemeActive ? 58f : 18f) * alpha)));

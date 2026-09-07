@@ -1444,7 +1444,7 @@ public final class SuggestionBarView extends GridLayout
         return azStripLastSlot;
     }
 
-    /** The rectangle the strip was drawn at, which is also what focus is resolved against. */
+    /** The strip as it was laid out, in the canonical frame focus is resolved in. */
     public void setAzStripGeometry(@Nullable AzFloatingStripPolicy.Strip strip) {
         azStripGeometry = strip;
     }
@@ -1463,16 +1463,21 @@ public final class SuggestionBarView extends GridLayout
     /**
      * Focus over the floating strip, reported in the row's own vocabulary so the FX layers and the
      * gesture need no second case for it.
+     *
+     * <p>The point and the answer are both in the canonical frame the strip was laid out in —
+     * along the bar as x, away from it as y — which is the screen for a bar along the bottom and a
+     * turn or a mirror for any other edge. Paging therefore reads the strip's own ends whichever
+     * way round they are on screen: for a column, its "left" end is the top one.
      */
     @NonNull
-    public AzDragFocusResult resolveAzStripFocus(float rawX, float rawY) {
+    public AzDragFocusResult resolveAzStripFocus(float alongPx, float awayPx) {
         boolean paged = azStripPageCount() > 1;
         AzFloatingStripPolicy.Strip strip = azStripGeometry;
         float density = getResources().getDisplayMetrics().density;
-        int edge = toAzEdge(AzFloatingStripPolicy.edgeAt(strip, rawX, paged, density));
+        int edge = toAzEdge(AzFloatingStripPolicy.edgeAt(strip, alongPx, paged, density));
         List<LauncherAppEntry> visible = azStripVisibleEntries();
         int slot = hasAzStripMatches()
-            ? AzFloatingStripPolicy.slotAt(strip, rawX, rawY, azStripLastSlot, density) : -1;
+            ? AzFloatingStripPolicy.slotAt(strip, alongPx, awayPx, azStripLastSlot, density) : -1;
         if (strip == null || slot < 0 || slot >= visible.size()) {
             azStripLastSlot = -1;
             return new AzDragFocusResult(null, null, null, null, null, edge, paged, paged);

@@ -46,6 +46,14 @@ public final class PlaceChromePolicy {
         return azIndexStandsAlone(layout) ? layout.azBarEdge : Edge.BOTTOM;
     }
 
+    /**
+     * The alphabets bar riding the dock's own row. Every place does but one that stands the bar on
+     * another edge, where it gets a host and a glass sheet of its own and the dock never knows.
+     */
+    public static boolean azRowOnDock(@NonNull PlaceLayout layout) {
+        return azRowShown(layout) && azBarEdge(layout) == Edge.BOTTOM;
+    }
+
     /** The pinned apps as a column on a screen edge — the rail. */
     public static boolean appsRailShown(@NonNull PlaceLayout layout) {
         return layout.appsRow.isOnSide();
@@ -70,6 +78,6 @@ public final class PlaceChromePolicy {
 
     /** Whether anything at all lands on the dock, which is what decides it is drawn. */
     public static boolean dockShown(@NonNull PlaceLayout layout) {
-        return appsRowShown(layout) || azRowShown(layout) || extraKeysRowShown(layout);
+        return appsRowShown(layout) || azRowOnDock(layout) || extraKeysRowShown(layout);
     }
 }
