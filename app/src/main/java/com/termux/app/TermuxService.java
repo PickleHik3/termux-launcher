@@ -92,6 +92,13 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     private TermuxTerminalSessionActivityClient mTermuxTerminalSessionActivityClient;
 
     /**
+     * Every activity client currently attached, so a second activity instance (a launch on another
+     * display) coming and going hands the sessions back to the first instead of to nobody.
+     */
+    private final com.termux.app.terminal.TerminalSessionClientRoster<TermuxTerminalSessionActivityClient>
+        mActivityClientRoster = new com.termux.app.terminal.TerminalSessionClientRoster<>();
+
+    /**
      * The basic implementation of the {@link TerminalSessionClient} interface to be used by {@link TerminalSession}
      * that does not hold activity references and only a service reference.
      */
@@ -207,9 +214,10 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         Logger.logVerbose(LOG_TAG, "onUnbind");
         // Since we cannot rely on {@link TermuxActivity.onDestroy()} to always complete,
         // we unset clients here as well if it failed, so that we do not leave service and session
-        // clients with references to the activity.
-        if (mTermuxTerminalSessionActivityClient != null)
-            unsetTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+        // clients with references to the activity. onUnbind means the last activity is gone, so
+        // every attached client goes.
+        for (TermuxTerminalSessionActivityClient client : detachAllActivityClients())
+            unsetTermuxTerminalSessionClient(client);
         return false;
     }
 
@@ -832,8 +840,20 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * implements the {@link TerminalSessionClient} interface.
      */
     public synchronized void setTermuxTerminalSessionClient(TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
-        mTermuxTerminalSessionActivityClient = termuxTerminalSessionActivityClient;
-        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+        mActivityClientRoster.attach(termuxTerminalSessionActivityClient);
+        applyActivityClient(termuxTerminalSessionActivityClient);
+    }
+
+    /** Point every session at {@code client}, or at the headless service client when null. */
+    private void applyActivityClient(@Nullable TermuxTerminalSessionActivityClient client) {
+        mTermuxTerminalSessionActivityClient = client;
+        TermuxTerminalSessionClientBase target = client != null ? client : mTermuxTerminalSessionServiceClient;
+        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(target);
+        if (client == null) mVisibleSessionCount = -1;
+    }
+
+    private synchronized List<TermuxTerminalSessionActivityClient> detachAllActivityClients() {
+        return mActivityClientRoster.detachAll();
     }
 
     /**
@@ -842,11 +862,12 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * clients do not hold an activity references.
      */
     public synchronized void unsetTermuxTerminalSessionClient(TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
-        if (mTermuxTerminalSessionActivityClient != termuxTerminalSessionActivityClient)
-            return;
-        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionServiceClient);
-        mTermuxTerminalSessionActivityClient = null;
-        mVisibleSessionCount = -1;
+        boolean wasCurrent = mTermuxTerminalSessionActivityClient == termuxTerminalSessionActivityClient;
+        TermuxTerminalSessionActivityClient next = mActivityClientRoster.detach(termuxTerminalSessionActivityClient);
+        // A departing non-current client (a second instance that never took over) changes nothing;
+        // a departing current one hands the sessions to whoever attached before it, or to nobody.
+        if (wasCurrent || next != mTermuxTerminalSessionActivityClient)
+            applyActivityClient(next);
     }
 
     /**

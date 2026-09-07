@@ -1191,6 +1191,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTerminalFrameMetricsMonitor.start(getWindow());
 
         mIsVisible = true;
+        reclaimTerminalSessionClient();
         resetInheritedImeLayoutState();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.setHostVisible(true);
@@ -5725,6 +5726,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
         rebuildDrawerSessions();
+    }
+
+    /**
+     * A visible activity owns the sessions. Another instance of this activity (a launch on a second
+     * display) may have attached its client after ours, and its departure may have handed the
+     * sessions back to nobody; either way our panes stop hearing about output and repaint only on
+     * the cursor blink. Coming back on screen is the moment to take them back.
+     */
+    private void reclaimTerminalSessionClient() {
+        if (mTermuxService == null || mTermuxTerminalSessionActivityClient == null) return;
+        if (mTermuxService.getTermuxTerminalSessionClient() == mTermuxTerminalSessionActivityClient) return;
+        Logger.logDebug(LOG_TAG, "Reclaiming the terminal session client on start");
+        mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
     }
 
     private void startBootstrapAndSession(@Nullable Intent intent) {
