@@ -80,7 +80,8 @@ public class TermuxActivityExtraKeysLayoutParamsTest {
 
         java.util.Set<Integer> expected = new java.util.HashSet<>(java.util.Arrays.asList(
             R.id.terminal_status_bar_glass_blur, R.id.terminal_window_bar_blur,
-            R.id.app_drawer_blur, R.id.command_palette_blur, R.id.terminal_sheet_blur));
+            R.id.app_drawer_blur, R.id.command_palette_blur, R.id.terminal_sheet_blur,
+            R.id.place_az_bar_top_blur, R.id.place_az_bar_column_blur));
         java.util.Set<Integer> found = new java.util.HashSet<>();
         collectBlurViews(activity.findViewById(R.id.activity_termux_root_view), found);
         assertEquals(expected, found);

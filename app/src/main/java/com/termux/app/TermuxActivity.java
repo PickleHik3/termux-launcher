@@ -4895,6 +4895,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearAccessoryRenderEffectBackdrop();
             // Nothing lands on the dock, but the letters may still be standing on another edge.
             syncAzBarHosts();
+            refreshAzBarHostsGlass();
             applyDecorNavBarSurfaceState(state);
             applyInAppKeyboardSurfaceState(state);
             mKeyboardGeometry.completePendingOpenReveal(state);
@@ -4964,6 +4965,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A bar off the dock is not in this stack and never rides its plank; it wears the same
         // glass, so it is re-glazed on the same pass that re-glazes the dock.
         syncAzBarHosts();
+        refreshAzBarHostsGlass();
 
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         // Thin material hairline at the seam between the A–Z row and the extra-keys row.
@@ -6255,10 +6257,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 next.setBarEdge(edge);
             }
         }
+        // A host that has just appeared needs its material now; one that was already up gets it
+        // on the render pass, so an insets dispatch does not build a fresh drawable for nothing.
+        if (changed) refreshAzBarHostsGlass();
         // The content's edge padding is decided from the column, so the insets pass reruns.
         if (changed && mTermuxActivityRootView != null)
             ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         return changed;
+    }
+
+    /** The material behind whichever host is up, re-read from the dock's own surface tuning. */
+    private void refreshAzBarHostsGlass() {
+        int thicknessPx = azBarThicknessPx();
+        View topHost = findViewById(R.id.place_az_bar_top);
+        if (topHost != null && topHost.getVisibility() == View.VISIBLE) {
+            applyAzBarHostGlass(R.id.place_az_bar_top_glass, R.id.place_az_bar_top_blur,
+                R.id.place_az_bar_top_surface, mAzBarTopOutline, thicknessPx);
+        }
+        View columnHost = findViewById(R.id.place_az_bar_column);
+        if (columnHost != null && columnHost.getVisibility() == View.VISIBLE) {
+            applyAzBarHostGlass(R.id.place_az_bar_column_glass, R.id.place_az_bar_column_blur,
+                R.id.place_az_bar_column_surface, mAzBarColumnOutline, thicknessPx);
+        }
     }
 
     /** The bar's own view inside a host, filling whatever box the host's padding leaves it. */
@@ -6298,8 +6318,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         int sideInsetPx = getDockLayout().horizontalInsetPx;
         updateViewPadding(host, sideInsetPx, 0, sideInsetPx, 0);
-        applyAzBarHostGlass(R.id.place_az_bar_top_glass, R.id.place_az_bar_top_blur,
-            R.id.place_az_bar_top_surface, mAzBarTopOutline, thicknessPx);
     }
 
     /**
@@ -6329,8 +6347,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int bottomPadPx = marginPx + azBarBottomChromeHeightPx();
         updateViewPadding(host, right ? marginPx : edgePadPx, topPadPx,
             right ? edgePadPx : marginPx, bottomPadPx);
-        applyAzBarHostGlass(R.id.place_az_bar_column_glass, R.id.place_az_bar_column_blur,
-            R.id.place_az_bar_column_surface, mAzBarColumnOutline, thicknessPx);
     }
 
     /** How much of the container's top a status bar standing along it holds. */
@@ -8852,8 +8868,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : findViewById(R.id.terminal_window_bar_host);
         int windowBarPx = windowBarHost != null && windowBarHost.getVisibility() == View.VISIBLE
             ? windowBarHost.getHeight() : 0;
+        View azBarTop = findViewById(R.id.place_az_bar_top);
+        int azBarTopPx = azBarTop != null && azBarTop.getVisibility() == View.VISIBLE
+            ? AzBarHostGeometry.rowHeightPx(azBarHostMarginPx(), azBarThicknessPx()) : 0;
         int minTerminalPx = Math.round(dpToPx(72));
-        return Math.max(0, rootHeightPx - windowBarPx - minTerminalPx
+        return Math.max(0, rootHeightPx - windowBarPx - azBarTopPx - minTerminalPx
             - Math.max(0, accessoryBottomMarginPx));
     }
 
