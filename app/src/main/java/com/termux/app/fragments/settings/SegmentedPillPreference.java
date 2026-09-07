@@ -11,6 +11,7 @@ import android.widget.TextView;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
@@ -60,6 +61,13 @@ public final class SegmentedPillPreference extends Preference {
         mLabelResIds = labelResIds;
         mValue = normalize(getPersistedString(mValues[0]));
         notifyChanged();
+    }
+
+    /** How many segments the current set has — a test's way of confirming a portrait/landscape
+     *  segment swap actually took, without reaching into the bound view. */
+    @VisibleForTesting
+    public int segmentCount() {
+        return mValues.length;
     }
 
     @Override

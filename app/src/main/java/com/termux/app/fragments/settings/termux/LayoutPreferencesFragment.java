@@ -23,6 +23,8 @@ import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.place.KeyboardOnEnter;
+import com.termux.app.place.PlaceChromePolicy;
+import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
@@ -48,6 +50,7 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     private static final String KEY_STATUS_BAR = "layout_status_bar";
     private static final String KEY_APPS_ROW = "layout_apps_row";
     private static final String KEY_ALPHABETS_ROW = "layout_alphabets_row";
+    private static final String KEY_ALPHABETS_ROW_EDGE = "layout_alphabets_row_edge";
     private static final String KEY_EXTRA_KEYS = "layout_extra_keys";
     private static final String KEY_KEYBOARD_ON_ENTER = "layout_keyboard_on_enter";
     private static final String KEY_KEYBOARD_MODE = "layout_keyboard_mode";
@@ -225,6 +228,11 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         if (alphabetsRow != null) {
             alphabetsRow.setOnPreferenceChangeListener(this::onRowChanged);
         }
+        SegmentedPillPreference alphabetsRowEdge = findPreference(KEY_ALPHABETS_ROW_EDGE);
+        if (alphabetsRowEdge != null) {
+            applyEdgeSegments(alphabetsRowEdge);
+            alphabetsRowEdge.setOnPreferenceChangeListener(this::onRowChanged);
+        }
         SegmentedPillPreference extraKeys = findPreference(KEY_EXTRA_KEYS);
         if (extraKeys != null) {
             applyRowSegments(extraKeys);
@@ -290,6 +298,8 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         if (mStore == null) return;
         SegmentedPillPreference statusBar = findPreference(KEY_STATUS_BAR);
         if (statusBar != null) applyEdgeSegments(statusBar);
+        SegmentedPillPreference alphabetsRowEdge = findPreference(KEY_ALPHABETS_ROW_EDGE);
+        if (alphabetsRowEdge != null) applyEdgeSegments(alphabetsRowEdge);
         SegmentedPillPreference appsRow = findPreference(KEY_APPS_ROW);
         if (appsRow != null) applyRowSegments(appsRow);
         SegmentedPillPreference extraKeys = findPreference(KEY_EXTRA_KEYS);
@@ -315,6 +325,11 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         if (mStore == null) return;
         Preference statusBar = findPreference(KEY_STATUS_BAR);
         if (statusBar != null) statusBar.setVisible(SHOW_STATUS_BAR_EDGE_ROW);
+        Preference alphabetsRowEdge = findPreference(KEY_ALPHABETS_ROW_EDGE);
+        if (alphabetsRowEdge != null) {
+            PlaceLayout resolved = mStore.places().resolve(mSelectedPlace, mSelectedOrientation);
+            alphabetsRowEdge.setVisible(PlaceChromePolicy.azIndexStandsAlone(resolved));
+        }
         Preference keyboardMode = findPreference(KEY_KEYBOARD_MODE);
         if (keyboardMode != null) {
             keyboardMode.setVisible(SHOW_KEYBOARD_MODE_ROW && mSelectedPlace == PaneWallPage.DISPLAY);
@@ -385,6 +400,13 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
                     relayoutLauncher();
                     break;
                 }
+                case KEY_ALPHABETS_ROW_EDGE: {
+                    Edge edge = Edge.parse(value, Edge.BOTTOM);
+                    if (edge == mPlaces.azBarEdge(mPlace, mOrientation)) return;
+                    mPlaces.setAzBarEdge(mPlace, mOrientation, edge);
+                    relayoutLauncher();
+                    break;
+                }
                 case KEY_EXTRA_KEYS: {
                     RowPlacement placement = RowPlacement.parse(value, RowPlacement.BOTTOM);
                     if (placement == mPlaces.extraKeys(mPlace, mOrientation)) return;
@@ -418,6 +440,8 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
             switch (key) {
                 case KEY_STATUS_BAR:
                     return mPlaces.statusBarEdge(mPlace, mOrientation).storageValue();
+                case KEY_ALPHABETS_ROW_EDGE:
+                    return mPlaces.azBarEdge(mPlace, mOrientation).storageValue();
                 case KEY_APPS_ROW:
                     return mPlaces.appsRow(mPlace, mOrientation).storageValue();
                 case KEY_EXTRA_KEYS:

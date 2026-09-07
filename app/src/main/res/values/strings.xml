@@ -30,6 +30,7 @@
     <string name="settings_layout_status_bar_title">Status bar</string>
     <string name="settings_layout_status_bar_summary">Choose which edge shows the status bar.</string>
     <string name="settings_layout_apps_row_summary">Choose where pinned apps appear, or hide them.</string>
+    <string name="settings_layout_alphabets_edge_summary">Choose which edge shows the alphabets bar.</string>
     <string name="settings_layout_extra_keys_summary">Choose where extra keys appear, or hide them.</string>
     <string name="settings_layout_keyboard_on_enter_title">Keyboard on enter</string>
     <string name="settings_layout_keyboard_on_enter_summary">How the keyboard comes up when you switch to this place.</string>
@@ -386,7 +387,7 @@
     <string name="settings_edit_pinned_apps_title">Edit pinned apps</string>
     <string name="settings_edit_pinned_apps_summary">Choose apps and drag them to reorder directly.</string>
     <string name="settings_app_browsing_header">App browsing</string>
-    <string name="settings_show_az_index_title">Alphabetical index</string>
+    <string name="settings_show_az_index_title">Alphabets bar</string>
     <string name="settings_show_az_index_summary">Show an A–Z index. Slide across it to find and open apps.</string>
     <string name="settings_app_index_haptics_title">Launcher haptics</string>
     <string name="settings_app_index_haptics_summary">Subtle feedback across the app index and dock page changes.</string>
