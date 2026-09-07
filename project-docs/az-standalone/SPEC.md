@@ -34,3 +34,21 @@ release and dismiss on release-away; Layout page switch, copy, rail-outside-colu
 checked on pong (2026-09-07): everything above, plus the breath repainting only while a finger is down
 (gfxinfo: ~104 frames/s focused, 2 idle, 3 per 2 s after release). Untested anywhere but unit tests: strip
 paging past eight matches — no letter on pong has more than eight apps.
+
+## Round 2 (2026-09-07, from device review on pong)
+
+| Item | Rule |
+|---|---|
+| Strip focus ring follows the icon | The floating strip's focused slot wears the same icon-contour ring the apps row uses (`FocusOutlineRenderer` visual built from the drawable's alpha), not a rounded rectangle. The breath scales that ring. |
+| Name | The switch is "Alphabets bar" everywhere (sentence case, like "Extra keys bar"). |
+| Alphabets bar edge | New per-place × orientation value `az_bar`: top · bottom · left · right, default bottom. Portrait offers top · bottom only (side values coerce to bottom, like the other rows). It applies only when the bar stands alone (apps row not at the bottom); with a bottom apps row the bar rides under it and the edge is ignored. |
+| Layout page | Under the "Alphabets bar" switch, a placement pill (Top/Bottom in portrait, Top/Bottom/Left/Right in landscape) visible only when the bar is on and stands alone. Summary: "Choose which edge shows the alphabets bar." Miniature draws the band on that edge: a top band under the status bar, a side column innermost of the side columns. |
+| One surface with the dock | The bar is part of whichever dock layer it sits on. Plank physics compensate the bar exactly as they compensate the pinned-apps layer (keyboard up: the glass is the plank and the letters must ride it). The drawer's dock lift moves the bar and the glass together instead of lifting and fading the letters on their own. |
+| Bar on another edge | A top bar is the same horizontal row hosted under the status bar, strip floating below it. A side bar is a vertical column of upright letters, strip stacked beside it. The gesture machinery is untouched: touches are mapped into the canonical bottom-bar frame by one pure edge transform (`AzBarFrame`), and the strip is laid out in that frame and mapped back for drawing. A bar not on the bottom gets its own glass sheet in the dock material and insets the content like the extra-keys column. |
+
+| # | Branch | Delivers | Depends on |
+|---|---|---|---|
+| 4 | `feat/az-bar-model` | `PlaceLayout.azBarEdge` + `PlaceLayoutStore` key/getter/setter (in `ARRANGEMENT_KEYS`); `PlaceChromePolicy.azBarEdge(layout)` (bottom unless standalone); rename; placement pill + visibility; miniature band on the edge; strings; tests | — |
+| 5 | `feat/az-ring-shape` | drawable-based `resolveFocusOutlineVisual` overload sharing the cache; strip carries per-slot visuals; `drawFloatingStrip` draws the contour ring with the breath; test | — |
+| 6 | `feat/az-dock-surface` | `DockPlankController` compensates a set of content layers including `apps_bar_az_row`; drawer lift moves glass and letters together; anchor chain of `apps_bar_az_row` sound with extra keys gone; tests | — |
+| 7 | `feat/az-bar-edges` | `AzBarFrame` transform; `AzScrubRowView` vertical mode; top/side hosts with dock-material glass and content insets; `azGestureGeometry`/strip in canonical frame; label side; tests | 4, 6 |
