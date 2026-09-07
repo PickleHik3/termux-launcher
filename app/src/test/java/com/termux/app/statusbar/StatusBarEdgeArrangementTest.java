@@ -145,4 +145,21 @@ public class StatusBarEdgeArrangementTest {
         assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, stats.getLayoutParams().width);
         assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, stats.getLayoutParams().height);
     }
+
+
+    @Test public void aBottomRowKeepsItsClockAtTheFootWhereTheRowIsNot() {
+        // The row rides the bar's inner edge — the top of a bottom bar — so the widget slot has
+        // to take the outer one, or the two share the same stretch and the clock wears the stats.
+        FrameLayout slot = new FrameLayout(mActivity);
+        slot.setId(R.id.terminal_top_widget_area);
+        mHost.addView(slot, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 68, Gravity.TOP));
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.BOTTOM);
+        assertEquals(Gravity.BOTTOM, ((FrameLayout.LayoutParams) slot.getLayoutParams()).gravity);
+        assertEquals(View.VISIBLE, slot.getVisibility());
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.TOP);
+        assertEquals(Gravity.TOP, ((FrameLayout.LayoutParams) slot.getLayoutParams()).gravity);
+    }
 }

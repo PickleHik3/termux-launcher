@@ -20,6 +20,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.font.NerdFontSpans;
 
@@ -90,6 +91,8 @@ public final class StatusBarLensView extends View {
     private float mChipRadiusPx = -1f;
     /** The bar stands in a column, so the icons travel down its length instead of across it. */
     private boolean mVertical;
+    /** The bar stands along the bottom: the clock, and the line the icons share, are at its foot. */
+    private boolean mBottom;
     @NonNull private String mDisplayGlyph = "";
     @Nullable private Listener mListener;
     @Nullable private PaneWallPage mPressed;
@@ -143,7 +146,24 @@ public final class StatusBarLensView extends View {
         invalidate();
     }
 
-    /** The clock's time line and band height, from the slot's layout; the home icon sits there. */
+    /**
+     * The edge the bar stands on. A column queues the places along the bar's height; a row along
+     * the bottom keeps its clock at its foot, so until the clock says where its line is, that is
+     * where the icons rest.
+     */
+    public void setEdge(@NonNull Edge edge) {
+        boolean vertical = edge == Edge.LEFT || edge == Edge.RIGHT;
+        boolean bottom = edge == Edge.BOTTOM;
+        if (mVertical == vertical && mBottom == bottom) return;
+        mVertical = vertical;
+        mBottom = bottom;
+        invalidate();
+    }
+
+    /**
+     * The clock's time line and band height, in this view's own coordinates — the slot reports
+     * its clock's line relative to itself, and the host offsets it by where the slot stands.
+     */
     public void setHomeAnchor(float centerYPx, float sizePx) {
         if (mHomeCenterYPx == centerYPx && mHomeSizePx == sizePx) return;
         mHomeCenterYPx = centerYPx;
@@ -222,8 +242,8 @@ public final class StatusBarLensView extends View {
         // and carries no home icon: there the neighbours alone peek in, and an icon fades as it
         // arrives at home, so the row is never crowded.
         float expandedHome = mHomeSizePx > 0f ? Math.min(dp(ICON_DP), mHomeSizePx) : dp(ICON_DP);
-        float expandedLine = mHomeCenterYPx >= 0f && !mVertical
-            ? mHomeCenterYPx : dp(SLOT_HEIGHT_DP) / 2f;
+        float slotMiddle = mBottom ? across - dp(SLOT_HEIGHT_DP) / 2f : dp(SLOT_HEIGHT_DP) / 2f;
+        float expandedLine = mHomeCenterYPx >= 0f && !mVertical ? mHomeCenterYPx : slotMiddle;
         float homeSize = lerp(dp(COMPACT_ICON_DP), expandedHome, mExpansion);
         float peekSize = lerp(dp(COMPACT_ICON_DP), expandedHome * PEEK_SHARE, mExpansion);
         // A column's line is simply its middle: there is no clock band beside the icons there.

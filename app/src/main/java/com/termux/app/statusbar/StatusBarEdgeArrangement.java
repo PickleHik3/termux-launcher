@@ -99,12 +99,24 @@ public final class StatusBarEdgeArrangement {
         boolean vertical = StatusBarEdgeGeometry.isVertical(edge);
 
         StatusBarLensView lens = host.findViewById(R.id.terminal_status_lens);
-        if (lens != null) lens.setVertical(vertical);
+        if (lens != null) lens.setEdge(edge);
 
         // The modular widget slot - the row clock, the media card, a pinned notification - is the
-        // row's. A column shows the stacked clock in its place.
+        // row's. A column shows the stacked clock in its place. In a row the slot keeps the bar's
+        // outer edge and the status row its inner one: the clock stands along the top of a top
+        // bar and along the bottom of a bottom bar, and the two never share a stretch of the bar.
         View widgetSlot = host.findViewById(R.id.terminal_top_widget_area);
         if (widgetSlot != null && vertical) widgetSlot.setVisibility(View.GONE);
+        if (widgetSlot != null
+            && widgetSlot.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams slotParams =
+                (FrameLayout.LayoutParams) widgetSlot.getLayoutParams();
+            int gravity = edge == Edge.BOTTOM ? Gravity.BOTTOM : Gravity.TOP;
+            if (slotParams.gravity != gravity) {
+                slotParams.gravity = gravity;
+                widgetSlot.setLayoutParams(slotParams);
+            }
+        }
         View stackedClock = host.findViewById(R.id.terminal_status_column_clock);
         if (stackedClock != null && !vertical) stackedClock.setVisibility(View.GONE);
 

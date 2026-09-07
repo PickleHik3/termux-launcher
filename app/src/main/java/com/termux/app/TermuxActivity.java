@@ -12532,9 +12532,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View slotView = findViewById(R.id.terminal_top_widget_area);
             if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
                 // The home icon sits on the clock's time line at the band's height; the slot
-                // says where that is after every layout.
+                // says where that is after every layout, relative to itself. The lens spans the
+                // whole bar, and the slot stands at its foot on a bottom bar, so the line is
+                // carried into the bar's own coordinates here.
                 ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setHomeAnchorListener(
-                    lens::setHomeAnchor);
+                    (centerYPx, sizePx) -> lens.setHomeAnchor(slotView.getTop() + centerYPx,
+                        sizePx));
             }
         }
         syncWallGestureAvailability();
@@ -12575,15 +12578,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             stackedClock.setAlpha(expansion);
         }
         if (topWidgets != null && !vertical) {
+            // The slot slides in from the bar's outer edge, and shows only the stretch of itself
+            // the row has not reached: the top of a top bar's slot, the foot of a bottom bar's.
+            float sign = com.termux.app.statusbar.StatusBarGesturePolicy.expandSign(mStatusBarEdge);
             topWidgets.setVisibility(View.VISIBLE);
             topWidgets.setAlpha(expansion);
-            topWidgets.setTranslationY(-dpToPx(8) * (1f - expansion));
+            topWidgets.setTranslationY(-sign * dpToPx(8) * (1f - expansion));
             int clipRight = Math.max(1, Math.max(host.getWidth(), topWidgets.getWidth()));
             int widgetHeight = topWidgets.getHeight() > 0
                 ? topWidgets.getHeight() : rowGeometry.clockClipBottom;
-            int clipBottom = Math.max(0,
-                Math.min(widgetHeight, rowGeometry.clockClipBottom));
-            topWidgets.setClipBounds(new Rect(0, 0, clipRight, clipBottom));
+            int clear = Math.max(0, Math.min(widgetHeight, rowGeometry.clockClipBottom));
+            topWidgets.setClipBounds(sign > 0f
+                ? new Rect(0, 0, clipRight, clear)
+                : new Rect(0, widgetHeight - clear, clipRight, widgetHeight));
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             // The clip radius must follow the CURRENT interactive height, not the endpoint it is
