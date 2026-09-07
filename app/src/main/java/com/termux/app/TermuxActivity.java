@@ -657,6 +657,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * for the length of the scrub and dropped on release.
      */
     private final List<Drawable> mAzStripIcons = new ArrayList<>();
+    /** Per-slot focus-ring visuals, parallel to {@link #mAzStripIcons}; resolved alongside it, once
+     * per artwork refresh, and shared with the apps row's own cache in {@code SuggestionBarView}. */
+    private final List<FocusOutlineRenderer.Visual> mAzStripVisuals = new ArrayList<>();
     @Nullable private AzFloatingStripPolicy.Strip mAzStrip;
     /** The rectangle the strip was drawn at, which is the gesture's icon track while it stands. */
     private final RectF mAzStripRawBounds = new RectF();
@@ -6552,14 +6555,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzStripRawBounds.set(strip.left, strip.top, strip.right, strip.bottom);
         mSuggestionBarView.setAzStripGeometry(strip);
         // Artwork straight from the budgeted icon store the row draws from — referenced, never
-        // copied, and dropped again on release.
+        // copied, and dropped again on release. The focus-ring visual for each slot is resolved
+        // alongside it and shares the row's own cache, so re-showing an already-outlined icon
+        // costs nothing beyond the list add.
         mAzStripIcons.clear();
+        mAzStripVisuals.clear();
+        int stripIconSizePx = Math.round(strip.iconSizePx);
         for (com.termux.app.launcher.model.LauncherAppEntry entry : entries) {
             Drawable artwork = com.termux.app.launcher.data.LauncherAppDataProvider
                 .artworkFor(this, entry);
-            mAzStripIcons.add(artwork != null ? artwork : getPackageManager().getDefaultActivityIcon());
+            Drawable icon = artwork != null ? artwork : getPackageManager().getDefaultActivityIcon();
+            mAzStripIcons.add(icon);
+            mAzStripVisuals.add(mSuggestionBarView.resolveFocusOutlineVisual(icon, stripIconSizePx));
         }
-        host.setFloatingStrip(strip, mAzStripIcons);
+        host.setFloatingStrip(strip, mAzStripIcons, mAzStripVisuals);
         host.setRowBounds(mAzStripRawBounds);
         return strip;
     }
@@ -6570,6 +6579,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzStripSyncedPage = -1;
         mAzStripRawBounds.setEmpty();
         mAzStripIcons.clear();
+        mAzStripVisuals.clear();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.clearAzStrip();
         }
