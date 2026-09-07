@@ -52,3 +52,15 @@ paging past eight matches — no letter on pong has more than eight apps.
 | 5 | `feat/az-ring-shape` | drawable-based `resolveFocusOutlineVisual` overload sharing the cache; strip carries per-slot visuals; `drawFloatingStrip` draws the contour ring with the breath; test | — |
 | 6 | `feat/az-dock-surface` | `DockPlankController` compensates a set of content layers including `apps_bar_az_row`; drawer lift moves glass and letters together; anchor chain of `apps_bar_az_row` sound with extra keys gone; tests | — |
 | 7 | `feat/az-bar-edges` | `AzBarFrame` transform; `AzScrubRowView` vertical mode; top/side hosts with dock-material glass and content insets; `azGestureGeometry`/strip in canonical frame; label side; tests | 4, 6 |
+
+## State after round 2 (2026-09-07)
+
+Phases 4–7 merged on `dev` (`c35e5b88`, `cf698605`, `2a761ff9`, `9cb1cf11`) plus the side-column
+height fix (`1f2283d7`). Emulator-verified: "Alphabets bar" title and the Position pill (Top/Bottom
+in portrait, four edges in landscape, shown only when the bar stands alone); miniature bands on
+every edge; icon-contour ring on the strip; a top bar under the status bar with its own glass and a
+working downward gesture; left and right columns innermost of the side columns, upright letters,
+strip stacked beside them, gesture and dismiss. Unit-test verified only: plank compensation of the
+letters and the drawer lift (cannot be provoked over adb without hitting a control on the glass).
+Installed on pong but not yet exercised there (screen was off). Open polish: on a side column the
+letter wave pushes the active letters into the strip's edge by a few dp.
