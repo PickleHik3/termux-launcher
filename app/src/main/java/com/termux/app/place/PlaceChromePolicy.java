@@ -19,9 +19,21 @@ public final class PlaceChromePolicy {
         return layout.appsRow == RowPlacement.BOTTOM;
     }
 
-    /** The alphabets row rides on the apps row: on an edge or hidden, it has nothing to index. */
+    /**
+     * The alphabets row is its own index. With the apps row along the bottom the matches land in
+     * that row; without it they ride a floating strip above the letters, so the switch is the only
+     * thing that decides whether the row is there.
+     */
     public static boolean azRowShown(@NonNull PlaceLayout layout) {
-        return layout.azRowShown && appsRowShown(layout);
+        return layout.azRowShown;
+    }
+
+    /**
+     * The index standing on its own, with no apps row under it to fill: the scrub shows its matches
+     * on a floating strip instead of in the row.
+     */
+    public static boolean azIndexStandsAlone(@NonNull PlaceLayout layout) {
+        return azRowShown(layout) && !appsRowShown(layout);
     }
 
     /** The pinned apps as a column on a screen edge — the rail. */

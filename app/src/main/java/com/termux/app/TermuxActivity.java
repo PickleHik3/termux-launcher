@@ -104,6 +104,7 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
+import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
@@ -650,6 +651,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final RectF mExtraKeysRawBounds = new RectF();
     private final RectF mAzFocusLetterRawBounds = new RectF();
     private final int[] mAzViewLocation = new int[2];
+    /**
+     * The standalone index's floating strip: the rectangle it was drawn at, which is also the icon
+     * track handed to the gesture, and the page's artwork, referenced from the budgeted icon store
+     * for the length of the scrub and dropped on release.
+     */
+    private final List<Drawable> mAzStripIcons = new ArrayList<>();
+    @Nullable private AzFloatingStripPolicy.Strip mAzStrip;
+    /** The rectangle the strip was drawn at, which is the gesture's icon track while it stands. */
+    private final RectF mAzStripRawBounds = new RectF();
+    /** What the strip was last laid out for, so an unchanged page costs nothing to re-sync. */
+    private char mAzStripSyncedLetter = '\0';
+    private int mAzStripSyncedPage = -1;
     private final AzScrubRowView.LetterVisualMetrics mAzLetterVisualMetrics = new AzScrubRowView.LetterVisualMetrics();
 
     /**
@@ -4871,10 +4884,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!state.appsRowEnabled) {
             mSuggestionBarExplicitSearchActive = false;
-            resetAzGestureState(false, true);
+            // The letters keep their scrub without the apps row — it just shows its matches on the
+            // floating strip instead — so only drop the gesture when the letters are gone too.
+            if (!state.azRowEnabled) {
+                resetAzGestureState(false, true);
+            }
         }
         if (indicatorBand != null) {
-            indicatorBand.setVisibility(state.azRowEnabled ? View.VISIBLE : View.GONE);
+            // The band is the air between the apps row and the letters; with no apps row above it
+            // there is nothing to separate, and it would only pad the dock out.
+            indicatorBand.setVisibility(
+                state.appsRowEnabled && state.azRowEnabled ? View.VISIBLE : View.GONE);
         }
         if (terminalToolbarViewPager != null) {
             terminalToolbarViewPager.setVisibility(
@@ -6062,8 +6082,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences != null && mPreferences.isAppLauncherAppsRowEnabled();
     }
 
+    /** The letters row is the place's, not the launcher's: one switch per arrangement. */
     private boolean isAzRowEnabled() {
-        return mPreferences != null && mPreferences.isAppLauncherAzRowEnabled();
+        return mPreferences != null && PlaceChromePolicy.azRowShown(currentPlaceLayout());
+    }
+
+    /**
+     * The index standing on its own, because the place put the pinned apps on a rail or hid them.
+     * The matches then ride a floating strip above the letters instead of filling the apps row.
+     */
+    private boolean isAzIndexStandalone() {
+        return mPreferences != null && PlaceChromePolicy.azIndexStandsAlone(currentPlaceLayout());
     }
 
     private boolean isLauncherCatalogEnabled() {
@@ -6366,10 +6395,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
+        boolean standalone = isAzIndexStandalone();
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
-        AzScrubGesture.Geometry geometry = azGestureGeometry();
+        // The icon track: the apps row where the place has one, the floating strip where it does
+        // not. The strip's band is anchored to the letters, so it does not move as pages change
+        // and the gesture can be judged against the rectangle the last sample drew.
+        AzScrubGesture.Geometry geometry = azGestureGeometry(standalone);
 
         AzScrubGesture.Decision decision;
         switch (phase) {
@@ -6418,13 +6451,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSuggestionBarView.clearAzFocusedEntry();
         }
         if (decision.persistPreview) {
-            mSuggestionBarView.persistAzPreview(decision.previewLetter, decision.previewSelectionIndex);
+            if (standalone) {
+                syncAzStandaloneStrip(decision.previewLetter, true);
+            } else {
+                mSuggestionBarView.persistAzPreview(decision.previewLetter, decision.previewSelectionIndex);
+            }
         }
         updateAzOverflowAffordance();
 
-        SuggestionBarView.AzDragFocusResult focusResult = decision.requestFocusResolve
-            ? mSuggestionBarView.resolveAzDragFocus(rawX, rawY)
-            : null;
+        SuggestionBarView.AzDragFocusResult focusResult = null;
+        if (decision.requestFocusResolve) {
+            focusResult = standalone
+                ? mSuggestionBarView.resolveAzStripFocus(rawX, rawY)
+                : mSuggestionBarView.resolveAzDragFocus(rawX, rawY);
+        }
+        if (standalone && mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setFloatingStripFocusedSlot(
+                focusResult == null ? -1 : mSuggestionBarView.azStripFocusedSlot());
+        }
         mAzCurrentFocusResult = focusResult;
         updateAzOverlayState(focusResult, decision.overlayLetter);
         updateAzEdgePagingLoop(focusResult);
@@ -6436,7 +6480,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mLauncherAzGestureFxLabelOverlayView != null) {
                     mLauncherAzGestureFxLabelOverlayView.dismissFocusedAppPreviewForLaunch();
                 }
-                launched = mSuggestionBarView.launchAzFocusedEntry(focusResult);
+                launched = standalone
+                    ? mSuggestionBarView.launchAzStripEntry(focusResult.entry)
+                    : mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
             resetAzGestureState(!launched, false);
             updateAzOverflowAffordance();
@@ -6447,13 +6493,90 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Re-lays the standalone index's floating strip for what the letter matches now, hands the
+     * rectangle to the view that draws it and to the suggestion bar that hit-tests it, and returns
+     * it so the next touch sample can use it as the gesture's icon track.
+     *
+     * @param refreshMatches false to re-lay the strip the letter already matched, without filtering
+     * @return the strip, or null when the letter has no matches to show
+     */
+    @Nullable
+    private AzFloatingStripPolicy.Strip syncAzStandaloneStrip(char letter, boolean refreshMatches) {
+        LauncherAzGestureFxView host = mLauncherAzGestureFxLabelOverlayView;
+        if (mSuggestionBarView == null || mAzScrubRowView == null || host == null
+            || mAzScrubRowView.getWidth() <= 0) {
+            return null;
+        }
+        // Measured against the letters, not the overlay that draws it: the overlay rests GONE and
+        // has no width until something puts it on screen, and the strip is what would do that.
+        // The letters are also the right span to centre over — they are the surface being scrubbed.
+        float density = getResources().getDisplayMetrics().density;
+        mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
+        float rowLeftRaw = mAzViewLocation[0];
+        float rowTopRaw = mAzViewLocation[1];
+        int rowWidth = mAzScrubRowView.getWidth();
+        int slots = AzFloatingStripPolicy.slotsForWidth(rowWidth, density);
+        if (refreshMatches) {
+            mSuggestionBarView.previewAzStripLetter(letter, slots);
+        }
+        // A scrub delivers a touch sample per frame and most of them land on the letter the last
+        // one did. Re-resolving artwork and re-pushing the strip for an unchanged page would put a
+        // handful of allocations on every frame of the gesture, so it is skipped.
+        char normalized = Character.toUpperCase(letter);
+        int page = mSuggestionBarView.azStripPageIndex();
+        if (mAzStrip != null && normalized == mAzStripSyncedLetter && page == mAzStripSyncedPage) {
+            return mAzStrip;
+        }
+        List<com.termux.app.launcher.model.LauncherAppEntry> entries = mSuggestionBarView.azStripVisibleEntries();
+        AzFloatingStripPolicy.Strip strip = entries.isEmpty() ? null : AzFloatingStripPolicy.layout(
+            rowLeftRaw, rowWidth, rowTopRaw, entries.size(), density);
+        if (strip == null) {
+            clearAzStandaloneStrip();
+            return null;
+        }
+        mAzStrip = strip;
+        mAzStripSyncedLetter = normalized;
+        mAzStripSyncedPage = page;
+        mAzStripRawBounds.set(strip.left, strip.top, strip.right, strip.bottom);
+        mSuggestionBarView.setAzStripGeometry(strip);
+        // Artwork straight from the budgeted icon store the row draws from — referenced, never
+        // copied, and dropped again on release.
+        mAzStripIcons.clear();
+        for (com.termux.app.launcher.model.LauncherAppEntry entry : entries) {
+            Drawable artwork = com.termux.app.launcher.data.LauncherAppDataProvider
+                .artworkFor(this, entry);
+            mAzStripIcons.add(artwork != null ? artwork : getPackageManager().getDefaultActivityIcon());
+        }
+        host.setFloatingStrip(strip, mAzStripIcons);
+        host.setRowBounds(mAzStripRawBounds);
+        return strip;
+    }
+
+    private void clearAzStandaloneStrip() {
+        mAzStrip = null;
+        mAzStripSyncedLetter = '\0';
+        mAzStripSyncedPage = -1;
+        mAzStripRawBounds.setEmpty();
+        mAzStripIcons.clear();
+        if (mSuggestionBarView != null) {
+            mSuggestionBarView.clearAzStrip();
+        }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setFloatingStrip(null, null);
+        }
+    }
+
+    /**
      * The layout the scrub is judged against. The row rectangles are the {@code isShown()}-gated
      * ones already populated for the FX layers; the letter row's own position and height are read
      * ungated, because that is what the anchor arithmetic and the row-height thresholds used before
      * the gesture moved out of here.
+     *
+     * @param standalone true to hand the floating strip's band in as the icon track, because the
+     *                   place has no apps row for the matches to land in
      */
     @NonNull
-    private AzScrubGesture.Geometry azGestureGeometry() {
+    private AzScrubGesture.Geometry azGestureGeometry(boolean standalone) {
         float azRowLeftRaw = 0f;
         float azRowTopRaw = 0f;
         float azRowHeightPx = 0f;
@@ -6468,8 +6591,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float extraKeysHeightPx = (mAzTerminalToolbarView != null && mAzTerminalToolbarView.getHeight() > 0)
             ? mAzTerminalToolbarView.getHeight()
             : 0f;
+        RectF iconTrack = standalone ? mAzStripRawBounds : mAppsRowRawBounds;
         return new AzScrubGesture.Geometry(azRowLeftRaw, azRowTopRaw, azRowHeightPx, extraKeysHeightPx,
-            toAzBounds(mAzRowRawBounds), toAzBounds(mAppsRowRawBounds), toAzBounds(mExtraKeysRawBounds),
+            toAzBounds(mAzRowRawBounds), toAzBounds(iconTrack), toAzBounds(mExtraKeysRawBounds),
             getResources().getDisplayMetrics().density);
     }
 
@@ -6497,12 +6621,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
-        applyAzFxRowBounds();
+        boolean standalone = isAzIndexStandalone();
+        applyAzFxRowBounds(standalone);
         LauncherAzGestureFxView.InteractionMode interactionMode =
             mAzGesture.mode() == AzScrubGesture.Mode.ICON_TRACKING_LOCKED
                 ? LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
                 : LauncherAzGestureFxView.InteractionMode.LETTER_TRACK;
-        if (mSuggestionBarView != null) {
+        // The row's own focus lift only exists where the row is drawing the matches.
+        if (mSuggestionBarView != null && !standalone) {
             if (interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED) {
                 mSuggestionBarView.updateAzFocusedEntry(focusResult);
             } else {
@@ -6540,7 +6666,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzGesture.isActive(),
             mAzGesture.lastRawX(),
             focusBounds,
-            interactionMode
+            interactionMode,
+            standalone
         );
         Drawable focusedIcon = interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
             && focusResult != null
@@ -6580,7 +6707,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
-        applyAzFxRowBounds();
+        applyAzFxRowBounds(isAzIndexStandalone());
         boolean azOverflowActive = mSuggestionBarView.hasAzOverflowPages();
         boolean interactionActive = mSuggestionBarInteractionActive;
         boolean canLeft = false;
@@ -6628,7 +6755,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         );
     }
 
-    private void applyAzFxRowBounds() {
+    /**
+     * The row every FX layer positions itself against. Standing alone, the strip is that row for
+     * the layer that draws it — that is what puts the preview bubble above the strip rather than
+     * above an apps row which is not there.
+     */
+    private void applyAzFxRowBounds(boolean standalone) {
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setRowBounds(mAppsRowRawBounds);
         }
@@ -6636,7 +6768,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherAzGestureFxOverlayView.setRowBounds(mAppsRowRawBounds);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
-            mLauncherAzGestureFxLabelOverlayView.setRowBounds(mAppsRowRawBounds);
+            mLauncherAzGestureFxLabelOverlayView.setRowBounds(
+                standalone ? mAzStripRawBounds : mAppsRowRawBounds);
         }
     }
 
@@ -6678,13 +6811,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Standing alone, only the layer that hosts the strip is told about the focus: it draws the
+     * strip, the ring on it and the preview bubble above it, so the other two would only paint a
+     * second ring over the first.
+     */
     private void applyAzFxDrag(boolean active, float rawX, @Nullable RectF focusedBoundsRaw,
-                               @NonNull LauncherAzGestureFxView.InteractionMode mode) {
+                               @NonNull LauncherAzGestureFxView.InteractionMode mode,
+                               boolean standalone) {
+        RectF sharedBounds = standalone ? null : focusedBoundsRaw;
         if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
+            mLauncherAzGestureFxUnderlayView.updateDrag(active, rawX, sharedBounds, mode);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
+            mLauncherAzGestureFxOverlayView.updateDrag(active, rawX, sharedBounds, mode);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
             mLauncherAzGestureFxLabelOverlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
@@ -6734,8 +6874,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     stopAzEdgePagingLoop();
                     return;
                 }
-                SuggestionBarView.AzDragFocusResult fresh =
-                    mSuggestionBarView.resolveAzDragFocus(mAzGesture.lastRawX(), mAzGesture.lastRawY());
+                SuggestionBarView.AzDragFocusResult fresh = resolveAzFocusAtLastPoint();
                 AzScrubGesture.EdgeFrame frame = mAzGesture.onEdgeFrame(toAzEdge(fresh.edge));
                 if (frame.action == AzScrubGesture.FrameAction.REFOCUS) {
                     mAzCurrentFocusResult = fresh;
@@ -6748,7 +6887,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     postNextAzEdgePagingFrame();
                     return;
                 }
-                boolean changed = mSuggestionBarView.requestAzPageDelta(frame.pageDelta, 640f);
+                boolean changed = requestAzPageDelta(frame.pageDelta);
                 if (changed) {
                     if (mLauncherAzGestureFxLabelOverlayView != null) {
                         mLauncherAzGestureFxLabelOverlayView.playFocusedAppPreviewSettle();
@@ -6759,14 +6898,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 applyAzFxEdgeDwellProgress(0f, mAzGesture.lastRawX(), mAzGesture.lastRawY());
                 mAzGestureHandler.postDelayed(() -> {
                     if (!mAzGesture.isActive() || mSuggestionBarView == null) return;
-                    SuggestionBarView.AzDragFocusResult afterSwitch =
-                        mSuggestionBarView.resolveAzDragFocus(mAzGesture.lastRawX(), mAzGesture.lastRawY());
+                    SuggestionBarView.AzDragFocusResult afterSwitch = resolveAzFocusAtLastPoint();
                     mAzCurrentFocusResult = afterSwitch;
                     updateAzOverlayState(afterSwitch, mAzGesture.lockedLetter());
                     updateAzEdgePagingLoop(afterSwitch);
                 }, AzScrubGesture.EDGE_PAGE_REPEAT_INTERVAL_MS);
         };
         postNextAzEdgePagingFrame();
+    }
+
+    /**
+     * Focus for the point the gesture last saw, over whichever surface is holding the matches. The
+     * edge-paging loop re-resolves without a fresh touch sample, so it asks through here.
+     */
+    @NonNull
+    private SuggestionBarView.AzDragFocusResult resolveAzFocusAtLastPoint() {
+        float rawX = mAzGesture.lastRawX();
+        float rawY = mAzGesture.lastRawY();
+        if (isAzIndexStandalone()) {
+            SuggestionBarView.AzDragFocusResult result =
+                mSuggestionBarView.resolveAzStripFocus(rawX, rawY);
+            if (mLauncherAzGestureFxLabelOverlayView != null) {
+                mLauncherAzGestureFxLabelOverlayView.setFloatingStripFocusedSlot(
+                    mSuggestionBarView.azStripFocusedSlot());
+            }
+            return result;
+        }
+        return mSuggestionBarView.resolveAzDragFocus(rawX, rawY);
+    }
+
+    /** One page flip of whichever surface is holding the matches. */
+    private boolean requestAzPageDelta(int pageDelta) {
+        if (!isAzIndexStandalone()) {
+            return mSuggestionBarView.requestAzPageDelta(pageDelta, 640f);
+        }
+        if (!mSuggestionBarView.requestAzStripPageDelta(pageDelta)) {
+            return false;
+        }
+        // A flipped page is a different set of icons in the same band: re-lay it and re-push the
+        // artwork, without re-filtering a letter that has not changed.
+        syncAzStandaloneStrip(mAzGesture.lockedLetter(), false);
+        return true;
     }
 
     private void postNextAzEdgePagingFrame() {
@@ -6788,12 +6960,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAzFxEdgeDwellProgress(0f, mAzGesture.lastRawX(), mAzGesture.lastRawY());
     }
 
+    /** The dwell bloom belongs on whichever layer is drawing the icons the dwell will page. */
     private void applyAzFxEdgeDwellProgress(float progress, float rawX, float rawY) {
+        boolean standalone = isAzIndexStandalone();
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setEdgeDwellProgress(0f, rawX, rawY);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.setEdgeDwellProgress(progress, rawX, rawY);
+            mLauncherAzGestureFxOverlayView.setEdgeDwellProgress(
+                standalone ? 0f : progress, rawX, rawY);
+        }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setEdgeDwellProgress(
+                standalone ? progress : 0f, rawX, rawY);
         }
     }
 
@@ -6818,6 +6997,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         cancelAzOverflowRefresh();
         mAzGesture.reset();
         mAzCurrentFocusResult = null;
+        // The strip's artwork is only borrowed from the icon store for the length of a scrub.
+        clearAzStandaloneStrip();
         if (mAzScrubRowView != null) {
             mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
             mAzScrubRowView.setLockedInlineLetter(null);
@@ -6880,7 +7061,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void lockScreenFromAzDoubleTap() {
-        if (mPreferences == null || !mPreferences.isAppLauncherAzRowEnabled()) {
+        if (!isAzRowEnabled()) {
             return;
         }
         String method = mPreferences.getAppLauncherAzLockMethod();

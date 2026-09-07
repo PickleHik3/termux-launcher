@@ -90,6 +90,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.launcher.LauncherAppLauncher;
+import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.PinnedAppsEditor;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
@@ -1368,6 +1369,145 @@ public final class SuggestionBarView extends GridLayout
     public void persistAzPreview(char letter, int selectionIndex) {
         previewAzLetter(letter, selectionIndex, false);
         scheduleAzResetTimeout();
+    }
+
+    // ---------------------------------------------------------- the standalone index's strip
+    //
+    // A place that puts its pinned apps on a rail, or hides them, still has the letters — and then
+    // the scrub's matches have no row to land in and ride a floating strip above the letters
+    // instead. The catalogue filter, the ranking and the launch are the row's; only where the
+    // matches are drawn and hit-tested differs, so the state below is kept apart from the row's
+    // preview rather than pretending the row is showing something it is not.
+
+    @Nullable private Character azStripLetter;
+    @NonNull private List<LauncherAppEntry> azStripCandidates = new ArrayList<>();
+    private int azStripPageIndex = 0;
+    private int azStripSlots = 1;
+    private int azStripLastSlot = -1;
+    @Nullable private AzFloatingStripPolicy.Strip azStripGeometry;
+
+    /**
+     * Filters the catalogue for a letter without rendering into the row.
+     *
+     * @param slots how many icons the strip can hold, from {@code AzFloatingStripPolicy}
+     * @return true when the letter has matches for the strip to show
+     */
+    public boolean previewAzStripLetter(char letter, int slots) {
+        if (appDataProvider == null) {
+            appDataProvider = LauncherAppDataProvider.getInstance(getContext());
+        }
+        if (!appDataProvider.hasLoadedApps()) {
+            // Cold start: warm the catalogue and let the next touch sample pick the matches up.
+            appDataProvider.warmAsync(null);
+            return false;
+        }
+        char normalized = Character.toUpperCase(letter);
+        int safeSlots = Math.max(1, slots);
+        if (azStripLetter == null || azStripLetter != normalized || azStripSlots != safeSlots) {
+            azStripPageIndex = 0;
+            azStripLastSlot = -1;
+        }
+        azStripLetter = normalized;
+        azStripSlots = safeSlots;
+        azStripCandidates = rankedAzCandidates(normalized);
+        azStripPageIndex = DockPagingModel.clampPage(azStripPageIndex, azStripPageCount());
+        return !azStripCandidates.isEmpty();
+    }
+
+    /** The page of matches the strip is showing, in slot order. */
+    @NonNull
+    public List<LauncherAppEntry> azStripVisibleEntries() {
+        int slots = Math.max(1, azStripSlots);
+        int start = AzFloatingStripPolicy.pageStart(azStripCandidates.size(), azStripPageIndex, slots);
+        List<LauncherAppEntry> visible = new ArrayList<>(slots);
+        for (int i = start; i < azStripCandidates.size() && visible.size() < slots; i++) {
+            visible.add(azStripCandidates.get(i));
+        }
+        return visible;
+    }
+
+    public int azStripPageCount() {
+        return AzFloatingStripPolicy.pageCount(azStripCandidates.size(), Math.max(1, azStripSlots));
+    }
+
+    /** Which page the strip is on, so a caller can tell whether its contents moved. */
+    public int azStripPageIndex() {
+        return azStripPageIndex;
+    }
+
+    public boolean hasAzStripMatches() {
+        return azStripLetter != null && !azStripCandidates.isEmpty();
+    }
+
+    /** Which slot the last resolve landed on, so the strip can draw the focus there. */
+    public int azStripFocusedSlot() {
+        return azStripLastSlot;
+    }
+
+    /** The rectangle the strip was drawn at, which is also what focus is resolved against. */
+    public void setAzStripGeometry(@Nullable AzFloatingStripPolicy.Strip strip) {
+        azStripGeometry = strip;
+    }
+
+    /** Flips the strip's page. The finger stays put, so only the contents change. */
+    public boolean requestAzStripPageDelta(int pageDelta) {
+        int pages = azStripPageCount();
+        if (pageDelta == 0 || pages <= 1) {
+            return false;
+        }
+        azStripPageIndex = DockPagingModel.wrap(azStripPageIndex + pageDelta, pages);
+        azStripLastSlot = -1;
+        return true;
+    }
+
+    /**
+     * Focus over the floating strip, reported in the row's own vocabulary so the FX layers and the
+     * gesture need no second case for it.
+     */
+    @NonNull
+    public AzDragFocusResult resolveAzStripFocus(float rawX, float rawY) {
+        boolean paged = azStripPageCount() > 1;
+        AzFloatingStripPolicy.Strip strip = azStripGeometry;
+        float density = getResources().getDisplayMetrics().density;
+        int edge = toAzEdge(AzFloatingStripPolicy.edgeAt(strip, rawX, paged, density));
+        List<LauncherAppEntry> visible = azStripVisibleEntries();
+        int slot = hasAzStripMatches()
+            ? AzFloatingStripPolicy.slotAt(strip, rawX, rawY, azStripLastSlot, density) : -1;
+        if (strip == null || slot < 0 || slot >= visible.size()) {
+            azStripLastSlot = -1;
+            return new AzDragFocusResult(null, null, null, null, null, edge, paged, paged);
+        }
+        azStripLastSlot = slot;
+        float half = strip.iconSizePx * 0.5f;
+        float centerX = strip.slotCenterX(slot);
+        RectF iconBounds = new RectF(centerX - half, strip.top, centerX + half, strip.bottom);
+        return new AzDragFocusResult(visible.get(slot), iconBounds, null, null, null, edge,
+            paged, paged);
+    }
+
+    private static int toAzEdge(int stripEdge) {
+        if (stripEdge == AzFloatingStripPolicy.EDGE_LEFT) return AZ_EDGE_LEFT;
+        if (stripEdge == AzFloatingStripPolicy.EDGE_RIGHT) return AZ_EDGE_RIGHT;
+        return AZ_EDGE_NONE;
+    }
+
+    /** Launches a match picked off the floating strip; there is no row view to launch from. */
+    public boolean launchAzStripEntry(@Nullable LauncherAppEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+        launchEntry(entry, lastTerminalView);
+        return true;
+    }
+
+    /** Drops everything the strip was holding, artwork references included. */
+    public void clearAzStrip() {
+        azStripLetter = null;
+        azStripCandidates = new ArrayList<>();
+        azStripPageIndex = 0;
+        azStripSlots = 1;
+        azStripLastSlot = -1;
+        azStripGeometry = null;
     }
 
     @NonNull
@@ -7119,10 +7259,18 @@ public final class SuggestionBarView extends GridLayout
         if (appDataProvider == null) {
             return;
         }
-        List<LauncherAppEntry> candidates = appDataProvider.getAppsForLetter(letter);
-        activeAzCandidates = getUsageStatsStore().rankForAz(candidates);
+        activeAzCandidates = rankedAzCandidates(letter);
         azCachedRankLetter = letter;
         azCachedRankedCandidates = activeAzCandidates;
+    }
+
+    /** The catalogue's matches for a letter, in the order the A–Z preview shows them. */
+    @NonNull
+    private List<LauncherAppEntry> rankedAzCandidates(char letter) {
+        if (appDataProvider == null) {
+            return new ArrayList<>();
+        }
+        return getUsageStatsStore().rankForAz(appDataProvider.getAppsForLetter(letter));
     }
 
     private static float clamp01(float value) {

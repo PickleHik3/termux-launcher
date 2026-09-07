@@ -2,6 +2,7 @@ package com.termux.app;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -16,13 +17,23 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.LinearInterpolator;
 import android.graphics.drawable.Drawable;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.launcher.az.AzFloatingStripPolicy;
+
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Glassmorphic renderer for AZ and icon-row drag interactions.
+ *
+ * <p>It also hosts the standalone index's floating strip of matches, for the places that put their
+ * pinned apps on a rail or hid them: with no apps row to fill, the letters' matches are drawn here
+ * instead. Every number the strip is drawn from comes from {@link AzFloatingStripPolicy}.
  */
 public final class LauncherAzGestureFxView extends View {
 
@@ -127,6 +138,20 @@ public final class LauncherAzGestureFxView extends View {
     private boolean darkThemeActive = true;
     @NonNull private RenderLayer renderLayer = RenderLayer.OVERLAY;
 
+    /** The standalone index's strip of matches: its geometry, its artwork and which slot has focus. */
+    @Nullable private AzFloatingStripPolicy.Strip floatingStrip;
+    @NonNull private final List<Drawable> floatingStripIcons = new ArrayList<>();
+    private int floatingStripFocusedSlot = -1;
+    private float floatingStripProgress;
+    @Nullable private ValueAnimator floatingStripAnimator;
+
+    /**
+     * The focused icon's breath. Driven by a repeating animator that exists only while a finger is
+     * down on a focused icon, so nothing here ever repaints at rest.
+     */
+    private float breathPhase;
+    @Nullable private ValueAnimator breathAnimator;
+
     @NonNull private InteractionMode interactionMode = InteractionMode.LETTER_TRACK;
     private static final long PINNED_INDICATOR_IDLE_DELAY_MS = 5000L;
     private static final long PINNED_INDICATOR_FADE_DURATION_MS = 520L;
@@ -200,6 +225,7 @@ public final class LauncherAzGestureFxView extends View {
                 hasPreviewPosition = false;
             }
         }
+        syncBreathing();
         refreshVisibility();
         invalidate();
     }
@@ -402,6 +428,41 @@ public final class LauncherAzGestureFxView extends View {
         animator.start();
     }
 
+    /**
+     * The standalone index's matches, as a strip floating above the letters.
+     *
+     * <p>{@code icons} are the drawables the row would have drawn — straight from the budgeted
+     * {@code LauncherIconStore}, referenced rather than copied, and dropped again the moment the
+     * strip is cleared, so the strip costs no pixels of its own.
+     *
+     * @param strip the band's geometry in raw screen coordinates, or null to fade the strip out
+     */
+    public void setFloatingStrip(@Nullable AzFloatingStripPolicy.Strip strip,
+                                 @Nullable List<Drawable> icons) {
+        boolean show = strip != null && !strip.isEmpty() && icons != null && !icons.isEmpty();
+        floatingStrip = show ? strip : null;
+        floatingStripIcons.clear();
+        if (show) {
+            floatingStripIcons.addAll(icons);
+        } else {
+            floatingStripFocusedSlot = -1;
+        }
+        animateFloatingStripTo(show ? 1f : 0f);
+        syncBreathing();
+        invalidate();
+    }
+
+    /** Which slot the finger is on, or -1 for none. */
+    public void setFloatingStripFocusedSlot(int slot) {
+        int bounded = slot >= 0 && slot < floatingStripIcons.size() ? slot : -1;
+        if (floatingStripFocusedSlot == bounded) {
+            return;
+        }
+        floatingStripFocusedSlot = bounded;
+        syncBreathing();
+        invalidate();
+    }
+
     public void setDarkThemeActive(boolean active) {
         if (darkThemeActive == active) {
             return;
@@ -415,6 +476,7 @@ public final class LauncherAzGestureFxView extends View {
         dragActive = false;
         hasFocus = false;
         edgeDwellProgress = 0f;
+        setFloatingStrip(null, null);
         if (!focusedAppPreviewLaunchDismissing) {
             setFocusedAppPreviewIcon(null);
         }
@@ -465,12 +527,25 @@ public final class LauncherAzGestureFxView extends View {
             && hasFocus
             && !focusRawRect.isEmpty();
         setVisibility(shouldDrawInteractionOverflow || edgeDwellProgress > 0.01f
-            || focusedAppPreviewProgress > 0.01f || shouldDrawFocusRing ? VISIBLE : GONE);
+            || focusedAppPreviewProgress > 0.01f || shouldDrawFocusRing
+            || floatingStrip != null || floatingStripProgress > 0.01f ? VISIBLE : GONE);
     }
 
     public void dismissFocusedAppPreviewForLaunch() {
         focusedAppPreviewLaunchDismissing = true;
         animateFocusedAppPreviewTo(0f, true);
+    }
+
+    /**
+     * The breath is the one thing here that repaints per frame, so it must not be able to outlive
+     * the window it is drawing in — a gesture cut short by the launcher going away never releases.
+     */
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility != VISIBLE) {
+            stopBreathing();
+        }
     }
 
     @Override
@@ -488,6 +563,13 @@ public final class LauncherAzGestureFxView extends View {
             focusedIconOutlineAnimator.cancel();
             focusedIconOutlineAnimator = null;
         }
+        if (floatingStripAnimator != null) {
+            floatingStripAnimator.cancel();
+            floatingStripAnimator = null;
+        }
+        stopBreathing();
+        floatingStripIcons.clear();
+        floatingStrip = null;
         cancelPageIndicatorAnimations();
         cancelSubtlePageIndicatorIdleFade();
     }
@@ -504,9 +586,14 @@ public final class LauncherAzGestureFxView extends View {
             && interactionMode == InteractionMode.ICON_TRACK_LOCKED
             && hasFocus
             && !focusRawRect.isEmpty();
+        boolean drawStrip = floatingStripProgress > 0.01f && floatingStrip != null
+            && renderLayer == RenderLayer.OVERLAY;
         if (!shouldDrawInteractionOverflow && edgeDwellProgress <= 0.01f
-            && focusedAppPreviewProgress <= 0.01f && !drawFocusRing) {
+            && focusedAppPreviewProgress <= 0.01f && !drawFocusRing && !drawStrip) {
             return;
+        }
+        if (drawStrip) {
+            drawFloatingStrip(canvas);
         }
         if (edgeDwellProgress > 0.01f && renderLayer == RenderLayer.OVERLAY) {
             drawEdgeDwellBloom(canvas);
@@ -530,6 +617,9 @@ public final class LauncherAzGestureFxView extends View {
     /** Accent outline around the visible artwork, not the icon button's larger touch target. */
     private void drawFocusedIconRing(Canvas canvas) {
         int accent = FocusOutlineRenderer.resolveAccent(this);
+        // The ring the finger is holding breathes; the one it just left keeps its own fade out.
+        float breathScale = AzFloatingStripPolicy.breathScale(breathPhase);
+        float breathAlpha = AzFloatingStripPolicy.breathAlpha(breathPhase);
         if (outgoingIconOutlineVisual != null && !outgoingIconOutlineRawBounds.isEmpty()) {
             focusDisplayRect.set(outgoingIconOutlineRawBounds);
             focusDisplayRect.offset(-locationOnScreen[0], -locationOnScreen[1]);
@@ -540,7 +630,8 @@ public final class LauncherAzGestureFxView extends View {
             focusDisplayRect.set(focusedIconOutlineRawBounds);
             focusDisplayRect.offset(-locationOnScreen[0], -locationOnScreen[1]);
             FocusOutlineRenderer.draw(canvas, focusedIconOutlineVisual, focusDisplayRect, accent,
-                focusedIconOutlineAlpha, focusedIconOutlineScale, focusedIconOutlinePaints);
+                focusedIconOutlineAlpha * breathAlpha, focusedIconOutlineScale * breathScale,
+                focusedIconOutlinePaints);
         } else if (outgoingIconOutlineVisual == null && hasFocus && !focusRawRect.isEmpty()) {
             // No artwork mask available (folder previews, views not yet measured): keep the ring
             // present with the sibling rounded-rect treatment instead of showing nothing.
@@ -549,9 +640,166 @@ public final class LauncherAzGestureFxView extends View {
             float density = getResources().getDisplayMetrics().density;
             FocusOutlineRenderer.drawRoundRectFallback(canvas, focusDisplayRect,
                 Math.min(focusDisplayRect.width(), focusDisplayRect.height()) * 0.28f, accent,
-                focusedIconOutlineAlpha > 0f ? focusedIconOutlineAlpha : 1f,
-                focusedIconOutlineScale > 0f ? focusedIconOutlineScale : 1f, density);
+                (focusedIconOutlineAlpha > 0f ? focusedIconOutlineAlpha : 1f) * breathAlpha,
+                (focusedIconOutlineScale > 0f ? focusedIconOutlineScale : 1f) * breathScale,
+                density);
         }
+    }
+
+    /**
+     * The standalone index's matches: one glass plank carrying the page's icons, with the focused
+     * one lifted slightly and wearing the breathing ring. Every position comes from the strip the
+     * policy laid out, so what is drawn and what the gesture hit-tests cannot drift apart.
+     */
+    private void drawFloatingStrip(Canvas canvas) {
+        AzFloatingStripPolicy.Strip strip = floatingStrip;
+        if (strip == null || floatingStripIcons.isEmpty()) {
+            return;
+        }
+        float progress = clamp01(floatingStripProgress);
+        float alpha = progress;
+        float offsetX = -locationOnScreen[0];
+        float offsetY = -locationOnScreen[1];
+        float iconSize = strip.iconSizePx;
+        float plankPadding = dp(9f);
+        float plankRadius = (iconSize * 0.5f) + plankPadding;
+        tmpRect.set(strip.left + offsetX - plankPadding, strip.top + offsetY - plankPadding,
+            strip.right + offsetX + plankPadding, strip.bottom + offsetY + plankPadding);
+
+        int save = canvas.save();
+        // Rises the last few pixels into place, like the preview bubble above it.
+        canvas.translate(0f, lerp(dp(7f), 0f, progress));
+        canvas.scale(lerp(0.94f, 1f, progress), lerp(0.94f, 1f, progress),
+            tmpRect.centerX(), tmpRect.bottom);
+
+        previewFillPaint.setColor(withAlpha(Color.BLACK,
+            Math.round((darkThemeActive ? 66f : 30f) * alpha)));
+        tmpShadowRect.set(tmpRect);
+        tmpShadowRect.offset(0f, dp(2.5f));
+        canvas.drawRoundRect(tmpShadowRect, plankRadius, plankRadius, previewFillPaint);
+
+        int plankFill = darkThemeActive
+            ? lerpColor(Color.rgb(34, 30, 39), edgeTintColor, 0.06f)
+            : lerpColor(Color.rgb(238, 234, 242), edgeTintColor, 0.05f);
+        previewFillPaint.setColor(withAlpha(plankFill,
+            Math.round((darkThemeActive ? 226f : 238f) * alpha)));
+        canvas.drawRoundRect(tmpRect, plankRadius, plankRadius, previewFillPaint);
+
+        int accent = FocusOutlineRenderer.resolveAccent(this);
+        float density = getResources().getDisplayMetrics().density;
+        float breathScale = AzFloatingStripPolicy.breathScale(breathPhase);
+        float breathAlpha = AzFloatingStripPolicy.breathAlpha(breathPhase);
+        for (int slot = 0; slot < floatingStripIcons.size() && slot < strip.slotCount; slot++) {
+            Drawable icon = floatingStripIcons.get(slot);
+            if (icon == null) {
+                continue;
+            }
+            boolean focused = slot == floatingStripFocusedSlot;
+            float cx = strip.slotCenterX(slot) + offsetX;
+            float cy = strip.centerY() + offsetY;
+            float drawnSize = focused ? iconSize * 1.06f : iconSize;
+            if (focused) {
+                previewRect.set(cx - (iconSize * 0.5f), cy - (iconSize * 0.5f),
+                    cx + (iconSize * 0.5f), cy + (iconSize * 0.5f));
+                FocusOutlineRenderer.drawRoundRectFallback(canvas, previewRect,
+                    iconSize * 0.28f, accent, alpha * breathAlpha, breathScale, density);
+            }
+            icon.setAlpha(Math.round(255f * alpha * (focused ? 1f : 0.9f)));
+            icon.setBounds(
+                Math.round(cx - (drawnSize * 0.5f)),
+                Math.round(cy - (drawnSize * 0.5f)),
+                Math.round(cx + (drawnSize * 0.5f)),
+                Math.round(cy + (drawnSize * 0.5f))
+            );
+            icon.draw(canvas);
+            icon.setAlpha(255);
+        }
+        canvas.restoreToCount(save);
+    }
+
+    private void animateFloatingStripTo(float target) {
+        float bounded = clamp01(target);
+        if (floatingStripAnimator != null) {
+            floatingStripAnimator.cancel();
+            floatingStripAnimator = null;
+        }
+        float start = floatingStripProgress;
+        if (Math.abs(start - bounded) < 0.01f) {
+            floatingStripProgress = bounded;
+            refreshVisibility();
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(start, bounded);
+        floatingStripAnimator = animator;
+        animator.setDuration(bounded > start ? 128L : 96L);
+        animator.setInterpolator(new DecelerateInterpolator(1.55f));
+        animator.addUpdateListener(animation -> {
+            floatingStripProgress = (float) animation.getAnimatedValue();
+            refreshVisibility();
+            invalidate();
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (floatingStripAnimator != animation) return;
+                floatingStripAnimator = null;
+                floatingStripProgress = bounded;
+                if (bounded <= 0.01f) {
+                    floatingStripIcons.clear();
+                    floatingStrip = null;
+                }
+                refreshVisibility();
+                invalidate();
+            }
+        });
+        animator.start();
+    }
+
+    /**
+     * Starts or stops the focused icon's breath. It runs only while a finger is down on something
+     * focused, which is the whole reason it is allowed to repaint per frame; nothing here can be
+     * left ticking at rest.
+     */
+    private void syncBreathing() {
+        boolean stripFocus = floatingStrip != null && floatingStripFocusedSlot >= 0;
+        boolean rowFocus = focusedIconRingEnabled
+            && interactionMode == InteractionMode.ICON_TRACK_LOCKED
+            && hasFocus && !focusRawRect.isEmpty();
+        boolean wanted = dragActive && (stripFocus || rowFocus)
+            && FocusOutlineRenderer.animationsEnabled(getContext());
+        if (wanted == (breathAnimator != null)) {
+            return;
+        }
+        if (!wanted) {
+            stopBreathing();
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        breathAnimator = animator;
+        animator.setDuration(AzFloatingStripPolicy.BREATH_PERIOD_MS);
+        animator.setRepeatCount(ValueAnimator.INFINITE);
+        animator.setInterpolator(new LinearInterpolator());
+        animator.addUpdateListener(animation -> {
+            breathPhase = (float) animation.getAnimatedValue();
+            invalidate();
+        });
+        animator.start();
+    }
+
+    private void stopBreathing() {
+        if (breathAnimator != null) {
+            breathAnimator.cancel();
+            breathAnimator = null;
+        }
+        breathPhase = 0f;
+        invalidate();
+    }
+
+    /** Portrait reads the focused app's name above its icon, landscape below it. */
+    @NonNull
+    private AzFloatingStripPolicy.LabelSide labelSide() {
+        return AzFloatingStripPolicy.labelSide(getResources().getConfiguration().orientation
+            == Configuration.ORIENTATION_LANDSCAPE);
     }
 
     private void drawFocusedAppPreviewIcon(Canvas canvas) {
@@ -581,7 +829,16 @@ public final class LauncherAzGestureFxView extends View {
         float iconSize = clamp(sourceIconSize * iconScale, dp(28f), bubbleSize - dp(12f));
         float left = clamp(focusCx - (bubbleSize * 0.5f), dp(8f), Math.max(dp(8f), getWidth() - bubbleSize - dp(8f)));
         float verticalGap = clamp(sourceIconSize * 0.22f, dp(8f), dp(14f));
-        float top = rowTop - bubbleSize - verticalGap;
+        // The label's own band has to be measured before the bubble is placed: below the icon it
+        // sits between the bubble and the row, so the bubble rises by exactly that much.
+        AzFloatingStripPolicy.LabelSide labelSide = labelSide();
+        StaticLayout labelLayout = drawLabel
+            ? buildFocusedAppPreviewLabelLayout(focusedAppPreviewLabel, sourceIconSize) : null;
+        float labelPillHeight = labelLayout == null
+            ? 0f : labelLayout.getHeight() + (PREVIEW_LABEL_VERTICAL_PADDING_DP * getResources().getDisplayMetrics().density * 2f);
+        float labelReserve = labelLayout != null && labelSide == AzFloatingStripPolicy.LabelSide.BELOW
+            ? labelPillHeight + dp(5f) : 0f;
+        float top = rowTop - bubbleSize - verticalGap - labelReserve;
         if (top < dp(8f)) {
             top = dp(8f);
         }
@@ -614,8 +871,9 @@ public final class LauncherAzGestureFxView extends View {
         previewFillPaint.setColor(withAlpha(baseFill, Math.round((darkThemeActive ? 222f : 236f) * alpha)));
         canvas.drawRoundRect(previewRect, radius, radius, previewFillPaint);
 
-        if (drawLabel) {
-            drawFocusedAppPreviewLabel(canvas, focusedAppPreviewLabel, cx, top, sourceIconSize, alpha);
+        if (labelLayout != null) {
+            drawFocusedAppPreviewLabel(canvas, labelLayout, cx, top, bubbleSize, labelPillHeight,
+                labelSide, alpha);
         }
 
         focusedAppPreviewIcon.setAlpha(Math.round(255f * alpha));
@@ -630,22 +888,21 @@ public final class LauncherAzGestureFxView extends View {
         canvas.restoreToCount(save);
     }
 
-    private void drawFocusedAppPreviewLabel(
-        @NonNull Canvas canvas,
-        @NonNull String label,
-        float centerX,
-        float bubbleTop,
-        float sourceIconSize,
-        float alpha
-    ) {
+    /** The label's inner padding above and below its text, in dp; the pill height rides on it. */
+    private static final float PREVIEW_LABEL_VERTICAL_PADDING_DP = 4f;
+
+    /**
+     * Measures and caches the focused app's label. Split out from the drawing because the pill's
+     * height decides where the bubble goes when the label reads below it.
+     */
+    @Nullable
+    private StaticLayout buildFocusedAppPreviewLabelLayout(@Nullable String label,
+                                                           float sourceIconSize) {
+        if (label == null || label.isEmpty()) {
+            return null;
+        }
         String displayLabel = addPreviewLabelBreakOpportunities(label);
         previewLabelPaint.setTextSize(clamp(sourceIconSize * 0.22f, dp(9.5f), dp(11.5f)));
-        previewLabelPaint.setColor(darkThemeActive
-            ? withAlpha(Color.rgb(230, 224, 233), Math.round(245f * alpha))
-            : withAlpha(Color.rgb(29, 27, 32), Math.round(235f * alpha)));
-
-        float horizontalPadding = dp(7f);
-        float verticalPadding = dp(4f);
         int maxInnerWidth = Math.round(clamp(getWidth() * 0.30f, dp(78f), dp(124f)));
         int minInnerWidth = Math.round(dp(38f));
         float measuredTextWidth = previewLabelPaint.measureText(displayLabel);
@@ -667,11 +924,30 @@ public final class LauncherAzGestureFxView extends View {
             focusedAppPreviewLabelLayoutWidth = textWidth;
             focusedAppPreviewLabelLayoutTextSize = previewLabelPaint.getTextSize();
         }
+        return layout;
+    }
 
+    private void drawFocusedAppPreviewLabel(
+        @NonNull Canvas canvas,
+        @NonNull StaticLayout layout,
+        float centerX,
+        float bubbleTop,
+        float bubbleSize,
+        float pillHeight,
+        @NonNull AzFloatingStripPolicy.LabelSide labelSide,
+        float alpha
+    ) {
+        previewLabelPaint.setColor(darkThemeActive
+            ? withAlpha(Color.rgb(230, 224, 233), Math.round(245f * alpha))
+            : withAlpha(Color.rgb(29, 27, 32), Math.round(235f * alpha)));
+
+        float horizontalPadding = dp(7f);
+        int maxInnerWidth = Math.round(clamp(getWidth() * 0.30f, dp(78f), dp(124f)));
         float pillWidth = Math.min(maxInnerWidth + (horizontalPadding * 2f), Math.max(dp(52f), layout.getWidth() + (horizontalPadding * 2f)));
-        float pillHeight = layout.getHeight() + (verticalPadding * 2f);
         float pillLeft = clamp(centerX - (pillWidth * 0.5f), dp(8f), Math.max(dp(8f), getWidth() - pillWidth - dp(8f)));
-        float pillTop = bubbleTop - pillHeight - dp(5f);
+        float pillTop = labelSide == AzFloatingStripPolicy.LabelSide.BELOW
+            ? bubbleTop + bubbleSize + dp(5f)
+            : bubbleTop - pillHeight - dp(5f);
         if (pillTop < dp(8f)) {
             pillTop = dp(8f);
         }
