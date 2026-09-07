@@ -68,8 +68,10 @@ public class TerminalPaneController {
     public static final String LAYOUT_HORIZONTAL = "horizontal";
     public static final String LAYOUT_VERTICAL = "vertical";
     /**
-     * Hyprland-style automatic tiling: every new pane halves the pane it was split from along that
-     * pane's longer side, and a pane dragged onto another halves the target the same way. Unlike
+     * Hyprland-style automatic tiling: a new pane asked for without an axis halves the pane it was
+     * split from along that pane's longer side, and a pane dragged onto another halves the target
+     * the same way. A split asked for with an axis — the horizontal and vertical split keys — takes
+     * that axis, as Hyprland's preselect does; the policy decides only where nobody said. Unlike
      * the other layouts it is incremental — the tree is never rebuilt from the pane list, so the
      * shape the user grew (and every divider they dragged) survives each split and close.
      */
@@ -902,6 +904,12 @@ public class TerminalPaneController {
         return split(dwindleOrientationFor(anchor));
     }
 
+    /**
+     * Split the focused pane along the axis the caller asked for. Honoured under every layout,
+     * dwindle included: the two split keys exist to say a direction, and a policy that overrode
+     * them made them one key with two names (both stacked in portrait, both side by side in
+     * landscape). Only {@link #splitAuto} and the paths with no axis to offer ask the policy.
+     */
     public boolean split(int orientation) {
         if (mActiveWindow == null || mActiveWindow.active == null) return false;
         Leaf oldLeaf = splitAnchor(mActiveWindow);
@@ -947,9 +955,8 @@ public class TerminalPaneController {
                             int orientation, boolean focus) {
         Leaf newLeaf = new Leaf(newSession);
         newLeaf.fontSize = inheritableFontSize(oldLeaf);
-        // Dwindle decides the axis itself: the caller's orientation is whatever key or button was
-        // pressed, but under this policy a pane always halves along its longer side.
-        if (isDwindleManaged(mActiveWindow)) orientation = dwindleOrientationFor(oldLeaf);
+        // The axis is the caller's: an explicit split key says it outright, and the axis-less
+        // paths (splitAuto, addPane) have already asked the dwindle rule for it.
         Split split = new Split();
         split.orientation = orientation;
         split.a = oldLeaf;

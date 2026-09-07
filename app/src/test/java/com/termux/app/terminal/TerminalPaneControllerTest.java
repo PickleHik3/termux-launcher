@@ -325,8 +325,8 @@ public class TerminalPaneControllerTest {
         assertTrue(controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
         assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
 
-        // The caller asked for side by side; a portrait pane stacks regardless.
-        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        // No axis asked: a portrait pane stacks.
+        assertTrue(controller.splitAuto());
         TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
         assertEquals(LinearLayout.VERTICAL, root.orientation);
         assertTrue(root.b instanceof TerminalPaneController.Leaf);
@@ -334,7 +334,7 @@ public class TerminalPaneControllerTest {
 
         // The new (focused) pane is 600x500: wider than tall, so its split goes side by side.
         layoutHost(host, 600, 1000);
-        assertTrue(controller.split(LinearLayout.VERTICAL));
+        assertTrue(controller.splitAuto());
         root = (TerminalPaneController.Split) window.root;
         assertEquals(LinearLayout.VERTICAL, root.orientation);
         TerminalPaneController.Split lower = (TerminalPaneController.Split) root.b;
@@ -342,7 +342,7 @@ public class TerminalPaneControllerTest {
 
         // 300x500 stacks again.
         layoutHost(host, 600, 1000);
-        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        assertTrue(controller.splitAuto());
         lower = (TerminalPaneController.Split) ((TerminalPaneController.Split) window.root).b;
         assertEquals(LinearLayout.VERTICAL, ((TerminalPaneController.Split) lower.b).orientation);
         assertEquals(4, controller.shellsOf(window).size());
@@ -377,19 +377,40 @@ public class TerminalPaneControllerTest {
         assertEquals(0.5f, root.weightB, 0f);
 
         // A keyboard resize hand-shapes the other layouts out of management; dwindle keeps every
-        // ratio anyway, so it stays dwindle and the next split still follows the aspect rule.
+        // ratio anyway, so it stays dwindle and an axis-less split still follows the aspect rule.
         assertTrue(controller.resizeActive(android.view.KeyEvent.KEYCODE_DPAD_UP));
         assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
         layoutHost(host, 600, 1000);
-        // Whatever shape the resize left the focused pane in, the split must follow its aspect,
-        // not the requested axis — so ask for both and expect the aspect's answer each time.
         android.view.View frame = (android.view.View) controller.getViewForSession(
             controller.getActiveSession()).getParent();
         int expected = DwindleTilingPolicy.splitOrientationFor(frame.getWidth(), frame.getHeight());
-        assertTrue(controller.split(expected == LinearLayout.HORIZONTAL
-            ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL));
+        assertTrue(controller.splitAuto());
         assertEquals(expected, window.active.parent.orientation);
         assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
+    }
+
+    @Test
+    public void dwindle_honoursAnAxisTheSplitKeysAskFor() {
+        // The two split keys are directions. Under dwindle they used to be one key with two
+        // names: a portrait pane stacked for both, a landscape one went side by side for both.
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
+
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
+        assertEquals("side by side on a portrait pane, because that is what was asked",
+            LinearLayout.HORIZONTAL, root.orientation);
+
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.VERTICAL));
+        TerminalPaneController.Split inner = (TerminalPaneController.Split) root.b;
+        assertEquals(LinearLayout.VERTICAL, inner.orientation);
+        assertEquals("the policy stays on; only the axis was the caller's",
+            TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
     }
 
     @Test
