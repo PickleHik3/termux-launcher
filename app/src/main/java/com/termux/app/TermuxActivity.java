@@ -7922,6 +7922,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * showing for, not one state for the whole launcher.
      */
     private boolean isStatusBarCompact() {
+        if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
+            return true;
+        }
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isStatusCompact(mStatusBarPlace);
     }
@@ -8283,7 +8286,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact()));
         com.termux.app.statusbar.StatusBarEdgeArrangement.apply((ViewGroup) host, edge);
         if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
-            ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setEdge(edge);
+            com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
+                (com.termux.app.statusbar.StatusBarSwipeLayout) host;
+            swipeHost.setEdge(edge);
+            swipeHost.setExpansionAllowed(
+                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(edge));
         }
         // The bar is not the system status bar's glass anywhere but along the top; everywhere else
         // the terminal simply starts under the system bar, as it does with the bar folded today.
@@ -11693,7 +11700,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPlaceStatusBar(@NonNull com.termux.app.wall.PaneWallPage page) {
         if (page == mStatusBarPlace) return;
-        setStatusBarCompact(isStatusBarCompact());
+        // While the bar stands on a side its resting state is forced, not remembered — writing
+        // that back here would clobber the place's real memory with the forced value. Skip the
+        // write while forced; the place still lands compact below, from isStatusBarCompact().
+        if (com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
+            setStatusBarCompact(isStatusBarCompact());
+        }
         mStatusBarPlace = page;
         setTopStatusBarCollapsed(isStatusBarCompact(), true);
     }
@@ -12599,6 +12611,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
             swipeHost.setCollapsed(isStatusBarCompact());
+            swipeHost.setExpansionAllowed(
+                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
                 @Override public void onCollapsedStateRequested(boolean collapsed) {
                     setTopStatusBarCollapsed(collapsed, true);
@@ -12789,8 +12803,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
-    private void setTopStatusBarCollapsed(boolean collapsed, boolean animate) {
+    private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate) {
         if (mPreferences == null) return;
+        // A bar down a side never rests expanded; isStatusBarCompact() already reflects that, so
+        // this coercion never lands on a preference write below — it only refuses the request.
+        boolean collapsed = requestedCollapsed
+            || !com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge);
         View host = findViewById(R.id.terminal_window_bar_host);
         View topWidgets = findViewById(R.id.terminal_top_widget_area);
         com.termux.app.statusbar.StatusBarSwipeLayout swipeHost = host instanceof
@@ -13752,11 +13770,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (weather.valid) {
                 widget.setIconAnimation(com.termux.app.statusbar.WeatherController.animationAssetFor(
                     weather.currentCode, weather.currentIsDay));
-                String temp = com.termux.app.statusbar.WeatherController.formatTemp(weather.currentC,
-                    mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit());
+                boolean fahrenheit = mPreferences != null
+                    && mPreferences.isStatusWidgetWeatherFahrenheit();
                 // The Widgets place has room and nothing else in its row, so the weather says
-                // the whole of it there: the temperature, the sky, and where that is.
-                if (isWidgetsPageShowing()) {
+                // the whole of it there: the temperature, the sky, and where that is — with the
+                // degree glyph. A side bar's chip has room for the number alone.
+                boolean widgetsPage = isWidgetsPageShowing();
+                boolean bare = isStatusBarVertical() && !widgetsPage;
+                String temp = bare
+                    ? com.termux.app.statusbar.WeatherController.formatTempBare(
+                        weather.currentC, fahrenheit)
+                    : com.termux.app.statusbar.WeatherController.formatTemp(
+                        weather.currentC, fahrenheit);
+                if (widgetsPage) {
                     StringBuilder full = new StringBuilder(temp);
                     String sky = com.termux.app.statusbar.WeatherController.describe(weather.currentCode);
                     if (!sky.isEmpty()) full.append(" · ").append(sky);
@@ -13766,7 +13792,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     widget.setValue(temp);
                 }
             } else {
-                widget.setValue("--°");
+                widget.setValue(isStatusBarVertical() && !isWidgetsPageShowing() ? "--" : "--°");
             }
         }
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {

@@ -127,6 +127,16 @@ public final class StatusBarGesturePolicy {
         return edge == Edge.LEFT || edge == Edge.RIGHT;
     }
 
+    /**
+     * Whether the bar standing on this edge may ever rest expanded. A bar down a side is too
+     * narrow to grow into a panel the way one along the top or the bottom does, so it stays
+     * compact regardless of what the place remembers — the memory itself is untouched, it just
+     * has nothing to apply while the bar stands here.
+     */
+    public static boolean expansionAllowed(@NonNull Edge edge) {
+        return !isVertical(edge);
+    }
+
     /** Finger travel along the bar: sideways for a row, up and down for a column. */
     public static float alongAxis(@NonNull Edge edge, float dx, float dy) {
         return isVertical(edge) ? dy : dx;
