@@ -85,6 +85,25 @@ public class AppDrawerTransitionGeometryTest {
         assertEquals((1996f - 24f + 2340f) / 2f, mid.bottom, EPS);
     }
 
+    /**
+     * The dock's hop is rigid: the plane's seed rectangle is the dock's own rectangle moved, not
+     * stretched. That is what lets the glass ride the hop with the single translationY the rows
+     * get — the dock and everything standing on it move as one object, and the hand-off still
+     * cross-fades two identical rectangles instead of two edges a hop apart.
+     */
+    @Test
+    public void theDockHopIsRigidSoOneTranslationCarriesTheGlassAndItsRows() {
+        Frame dock = new Frame(42f, 1780f, 1038f, 1996f);
+        Frame open = new Frame(24f, 96f, 1056f, 2340f);
+        float lift = -24f;   // dp(8) at 3x, the dock lift's peak
+        Frame seed = AppDrawerTransitionGeometry.resolvePlaneFrame(dock, open, 0f, lift);
+        assertEquals(dock.top + lift, seed.top, EPS);
+        assertEquals(dock.bottom + lift, seed.bottom, EPS);
+        assertEquals(dock.height(), seed.height(), EPS);
+        assertEquals(dock.left, seed.left, EPS);
+        assertEquals(dock.right, seed.right, EPS);
+    }
+
     @Test
     public void radiusAndInsetLerpEndpointsForBothDockStyles() {
         float openRadius = 60f;   // dp(20) at 3x
