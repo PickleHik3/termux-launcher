@@ -521,8 +521,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * How long after something was written to a pane it stays exempt from the working indication.
      * Covers the echo of a keystroke and the render it triggers, so typing never lights the pill.
+     * The same window the activity tracker uses to tell echo from output, so the two agree.
      */
-    private static final long SHELL_INPUT_GRACE_MS = 700L;
+    private static final long SHELL_INPUT_GRACE_MS =
+        com.termux.app.statusbar.ShellActivityTracker.INPUT_ECHO_MS;
 
     @Nullable private com.termux.app.terminal.SessionSwitchIndicatorView mSessionSwitchIndicator;
     private final com.termux.app.statusbar.BackgroundProcessModel mBackgroundProcessModel =
@@ -13132,7 +13134,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * <p>Input silences the indication outright: while the user is typing, the pane is being
      * interacted with, not working in the background, whatever its process spends on rendering the
-     * keystrokes.
+     * keystrokes. Both signals are read over a stretch of time rather than at an instant, so the
+     * silence has to reach back over that stretch too: a CPU reading whose interval the user typed
+     * in is discounted, and the tracker never records the echo of a keystroke as output. Without
+     * that, the pause after typing into a remote shell lit the ring — the stretch that was measured
+     * held the typing, but the instant it was judged at did not.
      *
      * <p>Where no foreground reading is available — no privileged backend, an unreadable procfs — the
      * output signal stands alone, and there the alternate screen is excluded, since without knowing
@@ -13146,7 +13152,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
             mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
         if (info != null && info.idle) return false;          // the shell itself has the terminal
-        if (info != null && info.isWorkingAsOf(nowMs)) return true;
+        if (info != null && info.isWorkingAsOf(nowMs, lastWrite)) return true;
         if (info == null && isFullScreenApplication(shell)) return false;
         return mShellActivityTracker.isWorking(pid, nowMs);
     }
@@ -13173,7 +13179,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int pid = session.getPid();
         if (pid <= 0) return;
         long now = android.os.SystemClock.uptimeMillis();
-        mShellActivityTracker.noteActivity(pid, now);
+        mShellActivityTracker.noteActivity(pid, now, session.getLastWriteUptimeMs());
         mShellActivityTracker.pruneBefore(now - 4 * com.termux.app.statusbar.ShellActivityTracker.DECAY_MS);
         if (mShellActivityRefreshPending) return;
         mShellActivityRefreshPending = true;

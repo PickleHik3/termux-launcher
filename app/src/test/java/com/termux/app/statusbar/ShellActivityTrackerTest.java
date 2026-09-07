@@ -123,4 +123,47 @@ public class ShellActivityTrackerTest {
         tracker.clear();
         assertFalse(tracker.isActive(102, 1_000L));
     }
+
+
+    @Test
+    public void outputOnTheHeelsOfAKeystrokeIsEchoAndEndsTheBurst() {
+        // A remote shell echoes every keystroke back in several pieces; ten of those over two
+        // seconds pass the burst rule, and the pause after typing used to light the ring.
+        ShellActivityTracker tracker = new ShellActivityTracker();
+        long echo = ShellActivityTracker.INPUT_ECHO_MS;
+        long t = 1_000L;
+        for (int i = 0; i < 10; i++) {
+            long keystroke = t + i * 200L;
+            tracker.noteActivity(101, keystroke + 40L, keystroke);
+        }
+        long lastKeystroke = t + 9 * 200L;
+
+        assertFalse("echo is not activity", tracker.isActive(101, lastKeystroke + 100L));
+        assertFalse("and never adds up to work", tracker.isWorking(101, lastKeystroke + echo + 100L));
+        assertEquals(-1L, tracker.nextExpiryMs(lastKeystroke + 100L));
+    }
+
+    @Test
+    public void aKeystrokeInTheMiddleOfABurstDropsItRatherThanLeavingItToBeJudged() {
+        ShellActivityTracker tracker = new ShellActivityTracker();
+        for (int i = 0; i < 5; i++) tracker.noteActivity(101, 1_000L + i * 150L, -1L);
+        assertTrue(tracker.isWorking(101, 1_700L));
+
+        // The user types; the redraw that follows is echo, and the earlier burst is gone with it.
+        tracker.noteActivity(101, 1_900L, 1_850L);
+
+        assertFalse(tracker.isWorking(101, 1_900L));
+        assertFalse(tracker.isActive(101, 1_900L));
+    }
+
+    @Test
+    public void outputPastTheEchoWindowAfterEnterIsTheCommandsOwn() {
+        // Enter is a keystroke too; what a command prints after the window is work as before.
+        ShellActivityTracker tracker = new ShellActivityTracker();
+        long enter = 1_000L;
+        long start = enter + ShellActivityTracker.INPUT_ECHO_MS;
+        for (int i = 0; i < 5; i++) tracker.noteActivity(101, start + i * 150L, enter);
+
+        assertTrue(tracker.isWorking(101, start + 700L));
+    }
 }

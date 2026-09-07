@@ -230,4 +230,38 @@ public class WindowForegroundResolverTest {
         assertNull(WindowForegroundResolver.unwrapInterpreter("bash",
             new String[]{"bash", "/home/amal/build.sh"}));
     }
+
+
+    /**
+     * The CPU delta covers the whole stretch between two polls. A keystroke inside that stretch —
+     * typing into an ssh session, say — makes the reading no evidence of a command working, while
+     * one before the stretch leaves it standing.
+     */
+    @Test
+    public void aWorkingReadingTheUserTypedDuringIsNoEvidence() {
+        WindowForegroundResolver resolver = new WindowForegroundResolver(null);
+        resolver.applyOutput("10|fg|500|ssh\tbox\ng|500|0\n",
+            Collections.singletonList(10), 1000L);
+        resolver.applyOutput("10|fg|500|ssh\tbox\ng|500|200\n",
+            Collections.singletonList(10), 3000L);
+        WindowForegroundResolver.ForegroundInfo info = resolver.get(10);
+
+        assertEquals(1000L, info.cpuSinceMs);
+        assertTrue(info.isWorkingAsOf(3100L));
+        assertTrue("never typed", info.isWorkingAsOf(3100L, 0L));
+        assertTrue("typed before the stretch", info.isWorkingAsOf(3100L, 900L));
+        assertFalse("typed during it", info.isWorkingAsOf(3100L, 2000L));
+        assertFalse("typed as it was taken", info.isWorkingAsOf(3100L, 3000L));
+        assertTrue("typed after it; the instant grace covers that", info.isWorkingAsOf(3100L, 3050L));
+    }
+
+    @Test
+    public void aFirstReadingHasNoStretchToHaveTypedDuring() {
+        WindowForegroundResolver resolver = new WindowForegroundResolver(null);
+        resolver.applyOutput("10|fg|500|ssh\tbox\ng|500|0\n",
+            Collections.singletonList(10), 1000L);
+
+        assertEquals(-1L, resolver.get(10).cpuSinceMs);
+        assertFalse(resolver.get(10).isWorkingAsOf(1100L, 500L));
+    }
 }

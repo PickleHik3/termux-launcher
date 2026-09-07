@@ -13,6 +13,13 @@ import java.util.Map;
  * burst that is both long enough and busy enough counts. A gap longer than {@link #DECAY_MS} ends the
  * burst, so each command starts its own instead of inheriting the previous one's credit.
  *
+ * <p>Typing is the other thing that is not work, and a remote program echoing every keystroke — a
+ * shell or an agent's prompt over ssh — redraws in enough pieces for the burst rule alone to read a
+ * sentence as a command running. So output that lands within {@link #INPUT_ECHO_MS} of the user's
+ * last keystroke is taken as echo: it never starts a burst and it ends the one in progress, so the
+ * indication cannot come up in the pause after the typing stops, when the last echoes are still
+ * inside the decay window but the keystroke that caused them is no longer "just now".
+ *
  * <p>Free of Android imports so it can be unit-tested. Time is passed in rather than read, so the
  * decay is testable without sleeping and the host can drive it from one clock.
  */
@@ -31,6 +38,13 @@ public final class ShellActivityTracker {
     /** And in at least this many separate screen updates, so one long paste is not "working". */
     public static final int SUSTAIN_UPDATES = 4;
 
+    /**
+     * How long after a keystroke the output that follows is its echo rather than a command's work.
+     * Long enough for a round trip to a remote shell, short enough that a command started by the
+     * Enter key is credited with its first second of output.
+     */
+    public static final long INPUT_ECHO_MS = 700L;
+
     private static final class Burst {
         long firstMs;
         long lastMs;
@@ -47,7 +61,20 @@ public final class ShellActivityTracker {
 
     /** Records output from {@code pid}. Cheap enough to call on every screen update. */
     public void noteActivity(int pid, long nowMs) {
+        noteActivity(pid, nowMs, -1L);
+    }
+
+    /**
+     * Records output from {@code pid}, knowing when the user last typed into it ({@code -1} or
+     * {@code 0} when never). Output inside {@link #INPUT_ECHO_MS} of that keystroke is echo: it is
+     * not recorded, and any burst under way is dropped rather than left to be judged later.
+     */
+    public void noteActivity(int pid, long nowMs, long lastInputMs) {
         if (pid <= 0) return;
+        if (lastInputMs > 0L && nowMs - lastInputMs < INPUT_ECHO_MS) {
+            mBursts.remove(pid);
+            return;
+        }
         Burst burst = mBursts.get(pid);
         if (burst == null || nowMs - burst.lastMs >= DECAY_MS) {
             mBursts.put(pid, new Burst(nowMs));

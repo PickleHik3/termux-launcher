@@ -58,10 +58,21 @@ public final class WindowForegroundResolver {
         public final double cpuFraction;
         /** When this reading was taken, on the caller's clock. See {@link #isWorkingAsOf(long)}. */
         public final long atMs;
+        /**
+         * When the stretch {@link #cpuFraction} was measured over began — the previous poll — or
+         * -1 when there was no previous reading to take a delta from.
+         */
+        public final long cpuSinceMs;
 
         ForegroundInfo(boolean idle, int foregroundPid, @Nullable String processName,
                        @Nullable String openFile, @NonNull List<String> command,
                        double cpuFraction, long atMs) {
+            this(idle, foregroundPid, processName, openFile, command, cpuFraction, -1L, atMs);
+        }
+
+        ForegroundInfo(boolean idle, int foregroundPid, @Nullable String processName,
+                       @Nullable String openFile, @NonNull List<String> command,
+                       double cpuFraction, long cpuSinceMs, long atMs) {
             this.idle = idle;
             this.foregroundPid = foregroundPid;
             this.processName = processName;
@@ -69,6 +80,7 @@ public final class WindowForegroundResolver {
             this.command = Collections.unmodifiableList(new ArrayList<>(command));
             this.cpuFraction = cpuFraction;
             this.working = cpuFraction >= WORKING_CPU_FRACTION;
+            this.cpuSinceMs = cpuSinceMs;
             this.atMs = atMs;
         }
 
@@ -83,6 +95,23 @@ public final class WindowForegroundResolver {
          */
         public boolean isWorkingAsOf(long nowMs) {
             return working && nowMs - atMs <= WORKING_TTL_MS;
+        }
+
+        /**
+         * {@link #isWorkingAsOf(long)}, discounting a reading the user typed during. The CPU a
+         * process spends handling keystrokes — an ssh session encrypting them and decrypting the
+         * remote's redraws, a TUI repainting for each — is not a command working, but it is spread
+         * over the whole stretch between two polls, and a grace measured from the last keystroke
+         * cannot see it once the typing stops. A keystroke anywhere inside the measured stretch
+         * makes the reading no evidence either way.
+         *
+         * @param lastInputMs when the user last wrote to the pane; {@code 0} or less when never.
+         */
+        public boolean isWorkingAsOf(long nowMs, long lastInputMs) {
+            if (!isWorkingAsOf(nowMs)) return false;
+            boolean typedDuring = lastInputMs > 0L && cpuSinceMs >= 0L
+                && lastInputMs >= cpuSinceMs && lastInputMs <= atMs;
+            return !typedDuring;
         }
     }
 
@@ -266,8 +295,8 @@ public final class WindowForegroundResolver {
             } else if ("fg".equals(kind) && parts.length == 4) {
                 int foregroundPid = parseInt(parts[2]);
                 Long ticks = groupTicks.get(foregroundPid);
-                ForegroundInfo info = parseForeground(parts[3], foregroundPid,
-                    cpuFraction(pid, foregroundPid, ticks == null ? -1L : ticks, nowMs), nowMs);
+                CpuDelta cpu = cpuDelta(pid, foregroundPid, ticks == null ? -1L : ticks, nowMs);
+                ForegroundInfo info = parseForeground(parts[3], foregroundPid, cpu, nowMs);
                 if (info != null) next.put(pid, info);
             }
             // "x" (unreadable) leaves no entry so callers fall back to title/cwd.
@@ -291,7 +320,7 @@ public final class WindowForegroundResolver {
 
     @Nullable
     private static ForegroundInfo parseForeground(@NonNull String payload, int foregroundPid,
-                                                  double cpuFraction, long atMs) {
+                                                  @NonNull CpuDelta cpu, long atMs) {
         if (payload.isEmpty()) return null;
         String[] argv = payload.split("\t");
         String process = basename(argv[0]);
@@ -310,8 +339,20 @@ public final class WindowForegroundResolver {
         }
         List<String> command = new ArrayList<>();
         Collections.addAll(command, argv);
-        return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpuFraction,
-            atMs);
+        return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpu.fraction,
+            cpu.sinceMs, atMs);
+    }
+
+    /** A foreground process's CPU use since the previous poll, and when that poll was. */
+    private static final class CpuDelta {
+        static final CpuDelta NONE = new CpuDelta(-1d, -1L);
+        final double fraction;
+        final long sinceMs;
+
+        CpuDelta(double fraction, long sinceMs) {
+            this.fraction = fraction;
+            this.sinceMs = sinceMs;
+        }
     }
 
     /**
@@ -321,19 +362,21 @@ public final class WindowForegroundResolver {
      * between polls. Reported rather than assumed to be zero: the caller's threshold treats unknown as
      * not-working, and one poll of latency at the start of a command is better than a wrong number.
      */
-    private double cpuFraction(int shellPid, int foregroundPid, long ticks, long nowMs) {
+    @NonNull
+    private CpuDelta cpuDelta(int shellPid, int foregroundPid, long ticks, long nowMs) {
         if (foregroundPid < 1 || ticks < 0) {
             mCpuSamples.remove(shellPid);
-            return -1d;
+            return CpuDelta.NONE;
         }
         CpuSample previous = mCpuSamples.get(shellPid);
         mCpuSamples.put(shellPid, new CpuSample(foregroundPid, ticks, nowMs));
-        if (previous == null || previous.pid != foregroundPid) return -1d;
+        if (previous == null || previous.pid != foregroundPid) return CpuDelta.NONE;
         long elapsedMs = nowMs - previous.atMs;
         // A counter that went backwards means the pid was reused; treat it as a new process.
-        if (elapsedMs <= 0L || ticks < previous.ticks) return -1d;
+        if (elapsedMs <= 0L || ticks < previous.ticks) return CpuDelta.NONE;
         double seconds = elapsedMs / 1000d;
-        return (ticks - previous.ticks) / CLOCK_TICKS_PER_SECOND / seconds;
+        return new CpuDelta((ticks - previous.ticks) / CLOCK_TICKS_PER_SECOND / seconds,
+            previous.atMs);
     }
 
     private static long parseLong(@NonNull String value) {
