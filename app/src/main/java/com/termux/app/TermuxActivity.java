@@ -1253,8 +1253,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         // The drawer's open drag starts on the dock; letting the plank keep tilting under it would
-        // put two owners on the same views' transforms.
+        // put two owners on the same views' transforms. The press that began the drag is handed
+        // back the moment the drawer engages — otherwise the springs sit frozen at their aimed
+        // targets (the UP never arrives here) and keep the rows tilted under the drawer's own lift.
         if (isAppDrawerEngaged()) {
+            if (mDockPlankTouchInside) {
+                mDockPlankTouchInside = false;
+                controller.releaseToNeutral();
+            }
             return;
         }
         switch (ev.getActionMasked()) {
@@ -2346,8 +2352,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDockPlankController = new DockPlankController(plank, specular, glow);
             mDockPlankTarget = plank;
         }
-        // The icon row follows the same springs as the glass under it.
-        mDockPlankController.setIconLayer(findViewById(R.id.apps_bar_plank_layer));
+        // Every row standing on the glass follows the same springs as the glass under it: the
+        // pinned-apps layer, the letters, and the band of air between them. The set is registered
+        // whole rather than one row at a time — a row left out is a row that reads as thrown off
+        // the surface the moment the dock is pushed.
+        mDockPlankController.setContentLayers(
+            findViewById(R.id.apps_bar_plank_layer),
+            findViewById(R.id.apps_bar_az_row),
+            findViewById(R.id.apps_bar_indicator_band));
         mDockPlankController.setReducedMotion(isReducedMotionEnabled());
     }
 
