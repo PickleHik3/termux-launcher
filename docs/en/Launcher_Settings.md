@@ -207,7 +207,7 @@ page now, one place and orientation at a time, and its dock look is tuned from t
 
 ## Linux display
 
-The Linux display has its own page: the **Linux display** switch runs a Linux desktop or X11 apps
+The Linux display has its own page: the **Display** switch runs a Linux desktop or X11 apps
 as the third place of the home screen — see [The Linux display](X11_Display.md). Under it sit touch
 mode, resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
 the window manager started with the display, the mark on the Display place's badge in the status

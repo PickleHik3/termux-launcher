@@ -50,8 +50,8 @@
     <string name="settings_layout_miniature_keys">Extra keys</string>
     <string name="settings_layout_miniature_grid_format">Widgets %1$d×%2$d</string>
     <string name="settings_layout_miniature_terminal">Terminal</string>
-    <string name="settings_layout_miniature_display">Linux display</string>
-    <string name="settings_layout_miniature_display_overlay">Linux display, keyboard floats</string>
+    <string name="settings_layout_miniature_display">Display</string>
+    <string name="settings_layout_miniature_display_overlay">Display, keyboard floats</string>
     <string name="settings_layout_miniature_hidden_format">%1$s, hidden</string>
     <string name="settings_layout_overview_caption">Arrange each place for portrait and landscape.</string>
     <string name="settings_layout_editing_format">Editing %1$s in %2$s</string>
@@ -65,7 +65,7 @@
     <string name="settings_destination_status_bar_summary">Clock, CPU, memory, weather, and notifications</string>
     <string name="settings_destination_keyboard_input">Keyboard</string>
     <string name="settings_destination_keyboard_input_summary">Input method, layouts, typing, feedback, and extra keys</string>
-    <string name="settings_destination_display">Linux display</string>
+    <string name="settings_destination_display">Display</string>
     <string name="settings_destination_display_summary">Linux display on or off, touch, resolution, clipboard, and how it starts</string>
     <string name="settings_destination_launcher_apps">Apps</string>
     <string name="settings_destination_launcher_apps_summary">Pinned apps, drawer, search, notifications, and home behavior</string>
@@ -228,7 +228,7 @@
     <string name="termux_x11_stop_display">Stop display</string>
     <string name="termux_x11_display_settings">Display settings</string>
     <string name="termux_x11_command_taken">Another app\'s display command is installed, so the launcher left its own out; the Linux display guide shows how to switch.</string>
-    <string name="settings_x11_display_title">Linux display</string>
+    <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
     <string name="settings_x11_category_display">Display</string>
