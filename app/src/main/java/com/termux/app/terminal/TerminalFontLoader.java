@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.font.FileTypefaces;
 import com.termux.view.TerminalRenderer;
 
 import java.io.File;
@@ -348,7 +349,7 @@ public final class TerminalFontLoader {
             return null;
         }
         try {
-            return Typeface.createFromFile(file);
+            return FileTypefaces.load(file);
         } catch (RuntimeException e) {
             errors.add(label + ": Android rejected the font: " + safeMessage(e));
             return null;

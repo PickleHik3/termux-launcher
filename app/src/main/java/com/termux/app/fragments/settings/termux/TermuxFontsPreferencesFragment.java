@@ -28,6 +28,7 @@ import com.termux.app.fonts.FontSettings;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
+import com.termux.shared.termux.font.FileTypefaces;
 
 import java.io.File;
 import java.util.HashMap;
@@ -497,9 +498,9 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         try {
             File face = new File(installer.getFamilyDir(family.id),
                 FontCatalog.FaceSlot.REGULAR.fileName);
-            if (face.isFile()) typeface = Typeface.createFromFile(face);
+            if (face.isFile()) typeface = FileTypefaces.load(face);
         } catch (RuntimeException ignored) {
-            // Typeface.createFromFile throws on corrupt files; the row just keeps the default face.
+            // createFromFile throws on corrupt files; the row just keeps the default face.
         }
         mPreviewTypefaces.put(family.id, typeface);
         return typeface;

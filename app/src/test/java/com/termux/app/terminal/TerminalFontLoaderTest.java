@@ -50,6 +50,27 @@ public class TerminalFontLoaderTest {
                 Typeface.MONOSPACE, faces.regular);
     }
 
+    /**
+     * Regression for the 2026-09-07 ANR: a face loaded from a file must be the same instance on
+     * every load, so the render thread's strike cache is never its last owner (see FileTypefaces).
+     */
+    @Test
+    public void reloadingTheSameFontPathReturnsTheSameTypefaceInstance() throws Exception {
+        File font = temporary.newFile("mono.ttf");
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(font)) {
+            out.write(new byte[64]);
+        }
+        TerminalFontConfig.Result config = TerminalFontConfig.parse(
+            "font_family path=" + font.getAbsolutePath() + "\n", true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+
+        TerminalFontLoader.Faces first = TerminalFontLoader.load(config);
+        TerminalFontLoader.Faces second = TerminalFontLoader.load(config);
+
+        assertTrue(first.errors.toString(), first.errors.isEmpty());
+        assertSame(first.regular, second.regular);
+    }
+
     @Test
     public void resolvesTheFallbackChainInOrderAndDropsBrokenEntries() {
         TerminalFontConfig.Result config = TerminalFontConfig.parse(

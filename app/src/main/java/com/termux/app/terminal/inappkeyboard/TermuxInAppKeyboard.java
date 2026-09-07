@@ -987,7 +987,8 @@ public final class TermuxInAppKeyboard {
         if (!fontFile.isFile())
             return bundledSymbolsLabelFont();
         try {
-            android.graphics.Typeface typeface = android.graphics.Typeface.createFromFile(fontFile);
+            android.graphics.Typeface typeface =
+                com.termux.shared.termux.font.FileTypefaces.load(fontFile);
             return android.graphics.Typeface.DEFAULT.equals(typeface)
                 ? bundledSymbolsLabelFont() : typeface;
         } catch (RuntimeException e) {
