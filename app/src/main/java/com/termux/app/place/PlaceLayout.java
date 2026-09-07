@@ -19,6 +19,11 @@ public final class PlaceLayout {
     public enum Edge {
         TOP, BOTTOM, LEFT, RIGHT;
 
+        /** A column down one side of the screen rather than a row along the top or the bottom. */
+        public boolean isOnSide() {
+            return this == LEFT || this == RIGHT;
+        }
+
         @NonNull
         public String storageValue() {
             return name().toLowerCase(Locale.ROOT);

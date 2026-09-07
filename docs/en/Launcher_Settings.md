@@ -16,12 +16,14 @@ between the two. A miniature shows the result, and tapping a part of it jumps to
 
 - **Status bar** and **Apps row**: which edge the row stands on, or hidden. **Alphabets row** shows
   or hides the A–Z index below the pinned apps, and only while the apps row is along the bottom.
-  **Extra keys**: where the terminal's extra keys stand, or hidden.
+  **Extra keys**: where the terminal's extra keys stand, or hidden. A column down the left or the
+  right is a landscape arrangement; in portrait the rows stand along the bottom or not at all.
 
-The status bar can stand on any of the four edges and is never hidden, so the swipe that moves
-between places always has somewhere to live. At the top it is the bar you already know. At the
-bottom it sits on the dock and shares its look, growing upward when you open it. On the left or the
-right it becomes a narrow column: the place badge, one chip per window, and the system readings
+The status bar can stand on the top or the bottom in portrait, and on any of the four edges in
+landscape; it is never hidden, so the swipe that moves between places always has somewhere to live.
+At the top it is the bar you already know. At the bottom it sits on the dock and shares its look,
+growing upward when you open it, with the clock at its foot and the window pills along its upper
+edge. On the left or the right of a landscape screen it becomes a narrow column: the place badge, one chip per window, and the system readings
 stacked down it, with the clock written hour over minutes when the column is open. Whichever edge
 it stands on, a swipe along the bar moves between places — sideways on a bar across the top or
 bottom, up and down on a column, where Home is above Terminal and Display below it — and a swipe

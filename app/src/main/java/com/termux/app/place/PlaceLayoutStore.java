@@ -112,10 +112,19 @@ public final class PlaceLayoutStore {
             widgetRows(place, orientation));
     }
 
-    /** Always an edge: the bar moves, it never goes away, so the wall's pager always has a grip. */
+    /**
+     * Always an edge: the bar moves, it never goes away, so the wall's pager always has a grip.
+     *
+     * <p>Portrait offers only the top and the bottom. A column down the side of a portrait screen
+     * takes width the terminal does not have and stands past the keyboard, so the option is not
+     * on the page there; a side still stored for portrait — written before it went — reads as the
+     * top rather than standing a column the page can no longer put right.
+     */
     @NonNull
     public Edge statusBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        return Edge.parse(readString(place, orientation, KEY_STATUS_BAR), Edge.TOP);
+        Edge edge = Edge.parse(readString(place, orientation, KEY_STATUS_BAR), Edge.TOP);
+        if (orientation == PlaceOrientation.PORTRAIT && edge.isOnSide()) return Edge.TOP;
+        return edge;
     }
 
     public void setStatusBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
@@ -129,8 +138,20 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public RowPlacement appsRow(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        return RowPlacement.parse(readString(place, orientation, KEY_APPS_ROW),
-            orientation == PlaceOrientation.LANDSCAPE ? RowPlacement.LEFT : RowPlacement.BOTTOM);
+        return rowForOrientation(RowPlacement.parse(readString(place, orientation, KEY_APPS_ROW),
+            orientation == PlaceOrientation.LANDSCAPE ? RowPlacement.LEFT : RowPlacement.BOTTOM),
+            orientation);
+    }
+
+    /**
+     * A column down the side is landscape's: portrait has no width to give one, so the page does
+     * not offer it there, and a side still stored for portrait reads as the row along the bottom.
+     */
+    @NonNull
+    private static RowPlacement rowForOrientation(@NonNull RowPlacement placement,
+                                                  @NonNull PlaceOrientation orientation) {
+        return orientation == PlaceOrientation.PORTRAIT && placement.isOnSide()
+            ? RowPlacement.BOTTOM : placement;
     }
 
     public void setAppsRow(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
@@ -154,8 +175,8 @@ public final class PlaceLayoutStore {
     @NonNull
     public RowPlacement extraKeys(@NonNull PaneWallPage place,
                                   @NonNull PlaceOrientation orientation) {
-        return RowPlacement.parse(readString(place, orientation, KEY_EXTRA_KEYS),
-            RowPlacement.BOTTOM);
+        return rowForOrientation(RowPlacement.parse(readString(place, orientation, KEY_EXTRA_KEYS),
+            RowPlacement.BOTTOM), orientation);
     }
 
     public void setExtraKeys(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,

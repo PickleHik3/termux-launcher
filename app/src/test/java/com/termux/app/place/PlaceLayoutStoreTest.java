@@ -110,9 +110,9 @@ public class PlaceLayoutStoreTest {
         }
         // The migration folded the master into Hidden once; a scoped write afterwards is a real
         // placement, not a value the master can still veto.
-        store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.RIGHT);
+        store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, RowPlacement.RIGHT);
         assertEquals(RowPlacement.RIGHT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).appsRow);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
     }
 
     // ------------------------------------------------------------------ scoped writes
@@ -231,10 +231,12 @@ public class PlaceLayoutStoreTest {
                 store.resolve(place, PlaceOrientation.LANDSCAPE).appsRow);
             assertFalse(place + " status", store.isStatusCompact(place));
         }
-        for (PlaceOrientation orientation : PlaceOrientation.values()) {
-            assertEquals(RowPlacement.LEFT,
-                store.resolve(PaneWallPage.DISPLAY, orientation).extraKeys);
-        }
+        // The old side is folded into both orientations; portrait, which has no column, reads
+        // the stored side as its bottom row.
+        assertEquals(RowPlacement.LEFT,
+            store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE).extraKeys);
+        assertEquals(RowPlacement.BOTTOM,
+            store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).extraKeys);
         assertTrue(store.wasKeyboardOpen(PaneWallPage.DISPLAY));
         // There is no hidden status bar any more, and the display's keyboard memory has moved.
         assertFalse(prefs.contains("x11_hide_status_bar"));
@@ -291,5 +293,42 @@ public class PlaceLayoutStoreTest {
                 "extra_keys"));
         assertEquals("place.terminal.status_compact",
             PlaceLayoutStore.memoryKey(PaneWallPage.TERMINAL, "status_compact"));
+    }
+
+
+    @Test
+    public void portraitStandsASideStoredForItBackOnTop() {
+        // The page no longer offers a column in portrait; a value written before it went, or by
+        // hand, must not stand one either. Landscape keeps every edge.
+        PlaceLayoutStore store = store();
+        store.setStatusBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.RIGHT);
+        store.setStatusBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.RIGHT);
+
+        assertEquals(Edge.TOP,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).statusBarEdge);
+        assertEquals(Edge.RIGHT,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).statusBarEdge);
+        store.setStatusBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.BOTTOM);
+        assertEquals(Edge.BOTTOM,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).statusBarEdge);
+    }
+
+    @Test
+    public void portraitStandsASideRowBackAlongTheBottom() {
+        // The apps row and the extra keys can be a column only in landscape; a side stored for
+        // portrait reads as the bottom row, and hidden stays hidden.
+        PlaceLayoutStore store = store();
+        store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.LEFT);
+        store.setExtraKeys(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.RIGHT);
+        store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, RowPlacement.RIGHT);
+        store.setExtraKeys(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
+
+        PlaceLayout portrait = store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
+        assertEquals(RowPlacement.BOTTOM, portrait.appsRow);
+        assertEquals(RowPlacement.BOTTOM, portrait.extraKeys);
+        assertEquals(RowPlacement.RIGHT,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+        assertEquals(RowPlacement.HIDDEN,
+            store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).extraKeys);
     }
 }

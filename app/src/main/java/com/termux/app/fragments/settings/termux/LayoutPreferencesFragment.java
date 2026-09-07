@@ -58,15 +58,23 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     private static final String STATE_PLACE = "layout_selected_place";
     private static final String STATE_ORIENTATION = "layout_selected_orientation";
 
+    /** Landscape offers every edge; portrait has no width to spare for a column down a side. */
     private static final String[] EDGE_VALUES = {"top", "bottom", "left", "right"};
     private static final int[] EDGE_LABELS = {
         R.string.settings_layout_edge_top, R.string.settings_x11_extra_keys_side_bottom,
         R.string.settings_dock_rail_side_left, R.string.settings_dock_rail_side_right};
+    private static final String[] EDGE_VALUES_PORTRAIT = {"top", "bottom"};
+    private static final int[] EDGE_LABELS_PORTRAIT = {
+        R.string.settings_layout_edge_top, R.string.settings_x11_extra_keys_side_bottom};
 
+    /** The apps row and the extra keys: a row along the bottom, a column in landscape, or gone. */
     private static final String[] ROW_VALUES = {"bottom", "left", "right", "hidden"};
     private static final int[] ROW_LABELS = {
         R.string.settings_x11_extra_keys_side_bottom, R.string.settings_dock_rail_side_left,
         R.string.settings_dock_rail_side_right, R.string.settings_layout_row_hidden};
+    private static final String[] ROW_VALUES_PORTRAIT = {"bottom", "hidden"};
+    private static final int[] ROW_LABELS_PORTRAIT = {
+        R.string.settings_x11_extra_keys_side_bottom, R.string.settings_layout_row_hidden};
 
     private static final String[] KEYBOARD_ON_ENTER_VALUES = {"as_left", "open", "closed"};
     private static final int[] KEYBOARD_ON_ENTER_LABELS = {
@@ -205,12 +213,12 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     private void configureRows() {
         SegmentedPillPreference statusBar = findPreference(KEY_STATUS_BAR);
         if (statusBar != null) {
-            statusBar.setSegments(EDGE_VALUES, EDGE_LABELS);
+            applyEdgeSegments(statusBar);
             statusBar.setOnPreferenceChangeListener(this::onRowChanged);
         }
         SegmentedPillPreference appsRow = findPreference(KEY_APPS_ROW);
         if (appsRow != null) {
-            appsRow.setSegments(ROW_VALUES, ROW_LABELS);
+            applyRowSegments(appsRow);
             appsRow.setOnPreferenceChangeListener(this::onRowChanged);
         }
         SwitchPreferenceCompat alphabetsRow = findPreference(KEY_ALPHABETS_ROW);
@@ -219,7 +227,7 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         }
         SegmentedPillPreference extraKeys = findPreference(KEY_EXTRA_KEYS);
         if (extraKeys != null) {
-            extraKeys.setSegments(ROW_VALUES, ROW_LABELS);
+            applyRowSegments(extraKeys);
             extraKeys.setOnPreferenceChangeListener(this::onRowChanged);
         }
         SegmentedPillPreference keyboardOnEnter = findPreference(KEY_KEYBOARD_ON_ENTER);
@@ -263,15 +271,29 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         return true;
     }
 
+    /** A row's placements for the selected orientation: a side column is landscape's alone. */
+    private void applyRowSegments(@NonNull SegmentedPillPreference row) {
+        boolean portrait = mSelectedOrientation == PlaceOrientation.PORTRAIT;
+        row.setSegments(portrait ? ROW_VALUES_PORTRAIT : ROW_VALUES,
+            portrait ? ROW_LABELS_PORTRAIT : ROW_LABELS);
+    }
+
+    /** The status bar's edges for the selected orientation: all four in landscape, two in portrait. */
+    private void applyEdgeSegments(@NonNull SegmentedPillPreference statusBar) {
+        boolean portrait = mSelectedOrientation == PlaceOrientation.PORTRAIT;
+        statusBar.setSegments(portrait ? EDGE_VALUES_PORTRAIT : EDGE_VALUES,
+            portrait ? EDGE_LABELS_PORTRAIT : EDGE_LABELS);
+    }
+
     /** Re-reads every row for the currently selected place and orientation. */
     private void refreshRows() {
         if (mStore == null) return;
         SegmentedPillPreference statusBar = findPreference(KEY_STATUS_BAR);
-        if (statusBar != null) statusBar.setSegments(EDGE_VALUES, EDGE_LABELS);
+        if (statusBar != null) applyEdgeSegments(statusBar);
         SegmentedPillPreference appsRow = findPreference(KEY_APPS_ROW);
-        if (appsRow != null) appsRow.setSegments(ROW_VALUES, ROW_LABELS);
+        if (appsRow != null) applyRowSegments(appsRow);
         SegmentedPillPreference extraKeys = findPreference(KEY_EXTRA_KEYS);
-        if (extraKeys != null) extraKeys.setSegments(ROW_VALUES, ROW_LABELS);
+        if (extraKeys != null) applyRowSegments(extraKeys);
         SegmentedPillPreference keyboardOnEnter = findPreference(KEY_KEYBOARD_ON_ENTER);
         if (keyboardOnEnter != null) {
             keyboardOnEnter.setSegments(KEYBOARD_ON_ENTER_VALUES, KEYBOARD_ON_ENTER_LABELS);
