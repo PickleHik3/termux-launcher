@@ -106,8 +106,6 @@ import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzBarHostGeometry;
-import com.termux.app.launcher.az.AzBarFrame;
-import com.termux.app.launcher.az.AzBarHostGeometry;
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
@@ -6340,11 +6338,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         // The root is already clear of the system bars — the column lives inside that — so only
-        // the launcher's own chrome is compensated here: a status bar along the top, whatever
-        // shares this column, and the dock's rows along the bottom.
+        // the launcher's own chrome is compensated here: a status bar standing along the top and
+        // the dock's rows along the bottom. A status bar, rail or extra-keys column on this same
+        // side is answered by the edge inset above and never by the ends: the bar stands beside
+        // them, so counting one of them here cost the bar its whole length.
         int edgePadPx = edgeInsetPx + marginPx;
-        int topPadPx = marginPx + statusColumnTopOffsetPx(right) + azBarTopChromeHeightPx();
-        int bottomPadPx = marginPx + azBarBottomChromeHeightPx();
+        int topPadPx = AzBarHostGeometry.columnTopPaddingPx(marginPx, azBarTopChromeHeightPx());
+        int bottomPadPx =
+            AzBarHostGeometry.columnBottomPaddingPx(marginPx, azBarBottomChromeHeightPx());
         updateViewPadding(host, right ? marginPx : edgePadPx, topPadPx,
             right ? edgePadPx : marginPx, bottomPadPx);
     }
