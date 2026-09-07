@@ -104,6 +104,10 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
+import com.termux.app.launcher.az.AzBarFrame;
+import com.termux.app.launcher.az.AzBarHostGeometry;
+import com.termux.app.launcher.az.AzBarFrame;
+import com.termux.app.launcher.az.AzBarHostGeometry;
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
@@ -436,6 +440,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     SuggestionBarView mSuggestionBarView;
     private boolean mSuggestionBarExplicitSearchActive;
     AzScrubRowView mAzScrubRowView;
+    /** The edge the alphabets bar is standing on right now, as last applied from the place. */
+    @NonNull private PlaceLayout.Edge mAzBarEdge = PlaceLayout.Edge.BOTTOM;
+    /** The bar's own view in each host away from the dock, built the first time it is needed. */
+    @Nullable private AzScrubRowView mAzBarTopRowView;
+    @Nullable private AzScrubRowView mAzBarColumnRowView;
+    /** The one scrub callback, moved to whichever bar the place has put on screen. */
+    @Nullable private AzScrubRowView.ScrubCallback mAzScrubCallback;
+    private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider mAzBarTopOutline =
+        new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
+    private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider mAzBarColumnOutline =
+        new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
     @Nullable private View mAzTerminalToolbarView;
     LauncherAzGestureFxView mLauncherAzGestureFxUnderlayView;
     LauncherAzGestureFxView mLauncherAzGestureFxOverlayView;
@@ -663,6 +678,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private AzFloatingStripPolicy.Strip mAzStrip;
     /** The rectangle the strip was drawn at, which is the gesture's icon track while it stands. */
     private final RectF mAzStripRawBounds = new RectF();
+    /** The focused strip slot, mapped back to the screen for the layers that draw it. */
+    private final RectF mAzStripFocusRawBounds = new RectF();
     /** What the strip was last laid out for, so an unchanged page costs nothing to re-sync. */
     private char mAzStripSyncedLetter = '\0';
     private int mAzStripSyncedPage = -1;
@@ -3378,7 +3395,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // laid out beside the content root, and its row collapses like a switched-off one.
         PlaceLayout layout = currentPlaceLayout();
         boolean appsRowEnabled = PlaceChromePolicy.appsRowShown(layout);
-        boolean azRowEnabled = PlaceChromePolicy.azRowShown(layout);
+        // The dock's own row. A place that stands the bar on another edge gives the dock nothing:
+        // the row goes, and with it the whole stack when it was the only thing on it.
+        boolean azRowEnabled = PlaceChromePolicy.azRowOnDock(layout);
         boolean extraKeysRowEnabled = PlaceChromePolicy.extraKeysRowShown(layout);
         boolean dockShown = PlaceChromePolicy.dockShown(layout);
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
@@ -4874,6 +4893,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 azLabelOverlay.setVisibility(View.GONE);
             }
             clearAccessoryRenderEffectBackdrop();
+            // Nothing lands on the dock, but the letters may still be standing on another edge.
+            syncAzBarHosts();
+            refreshAzBarHostsGlass();
             applyDecorNavBarSurfaceState(state);
             applyInAppKeyboardSurfaceState(state);
             mKeyboardGeometry.completePendingOpenReveal(state);
@@ -4901,7 +4923,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSuggestionBarExplicitSearchActive = false;
             // The letters keep their scrub without the apps row — it just shows its matches on the
             // floating strip instead — so only drop the gesture when the letters are gone too.
-            if (!state.azRowEnabled) {
+            // Standing on another edge is not gone: the row here is empty, the bar is elsewhere.
+            if (!isAzRowEnabled()) {
                 resetAzGestureState(false, true);
             }
         }
@@ -4939,6 +4962,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             extraKeysBackground.setAlpha(1f);
         }
         refreshDockPlankFx(state.barAlpha);
+        // A bar off the dock is not in this stack and never rides its plank; it wears the same
+        // glass, so it is re-glazed on the same pass that re-glazes the dock.
+        syncAzBarHosts();
+        refreshAzBarHostsGlass();
 
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         // Thin material hairline at the seam between the A–Z row and the extra-keys row.
@@ -5155,6 +5182,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         leftContentInsetPx = Math.max(leftContentInsetPx, statusBarColumnFootprintPx(false));
         rightContentInsetPx = Math.max(rightContentInsetPx, statusBarColumnFootprintPx(true));
         syncExtraKeysColumn();
+        // The alphabets bar's own column is the innermost of them, so it is measured after the
+        // three above and claims the band just inside whichever of them share its edge.
+        syncAzBarHosts();
+        leftContentInsetPx = Math.max(leftContentInsetPx, azBarColumnFootprintPx(false));
+        rightContentInsetPx = Math.max(rightContentInsetPx, azBarColumnFootprintPx(true));
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
         if (rootRelativeLayout != null
             && (rootRelativeLayout.getPaddingLeft() != leftContentInsetPx
@@ -5995,26 +6027,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.setSuggestionBarCallback(this);
         }
 
+        mAzScrubCallback = new AzScrubRowView.ScrubCallback() {
+            @Override
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
+                                float rawX, float rawY, long eventTimeMs,
+                                @NonNull AzScrubRowView.GesturePhase phase) {
+                handleAzGestureScrub(letter, selectionIndex, touchX, touchY, rawX, rawY,
+                    eventTimeMs, phase);
+            }
+
+            @Override
+            public void onCancel() {
+                resetAzGestureState(false, true);
+            }
+
+            @Override
+            public void onDoubleTap() {
+                lockScreenFromAzDoubleTap();
+            }
+        };
         if (mAzScrubRowView != null) {
-            mAzScrubRowView.setScrubCallback(new AzScrubRowView.ScrubCallback() {
-                @Override
-                public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
-                                    float rawX, float rawY, long eventTimeMs,
-                                    @NonNull AzScrubRowView.GesturePhase phase) {
-                    handleAzGestureScrub(letter, selectionIndex, touchX, touchY, rawX, rawY,
-                        eventTimeMs, phase);
-                }
-
-                @Override
-                public void onCancel() {
-                    resetAzGestureState(false, true);
-                }
-
-                @Override
-                public void onDoubleTap() {
-                    lockScreenFromAzDoubleTap();
-                }
-            });
+            mAzScrubRowView.setScrubCallback(mAzScrubCallback);
         }
     }
 
@@ -6108,6 +6141,273 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean isAzIndexStandalone() {
         return mPreferences != null && PlaceChromePolicy.azIndexStandsAlone(currentPlaceLayout());
+    }
+
+    /**
+     * The edge the alphabets bar stands on for the place on screen. Riding under the apps row pins
+     * it to the bottom whatever is stored, which is the policy's rule rather than this one's.
+     */
+    @NonNull
+    private PlaceLayout.Edge azBarEdge() {
+        return mPreferences == null ? PlaceLayout.Edge.BOTTOM
+            : PlaceChromePolicy.azBarEdge(currentPlaceLayout());
+    }
+
+    /**
+     * The map between the canonical bottom-bar frame the whole scrub is written in and the screen
+     * it is happening on. Built from the edge actually applied, so it agrees with the views that
+     * are laid out rather than with what the place is about to ask for.
+     */
+    @NonNull
+    private AzBarFrame azBarFrame() {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        return AzBarFrame.of(mAzBarEdge, metrics.widthPixels, metrics.heightPixels);
+    }
+
+    /** Where the gesture's last point was on screen; the FX layers draw from that, not the frame. */
+    private float azGestureScreenX() {
+        return azBarFrame().screenX(mAzGesture.lastRawX(), mAzGesture.lastRawY());
+    }
+
+    private float azGestureScreenY() {
+        return azBarFrame().screenY(mAzGesture.lastRawX(), mAzGesture.lastRawY());
+    }
+
+    /** The air a bar off the dock keeps from the screen, the same the rail and the column keep. */
+    private int azBarHostMarginPx() {
+        return Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
+    }
+
+    private int azBarThicknessPx() {
+        return AzBarHostGeometry.thicknessPx(getResources().getDisplayMetrics().density);
+    }
+
+    /** True while the bar stands in a column on that side of the screen. */
+    private boolean isAzBarColumnOn(boolean right) {
+        return mAzBarEdge == (right ? PlaceLayout.Edge.RIGHT : PlaceLayout.Edge.LEFT);
+    }
+
+    /**
+     * Where the bar's column starts, in from its edge: past the cutout, and past the rail, the
+     * extra keys column and the status bar's column wherever they hold the same side. The bar is
+     * the innermost of them, so none of the others gives up anything for it.
+     */
+    private int azBarColumnEdgeInsetPx(boolean right) {
+        int railPx = isDockRailShown() && isDockRailOnRight() == right
+            ? getDockLayout().railWidthPx : 0;
+        return AzBarHostGeometry.edgeInsetPx(
+            right ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft,
+            railPx, extraKeysColumnFootprintPx(right), statusBarColumnFootprintPx(right));
+    }
+
+    /** How far in from one side the bar's column reaches, which is the content's inset there. */
+    private int azBarColumnFootprintPx(boolean right) {
+        if (!isAzBarColumnOn(right) || !isAzRowEnabled()) return 0;
+        return AzBarHostGeometry.footprintPx(azBarColumnEdgeInsetPx(right), azBarHostMarginPx(),
+            azBarThicknessPx());
+    }
+
+    /**
+     * Stands the alphabets bar on the edge the place asks for, or hands it back to the dock.
+     *
+     * <p>Off the dock the bar gets a host of its own — a row in the content column, under the
+     * status bar wherever that stands along the top, or the innermost column on one side — with the
+     * dock's own glass behind it and the same content inset the extra keys column takes. The dock's
+     * row is left exactly as it is and simply goes, so a bottom bar is untouched by any of this.
+     *
+     * @return whether a host appeared or went, which the content's edge padding is derived from
+     */
+    private boolean syncAzBarHosts() {
+        FrameLayout topHost = findViewById(R.id.place_az_bar_top);
+        FrameLayout columnHost = findViewById(R.id.place_az_bar_column);
+        if (topHost == null || columnHost == null) return false;
+        boolean lettersShown = isAzRowEnabled();
+        PlaceLayout.Edge edge = lettersShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
+        boolean wantTop = lettersShown && edge == PlaceLayout.Edge.TOP;
+        boolean wantColumn = lettersShown && edge.isOnSide();
+        boolean changed = mAzBarEdge != edge
+            || (topHost.getVisibility() == View.VISIBLE) != wantTop
+            || (columnHost.getVisibility() == View.VISIBLE) != wantColumn;
+        mAzBarEdge = edge;
+
+        if (wantTop) {
+            mAzBarTopRowView = installAzBarRow(topHost, mAzBarTopRowView);
+            layoutAzBarTopHost(topHost);
+        }
+        topHost.setVisibility(wantTop ? View.VISIBLE : View.GONE);
+        if (wantColumn) {
+            mAzBarColumnRowView = installAzBarRow(columnHost, mAzBarColumnRowView);
+            layoutAzBarColumnHost(columnHost, edge == PlaceLayout.Edge.RIGHT);
+        }
+        columnHost.setVisibility(wantColumn ? View.VISIBLE : View.GONE);
+
+        AzScrubRowView next = wantTop ? mAzBarTopRowView
+            : (wantColumn ? mAzBarColumnRowView : findViewById(R.id.apps_bar_az_row));
+        if (next != null) {
+            if (next != mAzScrubRowView) {
+                // The scrub follows the bar rather than being wired to each of them: one gesture,
+                // one callback, and no second bar left listening on an edge nobody is looking at.
+                if (mAzScrubRowView != null) mAzScrubRowView.setScrubCallback(null);
+                resetAzGestureState(false, true);
+                mAzScrubRowView = next;
+                next.setScrubCallback(mAzScrubCallback);
+                next.setBarEdge(edge);
+                syncAzScrubLettersAndTint();
+            } else {
+                next.setBarEdge(edge);
+            }
+        }
+        // A host that has just appeared needs its material now; one that was already up gets it
+        // on the render pass, so an insets dispatch does not build a fresh drawable for nothing.
+        if (changed) refreshAzBarHostsGlass();
+        // The content's edge padding is decided from the column, so the insets pass reruns.
+        if (changed && mTermuxActivityRootView != null)
+            ViewCompat.requestApplyInsets(mTermuxActivityRootView);
+        return changed;
+    }
+
+    /** The material behind whichever host is up, re-read from the dock's own surface tuning. */
+    private void refreshAzBarHostsGlass() {
+        int thicknessPx = azBarThicknessPx();
+        View topHost = findViewById(R.id.place_az_bar_top);
+        if (topHost != null && topHost.getVisibility() == View.VISIBLE) {
+            applyAzBarHostGlass(R.id.place_az_bar_top_glass, R.id.place_az_bar_top_blur,
+                R.id.place_az_bar_top_surface, mAzBarTopOutline, thicknessPx);
+        }
+        View columnHost = findViewById(R.id.place_az_bar_column);
+        if (columnHost != null && columnHost.getVisibility() == View.VISIBLE) {
+            applyAzBarHostGlass(R.id.place_az_bar_column_glass, R.id.place_az_bar_column_blur,
+                R.id.place_az_bar_column_surface, mAzBarColumnOutline, thicknessPx);
+        }
+    }
+
+    /** The bar's own view inside a host, filling whatever box the host's padding leaves it. */
+    @NonNull
+    private AzScrubRowView installAzBarRow(@NonNull FrameLayout host,
+                                           @Nullable AzScrubRowView existing) {
+        AzScrubRowView row = existing;
+        if (row == null || row.getParent() != host) {
+            row = new AzScrubRowView(this);
+            row.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+            host.addView(row);
+        }
+        // Its host's thickness is the letter band plus this, so the letters keep the same band they
+        // have on the dock and the rest of the bar is the strip of dead space beside them.
+        row.setChinPaddingPx(AzBarHostGeometry.chinPx(getResources().getDisplayMetrics().density));
+        return row;
+    }
+
+    /**
+     * The top host: a plank of the bar's own thickness, inset from the screen's sides like the dock
+     * and clear of whatever the content column already puts above it.
+     */
+    private void layoutAzBarTopHost(@NonNull FrameLayout host) {
+        int marginPx = azBarHostMarginPx();
+        int thicknessPx = azBarThicknessPx();
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        if (params instanceof LinearLayout.LayoutParams) {
+            LinearLayout.LayoutParams linear = (LinearLayout.LayoutParams) params;
+            if (linear.height != thicknessPx || linear.topMargin != marginPx
+                || linear.bottomMargin != marginPx) {
+                linear.height = thicknessPx;
+                linear.topMargin = marginPx;
+                linear.bottomMargin = marginPx;
+                host.setLayoutParams(linear);
+            }
+        }
+        int sideInsetPx = getDockLayout().horizontalInsetPx;
+        updateViewPadding(host, sideInsetPx, 0, sideInsetPx, 0);
+    }
+
+    /**
+     * The side host: the innermost column on its edge, running the content's own height — clear of
+     * a status bar standing along the top and of the dock at the bottom.
+     */
+    private void layoutAzBarColumnHost(@NonNull FrameLayout host, boolean right) {
+        int marginPx = azBarHostMarginPx();
+        int thicknessPx = azBarThicknessPx();
+        int edgeInsetPx = azBarColumnEdgeInsetPx(right);
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        if (params instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
+            int widthPx = AzBarHostGeometry.footprintPx(edgeInsetPx, marginPx, thicknessPx);
+            int gravity = (right ? Gravity.END : Gravity.START) | Gravity.TOP;
+            if (frame.width != widthPx || frame.gravity != gravity) {
+                frame.width = widthPx;
+                frame.gravity = gravity;
+                host.setLayoutParams(frame);
+            }
+        }
+        // The root is already clear of the system bars — the column lives inside that — so only
+        // the launcher's own chrome is compensated here: a status bar along the top, whatever
+        // shares this column, and the dock's rows along the bottom.
+        int edgePadPx = edgeInsetPx + marginPx;
+        int topPadPx = marginPx + statusColumnTopOffsetPx(right) + azBarTopChromeHeightPx();
+        int bottomPadPx = marginPx + azBarBottomChromeHeightPx();
+        updateViewPadding(host, right ? marginPx : edgePadPx, topPadPx,
+            right ? edgePadPx : marginPx, bottomPadPx);
+    }
+
+    /** How much of the container's top a status bar standing along it holds. */
+    private int azBarTopChromeHeightPx() {
+        View windowBar = findViewById(R.id.terminal_window_bar_host);
+        if (windowBar == null || windowBar.getVisibility() != View.VISIBLE
+            || mStatusBarEdge != PlaceLayout.Edge.TOP) {
+            return 0;
+        }
+        return Math.max(0, windowBar.getHeight());
+    }
+
+    /** How much of the container's bottom the dock and whatever stands under it hold. */
+    private int azBarBottomChromeHeightPx() {
+        View stack = findViewById(R.id.accessory_stack_container);
+        if (stack == null || stack.getVisibility() != View.VISIBLE) return 0;
+        return Math.max(0, stack.getHeight());
+    }
+
+    /**
+     * The dock's own glass behind a bar that is not on the dock: the same material, the same blur
+     * and the same radius rule, so a bar on another edge reads as a piece of the same kit.
+     */
+    private void applyAzBarHostGlass(
+        int glassId,
+        int blurId,
+        int surfaceId,
+        @NonNull com.termux.app.statusbar.StatusBarSurfaceOutlineProvider outline,
+        int thicknessPx
+    ) {
+        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity() / 100f;
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        View blur = findViewById(blurId);
+        applyRealtimeBlurRadius(blur, blurRadiusDp);
+        applyRealtimeBlurDownsampleFactor(blur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
+        // Blur only, no tint: the glass drawable below paints the material wash at this opacity,
+        // exactly as the dock's own extra-keys background does.
+        applyRealtimeBlurOverlayColor(blur, Color.TRANSPARENT);
+        if (blur != null) {
+            blur.setVisibility(ChromePolicy.dockBlurEnabled(blurRadiusDp)
+                ? View.VISIBLE : View.GONE);
+            // Only the wallpaper is behind a bar off the dock, so one capture is the whole picture.
+            restLiveBlur(blur, true);
+        }
+        View surface = findViewById(surfaceId);
+        if (surface != null) {
+            // Without the dark foot: this is a plank floating clear of the screen's edges, not a
+            // slab standing on one, so a shaded underside would read as a drawn border.
+            surface.setBackground(mChrome.glass().dockSurface(opacity, 0f, 1f, false));
+            surface.setAlpha(1f);
+        }
+        // A plank on every side, so all four corners are on screen and carry the dock's radius.
+        // The sheet is what clips, not the host: the host has to let the wave's lift out of it.
+        View glass = findViewById(glassId);
+        if (glass == null) return;
+        outline.setEdge(mAzBarEdge);
+        outline.setInnerEdgeOnly(false);
+        outline.setFrame(getDockLayout().capsuleCornerRadiusPx(thicknessPx));
+        if (glass.getOutlineProvider() != outline) glass.setOutlineProvider(outline);
+        glass.setClipToOutline(outline.clipsCorners());
+        glass.invalidateOutline();
     }
 
     private boolean isLauncherCatalogEnabled() {
@@ -6418,21 +6718,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // not. The strip's band is anchored to the letters, so it does not move as pages change
         // and the gesture can be judged against the rectangle the last sample drew.
         AzScrubGesture.Geometry geometry = azGestureGeometry(standalone);
+        // Every point the gesture sees is in the canonical frame — a bar along the bottom with the
+        // track above it — so its thresholds, corridors and wedges hold on whichever edge the bar
+        // is really standing on. touchX/touchY arrive canonical from the bar itself.
+        AzBarFrame frame = azBarFrame();
+        float canonicalX = frame.canonicalX(rawX, rawY);
+        float canonicalY = frame.canonicalY(rawX, rawY);
 
         AzScrubGesture.Decision decision;
         switch (phase) {
             case DOWN:
-                decision = mAzGesture.onDown(letter, selectionIndex, touchX, touchY, rawX, rawY,
-                    eventTimeMs, geometry);
+                decision = mAzGesture.onDown(letter, selectionIndex, touchX, touchY,
+                    canonicalX, canonicalY, eventTimeMs, geometry);
                 break;
             case UP:
-                decision = mAzGesture.onUp(letter, selectionIndex, touchX, touchY, rawX, rawY,
-                    eventTimeMs, geometry);
+                decision = mAzGesture.onUp(letter, selectionIndex, touchX, touchY,
+                    canonicalX, canonicalY, eventTimeMs, geometry);
                 break;
             case MOVE:
             default:
-                decision = mAzGesture.onMove(letter, selectionIndex, touchX, touchY, rawX, rawY,
-                    eventTimeMs, geometry);
+                decision = mAzGesture.onMove(letter, selectionIndex, touchX, touchY,
+                    canonicalX, canonicalY, eventTimeMs, geometry);
                 break;
         }
 
@@ -6477,7 +6783,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SuggestionBarView.AzDragFocusResult focusResult = null;
         if (decision.requestFocusResolve) {
             focusResult = standalone
-                ? mSuggestionBarView.resolveAzStripFocus(rawX, rawY)
+                ? mSuggestionBarView.resolveAzStripFocus(canonicalX, canonicalY)
                 : mSuggestionBarView.resolveAzDragFocus(rawX, rawY);
         }
         if (standalone && mLauncherAzGestureFxLabelOverlayView != null) {
@@ -6519,17 +6825,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private AzFloatingStripPolicy.Strip syncAzStandaloneStrip(char letter, boolean refreshMatches) {
         LauncherAzGestureFxView host = mLauncherAzGestureFxLabelOverlayView;
         if (mSuggestionBarView == null || mAzScrubRowView == null || host == null
-            || mAzScrubRowView.getWidth() <= 0) {
+            || mAzScrubRowView.getWidth() <= 0 || mAzScrubRowView.getHeight() <= 0) {
             return null;
         }
         // Measured against the letters, not the overlay that draws it: the overlay rests GONE and
         // has no width until something puts it on screen, and the strip is what would do that.
         // The letters are also the right span to centre over — they are the surface being scrubbed.
+        // Their rectangle goes through the edge transform first, so the strip is laid out along a
+        // bar at the bottom of the frame however the bar is really standing.
         float density = getResources().getDisplayMetrics().density;
-        mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
-        float rowLeftRaw = mAzViewLocation[0];
-        float rowTopRaw = mAzViewLocation[1];
-        int rowWidth = mAzScrubRowView.getWidth();
+        AzBarFrame frame = azBarFrame();
+        AzScrubGesture.Bounds bar = frame.toCanonical(azBarScreenBounds());
+        float rowLeftRaw = bar.left;
+        float rowTopRaw = bar.top;
+        float rowWidth = bar.width();
         int slots = AzFloatingStripPolicy.slotsForWidth(rowWidth, density);
         if (refreshMatches) {
             mSuggestionBarView.previewAzStripLetter(letter, slots);
@@ -6552,7 +6861,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzStrip = strip;
         mAzStripSyncedLetter = normalized;
         mAzStripSyncedPage = page;
-        mAzStripRawBounds.set(strip.left, strip.top, strip.right, strip.bottom);
+        // The gesture and the hit-test work in the frame; the layers that draw the strip and place
+        // the preview bubble beside it want it on screen, so the band is mapped back once here.
+        AzScrubGesture.Bounds stripScreen = frame.toScreen(
+            new AzScrubGesture.Bounds(strip.left, strip.top, strip.right, strip.bottom));
+        mAzStripRawBounds.set(stripScreen.left, stripScreen.top, stripScreen.right,
+            stripScreen.bottom);
         mSuggestionBarView.setAzStripGeometry(strip);
         // Artwork straight from the budgeted icon store the row draws from — referenced, never
         // copied, and dropped again on release. The focus-ring visual for each slot is resolved
@@ -6568,6 +6882,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzStripIcons.add(icon);
             mAzStripVisuals.add(mSuggestionBarView.resolveFocusOutlineVisual(icon, stripIconSizePx));
         }
+        host.setBarFrame(frame);
         host.setFloatingStrip(strip, mAzStripIcons, mAzStripVisuals);
         host.setRowBounds(mAzStripRawBounds);
         return strip;
@@ -6599,24 +6914,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private AzScrubGesture.Geometry azGestureGeometry(boolean standalone) {
+        AzBarFrame frame = azBarFrame();
         float azRowLeftRaw = 0f;
         float azRowTopRaw = 0f;
         float azRowHeightPx = 0f;
         if (mAzScrubRowView != null) {
-            mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
-            azRowLeftRaw = mAzViewLocation[0];
-            azRowTopRaw = mAzViewLocation[1];
-            // The letters' band, not the view: the chin under them is touchable space, and the
-            // anchor arithmetic and row-height thresholds below are all about where letters are.
-            azRowHeightPx = mAzScrubRowView.letterBandHeightPx();
+            AzScrubGesture.Bounds bar = frame.toCanonical(azBarScreenBounds());
+            azRowLeftRaw = bar.left;
+            // The band's own face, the one the track is on, which is the canonical top on every
+            // edge because the chin always lands on the side the bar stands on.
+            azRowTopRaw = bar.top;
+            // The letters' band, not the view: the chin beside them is touchable space, and the
+            // anchor arithmetic and the row-height thresholds below are all about where letters are.
+            azRowHeightPx = mAzScrubRowView.letterBandThicknessPx();
         }
-        float extraKeysHeightPx = (mAzTerminalToolbarView != null && mAzTerminalToolbarView.getHeight() > 0)
+        // The extra keys are the dock's, so they extend the return band only for a bar that is on
+        // the dock with them; a bar on another edge has nothing under it and says so.
+        boolean onDock = mAzBarEdge == PlaceLayout.Edge.BOTTOM;
+        float extraKeysHeightPx = onDock && mAzTerminalToolbarView != null
+            && mAzTerminalToolbarView.getHeight() > 0
             ? mAzTerminalToolbarView.getHeight()
             : 0f;
         RectF iconTrack = standalone ? mAzStripRawBounds : mAppsRowRawBounds;
-        return new AzScrubGesture.Geometry(azRowLeftRaw, azRowTopRaw, azRowHeightPx, extraKeysHeightPx,
-            toAzBounds(mAzRowRawBounds), toAzBounds(iconTrack), toAzBounds(mExtraKeysRawBounds),
+        return new AzScrubGesture.Geometry(azRowLeftRaw, azRowTopRaw, azRowHeightPx,
+            extraKeysHeightPx,
+            frame.toCanonical(toAzBounds(mAzRowRawBounds)),
+            frame.toCanonical(toAzBounds(iconTrack)),
+            onDock ? frame.toCanonical(toAzBounds(mExtraKeysRawBounds))
+                : AzScrubGesture.Bounds.EMPTY,
             getResources().getDisplayMetrics().density);
+    }
+
+    /** The bar's own rectangle on screen, whether or not it is shown. */
+    @NonNull
+    private AzScrubGesture.Bounds azBarScreenBounds() {
+        if (mAzScrubRowView == null) return AzScrubGesture.Bounds.EMPTY;
+        mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
+        return new AzScrubGesture.Bounds(mAzViewLocation[0], mAzViewLocation[1],
+            mAzViewLocation[0] + mAzScrubRowView.getWidth(),
+            mAzViewLocation[1] + mAzScrubRowView.getHeight());
     }
 
     @NonNull
@@ -6668,6 +7004,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAzFocusLetterRawBounds.setEmpty();
                 focusBounds = null;
             }
+        } else if (standalone && focusResult != null && focusResult.iconBounds != null) {
+            // The strip hit-test answers in the frame, and the layers that draw a ring round the
+            // focused slot are drawing on the screen, so the slot comes back through the transform.
+            AzScrubGesture.Bounds slot = azBarFrame().toScreen(new AzScrubGesture.Bounds(
+                focusResult.iconBounds.left, focusResult.iconBounds.top,
+                focusResult.iconBounds.right, focusResult.iconBounds.bottom));
+            mAzStripFocusRawBounds.set(slot.left, slot.top, slot.right, slot.bottom);
+            focusBounds = mAzStripFocusRawBounds;
         } else {
             focusBounds = focusResult == null ? null : focusResult.iconBounds;
         }
@@ -6686,7 +7030,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         applyAzFxDrag(
             mAzGesture.isActive(),
-            mAzGesture.lastRawX(),
+            azGestureScreenX(),
             focusBounds,
             interactionMode,
             standalone
@@ -6881,7 +7225,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return;
             case SUPPRESS:
             case CONTINUE:
-                applyAzFxEdgeDwellProgress(intake.dwellProgress, mAzGesture.lastRawX(), mAzGesture.lastRawY());
+                applyAzFxEdgeDwellProgress(intake.dwellProgress, azGestureScreenX(), azGestureScreenY());
                 return;
             case START:
             default:
@@ -6890,7 +7234,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The machine has already dropped the edge it was dwelling on; the frame callback is the
         // only half of the old loop this activity still owns.
         cancelAzEdgePagingFrameCallback();
-        applyAzFxEdgeDwellProgress(intake.dwellProgress, mAzGesture.lastRawX(), mAzGesture.lastRawY());
+        applyAzFxEdgeDwellProgress(intake.dwellProgress, azGestureScreenX(), azGestureScreenY());
         mAzEdgePagingFrameCallback = frameTimeNanos -> {
                 if (!mAzGesture.isActive() || mSuggestionBarView == null) {
                     stopAzEdgePagingLoop();
@@ -6904,7 +7248,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     updateAzEdgePagingLoop(fresh);
                     return;
                 }
-                applyAzFxEdgeDwellProgress(frame.dwellProgress, mAzGesture.lastRawX(), mAzGesture.lastRawY());
+                applyAzFxEdgeDwellProgress(frame.dwellProgress, azGestureScreenX(), azGestureScreenY());
                 if (frame.action == AzScrubGesture.FrameAction.WAIT) {
                     postNextAzEdgePagingFrame();
                     return;
@@ -6917,7 +7261,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     updateAzOverflowAffordance();
                 }
                 mAzEdgePagingFrameCallback = null;
-                applyAzFxEdgeDwellProgress(0f, mAzGesture.lastRawX(), mAzGesture.lastRawY());
+                applyAzFxEdgeDwellProgress(0f, azGestureScreenX(), azGestureScreenY());
                 mAzGestureHandler.postDelayed(() -> {
                     if (!mAzGesture.isActive() || mSuggestionBarView == null) return;
                     SuggestionBarView.AzDragFocusResult afterSwitch = resolveAzFocusAtLastPoint();
@@ -6935,18 +7279,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private SuggestionBarView.AzDragFocusResult resolveAzFocusAtLastPoint() {
-        float rawX = mAzGesture.lastRawX();
-        float rawY = mAzGesture.lastRawY();
+        // The gesture remembers its last point in the canonical frame, which is what the strip is
+        // hit-tested in; the apps row is a view on the screen, so that one is asked in screen
+        // coordinates. On a bottom bar the two are the same numbers.
         if (isAzIndexStandalone()) {
-            SuggestionBarView.AzDragFocusResult result =
-                mSuggestionBarView.resolveAzStripFocus(rawX, rawY);
+            SuggestionBarView.AzDragFocusResult result = mSuggestionBarView.resolveAzStripFocus(
+                mAzGesture.lastRawX(), mAzGesture.lastRawY());
             if (mLauncherAzGestureFxLabelOverlayView != null) {
                 mLauncherAzGestureFxLabelOverlayView.setFloatingStripFocusedSlot(
                     mSuggestionBarView.azStripFocusedSlot());
             }
             return result;
         }
-        return mSuggestionBarView.resolveAzDragFocus(rawX, rawY);
+        return mSuggestionBarView.resolveAzDragFocus(azGestureScreenX(), azGestureScreenY());
     }
 
     /** One page flip of whichever surface is holding the matches. */
@@ -6979,7 +7324,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void stopAzEdgePagingLoop() {
         cancelAzEdgePagingFrameCallback();
         mAzGesture.stopEdgePaging();
-        applyAzFxEdgeDwellProgress(0f, mAzGesture.lastRawX(), mAzGesture.lastRawY());
+        applyAzFxEdgeDwellProgress(0f, azGestureScreenX(), azGestureScreenY());
     }
 
     /** The dwell bloom belongs on whichever layer is drawing the icons the dwell will page. */
@@ -8427,6 +8772,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyWidgetGridPreference();
         updateDockRailView();
         boolean columnChanged = syncExtraKeysColumn();
+        columnChanged |= syncAzBarHosts();
         if (arrangementChanged || columnChanged) {
             // Rows collapse or come back with a column or a rail, and the render state that hides
             // them is derived rather than stored, so both are rebuilt here.
@@ -8522,8 +8868,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : findViewById(R.id.terminal_window_bar_host);
         int windowBarPx = windowBarHost != null && windowBarHost.getVisibility() == View.VISIBLE
             ? windowBarHost.getHeight() : 0;
+        View azBarTop = findViewById(R.id.place_az_bar_top);
+        int azBarTopPx = azBarTop != null && azBarTop.getVisibility() == View.VISIBLE
+            ? AzBarHostGeometry.rowHeightPx(azBarHostMarginPx(), azBarThicknessPx()) : 0;
         int minTerminalPx = Math.round(dpToPx(72));
-        return Math.max(0, rootHeightPx - windowBarPx - minTerminalPx
+        return Math.max(0, rootHeightPx - windowBarPx - azBarTopPx - minTerminalPx
             - Math.max(0, accessoryBottomMarginPx));
     }
 
@@ -8815,7 +9164,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void updateViewPadding(int viewId, int left, int top, int right, int bottom) {
-        View view = findViewById(viewId);
+        updateViewPadding(findViewById(viewId), left, top, right, bottom);
+    }
+
+    private void updateViewPadding(@Nullable View view, int left, int top, int right, int bottom) {
         if (view == null) return;
         if (view.getPaddingLeft() == left && view.getPaddingTop() == top &&
             view.getPaddingRight() == right && view.getPaddingBottom() == bottom) {
@@ -8892,7 +9244,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? mPreferences.getAppLauncherDockCornerRadius()
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS)
             .appsRowEnabledPref(layout.appsRow != PlaceLayout.RowPlacement.HIDDEN)
-            .azRowEnabledPref(PlaceChromePolicy.azRowShown(layout))
+            .azRowEnabledPref(PlaceChromePolicy.azRowOnDock(layout))
             // Which row ends up on the dock's rim, so the A-Z row knows whether to carry a chin.
             .extraKeysRowShown(PlaceChromePolicy.extraKeysRowShown(layout))
             .baseToolbarHeightPx(getDockBaseToolbarHeightPx())
@@ -8921,7 +9273,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateViewHeight(R.id.apps_bar_viewpager, layout.appsBarHeightPx);
         updateViewHeight(R.id.apps_bar_indicator_band, layout.indicatorBandHeightPx);
         updateViewHeight(R.id.apps_bar_az_row, layout.azRowHeightPx);
-        if (mAzScrubRowView != null)
+        // The dock's chin is the dock's row's; a bar standing elsewhere carries the one its own
+        // host was sized for, and must not have it taken away because the dock has no row.
+        if (mAzScrubRowView != null && mAzBarEdge == PlaceLayout.Edge.BOTTOM)
             mAzScrubRowView.setChinPaddingPx(layout.azRowChinPaddingPx);
         updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
         applyDockRowHorizontalInsets();

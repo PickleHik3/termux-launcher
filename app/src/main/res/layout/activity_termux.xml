@@ -354,6 +354,39 @@
 
                 </com.termux.app.statusbar.StatusBarSwipeLayout>
 
+                <!-- The alphabets bar standing along the top, when the place on screen asks for
+                     that. A row in the content column like the status bar's own, so it lands under
+                     the status bar wherever that is on top and takes its slice of the terminal's
+                     height between the side columns. syncAzBarHosts() sizes, glazes and fills it. -->
+                <FrameLayout
+                    android:id="@+id/place_az_bar_top"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:visibility="gone">
+
+                    <!-- The glass sheet is exactly the plank, so it is the thing the rounded
+                         outline clips; the host around it stays unclipped for the wave's lift. -->
+                    <FrameLayout
+                        android:id="@+id/place_az_bar_top_glass"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent">
+
+                        <com.github.mmin18.widget.RealtimeBlurView
+                            android:id="@+id/place_az_bar_top_blur"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            app:realtimeBlurRadius="10dp"
+                            app:realtimeOverlayColor="@android:color/transparent" />
+
+                        <View
+                            android:id="@+id/place_az_bar_top_surface"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent" />
+                    </FrameLayout>
+                </FrameLayout>
+
                 <FrameLayout
                     android:id="@+id/terminal_surface_host"
                     android:layout_width="match_parent"
@@ -1093,6 +1126,38 @@
             android:layout_gravity="start"
             android:clipToPadding="false"
             android:visibility="gone" />
+
+        <!-- The alphabets bar standing in a column on one edge. A sibling of the padded content
+             root like the rail and the extra keys column, and the innermost of them: it starts past
+             whatever else holds its edge, so several columns share one side without overdrawing.
+             syncAzBarHosts() sizes, glazes, places and fills it. -->
+        <FrameLayout
+            android:id="@+id/place_az_bar_column"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/place_az_bar_column_glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <com.github.mmin18.widget.RealtimeBlurView
+                    android:id="@+id/place_az_bar_column_blur"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:realtimeBlurRadius="10dp"
+                    app:realtimeOverlayColor="@android:color/transparent" />
+
+                <View
+                    android:id="@+id/place_az_bar_column_surface"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </FrameLayout>
+        </FrameLayout>
 
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is

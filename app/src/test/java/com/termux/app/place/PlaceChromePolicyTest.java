@@ -127,4 +127,34 @@ public class PlaceChromePolicyTest {
         PlaceLayout off = layout(RowPlacement.LEFT, false, Edge.RIGHT, RowPlacement.BOTTOM);
         assertEquals(Edge.BOTTOM, PlaceChromePolicy.azBarEdge(off));
     }
+
+    /**
+     * A bar standing on another edge gives the dock nothing: it has a host and a glass sheet of
+     * its own, so the dock reserves no row for it and goes altogether when it was the only thing
+     * that would have been on it.
+     */
+    @Test
+    public void aBarOnAnotherEdgeIsNotOnTheDock() {
+        PlaceLayout onDock = layout(RowPlacement.HIDDEN, true, Edge.BOTTOM, RowPlacement.HIDDEN);
+        assertTrue(PlaceChromePolicy.azRowOnDock(onDock));
+        assertTrue(PlaceChromePolicy.dockShown(onDock));
+
+        for (Edge edge : new Edge[]{Edge.TOP, Edge.LEFT, Edge.RIGHT}) {
+            PlaceLayout elsewhere = layout(RowPlacement.HIDDEN, true, edge, RowPlacement.HIDDEN);
+            // The letters are still shown — just not here.
+            assertTrue(PlaceChromePolicy.azRowShown(elsewhere));
+            assertFalse(PlaceChromePolicy.azRowOnDock(elsewhere));
+            assertFalse(PlaceChromePolicy.dockShown(elsewhere));
+        }
+
+        // Anything else on the dock keeps the dock, wherever the bar has gone.
+        PlaceLayout withKeys = layout(RowPlacement.HIDDEN, true, Edge.LEFT, RowPlacement.BOTTOM);
+        assertFalse(PlaceChromePolicy.azRowOnDock(withKeys));
+        assertTrue(PlaceChromePolicy.dockShown(withKeys));
+
+        // Riding under the apps row is on the dock however the stored edge reads.
+        PlaceLayout riding = layout(RowPlacement.BOTTOM, true, Edge.RIGHT, RowPlacement.HIDDEN);
+        assertTrue(PlaceChromePolicy.azRowOnDock(riding));
+        assertTrue(PlaceChromePolicy.dockShown(riding));
+    }
 }
