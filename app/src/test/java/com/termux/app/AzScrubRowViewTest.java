@@ -4,6 +4,8 @@ import android.os.Build;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 
+import com.termux.app.place.PlaceLayout.Edge;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -102,8 +104,8 @@ public class AzScrubRowViewTest {
         AzScrubRowView bare = layoutRow(48, 0);
         AzScrubRowView chinned = layoutRow(58, 10);
 
-        assertEquals(48, bare.letterBandHeightPx());
-        assertEquals(48, chinned.letterBandHeightPx());
+        assertEquals(48, bare.letterBandThicknessPx());
+        assertEquals(48, chinned.letterBandThicknessPx());
 
         // The letters sit at the same place in the band, so the 10px lands below them.
         AzScrubRowView.LetterVisualMetrics bareMetrics = new AzScrubRowView.LetterVisualMetrics();
@@ -226,5 +228,199 @@ public class AzScrubRowViewTest {
     private static boolean tickedOn(AzScrubRowView view) {
         return Shadows.shadowOf(view).lastHapticFeedbackPerformed()
             == HapticFeedbackConstants.CLOCK_TICK;
+    }
+
+    /**
+     * A column reads the letters down its height, so the same fraction of the bar picks the same
+     * letter it would along a row of that length — the axis is all that changes.
+     */
+    @Test
+    public void verticalBar_picksLettersDownItsHeight() {
+        AzScrubRowView column = layoutColumn(Edge.LEFT, 58, 540);
+        final char[] letter = {'?'};
+        column.setScrubCallback(recordLetter(letter));
+
+        column.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 20f, 0f, 0));
+        assertEquals(AzScrubRowView.PINNED_APPS_SYMBOL, letter[0]);
+
+        column.onTouchEvent(MotionEvent.obtain(0, 15, MotionEvent.ACTION_MOVE, 20f, 30f, 0));
+        assertEquals('A', letter[0]);
+
+        column.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, 20f, 539f, 0));
+        assertEquals('#', letter[0]);
+
+        // Sliding across the column, not down it, holds the letter it is already on.
+        column.onTouchEvent(MotionEvent.obtain(0, 25, MotionEvent.ACTION_MOVE, 200f, 539f, 0));
+        assertEquals('#', letter[0]);
+    }
+
+    /** The two side edges read the letters the same way down the screen. */
+    @Test
+    public void verticalBar_readsTheSameWayOnEitherSide() {
+        final char[] left = {'?'};
+        final char[] right = {'?'};
+        AzScrubRowView leftBar = layoutColumn(Edge.LEFT, 58, 540);
+        AzScrubRowView rightBar = layoutColumn(Edge.RIGHT, 58, 540);
+        leftBar.setScrubCallback(recordLetter(left));
+        rightBar.setScrubCallback(recordLetter(right));
+        leftBar.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 20f, 300f, 0));
+        rightBar.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 38f, 300f, 0));
+        assertEquals(left[0], right[0]);
+    }
+
+    /**
+     * The drag that opens a letter's later selections is a drag away from the bar, whichever way
+     * that is: off the top of a bottom bar, and off the inner face of a side one.
+     */
+    @Test
+    public void verticalBar_readsTheDragAwayFromItsOwnEdge() {
+        AzScrubRowView leftBar = layoutColumn(Edge.LEFT, 58, 540);
+        final int[] selection = {-1};
+        leftBar.setScrubCallback(recordSelection(selection));
+        leftBar.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 20f, 300f, 0));
+        assertEquals(0, selection[0]);
+        // Past the column's inner (content-facing) face is the away direction for a left bar.
+        leftBar.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, 140f, 300f, 0));
+        assertTrue(selection[0] >= 1);
+
+        AzScrubRowView rightBar = layoutColumn(Edge.RIGHT, 58, 540);
+        final int[] rightSelection = {-1};
+        rightBar.setScrubCallback(recordSelection(rightSelection));
+        rightBar.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 38f, 300f, 0));
+        assertEquals(0, rightSelection[0]);
+        // For a right bar the away direction is the other way: left of the column.
+        rightBar.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, -80f, 300f, 0));
+        assertTrue(rightSelection[0] >= 1);
+    }
+
+    /** A top bar is still a row: the letters read across it and the drag goes down instead of up. */
+    @Test
+    public void topBar_keepsTheRowAndMirrorsTheDrag() {
+        AzScrubRowView top = new AzScrubRowView(RuntimeEnvironment.application);
+        top.setBarEdge(Edge.TOP);
+        top.setInteractionMode(AzScrubRowView.InteractionMode.INLINE_EMPHASIS_TRACK);
+        top.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(540, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(48, android.view.View.MeasureSpec.EXACTLY)
+        );
+        top.layout(0, 0, 540, 48);
+        final char[] letter = {'?'};
+        final int[] selection = {-1};
+        top.setScrubCallback(new AzScrubRowView.ScrubCallback() {
+            @Override
+            public void onScrub(char l, int selectionIndex, float touchX, float touchY, float rawX,
+                                float rawY, long eventTimeMs, AzScrubRowView.GesturePhase phase) {
+                letter[0] = l;
+                selection[0] = selectionIndex;
+            }
+
+            @Override
+            public void onCancel() {}
+        });
+        top.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 30f, 24f, 0));
+        assertEquals('A', letter[0]);
+        assertEquals(0, selection[0]);
+        // Below a top bar is away from it, so that is the drag the later selections read.
+        top.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, 30f, 96f, 0));
+        assertTrue(selection[0] >= 1);
+    }
+
+    /** The chin lands on the side the bar stands on, and never inside the letters' own band. */
+    @Test
+    public void chinPadding_landsOnTheEdgeTheBarStandsOn() {
+        AzScrubRowView leftBar = layoutColumn(Edge.LEFT, 58, 540);
+        leftBar.setChinPaddingPx(10);
+        assertEquals(48, leftBar.letterBandThicknessPx());
+        assertTrue(leftBar.getPaddingLeft() > leftBar.getPaddingRight());
+
+        AzScrubRowView rightBar = layoutColumn(Edge.RIGHT, 58, 540);
+        rightBar.setChinPaddingPx(10);
+        assertTrue(rightBar.getPaddingRight() > rightBar.getPaddingLeft());
+
+        AzScrubRowView top = new AzScrubRowView(RuntimeEnvironment.application);
+        top.setBarEdge(Edge.TOP);
+        top.setChinPaddingPx(10);
+        assertTrue(top.getPaddingTop() > top.getPaddingBottom());
+    }
+
+    /**
+     * A column's letter metrics stack down its height with the glyphs upright, and the wave lifts
+     * them sideways — away from the edge — rather than up out of the bar.
+     */
+    @Test
+    public void verticalBar_metricsStackDownTheColumn() {
+        AzScrubRowView column = layoutColumn(Edge.LEFT, 58, 540);
+        AzScrubRowView.LetterVisualMetrics first = new AzScrubRowView.LetterVisualMetrics();
+        AzScrubRowView.LetterVisualMetrics later = new AzScrubRowView.LetterVisualMetrics();
+        assertTrue(column.getLetterVisualMetricsOnScreen('A', first));
+        assertTrue(column.getLetterVisualMetricsOnScreen('Z', later));
+        // Later letters are further down the column, and both sit at the same place across it.
+        assertTrue(later.baselineRawY > first.baselineRawY);
+        assertEquals(first.centerRawX, later.centerRawX, 0.01f);
+        // The glass is inside the column's own width.
+        assertTrue(first.glassBoundsRaw.left >= 0f);
+        assertTrue(first.glassBoundsRaw.right <= 58f);
+    }
+
+    /** A bottom bar is the canonical frame, so it hands the activity its raw touch point as-is. */
+    @Test
+    public void bottomBar_handsTheTouchPointThroughUnchanged() {
+        AzScrubRowView view = layoutRow(48, 0);
+        final float[] seen = {Float.NaN, Float.NaN};
+        view.setScrubCallback(new AzScrubRowView.ScrubCallback() {
+            @Override
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
+                                float rawX, float rawY, long eventTimeMs,
+                                AzScrubRowView.GesturePhase phase) {
+                seen[0] = touchX;
+                seen[1] = touchY;
+            }
+
+            @Override
+            public void onCancel() {}
+        });
+        view.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 137f, -22f, 0));
+        assertEquals(137f, seen[0], 0.001f);
+        assertEquals(-22f, seen[1], 0.001f);
+    }
+
+    private static AzScrubRowView layoutColumn(Edge edge, int widthPx, int heightPx) {
+        AzScrubRowView view = new AzScrubRowView(RuntimeEnvironment.application);
+        view.setBarEdge(edge);
+        view.setInteractionMode(AzScrubRowView.InteractionMode.INLINE_EMPHASIS_TRACK);
+        view.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(widthPx, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(heightPx, android.view.View.MeasureSpec.EXACTLY)
+        );
+        view.layout(0, 0, widthPx, heightPx);
+        return view;
+    }
+
+    private static AzScrubRowView.ScrubCallback recordLetter(char[] out) {
+        return new AzScrubRowView.ScrubCallback() {
+            @Override
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
+                                float rawX, float rawY, long eventTimeMs,
+                                AzScrubRowView.GesturePhase phase) {
+                out[0] = letter;
+            }
+
+            @Override
+            public void onCancel() {}
+        };
+    }
+
+    private static AzScrubRowView.ScrubCallback recordSelection(int[] out) {
+        return new AzScrubRowView.ScrubCallback() {
+            @Override
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
+                                float rawX, float rawY, long eventTimeMs,
+                                AzScrubRowView.GesturePhase phase) {
+                out[0] = selectionIndex;
+            }
+
+            @Override
+            public void onCancel() {}
+        };
     }
 }

@@ -6608,7 +6608,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             azRowTopRaw = mAzViewLocation[1];
             // The letters' band, not the view: the chin under them is touchable space, and the
             // anchor arithmetic and row-height thresholds below are all about where letters are.
-            azRowHeightPx = mAzScrubRowView.letterBandHeightPx();
+            azRowHeightPx = mAzScrubRowView.letterBandThicknessPx();
         }
         float extraKeysHeightPx = (mAzTerminalToolbarView != null && mAzTerminalToolbarView.getHeight() > 0)
             ? mAzTerminalToolbarView.getHeight()
