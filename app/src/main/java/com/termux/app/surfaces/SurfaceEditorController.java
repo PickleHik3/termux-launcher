@@ -50,6 +50,7 @@ import com.termux.app.surfaces.SurfaceEditorProperties.Kind;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLookPreferences;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -98,6 +99,12 @@ public final class SurfaceEditorController {
          * scope it is open on here, and every read the chrome makes resolves through it.
          */
         @Nullable PlaceLookPreferences lookPreferences();
+        /**
+         * How the place on screen is arranged: which edge the status bar stands on, and whether
+         * the apps and the extra keys are rows, columns or away. The editor offers what that
+         * arrangement actually has, and parks inside the room it leaves.
+         */
+        @NonNull PlaceLayout placeLayout();
         @Nullable TermuxInAppKeyboard inAppKeyboard();
         @Nullable View attachedInAppKeyboardView();
         boolean isInAppKeyboardShown();
@@ -183,6 +190,17 @@ public final class SurfaceEditorController {
     @Nullable
     private PlaceLookPreferences look() {
         return mHost.lookPreferences();
+    }
+
+    /**
+     * What the arrangement on screen lets the editor offer, and the room it leaves for the card.
+     * Read fresh rather than held: a rotation and a place change both move it, and every caller
+     * here is already running off a layout pass.
+     */
+    @NonNull
+    private SurfaceEditorScene scene() {
+        return SurfaceEditorScene.of(mHost.placeLayout(), mHost.isInAppKeyboardShown(),
+            mHost.isFloatingDock());
     }
 
     /** The place this session is editing, or null while it is on the shared layer. */
@@ -316,6 +334,12 @@ public final class SurfaceEditorController {
     private static final long SURFACE_EDITOR_RING_DURATION_MS = 150;
     /** The constant gap between the card and whatever bounds the room it lives in. */
     private static final float SURFACE_EDITOR_STANDOFF_DP = 14f;
+    /**
+     * The least room the editor will make for itself. An arrangement can leave the band between
+     * its surfaces shorter than this — a bar on the bottom edge sitting straight on the dock — and
+     * the answer is a card that overlaps them, never one parked off the screen.
+     */
+    private static final float SURFACE_EDITOR_MIN_BAND_DP = 120f;
     private static final float SURFACE_TUNING_INSET_DRAG_GAIN = 0.5f;
     /** How far the capture groups reach above their surface so the border handle is inside. */
     private static final int SURFACE_TUNING_HANDLE_OVERHANG_DP = 14;
@@ -741,6 +765,10 @@ public final class SurfaceEditorController {
     private void selectTarget(@Nullable SurfaceSlot slot, boolean animate) {
         if (mPanel == null)
             return;
+        // A deep link can name a surface the place on screen does not have — "dock" for a place
+        // whose apps stand in a rail. The shared layer is what that opens instead of an empty card.
+        if (slot != null && !scene().offersSurface(slot))
+            slot = null;
         boolean raising = !mCardShown;
         boolean changed = raising || mSelectedSlot != slot;
         mSelectedSlot = slot;
@@ -1298,6 +1326,10 @@ public final class SurfaceEditorController {
     private boolean isAvailable(@Nullable SurfaceSlot slot, @NonNull Control control) {
         if (slot == null)
             return true;
+        // What the place's arrangement leaves the row nothing to move: the dock's own two rows
+        // about its pinned apps, once those stand in a rail instead.
+        if (!scene().offersRow(slot, control.id))
+            return false;
         if (control.cell != null && control.cell.property == SurfaceProperty.SIDE_GAP)
             return mHost.isFloatingDock();
         if (slot != SurfaceSlot.CANVAS)
@@ -1642,20 +1674,24 @@ public final class SurfaceEditorController {
             ((View) host.getParent()).getLocationInWindow(mTmpAnchorLocation);
             parentTopInWindow = mTmpAnchorLocation[1];
         }
-        int top = Math.max(0, mHost.statusBarInsetTop() - parentTopInWindow);
-        View windowBar = mHost.findView(R.id.terminal_window_bar_host);
-        if (windowBar != null && windowBar.getVisibility() == View.VISIBLE
-            && windowBar.getHeight() > 0) {
-            windowBar.getLocationInWindow(mTmpAnchorLocation);
-            top = Math.max(top,
-                mTmpAnchorLocation[1] + windowBar.getHeight() - parentTopInWindow);
-        }
+        int insetTop = Math.max(0, mHost.statusBarInsetTop() - parentTopInWindow);
         int parentHeight = host.getParent() instanceof View
             ? ((View) host.getParent()).getHeight() : host.getHeight();
+        View windowBar = mHost.findView(R.id.terminal_window_bar_host);
+        boolean barOnScreen = windowBar != null && windowBar.getVisibility() == View.VISIBLE
+            && windowBar.getHeight() > 0;
+        int barTop = 0;
+        int barBottom = 0;
+        if (barOnScreen) {
+            windowBar.getLocationInWindow(mTmpAnchorLocation);
+            barTop = mTmpAnchorLocation[1] - parentTopInWindow;
+            barBottom = barTop + windowBar.getHeight();
+        }
         View stack = mHost.findView(R.id.accessory_stack_container);
-        int bottom = stack == null ? parentHeight
+        int stackTop = stack == null ? parentHeight
             : surfaceEditorStackTopPx(stack, parentHeight);
-        return new int[] {top, Math.max(top, bottom)};
+        return scene().freeBandPx(insetTop, barTop, barBottom, barOnScreen, stackTop,
+            parentHeight, dp(SURFACE_EDITOR_MIN_BAND_DP));
     }
 
     /**
@@ -1664,7 +1700,7 @@ public final class SurfaceEditorController {
      * <p>{@code getTop()} is the laid-out position and nothing else: a {@code GONE} stack was
      * skipped by the last layout pass and reports wherever it was before that, and the inset-driven
      * dock lift moves the stack with a translation that leaves {@code getTop()} untouched. A hidden
-     * stack occupies no room at all, so the region runs to the parent's bottom edge.
+     * stack occupies no room at all, so the band runs to the parent's bottom edge.
      */
     private static int surfaceEditorStackTopPx(@NonNull View stack, int parentHeight) {
         if (stack.getVisibility() != View.VISIBLE || stack.getHeight() <= 0)
@@ -1695,6 +1731,8 @@ public final class SurfaceEditorController {
 
     @Nullable
     private View anchorViewFor(@NonNull SurfaceSlot slot) {
+        if (!scene().offersSurface(slot))
+            return null;
         switch (slot) {
             case STATUS:
                 return mHost.findView(R.id.terminal_window_bar_host);
@@ -1736,8 +1774,10 @@ public final class SurfaceEditorController {
             top = SurfaceEditorPillMetrics.parkRegionFootTopPx(height, standoff, region[0],
                 region[1]);
         } else {
+            // Only a surface fixed to the top of the screen is stood off downward; the same bar
+            // standing on the bottom edge is approached from above, like the dock.
             top = SurfaceEditorPillMetrics.parkTopPx(anchor[1], anchor[3],
-                mSelectedSlot == SurfaceSlot.STATUS, height, standoff, region[0], region[1]);
+                scene().surfaceIsAtTop(mSelectedSlot), height, standoff, region[0], region[1]);
         }
         ViewGroup.LayoutParams params = panel.root.getLayoutParams();
         if (!(params instanceof ViewGroup.MarginLayoutParams))
@@ -2347,11 +2387,18 @@ public final class SurfaceEditorController {
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_status_gesture_group, overlay,
             statusSurface);
         resizeStatusTuningPills(statusSurface);
+        SurfaceEditorScene scene = scene();
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_dock_gesture_group, overlay,
-            mHost.findView(R.id.accessory_surface_host));
+            anchorViewFor(SurfaceSlot.DOCK));
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_keyboard_gesture_group, overlay,
-            mHost.isInAppKeyboardShown() ? mHost.findView(R.id.inapp_keyboard_view_host) : null);
+            anchorViewFor(SurfaceSlot.KEYBOARD));
         positionCanvasGestureGroup(overlay);
+        // The dock's size grip rides its top border and drags the height of the pinned apps row.
+        // With those apps in a rail there is no such height, so the grip is not offered.
+        setSurfaceTuningHandleVisible(R.id.surface_tuning_dock_height_handle,
+            scene.offersHandle(SurfaceEditorScene.Handle.DOCK_HEIGHT));
+        setSurfaceTuningHandleVisible(R.id.surface_tuning_keyboard_height_handle,
+            scene.offersHandle(SurfaceEditorScene.Handle.KEYBOARD_HEIGHT));
         // Docked surfaces are flush with the screen edges: the margin drag is inert there, so the
         // side pills advertising it must not render either.
         boolean sideDrag = mHost.isFloatingDock();
@@ -2450,7 +2497,8 @@ public final class SurfaceEditorController {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
         View surface = mHost.findView(R.id.inapp_keyboard_view_host);
         View keys = mHost.attachedInAppKeyboardView();
-        boolean wanted = mSurfaceEditorOpen && mHost.isInAppKeyboardShown()
+        boolean wanted = mSurfaceEditorOpen
+            && scene().offersHandle(SurfaceEditorScene.Handle.KEYBOARD_CHIN)
             && group != null && group.getVisibility() == View.VISIBLE && overlay != null
             && surface != null && surface.getHeight() > 0
             && keys != null && keys.getHeight() > 0;
@@ -2477,8 +2525,14 @@ public final class SurfaceEditorController {
         int keysBottom = ((keysLocation[1] - overlayLocation[1]) + keys.getHeight()) - groupTop;
         // The glass left under the keys: the allowance, plus the capsule's inner padding floating.
         int band = Math.max(0, groupHeight - keysBottom);
-        int drop = band < gripHeight ? 0
-            : clamp(dp(KEYBOARD_CHIN_GRIP_DROP_DP), gripHeight / 2, band - gripHeight / 2);
+        // No glass under the last key row is no chin: the pill would sit on the keys themselves
+        // and drag a number with nowhere to show, so it is not offered at all.
+        if (band < gripHeight) {
+            if (handle.getVisibility() != View.GONE)
+                handle.setVisibility(View.GONE);
+            return;
+        }
+        int drop = clamp(dp(KEYBOARD_CHIN_GRIP_DROP_DP), gripHeight / 2, band - gripHeight / 2);
         int gripCenter = keysBottom + drop;
         int top = clamp(gripCenter - size / 2, 0, Math.max(0, groupHeight - size));
         ViewGroup.LayoutParams params = handle.getLayoutParams();
@@ -2530,6 +2584,13 @@ public final class SurfaceEditorController {
         View pill = mHost.findView(pillId);
         if (pill != null)
             pill.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    /** A drag handle the arrangement leaves nothing for is taken off the surface, not drawn dead. */
+    private void setSurfaceTuningHandleVisible(int handleId, boolean visible) {
+        View handle = mHost.findView(handleId);
+        if (handle != null && (handle.getVisibility() == View.VISIBLE) != visible)
+            handle.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     /**
@@ -2620,6 +2681,15 @@ public final class SurfaceEditorController {
                 return;
             mSurfaceEditorAnchorSignature = signature;
             positionSurfaceTuningGestureTargets();
+            // A rotation or a place change can take the surface the card is open on off the
+            // screen; the shared layer is where the card goes rather than staying on nothing.
+            if (mCardShown && mSelectedSlot != null && !scene().offersSurface(mSelectedSlot)) {
+                selectTarget(null, false);
+                return;
+            }
+            // And it can add or drop rows on the card that stays: syncPanel rebuilds the body
+            // only when the editable set has actually moved.
+            syncPanel();
             applyRowsCap();
             parkPanel(false);
             parkFloat();
@@ -2655,6 +2725,9 @@ public final class SurfaceEditorController {
         for (int edge : frame == null ? new int[] {-1} : frame)
             signature = mixAnchor(signature, edge);
         signature = mixAnchor(signature, mHost.isFloatingDock() ? 1 : 0);
+        // The arrangement itself: a rotation, a place change or a rail appearing all move what the
+        // editor offers and the room it has, and none of them need show up in a rect above.
+        signature = mixAnchor(signature, scene().signature());
         return mixAnchor(signature, mSelectedSlot == null ? -1 : mSelectedSlot.ordinal());
     }
 
