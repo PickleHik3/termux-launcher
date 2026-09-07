@@ -29,11 +29,13 @@ public class PlaceChromePolicyTest {
     }
 
     @Test
-    public void appsOnAnEdgeBecomeTheRailAndTakeTheAlphabetsRowWithThem() {
+    public void appsOnAnEdgeBecomeTheRailAndLeaveTheLettersStandingAlone() {
         PlaceLayout left = layout(RowPlacement.LEFT, true, RowPlacement.BOTTOM);
         assertFalse(PlaceChromePolicy.appsRowShown(left));
-        assertFalse("the letters index a row that is not there",
+        assertTrue("the letters are their own index",
             PlaceChromePolicy.azRowShown(left));
+        assertTrue("with no row to fill, the matches ride the floating strip",
+            PlaceChromePolicy.azIndexStandsAlone(left));
         assertTrue(PlaceChromePolicy.appsRailShown(left));
         assertFalse(PlaceChromePolicy.appsRailOnRight(left));
         // The extra keys still hold the bottom, so the dock is still drawn.
@@ -45,14 +47,41 @@ public class PlaceChromePolicyTest {
     }
 
     @Test
+    public void theLettersStandAloneWhereverTheAppsRowIsNotOnTheBottom() {
+        assertFalse("with the apps row under them the matches land in it",
+            PlaceChromePolicy.azIndexStandsAlone(layout(RowPlacement.BOTTOM, true, RowPlacement.BOTTOM)));
+        assertTrue(PlaceChromePolicy.azIndexStandsAlone(
+            layout(RowPlacement.HIDDEN, true, RowPlacement.BOTTOM)));
+        assertFalse("the switch is off, so there is no index at all",
+            PlaceChromePolicy.azIndexStandsAlone(layout(RowPlacement.HIDDEN, false, RowPlacement.BOTTOM)));
+    }
+
+    @Test
+    public void theLettersAloneAreEnoughToDrawTheDock() {
+        PlaceLayout l = layout(RowPlacement.LEFT, true, RowPlacement.RIGHT);
+        assertTrue(PlaceChromePolicy.azRowShown(l));
+        assertTrue(PlaceChromePolicy.dockShown(l));
+    }
+
+    @Test
     public void hiddenAppsLeaveNeitherRowNorRail() {
-        PlaceLayout l = layout(RowPlacement.HIDDEN, true, RowPlacement.HIDDEN);
+        PlaceLayout l = layout(RowPlacement.HIDDEN, false, RowPlacement.HIDDEN);
         assertFalse(PlaceChromePolicy.appsRowShown(l));
         assertFalse(PlaceChromePolicy.azRowShown(l));
         assertFalse(PlaceChromePolicy.appsRailShown(l));
         assertFalse(PlaceChromePolicy.extraKeysRowShown(l));
         assertFalse(PlaceChromePolicy.extraKeysColumnShown(l));
         assertFalse(PlaceChromePolicy.dockShown(l));
+    }
+
+    @Test
+    public void hiddenAppsWithTheSwitchOnLeaveTheLettersAsTheWholeDock() {
+        PlaceLayout l = layout(RowPlacement.HIDDEN, true, RowPlacement.HIDDEN);
+        assertFalse(PlaceChromePolicy.appsRowShown(l));
+        assertFalse(PlaceChromePolicy.appsRailShown(l));
+        assertTrue(PlaceChromePolicy.azRowShown(l));
+        assertTrue(PlaceChromePolicy.azIndexStandsAlone(l));
+        assertTrue(PlaceChromePolicy.dockShown(l));
     }
 
     @Test
@@ -66,8 +95,8 @@ public class PlaceChromePolicyTest {
     }
 
     @Test
-    public void everythingOnAnEdgeLeavesNoDockAtAll() {
-        PlaceLayout l = layout(RowPlacement.LEFT, true, RowPlacement.RIGHT);
+    public void everythingOnAnEdgeAndNoLettersLeavesNoDockAtAll() {
+        PlaceLayout l = layout(RowPlacement.LEFT, false, RowPlacement.RIGHT);
         assertFalse(PlaceChromePolicy.dockShown(l));
         assertTrue(PlaceChromePolicy.appsRailShown(l));
         assertTrue(PlaceChromePolicy.extraKeysColumnShown(l));

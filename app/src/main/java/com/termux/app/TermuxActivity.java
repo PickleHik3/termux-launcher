@@ -4871,10 +4871,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!state.appsRowEnabled) {
             mSuggestionBarExplicitSearchActive = false;
-            resetAzGestureState(false, true);
+            // The letters keep their scrub without the apps row — it just shows its matches on the
+            // floating strip instead — so only drop the gesture when the letters are gone too.
+            if (!state.azRowEnabled) {
+                resetAzGestureState(false, true);
+            }
         }
         if (indicatorBand != null) {
-            indicatorBand.setVisibility(state.azRowEnabled ? View.VISIBLE : View.GONE);
+            // The band is the air between the apps row and the letters; with no apps row above it
+            // there is nothing to separate, and it would only pad the dock out.
+            indicatorBand.setVisibility(
+                state.appsRowEnabled && state.azRowEnabled ? View.VISIBLE : View.GONE);
         }
         if (terminalToolbarViewPager != null) {
             terminalToolbarViewPager.setVisibility(
@@ -6062,8 +6069,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences != null && mPreferences.isAppLauncherAppsRowEnabled();
     }
 
+    /** The letters row is the place's, not the launcher's: one switch per arrangement. */
     private boolean isAzRowEnabled() {
-        return mPreferences != null && mPreferences.isAppLauncherAzRowEnabled();
+        return mPreferences != null && PlaceChromePolicy.azRowShown(currentPlaceLayout());
+    }
+
+    /**
+     * The index standing on its own, because the place put the pinned apps on a rail or hid them.
+     * The matches then ride a floating strip above the letters instead of filling the apps row.
+     */
+    private boolean isAzIndexStandalone() {
+        return mPreferences != null && PlaceChromePolicy.azIndexStandsAlone(currentPlaceLayout());
     }
 
     private boolean isLauncherCatalogEnabled() {
@@ -6880,7 +6896,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void lockScreenFromAzDoubleTap() {
-        if (mPreferences == null || !mPreferences.isAppLauncherAzRowEnabled()) {
+        if (!isAzRowEnabled()) {
             return;
         }
         String method = mPreferences.getAppLauncherAzLockMethod();

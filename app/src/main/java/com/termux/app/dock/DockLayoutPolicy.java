@@ -197,12 +197,13 @@ public final class DockLayoutPolicy {
             capsule ? out.capsuleAppsBottomPaddingPx : out.defaultAppsBottomPaddingPx;
         out.capsuleBottomGapPx = Math.round(density * 6f);
 
-        // Row metrics. The horizontal rows collapse when the pinned apps stand on a screen edge,
-        // where the rail is the launcher surface instead, and collapse outright before a
-        // preference store exists.
+        // Row metrics. The pinned-apps row collapses when the apps stand on a screen edge, where
+        // the rail is the launcher surface instead, and collapses outright before a preference
+        // store exists. The letters row keeps its slot either way — it is its own index, and its
+        // matches ride a floating strip when there is no row under it to fill.
         boolean appsRowEnabled =
             in.preferencesAvailable && in.appsRowEnabledPref && !in.appsRowOnEdge;
-        boolean azRowEnabled = in.preferencesAvailable && in.azRowEnabledPref && !in.appsRowOnEdge;
+        boolean azRowEnabled = in.preferencesAvailable && in.azRowEnabledPref;
         out.appsRowEnabled = appsRowEnabled;
         out.azRowEnabled = azRowEnabled;
         if (in.preferencesAvailable) {

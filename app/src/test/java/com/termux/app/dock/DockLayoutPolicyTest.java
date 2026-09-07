@@ -40,21 +40,21 @@ public class DockLayoutPolicyTest {
         // appsTop, appsBottom, combined, compactStatusBar, iconScale
         Object[][] rows = {
             {1.72f, false, false, 132, 107, 52, 8, 0, 67, 17, 8, 295, 88, 1.3068f},
-            {1.72f, false, true, 0, 0, 0, 0, 0, 67, 17, 8, 103, 88, 1.3068f},
+            {1.72f, false, true, 0, 0, 52, 0, 0, 67, 17, 8, 155, 88, 1.3068f},
             {1.72f, true, false, 132, 107, 52, 8, 28, 67, 17, 8, 295, 83, 1.7252f},
-            {1.72f, true, true, 0, 0, 0, 0, 28, 67, 17, 8, 103, 83, 1.7252f},
+            {1.72f, true, true, 0, 0, 52, 0, 28, 67, 17, 8, 155, 83, 1.7252f},
             {1.95f, false, false, 148, 123, 52, 8, 0, 67, 17, 8, 311, 88, 1.487604f},
-            {1.95f, false, true, 0, 0, 0, 0, 0, 67, 17, 8, 103, 88, 1.487604f},
+            {1.95f, false, true, 0, 0, 52, 0, 0, 67, 17, 8, 155, 88, 1.487604f},
             {1.95f, true, false, 149, 120, 52, 8, 28, 67, 19, 10, 312, 83, 1.9633334f},
-            {1.95f, true, true, 0, 0, 0, 0, 28, 67, 19, 10, 103, 83, 1.9633334f},
+            {1.95f, true, true, 0, 0, 52, 0, 28, 67, 19, 10, 155, 83, 1.9633334f},
             {2.18f, false, false, 166, 141, 52, 8, 0, 67, 17, 8, 329, 88, 1.68f},
-            {2.18f, false, true, 0, 0, 0, 0, 0, 67, 17, 8, 103, 88, 1.68f},
+            {2.18f, false, true, 0, 0, 52, 0, 0, 67, 17, 8, 155, 88, 1.68f},
             {2.18f, true, false, 169, 135, 52, 8, 28, 67, 21, 13, 332, 83, 2.21312f},
-            {2.18f, true, true, 0, 0, 0, 0, 28, 67, 21, 13, 103, 83, 2.21312f},
+            {2.18f, true, true, 0, 0, 52, 0, 28, 67, 21, 13, 155, 83, 2.21312f},
             {2.45f, false, false, 183, 158, 52, 8, 0, 67, 17, 8, 346, 88, 1.89072f},
-            {2.45f, false, true, 0, 0, 0, 0, 0, 67, 17, 8, 103, 88, 1.89072f},
+            {2.45f, false, true, 0, 0, 52, 0, 0, 67, 17, 8, 155, 88, 1.89072f},
             {2.45f, true, false, 190, 151, 52, 8, 28, 67, 24, 15, 353, 83, 2.508f},
-            {2.45f, true, true, 0, 0, 0, 0, 28, 67, 24, 15, 103, 83, 2.508f},
+            {2.45f, true, true, 0, 0, 52, 0, 28, 67, 24, 15, 155, 83, 2.508f},
         };
         List<Object[]> cases = new ArrayList<>();
         for (int cutoutPx : new int[]{0, 44}) {
@@ -116,9 +116,10 @@ public class DockLayoutPolicyTest {
         // The inter-row gap has always been the indicator band itself.
         assertEquals("interRowGapPx", expectedBandPx, l.interRowGapPx);
         assertEquals("combinedHeight", expectedCombinedPx, l.combinedHeight(TOOLBAR_PX, true));
-        // A rail collapses the horizontal rows: it is the launcher surface instead.
+        // A rail collapses the pinned-apps row: it is the launcher surface instead. The letters
+        // keep their slot — they are their own index, and show their matches on a floating strip.
         assertEquals(!appsRowOnEdge, l.appsRowEnabled);
-        assertEquals(!appsRowOnEdge, l.azRowEnabled);
+        assertTrue(l.azRowEnabled);
     }
 
     @Test
