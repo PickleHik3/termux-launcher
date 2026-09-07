@@ -24,3 +24,11 @@ Three landscape fixes the developer asked for, specified from the code map and a
 | 3 | `feat/layout-page-az` | `LayoutPreferencesFragment`: switch always enabled, new summary; `PlaceMiniatureView`: rail-outside-column order, A–Z band independent of apps row, legend order; strings; tests | — |
 
 Each phase: worktree off `dev`, sub-agent builds and commits, orchestrator reviews and merges, APK checked on the emulator in portrait and landscape before the work is called done. Phases 2 and 3 must not edit each other's files (2 owns `place/PlaceChromePolicy`, `launcher/az/*`, `LauncherAzGestureFxView`, `SuggestionBarView`, the A–Z region of `TermuxActivity`; 3 owns `fragments/settings/*`, `res/xml/layout_preferences.xml`; both may add strings).
+
+## State after 2026-09-07
+
+All three phases merged on `dev` (`d034a223`, `e0447df0`, `85e739c6`). Emulator-verified in portrait and
+landscape: side bar refuses the expand swipe while the top bar still expands; bare weather value in
+the side bar; A–Z row in landscape with the apps rail; strip, breathing ring, label side, launch on
+release and dismiss on release-away; Layout page switch, copy, rail-outside-column miniature. Not yet
+checked on pong: the feel of the breath and the strip's edge paging.
