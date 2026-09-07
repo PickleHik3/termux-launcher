@@ -646,6 +646,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bitmap mPaneGlassFrame;
     /** The unblurred wallpaper frame the Display page's corner mask paints; held so no eviction recycles it under a draw. */
     @Nullable private Bitmap mWallBehindFrame;
+    /**
+     * The colour the wall's ground was last painted with — what shows between and around the
+     * panes — so a page that paints its own corners (the display) paints them with the same.
+     */
+    private int mWallGroundColor = Color.TRANSPARENT;
+    /** Whether the ground has been painted at all yet; before that the colour is derived. */
+    private boolean mWallGroundPainted;
 
     private float mTerminalToolbarDefaultHeight;
     private final Handler mAzGestureHandler = new Handler(Looper.getMainLooper());
@@ -1474,16 +1481,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The terminal tint lives on each pane's own glass slab now; the root carries only
                 // the wallpaper dim, so the gaps between panes — and the margin around them — show
                 // the wallpaper at whatever opacity the Wallpaper control asks for.
-                applyUnifiedBackgroundDim(wallpaperDim);
+                mWallGroundColor = wallpaperDim;
             } else {
                 // Unify the background: apply the terminal-opacity dim to the full-screen root so the
                 // terminal area, the space under the floating dock, and the gesture-pill strip all read
                 // as one continuous surface (the dock then floats on top of it). The bounded
                 // terminal_background overlay is retired so the dim isn't applied twice. The wallpaper
                 // dim composes underneath it.
-                applyUnifiedBackgroundDim(androidx.core.graphics.ColorUtils.compositeColors(
-                    terminalSurfaceColor, wallpaperDim));
+                mWallGroundColor = androidx.core.graphics.ColorUtils.compositeColors(
+                    terminalSurfaceColor, wallpaperDim);
             }
+            mWallGroundPainted = true;
+            applyUnifiedBackgroundDim(mWallGroundColor);
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
             applyTerminalBodySurface(terminalBodySurface,
                 slab ? terminalSurfaceColor : Color.TRANSPARENT, slab);
@@ -1504,6 +1513,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyUnifiedBackgroundDim(Color.TRANSPARENT);
         boolean showSurface = true;
         int terminalSurfaceColor = resolveTerminalSurfaceColor();
+        // Behind the wall here is the terminal surface over the window's base colour.
+        mWallGroundColor = androidx.core.graphics.ColorUtils.compositeColors(terminalSurfaceColor,
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
+                R.color.termux_surface_base));
+        mWallGroundPainted = true;
         terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
         applyTerminalBodySurface(terminalBodySurface, terminalSurfaceColor,
             showSurface && Color.alpha(terminalSurfaceColor) > 0);
@@ -1884,8 +1898,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int wallBehindColor() {
-                // The root wears this dim over the wallpaper, so the arcs must too, or they
-                // show the wallpaper a shade brighter than the wall beside them.
+                // Exactly what the wall's ground was last painted with, not a re-derivation of
+                // it: the root's dim in wallpaper mode (which folds the terminal tint in when the
+                // panes have no slab of their own), the terminal surface over the base colour
+                // otherwise. Every time the two were computed separately they drifted apart, and
+                // the arcs showed as four faint squares a shade off the wall beside them.
+                if (mWallGroundPainted) return mWallGroundColor;
                 return shouldUseWallpaperPassthroughMode() ? resolveWallpaperBackdropDimColor()
                     : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
                         R.color.termux_surface_base);
