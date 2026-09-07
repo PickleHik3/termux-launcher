@@ -93,3 +93,22 @@ vertical clock, extrakeys glass") holds an earlier vertical-clock attempt worth 
 - Home place status bar: stats order Weather · RAM · CPU, grouped as one cluster, always centred in
   the row (today: row end, sliding under the clock via `alignStatsUnderClock`). Branch
   `feat/home-status-stats-centered`.
+
+### Landscape polish queue (2026-09-07, from device review on pong)
+
+1. **Side column spans the display's length.** The bar's host lives inside the padded content root,
+   so its surface stops at the inside of the system bars (63px/96px) and the row inside it stops
+   again (`applyStatusColumnRowGeometry` adds `mLastStatusBarInsetTop`, `statusColumnContentLengthPx`
+   subtracts the nav inset — both already excluded by the root). The chips get too little room and
+   the surface visibly stops before the display's rounded corner. Surface runs the whole display
+   length on a side edge; only the *content* stays inside the system bars; docked squares its outer
+   corners, capsule keeps rounded ends. Not an Android limit — the window is already edge-to-edge;
+   the only hard stop is the physical rounded corner (`RoundedCorner`, ~10dp).
+   *Done in `4ee40dcd`: the content's own centring and the extra keys/rail double-padding.*
+2. **No dead padding in landscape** between the bar and the terminal, and between the bar and the
+   keyboard surface.
+3. **The keyboard must not resize the Home place** — it breaks the widget grid. A widget's own text
+   field raises the Android IME (over the place, no resize); the keyboard key in the extra keys bar
+   raises the in-app keyboard.
+4. **Surface editor never opens in portrait.** Fix, and curate what it offers in landscape: strip
+   the rows that cannot apply to a side-standing bar or a column'd extra keys.
