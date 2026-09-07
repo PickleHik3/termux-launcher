@@ -30,5 +30,7 @@ Each phase: worktree off `dev`, sub-agent builds and commits, orchestrator revie
 All three phases merged on `dev` (`d034a223`, `e0447df0`, `85e739c6`). Emulator-verified in portrait and
 landscape: side bar refuses the expand swipe while the top bar still expands; bare weather value in
 the side bar; A–Z row in landscape with the apps rail; strip, breathing ring, label side, launch on
-release and dismiss on release-away; Layout page switch, copy, rail-outside-column miniature. Not yet
-checked on pong: the feel of the breath and the strip's edge paging.
+release and dismiss on release-away; Layout page switch, copy, rail-outside-column miniature. Also
+checked on pong (2026-09-07): everything above, plus the breath repainting only while a finger is down
+(gfxinfo: ~104 frames/s focused, 2 idle, 3 per 2 s after release). Untested anywhere but unit tests: strip
+paging past eight matches — no letter on pong has more than eight apps.
