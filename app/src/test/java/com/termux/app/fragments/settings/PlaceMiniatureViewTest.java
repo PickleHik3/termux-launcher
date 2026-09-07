@@ -29,17 +29,25 @@ import org.robolectric.annotation.Config;
 public class PlaceMiniatureViewTest {
 
     private static PlaceLayout layout(Edge statusBar, RowPlacement appsRow, RowPlacement extraKeys) {
-        return new PlaceLayout(statusBar, appsRow, true, extraKeys, KeyboardMode.RESIZE, 4, 5);
+        return new PlaceLayout(statusBar, appsRow, true, Edge.BOTTOM, extraKeys, KeyboardMode.RESIZE,
+            4, 5);
     }
 
     private static PlaceLayout layout(Edge statusBar, RowPlacement appsRow, boolean azRowShown,
                                       RowPlacement extraKeys) {
-        return new PlaceLayout(statusBar, appsRow, azRowShown, extraKeys, KeyboardMode.RESIZE, 4, 5);
+        return new PlaceLayout(statusBar, appsRow, azRowShown, Edge.BOTTOM, extraKeys,
+            KeyboardMode.RESIZE, 4, 5);
+    }
+
+    private static PlaceLayout layout(Edge statusBar, RowPlacement appsRow, boolean azRowShown,
+                                      Edge azBarEdge, RowPlacement extraKeys) {
+        return new PlaceLayout(statusBar, appsRow, azRowShown, azBarEdge, extraKeys,
+            KeyboardMode.RESIZE, 4, 5);
     }
 
     private static PlaceLayout layout(RowPlacement appsRow, int widgetColumns, int widgetRows) {
-        return new PlaceLayout(Edge.TOP, appsRow, true, RowPlacement.BOTTOM, KeyboardMode.RESIZE,
-            widgetColumns, widgetRows);
+        return new PlaceLayout(Edge.TOP, appsRow, true, Edge.BOTTOM, RowPlacement.BOTTOM,
+            KeyboardMode.RESIZE, widgetColumns, widgetRows);
     }
 
     private static PlaceMiniatureView sized() {
@@ -203,6 +211,66 @@ public class PlaceMiniatureViewTest {
         // padded inward by the rail's width.
         assertTrue("apps rail is at the left screen edge", apps.left <= keys.left - 0.5f);
         assertTrue("extra keys column stands to the right of the rail", keys.left >= apps.right - 0.5f);
+    }
+
+    @Test
+    public void theAzBarEdgeOnlyAppliesWhileTheBarStandsAlone() {
+        PlaceMiniatureView view = sized();
+        // Riding under a bottom apps row: a stored side edge is ignored, the band stays along the
+        // bottom, between the pinned apps and the extra keys, same as the default arrangement.
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.LEFT, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF ridingRow = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        assertNotNull(apps);
+        assertNotNull(ridingRow);
+        assertNotNull(keys);
+        assertTrue("the ignored side edge never turns the band into a column",
+            ridingRow.width() > ridingRow.height());
+        assertTrue("still below the pinned apps", ridingRow.top >= apps.bottom - 0.5f);
+        assertTrue("still above the extra keys", ridingRow.bottom <= keys.top + 0.5f);
+    }
+
+    @Test
+    public void aTopAzBarStandsRightUnderTheStatusBar() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, true, Edge.TOP, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF status = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        assertNotNull(status);
+        assertNotNull(az);
+        assertTrue("the band sits right under the status bar", az.top >= status.bottom - 0.5f);
+        assertTrue("a horizontal band is wider than it is tall", az.width() > az.height());
+    }
+
+    @Test
+    public void aSideAzBarIsInnermostOfTheSideColumns() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, true, Edge.LEFT, RowPlacement.LEFT),
+            PlaceOrientation.LANDSCAPE);
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        assertNotNull(apps);
+        assertNotNull(keys);
+        assertNotNull(az);
+        assertTrue("the rail is outermost", apps.left <= keys.left - 0.5f);
+        assertTrue("the extra-keys column is next", keys.left <= az.left - 0.5f);
+        assertTrue("a vertical band is taller than it is wide", az.height() > az.width());
+
+        // The right edge mirrors the same order from the other side.
+        view.setLayout(layout(Edge.TOP, RowPlacement.RIGHT, true, Edge.RIGHT, RowPlacement.RIGHT),
+            PlaceOrientation.LANDSCAPE);
+        RectF appsRight = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF keysRight = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF azRight = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        assertNotNull(appsRight);
+        assertNotNull(keysRight);
+        assertNotNull(azRight);
+        assertTrue("the rail is outermost on the right too", appsRight.right >= keysRight.right + 0.5f);
+        assertTrue("the extra-keys column is next", keysRight.right >= azRight.right + 0.5f);
     }
 
     @Test

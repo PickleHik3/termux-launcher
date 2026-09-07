@@ -25,6 +25,7 @@ import androidx.core.graphics.drawable.DrawableCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -338,24 +339,37 @@ public final class PlaceMiniatureView extends View {
             mGridCollapsed = false;
             return;
         }
+        boolean azShown = !isBlockHidden(Block.ALPHABETS_ROW);
+        // The bar's own edge only applies while it stands alone; riding under the apps row always
+        // reads as bottom regardless of what is stored (PlaceChromePolicy.azBarEdge).
+        Edge azEdge = PlaceChromePolicy.azBarEdge(mLayout);
+
         takeEdgeStrip(Block.STATUS_BAR, mLayout.statusBarEdge, STATUS_BAR_FRACTION);
+        // A top bar is claimed right after the status bar, before any side column, so it always
+        // reads as the band directly under the status bar.
+        if (azShown && azEdge == Edge.TOP) {
+            takeEdgeStrip(Block.ALPHABETS_ROW, Edge.TOP, ALPHABETS_FRACTION);
+        }
         // Strips are claimed from the outside in. Two facts, both verified against the device:
         // (1) a side rail/column pair puts the pinned-apps rail at the screen edge and pads the
         // extra-keys column in by the rail's width, so a side apps row is claimed before a side
         // extra-keys row; (2) the bottom stack still reads extra keys, then the A–Z index, then
-        // pinned apps, so a bottom extra-keys row is still claimed before a bottom apps row. The
-        // A–Z band is always along the bottom and claimed after any side columns, so it spans only
-        // the width those columns leave between them.
+        // pinned apps, so a bottom extra-keys row is still claimed before a bottom apps row.
         if (mLayout.appsRow.isOnSide()) {
             takeEdgeStrip(Block.APPS_ROW, edgeOf(mLayout.appsRow), ROW_FRACTION);
         }
         if (mLayout.extraKeys.isOnSide()) {
             takeEdgeStrip(Block.EXTRA_KEYS, edgeOf(mLayout.extraKeys), ROW_FRACTION);
         }
+        // A side bar is innermost of the side columns — the rail and the extra-keys column pad it
+        // in first, same as the device.
+        if (azShown && azEdge.isOnSide()) {
+            takeEdgeStrip(Block.ALPHABETS_ROW, azEdge, ALPHABETS_FRACTION);
+        }
         if (mLayout.extraKeys == RowPlacement.BOTTOM) {
             takeEdgeStrip(Block.EXTRA_KEYS, Edge.BOTTOM, ROW_FRACTION);
         }
-        if (!isBlockHidden(Block.ALPHABETS_ROW)) {
+        if (azShown && azEdge == Edge.BOTTOM) {
             takeEdgeStrip(Block.ALPHABETS_ROW, Edge.BOTTOM, ALPHABETS_FRACTION);
         }
         if (mLayout.appsRow == RowPlacement.BOTTOM) {
@@ -608,20 +622,29 @@ public final class PlaceMiniatureView extends View {
 
     private void drawAlphabetsRowBlock(@NonNull Canvas canvas) {
         RectF rect = mBlockRects.get(Block.ALPHABETS_ROW);
-        if (rect == null || rect.isEmpty()) return;
+        if (rect == null || rect.isEmpty() || mLayout == null) return;
         mFillPaint.setColor(bandFill(Block.ALPHABETS_ROW));
         canvas.drawRect(rect, mFillPaint);
 
-        mTextPaint.setColor(bandOnFill(Block.ALPHABETS_ROW));
+        // A side bar is a column of upright letters: rotate so the same left-to-right layout below
+        // draws them stacked along the column's length instead of squeezed across its thinness.
+        boolean vertical = PlaceChromePolicy.azBarEdge(mLayout).isOnSide();
+        int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
+        drawAlphabetLetters(canvas, mScratchRectA, bandOnFill(Block.ALPHABETS_ROW));
+        endBandOrientation(canvas, saved);
+    }
+
+    private void drawAlphabetLetters(@NonNull Canvas canvas, @NonNull RectF local, int color) {
+        mTextPaint.setColor(color);
         mTextPaint.setTypeface(Typeface.MONOSPACE);
         mTextPaint.setTextAlign(Paint.Align.CENTER);
-        mTextPaint.setTextSize(Math.min(dp(7), rect.height() * 0.62f));
+        mTextPaint.setTextSize(Math.min(dp(7), local.height() * 0.62f));
         int n = ALPHABETS_SAMPLE.length;
         float inset = dp(8);
-        float slot = (rect.width() - inset * 2f) / n;
-        float baseline = rect.centerY() + mTextPaint.getTextSize() * 0.32f;
+        float slot = (local.width() - inset * 2f) / n;
+        float baseline = local.centerY() + mTextPaint.getTextSize() * 0.32f;
         for (int i = 0; i < n; i++) {
-            float x = rect.left + inset + slot * (i + 0.5f);
+            float x = local.left + inset + slot * (i + 0.5f);
             canvas.drawText(ALPHABETS_SAMPLE[i], x, baseline, mTextPaint);
         }
     }
