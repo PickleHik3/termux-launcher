@@ -536,6 +536,18 @@ public final class LauncherAzGestureFxView extends View {
         animateFocusedAppPreviewTo(0f, true);
     }
 
+    /**
+     * The breath is the one thing here that repaints per frame, so it must not be able to outlive
+     * the window it is drawing in — a gesture cut short by the launcher going away never releases.
+     */
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility != VISIBLE) {
+            stopBreathing();
+        }
+    }
+
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();

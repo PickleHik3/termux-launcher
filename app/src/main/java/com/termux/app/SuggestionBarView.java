@@ -1430,6 +1430,11 @@ public final class SuggestionBarView extends GridLayout
         return AzFloatingStripPolicy.pageCount(azStripCandidates.size(), Math.max(1, azStripSlots));
     }
 
+    /** Which page the strip is on, so a caller can tell whether its contents moved. */
+    public int azStripPageIndex() {
+        return azStripPageIndex;
+    }
+
     public boolean hasAzStripMatches() {
         return azStripLetter != null && !azStripCandidates.isEmpty();
     }

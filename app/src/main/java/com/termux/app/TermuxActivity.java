@@ -656,9 +656,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * track handed to the gesture, and the page's artwork, referenced from the budgeted icon store
      * for the length of the scrub and dropped on release.
      */
-    @Nullable private AzFloatingStripPolicy.Strip mAzStrip;
     private final List<Drawable> mAzStripIcons = new ArrayList<>();
+    @Nullable private AzFloatingStripPolicy.Strip mAzStrip;
+    /** The rectangle the strip was drawn at, which is the gesture's icon track while it stands. */
     private final RectF mAzStripRawBounds = new RectF();
+    /** What the strip was last laid out for, so an unchanged page costs nothing to re-sync. */
+    private char mAzStripSyncedLetter = '\0';
+    private int mAzStripSyncedPage = -1;
     private final AzScrubRowView.LetterVisualMetrics mAzLetterVisualMetrics = new AzScrubRowView.LetterVisualMetrics();
 
     /**
@@ -6499,30 +6503,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private AzFloatingStripPolicy.Strip syncAzStandaloneStrip(char letter, boolean refreshMatches) {
         LauncherAzGestureFxView host = mLauncherAzGestureFxLabelOverlayView;
-        if (mSuggestionBarView == null || mAzScrubRowView == null
-            || host == null || host.getWidth() <= 0) {
+        if (mSuggestionBarView == null || mAzScrubRowView == null || host == null
+            || mAzScrubRowView.getWidth() <= 0) {
             return null;
         }
+        // Measured against the letters, not the overlay that draws it: the overlay rests GONE and
+        // has no width until something puts it on screen, and the strip is what would do that.
+        // The letters are also the right span to centre over — they are the surface being scrubbed.
         float density = getResources().getDisplayMetrics().density;
-        host.getLocationOnScreen(mAzViewLocation);
-        float hostLeftRaw = mAzViewLocation[0];
-        int slots = AzFloatingStripPolicy.slotsForWidth(host.getWidth(), density);
+        mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
+        float rowLeftRaw = mAzViewLocation[0];
+        float rowTopRaw = mAzViewLocation[1];
+        int rowWidth = mAzScrubRowView.getWidth();
+        int slots = AzFloatingStripPolicy.slotsForWidth(rowWidth, density);
         if (refreshMatches) {
             mSuggestionBarView.previewAzStripLetter(letter, slots);
         }
-        List<com.termux.app.launcher.model.LauncherAppEntry> entries = mSuggestionBarView.azStripVisibleEntries();
-        if (entries.isEmpty()) {
-            clearAzStandaloneStrip();
-            return null;
+        // A scrub delivers a touch sample per frame and most of them land on the letter the last
+        // one did. Re-resolving artwork and re-pushing the strip for an unchanged page would put a
+        // handful of allocations on every frame of the gesture, so it is skipped.
+        char normalized = Character.toUpperCase(letter);
+        int page = mSuggestionBarView.azStripPageIndex();
+        if (mAzStrip != null && normalized == mAzStripSyncedLetter && page == mAzStripSyncedPage) {
+            return mAzStrip;
         }
-        mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
-        AzFloatingStripPolicy.Strip strip = AzFloatingStripPolicy.layout(
-            hostLeftRaw, host.getWidth(), mAzViewLocation[1], entries.size(), density);
+        List<com.termux.app.launcher.model.LauncherAppEntry> entries = mSuggestionBarView.azStripVisibleEntries();
+        AzFloatingStripPolicy.Strip strip = entries.isEmpty() ? null : AzFloatingStripPolicy.layout(
+            rowLeftRaw, rowWidth, rowTopRaw, entries.size(), density);
         if (strip == null) {
             clearAzStandaloneStrip();
             return null;
         }
         mAzStrip = strip;
+        mAzStripSyncedLetter = normalized;
+        mAzStripSyncedPage = page;
         mAzStripRawBounds.set(strip.left, strip.top, strip.right, strip.bottom);
         mSuggestionBarView.setAzStripGeometry(strip);
         // Artwork straight from the budgeted icon store the row draws from — referenced, never
@@ -6540,6 +6554,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void clearAzStandaloneStrip() {
         mAzStrip = null;
+        mAzStripSyncedLetter = '\0';
+        mAzStripSyncedPage = -1;
         mAzStripRawBounds.setEmpty();
         mAzStripIcons.clear();
         if (mSuggestionBarView != null) {
