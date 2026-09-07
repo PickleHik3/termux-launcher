@@ -181,6 +181,20 @@ off — `tlstore update` is how it gets new versions. Once it is installed, sign
 claude
 ```
 
+## References
+
+`fastfetch`, `kitten`, `sigye`, and the musl loader are built by the launcher's maintainer rather
+than coming from Termux's own packages or npm. The binaries themselves are published at
+[PickleHik3/termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries),
+which is what `tlstore install` downloads and checks against a pinned digest. The recipes that
+build them from upstream source — with whatever patches are applied — live in this repository
+under [`recipes/cross`](../../recipes/cross) and [`recipes/termux`](../../recipes/termux); run one
+yourself to reproduce a binary and compare it against what tlstore installed.
+
+Everything else in the store is unmodified: `claude-code` comes straight from npm, and the
+packages behind `fish-shell` (`fish`, `eza`, `zoxide`, `oh-my-posh`) and `nvim-theme`'s dependencies
+come straight from Termux's own package repository.
+
 ## For maintainers
 
 The catalog that `tlstore` reads (`app/src/main/assets/tlstore/catalog.tsv`) is generated — never
