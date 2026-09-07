@@ -30,6 +30,7 @@
     <string name="settings_layout_status_bar_title">Status bar</string>
     <string name="settings_layout_status_bar_summary">Choose which edge shows the status bar.</string>
     <string name="settings_layout_apps_row_summary">Choose where pinned apps appear, or hide them.</string>
+    <string name="settings_layout_alphabets_edge_title">Position</string>
     <string name="settings_layout_alphabets_edge_summary">Choose which edge shows the alphabets bar.</string>
     <string name="settings_layout_extra_keys_summary">Choose where extra keys appear, or hide them.</string>
     <string name="settings_layout_keyboard_on_enter_title">Keyboard on enter</string>
