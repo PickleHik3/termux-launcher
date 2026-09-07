@@ -94,6 +94,23 @@ public class AccessoryStackLayoutPolicyTest {
         assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(false, false, 3f));
     }
 
+    /**
+     * The Alphabets bar standing alone: no apps row above it, no extra keys below it. The stack is
+     * the letter band plus its chin and nothing else — no inter-row gap is paid for a row that is
+     * not there — so the glass drawn over that height ends flush on the chin the letters sit in.
+     */
+    @Test
+    public void theLettersAloneAreTheWholeDockAndTheGlassIsExactlyTheirHeight() {
+        int alone = AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, 3f);
+        assertEquals(87, alone);
+        assertEquals(alone, AccessoryStackLayoutPolicy.computeCombinedHeight(
+            false, true, false, 300, alone, 112, 9));
+        // With the extra keys back the letters drop the chin and the two rows are the whole stack.
+        int banded = AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, true, 3f);
+        assertEquals(banded + 112, AccessoryStackLayoutPolicy.computeCombinedHeight(
+            false, true, true, 300, banded, 112, 9));
+    }
+
     @Test
     public void terminalToolbarHeight_scalesWithRowsAndScale() {
         assertEquals(228, AccessoryStackLayoutPolicy.computeTerminalToolbarHeightPx(38, 2, 3f));
