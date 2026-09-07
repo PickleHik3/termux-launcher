@@ -22,6 +22,8 @@ import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.LayoutOverviewPreference;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
+import com.termux.app.place.PlaceLayout.RowPlacement;
+import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
@@ -90,6 +92,38 @@ public class LayoutPreferencesFragmentTest {
         // The default selection is Terminal, not Home, so the widget grid has nothing to show yet.
         assertFalse("grid columns row", screen.findPreference("layout_grid_columns").isVisible());
         assertFalse("grid rows row", screen.findPreference("layout_grid_rows").isVisible());
+    }
+
+    @Test
+    public void theAlphabetsRowSwitchIsAlwaysEnabled() {
+        Application app = RuntimeEnvironment.getApplication();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
+        PlaceLayoutStore places = new PlaceLayoutStore(preferences);
+
+        // The default: apps row along the bottom.
+        LayoutPreferencesFragment bottomFragment = launch();
+        Preference bottomSwitch = bottomFragment.getPreferenceScreen()
+            .findPreference("layout_alphabets_row");
+        assertNotNull(bottomSwitch);
+        assertTrue("enabled with the apps row at the bottom", bottomSwitch.isEnabled());
+
+        // Apps row hidden entirely.
+        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
+        LayoutPreferencesFragment hiddenFragment = launch();
+        Preference hiddenSwitch = hiddenFragment.getPreferenceScreen()
+            .findPreference("layout_alphabets_row");
+        assertNotNull(hiddenSwitch);
+        assertTrue("enabled with the apps row hidden", hiddenSwitch.isEnabled());
+
+        // Apps row on a side rail — the fragment opens on portrait/Terminal by default, and the
+        // store does not itself refuse a side placement there, so this exercises the same
+        // enablement check without driving the overview's orientation tab.
+        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.LEFT);
+        LayoutPreferencesFragment railFragment = launch();
+        Preference railSwitch = railFragment.getPreferenceScreen()
+            .findPreference("layout_alphabets_row");
+        assertNotNull(railSwitch);
+        assertTrue("enabled with the apps row on a rail", railSwitch.isEnabled());
     }
 
     @Test

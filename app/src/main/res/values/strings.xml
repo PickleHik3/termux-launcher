@@ -387,7 +387,7 @@
     <string name="settings_edit_pinned_apps_summary">Choose apps and drag them to reorder directly.</string>
     <string name="settings_app_browsing_header">App browsing</string>
     <string name="settings_show_az_index_title">Alphabetical index</string>
-    <string name="settings_show_az_index_summary">Show an A–Z index below pinned apps.</string>
+    <string name="settings_show_az_index_summary">Show an A–Z index. Slide across it to find and open apps.</string>
     <string name="settings_app_index_haptics_title">Launcher haptics</string>
     <string name="settings_app_index_haptics_summary">Subtle feedback across the app index and dock page changes.</string>
     <string name="settings_notification_dots_title">Notification dots</string>
