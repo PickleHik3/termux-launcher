@@ -32,6 +32,11 @@ public class PlaceMiniatureViewTest {
         return new PlaceLayout(statusBar, appsRow, true, extraKeys, KeyboardMode.RESIZE, 4, 5);
     }
 
+    private static PlaceLayout layout(Edge statusBar, RowPlacement appsRow, boolean azRowShown,
+                                      RowPlacement extraKeys) {
+        return new PlaceLayout(statusBar, appsRow, azRowShown, extraKeys, KeyboardMode.RESIZE, 4, 5);
+    }
+
     private static PlaceLayout layout(RowPlacement appsRow, int widgetColumns, int widgetRows) {
         return new PlaceLayout(Edge.TOP, appsRow, true, RowPlacement.BOTTOM, KeyboardMode.RESIZE,
             widgetColumns, widgetRows);
@@ -66,8 +71,8 @@ public class PlaceMiniatureViewTest {
         assertTrue("apps row now stands on the left edge", appsLeft.right <= appsBottom.left
             + appsBottom.width() / 2f);
         assertTrue(appsLeft.height() > appsLeft.width());
-        // Hidden alphabets row: it only shows under a bottom apps row.
-        assertNull(view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
+        // The A–Z band no longer depends on the apps row: it is still on screen.
+        assertNotNull(view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
     }
 
     @Test
@@ -149,8 +154,8 @@ public class PlaceMiniatureViewTest {
             assertNotNull("legend row for " + block, view.legendRect(block));
         }
         assertTrue("hidden apps row is marked", view.isBlockHidden(PlaceMiniatureView.Block.APPS_ROW));
-        assertTrue("A–Z cannot show without a bottom apps row",
-            view.isBlockHidden(PlaceMiniatureView.Block.ALPHABETS_ROW));
+        assertTrue("A–Z shows regardless of the apps row",
+            !view.isBlockHidden(PlaceMiniatureView.Block.ALPHABETS_ROW));
         assertTrue("extra keys are on screen", !view.isBlockHidden(PlaceMiniatureView.Block.EXTRA_KEYS));
         assertNull("a hidden block is off the picture",
             view.blockRect(PlaceMiniatureView.Block.APPS_ROW));
@@ -160,5 +165,60 @@ public class PlaceMiniatureViewTest {
         RectF legend = view.legendRect(PlaceMiniatureView.Block.STATUS_BAR);
         assertNotNull(frame);
         assertTrue("legend clear of the phone", legend.left >= frame.right);
+    }
+
+    @Test
+    public void theAlphabetsRowIsIndependentOfTheAppsRow() {
+        PlaceMiniatureView view = sized();
+
+        // Apps row hidden entirely: the A–Z band still shows.
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, true, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertNotNull("A–Z shows with the apps row hidden",
+            view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
+
+        // Apps row on a side rail: the A–Z band still shows, along the bottom.
+        view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, true, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertNotNull("A–Z shows with the apps row on a rail",
+            view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
+
+        // The switch itself, not the apps row, controls the band.
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, false, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertNull("the switch being off hides the band",
+            view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
+    }
+
+    @Test
+    public void aSideRailStandsOutsideAnExtraKeysColumnOnTheSameSide() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, RowPlacement.LEFT),
+            PlaceOrientation.LANDSCAPE);
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        assertNotNull(apps);
+        assertNotNull(keys);
+        // The real device: the pinned-apps rail sits at the screen edge, the extra-keys column is
+        // padded inward by the rail's width.
+        assertTrue("apps rail is at the left screen edge", apps.left <= keys.left - 0.5f);
+        assertTrue("extra keys column stands to the right of the rail", keys.left >= apps.right - 0.5f);
+    }
+
+    @Test
+    public void bottomStackingOrderIsUnchanged() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        assertNotNull(apps);
+        assertNotNull(az);
+        assertNotNull(keys);
+        // Bottom stack, outside in from the screen edge: extra keys, then A–Z, then pinned apps.
+        assertTrue("extra keys are outermost", keys.bottom >= az.bottom - 0.5f);
+        assertTrue("A–Z sits above the extra keys", az.bottom <= keys.top + 0.5f);
+        assertTrue("pinned apps are innermost", apps.bottom <= az.top + 0.5f);
     }
 }

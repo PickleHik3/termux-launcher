@@ -324,12 +324,6 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         if (gridColumns != null) gridColumns.setVisible(isHome);
         Preference gridRows = findPreference(KEY_GRID_ROWS);
         if (gridRows != null) gridRows.setVisible(isHome);
-        Preference alphabetsRow = findPreference(KEY_ALPHABETS_ROW);
-        if (alphabetsRow != null) {
-            boolean appsRowIsBottom = mStore.places()
-                .appsRow(mSelectedPlace, mSelectedOrientation) == RowPlacement.BOTTOM;
-            alphabetsRow.setEnabled(appsRowIsBottom);
-        }
     }
 
     private void refreshMiniature() {
