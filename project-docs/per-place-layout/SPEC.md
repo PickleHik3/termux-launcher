@@ -112,3 +112,25 @@ vertical clock, extrakeys glass") holds an earlier vertical-clock attempt worth 
    raises the in-app keyboard.
 4. **Surface editor never opens in portrait.** Fix, and curate what it offers in landscape: strip
    the rows that cannot apply to a side-standing bar or a column'd extra keys.
+   *Partly done in `8bd20769` (merged): the editor's free band was measured from the bar's lower
+   edge wherever it stood, so a bottom bar or a side column collapsed the band and everything the
+   editor draws parked off the bottom of the screen. `SurfaceEditorScene` derives the band from the
+   edge instead, never inverts it, never leaves the host and keeps 120dp, and it now also decides
+   which surfaces, rows and handles the arrangement has (no dock target where nothing stands on the
+   dock band; no size/apps rows or size grip where the pinned apps are a rail; no chin grip with no
+   glass under the last key row).*
+   **Still open:** the portrait failure the user saw is not explained. Verified on the emulator that
+   the editor opens and parks correctly in portrait with the bar on the bottom **and** on the top
+   (pong stores `top` for every place in portrait), and in landscape with the bar in a column — all
+   via the `DOCK_TUNING` intent. Ask which entry point fails on pong (Settings → Look, the
+   terminal's context menu, an extra key) and whether nothing appears at all or only the card fails
+   to rise. A tap straight on the status column in landscape did not raise its card — the palette
+   pill does; worth checking whether the bar's own gesture swallows the tap.
+
+### Landscape polish — state after 2026-09-07
+
+Merged on `dev`: `4ee40dcd` (column content on the bar's centre line, extra keys/rail double
+padding), `a7293aa7` (a side column runs the display's length, starts past the cutout),
+`9efc31ed` (home place: keyboard floats, IME handed to the place while the in-app keyboard is
+down), `8bd20769` (surface editor band + per-arrangement offer). Everything verified on the
+emulator; **nothing verified on pong yet** — the phone was asleep and locked through the session.
