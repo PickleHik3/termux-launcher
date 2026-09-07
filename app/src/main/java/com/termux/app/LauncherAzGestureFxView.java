@@ -60,12 +60,15 @@ public final class LauncherAzGestureFxView extends View {
     private final Paint previewFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final FocusOutlineRenderer.RenderPaints focusedIconOutlinePaints =
         new FocusOutlineRenderer.RenderPaints();
+    private final FocusOutlineRenderer.RenderPaints floatingStripOutlinePaints =
+        new FocusOutlineRenderer.RenderPaints();
     private final TextPaint previewLabelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF tmpRect = new RectF();
     private final RectF tmpShadowRect = new RectF();
     private final RectF focusDisplayRect = new RectF();
     private final RectF focusRawRect = new RectF();
     private final RectF previewRect = new RectF();
+    private final RectF floatingStripOutlineRect = new RectF();
     private final RectF appsRowRawBounds = new RectF();
     private final int[] locationOnScreen = new int[2];
     private final int[] edgeDwellGradientColors = new int[3];
@@ -141,6 +144,12 @@ public final class LauncherAzGestureFxView extends View {
     /** The standalone index's strip of matches: its geometry, its artwork and which slot has focus. */
     @Nullable private AzFloatingStripPolicy.Strip floatingStrip;
     @NonNull private final List<Drawable> floatingStripIcons = new ArrayList<>();
+    /**
+     * Per-slot contour visuals, parallel to {@link #floatingStripIcons}: resolved once by the caller
+     * when the strip's artwork changes, never per frame. A slot with no visual (index out of range,
+     * or a null entry) falls back to the rounded rect the focus ring always had.
+     */
+    @NonNull private final List<FocusOutlineRenderer.Visual> floatingStripVisuals = new ArrayList<>();
     private int floatingStripFocusedSlot = -1;
     private float floatingStripProgress;
     @Nullable private ValueAnimator floatingStripAnimator;
@@ -439,11 +448,29 @@ public final class LauncherAzGestureFxView extends View {
      */
     public void setFloatingStrip(@Nullable AzFloatingStripPolicy.Strip strip,
                                  @Nullable List<Drawable> icons) {
+        setFloatingStrip(strip, icons, null);
+    }
+
+    /**
+     * Same as {@link #setFloatingStrip(AzFloatingStripPolicy.Strip, List)}, plus the per-slot
+     * contour visual the focused slot should wear — the same icon-shaped ring the apps row uses,
+     * instead of a rounded rectangle. Resolving these is the caller's job (it holds the drawable
+     * cache); this view only ever indexes into the list it is handed.
+     *
+     * @param visuals parallel to {@code icons}, or null/short to fall back to the rounded rect
+     */
+    public void setFloatingStrip(@Nullable AzFloatingStripPolicy.Strip strip,
+                                 @Nullable List<Drawable> icons,
+                                 @Nullable List<FocusOutlineRenderer.Visual> visuals) {
         boolean show = strip != null && !strip.isEmpty() && icons != null && !icons.isEmpty();
         floatingStrip = show ? strip : null;
         floatingStripIcons.clear();
+        floatingStripVisuals.clear();
         if (show) {
             floatingStripIcons.addAll(icons);
+            if (visuals != null) {
+                floatingStripVisuals.addAll(visuals);
+            }
         } else {
             floatingStripFocusedSlot = -1;
         }
@@ -569,6 +596,7 @@ public final class LauncherAzGestureFxView extends View {
         }
         stopBreathing();
         floatingStripIcons.clear();
+        floatingStripVisuals.clear();
         floatingStrip = null;
         cancelPageIndicatorAnimations();
         cancelSubtlePageIndicatorIdleFade();
@@ -701,8 +729,21 @@ public final class LauncherAzGestureFxView extends View {
             if (focused) {
                 previewRect.set(cx - (iconSize * 0.5f), cy - (iconSize * 0.5f),
                     cx + (iconSize * 0.5f), cy + (iconSize * 0.5f));
-                FocusOutlineRenderer.drawRoundRectFallback(canvas, previewRect,
-                    iconSize * 0.28f, accent, alpha * breathAlpha, breathScale, density);
+                FocusOutlineRenderer.Visual visual = slot < floatingStripVisuals.size()
+                    ? floatingStripVisuals.get(slot) : null;
+                if (visual != null) {
+                    // Same expansion OutlineDrawable.draw uses: the rasterised visual is the
+                    // slot's own icon size, so this scale is ~1 and the padding is the halo width.
+                    float scale = iconSize / (float) visual.sourceWidth;
+                    float pad = visual.outerPadding * scale;
+                    floatingStripOutlineRect.set(previewRect.left - pad, previewRect.top - pad,
+                        previewRect.right + pad, previewRect.bottom + pad);
+                    FocusOutlineRenderer.draw(canvas, visual, floatingStripOutlineRect, accent,
+                        alpha * breathAlpha, breathScale, floatingStripOutlinePaints);
+                } else {
+                    FocusOutlineRenderer.drawRoundRectFallback(canvas, previewRect,
+                        iconSize * 0.28f, accent, alpha * breathAlpha, breathScale, density);
+                }
             }
             icon.setAlpha(Math.round(255f * alpha * (focused ? 1f : 0.9f)));
             icon.setBounds(
@@ -746,6 +787,7 @@ public final class LauncherAzGestureFxView extends View {
                 floatingStripProgress = bounded;
                 if (bounded <= 0.01f) {
                     floatingStripIcons.clear();
+                    floatingStripVisuals.clear();
                     floatingStrip = null;
                 }
                 refreshVisibility();

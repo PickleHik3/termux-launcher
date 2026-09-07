@@ -1710,13 +1710,53 @@ public final class SuggestionBarView extends GridLayout
         Canvas sourceCanvas = new Canvas(source);
         sourceCanvas.translate(imageView.getPaddingLeft(), imageView.getPaddingTop());
         sourceCanvas.concat(imageView.getImageMatrix());
+        drawCleanArtwork(drawable, drawable.getBounds(), sourceCanvas);
+        return buildAndCacheFocusOutlineVisual(drawable, source);
+    }
+
+    /**
+     * Same contour visual as {@link #resolveFocusOutlineVisual(ImageView)}, for callers that hold
+     * only a {@link Drawable} and a target size — the floating strip's slots, which have no
+     * {@code ImageView} to measure or matrix-transform against. Shares
+     * {@link #focusOutlineVisualCache}, so a drawable already outlined by the apps row costs nothing
+     * extra here, and the rasterised bitmap is exactly {@code sizePx} square (the strip's icon size,
+     * not the screen) — the cache is what bounds how many of these accumulate.
+     */
+    @Nullable
+    FocusOutlineRenderer.Visual resolveFocusOutlineVisual(@Nullable Drawable drawable, int sizePx) {
+        if (drawable == null || sizePx <= 0) {
+            return null;
+        }
+        FocusOutlineRenderer.Visual cached = focusOutlineVisualCache.get(drawable);
+        if (cached != null && cached.sourceWidth == sizePx && cached.sourceHeight == sizePx) {
+            return cached;
+        }
+        Bitmap source = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        Canvas sourceCanvas = new Canvas(source);
+        drawCleanArtwork(drawable, new Rect(0, 0, sizePx, sizePx), sourceCanvas);
+        return buildAndCacheFocusOutlineVisual(drawable, source);
+    }
+
+    /**
+     * Draws clean artwork (no drop shadow) into {@code bounds}. A plain drawable's own bounds are
+     * restored afterwards since a caller (the strip) may still be using it to draw the icon itself.
+     */
+    private static void drawCleanArtwork(@NonNull Drawable drawable, @NonNull Rect bounds,
+                                         @NonNull Canvas canvas) {
         if (drawable instanceof RenderedIconDrawable) {
             RenderedIconDrawable rendered = (RenderedIconDrawable) drawable;
             Paint artworkPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-            sourceCanvas.drawBitmap(rendered.cleanArtwork, null, drawable.getBounds(), artworkPaint);
+            canvas.drawBitmap(rendered.cleanArtwork, null, bounds, artworkPaint);
         } else {
-            drawable.draw(sourceCanvas);
+            Rect savedBounds = drawable.copyBounds();
+            drawable.setBounds(bounds);
+            drawable.draw(canvas);
+            drawable.setBounds(savedBounds);
         }
+    }
+
+    private FocusOutlineRenderer.Visual buildAndCacheFocusOutlineVisual(@NonNull Drawable drawable,
+                                                                        @NonNull Bitmap source) {
         FocusOutlineRenderer.Visual built = FocusOutlineRenderer.buildVisual(
             source, getResources().getDisplayMetrics().density);
         source.recycle();
