@@ -2846,6 +2846,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && statusRow.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
                 ViewGroup.MarginLayoutParams rowParams =
                     (ViewGroup.MarginLayoutParams) statusRow.getLayoutParams();
+                // A column's foot clearance goes back to nothing here: 10dp of it inside the
+                // row's 24dp would squash the chips the way the strip's own padding once did.
+                if (statusRow.getPaddingBottom() != 0 || statusRow.getPaddingTop() != 0) {
+                    statusRow.setPaddingRelative(0, 0, 0, 0);
+                }
                 // Keep only enough inset for the capsule clip and move the side content inward
                 // below where the curve becomes tight.
                 int targetEdgeMargin = Math.round(dpToPx(collapsed ? 0 : capsule ? 3 : 2));
@@ -2887,12 +2892,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.statusbar.SessionsIndicatorView
                     && ((com.termux.app.statusbar.SessionsIndicatorView) sessions).isShowingSessionNumber()
                     ? targetSessionHeight : ViewGroup.LayoutParams.WRAP_CONTENT;
-                boolean sessionLayoutChanged = sessionParams.getMarginStart() != targetStartMargin
+                boolean sessionLayoutChanged =
+                    sessionParams.getMarginStart() != (vertical ? 0 : targetStartMargin)
+                    || sessionParams.topMargin != (vertical ? targetStartMargin : 0)
                     || sessionParams.height != targetSessionHeight
                     || sessionParams.width != targetSessionWidth;
                 // The chip's height is row geometry too; the interactive writer owns it as well.
                 if (sessionLayoutChanged && !interactiveGeometryOwnsRow) {
-                    sessionParams.setMarginStart(targetStartMargin);
+                    // The gap before the badge is the bar's leading end: the row's start, the
+                    // column's top. Kept on the start in a column it pushes the badge sideways.
+                    sessionParams.setMarginStart(vertical ? 0 : targetStartMargin);
+                    sessionParams.topMargin = vertical ? targetStartMargin : 0;
                     sessionParams.height = targetSessionHeight;
                     sessionParams.width = targetSessionWidth;
                     if (sessionParams instanceof android.widget.LinearLayout.LayoutParams) {
@@ -2923,10 +2933,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View statusWidgets = findViewById(R.id.terminal_status_widgets);
             if (statusWidgets != null) {
                 int targetEndPadding = statusBarContentEdgeInsetPx(capsule);
-                if (statusWidgets.getPaddingEnd() != targetEndPadding) {
+                int end = vertical ? 0 : targetEndPadding;
+                int bottom = vertical ? targetEndPadding : 0;
+                if (statusWidgets.getPaddingEnd() != end
+                    || statusWidgets.getPaddingBottom() != bottom) {
                     statusWidgets.setPaddingRelative(statusWidgets.getPaddingStart(),
-                        statusWidgets.getPaddingTop(), targetEndPadding,
-                        statusWidgets.getPaddingBottom());
+                        statusWidgets.getPaddingTop(), end, bottom);
                 }
             }
             if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
@@ -2945,6 +2957,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                               @NonNull View statusRow, boolean collapsed) {
         int top = mLastStatusBarInsetTop + Math.round(dpToPx(8)) + statusColumnClockHeightPx(collapsed);
         int length = Math.max(Math.round(dpToPx(48)), statusColumnContentLengthPx() - top);
+        // The bar's foot is the lens's: the place below peeks half past it. The stats stop short
+        // of that icon, the way the row's content stops short of the one past its end.
+        int foot = Math.round(dpToPx(com.termux.app.statusbar.PlaceContentStrip.LENS_WIDTH_DP));
+        if (statusRow.getPaddingBottom() != foot || statusRow.getPaddingTop() != 0) {
+            statusRow.setPaddingRelative(0, 0, 0, foot);
+        }
         boolean changed = params.gravity != (Gravity.TOP | Gravity.START)
             || params.topMargin != top || params.bottomMargin != 0
             || params.height != length
@@ -7981,16 +7999,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         railScroll.setDrawerPullListener(mDockRailDrawerPullListener);
         // Padded on all four sides rather than only vertically: the docked edge carries its cutout
-        // inset plus a margin, and the scroll range clears the status and navigation bars, so the
-        // first and last icons cannot end up under a system bar when the rail is scrolled.
+        // inset plus a margin, and the ends carry their own margin — the root already holds the
+        // rail's column clear of the status and navigation bars, so the rail does not pad for them
+        // a second time.
         int verticalPadPx = Math.round(dpToPx(10));
         int edgeMarginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
         int dockedEdgePadPx = dockLayout.railEdgeInsetPx + edgeMarginPx;
         railScroll.setPadding(isDockRailOnRight() ? edgeMarginPx : dockedEdgePadPx,
-            Math.max(mLastStatusBarInsetTop + verticalPadPx,
-                statusColumnTopOffsetPx(isDockRailOnRight()) + verticalPadPx),
-            isDockRailOnRight() ? dockedEdgePadPx : edgeMarginPx,
-            mLastNavigationBarInsetBottom + verticalPadPx);
+            Math.max(verticalPadPx, statusColumnTopOffsetPx(isDockRailOnRight()) + verticalPadPx),
+            isDockRailOnRight() ? dockedEdgePadPx : edgeMarginPx, verticalPadPx);
         railScroll.setClipToPadding(false);
         railList.removeAllViews();
         int iconSizePx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_ICON_SIZE_DP));
@@ -8089,10 +8106,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int marginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
         int edgePadPx = extraKeysColumnEdgeInsetPx(right) + marginPx;
         int verticalPadPx = Math.round(dpToPx(10));
+        // The column's own ends carry only their margin, and the bar's content where they share a
+        // column. The root is already padded away from the status and navigation bars — the column
+        // lives inside that — so adding them here left a bar's height of dead space at each end
+        // and squeezed the keys well under the height they ask for.
         column.setPadding(right ? marginPx : edgePadPx,
-            Math.max(mLastStatusBarInsetTop + verticalPadPx,
-                statusColumnTopOffsetPx(right) + verticalPadPx),
-            right ? edgePadPx : marginPx, mLastNavigationBarInsetBottom + verticalPadPx);
+            Math.max(verticalPadPx, statusColumnTopOffsetPx(right) + verticalPadPx),
+            right ? edgePadPx : marginPx, verticalPadPx);
         ViewGroup.LayoutParams columnParams = column.getLayoutParams();
         if (columnParams instanceof FrameLayout.LayoutParams) {
             FrameLayout.LayoutParams frameParams = (FrameLayout.LayoutParams) columnParams;
@@ -11881,11 +11901,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // start on a row, the column's top on a column.
         // Each is put back to nothing on the other axis: a column's top padding carried over into
         // a row once, and pushed the row's chips down out of their 24dp.
-        int start = isStatusBarVertical() ? 0 : lens;
-        int top = isStatusBarVertical() ? lens : 0;
-        if (strip.getPaddingStart() != start || strip.getPaddingTop() != top) {
-            strip.setPaddingRelative(start, top, strip.getPaddingEnd(),
-                strip.getPaddingBottom());
+        boolean vertical = isStatusBarVertical();
+        // The strip's own trailing padding turns with it too. Left standing across a column it is
+        // width the chips do not have — a 26dp chip in a 34dp column — so they slide off the
+        // bar's centre line and the capsule's curve clips them.
+        int trailing = Math.max(strip.getPaddingEnd(), strip.getPaddingBottom());
+        int start = vertical ? 0 : lens;
+        int top = vertical ? lens : 0;
+        int end = vertical ? 0 : trailing;
+        int bottom = vertical ? trailing : 0;
+        if (strip.getPaddingStart() != start || strip.getPaddingTop() != top
+            || strip.getPaddingEnd() != end || strip.getPaddingBottom() != bottom) {
+            strip.setPaddingRelative(start, top, end, bottom);
         }
     }
 

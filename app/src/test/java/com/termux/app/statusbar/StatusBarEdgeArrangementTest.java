@@ -147,6 +147,60 @@ public class StatusBarEdgeArrangementTest {
     }
 
 
+    @Test public void aStatOnItsSideKeepsTheBarsMiddleLineAndItsGapTurnsWithIt() {
+        LinearLayout row = new LinearLayout(mActivity);
+        row.setId(R.id.terminal_status_row);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        mHost.addView(row, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 24));
+
+        LinearLayout stats = new LinearLayout(mActivity);
+        stats.setId(R.id.terminal_status_stats_cluster);
+        stats.setOrientation(LinearLayout.HORIZONTAL);
+        stats.setPaddingRelative(8, 0, 0, 0);
+        row.addView(stats, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        StatusBarWidgetView cpu = new StatusBarWidgetView(mActivity);
+        stats.addView(cpu, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        MaterialDotSeparatorView dot = new MaterialDotSeparatorView(mActivity, null);
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(3, 3);
+        dotParams.gravity = Gravity.CENTER_VERTICAL;
+        dotParams.setMargins(2, 0, 2, 0);
+        stats.addView(dot, dotParams);
+        StatusBarWidgetView ram = new StatusBarWidgetView(mActivity);
+        LinearLayout.LayoutParams ramParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        ramParams.setMarginStart(8);
+        stats.addView(ram, ramParams);
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.LEFT);
+        assertEquals("a row's centre_vertical has no horizontal part: the dot would fall to the"
+                + " column's edge", Gravity.CENTER_HORIZONTAL,
+            ((LinearLayout.LayoutParams) dot.getLayoutParams()).gravity);
+        assertEquals(Gravity.CENTER_HORIZONTAL,
+            ((LinearLayout.LayoutParams) ram.getLayoutParams()).gravity);
+        assertEquals("the gap before the stat is now above it",
+            8, ((LinearLayout.LayoutParams) ram.getLayoutParams()).topMargin);
+        assertEquals(0, ((LinearLayout.LayoutParams) ram.getLayoutParams()).getMarginStart());
+        assertEquals("the dot keeps a gap at both ends", 2,
+            ((LinearLayout.LayoutParams) dot.getLayoutParams()).topMargin);
+        assertEquals(2, ((LinearLayout.LayoutParams) dot.getLayoutParams()).bottomMargin);
+        assertEquals("the cluster's own clearance is at the bar's leading end", 8,
+            stats.getPaddingTop());
+        assertEquals(0, stats.getPaddingStart());
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.TOP);
+        assertEquals(Gravity.CENTER_VERTICAL,
+            ((LinearLayout.LayoutParams) dot.getLayoutParams()).gravity);
+        assertEquals("and back along the row it came from",
+            8, ((LinearLayout.LayoutParams) ram.getLayoutParams()).getMarginStart());
+        assertEquals(0, ((LinearLayout.LayoutParams) ram.getLayoutParams()).topMargin);
+        assertEquals(8, stats.getPaddingStart());
+        assertEquals(0, stats.getPaddingTop());
+    }
+
     @Test public void aBottomRowKeepsItsClockAtTheFootWhereTheRowIsNot() {
         // The row rides the bar's inner edge — the top of a bottom bar — so the widget slot has
         // to take the outer one, or the two share the same stretch and the clock wears the stats.

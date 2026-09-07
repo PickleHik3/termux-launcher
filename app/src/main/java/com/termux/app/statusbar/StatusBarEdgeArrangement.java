@@ -156,16 +156,35 @@ public final class StatusBarEdgeArrangement {
         group.setOrientation(vertical ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         group.setGravity(vertical ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
         fit(group, vertical);
+        // The group's own gaps and paddings are spacings along the bar: they keep the stats clear
+        // of the bar's end, so they turn with it instead of nudging the whole cluster off the
+        // bar's middle.
+        centreAcross(group, vertical);
+        turnAlongMargins(group, vertical);
+        turnAlongPadding(group, vertical);
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
+            // A stat and the dot before it sit on the bar's middle line and are spaced from
+            // each other along it. Both of those turn with the bar; a start margin left standing
+            // in a column shifts the stat sideways, and a row's centre_vertical gravity has no
+            // horizontal part at all, so the dot falls to the column's edge.
+            centreAcross(child, vertical);
+            turnAlongMargins(child, vertical);
             if (child instanceof StatusBarWidgetView) {
                 ((StatusBarWidgetView) child).setStacked(vertical);
                 fit(child, vertical);
-            } else if (child instanceof MaterialDotSeparatorView) {
-                // The dot between two stats keeps its size; only the margin it wears turns.
-                turnMargins(child, vertical);
             }
         }
+    }
+
+    /** A child centred across the bar, whichever axis that is. */
+    private static void centreAcross(@NonNull View view, boolean vertical) {
+        if (!(view.getLayoutParams() instanceof LinearLayout.LayoutParams)) return;
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) view.getLayoutParams();
+        int gravity = vertical ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL;
+        if (params.gravity == gravity) return;
+        params.gravity = gravity;
+        view.setLayoutParams(params);
     }
 
     /** A child that fills the bar across its width and wraps along it, or the other way round. */
@@ -199,13 +218,31 @@ public final class StatusBarEdgeArrangement {
         view.setLayoutParams(linear);
     }
 
-    private static void turnMargins(@NonNull View view, boolean vertical) {
+    /**
+     * The gaps a child wears at its two ends along the bar, turned with it: what was the space
+     * before and after it along a row is the space above and below it down a column. Each end
+     * keeps its own size, so a leading gap stays a leading gap, and turning back restores the row.
+     */
+    private static void turnAlongMargins(@NonNull View view, boolean vertical) {
         ViewGroup.LayoutParams params = view.getLayoutParams();
         if (!(params instanceof ViewGroup.MarginLayoutParams)) return;
         ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
-        int spacing = Math.max(margins.leftMargin, margins.topMargin);
-        if (vertical) margins.setMargins(0, spacing, 0, spacing);
-        else margins.setMargins(spacing, 0, spacing, 0);
+        int leading = Math.max(margins.getMarginStart(), margins.topMargin);
+        int trailing = Math.max(margins.getMarginEnd(), margins.bottomMargin);
+        if (leading == 0 && trailing == 0) return;
+        margins.setMarginStart(vertical ? 0 : leading);
+        margins.setMarginEnd(vertical ? 0 : trailing);
+        margins.topMargin = vertical ? leading : 0;
+        margins.bottomMargin = vertical ? trailing : 0;
         view.setLayoutParams(margins);
+    }
+
+    /** The same for a group's own padding: the clearance it keeps at the bar's two ends. */
+    private static void turnAlongPadding(@NonNull View view, boolean vertical) {
+        int leading = Math.max(view.getPaddingStart(), view.getPaddingTop());
+        int trailing = Math.max(view.getPaddingEnd(), view.getPaddingBottom());
+        if (leading == 0 && trailing == 0) return;
+        view.setPaddingRelative(vertical ? 0 : leading, vertical ? leading : 0,
+            vertical ? 0 : trailing, vertical ? trailing : 0);
     }
 }
