@@ -9,10 +9,13 @@ import com.termux.app.wall.PaneWallPage;
  * When an open keyboard floats over the place instead of shrinking it, and what that does to the
  * geometry underneath.
  *
- * <p>Only the Linux display can be floated over. It draws a screen of its own, at a size the guest
+ * <p>Two places are floated over. The Linux display draws a screen of its own, at a size the guest
  * chose, and has nothing to reflow — taking room away from it scales the whole picture rather than
- * giving the keyboard somewhere to go. Everywhere else the content is text that wants the room, so
- * the keyboard takes it; a stored overlay on any other place is ignored rather than obeyed.
+ * giving the keyboard somewhere to go; it is the one place where this is a choice. The home place
+ * is a fixed field of cells, and every widget in it is laid out against that field: a keyboard that
+ * took room from it would move and re-cut every widget on the way in and again on the way out, so
+ * it always floats there, whatever is stored. Everywhere else the content is text that wants the
+ * room, so the keyboard takes it, and a stored overlay is ignored rather than obeyed.
  *
  * <p>Pure, so the answer can be read and tested without a window: the view layer only applies it.
  */
@@ -22,6 +25,7 @@ public final class KeyboardOverlayPolicy {
 
     /** Whether an open keyboard floats over the place on screen rather than shrinking it. */
     public static boolean overlays(@NonNull PaneWallPage place, @NonNull PlaceLayout layout) {
+        if (place == PaneWallPage.WIDGETS) return true;
         return place == PaneWallPage.DISPLAY && layout.keyboardMode == KeyboardMode.OVERLAY;
     }
 

@@ -32,6 +32,9 @@ keys when those stand there too: the status bar takes the top of that edge and t
 underneath.
 - **Keyboard on enter**: whether the on-screen keyboard comes back the way you left it, opens, or
   stays closed when you switch to this place. Remembered per place, the same in both orientations.
+  On Home the keyboard opens over the page rather than shrinking it, so the widgets keep their
+  places; a text field inside a widget opens the Android keyboard, and the keyboard key on the
+  extra keys row opens the built-in one.
 - **Grid columns** and **Grid rows** (Home only): how many widgets fit across and down a page, set
   separately for portrait and landscape; widgets that no longer fit a smaller grid move to free
   space or a new page rather than being dropped.

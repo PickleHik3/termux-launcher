@@ -59,16 +59,30 @@ public class KeyboardOverlayPolicyTest {
     // ------------------------------------------------------------------ when it applies
 
     @Test
-    public void outOfTheBoxOnlyTheDisplayInLandscapeFloatsTheKeyboard() {
+    public void outOfTheBoxTheHomePlaceAndTheDisplayInLandscapeFloatTheKeyboard() {
         PlaceLayoutStore store = store();
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                boolean expected = place == PaneWallPage.DISPLAY
-                    && orientation == PlaceOrientation.LANDSCAPE;
+                boolean expected = place == PaneWallPage.WIDGETS
+                    || (place == PaneWallPage.DISPLAY
+                        && orientation == PlaceOrientation.LANDSCAPE);
                 assertEquals(place + " " + orientation, expected,
                     overlays(store, place, orientation));
             }
         }
+    }
+
+    /** The widget grid is laid against fixed cells; a keyboard that took room would re-cut it. */
+    @Test
+    public void theHomePlaceFloatsTheKeyboardWhateverIsStored() {
+        PlaceLayoutStore store = store();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            store.setKeyboardMode(PaneWallPage.WIDGETS, orientation, KeyboardMode.RESIZE);
+            assertTrue(String.valueOf(orientation),
+                overlays(store, PaneWallPage.WIDGETS, orientation));
+        }
+        assertTrue(KeyboardOverlayPolicy.overlays(PaneWallPage.WIDGETS,
+            layout(KeyboardMode.RESIZE)));
     }
 
     @Test
@@ -86,7 +100,7 @@ public class KeyboardOverlayPolicyTest {
     public void noOtherPlaceFloatsTheKeyboardEvenWithAnOverlayStored() {
         PlaceLayoutStore store = store();
         for (PaneWallPage place : PaneWallPage.values()) {
-            if (place == PaneWallPage.DISPLAY) continue;
+            if (place == PaneWallPage.DISPLAY || place == PaneWallPage.WIDGETS) continue;
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 store.setKeyboardMode(place, orientation, KeyboardMode.OVERLAY);
                 assertFalse(place + " " + orientation, overlays(store, place, orientation));

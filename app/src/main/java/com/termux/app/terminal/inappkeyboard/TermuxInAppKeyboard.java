@@ -88,6 +88,10 @@ public final class TermuxInAppKeyboard {
     private boolean mDestroyed;
     private boolean mHeightAdjusting;
     private boolean mExternalTextInputActive;
+    /** The place on screen carries its own text fields, so it holds the system IME while down. */
+    private boolean mPlaceOwnsSystemIme;
+    /** Whether the place actually has it right now — what was last applied to the window. */
+    private boolean mPlaceHoldsSystemIme;
     private float mHeightScale = 1f;
     private float mKeyMarginScale = 1f;
     private float mKeyCornerRadiusDp = -1f;
@@ -328,6 +332,8 @@ public final class TermuxInAppKeyboard {
             return;
         mLastShowReason = Objects.requireNonNull(reason, "reason");
         mVisible = true;
+        // Shown, this keyboard is the one typing: the place gives the IME back.
+        mPlaceHoldsSystemIme = false;
         suppressSystemIme();
         showInternal();
     }
@@ -342,6 +348,8 @@ public final class TermuxInAppKeyboard {
         resetInputPipeline();
         setContainerVisible(false);
         mHost.requestAccessoryGeometrySync();
+        // Down on a place that has its own fields, the IME goes back to the place.
+        syncPlaceSystemIme();
     }
 
     public void toggle(ToggleReason reason) {
@@ -712,9 +720,37 @@ public final class TermuxInAppKeyboard {
             .hide(androidx.core.view.WindowInsetsCompat.Type.ime());
     }
 
+    /**
+     * Whether the place on screen owns the system IME. The home place does: its widgets carry
+     * their own text fields, and a tap in one has to reach a keyboard. While it is on screen and
+     * this keyboard is down, the suppression is lifted so the IME can open over the place — the
+     * window is never given room for it, so the widget field keeps its cell. Showing this
+     * keyboard, from the extra keys or anywhere else, takes the IME straight back.
+     */
+    public void setPlaceOwnsSystemIme(boolean owns) {
+        mPlaceOwnsSystemIme = owns;
+        syncPlaceSystemIme();
+    }
+
+    /**
+     * Hands the IME to the place or takes it back, from the place on screen and this keyboard's own
+     * visibility. Cheap to call on every pass: it acts only when the answer changes.
+     */
+    private void syncPlaceSystemIme() {
+        boolean holds = mPlaceOwnsSystemIme && !mVisible && !mExternalTextInputActive;
+        if (mPlaceHoldsSystemIme == holds) return;
+        mPlaceHoldsSystemIme = holds;
+        if (holds) releaseSystemImeToPlace();
+        else suppressSystemIme();
+    }
+
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */
     public void suppressSystemIme() {
         if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
+            return;
+        // The place on screen has the IME while this keyboard is down; it is taken back the
+        // moment the keyboard is shown.
+        if (mPlaceHoldsSystemIme)
             return;
         mHost.runOnMain(() -> {
             if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
@@ -747,6 +783,34 @@ public final class TermuxInAppKeyboard {
                 terminalView.setOnFocusChangeListener(mSystemImeFocusListener);
             }
             terminalView.requestFocus();
+        });
+    }
+
+    /**
+     * Hands the system IME to the place on screen: the disable flags come off so a field in it can
+     * open the IME, and the window still refuses to be resized for it, so nothing in the place
+     * moves. Unlike {@link #beginExternalTextInput()} this is not a mode — the keyboard has not
+     * yielded to one known field, it is simply down on a place that has its own.
+     */
+    private void releaseSystemImeToPlace() {
+        if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
+            return;
+        mHost.runOnMain(() -> {
+            if (!mEnabled || mDestroyed || mHost == null || !mPlaceHoldsSystemIme)
+                return;
+            Activity activity = findActivity(requireContainer().getContext());
+            if (activity == null) return;
+            TerminalView terminalView = mHost.getTerminalView();
+            if (terminalView != null && mSystemImeFocusListener != null)
+                terminalView.setOnFocusChangeListener(null);
+            mSystemImeFocusListener = null;
+            KeyboardUtils.clearDisableSoftKeyboardFlags(activity);
+            int mode = activity.getWindow().getAttributes().softInputMode;
+            mode = (mode & ~(WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE
+                | WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST))
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED
+                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
+            activity.getWindow().setSoftInputMode(mode);
         });
     }
 

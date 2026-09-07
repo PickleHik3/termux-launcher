@@ -8193,6 +8193,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Re-lays every piece of chrome the arrangement decides, after the wall changes place or the
      * screen turns. One entry point: the layout is resolved once and each surface applies its part.
      */
+    /**
+     * Who holds the system IME on the place now on screen. The home place does: a tap in a widget's
+     * own text field has to reach a keyboard, so the in-app keyboard lifts its suppression while it
+     * is down there. Its own keyboard key, on the extra keys, still brings the in-app keyboard back.
+     */
+    private void applyPlaceSystemImeOwner() {
+        if (mInAppKeyboard == null) return;
+        mInAppKeyboard.setPlaceOwnsSystemIme(isWidgetsPageShowing());
+    }
+
     private void syncPlaceLayout() {
         // The look layer follows the wall too: a place wearing its own dock, keyboard or status
         // surface puts it on as the wall settles on it. Nothing to re-apply when no place has one.
@@ -8202,6 +8212,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
+        applyPlaceSystemImeOwner();
         applyStatusBarEdge(layout);
         applyWidgetGridPreference();
         updateDockRailView();
@@ -8345,6 +8356,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             currentPlaceLayout());
         int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
             keyboardOverlays, state.keyboardShown, state.keyboardHeight);
+        // The keyboard coming and going is also when the place's claim on the system IME changes.
+        applyPlaceSystemImeOwner();
         int toolbarHeightPx = state.extraKeysRowEnabled ? measuredToolbarHeightPx : 0;
         toolbarLayoutParams.height = toolbarHeightPx;
         terminalToolbarViewPager.setLayoutParams(toolbarLayoutParams);
@@ -8386,8 +8399,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The system IME stands the absorption down too: the remainder halves only hide when the
         // band rests on the screen edge — above a keyboard they surface as a wallpaper band
         // between the extra-keys glass and the IME, read as a stray gap.
+        // And it is the terminal's own device: it exists to land the dock on a whole terminal row.
+        // On a place with no rows to land on it is only a height that changes as the keyboard comes
+        // and goes — on the home place, a grid re-cut around every widget for nothing.
+        boolean terminalOnScreen =
+            currentWallPlace() == com.termux.app.wall.PaneWallPage.TERMINAL;
         int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown
-            || visiblePaneCount() > 1 || activePaneFloating || isImeVisible() ? 0
+            || visiblePaneCount() > 1 || activePaneFloating || isImeVisible() || !terminalOnScreen
+            ? 0
             : resolveTerminalFlushDockPaddingPx(accessoryContentHeightPx, accessoryBottomMarginPx);
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
         int combinedHeight = computeAccessoryStackHeight(
