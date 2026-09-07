@@ -213,7 +213,7 @@ public final class PlaceMiniatureView extends View {
             case APPS_ROW: return mLayout.appsRow == RowPlacement.HIDDEN;
             case EXTRA_KEYS: return mLayout.extraKeys == RowPlacement.HIDDEN;
             case ALPHABETS_ROW:
-                return !(mLayout.appsRow == RowPlacement.BOTTOM && mLayout.azRowShown);
+                return !mLayout.azRowShown;
             case STATUS_BAR:
             case CANVAS:
             default: return false;
@@ -339,17 +339,27 @@ public final class PlaceMiniatureView extends View {
             return;
         }
         takeEdgeStrip(Block.STATUS_BAR, mLayout.statusBarEdge, STATUS_BAR_FRACTION);
-        // Strips are claimed from the outside in, so the order here is the real dock's stacking
-        // order read from the screen edge: extra keys lowest, the A–Z index above them, and the
-        // pinned apps above that.
-        if (mLayout.extraKeys != RowPlacement.HIDDEN) {
+        // Strips are claimed from the outside in. Two facts, both verified against the device:
+        // (1) a side rail/column pair puts the pinned-apps rail at the screen edge and pads the
+        // extra-keys column in by the rail's width, so a side apps row is claimed before a side
+        // extra-keys row; (2) the bottom stack still reads extra keys, then the A–Z index, then
+        // pinned apps, so a bottom extra-keys row is still claimed before a bottom apps row. The
+        // A–Z band is always along the bottom and claimed after any side columns, so it spans only
+        // the width those columns leave between them.
+        if (mLayout.appsRow.isOnSide()) {
+            takeEdgeStrip(Block.APPS_ROW, edgeOf(mLayout.appsRow), ROW_FRACTION);
+        }
+        if (mLayout.extraKeys.isOnSide()) {
             takeEdgeStrip(Block.EXTRA_KEYS, edgeOf(mLayout.extraKeys), ROW_FRACTION);
+        }
+        if (mLayout.extraKeys == RowPlacement.BOTTOM) {
+            takeEdgeStrip(Block.EXTRA_KEYS, Edge.BOTTOM, ROW_FRACTION);
         }
         if (!isBlockHidden(Block.ALPHABETS_ROW)) {
             takeEdgeStrip(Block.ALPHABETS_ROW, Edge.BOTTOM, ALPHABETS_FRACTION);
         }
-        if (mLayout.appsRow != RowPlacement.HIDDEN) {
-            takeEdgeStrip(Block.APPS_ROW, edgeOf(mLayout.appsRow), ROW_FRACTION);
+        if (mLayout.appsRow == RowPlacement.BOTTOM) {
+            takeEdgeStrip(Block.APPS_ROW, Edge.BOTTOM, ROW_FRACTION);
         }
         mBlockRects.put(Block.CANVAS, new RectF(mRemaining));
         computeContent();
