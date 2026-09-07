@@ -11877,8 +11877,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int lens = Math.round(dpToPx(com.termux.app.statusbar.PlaceContentStrip.LENS_WIDTH_DP));
         // The lens runs along the bar, so what it keeps clear is the bar's leading end: the row's
         // start on a row, the column's top on a column.
+        // Each is put back to nothing on the other axis: a column's top padding carried over into
+        // a row once, and pushed the row's chips down out of their 24dp.
         int start = isStatusBarVertical() ? 0 : lens;
-        int top = isStatusBarVertical() ? lens : strip.getPaddingTop();
+        int top = isStatusBarVertical() ? lens : 0;
         if (strip.getPaddingStart() != start || strip.getPaddingTop() != top) {
             strip.setPaddingRelative(start, top, strip.getPaddingEnd(),
                 strip.getPaddingBottom());
