@@ -76,6 +76,8 @@ public class LayoutPreferencesFragmentTest {
         assertTrue(screen.findPreference("layout_status_bar") instanceof SegmentedPillPreference);
         assertTrue(screen.findPreference("layout_apps_row") instanceof SegmentedPillPreference);
         assertTrue(screen.findPreference("layout_alphabets_row") instanceof SwitchPreferenceCompat);
+        assertTrue(screen.findPreference("layout_alphabets_row_edge")
+            instanceof SegmentedPillPreference);
         assertTrue(screen.findPreference("layout_extra_keys") instanceof SegmentedPillPreference);
         assertTrue(screen.findPreference("layout_keyboard_on_enter") instanceof SegmentedPillPreference);
         assertTrue(screen.findPreference("layout_keyboard_mode") instanceof SegmentedPillPreference);
@@ -92,6 +94,79 @@ public class LayoutPreferencesFragmentTest {
         // The default selection is Terminal, not Home, so the widget grid has nothing to show yet.
         assertFalse("grid columns row", screen.findPreference("layout_grid_columns").isVisible());
         assertFalse("grid rows row", screen.findPreference("layout_grid_rows").isVisible());
+
+        // The apps row is at the bottom by default, so the bar rides under it and its own
+        // placement pill has nothing to offer.
+        assertFalse("alphabets bar edge pill",
+            screen.findPreference("layout_alphabets_row_edge").isVisible());
+    }
+
+    @Test
+    public void theAlphabetsRowEdgePillShowsOnlyWhileTheBarStandsAlone() {
+        Application app = RuntimeEnvironment.getApplication();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
+        PlaceLayoutStore places = new PlaceLayoutStore(preferences);
+
+        // Apps row at the bottom (the default): the bar rides under it, pill hidden.
+        LayoutPreferencesFragment bottomFragment = launch();
+        assertFalse("bottom apps row hides the pill", bottomFragment.getPreferenceScreen()
+            .findPreference("layout_alphabets_row_edge").isVisible());
+
+        // Apps row hidden entirely: the bar stands alone, pill shown.
+        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
+        LayoutPreferencesFragment hiddenFragment = launch();
+        assertTrue("hidden apps row shows the pill", hiddenFragment.getPreferenceScreen()
+            .findPreference("layout_alphabets_row_edge").isVisible());
+    }
+
+    @Test
+    public void theAlphabetsRowEdgePillShowsWithARailAppsRowInLandscape() {
+        // A side apps row has no width to stand in portrait — the store reads it back as bottom —
+        // so the rail case that leaves the bar standing alone only exists in landscape.
+        Application app = RuntimeEnvironment.getApplication();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
+        PlaceLayoutStore places = new PlaceLayoutStore(preferences);
+        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, RowPlacement.LEFT);
+
+        RuntimeEnvironment.setQualifiers("+land");
+        LayoutPreferencesFragment railFragment = launch();
+        assertTrue("rail apps row shows the pill", railFragment.getPreferenceScreen()
+            .findPreference("layout_alphabets_row_edge").isVisible());
+    }
+
+    @Test
+    public void theAlphabetsRowEdgeOffersTwoSegmentsInPortraitAndFourInLandscape() {
+        LayoutPreferencesFragment portraitFragment = launch();
+        SegmentedPillPreference portraitPill = portraitFragment.getPreferenceScreen()
+            .findPreference("layout_alphabets_row_edge");
+        assertNotNull(portraitPill);
+        assertEquals("portrait has no width for a side column", 2, portraitPill.segmentCount());
+
+        RuntimeEnvironment.setQualifiers("+land");
+        LayoutPreferencesFragment landscapeFragment = launch();
+        SegmentedPillPreference landscapePill = landscapeFragment.getPreferenceScreen()
+            .findPreference("layout_alphabets_row_edge");
+        assertNotNull(landscapePill);
+        assertEquals("landscape offers every edge", 4, landscapePill.segmentCount());
+    }
+
+    @Test
+    public void aWriteToTheAlphabetsRowEdgeLandsInTheScopedKey() {
+        Application app = RuntimeEnvironment.getApplication();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
+        LayoutPreferencesFragment.LayoutPreferencesDataStore store =
+            new LayoutPreferencesFragment.LayoutPreferencesDataStore(app, preferences);
+        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
+
+        store.putString("layout_alphabets_row_edge", "right");
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
+
+        SharedPreferences prefs = preferences.getSharedPreferences();
+        assertEquals("right", prefs.getString("place.terminal.landscape.az_bar", null));
+        assertEquals("right", store.getString("layout_alphabets_row_edge", "bottom"));
+        // A different orientation on the same place is untouched.
+        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
+        assertEquals("bottom", store.getString("layout_alphabets_row_edge", "bottom"));
     }
 
     @Test

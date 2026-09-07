@@ -137,14 +137,15 @@ public class PlaceLayoutStoreTest {
         store.setStatusBarEdge(place, orientation, Edge.LEFT);
         store.setAppsRow(place, orientation, RowPlacement.HIDDEN);
         store.setAzRowShown(place, orientation, false);
+        store.setAzBarEdge(place, orientation, Edge.RIGHT);
         store.setExtraKeys(place, orientation, RowPlacement.LEFT);
         store.setKeyboardMode(place, orientation, KeyboardMode.OVERLAY);
         store.setWidgetColumns(place, orientation, 6);
         store.setWidgetRows(place, orientation, 3);
 
         PlaceLayout layout = store.resolve(place, orientation);
-        assertEquals(new PlaceLayout(Edge.LEFT, RowPlacement.HIDDEN, false, RowPlacement.LEFT,
-            KeyboardMode.OVERLAY, 6, 3), layout);
+        assertEquals(new PlaceLayout(Edge.LEFT, RowPlacement.HIDDEN, false, Edge.RIGHT,
+            RowPlacement.LEFT, KeyboardMode.OVERLAY, 6, 3), layout);
         assertTrue(layout.toString().contains("grid=6x3"));
         assertNotEquals(layout, store.resolve(place, PlaceOrientation.PORTRAIT));
     }
@@ -165,6 +166,7 @@ public class PlaceLayoutStoreTest {
         store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.RIGHT);
         store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, RowPlacement.RIGHT);
         store.setStatusBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.BOTTOM);
+        store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.LEFT);
 
         store.clear(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
         PlaceLayout portrait = store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
@@ -172,6 +174,38 @@ public class PlaceLayoutStoreTest {
         assertEquals(Edge.TOP, portrait.statusBarEdge);
         assertEquals(RowPlacement.RIGHT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+        // az_bar is in ARRANGEMENT_KEYS but for the untouched orientation, so it survives the clear.
+        assertEquals(Edge.LEFT,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
+    }
+
+    @Test
+    public void azBarEdgeDefaultsToBottomAndStandsOnlyInLandscape() {
+        PlaceLayoutStore store = store();
+        assertEquals(Edge.BOTTOM,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).azBarEdge);
+        assertEquals(Edge.BOTTOM,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
+
+        store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.LEFT);
+        store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.LEFT);
+        assertEquals("a side value stored for portrait reads as the bottom", Edge.BOTTOM,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).azBarEdge);
+        assertEquals(Edge.LEFT,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
+
+        store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.TOP);
+        assertEquals(Edge.TOP,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).azBarEdge);
+    }
+
+    @Test
+    public void clearingRemovesTheAzBarEdge() {
+        PlaceLayoutStore store = store();
+        store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.RIGHT);
+        store.clear(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
+        assertEquals(Edge.BOTTOM,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
     }
 
     @Test

@@ -53,7 +53,8 @@ public class KeyboardOverlayPolicyTest {
     }
 
     private static PlaceLayout layout(KeyboardMode mode) {
-        return new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, true, RowPlacement.BOTTOM, mode, 4, 5);
+        return new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM, mode, 4, 5);
     }
 
     // ------------------------------------------------------------------ when it applies

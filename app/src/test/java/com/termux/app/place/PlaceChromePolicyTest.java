@@ -1,5 +1,6 @@
 package com.termux.app.place;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -14,7 +15,13 @@ public class PlaceChromePolicyTest {
 
     private static PlaceLayout layout(RowPlacement appsRow, boolean azRowShown,
                                       RowPlacement extraKeys) {
-        return new PlaceLayout(Edge.TOP, appsRow, azRowShown, extraKeys, KeyboardMode.RESIZE, 4, 5);
+        return layout(appsRow, azRowShown, Edge.BOTTOM, extraKeys);
+    }
+
+    private static PlaceLayout layout(RowPlacement appsRow, boolean azRowShown, Edge azBarEdge,
+                                      RowPlacement extraKeys) {
+        return new PlaceLayout(Edge.TOP, appsRow, azRowShown, azBarEdge, extraKeys,
+            KeyboardMode.RESIZE, 4, 5);
     }
 
     @Test
@@ -100,5 +107,24 @@ public class PlaceChromePolicyTest {
         assertFalse(PlaceChromePolicy.dockShown(l));
         assertTrue(PlaceChromePolicy.appsRailShown(l));
         assertTrue(PlaceChromePolicy.extraKeysColumnShown(l));
+    }
+
+    @Test
+    public void theBarsStoredEdgeAppliesOnlyWhileItStandsAlone() {
+        // Riding under the apps row: the stored edge is ignored, the bar is always bottom.
+        PlaceLayout ridingRow = layout(RowPlacement.BOTTOM, true, Edge.LEFT, RowPlacement.BOTTOM);
+        assertFalse(PlaceChromePolicy.azIndexStandsAlone(ridingRow));
+        assertEquals(Edge.BOTTOM, PlaceChromePolicy.azBarEdge(ridingRow));
+
+        // Standing alone: the stored edge is honoured, on every edge.
+        for (Edge edge : Edge.values()) {
+            PlaceLayout standalone = layout(RowPlacement.LEFT, true, edge, RowPlacement.BOTTOM);
+            assertTrue(PlaceChromePolicy.azIndexStandsAlone(standalone));
+            assertEquals(edge, PlaceChromePolicy.azBarEdge(standalone));
+        }
+
+        // The switch off: standing alone is moot, the bar is bottom.
+        PlaceLayout off = layout(RowPlacement.LEFT, false, Edge.RIGHT, RowPlacement.BOTTOM);
+        assertEquals(Edge.BOTTOM, PlaceChromePolicy.azBarEdge(off));
     }
 }

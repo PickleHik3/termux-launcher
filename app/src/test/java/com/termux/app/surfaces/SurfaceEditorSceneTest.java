@@ -30,7 +30,7 @@ public class SurfaceEditorSceneTest {
     private static final int MIN_BAND = 360;
 
     private static PlaceLayout layout(Edge edge, RowPlacement apps, RowPlacement keys) {
-        return new PlaceLayout(edge, apps, false, keys, KeyboardMode.RESIZE, 4, 4);
+        return new PlaceLayout(edge, apps, false, Edge.BOTTOM, keys, KeyboardMode.RESIZE, 4, 4);
     }
 
     /** Portrait as it ships: bar along the top, apps and keys on the dock. */

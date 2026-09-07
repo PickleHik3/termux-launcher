@@ -28,6 +28,12 @@
         android:defaultValue="true" />
 
     <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="layout_alphabets_row_edge"
+        app:title="@string/settings_show_az_index_title"
+        app:summary="@string/settings_layout_alphabets_edge_summary"
+        app:defaultValue="bottom" />
+
+    <com.termux.app.fragments.settings.SegmentedPillPreference
         app:key="layout_extra_keys"
         app:title="@string/settings_x11_extra_keys_side_title"
         app:summary="@string/settings_layout_extra_keys_summary"
