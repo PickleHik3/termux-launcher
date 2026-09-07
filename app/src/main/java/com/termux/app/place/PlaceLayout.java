@@ -95,17 +95,21 @@ public final class PlaceLayout {
     @NonNull public final Edge statusBarEdge;
     @NonNull public final RowPlacement appsRow;
     public final boolean azRowShown;
+    /** Where the alphabets bar stands when it rides on its own; ignored while it sits under the
+     *  apps row, where it always rides along the bottom regardless of what is stored here. */
+    @NonNull public final Edge azBarEdge;
     @NonNull public final RowPlacement extraKeys;
     @NonNull public final KeyboardMode keyboardMode;
     public final int widgetColumns;
     public final int widgetRows;
 
     public PlaceLayout(@NonNull Edge statusBarEdge, @NonNull RowPlacement appsRow,
-                       boolean azRowShown, @NonNull RowPlacement extraKeys,
+                       boolean azRowShown, @NonNull Edge azBarEdge, @NonNull RowPlacement extraKeys,
                        @NonNull KeyboardMode keyboardMode, int widgetColumns, int widgetRows) {
         this.statusBarEdge = statusBarEdge;
         this.appsRow = appsRow;
         this.azRowShown = azRowShown;
+        this.azBarEdge = azBarEdge;
         this.extraKeys = extraKeys;
         this.keyboardMode = keyboardMode;
         this.widgetColumns = widgetColumns;
@@ -122,6 +126,7 @@ public final class PlaceLayout {
             && widgetRows == that.widgetRows
             && statusBarEdge == that.statusBarEdge
             && appsRow == that.appsRow
+            && azBarEdge == that.azBarEdge
             && extraKeys == that.extraKeys
             && keyboardMode == that.keyboardMode;
     }
@@ -131,6 +136,7 @@ public final class PlaceLayout {
         int result = statusBarEdge.hashCode();
         result = 31 * result + appsRow.hashCode();
         result = 31 * result + (azRowShown ? 1 : 0);
+        result = 31 * result + azBarEdge.hashCode();
         result = 31 * result + extraKeys.hashCode();
         result = 31 * result + keyboardMode.hashCode();
         result = 31 * result + widgetColumns;
@@ -144,6 +150,7 @@ public final class PlaceLayout {
         return "PlaceLayout{status=" + statusBarEdge
             + ", apps=" + appsRow
             + ", az=" + azRowShown
+            + ", azEdge=" + azBarEdge
             + ", keys=" + extraKeys
             + ", keyboard=" + keyboardMode
             + ", grid=" + widgetColumns + "x" + widgetRows

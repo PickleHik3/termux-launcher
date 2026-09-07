@@ -2,6 +2,7 @@ package com.termux.app.place;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 
 /**
@@ -34,6 +35,15 @@ public final class PlaceChromePolicy {
      */
     public static boolean azIndexStandsAlone(@NonNull PlaceLayout layout) {
         return azRowShown(layout) && !appsRowShown(layout);
+    }
+
+    /**
+     * The edge the alphabets bar actually draws on. Its stored choice only applies while it stands
+     * alone; riding under the apps row pins it to the bottom regardless of what is stored.
+     */
+    @NonNull
+    public static Edge azBarEdge(@NonNull PlaceLayout layout) {
+        return azIndexStandsAlone(layout) ? layout.azBarEdge : Edge.BOTTOM;
     }
 
     /** The pinned apps as a column on a screen edge — the rail. */

@@ -45,6 +45,7 @@ public final class PlaceLayoutStore {
     private static final String KEY_STATUS_BAR = "status_bar";
     private static final String KEY_APPS_ROW = "apps_row";
     private static final String KEY_AZ_ROW = "az_row";
+    private static final String KEY_AZ_BAR = "az_bar";
     private static final String KEY_EXTRA_KEYS = "extra_keys";
     private static final String KEY_KEYBOARD_MODE = "keyboard_mode";
     private static final String KEY_WIDGET_COLUMNS = "widget_columns";
@@ -58,7 +59,7 @@ public final class PlaceLayoutStore {
     private static final String LEGACY_KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
 
     private static final String[] ARRANGEMENT_KEYS = {
-        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_EXTRA_KEYS, KEY_KEYBOARD_MODE,
+        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS, KEY_KEYBOARD_MODE,
         KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS
     };
 
@@ -106,6 +107,7 @@ public final class PlaceLayoutStore {
             statusBarEdge(place, orientation),
             appsRow,
             azRowShown(place, orientation),
+            azBarEdge(place, orientation),
             extraKeys,
             keyboardMode(place, orientation),
             widgetColumns(place, orientation),
@@ -169,6 +171,26 @@ public final class PlaceLayoutStore {
     public void setAzRowShown(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
                               boolean shown) {
         writeBoolean(arrangementKey(place, orientation, KEY_AZ_ROW), shown);
+    }
+
+    /**
+     * Where the alphabets bar stands while it rides on its own — with the apps row under it, it
+     * always rides along the bottom and this choice is ignored ({@link PlaceChromePolicy#azBarEdge}).
+     *
+     * <p>Portrait offers only the top and the bottom, same as the status bar: a column down the
+     * side of a portrait screen takes width the terminal does not have, so a side still stored for
+     * portrait reads as the bottom rather than standing a column the page can no longer put right.
+     */
+    @NonNull
+    public Edge azBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
+        Edge edge = Edge.parse(readString(place, orientation, KEY_AZ_BAR), Edge.BOTTOM);
+        if (orientation == PlaceOrientation.PORTRAIT && edge.isOnSide()) return Edge.BOTTOM;
+        return edge;
+    }
+
+    public void setAzBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+                             @NonNull Edge edge) {
+        writeString(place, orientation, KEY_AZ_BAR, edge.storageValue());
     }
 
     /** Where the extra keys stand when they are shown at all. */
