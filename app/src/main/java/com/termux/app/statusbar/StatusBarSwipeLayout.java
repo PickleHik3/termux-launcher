@@ -108,6 +108,12 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     @NonNull public Edge edge() { return mEdge; }
 
+    /**
+     * Whether the bar standing on this edge may rest expanded. A bar down a side stays compact
+     * regardless: this only vetoes the expand swipe, it never folds a bar already open elsewhere.
+     */
+    public void setExpansionAllowed(boolean allowed) { mExpansionAllowed = allowed; }
+
     /** Whether the pane wall has a place to go from here; off, a sideways drag means nothing. */
     public void setWallAvailable(boolean available) {
         mWallAvailable = available;
@@ -261,6 +267,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     private boolean mWallAvailable;
     private boolean mWallDragActive;
+    private boolean mExpansionAllowed = true;
 
     /**
      * Child streams are frozen at DOWN with one exception: a claimed wall drag takes over — the
@@ -355,7 +362,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         // any pinned card are targets, not bar chrome.
         boolean inTopSlot = isInsideView(findViewById(R.id.terminal_top_widget_area), event);
         boolean formEligible = !blocked
-            && !(mState == TopStatusBarState.EXPANDED && inTopSlot);
+            && !(mState == TopStatusBarState.EXPANDED && inTopSlot)
+            && mExpansionAllowed;
         // The wall takes a drag along the bar from anywhere on it except the window strip, whose
         // chips scroll first and hand over their own surplus distance. It works over the clock,
         // the tiles and the stat widgets too: a drag along the bar on one of those is not a tap.

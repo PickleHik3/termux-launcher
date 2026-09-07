@@ -1,8 +1,12 @@
 package com.termux.app.statusbar;
 
+import com.termux.app.place.PlaceLayout.Edge;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * The status bar's one-way arbitration over one immutable DOWN. Two gestures share the bar: a
@@ -131,5 +135,12 @@ public class StatusBarGesturePolicyTest {
         // Without the wall the older, quicker rule stands: one slop of vertical travel decides.
         assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
             wallPolicy(false, false).move(10, 1));
+    }
+
+    @Test public void expansionIsAllowedOnlyAlongTopOrBottom() {
+        assertTrue(StatusBarGesturePolicy.expansionAllowed(Edge.TOP));
+        assertTrue(StatusBarGesturePolicy.expansionAllowed(Edge.BOTTOM));
+        assertFalse(StatusBarGesturePolicy.expansionAllowed(Edge.LEFT));
+        assertFalse(StatusBarGesturePolicy.expansionAllowed(Edge.RIGHT));
     }
 }
