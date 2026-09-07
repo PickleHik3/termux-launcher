@@ -15,7 +15,10 @@ import android.view.ViewParent;
  * duration scale is 0 (reduce-motion), the springs snap to their targets instead of animating.</p>
  *
  * <p>Everything on the dock — glass, icons, rows — is one plane: the slab owns the only transform
- * and its contents inherit it, so nothing on it can ease on a timeline of its own.</p>
+ * and its contents inherit it, so nothing on it can ease on a timeline of its own. Where a row
+ * cannot inherit it (the glass is the slab while the in-app keyboard is up, and the rows are its
+ * siblings) it is handed the very same answer with the plane's pivot mapped into its own
+ * coordinates, which is the same plane and not merely the same angles.</p>
  *
  * <p>This mirrors the {@code dock-ui.jsx} prototype's plank physics (press dip and glow/specular
  * coupling) recreated natively, with the tilt tightened to {@code maxTiltDeg} and the springs
@@ -36,6 +39,8 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     private static final float DEFAULT_PRESS_DIP = 0.013f;
     /** No cap on how far the dip may travel; the dock's own slab keeps its proportional dip. */
     private static final float NO_DIP_TRAVEL_CAP = 0f;
+    private static final View[] NO_LAYERS = new View[0];
+    private static final boolean[] NO_FLAGS = new boolean[0];
 
     // Per-instance tuning: the dock keeps the defaults; the terminal's full-screen pane uses far
     // gentler values, since 3° on a surface that tall reads as the whole screen keeling over.
@@ -49,14 +54,27 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     private final View mSpecular;    // moving specular highlight
     private final View mGlow;        // accent rim glow
     private final float mDensity;
-    private View mIconLayer;         // the dock's icon row
-    private boolean mIconLayerInherits;  // true when the row is inside the slab and needs no transform
+    /** The dock's content rows: pinned apps, the letters, the band between them. */
+    private View[] mContentLayers = NO_LAYERS;
+    /** Per layer: true when it sits inside the slab and so needs no transform of its own. */
+    private boolean[] mContentInherits = NO_FLAGS;
+    /** The one answer the whole dock wears this frame, computed once from the plank's geometry. */
+    private final Slab mSlab = new Slab();
+    /** Reused by {@link #measureOffsetFromPlank}: a row's laid-out offset from the plank. */
+    private final float[] mLayerOffset = new float[2];
 
     private boolean mEnabled = true;
     private boolean mReducedMotion = false;
     private boolean mPressed = false;
     private boolean mFrameScheduled = false;
     private boolean mMotionEnabled = true;
+    /**
+     * True while another surface owns the dock's transforms — the app drawer's plane lifts the very
+     * glass and rows the plank tilts. The plank then writes nothing at all until the next finger
+     * lands on it: a chrome re-apply mid-transition would otherwise zero the translations the
+     * drawer is animating, for a frame.
+     */
+    private boolean mHandedOver = false;
     // Hinge mode (edge-to-edge "normal" dock): pivot at the screen-bottom edge so the bar tips back
     // from the bottom toward the finger, instead of the capsule's free-floating centre tilt+dip.
     private boolean mHingeMode = false;
@@ -94,30 +112,76 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     }
 
     /**
-     * The dock's icon row. Wherever the row sits inside the transformed slab it is left completely
-     * alone — it inherits the slab's transform, which is the only way its motion can be exactly the
-     * glass's motion. The one state where it is not a descendant (the in-app keyboard tilts the
-     * glass surface alone, since the slab there also holds the keyboard) it is driven with the very
-     * same spring values, never an easing of its own. Passing a different view (or null)
-     * neutralizes the previous one.
+     * The dock's content rows — the pinned-apps layer, the letters, the band between them. They are
+     * one group on purpose: every row standing on the glass gets the same answer, so no row can
+     * move by a hair less than the surface it sits on.
+     *
+     * <p>Wherever a row sits inside the transformed slab it is left completely alone — it inherits
+     * the slab's transform, which is the only way its motion can be exactly the glass's motion. In
+     * the one state where the rows are not descendants (the in-app keyboard tilts the glass surface
+     * alone, since the slab there also holds the keyboard) each of them is driven with the very same
+     * spring values, off the very same slab, never an easing of its own. Passing a different set
+     * (or none) neutralizes the previous one. Nulls are ignored, so callers can hand over views
+     * that may not be inflated.</p>
      */
-    public void setIconLayer(View iconLayer) {
-        if (mIconLayer == iconLayer) {
+    public void setContentLayers(View... layers) {
+        if (sameContentLayers(layers)) {
             return;
         }
-        if (mIconLayer != null) {
-            resetIconLayer(mIconLayer);
+        for (View previous : mContentLayers) {
+            resetLayer(previous);
         }
-        mIconLayer = iconLayer;
-        mIconLayerInherits = isInsidePlank(iconLayer);
-        if (mIconLayer != null) {
-            if (mIconLayerInherits) {
-                resetIconLayer(mIconLayer);
-            } else {
-                mIconLayer.setCameraDistance(mDensity * 2600f);
-                applyToViews();
+        int count = countNonNull(layers);
+        mContentLayers = count == 0 ? NO_LAYERS : new View[count];
+        mContentInherits = count == 0 ? NO_FLAGS : new boolean[count];
+        int index = 0;
+        if (layers != null) {
+            for (View layer : layers) {
+                if (layer == null) {
+                    continue;
+                }
+                boolean inherits = isInsidePlank(layer);
+                mContentLayers[index] = layer;
+                mContentInherits[index] = inherits;
+                index++;
+                if (inherits) {
+                    resetLayer(layer);
+                } else {
+                    layer.setCameraDistance(mDensity * 2600f);
+                }
             }
         }
+        applyToViews();
+    }
+
+    private boolean sameContentLayers(View[] layers) {
+        if (countNonNull(layers) != mContentLayers.length) {
+            return false;
+        }
+        int index = 0;
+        if (layers != null) {
+            for (View layer : layers) {
+                if (layer == null) {
+                    continue;
+                }
+                if (mContentLayers[index++] != layer) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static int countNonNull(View[] layers) {
+        int count = 0;
+        if (layers != null) {
+            for (View layer : layers) {
+                if (layer != null) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     private boolean isInsidePlank(View view) {
@@ -132,7 +196,10 @@ public final class DockPlankController implements Choreographer.FrameCallback {
         return false;
     }
 
-    private static void resetIconLayer(View layer) {
+    private static void resetLayer(View layer) {
+        if (layer == null) {
+            return;
+        }
         layer.setRotationX(0f);
         layer.setRotationY(0f);
         layer.setTranslationX(0f);
@@ -198,6 +265,8 @@ public final class DockPlankController implements Choreographer.FrameCallback {
         if (!mEnabled) {
             return;
         }
+        // The finger is back on the dock, so the dock is the plank's again.
+        mHandedOver = false;
         mPressed = true;
         aim(nx, ny);
         mPress.target = 1f;
@@ -234,6 +303,7 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     /** Snap everything back to neutral and stop the frame loop. */
     public void reset() {
         mPressed = false;
+        mHandedOver = false;
         mRx.reset(0f);
         mRy.reset(0f);
         mPress.reset(0f);
@@ -247,6 +317,19 @@ public final class DockPlankController implements Choreographer.FrameCallback {
         if (mSpecular != null) {
             mSpecular.setVisibility(View.GONE);
         }
+    }
+
+    /**
+     * Hands the dock's transforms back at once: every spring to rest and the answer written one
+     * last time, so a surface that is taking the rows over — the app drawer's plane lifts and fades
+     * the very same rows — is their only writer while it owns them. Unlike {@link #reset} the
+     * resting rim stays lit: the dock is still on screen, it is just no longer the thing being
+     * pushed.
+     */
+    public void releaseToNeutral() {
+        reset();
+        showRestingGlow();
+        mHandedOver = true;
     }
 
     private void showRestingGlow() {
@@ -310,9 +393,11 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     }
 
     private void applyToViews() {
-        if (mPlank != null && mPlank.getWidth() > 0 && mPlank.getHeight() > 0) {
+        mSlab.valid = false;
+        if (!mHandedOver && mPlank != null && mPlank.getWidth() > 0 && mPlank.getHeight() > 0) {
             if (mMotionEnabled) {
-                applySlabTransform(mPlank);
+                computeSlab(mPlank.getWidth(), mPlank.getHeight());
+                mSlab.applyTo(mPlank, 0f, 0f);
             } else if (mPlank.getRotationX() != 0f || mPlank.getRotationY() != 0f
                 || mPlank.getScaleX() != 1f) {
                 mPlank.setRotationX(0f);
@@ -323,7 +408,9 @@ public final class DockPlankController implements Choreographer.FrameCallback {
                 mPlank.setTranslationY(0f);
             }
         }
-        applyToIconLayer();
+        if (!mHandedOver) {
+            applyToContentLayers();
+        }
         if (mGlow instanceof DockEdgeGlowView) {
             // Drive the reactive rim: overall strength from the glow spring, and the live tilt so the
             // hot lobe sweeps around the perimeter as the plank tips (physical glass-edge light).
@@ -350,7 +437,8 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     }
 
     /**
-     * The one transform on the dock, applied to the slab so everything on it moves as one plane.
+     * The one transform on the dock, computed from the slab's own geometry so everything on it can
+     * move as one plane.
      *
      * <p>It rotates about the touch point horizontally and about a line just below centre
      * vertically (the screen-bottom edge for the edge-to-edge bar, whose bottom must stay pinned),
@@ -360,29 +448,57 @@ public final class DockPlankController implements Choreographer.FrameCallback {
      * would open a strip of background at the screen edge. The overscan is scaled by contact, so a
      * resting dock is at exactly its laid-out size.</p>
      */
-    private void applySlabTransform(View slab) {
-        float width = slab.getWidth();
-        float height = slab.getHeight();
-        slab.setPivotX(width * clamp01(mLightX.value));
-        slab.setPivotY(mHingeMode ? height : height * PIVOT_BELOW_CENTRE);
-        slab.setRotationX(mRx.value);
-        slab.setRotationY(mRy.value);
+    private void computeSlab(float width, float height) {
+        mSlab.pivotX = width * clamp01(mLightX.value);
+        mSlab.pivotY = mHingeMode ? height : height * PIVOT_BELOW_CENTRE;
+        mSlab.rotationX = mRx.value;
+        mSlab.rotationY = mRy.value;
         float tiltFraction = mRy.value / mMaxTiltDeg;
         float shiftPx = mDensity * mShiftDp;
-        slab.setTranslationX(tiltFraction * shiftPx);
+        mSlab.translationX = tiltFraction * shiftPx;
         // The hinged bar slides sideways only: any vertical travel would lift it off the screen edge.
-        slab.setTranslationY(mHingeMode
-            ? 0f : (-mRx.value / mMaxTiltDeg) * shiftPx * SHIFT_Y_FACTOR);
+        mSlab.translationY = mHingeMode
+            ? 0f : (-mRx.value / mMaxTiltDeg) * shiftPx * SHIFT_Y_FACTOR;
         if (mHingeMode) {
             float overscan = (Math.abs(tiltFraction) * shiftPx + mDensity * OVERSCAN_SLACK_DP)
                 * clamp01(mGlowLevel.value);
-            slab.setScaleX(width > 0f ? (width + 2f * overscan) / width : 1f);
-            slab.setScaleY(1f);
+            mSlab.scaleX = width > 0f ? (width + 2f * overscan) / width : 1f;
+            mSlab.scaleY = 1f;
         } else {
             // The floating capsule has margins to slide into, so it needs no overscan — just the dip.
             float scale = 1f - dipFor(width, height);
-            slab.setScaleX(scale);
-            slab.setScaleY(scale);
+            mSlab.scaleX = scale;
+            mSlab.scaleY = scale;
+        }
+        mSlab.valid = true;
+    }
+
+    /** The slab's answer, held so it can be handed to the plank and to every row standing on it. */
+    private static final class Slab {
+        float pivotX;
+        float pivotY;
+        float rotationX;
+        float rotationY;
+        float translationX;
+        float translationY;
+        float scaleX = 1f;
+        float scaleY = 1f;
+        boolean valid;
+
+        /**
+         * @param offsetX the view's laid-out left relative to the plank's, so the plane's pivot
+         *     lands on the same physical line in the view's own coordinates
+         * @param offsetY the same for its top
+         */
+        void applyTo(View view, float offsetX, float offsetY) {
+            view.setPivotX(pivotX - offsetX);
+            view.setPivotY(pivotY - offsetY);
+            view.setRotationX(rotationX);
+            view.setRotationY(rotationY);
+            view.setTranslationX(translationX);
+            view.setTranslationY(translationY);
+            view.setScaleX(scaleX);
+            view.setScaleY(scaleY);
         }
     }
 
@@ -399,16 +515,57 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     }
 
     /**
-     * Only for the one state where the icon row is not inside the transformed slab: it gets the
-     * slab's transform verbatim, off the same springs, so it still cannot ease independently.
+     * Only for the one state where the rows are not inside the transformed slab: each of them gets
+     * the slab's answer verbatim — the same angles, the same slide, the same scale, and the plane's
+     * own pivot mapped into the row's coordinates — so the rows and the glass stay one plane and
+     * none of them can ease independently. A row that is not shown is skipped: it costs a
+     * visibility read, and it is handed the answer again the moment the dock is re-applied.
      */
-    private void applyToIconLayer() {
-        View icons = mIconLayer;
-        if (icons == null || mIconLayerInherits || !mMotionEnabled
-            || icons.getWidth() <= 0 || icons.getHeight() <= 0) {
+    private void applyToContentLayers() {
+        for (int i = 0; i < mContentLayers.length; i++) {
+            View layer = mContentLayers[i];
+            if (layer == null || mContentInherits[i]) {
+                continue;
+            }
+            if (!mMotionEnabled) {
+                resetLayer(layer);
+                continue;
+            }
+            if (!mSlab.valid || layer.getVisibility() != View.VISIBLE
+                || layer.getWidth() <= 0 || layer.getHeight() <= 0) {
+                continue;
+            }
+            measureOffsetFromPlank(layer);
+            mSlab.applyTo(layer, mLayerOffset[0], mLayerOffset[1]);
+        }
+    }
+
+    /**
+     * A row's laid-out offset from the plank, summed from {@code getLeft}/{@code getTop} up to the
+     * plank's own parent, into {@link #mLayerOffset}. Layout values only: reading a live location
+     * instead would feed the plank's own transform back into the pivot it is computed from. A row
+     * that shares no ancestor with the plank keeps the plank's pivot unshifted.
+     */
+    private void measureOffsetFromPlank(View layer) {
+        mLayerOffset[0] = 0f;
+        mLayerOffset[1] = 0f;
+        ViewParent plankParent = mPlank == null ? null : mPlank.getParent();
+        if (plankParent == null) {
             return;
         }
-        applySlabTransform(icons);
+        float left = 0f;
+        float top = 0f;
+        for (View view = layer; view != null; ) {
+            ViewParent parent = view.getParent();
+            left += view.getLeft();
+            top += view.getTop();
+            if (parent == plankParent) {
+                mLayerOffset[0] = left - mPlank.getLeft();
+                mLayerOffset[1] = top - mPlank.getTop();
+                return;
+            }
+            view = parent instanceof View ? (View) parent : null;
+        }
     }
 
     private static float clamp01(float v) {

@@ -177,9 +177,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /** Glass handoff: two identical rectangles swapping over the first tenth of the transition. */
     private static final float GLASS_FADE_END = 0.10f;
-    /** A-Z row and indicator band leave early — they are the dock's, not the drawer's. */
+    /**
+     * The dock's rows leave early — they are the dock's, not the drawer's. One window for all of
+     * them, ending where the pinned icons' own staggered wave ends, so no row on the glass is gone
+     * before another: a row with a curve of its own reads as peeling off the surface, and with the
+     * apps row hidden the letters are the only row there is to notice it in.
+     */
     private static final float ROW_FADE_START = 0.02f;
-    private static final float ROW_FADE_END = 0.26f;
+    private static final float ROW_FADE_END = 0.30f;
 
     /** Below this the closing spring is close enough to shut to tear the plane down. */
     /**
@@ -256,6 +261,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     @Nullable private View mAzLabelOverlay;
     @Nullable private View mExtraKeysView;
     @Nullable private View mKeyboardView;
+    /** The dock as one object: the glass and every row standing on it, hopping together. */
+    @Nullable private View[] mDockLiftGroup;
+    /** Every row that leaves before the plane fills it, on one curve. */
+    @Nullable private View[] mDockRowFadeGroup;
     /** The app-owned top status bar, the one band above the plane. */
     @Nullable private View mStatusBarView;
     private float mStatusCompactHeightPx;
@@ -951,6 +960,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mAzFxUnderlay = mHost.findView(R.id.apps_bar_az_fx_underlay);
         mAzFxOverlay = mHost.findView(R.id.apps_bar_az_fx_overlay);
         mAzLabelOverlay = mHost.findView(R.id.apps_bar_az_label_overlay);
+        // Groups, not a list of calls: the dock hops as one object and its rows leave on one
+        // curve, and that is only true if there is one place a row can be left out of.
+        mDockLiftGroup = new View[] {mAccessorySurface, mAppsPager, mAzRow, mIndicatorBand};
+        mDockRowFadeGroup = new View[] {
+            mAzRow, mIndicatorBand, mAzFxUnderlay, mAzFxOverlay, mAzLabelOverlay};
         captureBands(dockRect);
         captureStatusBand(dockLayout);
         return true;
@@ -1314,17 +1328,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mHostLayout.setAlpha(handoff);
         applyAlpha(mAccessorySurface, 1f - handoff);
 
-        // Dock lift rides the two rows, never accessory_stack_container: applyDockImeOffset owns
-        // that view's translationY, and writing it here makes the dock jump by the IME lift.
-        applyTranslationY(mAppsPager, lift);
-        applyTranslationY(mAzRow, lift);
+        // The hop belongs to the dock, not to its rows: the glass takes the same lift the plane's
+        // seed rect takes, so the two rectangles the hand-off cross-fades stay identical and every
+        // row standing on the glass rises with it instead of off it. Never
+        // accessory_stack_container: applyDockImeOffset owns that view's translationY, and writing
+        // it here makes the dock jump by the IME lift.
+        applyGroupTranslationY(mDockLiftGroup, lift);
 
-        float rowAlpha = 1f - AppDrawerTransitionGeometry.ramp(p, ROW_FADE_START, ROW_FADE_END);
-        applyAlpha(mAzRow, rowAlpha);
-        applyAlpha(mIndicatorBand, rowAlpha);
-        applyAlpha(mAzFxUnderlay, rowAlpha);
-        applyAlpha(mAzFxOverlay, rowAlpha);
-        applyAlpha(mAzLabelOverlay, rowAlpha);
+        applyGroupAlpha(mDockRowFadeGroup,
+            1f - AppDrawerTransitionGeometry.ramp(p, ROW_FADE_START, ROW_FADE_END));
 
         // The built-in keyboard's bands come back with the reveal only when they are what is being
         // revealed; under a system keyboard they stay where the plane pushed them.
@@ -1418,6 +1430,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (view != null) view.setTranslationY(translationY);
     }
 
+    private static void applyGroupAlpha(@Nullable View[] group, float alpha) {
+        if (group == null) return;
+        for (View view : group) applyAlpha(view, alpha);
+    }
+
+    private static void applyGroupTranslationY(@Nullable View[] group, float translationY) {
+        if (group == null) return;
+        for (View view : group) applyTranslationY(view, translationY);
+    }
+
     // ------------------------------------------------------------------ teardown
 
     /**
@@ -1461,13 +1483,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             }
             removeHostLayoutListener();
             applyAlpha(mAccessorySurface, 1f);
-            applyTranslationY(mAppsPager, 0f);
-            applyTranslationY(mAzRow, 0f);
-            applyAlpha(mAzRow, 1f);
-            applyAlpha(mIndicatorBand, 1f);
-            applyAlpha(mAzFxUnderlay, 1f);
-            applyAlpha(mAzFxOverlay, 1f);
-            applyAlpha(mAzLabelOverlay, 1f);
+            applyGroupTranslationY(mDockLiftGroup, 0f);
+            applyGroupAlpha(mDockRowFadeGroup, 1f);
             applyBand(mExtraKeysView, 0f, 0f, 1f);
             applyBand(mKeyboardView, 0f, 0f, 1f);
             // Unconditional, unlike applyStatusBand's null guard: a bar that was captured and then
