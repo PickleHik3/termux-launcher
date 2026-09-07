@@ -13770,11 +13770,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (weather.valid) {
                 widget.setIconAnimation(com.termux.app.statusbar.WeatherController.animationAssetFor(
                     weather.currentCode, weather.currentIsDay));
-                String temp = com.termux.app.statusbar.WeatherController.formatTemp(weather.currentC,
-                    mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit());
+                boolean fahrenheit = mPreferences != null
+                    && mPreferences.isStatusWidgetWeatherFahrenheit();
                 // The Widgets place has room and nothing else in its row, so the weather says
-                // the whole of it there: the temperature, the sky, and where that is.
-                if (isWidgetsPageShowing()) {
+                // the whole of it there: the temperature, the sky, and where that is — with the
+                // degree glyph. A side bar's chip has room for the number alone.
+                boolean widgetsPage = isWidgetsPageShowing();
+                boolean bare = isStatusBarVertical() && !widgetsPage;
+                String temp = bare
+                    ? com.termux.app.statusbar.WeatherController.formatTempBare(
+                        weather.currentC, fahrenheit)
+                    : com.termux.app.statusbar.WeatherController.formatTemp(
+                        weather.currentC, fahrenheit);
+                if (widgetsPage) {
                     StringBuilder full = new StringBuilder(temp);
                     String sky = com.termux.app.statusbar.WeatherController.describe(weather.currentCode);
                     if (!sky.isEmpty()) full.append(" · ").append(sky);
@@ -13784,7 +13792,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     widget.setValue(temp);
                 }
             } else {
-                widget.setValue("--°");
+                widget.setValue(isStatusBarVertical() && !isWidgetsPageShowing() ? "--" : "--°");
             }
         }
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
