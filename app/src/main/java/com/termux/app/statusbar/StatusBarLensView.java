@@ -91,6 +91,9 @@ public final class StatusBarLensView extends View {
     private float mChipRadiusPx = -1f;
     /** The bar stands in a column, so the icons travel down its length instead of across it. */
     private boolean mVertical;
+    /** What a column's surface reaches past its content at each end: the system bars. */
+    private int mAlongStartPx;
+    private int mAlongEndPx;
     /** The bar stands along the bottom: the clock, and the line the icons share, are at its foot. */
     private boolean mBottom;
     @NonNull private String mDisplayGlyph = "";
@@ -157,6 +160,20 @@ public final class StatusBarLensView extends View {
         if (mVertical == vertical && mBottom == bottom) return;
         mVertical = vertical;
         mBottom = bottom;
+        invalidate();
+    }
+
+    /**
+     * How much of a column's length the system bars hold at each end. The surface runs the whole
+     * display, so without this the place above would queue behind the system status bar and the
+     * one below under the navigation bar, where neither can be seen or tapped.
+     */
+    public void setAlongInsets(int startPx, int endPx) {
+        int start = Math.max(0, startPx);
+        int end = Math.max(0, endPx);
+        if (mAlongStartPx == start && mAlongEndPx == end) return;
+        mAlongStartPx = start;
+        mAlongEndPx = end;
         invalidate();
     }
 
@@ -234,8 +251,10 @@ public final class StatusBarLensView extends View {
 
         // The two axes the lens is drawn in: the places queue along the bar's length, and the
         // line they share runs across it. On a row that is x and y; on a column it is y and x.
-        float along = mVertical ? height : width;
+        float alongStart = mVertical ? mAlongStartPx : 0f;
+        float along = (mVertical ? height : width) - alongStart - (mVertical ? mAlongEndPx : 0f);
         float across = mVertical ? width : height;
+        if (along <= 0f) return;
 
         // In the expanded bar the home icon takes the clock's band and its line; its neighbours
         // share the line, smaller, half past the edges. The compact row is the place's own content
@@ -261,8 +280,8 @@ public final class StatusBarLensView extends View {
             float size = lerp(homeSize, peekSize, presence) * StatusBarLensPolicy.scale(t);
             float nearPeek = -size / 2f;
             float farPeek = along - size / 2f;
-            float travelled = StatusBarLensPolicy.iconX(t, home, nearPeek, farPeek, size)
-                + size / 2f;
+            float travelled = alongStart
+                + StatusBarLensPolicy.iconX(t, home, nearPeek, farPeek, size) + size / 2f;
             float centerX = mVertical ? line : travelled;
             float centerY = mVertical ? travelled : line;
             mTile.set(centerX - size / 2f, centerY - size / 2f, centerX + size / 2f, centerY + size / 2f);

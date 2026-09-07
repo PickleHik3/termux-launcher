@@ -2782,16 +2782,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int sideMargin = resolveStatusBarHorizontalInsetPx();
             // Extend Rounded away from its own edge without moving the edge it faces the terminal
             // with, or the terminal content beside it.
-            int outerMargin = capsule ? Math.round(dpToPx(2)) : 0;
+            int outerMargin = statusBarColumnOuterMarginPx();
             int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
             boolean vertical = isStatusBarVertical();
-            int leftMargin = vertical ? (mStatusBarEdge == PlaceLayout.Edge.LEFT ? outerMargin : 0)
-                : sideMargin;
-            int rightMargin = vertical ? (mStatusBarEdge == PlaceLayout.Edge.RIGHT ? outerMargin : 0)
-                : sideMargin;
-            int topMargin = vertical ? sideMargin
+            // A column stands past the camera hole, exactly where the content beside it is inset
+            // to: the two used to be reckoned from different origins, which left the cutout's
+            // width as an empty gap between the bar and the terminal.
+            int columnLeadIn = vertical ? statusBarColumnLeadInPx(
+                mStatusBarEdge == PlaceLayout.Edge.RIGHT) : 0;
+            int leftMargin = vertical
+                ? (mStatusBarEdge == PlaceLayout.Edge.LEFT ? columnLeadIn : 0) : sideMargin;
+            int rightMargin = vertical
+                ? (mStatusBarEdge == PlaceLayout.Edge.RIGHT ? columnLeadIn : 0) : sideMargin;
+            // And it runs the display's whole length. The root pads the container away from the
+            // status and navigation bars; a column cancels that padding so its surface reaches
+            // both ends of the screen, and keeps its own content clear of the bars instead — the
+            // same trick the top bar's glass plays with the system status bar.
+            int topMargin = vertical ? -mLastStatusBarInsetTop
                 : (mStatusBarEdge == PlaceLayout.Edge.TOP ? outerMargin : 0);
-            int bottomMargin = vertical ? sideMargin
+            int bottomMargin = vertical ? -mLastNavigationBarInsetBottom
                 : (mStatusBarEdge == PlaceLayout.Edge.BOTTOM ? outerMargin : 0);
             boolean sizeStale = mStatusBarCollapseAnimator == null
                 && (vertical ? mlp.width != targetThickness : mlp.height != targetThickness);
@@ -2826,6 +2835,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (stackedClock != null && mStatusBarCollapseAnimator == null) {
                 stackedClock.setAlpha(1f);
                 stackedClock.setVisibility(vertical && !collapsed ? View.VISIBLE : View.GONE);
+                // The column's glass starts at the top of the screen; its clock starts under the
+                // system status bar, like the row it stands above.
+                if (stackedClock.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                    ViewGroup.MarginLayoutParams clockParams =
+                        (ViewGroup.MarginLayoutParams) stackedClock.getLayoutParams();
+                    int clockTop = vertical ? mLastStatusBarInsetTop : 0;
+                    if (clockParams.topMargin != clockTop) {
+                        clockParams.topMargin = clockTop;
+                        stackedClock.setLayoutParams(clockParams);
+                    }
+                }
             }
 
             // While a spring or animator drives the pane, applyFrame's
@@ -2999,13 +3019,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 .sharesColumn(mStatusBarEdge, isExtraKeysColumnOnRight()));
     }
 
+    /** The margin a floating column keeps from the edge it stands on; docked hugs it. */
+    private int statusBarColumnOuterMarginPx() {
+        return isRoundedDockStyle() ? Math.round(dpToPx(2)) : 0;
+    }
+
+    /** How far in a column starts: past the camera hole on its side, plus its own margin. */
+    private int statusBarColumnLeadInPx(boolean right) {
+        return (right ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft)
+            + statusBarColumnOuterMarginPx();
+    }
+
     /**
      * How far down its column the bar's content reaches. The bar has the top of the column; what
      * shares it starts underneath, which is the whole of the merge rule on a side edge.
+     *
+     * <p>Measured down the bar's own surface, which runs the display's length, and stopping at the
+     * navigation bar: the content never stands under a system bar even though the glass does.
      */
     private int statusColumnContentLengthPx() {
         View container = findViewById(R.id.terminal_root_container);
-        int columnPx = container == null ? 0 : container.getHeight();
+        // The display's length, not the container's: the column cancels the root's padding, and
+        // reading the host's own height here would settle on whatever it measured before the
+        // first layout.
+        int columnPx = container == null ? 0
+            : container.getHeight() + mLastStatusBarInsetTop + mLastNavigationBarInsetBottom;
         int usable = Math.max(0, columnPx - mLastNavigationBarInsetBottom);
         if (usable <= 0) return 0;
         return isStatusColumnShared()
@@ -3014,11 +3052,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : usable;
     }
 
-    /** What a rail or extra-keys column sharing the bar's edge starts below. */
+    /**
+     * What a rail or extra-keys column sharing the bar's edge starts below, in the container's own
+     * coordinates: the bar's content is measured down the display, the rail lives inside the root's
+     * padding, so the status bar's inset comes back off.
+     */
     private int statusColumnTopOffsetPx(boolean right) {
         if (!isStatusBarVertical()) return 0;
-        return com.termux.app.statusbar.StatusBarEdgeGeometry.columnTopOffsetPx(mStatusBarEdge,
+        int offset = com.termux.app.statusbar.StatusBarEdgeGeometry.columnTopOffsetPx(mStatusBarEdge,
             right, statusColumnContentLengthPx());
+        return offset == 0 ? 0 : Math.max(0, offset - mLastStatusBarInsetTop);
     }
 
     /** How far in from one side the bar's own column reaches; zero for a bar standing in a row. */
@@ -3026,7 +3069,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!isStatusBarVertical()) return 0;
         return com.termux.app.statusbar.StatusBarEdgeGeometry.contentInsetPx(mStatusBarEdge, right,
             targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact()),
-            right ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft);
+            statusBarColumnLeadInPx(right));
     }
 
     /**
@@ -11823,6 +11866,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The icons are chips of the same kit as the badge beside them: same corner.
             lens.setChipRadiusPx(resolveStatusIndicatorCornerRadiusPx(Math.round(dpToPx(20)),
                 isRoundedDockStyle()));
+            // A column's glass runs under the system bars; its place icons do not.
+            boolean columnLens = isStatusBarVertical();
+            lens.setAlongInsets(columnLens ? mLastStatusBarInsetTop : 0,
+                columnLens ? mLastNavigationBarInsetBottom : 0);
             if (mStatusBarCollapseAnimator == null) {
                 lens.setExpansion(isStatusBarCompact()
                     ? 0f : 1f);
