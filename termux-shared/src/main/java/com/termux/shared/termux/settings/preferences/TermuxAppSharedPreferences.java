@@ -1679,7 +1679,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public synchronized int getAndIncrementTerminalSessionNumberSinceBoot() {
         // Keep value at MAX_VALUE on integer overflow and not 0, since not first shell
-        return SharedPreferenceUtils.getAndIncrementInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_SESSION_NUMBER_SINCE_BOOT, TERMUX_APP.DEFAULT_VALUE_TERMINAL_SESSION_NUMBER_SINCE_BOOT, true, Integer.MAX_VALUE);
+        // apply(), not commit(): this runs on the main thread while a shell is being created, and a
+        // synchronous commit fsyncs the preferences file (~140 ms measured). The number only has to
+        // be unique since boot; a write lost to a crash would at worst reuse one.
+        return SharedPreferenceUtils.getAndIncrementInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_SESSION_NUMBER_SINCE_BOOT, TERMUX_APP.DEFAULT_VALUE_TERMINAL_SESSION_NUMBER_SINCE_BOOT, false, Integer.MAX_VALUE);
     }
 
     public synchronized void resetTerminalSessionNumberSinceBoot() {

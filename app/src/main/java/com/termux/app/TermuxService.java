@@ -666,6 +666,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             return null;
         }
         newTermuxSession.getTerminalSession().setBoldWithBright(mProperties.shouldDrawBoldTextWithBrightColors());
+        boolean firstSession = mShellManager.mTermuxSessions.isEmpty();
         mShellManager.mTermuxSessions.add(newTermuxSession);
         // Remove the execution command from the pending plugin execution commands list since it has
         // now been processed
@@ -676,8 +677,14 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
         updateNotification();
+        // The first session may arrive before the activity has styled itself (upstream's case, a
+        // service started ahead of its activity), so it still asks for a styling pass. Every later
+        // shell — a split, a new window, a restored workspace — inherits the styling already on
+        // screen: its pane view is configured by the pane host and its emulator takes the current
+        // colour scheme. Broadcasting for those re-inflated the extra keys, the keyboard and the
+        // accessory chrome (~300 ms of main thread) right under the split's reveal animation.
         // No need to recreate the activity since it likely just started and theme should already have applied
-        TermuxActivity.updateTermuxActivityStyling(this, false);
+        if (firstSession) TermuxActivity.updateTermuxActivityStyling(this, false);
         return newTermuxSession;
     }
 
