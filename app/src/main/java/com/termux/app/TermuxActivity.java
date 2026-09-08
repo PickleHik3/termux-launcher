@@ -44,6 +44,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -996,7 +997,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAppDrawerController.onImeInsetChanged(insetsCompat.isVisible(Type.ime())
                     ? insetsCompat.getInsets(Type.ime()).bottom : 0);
             }
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
             return insetsCompat.toWindowInsets();
         });
         applySeamlessStatusBackgroundModeIfNeeded();
@@ -1258,13 +1259,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSurfaceEditor.collapseStatusPaneIfLeftExpanded();
     }
 
+    /**
+     * Traced as {@code Touch.dispatch}: with the frame timeline this is the touch-to-frame latency
+     * of every gesture, which nothing else in a trace attributes to this app.
+     */
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        feedDockPlank(ev);
-        feedTerminalPlank(ev);
-        mKeybindHintPresenter.onTerminalTouch(ev);
-        notifyKeybindHintPanelTouch(ev);
-        return super.dispatchTouchEvent(ev);
+        Trace.beginSection("Touch.dispatch");
+        try {
+            feedDockPlank(ev);
+            feedTerminalPlank(ev);
+            mKeybindHintPresenter.onTerminalTouch(ev);
+            notifyKeybindHintPanelTouch(ev);
+            return super.dispatchTouchEvent(ev);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /**
@@ -4855,6 +4865,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void applyChromeSpec(@NonNull ChromeSpec state) {
+        Trace.beginSection("Chrome.applyChromeSpec");
+        try {
+            doApplyChromeSpec(state);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doApplyChromeSpec(@NonNull ChromeSpec state) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         View accessorySurfaceHost = findViewById(R.id.accessory_surface_host);
         View terminalToolbarViewPager = findViewById(R.id.terminal_toolbar_view_pager);
@@ -5687,7 +5706,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // it is derived, not stored — so it has to be rebuilt here too. Without this the rows a
         // landscape session collapsed stayed collapsed after rotating back, with their preferences
         // still enabled, until something else happened to sync the accessory stack.
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         updateWindowBackgroundForCurrentSession();
     }
 
@@ -6503,6 +6522,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void applyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
+        Trace.beginSection("Accessory.geometry");
+        try {
+            doApplyAccessoryGeometryIfNeeded(force, reason);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doApplyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
         // Same freeze as setTerminalToolbarHeight: while the drawer plane owns the stack every
         // band moves by translation/clip only, and a relayout here would fight it. Replayed on close.
         if (isAppDrawerEngaged()) {
@@ -6517,7 +6545,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastAccessoryGeometryApplyUptimeMs = now;
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight(true);
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
     }
 
     static int calculateSuggestionBarMaxButtons(DisplayMetrics displayMetrics) {
@@ -7769,7 +7797,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Without commit the dock/keyboard visuals still track the drag live; only the
             // terminal resize (a SIGWINCH into the shell per reflow) waits for the release.
             setTerminalToolbarHeight(commit);
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
 
         @Override public void applyGlassPreview(boolean blurChanged) {
@@ -7780,7 +7808,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Styling only: this runs once per frame of a drag, and the full preference apply
             // rebuilds the dock's whole app row.
             applySuggestionBarSurfaceStyling();
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         }
 
         @Override @Nullable public int[] terminalFrameRectInWindow() {
@@ -8413,7 +8441,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTerminalToolbarDefaultHeight = layoutParams.height;
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight();
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         String savedTextInput = null;
         if (savedInstanceState != null)
             savedTextInput = savedInstanceState.getString(ARG_TERMINAL_TOOLBAR_TEXT_INPUT);
@@ -8792,6 +8820,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void syncPlaceLayout() {
+        Trace.beginSection("Place.syncLayout");
+        try {
+            doSyncPlaceLayout();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doSyncPlaceLayout() {
         // The look layer follows the wall too: a place wearing its own dock, keyboard or status
         // surface puts it on as the wall settles on it. Nothing to re-apply when no place has one.
         boolean lookChanged = mLookPreferences != null
@@ -8810,7 +8847,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Rows collapse or come back with a column or a rail, and the render state that hides
             // them is derived rather than stored, so both are rebuilt here.
             setTerminalToolbarHeight();
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
         if (lookChanged) applyPlaceLook();
     }
@@ -8826,6 +8863,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * drag that moved the wall (measured on Pong, 2026-09-07).
      */
     private void applyPlaceLook() {
+        Trace.beginSection("Place.applyLook");
+        try {
+            doApplyPlaceLook();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doApplyPlaceLook() {
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight(true);
         applyTerminalSurfaceAppearance();
@@ -8835,7 +8881,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController != null) mPaneController.refreshPaneLayout();
         if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
-            | ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            | ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     /**
@@ -9329,7 +9375,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean showNow = mPreferences.toogleShowTerminalToolbar();
         Logger.showToast(this, showNow ? getString(R.string.msg_enabling_terminal_toolbar) : getString(R.string.msg_disabling_terminal_toolbar), true);
 
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         // The A-Z row's height follows this switch — it carries a chin under its letters only while
         // it is the dock's bottom row — and the render pass above sizes no rows, so ask for the

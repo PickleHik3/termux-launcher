@@ -61,13 +61,68 @@ public class ChromeRendererTest {
         assertEquals(2, surfaces.applied.size());
     }
 
+    /**
+     * The contract this replaced ran the apply inline, so nine call sites that fire during one
+     * gesture cost nine full applies. Now they book one commit for the frame.
+     */
     @Test
-    public void applyNowRunsBeforeTheCallReturns() {
-        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+    public void manyApplyRequestsInOneFrameCostOneCommit() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_BACKDROPS);
+
+        assertTrue(chrome.isCommitPending());
+        assertEquals("the apply is coalesced, not run inline", 0, surfaces.applied.size());
+
+        mainLooper().idle();
 
         assertEquals(1, surfaces.applied.size());
         assertSame(surfaces.spec, surfaces.applied.get(0));
-        assertEquals("a synchronous apply is not the coalesced pass", 0, surfaces.invariantsEnforced);
+        assertEquals("a commit is not the accessory render pass", 0, surfaces.invariantsEnforced);
+        assertFalse(chrome.isCommitPending());
+
+        // And the next frame can book again.
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+        assertEquals(2, surfaces.applied.size());
+    }
+
+    /** The commit runs before layout, the render after it: two phases, so two passes. */
+    @Test
+    public void anApplyAndARenderInOneFrameAreStillTwoPasses() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+
+        assertEquals(0, surfaces.applied.size());
+        mainLooper().idle();
+
+        assertEquals(2, surfaces.applied.size());
+        assertEquals(1, surfaces.invariantsEnforced);
+    }
+
+    @Test
+    public void cancellingPendingWorkDropsTheBookedCommit() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+
+        chrome.cancelPendingWork();
+        mainLooper().idle();
+
+        assertFalse(chrome.isCommitPending());
+        assertEquals(0, surfaces.applied.size());
+    }
+
+    /** The in-place session recovery resets transient chrome; the activity stays on screen. */
+    @Test
+    public void cancellingThePendingRenderKeepsTheBookedCommit() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+
+        chrome.cancelPendingRender();
+        mainLooper().idle();
+
+        assertFalse(chrome.isRenderSyncPending());
+        assertEquals("the commit lands, the render does not", 1, surfaces.applied.size());
+        assertEquals(0, surfaces.invariantsEnforced);
     }
 
     @Test
@@ -77,6 +132,7 @@ public class ChromeRendererTest {
 
         assertEquals(0, surfaces.applied.size());
         assertFalse(chrome.isRenderSyncPending());
+        assertFalse(chrome.isCommitPending());
     }
 
     @Test

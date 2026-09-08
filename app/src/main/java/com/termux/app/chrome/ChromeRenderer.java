@@ -4,11 +4,14 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Trace;
 import android.view.View;
+import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -114,8 +117,21 @@ public final class ChromeRenderer {
     public static final int SCOPE_WALLPAPER_BLUR_CACHE = 1 << 3;
     /** Re-cuts the top pane's wallpaper frost (status inset band + window-bar pane) now. */
     public static final int SCOPE_TOP_PANE_FROST = 1 << 4;
-    /** Builds and applies a spec synchronously, before this call returns. */
-    public static final int SCOPE_APPLY_NOW = 1 << 5;
+    /**
+     * Builds and applies a spec once before the frame this request lands in is laid out, no matter
+     * how many callers ask for it in the meantime.
+     *
+     * <p>This used to run inline, inside the caller. Every path that moves the wall or re-lays the
+     * dock asks for it several times over — the inset listener, the geometry pass, the place look,
+     * the toolbar toggle each behaved as if they were the only caller — and two page changes cost
+     * 27–38 full applies, 1.2–1.3 s of main thread, for a handful of distinct states (measured on
+     * Pong, 2026-09-08). What every caller actually needs is "applied before the user sees the next
+     * frame", so the apply now rides the frame's animation phase: after input, before layout and
+     * draw. A request made from inside a traversal (an inset dispatch, a layout listener) has
+     * missed that phase, so a pre-draw gate commits it in the same frame instead, re-running the
+     * layout when the apply moved anything.</p>
+     */
+    public static final int SCOPE_APPLY_THIS_FRAME = 1 << 5;
     /** Restarts the blur backstop heartbeat and arms the short recovery retry. */
     public static final int SCOPE_BLUR_HEALTH = 1 << 6;
 
@@ -130,6 +146,13 @@ public final class ChromeRenderer {
 
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     private boolean mRenderSyncPending;
+
+    /** True while a {@link #SCOPE_APPLY_THIS_FRAME} commit waits for its frame. */
+    private boolean mCommitPending;
+    /** The view the pending commit is riding; null when it fell back to a plain post. */
+    @Nullable private View mCommitGateView;
+    private final Runnable mCommitRunnable = this::commit;
+    private final ViewTreeObserver.OnPreDrawListener mCommitPreDrawListener = this::commitBeforeDraw;
 
     private final Runnable mRenderSyncRunnable;
     private final Runnable mBlurHeartbeatRunnable;
@@ -187,13 +210,23 @@ public final class ChromeRenderer {
      * ask for {@link #SCOPE_WALLPAPER_BLUR_CACHE}.
      *
      * <p>Work runs in dependency order — drop the shared frames, invalidate the crops that were cut
-     * from them, then re-render — and the accessory render is coalesced to one pass per main-loop
-     * turn no matter how many callers ask for it.</p>
+     * from them, then re-render — and both passes are coalesced: the apply to one commit before the
+     * frame's layout ({@link #SCOPE_APPLY_THIS_FRAME}), the accessory render to one pass after it
+     * ({@link #SCOPE_ACCESSORY_RENDER}), no matter how many callers ask for either.</p>
      */
     public void requestSync(int scopes) {
         if (scopes == 0) {
             return;
         }
+        Trace.beginSection("Chrome.requestSync");
+        try {
+            sync(scopes);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void sync(int scopes) {
         if ((scopes & SCOPE_WALLPAPER_BLUR_CACHE) != 0) {
             mBlurCache.clear();
         }
@@ -206,8 +239,8 @@ public final class ChromeRenderer {
         if ((scopes & SCOPE_KEYBOARD_BACKDROP) != 0) {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
         }
-        if ((scopes & SCOPE_APPLY_NOW) != 0) {
-            mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+        if ((scopes & SCOPE_APPLY_THIS_FRAME) != 0) {
+            scheduleCommit();
         }
         if ((scopes & SCOPE_TOP_PANE_FROST) != 0) {
             mFrost.updateTopPane();
@@ -225,6 +258,80 @@ public final class ChromeRenderer {
     /** True while a coalesced accessory render is waiting for its main-loop turn. */
     public boolean isRenderSyncPending() {
         return mRenderSyncPending;
+    }
+
+    /** True while a {@link #SCOPE_APPLY_THIS_FRAME} commit is waiting for its frame. */
+    public boolean isCommitPending() {
+        return mCommitPending;
+    }
+
+    // ------------------------------------------------------------------ commit
+
+    /**
+     * Books the one apply pass for this frame. On an attached window it rides the root view's
+     * animation phase, which the platform runs after input and before layout, so the layout that
+     * follows already sees the applied visibilities; a pre-draw gate on the same view catches a
+     * request made after that phase had passed. Without an attached root — before the first
+     * layout, after {@code onStop}, in a window-less test — a plain post keeps the old contract.
+     */
+    private void scheduleCommit() {
+        if (mCommitPending) {
+            return;
+        }
+        mCommitPending = true;
+        View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
+        if (gate == null || !gate.isAttachedToWindow()) {
+            mHandler.post(mCommitRunnable);
+            return;
+        }
+        mCommitGateView = gate;
+        gate.postOnAnimation(mCommitRunnable);
+        ViewTreeObserver observer = gate.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.addOnPreDrawListener(mCommitPreDrawListener);
+        }
+    }
+
+    private void commit() {
+        if (!mCommitPending) {
+            return;
+        }
+        unscheduleCommit();
+        Trace.beginSection("Chrome.commit");
+        try {
+            mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * The pre-draw gate: a commit still pending here was requested from inside this traversal.
+     * Apply it now, and when the apply moved a view, cancel this draw so the layout runs again
+     * before anything is shown — one frame later beats one frame wrong.
+     */
+    private boolean commitBeforeDraw() {
+        if (!mCommitPending) {
+            return true;
+        }
+        View gate = mCommitGateView;
+        commit();
+        return gate == null || !gate.isLayoutRequested();
+    }
+
+    private void unscheduleCommit() {
+        mCommitPending = false;
+        View gate = mCommitGateView;
+        mCommitGateView = null;
+        mHandler.removeCallbacks(mCommitRunnable);
+        if (gate == null) {
+            return;
+        }
+        gate.removeCallbacks(mCommitRunnable);
+        ViewTreeObserver observer = gate.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.removeOnPreDrawListener(mCommitPreDrawListener);
+        }
     }
 
     /**
@@ -254,10 +361,12 @@ public final class ChromeRenderer {
     }
 
     /**
-     * Drops every pending chrome pass — the coalesced render, the blur backstop heartbeat and the
-     * short recovery retry. For the paths that are tearing the visible chrome down (onStop).
+     * Drops every pending chrome pass — the frame's commit, the coalesced render, the blur backstop
+     * heartbeat and the short recovery retry. For the paths that are tearing the visible chrome
+     * down (onStop).
      */
     public void cancelPendingWork() {
+        unscheduleCommit();
         mHandler.removeCallbacks(mRenderSyncRunnable);
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);
@@ -267,7 +376,8 @@ public final class ChromeRenderer {
     /**
      * The narrower cancel the in-place session recovery does: the pending render and the backstop
      * heartbeat go, but the short recovery retry stays armed so a reset that lands mid-blur still
-     * gets its follow-up pass.
+     * gets its follow-up pass, and a commit already booked for this frame still lands — the
+     * activity stays on screen through a recovery.
      */
     public void cancelPendingRender() {
         mHandler.removeCallbacks(mRenderSyncRunnable);
@@ -276,6 +386,7 @@ public final class ChromeRenderer {
     }
 
     public void onDestroy() {
+        unscheduleCommit();
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);
         mBlurCache.clear();

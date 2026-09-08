@@ -314,7 +314,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         mController = ReflectionHelpers.getField(mActivity, "mInAppKeyboard");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         layoutActivityRoot();
-        mActivity.getChromeRenderer().requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+        mActivity.getChromeRenderer().requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         layoutActivityRoot();
 
