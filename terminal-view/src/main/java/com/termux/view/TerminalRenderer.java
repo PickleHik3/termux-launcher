@@ -258,6 +258,29 @@ public final class TerminalRenderer {
 
     final SymbolMap[] mSymbolMaps;
 
+    /**
+     * The union of every configured range, so a code point outside all of them — every ASCII cell
+     * on a normal screen — is rejected by two comparisons instead of walking the whole map list.
+     * {@link Integer#MAX_VALUE} and -1 when nothing is configured, which rejects everything.
+     */
+    private final int mSymbolMapsFirstCodePoint;
+    private final int mSymbolMapsLastCodePoint;
+
+    /**
+     * Whether the map at this index may be remembered as {@link #mLastSymbolMap}. Only a map no
+     * later map overlaps can be: the rule is that a later range wins, so a map some later one
+     * intersects may lose the next code point that lands in it, and answering from the memo would
+     * silently draw the wrong font.
+     */
+    private final boolean[] mSymbolMapIsExclusive;
+
+    /**
+     * The map the previous cell matched, when it was exclusive. Symbol cells cluster — a status
+     * line is runs of icons from one map — so this turns the reverse scan into one range test for
+     * every cell after the first.
+     */
+    @Nullable private SymbolMap mLastSymbolMap;
+
     /** Faces consulted, in configured order, for code points the primary face has no glyph for. */
     final Typeface[] mFallbackTypefaces;
 
@@ -329,7 +352,51 @@ public final class TerminalRenderer {
      * size change and a font reload that keeps the same faces both build a new renderer, and each
      * used to start cold and instantiate every pair again on its first frame.</p>
      */
-    private final java.util.HashMap<String, Typeface> mVariationTypefaces;
+    private final VariationCache mVariationTypefaces;
+
+    /**
+     * The variable-font instances, as a face-then-axes lookup that allocates nothing to consult.
+     *
+     * <p>The face is matched by identity — a {@link Typeface} has no value equality worth using
+     * here — and the axis settings by their {@link String}, which are the long-lived fields of
+     * {@link FontVariations} and {@link SymbolMap}, so their hash is computed once and cached on
+     * the instance. The single flat map this replaces had to build a key string per lookup, and
+     * {@code configureFont} is called for every run.
+     */
+    static final class VariationCache {
+
+        private final java.util.IdentityHashMap<Typeface, java.util.HashMap<String, Typeface>>
+            mByFace = new java.util.IdentityHashMap<>();
+
+        /** The instance already built for this (face, axes) pair, or null for none. */
+        @Nullable
+        Typeface get(Typeface base, String variations) {
+            java.util.HashMap<String, Typeface> byAxes = mByFace.get(base);
+            return byAxes == null ? null : byAxes.get(variations);
+        }
+
+        void put(Typeface base, String variations, Typeface instance) {
+            java.util.HashMap<String, Typeface> byAxes = mByFace.get(base);
+            if (byAxes == null) {
+                byAxes = new java.util.HashMap<>(4);
+                mByFace.put(base, byAxes);
+            }
+            byAxes.put(variations, instance);
+        }
+
+        /** How many base faces have an entry, for tests. */
+        int faceCount() {
+            return mByFace.size();
+        }
+
+        /** How many (face, axes) instances are held, for tests. */
+        int size() {
+            int total = 0;
+            for (java.util.HashMap<String, Typeface> byAxes : mByFace.values())
+                total += byAxes.size();
+            return total;
+        }
+    }
 
     /**
      * The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'.
@@ -545,7 +612,7 @@ public final class TerminalRenderer {
             italicTypeface, boldItalicTypeface, mFallbackTypefaces);
         mFallbackResolver = inherit
             ? previous.mFallbackResolver : new FallbackFontResolver(mFallbackTypefaces.length);
-        mVariationTypefaces = inherit ? previous.mVariationTypefaces : new java.util.HashMap<>();
+        mVariationTypefaces = inherit ? previous.mVariationTypefaces : new VariationCache();
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
@@ -553,6 +620,24 @@ public final class TerminalRenderer {
         mBoldItalicTypeface = boldItalicTypeface;
         mSymbolMaps = symbolMaps == null || symbolMaps.length == 0
             ? NO_SYMBOL_MAPS : symbolMaps.clone();
+        int firstCodePoint = Integer.MAX_VALUE;
+        int lastCodePoint = -1;
+        for (SymbolMap map : mSymbolMaps) {
+            if (map.firstCodePoint < firstCodePoint) firstCodePoint = map.firstCodePoint;
+            if (map.lastCodePoint > lastCodePoint) lastCodePoint = map.lastCodePoint;
+        }
+        mSymbolMapsFirstCodePoint = firstCodePoint;
+        mSymbolMapsLastCodePoint = lastCodePoint;
+        mSymbolMapIsExclusive = new boolean[mSymbolMaps.length];
+        for (int i = 0; i < mSymbolMaps.length; i++) {
+            boolean overlappedByALaterMap = false;
+            for (int j = i + 1; j < mSymbolMaps.length && !overlappedByALaterMap; j++) {
+                overlappedByALaterMap =
+                    mSymbolMaps[j].firstCodePoint <= mSymbolMaps[i].lastCodePoint
+                        && mSymbolMaps[j].lastCodePoint >= mSymbolMaps[i].firstCodePoint;
+            }
+            mSymbolMapIsExclusive[i] = !overlappedByALaterMap;
+        }
         mLigaturePolicy = ligaturePolicy == null ? LigaturePolicy.NEVER : ligaturePolicy;
         mFontFeatures = fontFeatures == null ? FontFeatures.NONE : fontFeatures;
         mFontVariations = fontVariations == null ? FontVariations.NONE : fontVariations;
@@ -620,7 +705,7 @@ public final class TerminalRenderer {
     }
 
     /** The variable-font instance cache, for tests that check it survives a rebuild. */
-    java.util.Map<String, Typeface> variationTypefaceCache() {
+    VariationCache variationTypefaceCache() {
         return mVariationTypefaces;
     }
 
@@ -1844,8 +1929,7 @@ public final class TerminalRenderer {
     @Nullable
     private Typeface variationTypeface(@Nullable Typeface base, @Nullable String variations) {
         if (base == null || variations == null || variations.isEmpty()) return base;
-        String key = variationKey(base, variations);
-        Typeface cached = mVariationTypefaces.get(key);
+        Typeface cached = mVariationTypefaces.get(base, variations);
         if (cached != null) return cached;
         Typeface resolved = base;
         try {
@@ -1858,21 +1942,8 @@ public final class TerminalRenderer {
         } catch (RuntimeException ignored) {
             // An unsupported axis must never take terminal rendering down; keep the base face.
         }
-        mVariationTypefaces.put(key, resolved);
+        mVariationTypefaces.put(base, variations, resolved);
         return resolved;
-    }
-
-    /**
-     * The {@link #mVariationTypefaces} key of one (face, axes) pair. Both halves matter: two symbol
-     * maps naming the same font with different axes are two instances, and one font with the same
-     * axes reached from two maps is one instance.
-     */
-    private static String variationKey(@Nullable Typeface base, @Nullable String variations) {
-        return variationKey(System.identityHashCode(base), variations);
-    }
-
-    static String variationKey(int baseIdentity, @Nullable String variations) {
-        return baseIdentity + "\0" + variations;
     }
 
     /**
@@ -1980,14 +2051,28 @@ public final class TerminalRenderer {
             || (codePoint >= 0x100000 && codePoint <= 0x10FFFD);
     }
 
-    /** The map a code point draws from, kept whole so the run can use its own settings. */
+    /**
+     * The map a code point draws from, kept whole so the run can use its own settings.
+     *
+     * <p>Called once per cell, so the answer is reached without walking the list wherever that is
+     * possible: outside the union of every range there can be no match, and inside the range of the
+     * map the previous cell matched — when no later map overlaps that one — the answer is that same
+     * map. Everything else falls through to the ordered scan, where a later range still wins.
+     */
     @Nullable
-    private SymbolMap symbolMapFor(int codePoint) {
+    SymbolMap symbolMapFor(int codePoint) {
+        if (codePoint < mSymbolMapsFirstCodePoint || codePoint > mSymbolMapsLastCodePoint)
+            return null;
+        final SymbolMap last = mLastSymbolMap;
+        if (last != null && codePoint >= last.firstCodePoint && codePoint <= last.lastCodePoint)
+            return last;
         // Repeated directives are ordered; a later overlapping range wins.
         for (int i = mSymbolMaps.length - 1; i >= 0; i--) {
             SymbolMap map = mSymbolMaps[i];
-            if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint)
+            if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint) {
+                if (mSymbolMapIsExclusive[i]) mLastSymbolMap = map;
                 return map;
+            }
         }
         return null;
     }
