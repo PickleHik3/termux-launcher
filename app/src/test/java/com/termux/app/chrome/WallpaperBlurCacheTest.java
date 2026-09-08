@@ -62,17 +62,19 @@ public class WallpaperBlurCacheTest {
         cache.obtain(4, wallpaperFrame);
         cache.obtain(8, wallpaperFrame);
         cache.obtain(12, wallpaperFrame);
+        cache.obtain(16, wallpaperFrame);
         assertEquals(WallpaperBlurCache.MAX_CACHED_WALLPAPER_BLUR_RADII, cache.residentRadiiCount());
 
         // Touch the oldest so recency, not insertion order, decides what goes.
         cache.obtain(4, wallpaperFrame);
-        cache.obtain(16, wallpaperFrame);
+        cache.obtain(20, wallpaperFrame);
 
         assertEquals(WallpaperBlurCache.MAX_CACHED_WALLPAPER_BLUR_RADII, cache.residentRadiiCount());
         assertFalse("the least recently used radius should be gone", cache.hasRadius(8));
         assertTrue(cache.hasRadius(4));
         assertTrue(cache.hasRadius(12));
         assertTrue(cache.hasRadius(16));
+        assertTrue(cache.hasRadius(20));
     }
 
     @Test
@@ -98,6 +100,7 @@ public class WallpaperBlurCacheTest {
         cache.obtain(12, wallpaperFrame);
         cache.obtain(16, wallpaperFrame);
         cache.obtain(20, wallpaperFrame);
+        cache.obtain(24, wallpaperFrame);
 
         assertFalse(cache.hasRadius(8));
         assertFalse("recycling a frame a view holds crashes its next draw", doomed.isRecycled());

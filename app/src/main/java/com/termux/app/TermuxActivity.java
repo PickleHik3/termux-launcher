@@ -8815,7 +8815,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (lookChanged) applyPlaceLook();
     }
 
-    /** Every surface re-read for the place the wall has just settled on. */
+    /**
+     * Every surface re-read for the place the wall has just settled on.
+     *
+     * <p>The pre-blurred wallpaper frames are deliberately kept: they depend on the wallpaper, not
+     * on the place, and the cache holds one frame per radius, so a place whose look asks for
+     * another radius builds that frame once and the crops re-cut against their recorded radius.
+     * Clearing here made every page change decode and blur the wallpaper again for each radius in
+     * use — three to four full-frame rebuilds, half a second of main thread, inside the tap or the
+     * drag that moved the wall (measured on Pong, 2026-09-07).
+     */
     private void applyPlaceLook() {
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight(true);
@@ -8825,8 +8834,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applySuggestionBarSurfaceStyling();
         if (mPaneController != null) mPaneController.refreshPaneLayout();
         if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
-        mChrome.requestSync(ChromeRenderer.SCOPE_WALLPAPER_BLUR_CACHE
-            | ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
+        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
             | ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 

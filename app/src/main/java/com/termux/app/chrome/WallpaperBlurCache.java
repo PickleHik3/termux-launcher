@@ -66,15 +66,24 @@ public final class WallpaperBlurCache {
         void onCacheCleared();
     }
 
-    /** How many independently tuned radii stay resident before the least-recently-used is dropped. */
-    public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 3;
+    /**
+     * How many independently tuned radii stay resident before the least-recently-used is dropped.
+     *
+     * <p>Four, because a look readily uses four at once: the status bar's, the dock's (clamped to
+     * 1 when blur is off), the panes' glass, and radius 0 for the wall behind the panes. At three
+     * every arrival on the Terminal place cycled through all four — eight or nine misses, each a
+     * wallpaper decode plus a blur, ~100 ms apiece on Pong (measured 2026-09-08) — while holding
+     * three frames anyway. One more frame is the price of holding none of them hostage.
+     */
+    public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 4;
     /**
      * How many bytes of pre-blurred frames stay resident, whatever the radius count. A frame is a
      * full-screen ARGB_8888 bitmap — about 10 MB on a 1080x2400 panel and 18 MB at 1440x3200 — so
      * a count alone let a QHD phone hold 55 MB of wallpaper nobody was looking at. The most recent
-     * frame always stays, however large.
+     * frame always stays, however large. Sized so the four radii above fit a 1080x2412 panel
+     * (4 x 10.4 MB); a QHD phone still holds only what fits.
      */
-    public static final long DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES = 40L * 1024 * 1024;
+    public static final long DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES = 48L * 1024 * 1024;
 
     @NonNull private final Source mSource;
     @Nullable private final Runnable mOnCleared;
