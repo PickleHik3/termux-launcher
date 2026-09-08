@@ -858,7 +858,7 @@ public final class TerminalView extends View {
                 mRenderer.mItalicTypeface, mRenderer.mBoldItalicTypeface, mRenderer.mSymbolMaps,
                 mRenderer.mLigaturePolicy, mRenderer.mFontFeatures, mRenderer.mFontVariations,
                 mRenderer.mFontMetricsAdjustments, mRenderer.mBoxDrawingPolicy,
-                mRenderer.mFallbackTypefaces);
+                mRenderer.mFallbackTypefaces, mRenderer.mSymbolExpansion, mRenderer);
         updateSize();
     }
 
@@ -964,7 +964,7 @@ public final class TerminalView extends View {
                             TerminalRenderer.SymbolExpansion symbolExpansion) {
         mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic,
             symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
-            boxDrawingPolicy, fallbackTypefaces, symbolExpansion);
+            boxDrawingPolicy, fallbackTypefaces, symbolExpansion, mRenderer);
         updateSize();
         invalidate();
     }

@@ -9,6 +9,8 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.os.Trace;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.termux.terminal.KittyImagePlaceholder;
 import com.termux.terminal.KittyUnicodePlaceholder;
@@ -287,7 +289,11 @@ public final class TerminalRenderer {
     private final Paint mOverlayPaint = new Paint();
     private Typeface mCurrentTypeface;
 
-    /** Memoized fallback-chain lookups; sized for this renderer's chain and never resized. */
+    /**
+     * Memoized fallback-chain lookups; sized for this renderer's chain and never resized. Carried
+     * over from the renderer this one replaces when the faces are the same, see
+     * {@link #sharesFacesWith}.
+     */
     private final FallbackFontResolver mFallbackResolver;
 
     /** Scratch paint for coverage probes, so they cannot disturb the drawing paint's state. */
@@ -319,9 +325,11 @@ public final class TerminalRenderer {
      * measured at 73ms median frame time against 12ms with the axes removed.
      *
      * <p>The set of (face, axes) pairs a config can produce is tiny and fixed, so each instance is
-     * built once and the hot path just selects a typeface.
+     * built once and the hot path just selects a typeface. The map outlives the renderer: a text
+     * size change and a font reload that keeps the same faces both build a new renderer, and each
+     * used to start cold and instantiate every pair again on its first frame.</p>
      */
-    private final java.util.HashMap<String, Typeface> mVariationTypefaces = new java.util.HashMap<>();
+    private final java.util.HashMap<String, Typeface> mVariationTypefaces;
 
     /**
      * The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'.
@@ -503,12 +511,41 @@ public final class TerminalRenderer {
                             @Nullable BoxDrawingPolicy boxDrawingPolicy,
                             @Nullable Typeface[] fallbackTypefaces,
                             @Nullable SymbolExpansion symbolExpansion) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments, boxDrawingPolicy,
+            fallbackTypefaces, symbolExpansion, null);
+    }
+
+    /**
+     * As above, replacing {@code previous}. When the new renderer draws with the same faces — the
+     * four primaries and the fallback chain, by identity — it inherits the variable-font instances
+     * and the fallback memo already built, so a text size change or a same-font reload does not
+     * spend its first frame instantiating every (face, axes) pair again. Neither cache depends on
+     * the text size: an instance is a face with axes applied, and glyph coverage is a property of
+     * the face. A face that changed starts both caches cold, as before.
+     */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy,
+                            @Nullable FontFeatures fontFeatures,
+                            @Nullable FontVariations fontVariations,
+                            @Nullable FontMetricsAdjustments fontMetricsAdjustments,
+                            @Nullable BoxDrawingPolicy boxDrawingPolicy,
+                            @Nullable Typeface[] fallbackTypefaces,
+                            @Nullable SymbolExpansion symbolExpansion,
+                            @Nullable TerminalRenderer previous) {
         mBoxDrawingPolicy = boxDrawingPolicy == null
             ? BoxDrawingPolicy.DEFAULT : boxDrawingPolicy;
         mSymbolExpansion = symbolExpansion == null ? SymbolExpansion.DEFAULT : symbolExpansion;
         mFallbackTypefaces = fallbackTypefaces == null || fallbackTypefaces.length == 0
             ? NO_FALLBACK_TYPEFACES : fallbackTypefaces.clone();
-        mFallbackResolver = new FallbackFontResolver(mFallbackTypefaces.length);
+        boolean inherit = previous != null && previous.sharesFacesWith(typeface, boldTypeface,
+            italicTypeface, boldItalicTypeface, mFallbackTypefaces);
+        mFallbackResolver = inherit
+            ? previous.mFallbackResolver : new FallbackFontResolver(mFallbackTypefaces.length);
+        mVariationTypefaces = inherit ? previous.mVariationTypefaces : new java.util.HashMap<>();
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
@@ -567,6 +604,31 @@ public final class TerminalRenderer {
         mDashedEffect = new DashPathEffect(new float[]{mDecorationThickness * 4f, mDecorationThickness * 3f}, 0f);
     }
 
+    /** True when a renderer built on these faces can inherit this one's caches. */
+    private boolean sharesFacesWith(Typeface typeface, @Nullable Typeface boldTypeface,
+                                    @Nullable Typeface italicTypeface,
+                                    @Nullable Typeface boldItalicTypeface,
+                                    @NonNull Typeface[] fallbackTypefaces) {
+        if (mTypeface != typeface || mBoldTypeface != boldTypeface
+            || mItalicTypeface != italicTypeface || mBoldItalicTypeface != boldItalicTypeface
+            || mFallbackTypefaces.length != fallbackTypefaces.length)
+            return false;
+        for (int i = 0; i < fallbackTypefaces.length; i++) {
+            if (mFallbackTypefaces[i] != fallbackTypefaces[i]) return false;
+        }
+        return true;
+    }
+
+    /** The variable-font instance cache, for tests that check it survives a rebuild. */
+    java.util.Map<String, Typeface> variationTypefaceCache() {
+        return mVariationTypefaces;
+    }
+
+    /** The fallback memo, for tests that check it survives a rebuild. */
+    FallbackFontResolver fallbackResolver() {
+        return mFallbackResolver;
+    }
+
     static float adjustMetric(float original, @Nullable MetricAdjustment adjustment) {
         if (adjustment == null) return original;
         return adjustment.percent ? original * adjustment.value / 100f : original + adjustment.value;
@@ -594,6 +656,16 @@ public final class TerminalRenderer {
      * from below is partially visible.
      */
     public final void render(TerminalEmulator mEmulator, Canvas canvas, int topRow, int selectionY1, int selectionY2, int selectionX1, int selectionX2, boolean transparentBackground, int transparentOverlayColor, float horizontalOffset, int extraRows) {
+        Trace.beginSection("Terminal.render");
+        try {
+            renderRows(mEmulator, canvas, topRow, selectionY1, selectionY2, selectionX1, selectionX2,
+                transparentBackground, transparentOverlayColor, horizontalOffset, extraRows);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void renderRows(TerminalEmulator mEmulator, Canvas canvas, int topRow, int selectionY1, int selectionY2, int selectionX1, int selectionX2, boolean transparentBackground, int transparentOverlayColor, float horizontalOffset, int extraRows) {
         final boolean boldWithBright = mEmulator.isBoldWithBright();
         final boolean reverseVideo = mEmulator.isReverseVideo();
         final int endRow = Math.min(topRow + mEmulator.mRows + extraRows, mEmulator.mRows);
