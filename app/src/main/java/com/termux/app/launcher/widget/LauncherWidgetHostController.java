@@ -13,6 +13,7 @@ import android.content.pm.LauncherApps;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 
@@ -370,6 +371,16 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
 
     @Nullable
     public AppWidgetHostView createHostView(int appWidgetId) {
+        Trace.beginSection("Widgets.createHostView");
+        try {
+            return doCreateHostView(appWidgetId);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    @Nullable
+    private AppWidgetHostView doCreateHostView(int appWidgetId) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return null;
         AppWidgetHostView existing = hostViews.get(appWidgetId);

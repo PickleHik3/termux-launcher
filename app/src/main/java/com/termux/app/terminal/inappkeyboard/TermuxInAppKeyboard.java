@@ -8,6 +8,7 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Trace;
 import android.view.View;
 import android.view.WindowManager;
 
@@ -287,6 +288,15 @@ public final class TermuxInAppKeyboard {
     }
 
     public void onPreferencesReloaded() {
+        Trace.beginSection("Keyboard.onPreferencesReloaded");
+        try {
+            doOnPreferencesReloaded();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doOnPreferencesReloaded() {
         if (mDestroyed)
             return;
         boolean enabled = mPreferences.isInAppKeyboardEnabled();

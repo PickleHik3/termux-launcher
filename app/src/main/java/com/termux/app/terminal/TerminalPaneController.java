@@ -16,6 +16,7 @@ import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
+import android.os.Trace;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -2020,6 +2021,15 @@ public class TerminalPaneController {
     // --- Rendering ---
 
     private void render() {
+        Trace.beginSection("Panes.render");
+        try {
+            doRender();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doRender() {
         // A re-render invalidates the geometry a running divider reveal was easing toward.
         cancelSplitReveal();
         // Weights first, so the tree is built already grown; the pane-move animation carries the

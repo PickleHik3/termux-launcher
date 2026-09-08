@@ -8,6 +8,7 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Shader;
+import android.os.Trace;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -202,17 +203,24 @@ public final class WallpaperBlurCache {
             clear();
         }
 
-        Bitmap wallpaperBitmap = mSource.captureWallpaperFrame(frameRect, wallpaperFrame);
-        if (wallpaperBitmap == null) {
-            return null;
-        }
-        Bitmap blurredBitmap = mSource.preBlur(wallpaperBitmap, blurRadiusDp);
-        if (blurredBitmap == null) {
-            wallpaperBitmap.recycle();
-            return null;
-        }
-        if (blurredBitmap != wallpaperBitmap) {
-            wallpaperBitmap.recycle();
+        // A miss is the expensive path: a full-frame wallpaper decode plus a blur, on this thread.
+        Bitmap blurredBitmap;
+        Trace.beginSection("Blur.miss");
+        try {
+            Bitmap wallpaperBitmap = mSource.captureWallpaperFrame(frameRect, wallpaperFrame);
+            if (wallpaperBitmap == null) {
+                return null;
+            }
+            blurredBitmap = mSource.preBlur(wallpaperBitmap, blurRadiusDp);
+            if (blurredBitmap == null) {
+                wallpaperBitmap.recycle();
+                return null;
+            }
+            if (blurredBitmap != wallpaperBitmap) {
+                wallpaperBitmap.recycle();
+            }
+        } finally {
+            Trace.endSection();
         }
         mByRadius.put(blurRadiusDp, blurredBitmap);
         while (mByRadius.size() > MAX_CACHED_WALLPAPER_BLUR_RADII
