@@ -113,6 +113,8 @@ public final class TermuxInAppKeyboard {
      * already recorded one.
      */
     private int mAppliedPaletteSignature;
+    /** Inputs of the palette on the view, so a reload that moved none of them skips the rebuild. */
+    @Nullable private String mAppliedPaletteInputs;
     private String mExtraKeysStoredValue;
     private LayoutModifier.LayoutOptions mLayoutOptions;
     private final int[] mLaunchWaveLocation = new int[2];
@@ -926,6 +928,7 @@ public final class TermuxInAppKeyboard {
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
             configBuilder.build(), createPalette());
+        mAppliedPaletteInputs = paletteInputsSignature();
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
         mKeyboardView.setHeightScale(mHeightScale);
@@ -1022,6 +1025,18 @@ public final class TermuxInAppKeyboard {
             return;
         }
         resetInputPipeline();
+        // A preference reload that changed nothing the palette is built from — every wall page
+        // change with a per-place look arrives here — keeps the palette it has. The geometry sync
+        // this used to request unconditionally cost ~150 ms on Pong per page change, most of the
+        // place-look re-read; the callers that do move the keyboard's geometry request it
+        // themselves.
+        String paletteInputs = paletteInputsSignature();
+        if (paletteInputs.equals(mAppliedPaletteInputs)) {
+            if (mHeightAdjusting)
+                mHost.setKeyboardHeightAdjustmentVisible(true);
+            return;
+        }
+        mAppliedPaletteInputs = paletteInputs;
         mKeyboardView.setPalette(createPalette());
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
@@ -1029,6 +1044,13 @@ public final class TermuxInAppKeyboard {
         if (mHeightAdjusting)
             mHost.setKeyboardHeightAdjustmentVisible(true);
         mHost.requestAccessoryGeometrySync();
+    }
+
+    /** Everything {@link #createPalette()} reads, plus the Material roles behind its dynamic slots. */
+    @NonNull
+    private String paletteInputsSignature() {
+        return mPreferences.getInAppKeyboardTheme() + "|" + mPreferences.getInAppKeyboardColorScheme()
+            + "|" + InAppKeyboardPaletteFactory.signature(requireContainer().getContext());
     }
 
     /**
@@ -1061,6 +1083,7 @@ public final class TermuxInAppKeyboard {
         if (signature == mAppliedPaletteSignature)
             return false;
         mAppliedPaletteSignature = signature;
+        mAppliedPaletteInputs = paletteInputsSignature();
         // Both of these reload the stored scheme, so dynamic slots re-resolve against the new
         // Material roles while pinned and imported swatches keep their persisted colors.
         mKeyboardView.setPalette(createPalette());
