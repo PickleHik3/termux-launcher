@@ -852,13 +852,17 @@ public final class TerminalView extends View {
      * @param textSize the new font size, in density-independent pixels.
      */
     public void setTextSize(int textSize) {
-        mRenderer = mRenderer == null
+        final TerminalRenderer replaced = mRenderer;
+        mRenderer = replaced == null
             ? new TerminalRenderer(textSize, Typeface.MONOSPACE, null, null, null)
-            : new TerminalRenderer(textSize, mRenderer.mTypeface, mRenderer.mBoldTypeface,
-                mRenderer.mItalicTypeface, mRenderer.mBoldItalicTypeface, mRenderer.mSymbolMaps,
-                mRenderer.mLigaturePolicy, mRenderer.mFontFeatures, mRenderer.mFontVariations,
-                mRenderer.mFontMetricsAdjustments, mRenderer.mBoxDrawingPolicy,
-                mRenderer.mFallbackTypefaces, mRenderer.mSymbolExpansion, mRenderer);
+            : new TerminalRenderer(textSize, replaced.mTypeface, replaced.mBoldTypeface,
+                replaced.mItalicTypeface, replaced.mBoldItalicTypeface, replaced.mSymbolMaps,
+                replaced.mLigaturePolicy, replaced.mFontFeatures, replaced.mFontVariations,
+                replaced.mFontMetricsAdjustments, replaced.mBoxDrawingPolicy,
+                replaced.mFallbackTypefaces, replaced.mSymbolExpansion, replaced);
+        // The new renderer has taken everything worth inheriting; the old one's per-row recordings
+        // are the size of the screen and will never be replayed again.
+        if (replaced != null) replaced.release();
         updateSize();
     }
 
@@ -962,9 +966,11 @@ public final class TerminalView extends View {
                             TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy,
                             Typeface[] fallbackTypefaces,
                             TerminalRenderer.SymbolExpansion symbolExpansion) {
-        mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic,
+        final TerminalRenderer replaced = mRenderer;
+        mRenderer = new TerminalRenderer(replaced.mTextSize, regular, bold, italic, boldItalic,
             symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
-            boxDrawingPolicy, fallbackTypefaces, symbolExpansion, mRenderer);
+            boxDrawingPolicy, fallbackTypefaces, symbolExpansion, replaced);
+        replaced.release();
         updateSize();
         invalidate();
     }
