@@ -211,10 +211,25 @@ public final class WidgetGridView extends ViewGroup {
                 }
             }
         }
-        if (sizeDeliveryPending) post(this::deliverCommittedSizes);
+        if (sizeDeliveryPending) scheduleSizeDelivery();
     }
 
     private boolean sizeDeliveryPending;
+
+    /**
+     * A layout pass that changed a cell's size waits this long for the next one before the size
+     * reaches the provider. The grid is laid out once per frame while the wall slides or the
+     * status bar animates between places, and each delivery makes the provider re-render and push
+     * new RemoteViews — ~200 ms of main thread per widget on Pong. One delivery per settled size,
+     * not one per frame.
+     */
+    static final long SIZE_DELIVERY_SETTLE_MS = 160L;
+    private final Runnable deliverCommittedSizesRunnable = this::deliverCommittedSizes;
+
+    private void scheduleSizeDelivery() {
+        removeCallbacks(deliverCommittedSizesRunnable);
+        postDelayed(deliverCommittedSizesRunnable, SIZE_DELIVERY_SETTLE_MS);
+    }
 
     /**
      * Tell each provider the size its widget really has — the cell less the gutter and less the
@@ -246,13 +261,13 @@ public final class WidgetGridView extends ViewGroup {
     @Override
     protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
-        if (visibility == VISIBLE && sizeDeliveryPending) post(this::deliverCommittedSizes);
+        if (visibility == VISIBLE && sizeDeliveryPending) scheduleSizeDelivery();
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        if (sizeDeliveryPending) post(this::deliverCommittedSizes);
+        if (sizeDeliveryPending) scheduleSizeDelivery();
     }
 
     private static long packSize(int width, int height, int orientation) {

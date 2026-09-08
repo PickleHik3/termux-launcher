@@ -29,14 +29,14 @@ public class WidgetGridHostViewIntegrationTest {
         assertTrue(repository.putRecord(record)); platform.info.put(20, WidgetTestFixtures.info(false));
         LauncherWidgetHostController controller = new LauncherWidgetHostController(activity, repository, platform);
         WidgetGridView grid = new WidgetGridView(activity); activity.setContentView(grid); grid.bind(controller);
-        layout(grid); Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        layout(grid); Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(WidgetGridView.SIZE_DELIVERY_SETTLE_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
         assertEquals(0, platform.allocations); assertTrue(platform.optionUpdates >= 1);
         assertNotNull(grid.cellForId(20));
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(1, java.util.concurrent.TimeUnit.SECONDS);
         int stableWidth = grid.getWidth(), stableHeight = grid.getHeight();
         platform.optionUpdates = 0;
         grid.layout(0, 0, stableWidth, stableHeight);
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(WidgetGridView.SIZE_DELIVERY_SETTLE_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
         assertEquals(0, platform.optionUpdates);
     }
 
@@ -52,7 +52,7 @@ public class WidgetGridHostViewIntegrationTest {
             repository, platform);
         WidgetGridView grid = new WidgetGridView(activity); activity.setContentView(grid);
         grid.bind(controller); layout(grid);
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(WidgetGridView.SIZE_DELIVERY_SETTLE_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
         WidgetCellView cell = grid.cellForId(20);
         assertNotNull(cell);
         // The framework pads every host view on its own; the provider lays out inside that
