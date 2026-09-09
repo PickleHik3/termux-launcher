@@ -8504,6 +8504,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final PlaceLayout NO_PREFERENCES_PLACE_LAYOUT = new PlaceLayout(
         PlaceLayout.Edge.TOP, PlaceLayout.RowPlacement.HIDDEN, false, PlaceLayout.Edge.BOTTOM,
         PlaceLayout.RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED,
         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
 
