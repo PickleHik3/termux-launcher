@@ -618,6 +618,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public boolean isToolbarHidden = false;
 
     private int mNavBarHeight;
+
+    /** The insets the last chrome apply was asked for; a re-dispatch of the same ones asks nothing. */
+    private long mLastAppliedInsetsSignature = Long.MIN_VALUE;
+
+    /** The parts of the window insets the chrome spec reads, packed so a re-dispatch can be compared. */
+    static long insetsSignature(@NonNull WindowInsetsCompat insets) {
+        androidx.core.graphics.Insets bars = insets.getInsets(Type.systemBars());
+        androidx.core.graphics.Insets ime = insets.getInsets(Type.ime());
+        long imeBottom = insets.isVisible(Type.ime()) ? ime.bottom : 0;
+        return ((long) bars.top << 48) | ((long) bars.bottom << 32) | (imeBottom << 16)
+            | (bars.left << 8) | bars.right;
+    }
     private int mImeLiftPx;
     /** Set only after this activity explicitly requests a system IME in its current visible run. */
     private final LruCache<String, Integer> mLaunchIconColorCache = new LruCache<>(64);
@@ -1006,7 +1018,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAppDrawerController.onImeInsetChanged(insetsCompat.isVisible(Type.ime())
                     ? insetsCompat.getInsets(Type.ime()).bottom : 0);
             }
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            // Every relayout re-dispatches the insets, a wall page arrival included, and an
+            // apply requested from inside that traversal lands as a second full commit before
+            // the frame draws. Only an inset that moved earns one.
+            long insetsSignature = insetsSignature(insetsCompat);
+            if (insetsSignature != mLastAppliedInsetsSignature) {
+                mLastAppliedInsetsSignature = insetsSignature;
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            }
             return insetsCompat.toWindowInsets();
         });
         applySeamlessStatusBackgroundModeIfNeeded();

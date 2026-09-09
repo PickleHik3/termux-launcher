@@ -627,6 +627,21 @@ main thread busy ~17 % (from ~35 %). Not verified on device: sixel rows and the 
 placeholder. Follow-up: drive redraws from the gif's frame gap instead of per screen update, and a
 generation counter on the placeholder so an unchanged frame skips the image walk.
 
+**Landed 2026-09-09: one chrome apply per frame, and a free repeat frost pass.** With the scope
+bits in the trace (`Chrome.requestSync <bits>`), four wall page changes showed 70 `applyChromeSpec`
+runs (344 ms): the frame commit and the post-layout accessory pass were feeding each other — the
+geometry pass requested an apply unconditionally, its 120 ms throttle still requested the full
+post-layout apply, and the apply re-requested the accessory pass — and every apply re-dressed every
+pane's frost synchronously (`Frost.updateTopPane` 78×, 174 ms). Now a geometry pass that moved
+nothing requests nothing, the render pass coalesces a request made from inside itself and re-posts
+only on a ledger dirty-generation change, and `PaneGlassBackdropView.setGlass` / the pane and page
+appliers return early on identical inputs. Same four page changes after: 14 applies (89 ms), 8
+commits (64 ms), 22 frost passes (57 ms). The worst arrival frame is still 40–53 ms: one apply
+(8–11 ms on arrival), measure + insets (10 ms), layout with the widget grid's sized-RemoteViews
+re-apply (`RemoteViews#applyActions` 9–12 ms, that is T9), and a second commit at pre-draw because
+the insets dispatch requests an apply mid-traversal. Those three are what is left of the arrival
+frame.
+
 ## Recommended order
 
 **Landed on dev, 2026-09-08 (uncommitted at the time of writing): T10 and A1.** Twelve trace
