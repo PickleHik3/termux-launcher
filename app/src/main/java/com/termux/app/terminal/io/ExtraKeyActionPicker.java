@@ -242,14 +242,34 @@ public final class ExtraKeyActionPicker {
         for (Map.Entry<String, List<LauncherToolRegistry.ToolMetadata>> group : grouped.entrySet()) {
             boolean groupHeaderWritten = false;
             for (LauncherToolRegistry.ToolMetadata tool : group.getValue()) {
-                String label = tool.titleRes != 0 ? context.getString(tool.titleRes) : tool.name;
+                // No title is what marks a tool agent-only, the same rule the command palette
+                // reads: a state query has nothing to put on a key cap.
+                if (tool.titleRes == 0) continue;
+                // A key carries one action and no keyboard, so an action that insists on two
+                // typed values can never be bound right from here.
+                if (requiredArgumentCount(tool.schema) > 1) continue;
+                String label = context.getString(tool.titleRes);
+                String required = firstRequiredArgument(tool.schema);
+                List<String> choices = enumChoices(tool.schema, required);
                 if (!matches(tool.name, needle) && !matches(label, needle)
-                    && !matches(group.getKey(), needle)) continue;
+                    && !matches(group.getKey(), needle)
+                    && !matchesAny(choices, needle)) continue;
                 if (!groupHeaderWritten) {
                     results.addView(header(group.getKey()));
                     groupHeaderWritten = true;
                 }
-                String required = firstRequiredArgument(tool.schema);
+                if (choices != null) {
+                    // A fixed set of values is a row each - "Pane layout · grid" - so binding one
+                    // is picking rather than typing a value the user would have to already know.
+                    for (String choice : choices) {
+                        String choiceLabel = label + " · " + choice;
+                        results.addView(entry(choiceLabel,
+                            tool.name + ":" + required + "=" + choice,
+                            () -> pick.onPicked(
+                                toolKey(tool.name, required, choice, choiceLabel))));
+                    }
+                    continue;
+                }
                 results.addView(entry(label, tool.name + (required == null ? "" : " · " + required),
                     () -> {
                         if (required == null) {
@@ -325,6 +345,36 @@ public final class ExtraKeyActionPicker {
         // the user can shorten it in the key sheet.
         String glyph = ExtraKeyActionLabels.defaultCapGlyph(toolName);
         return new ExtraKeysLayoutModel.Key(spec, false, glyph != null ? glyph : label, null);
+    }
+
+    /** How many values a tool insists on, so the ones a key cannot supply stay out. */
+    private static int requiredArgumentCount(@Nullable JSONObject schema) {
+        if (schema == null) return 0;
+        JSONArray required = schema.optJSONArray("required");
+        return required == null ? 0 : required.length();
+    }
+
+    /** The fixed values an argument accepts, or null when it is free text. */
+    @Nullable
+    private static List<String> enumChoices(@Nullable JSONObject schema,
+                                            @Nullable String argument) {
+        if (schema == null || argument == null) return null;
+        JSONObject properties = schema.optJSONObject("properties");
+        JSONObject property = properties == null ? null : properties.optJSONObject(argument);
+        JSONArray values = property == null ? null : property.optJSONArray("enum");
+        if (values == null || values.length() == 0) return null;
+        List<String> choices = new ArrayList<>(values.length());
+        for (int i = 0; i < values.length(); i++) {
+            String value = values.optString(i, "");
+            if (!value.isEmpty()) choices.add(value);
+        }
+        return choices.isEmpty() ? null : choices;
+    }
+
+    private static boolean matchesAny(@Nullable List<String> candidates, @NonNull String needle) {
+        if (candidates == null || needle.isEmpty()) return false;
+        for (String candidate : candidates) if (matches(candidate, needle)) return true;
+        return false;
     }
 
     @Nullable

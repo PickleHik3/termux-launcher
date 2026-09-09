@@ -31,7 +31,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void agentOnlyTools_haveNoUiMetadata() {
         String[] agentOnly = {"workspace.save", "workspace.load", "workspace.list", "workspace.delete",
-            "pane.layout", "pane.move_to_edge", "wall.go"};
+            "pane.list", "pane.open", "pane.focus", "pane.close", "pane.write", "pane.read"};
         for (String name : agentOnly) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -50,7 +50,7 @@ public class LauncherToolRegistryTest {
             "session.close_current", "session.browser", "session.panel", "session.clone_current",
             "pane.equalize", "pane.rotate", "pane.next_layout", "pane.toggle_float",
             "terminal.toggle_scratchpad", "workspace.picker", "workspace.save_prompt",
-            "extrakeys.edit"};
+            "extrakeys.edit", "pane.layout", "pane.move_to_edge", "wall.go"};
         for (String name : terminalTools) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -62,9 +62,11 @@ public class LauncherToolRegistryTest {
         // session.rename when the rename vocabulary was straightened out, then by extrakeys.edit,
         // the row editor's in-terminal entry, then by terminal.select_at_cursor and
         // terminal.select_all, which gave selection an entry point outside a long-press, and
-        // then by the keyboard layout pair, and finally by the four keyboard-type and
-        // keyboard-visibility tools.
-        assertEquals(76, registry.getUiTools().size());
+        // then by the keyboard layout pair, then by the four keyboard-type and
+        // keyboard-visibility tools, and finally by pane.layout, pane.move_to_edge and wall.go,
+        // whose one enum argument the palette and the extra-keys picker both offer as a row per
+        // value rather than as a prompt.
+        assertEquals(79, registry.getUiTools().size());
     }
 
     @Test
@@ -206,15 +208,17 @@ public class LauncherToolRegistryTest {
         assertEquals(4, move.schema.optJSONObject("properties")
             .optJSONObject("edge").optJSONArray("enum").length());
         assertEquals("edge", move.schema.optJSONArray("required").optString(0));
-        assertFalse(layout.hasUiMetadata());
-        assertFalse(move.hasUiMetadata());
+        // A bounded enum is offerable: both surfaces that bind an action list a row per value,
+        // so these two carry UI metadata despite their required argument.
+        assertTrue(layout.hasUiMetadata());
+        assertTrue(move.hasUiMetadata());
         assertTrue(equalize.hasUiMetadata());
         assertTrue(rotate.hasUiMetadata());
         assertFalse(equalize.requiresConfirmation);
         assertFalse(rotate.requiresConfirmation);
 
-        // next_layout takes no argument, so unlike pane.layout it can carry UI metadata and a
-        // binding. It is the only layout action bound by default.
+        // next_layout takes no argument, so unlike pane.layout it needs no chosen value on the
+        // row that runs it. It is the only layout action bound by default.
         LauncherToolRegistry.ToolMetadata next = registry.getTool("pane.next_layout");
         assertNotNull(next);
         assertTrue(next.hasUiMetadata());

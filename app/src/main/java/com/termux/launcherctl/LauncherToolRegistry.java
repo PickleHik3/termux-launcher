@@ -588,15 +588,18 @@ public final class LauncherToolRegistry {
             ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_kill_focused, R.string.tool_desc_pane_kill_focused,
             Collections.singletonList(Binding.of("ctrl+alt+w", BindingCondition.SPLITS_ON)), REQUIRES_SESSION);
-        // The palette cannot prompt for a preset or edge. Keep those two parameterized actions
-        // agent/CLI-only; equalize and clockwise rotate remain directly useful palette actions.
-        add(map, TOOL_PANE_LAYOUT,
+        // A preset, a page and an edge are all one enum argument, and both surfaces that bind an
+        // action — the palette and the extra-keys picker — now offer a row per value instead of
+        // asking the user to type one, so these three are as bindable as an argument-free action.
+        addUi(map, TOOL_PANE_LAYOUT,
             "Arrange the current window using an automatic pane layout.",
             schemaObject()
                 .withEnum("layout", new String[]{"stack", "grid", "dwindle", "tall", "fat", "horizontal", "vertical"},
                     true, "grid")
                 .build(),
-            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_layout, R.string.tool_desc_pane_layout, null,
+            REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_EQUALIZE,
             "Reset every divider in the current window to an equal ratio.",
             schemaEmpty(),
@@ -611,16 +614,16 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_rotate, R.string.tool_desc_pane_rotate, null,
             REQUIRES_SPLITS);
-        // Agent and CLI only, for the same reason as pane.layout: the palette cannot prompt for
-        // a page, and the wall's own ways across — the status-bar swipe and the tiles — are the
-        // ones a user reaches for. A user who wants a key for it binds this tool by name.
-        add(map, TOOL_WALL_GO,
+        // Offered as a row per page, which is also the only way to reach the relative moves:
+        // "left" and "right" have no tool of their own.
+        addUi(map, TOOL_WALL_GO,
             "Show one of the pane wall's places: the widget grid, the terminal, or the display.",
             schemaObject()
                 .withEnum("page", new String[]{"widgets", "terminal", "display", "left", "right"},
                     true, "terminal")
                 .build(),
-            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_go, R.string.tool_desc_wall_go, null);
         // One tool per place, with nothing to ask: these are what a finger binds — a key on the
         // extra-keys row or the in-app keyboard, a chord, a palette row — where wall.go's page
         // argument is what a script passes.
@@ -642,12 +645,14 @@ public final class LauncherToolRegistry {
             "Turn mouse mode on or off: touches become mouse clicks and drags in the terminal, and a touchpad takes the keyboard's place on the display.",
             schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_KEYBOARD, R.string.tool_mouse_toggle, R.string.tool_desc_mouse_toggle, null);
-        add(map, TOOL_PANE_MOVE_TO_EDGE,
+        addUi(map, TOOL_PANE_MOVE_TO_EDGE,
             "Move the focused pane to an outer edge of the current window.",
             schemaObject()
                 .withEnum("edge", new String[]{"left", "right", "up", "down"}, true, "left")
                 .build(),
-            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_move_to_edge, R.string.tool_desc_pane_move_to_edge,
+            null, REQUIRES_SPLITS);
         // The pane API for agents and scripts (`launcherctl pane …`, /v1/panes). Not in the palette:
         // every one of them takes an argument the palette cannot ask for, and they exist so a
         // process in a shell can show its work in a pane of its own, not for a finger.
