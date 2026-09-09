@@ -121,6 +121,18 @@ fails when the catalogue has gone stale.
   own `hashCode`/`equals`: `KeyValue.hashCode` delegates to the payload, and
   tool keys are freshly built on every `getKeyByName`, so without them a tool
   key could not be looked up in the key maps `addExtraKeys` uses.
+- Split keyboard type (local addition): the new file `SplitLayout.java`, the
+  `LayoutModifier.gapUnits`/`LayoutModifier.split` delegates in front of it, and
+  `Keyboard2View.setSplitGapUnits`/`getSplitGapUnits`/`getSplitGapBounds`.
+  Upstream's own split — `split_middle_column.xml` plus its layout modifier —
+  was not ported (see "Deliberate removals"); this one is a step of its own
+  after `modify`, parting every composed row at its midpoint by a gap given in
+  key-width units, and cutting a key that straddles the midpoint into two keys
+  of the same values. The view is told the same gap: it then keeps no view
+  background and paints one slab under each run of keys instead, and refuses
+  (`onTouch` returns false) a press that starts in the parting, so the press
+  reaches whatever the keyboard is over. Both are inert at gap zero, which is
+  the docked keyboard.
 - Stateful suggestion labels have no global provider and render empty.
 - Tap correction hook (local addition): `Keyboard2View.TapResolver` plus
   `setTapResolver`, and the new file `TapGeometry.java`. At `ACTION_DOWN` the
