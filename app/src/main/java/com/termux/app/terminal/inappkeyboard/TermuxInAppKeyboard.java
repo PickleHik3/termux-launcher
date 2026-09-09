@@ -76,6 +76,16 @@ public final class TermuxInAppKeyboard {
         KEYBOARD_ACTION
     }
 
+    /**
+     * Told whenever the keyboard goes up or down for any reason but {@code FOCUS} — every dock
+     * button, key, tool, wall page and preference, all of which are the user's doing as far as a
+     * policy that opens the keyboard for a text field is concerned. {@code FOCUS} is that policy's
+     * own doing and is deliberately not reported back to it.
+     */
+    public interface VisibilityListener {
+        void onKeyboardVisibilityChanged(boolean shown);
+    }
+
     private InAppKeyboardHost mHost;
     private TermuxAppSharedPreferences mPreferences;
     private final ExecutorService mLayoutExecutor;
@@ -133,6 +143,7 @@ public final class TermuxInAppKeyboard {
     private LayoutModifier.LayoutOptions mLayoutOptions;
     private final int[] mLaunchWaveLocation = new int[2];
 
+    @Nullable private VisibilityListener mVisibilityListener;
     private ShowReason mLastShowReason;
     private HideReason mLastHideReason;
     /** The place's keyboard type as this keyboard last heard it. */
@@ -360,12 +371,14 @@ public final class TermuxInAppKeyboard {
     public void show(ShowReason reason) {
         if (!mEnabled || mDestroyed)
             return;
+        boolean wasVisible = mVisible;
         mLastShowReason = Objects.requireNonNull(reason, "reason");
         mVisible = true;
         // Shown, this keyboard is the one typing: the place gives the IME back.
         mPlaceHoldsSystemIme = false;
         suppressSystemIme();
         showInternal();
+        if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
     }
 
     public void hide(HideReason reason) {
@@ -373,6 +386,7 @@ public final class TermuxInAppKeyboard {
             return;
         if (mHeightAdjusting && reason != HideReason.PREFERENCE_DISABLED)
             return;
+        boolean wasVisible = mVisible;
         mLastHideReason = Objects.requireNonNull(reason, "reason");
         mVisible = false;
         resetInputPipeline();
@@ -380,6 +394,17 @@ public final class TermuxInAppKeyboard {
         mHost.requestAccessoryGeometrySync();
         // Down on a place that has its own fields, the IME goes back to the place.
         syncPlaceSystemIme();
+        if (wasVisible && reason != HideReason.FOCUS) notifyVisibilityChanged(false);
+    }
+
+    /** Watch every show and hide that is not a focus signal; pass null to stop. */
+    public void setVisibilityListener(@Nullable VisibilityListener listener) {
+        mVisibilityListener = listener;
+    }
+
+    private void notifyVisibilityChanged(boolean shown) {
+        VisibilityListener listener = mVisibilityListener;
+        if (listener != null) listener.onKeyboardVisibilityChanged(shown);
     }
 
     public void toggle(ToggleReason reason) {
