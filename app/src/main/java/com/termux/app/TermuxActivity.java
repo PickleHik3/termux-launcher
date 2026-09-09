@@ -3570,10 +3570,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean shouldUseUnifiedDefaultKeyboardGlassSurface(@NonNull ChromeSpec state) {
         // A scheme background color or a non-default background opacity must repaint only the
         // keyboard, not the material it would share with the dock, so either drops the keyboard
-        // to its own local surface path.
+        // to its own local surface path. A split keyboard drops out of it too: one material
+        // spanning the dock and the keyboard would also span the parting between the halves.
         return ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
             state.keyboardShown, isRoundedDockStyle(), isInAppKeyboardGlassSurface())
-            && !hasInAppKeyboardBackgroundOverride();
+            && !hasInAppKeyboardBackgroundOverride() && !isInAppKeyboardSplit();
     }
 
 
@@ -3901,6 +3902,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * every other surface until the keyboard section was reset. While surfaces are normalized the
      * keyboard renders the shared material and the scheme keeps only its key colours.</p>
      */
+    /** Whether the keyboard on screen is the split one, whose parting no surface may fill. */
+    private boolean isInAppKeyboardSplit() {
+        return mInAppKeyboard != null
+            && mInAppKeyboard.getForm() == PlaceLayout.KeyboardForm.SPLIT;
+    }
+
     private boolean hasInAppKeyboardBackgroundOverride() {
         return ChromePolicy.hasInAppKeyboardBackgroundOverride(isInAppKeyboardOpacityLinked(),
             resolveInAppKeyboardSchemeBackgroundColor(),
@@ -4002,6 +4009,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
+        // A split keyboard paints its own background under each half. The launcher's slab would
+        // fill the parting the halves leave open, so it is dropped and the keys keep the shape
+        // and insets applied above.
+        if (isInAppKeyboardSplit()) {
+            surfaceHost.setBackground(null);
+            clearInAppKeyboardBackdrop();
+            return;
+        }
         if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
             // Once accessory_surface_host has actually laid out at the expanded height and its
             // matching crop is installed, the transparent keyboard exposes that one unified
