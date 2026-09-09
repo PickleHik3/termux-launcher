@@ -339,6 +339,8 @@ public final class TerminalRenderer {
 
     /** How many rows the last frame had to record again, for tests and for a trace to read. */
     private int mRowsRecordedLastFrame;
+    /** How many rows the last frame re-recorded image draws for; zero when they were drawn inline. */
+    private int mImageRowsRecordedLastFrame;
     private boolean mRowCacheBypassed;
 
     private final Paint mTextPaint = new Paint();
@@ -834,6 +836,7 @@ public final class TerminalRenderer {
             return;
         }
         mRowsRecordedLastFrame = Math.max(0, endRow - topRow);
+        mImageRowsRecordedLastFrame = 0;
         float heightOffset = mFontLineSpacingAndAscent;
         // Backgrounds and the cursor block for every row are painted before any glyph, so a glyph
         // whose ink overhangs its cells — Nerd Font symbols routinely do — lands on top of a
@@ -867,7 +870,7 @@ public final class TerminalRenderer {
             TerminalRow lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
             drawRowGlyphs(mEmulator, canvas, lineObject, palette, heightOffset, columns, cursorX,
                 cursorVisible, cursorShape, selx1, selx2, boldWithBright, reverseVideo,
-                horizontalOffset);
+                horizontalOffset, false);
         }
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
     }
@@ -880,9 +883,10 @@ public final class TerminalRenderer {
      * and a software canvas cannot replay one. That fallback is the code this fork has always run,
      * unchanged.
      *
-     * <p>The two passes are kept apart exactly as the direct path keeps them: every row's
-     * backgrounds and cursor block first, then every row's glyphs, so overhanging ink is never
-     * covered by the next row's fill. Each node spans the whole view and is recorded in the same
+     * <p>The three passes are kept apart exactly as the direct path keeps them: every row's
+     * backgrounds and cursor block first, then every row's glyphs, then every row's images, so
+     * overhanging ink is never covered by the next row's fill and an image still lands over the
+     * cells it covers. Each node spans the whole view and is recorded in the same
      * coordinates the direct path draws in, so nothing about where a row lands, how its cell edges
      * snap, or how far its glyphs may reach depends on which path drew it.
      */
@@ -934,6 +938,7 @@ public final class TerminalRenderer {
         nodes.resize(visibleRows);
         final int cursorColor = palette[TextStyle.COLOR_INDEX_CURSOR];
         int recorded = 0;
+        int imageRowsRecorded = 0;
         for (int index = 0; index < visibleRows; index++) {
             final int row = topRow + index;
             final int cursorX = (row == cursorRow && cursorVisible) ? cursorCol : -1;
@@ -947,16 +952,37 @@ public final class TerminalRenderer {
                 screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
             final boolean changed = mRowCache.rowChanged(index, lineObject, columns, cursorX,
                 cursorShape, cursorColor, selx1, selx2);
+            final boolean carriesAnImage = mRowCache.rowCarriesAnImage(index);
             final android.graphics.RenderNode background = nodes.background(index);
             final android.graphics.RenderNode glyphs = nodes.glyphs(index);
+            final android.graphics.RenderNode images = nodes.images(index);
             background.setPosition(0, 0, viewWidth, viewHeight);
             glyphs.setPosition(0, 0, viewWidth, viewHeight);
+            images.setPosition(0, 0, viewWidth, viewHeight);
             // Symbol expansion and glyph overhang both reach past the cells they were measured
             // for, and the canvas the node is replayed into already carries the pane's own clip.
             background.setClipToBounds(false);
             glyphs.setClipToBounds(false);
-            if (!changed && background.hasDisplayList() && glyphs.hasDisplayList()) continue;
+            images.setClipToBounds(false);
             final float heightOffset = mFontLineSpacingAndAscent + (index + 1) * mFontLineSpacing;
+            if (carriesAnImage) {
+                // The pixels a placeholder or a bitmap cell draws from are replaced without any
+                // input the cache compares moving, so this is the node that is re-recorded every
+                // frame — a cell walk and a drawBitmap each, no shaping and no measuring. The
+                // glyph node above it keeps the recording it already had.
+                Canvas imagesInto = images.beginRecording(viewWidth, viewHeight);
+                try {
+                    drawRowImages(mEmulator, imagesInto, lineObject, palette, heightOffset,
+                        columns, cursorX, cursorVisible, cursorShape, horizontalOffset);
+                } finally {
+                    images.endRecording();
+                }
+                imageRowsRecorded++;
+            } else if (images.hasDisplayList()) {
+                // The frame a row stops carrying an image is the last one it costs anything.
+                images.discardDisplayList();
+            }
+            if (!changed && background.hasDisplayList() && glyphs.hasDisplayList()) continue;
             Canvas into = background.beginRecording(viewWidth, viewHeight);
             try {
                 drawRowBackgroundAndCursor(into, lineObject, palette, heightOffset, columns,
@@ -969,7 +995,7 @@ public final class TerminalRenderer {
             try {
                 drawRowGlyphs(mEmulator, into, lineObject, palette, heightOffset, columns, cursorX,
                     cursorVisible, cursorShape, selx1, selx2, boldWithBright, reverseVideo,
-                    horizontalOffset);
+                    horizontalOffset, true);
             } finally {
                 glyphs.endRecording();
             }
@@ -979,19 +1005,32 @@ public final class TerminalRenderer {
             canvas.drawRenderNode(nodes.background(index));
         for (int index = 0; index < visibleRows; index++)
             canvas.drawRenderNode(nodes.glyphs(index));
+        // Images last, over the cells the glyph pass deliberately left blank, which is the order
+        // kitty paints in. Only a row that carries one holds a display list here.
+        for (int index = 0; index < visibleRows; index++) {
+            final android.graphics.RenderNode images = nodes.images(index);
+            if (images.hasDisplayList()) canvas.drawRenderNode(images);
+        }
         mRowsRecordedLastFrame = recorded;
+        mImageRowsRecordedLastFrame = imageRowsRecorded;
     }
 
     /**
      * Draw one row's glyphs, decorations, synthesized geometry and images, in the run segmentation
      * the whole loop shares. The row's cell backgrounds and its cursor block were laid down by an
      * earlier pass over every row, so nothing here paints a fill.
+     *
+     * @param imagesRecordedSeparately when set, image cells are left to {@link #drawRowImages} and
+     *     this pass only flushes the run to their left and steps over them — the cells still end up
+     *     blank, exactly as they are when the image is drawn here, and the image is drawn over them
+     *     from the row's own node afterwards. The direct path (software canvas, or a bypassed row
+     *     cache) passes false and draws everything inline in one walk.
      */
     private void drawRowGlyphs(TerminalEmulator mEmulator, Canvas canvas, TerminalRow lineObject,
                                int[] palette, float heightOffset, int columns, int cursorX,
                                boolean cursorVisible, int cursorShape, int selx1, int selx2,
                                boolean boldWithBright, boolean reverseVideo,
-                               float horizontalOffset) {
+                               float horizontalOffset, boolean imagesRecordedSeparately) {
         final char[] line = lineObject.mText;
         final int charsUsedInLine = lineObject.getSpaceUsed();
         long lastRunStyle = 0;
@@ -1065,13 +1104,9 @@ public final class TerminalRenderer {
                         lastRunFallbackTypeface, lastRunSymbolFeatures,
                         lastRunSymbolVariations, false);
                 }
-                Bitmap bm = mEmulator.getScreen().getSixelBitmap(codePoint, style);
-                if (bm != null) {
-                    float left = horizontalOffset + column * mFontWidth;
-                    float top = heightOffset - mFontLineSpacing;
-                    mSixelRect.set(left, top, left + mFontWidth, top + mFontLineSpacing);
-                    canvas.drawBitmap(mEmulator.getScreen().getSixelBitmap(codePoint, style), mEmulator.getScreen().getSixelRect(codePoint, style), mSixelRect, null);
-                }
+                if (!imagesRecordedSeparately)
+                    drawBitmapCell(canvas, mEmulator, codePoint, style, column, heightOffset,
+                        horizontalOffset);
                 column += 1;
                 currentCharIndex += charsForCodePoint;
                 startFreshRun = true;
@@ -1097,32 +1132,30 @@ public final class TerminalRenderer {
                         lastRunFallbackTypeface, lastRunSymbolFeatures,
                         lastRunSymbolVariations, false);
                 }
-                int clusterEnd = currentCharIndex + charsForCodePoint;
-                while (clusterEnd < charsUsedInLine
-                    && lineObject.getDisplayWidthAt(clusterEnd) <= 0) {
-                    clusterEnd += Character.isHighSurrogate(line[clusterEnd]) ? 2 : 1;
-                }
-                KittyUnicodePlaceholder.Cell inherited = previousPlaceholderColumn == column - 1
-                    ? previousPlaceholder : null;
-                KittyUnicodePlaceholder.Cell placeholderCell = KittyUnicodePlaceholder.decode(
-                    line, currentCharIndex + charsForCodePoint, clusterEnd,
-                    TextStyle.decodeForeColor(style), decorationColor,
-                    TextStyle.DECORATION_COLOR_DEFAULT, inherited);
-                if (placeholderCell != null) {
-                    previousPlaceholder = placeholderCell;
-                    previousPlaceholderColumn = column;
-                    if (mEmulator.getKittyImagePlaceholder(placeholderCell.imageId,
-                        placeholderCell.placementId, mKittyPlaceholder)) {
-                        drawKittyPlaceholderCell(canvas, placeholderCell, column, heightOffset,
-                            horizontalOffset);
-                    }
-                } else {
+                int clusterEnd = placeholderClusterEnd(lineObject, line,
+                    currentCharIndex + charsForCodePoint, charsUsedInLine);
+                if (imagesRecordedSeparately) {
+                    // Not even decoded here: the slice and the cursor drawn over it are the image
+                    // node's business, and this pass is the one worth not repeating per frame.
                     previousPlaceholder = null;
                     previousPlaceholderColumn = -2;
+                } else {
+                    KittyUnicodePlaceholder.Cell inherited = previousPlaceholderColumn == column - 1
+                        ? previousPlaceholder : null;
+                    KittyUnicodePlaceholder.Cell placeholderCell = drawPlaceholderCell(canvas,
+                        mEmulator, line, currentCharIndex + charsForCodePoint, clusterEnd, style,
+                        decorationColor, inherited, column, heightOffset, horizontalOffset);
+                    if (placeholderCell != null) {
+                        previousPlaceholder = placeholderCell;
+                        previousPlaceholderColumn = column;
+                    } else {
+                        previousPlaceholder = null;
+                        previousPlaceholderColumn = -2;
+                    }
+                    if (cursorX == column && cursorVisible)
+                        drawPlaceholderCursor(canvas, column, heightOffset, horizontalOffset,
+                            cursorShape, palette[TextStyle.COLOR_INDEX_CURSOR]);
                 }
-                if (cursorX == column && cursorVisible)
-                    drawPlaceholderCursor(canvas, column, heightOffset, horizontalOffset,
-                        cursorShape, palette[TextStyle.COLOR_INDEX_CURSOR]);
                 column++;
                 currentCharIndex = clusterEnd;
                 startFreshRun = true;
@@ -1329,6 +1362,131 @@ public final class TerminalRenderer {
                 lastRunSymbolTypeface, lastRunFallbackTypeface, lastRunSymbolFeatures,
                 lastRunSymbolVariations, false);
         }
+    }
+
+    /**
+     * Draw one row's image cells — kitty placeholder slices and sixel or legacy bitmaps — and
+     * nothing else.
+     *
+     * <p>This is the whole point of the third row node. An animation replaces the pixels behind a
+     * placeholder without touching a single char of the row, so the glyph pass has nothing new to
+     * say and its recording is replayed; only this walk runs again. It shares the cell stepping of
+     * {@link #drawRowGlyphs} but none of its run segmentation: no advances are measured, no
+     * typeface is configured, no text is shaped.
+     *
+     * <p>Only ever called for a row {@link RowRenderCache#rowCarriesAnImage} reported, which is
+     * every row whose text holds a placeholder or whose styles hold a bitmap cell — the same two
+     * conditions the branches below test, so no image and no placeholder cursor can be missed.
+     */
+    private void drawRowImages(TerminalEmulator mEmulator, Canvas canvas, TerminalRow lineObject,
+                               int[] palette, float heightOffset, int columns, int cursorX,
+                               boolean cursorVisible, int cursorShape, float horizontalOffset) {
+        final char[] line = lineObject.mText;
+        final int charsUsedInLine = lineObject.getSpaceUsed();
+        final boolean rowHasDecorationColors = lineObject.hasDecorationColors();
+        KittyUnicodePlaceholder.Cell previousPlaceholder = null;
+        int previousPlaceholderColumn = -2;
+        int currentCharIndex = 0;
+        for (int column = 0; column < columns && currentCharIndex < charsUsedInLine; ) {
+            final char charAtIndex = line[currentCharIndex];
+            final boolean charIsHighsurrogate = Character.isHighSurrogate(charAtIndex);
+            final int charsForCodePoint = charIsHighsurrogate ? 2 : 1;
+            final int codePoint = charIsHighsurrogate
+                ? Character.toCodePoint(charAtIndex, line[currentCharIndex + 1]) : charAtIndex;
+            final long style = lineObject.getStyle(column);
+            if (TextStyle.isBitmap(style)) {
+                previousPlaceholder = null;
+                previousPlaceholderColumn = -2;
+                drawBitmapCell(canvas, mEmulator, codePoint, style, column, heightOffset,
+                    horizontalOffset);
+                column += 1;
+                currentCharIndex += charsForCodePoint;
+                continue;
+            }
+            if (codePoint == KittyUnicodePlaceholder.CODE_POINT) {
+                final int clusterEnd = placeholderClusterEnd(lineObject, line,
+                    currentCharIndex + charsForCodePoint, charsUsedInLine);
+                final int decorationColor = rowHasDecorationColors
+                    ? lineObject.getDecorationColor(column) : TextStyle.DECORATION_COLOR_DEFAULT;
+                final KittyUnicodePlaceholder.Cell inherited =
+                    previousPlaceholderColumn == column - 1 ? previousPlaceholder : null;
+                final KittyUnicodePlaceholder.Cell placeholderCell = drawPlaceholderCell(canvas,
+                    mEmulator, line, currentCharIndex + charsForCodePoint, clusterEnd, style,
+                    decorationColor, inherited, column, heightOffset, horizontalOffset);
+                if (placeholderCell != null) {
+                    previousPlaceholder = placeholderCell;
+                    previousPlaceholderColumn = column;
+                } else {
+                    previousPlaceholder = null;
+                    previousPlaceholderColumn = -2;
+                }
+                // Kitty specifies that the cursor is drawn over the image, so it belongs here.
+                if (cursorX == column && cursorVisible)
+                    drawPlaceholderCursor(canvas, column, heightOffset, horizontalOffset,
+                        cursorShape, palette[TextStyle.COLOR_INDEX_CURSOR]);
+                column++;
+                currentCharIndex = clusterEnd;
+                continue;
+            }
+            previousPlaceholder = null;
+            previousPlaceholderColumn = -2;
+            column += Math.max(1, lineObject.getDisplayWidthAt(currentCharIndex));
+            currentCharIndex += charsForCodePoint;
+            while (currentCharIndex < charsUsedInLine
+                && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
+                currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
+            }
+        }
+    }
+
+    /**
+     * Where the placeholder grapheme that begins at {@code afterCodePoint} ends: its diacritics are
+     * zero-width continuations of the cluster, so they belong to the same cell.
+     */
+    private static int placeholderClusterEnd(TerminalRow lineObject, char[] line,
+                                             int afterCodePoint, int charsUsedInLine) {
+        int clusterEnd = afterCodePoint;
+        while (clusterEnd < charsUsedInLine && lineObject.getDisplayWidthAt(clusterEnd) <= 0)
+            clusterEnd += Character.isHighSurrogate(line[clusterEnd]) ? 2 : 1;
+        return clusterEnd;
+    }
+
+    /**
+     * Decode the placeholder cluster in {@code [start, end)} and, when its placement is still on
+     * screen, draw the image slice it addresses.
+     *
+     * @return the decoded cell, which the next column inherits its unspecified fields from, or null
+     *     when the cluster does not decode to one.
+     */
+    @Nullable
+    private KittyUnicodePlaceholder.Cell drawPlaceholderCell(Canvas canvas,
+                                                             TerminalEmulator mEmulator,
+                                                             char[] line, int start, int end,
+                                                             long style, int decorationColor,
+                                                             @Nullable
+                                                             KittyUnicodePlaceholder.Cell inherited,
+                                                             int column, float heightOffset,
+                                                             float horizontalOffset) {
+        final KittyUnicodePlaceholder.Cell cell = KittyUnicodePlaceholder.decode(line, start, end,
+            TextStyle.decodeForeColor(style), decorationColor,
+            TextStyle.DECORATION_COLOR_DEFAULT, inherited);
+        if (cell == null) return null;
+        if (mEmulator.getKittyImagePlaceholder(cell.imageId, cell.placementId, mKittyPlaceholder))
+            drawKittyPlaceholderCell(canvas, cell, column, heightOffset, horizontalOffset);
+        return cell;
+    }
+
+    /** Draw the sixel or legacy bitmap slice one image cell holds. */
+    private void drawBitmapCell(Canvas canvas, TerminalEmulator mEmulator, int codePoint,
+                                long style, int column, float heightOffset,
+                                float horizontalOffset) {
+        final TerminalBuffer screen = mEmulator.getScreen();
+        final Bitmap bitmap = screen.getSixelBitmap(codePoint, style);
+        if (bitmap == null) return;
+        final float left = horizontalOffset + column * mFontWidth;
+        final float top = heightOffset - mFontLineSpacing;
+        mSixelRect.set(left, top, left + mFontWidth, top + mFontLineSpacing);
+        canvas.drawBitmap(bitmap, screen.getSixelRect(codePoint, style), mSixelRect, null);
     }
 
     /** Draw the image slice addressed by one placeholder cell, clipped to that cell. */
@@ -2381,6 +2539,14 @@ public final class TerminalRenderer {
         return mRowsRecordedLastFrame;
     }
 
+    /**
+     * How many of the visible rows the last frame re-recorded image draws for. Zero on the direct
+     * path, where a row's images are drawn inline with its glyphs.
+     */
+    int imageRowsRecordedLastFrame() {
+        return mImageRowsRecordedLastFrame;
+    }
+
     /** How many rows currently hold a recording, for tests. */
     int cachedRowCount() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
@@ -2401,6 +2567,7 @@ public final class TerminalRenderer {
         mRowNodes = null;
         mRowCache.invalidate();
         mRowsRecordedLastFrame = 0;
+        mImageRowsRecordedLastFrame = 0;
     }
 
     /** @return true when the flag changed, so the caller can skip a needless invalidate */

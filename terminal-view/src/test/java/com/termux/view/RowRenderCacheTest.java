@@ -15,6 +15,11 @@ import org.junit.Test;
  * A row that did not move must be reported clean, and every input the render loop reads from a row
  * must move it. Getting the second half wrong leaves a cell frozen on screen, which is why each
  * input has its own case here rather than one broad "content changed" test.
+ *
+ * <p>The two answers are kept apart on purpose: {@code rowChanged} says the row's text has to be
+ * shaped again, {@code rowCarriesAnImage} says only its pixels do. A row showing an animation
+ * answers no to the first and yes to the second on every frame, which is what stops the animation
+ * from paying for the text beside it.
  */
 public class RowRenderCacheTest {
 
@@ -77,6 +82,13 @@ public class RowRenderCacheTest {
     private static void assertAll(boolean[] recorded) {
         for (int i = 0; i < recorded.length; i++)
             assertTrue("row " + i + " must be recorded", recorded[i]);
+    }
+
+    /** Which rows the frame just run reported as carrying an image. */
+    private boolean[] carriesAnImage() {
+        boolean[] carries = new boolean[ROWS];
+        for (int i = 0; i < ROWS; i++) carries[i] = mCache.rowCarriesAnImage(i);
+        return carries;
     }
 
     @Test
@@ -190,39 +202,71 @@ public class RowRenderCacheTest {
     }
 
     @Test
-    public void aRowCarryingABitmapIsNeverClean() {
+    public void aRowCarryingABitmapReportsTheImageAndNotItsText() {
         mRows[1].setChar(0, 'a', TextStyle.encodeBitmap(1, 0, 0));
 
         assertAll(frame());
-        assertOnly(1, frame());
-        assertOnly(1, frame());
+        assertOnly(1, carriesAnImage());
+        // Its text settles like any other row's; only the pixels are redrawn from here on.
+        assertNone(frame());
+        assertOnly(1, carriesAnImage());
+        assertNone(frame());
+        assertOnly(1, carriesAnImage());
     }
 
     @Test
-    public void aRowCarryingAKittyPlaceholderIsNeverClean() {
+    public void aRowCarryingAKittyPlaceholderReportsTheImageAndNotItsText() {
         mRows[2].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
 
         assertAll(frame());
-        assertOnly(2, frame());
-        assertOnly(2, frame());
+        assertOnly(2, carriesAnImage());
+        assertNone(frame());
+        assertOnly(2, carriesAnImage());
 
-        // The placeholder is ordinary text, so overwriting it does let the row settle again.
+        // The placeholder is ordinary text, so overwriting it moves the row once and then stops it
+        // carrying an image at all.
         mRows[2].setChar(0, 'a', 0L);
         assertOnly(2, frame());
+        assertNone(carriesAnImage());
         assertNone(frame());
     }
 
     @Test
-    public void aRowErasedAfterCarryingABitmapBecomesCleanAgain() {
+    public void anAnimatedRowIsNotReshapedWhileARowWhoseTextMovedIs() {
+        // The fastfetch case: one row holds both the logo's placeholder and the text beside it.
+        mRows[0].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
+        mRows[0].setChar(1, 'i', 0L);
+        frame();
+
+        // Frame after frame of animation: the image is redrawn, no text is shaped again.
+        assertNone(frame());
+        assertOnly(0, carriesAnImage());
+        assertNone(frame());
+        assertOnly(0, carriesAnImage());
+
+        // A row whose text did move is still recorded, and the placeholder row still is not.
+        mRows[1].setChar(2, 'z', 0L);
+        assertOnly(1, frame());
+        assertOnly(0, carriesAnImage());
+
+        // Including when the text sharing the animated row is what moved.
+        mRows[0].setChar(1, 'j', 0L);
+        assertOnly(0, frame());
+        assertOnly(0, carriesAnImage());
+    }
+
+    @Test
+    public void aRowErasedAfterCarryingABitmapStopsCarryingAnImage() {
         mRows[1].setChar(0, 'a', TextStyle.encodeBitmap(1, 0, 0));
         frame();
-        assertOnly(1, frame());
+        assertOnly(1, carriesAnImage());
 
         // The row keeps its bitmap flag until it is erased — overwriting the cell does not clear
-        // it — so this is the point at which it can go back to being replayed.
+        // it — so this is the point at which its image node can be dropped.
         mRows[1].clear(0L);
 
         assertOnly(1, frame());
+        assertNone(carriesAnImage());
         assertNone(frame());
     }
 

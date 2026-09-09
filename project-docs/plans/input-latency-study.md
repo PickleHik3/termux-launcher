@@ -605,6 +605,28 @@ around cold start. Nothing on it claims a warm or hot benefit, so this does not 
 (c) — it addresses the first launch after an install or update. Worth having; not a latency fix for
 the measured hotspots. *Effort:* **S**.
 
+**Measured 2026-09-09: the emulator's byte path on the UI thread.** A `Terminal.append` trace
+section now wraps `TerminalEmulator.append` in `TerminalSession`'s main-thread handler. On pong,
+`seq 1 400000` parsed 725 ms in one second, frames fell from ~90 to 34 that second, and one 64 KB
+chunk held the thread for 89 ms; `top -d 0.2` parsed 10–27 ms per second; fastfetch's kitty gif
+parsed 230 ms in its first two seconds and nothing afterwards. Parsing competes with drawing only
+under a flood, and the largest single stall is ~90 ms. Verdict: do not move the emulator to its own
+thread; the render would still need the screen lock and the gain is bounded to the flood case.
+A per-turn parse cap was considered and rejected: it would trade stream throughput for input
+latency during floods and helps no real workload measured.
+
+**Landed 2026-09-09: an image node per row.** The fastfetch gif redrew 65 times a second with
+`Terminal.render` median 5.4 ms, and an ART sample put the busy main thread in text shaping and
+drawing (nDrawTextRun 338 ms, nGetTextAdvances 213, font features 110, of 6 s) because a row with a
+kitty placeholder was re-recorded whole every frame. `TerminalRowNodes` now holds a third node,
+"TerminalRowImages"; `RowRenderCache.rowChanged` answers only for text and `rowCarriesAnImage`
+separately; `TerminalRenderer.drawRowImages` re-records image cells alone, and the glyph node keeps
+its recording — kitty's cell buffer / graphics layer split at row granularity. After: render median
+1.77 ms (from 5.37), total render 1673 ms of 24 s (from 4485), text methods gone from the sample,
+main thread busy ~17 % (from ~35 %). Not verified on device: sixel rows and the cursor over a
+placeholder. Follow-up: drive redraws from the gif's frame gap instead of per screen update, and a
+generation counter on the placeholder so an unchanged frame skips the image walk.
+
 ## Recommended order
 
 **Landed on dev, 2026-09-08 (uncommitted at the time of writing): T10 and A1.** Twelve trace

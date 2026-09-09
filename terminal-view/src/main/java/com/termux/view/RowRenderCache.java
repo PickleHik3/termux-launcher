@@ -24,10 +24,11 @@ import java.util.Arrays;
  * geometry, the palette, the scroll position) invalidates every row at once, which is what
  * {@link #beginFrame} decides.
  *
- * <p>Two kinds of row are never clean. A row carrying a bitmap, and a row carrying a kitty
- * placeholder, both draw from image state this class cannot see: the placeholder text is stable
- * while the image under it is replaced. Both are re-recorded every frame, which costs the rows
- * showing an image and nothing else.
+ * <p>Two kinds of row draw from image state this class cannot see: a row carrying a bitmap, and a
+ * row carrying a kitty placeholder, whose text is stable while the image under it is replaced.
+ * Those rows are reported by {@link #rowCarriesAnImage} rather than by {@link #rowChanged}, so the
+ * frame that redraws their pixels does not also re-shape their text — the two answers are recorded
+ * into different nodes.
  *
  * <p>This class knows nothing about how a row is drawn or what it is drawn into — see
  * {@link TerminalRowNodes} for that half.
@@ -60,7 +61,7 @@ final class RowRenderCache {
         int[] decorationColors = NO_INTS;
         boolean hasHyperlinks;
         int[] hyperlinkIds = NO_INTS;
-        /** Drawn from image state this class cannot compare, so never clean. */
+        /** Drawn from image state this class cannot compare, so its image node is never clean. */
         boolean carriesAnImage;
         /** The column the cursor is drawn at on this row, or -1 when it is not drawn here. */
         int cursorColumn = -1;
@@ -154,9 +155,10 @@ final class RowRenderCache {
     }
 
     /**
-     * Whether the row at this visible index has to be recorded again, remembering what it will be
-     * recorded from either way. Must be called once per visible row, in order, after
-     * {@link #beginFrame}.
+     * Whether the text, style, cursor or selection of the row at this visible index moved, so that
+     * its glyphs have to be recorded again — remembering what they will be recorded from either
+     * way. Says nothing about the row's images: ask {@link #rowCarriesAnImage} for those. Must be
+     * called once per visible row, in order, after {@link #beginFrame}.
      */
     boolean rowChanged(int index, TerminalRow line, int columns, int cursorColumn, int cursorShape,
                        int cursorColor, int selectionStart, int selectionEnd) {
@@ -184,9 +186,18 @@ final class RowRenderCache {
         if (captureDecorationColors(state, line, columns)) changed = true;
         if (captureHyperlinks(state, line, columns)) changed = true;
         state.recorded = true;
-        // An image row is reported dirty after its state is captured, so that the frame it stops
-        // carrying one is the last frame it costs anything.
-        return changed || state.carriesAnImage;
+        return changed;
+    }
+
+    /**
+     * Whether the row at this visible index holds a kitty placeholder or a bitmap cell, as seen by
+     * the last {@link #rowChanged} for it. Such a row's pixels can be replaced without anything
+     * this class compares moving, so its image draws are re-recorded every frame — and the frame it
+     * stops carrying an image is the last frame it costs anything, because the answer is read after
+     * the row's state was captured.
+     */
+    boolean rowCarriesAnImage(int index) {
+        return mRows[index].carriesAnImage;
     }
 
     /** True when the palette's contents moved; the copy is refreshed either way. */

@@ -23,7 +23,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * The software path is what a Robolectric canvas gives us, and it is also what runs on a device
  * whenever the pane is drawn without hardware acceleration. It must keep drawing every row every
- * frame, and it must keep reporting that it did.
+ * frame — glyphs and images together, in one walk — and it must keep reporting that it did.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -92,6 +92,20 @@ public class TerminalRendererRowCacheTest {
     }
 
     @Test
+    public void aSoftwareCanvasDrawsAPlaceholderRowsImageInlineWithItsGlyphs() {
+        // U+10EEEE, the kitty unicode placeholder, with the text of the row beside it.
+        enter("\uD83B\uDEEEinfo\r\n");
+
+        render();
+        render();
+
+        assertEquals("every row is still drawn in one pass", ROWS,
+            mRenderer.rowsRecordedLastFrame());
+        assertEquals("and none of them records images on their own", 0,
+            mRenderer.imageRowsRecordedLastFrame());
+    }
+
+    @Test
     public void anExtraRowIsDrawnDuringASmoothScroll() {
         // Enough output to push a row into the transcript, so there is a row above the screen.
         for (int i = 0; i < ROWS + 2; i++) enter("row " + i + "\r\n");
@@ -109,5 +123,6 @@ public class TerminalRendererRowCacheTest {
 
         assertEquals(0, mRenderer.cachedRowCount());
         assertEquals(0, mRenderer.rowsRecordedLastFrame());
+        assertEquals(0, mRenderer.imageRowsRecordedLastFrame());
     }
 }
