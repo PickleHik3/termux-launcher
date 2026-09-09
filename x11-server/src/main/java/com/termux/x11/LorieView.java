@@ -718,6 +718,7 @@ public class LorieView extends SurfaceView implements InputStub {
      */
     @Keep void onCursorNameChanged(String name) {
         cursorName = name == null ? "" : name;
+        Log.d("LorieView", "cursor name: " + (cursorName.isEmpty() ? "(none)" : cursorName));
         if (mCursorNameListener != null)
             mCursorNameListener.onCursorNameChanged(cursorName);
     }
