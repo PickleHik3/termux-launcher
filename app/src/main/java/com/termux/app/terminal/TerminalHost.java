@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxService;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
@@ -124,6 +125,28 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     /** The layout id the ring stands on, or {@code main} while there is no keyboard. */
     @NonNull String activeInAppKeyboardLayout();
+
+    /**
+     * The keyboard type the place on screen resolves to in the orientation it is being held in.
+     * Docked while nothing has been stored, which is also the answer before the wall exists.
+     */
+    @NonNull KeyboardForm keyboardForm();
+
+    /**
+     * Stores a keyboard type for the place and orientation on screen and re-runs the geometry that
+     * depends on it. False when there are no preferences to store it in yet.
+     */
+    boolean setKeyboardForm(@NonNull KeyboardForm form);
+
+    /**
+     * Raises the in-app keyboard. {@code fromFocus} separates a text field that took focus from a
+     * person asking, so a policy that opened the keyboard itself can tell its own doing from the
+     * user's; false when there is no keyboard to raise.
+     */
+    boolean showInAppKeyboard(boolean fromFocus);
+
+    /** Puts the in-app keyboard down, with the same distinction. */
+    boolean hideInAppKeyboard(boolean fromFocus);
 
     // --- Keybind hints ---
 

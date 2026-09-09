@@ -1,5 +1,6 @@
 package com.termux.app.terminal;
 
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.launcherctl.LauncherToolRegistry;
 
 import org.junit.Before;
@@ -35,6 +36,41 @@ public class TerminalCommandPaletteRowsTest {
             registry.getTool(LauncherToolRegistry.TOOL_SESSION_RENAME_AT_INDEX)));
         assertEquals("name", TerminalCommandPalette.promptableArgument(
             registry.getTool(LauncherToolRegistry.TOOL_SESSION_RENAME)));
+    }
+
+    /**
+     * A submenu of three storage values could not say which type is in use, so the Keyboard
+     * section supplies a row per type instead and the projection leaves the tool alone.
+     */
+    @Test
+    public void promptableArgument_leavesTheKeyboardTypeToItsOwnRows() {
+        assertNull(TerminalCommandPalette.promptableArgument(
+            registry.getTool(LauncherToolRegistry.TOOL_KEYBOARD_SET_FORM)));
+    }
+
+    @Test
+    public void keyboardFormEntry_carriesItsOwnTypeAndAsksForNothing() {
+        CommandPaletteFilter.Entry entry = TerminalCommandPalette.keyboardFormEntry(
+            KeyboardForm.FLOATING, "Floating keyboard", "Current type");
+
+        assertEquals(LauncherToolRegistry.TOOL_KEYBOARD_SET_FORM, entry.toolName);
+        assertEquals(LauncherToolRegistry.CATEGORY_KEYBOARD, entry.category);
+        assertNotNull(entry.arguments);
+        assertEquals("floating", entry.arguments.optString("form"));
+        assertNull("the row supplies the value, so it must not prompt", entry.argumentName);
+        assertTrue(entry.enabled);
+    }
+
+    /** Every type gets a row, and each names itself the way the Layout page's pill does. */
+    @Test
+    public void everyKeyboardTypeHasALabelAndAValueTheDispatcherAccepts() {
+        for (KeyboardForm form : KeyboardForm.values()) {
+            assertTrue(form.name(), TerminalCommandPalette.formLabel(form) != 0);
+            CommandPaletteFilter.Entry entry =
+                TerminalCommandPalette.keyboardFormEntry(form, form.name(), "");
+            assertEquals(form, KeyboardForm.parse(
+                entry.arguments.optString("form"), KeyboardForm.DOCKED));
+        }
     }
 
     @Test

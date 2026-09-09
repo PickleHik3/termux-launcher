@@ -13,6 +13,7 @@ import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
 import com.termux.terminal.TerminalSession;
@@ -133,6 +134,10 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
     public static final String TOOL_KEYBOARD_CYCLE_LAYOUT = "keyboard.cycle_layout";
     public static final String TOOL_KEYBOARD_SELECT_LAYOUT = "keyboard.select_layout";
+    public static final String TOOL_KEYBOARD_CYCLE_FORM = "keyboard.cycle_form";
+    public static final String TOOL_KEYBOARD_SET_FORM = "keyboard.set_form";
+    public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
+    public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
@@ -272,6 +277,10 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
             case TOOL_KEYBOARD_CYCLE_LAYOUT:
             case TOOL_KEYBOARD_SELECT_LAYOUT:
+            case TOOL_KEYBOARD_CYCLE_FORM:
+            case TOOL_KEYBOARD_SET_FORM:
+            case TOOL_KEYBOARD_SHOW:
+            case TOOL_KEYBOARD_HIDE:
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
@@ -352,6 +361,17 @@ public final class TerminalActionDispatcher {
                 return inAppKeyboard;
             }
         };
+    }
+
+    /**
+     * The keyboard type the place on screen resolves to, for a caller that wants to show it — the
+     * palette marks the row for it. Docked while nothing is attached, which is what an install
+     * that has never chosen resolves to anyway.
+     */
+    @NonNull
+    public KeyboardForm keyboardForm() {
+        TerminalHost host = currentHost();
+        return host == null ? KeyboardForm.DOCKED : host.keyboardForm();
     }
 
     private static boolean hasSelectedText(@NonNull TerminalHost host) {
@@ -1070,6 +1090,51 @@ public final class TerminalActionDispatcher {
                     if (!host.selectInAppKeyboardLayout(layout))
                         return error(404, "not_found", "No keyboard layout named '" + layout + "'");
                     return ok().put("layout", host.activeInAppKeyboardLayout());
+                }
+
+                case TOOL_KEYBOARD_CYCLE_FORM: {
+                    String direction = arguments.optString("direction", "forward");
+                    if (!"forward".equals(direction) && !"backward".equals(direction))
+                        return error(400, "bad_request", "'direction' must be forward or backward");
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    KeyboardForm from = host.keyboardForm();
+                    KeyboardForm to = from.cycled("backward".equals(direction) ? -1 : 1);
+                    if (!host.setKeyboardForm(to))
+                        return error(503, "unavailable", "The place on screen is not settled yet");
+                    return ok().put("form", to.storageValue())
+                        .put("previousForm", from.storageValue());
+                }
+                case TOOL_KEYBOARD_SET_FORM: {
+                    String requested = arguments.optString("form", "").trim();
+                    if (requested.isEmpty()) return error(400, "bad_request", "Missing 'form'");
+                    KeyboardForm form = KeyboardForm.parse(requested, KeyboardForm.DOCKED);
+                    if (!form.storageValue().equals(requested))
+                        return error(400, "bad_request",
+                            "Invalid 'form'; expected docked, floating, or split");
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    if (!host.setKeyboardForm(form))
+                        return error(503, "unavailable", "The place on screen is not settled yet");
+                    return ok().put("form", form.storageValue());
+                }
+                case TOOL_KEYBOARD_SHOW:
+                case TOOL_KEYBOARD_HIDE: {
+                    // Deliberately not background-safe: both put a keyboard on screen or take one
+                    // off it, which is meaningless with nobody looking. The visibility gate above
+                    // has already answered 409 for a stopped activity by the time we are here.
+                    String source = arguments.optString("source", "manual");
+                    if (!"manual".equals(source) && !"focus".equals(source))
+                        return error(400, "bad_request", "'source' must be manual or focus");
+                    boolean fromFocus = "focus".equals(source);
+                    boolean show = TOOL_KEYBOARD_SHOW.equals(toolName);
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    boolean applied = show
+                        ? host.showInAppKeyboard(fromFocus) : host.hideInAppKeyboard(fromFocus);
+                    if (!applied)
+                        return error(409, "unavailable", "The in-app keyboard is not on screen");
+                    return ok().put("source", source).put("keyboardShown", show);
                 }
 
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:

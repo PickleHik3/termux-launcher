@@ -1178,7 +1178,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         "accent_aigu", "accent_grave", "accent_circonflexe", "accent_tilde",
         "accent_cedille", "accent_trema", "accent_ring", "accent_caron",
         "accent_macron", "accent_ogonek", "accent_breve", "accent_dot_above",
-        "accent_double_aigu", "accent_slash", "accent_bar"
+        "accent_double_aigu", "accent_slash", "accent_bar",
+        // A launcher action offered in the same catalogue: it steps the keyboard between docked,
+        // floating and split. The canonical order here is what a selection is written back in, so
+        // a name missing from this list would be dropped on save.
+        "tool:keyboard.cycle_form"
     };
 
     /**

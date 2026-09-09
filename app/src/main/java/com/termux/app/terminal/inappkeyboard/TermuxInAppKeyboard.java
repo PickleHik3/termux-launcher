@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.place.PlaceLayout;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.view.KeyboardUtils;
@@ -51,7 +52,11 @@ public final class TermuxInAppKeyboard {
         FIRST_ENABLE,
         TERMINAL_TAP,
         KEYBOARD_ACTION,
-        HEIGHT_ADJUSTMENT
+        HEIGHT_ADJUSTMENT,
+        /** A person asked, through {@code keyboard.show} on a key, a chord or the palette. */
+        TOOL,
+        /** Something on screen took text focus and the keyboard was opened for it. */
+        FOCUS
     }
 
     public enum HideReason {
@@ -60,7 +65,11 @@ public final class TermuxInAppKeyboard {
         PREFERENCE_DISABLED,
         DESTROYED,
         /** The pane wall left the terminal: there is nothing on the other pages to type into. */
-        WALL_PAGE
+        WALL_PAGE,
+        /** A person asked, through {@code keyboard.hide}. */
+        TOOL,
+        /** Text focus went away, so what a focus signal opened is closed again. */
+        FOCUS
     }
 
     public enum ToggleReason {
@@ -122,6 +131,8 @@ public final class TermuxInAppKeyboard {
 
     private ShowReason mLastShowReason;
     private HideReason mLastHideReason;
+    /** The place's keyboard type as this keyboard last heard it. */
+    @NonNull private PlaceLayout.KeyboardForm mForm = PlaceLayout.KeyboardForm.DOCKED;
     private ToggleReason mLastToggleReason;
 
     public TermuxInAppKeyboard(InAppKeyboardHost host,
@@ -372,6 +383,31 @@ public final class TermuxInAppKeyboard {
             hide(HideReason.KEYBOARD_ACTION);
         else
             show(ShowReason.KEYBOARD_ACTION);
+    }
+
+    /**
+     * The keyboard type the place on screen resolves to, as last handed in. The keyboard is the
+     * observer here, not the owner: the value lives in {@code PlaceLayoutStore} and reaches this
+     * from the activity's arrangement pass, so the cycle key, the Layout page, a rotation and a
+     * move to another place all arrive the same way.
+     */
+    @NonNull
+    public PlaceLayout.KeyboardForm getForm() {
+        return mForm;
+    }
+
+    /**
+     * Hears that the place's keyboard type moved. Only the geometry pass re-runs for now — the
+     * keyboard still draws docked whatever the type says; the floating frame and the split row
+     * transform hang off this callback.
+     */
+    public void onKeyboardFormChanged(@NonNull PlaceLayout.KeyboardForm form) {
+        if (mDestroyed || mForm == form)
+            return;
+        mForm = form;
+        if (!mEnabled)
+            return;
+        mHost.requestAccessoryGeometrySync();
     }
 
     public void attachSession(TerminalSession session) {

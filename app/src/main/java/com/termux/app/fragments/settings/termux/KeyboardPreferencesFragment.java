@@ -232,6 +232,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             case "f12_placeholder": return "F12";
             case "menu": return "Menu";
             case "scroll_lock": return "Scroll Lock";
+            case InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM: return "Next keyboard type";
             default:
                 if (name.startsWith("accent_"))
                     return "Dead key: " + name.substring("accent_".length()).replace('_', ' ');
