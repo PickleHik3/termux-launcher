@@ -360,6 +360,38 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             DataUtils.clamp(value, 0, 100), false);
     }
 
+    /**
+     * The starting magnification for a device that has never set the wallpaper alignment slider,
+     * as a percent. Nothing OS magnifies the wallpaper at composite time and ignores a request not
+     * to; every other ROM measured so far renders it unzoomed.
+     *
+     * @param manufacturer {@link Build#MANUFACTURER}, or {@code null} where it is unknown
+     */
+    public static int defaultWallpaperRenderZoom(@Nullable String manufacturer) {
+        return "nothing".equalsIgnoreCase(manufacturer)
+            ? TERMUX_APP.DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS
+            : TERMUX_APP.DEFAULT_WALLPAPER_RENDER_ZOOM;
+    }
+
+    public static int clampWallpaperRenderZoom(int value) {
+        return DataUtils.clamp(value, TERMUX_APP.MIN_WALLPAPER_RENDER_ZOOM,
+            TERMUX_APP.MAX_WALLPAPER_RENDER_ZOOM);
+    }
+
+    /**
+     * Magnification of the wallpaper copy behind the glass surfaces, as a percent of its unzoomed
+     * size; see {@link TERMUX_APP#KEY_WALLPAPER_RENDER_ZOOM} for why the user owns it.
+     */
+    public int getWallpaperRenderZoom() {
+        return clampWallpaperRenderZoom(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM, defaultWallpaperRenderZoom(Build.MANUFACTURER)));
+    }
+
+    public void setWallpaperRenderZoom(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM,
+            clampWallpaperRenderZoom(value), false);
+    }
+
     /** Gap between tiled terminal panes, in dp. */
     public int getTerminalPaneGap() {
         return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,

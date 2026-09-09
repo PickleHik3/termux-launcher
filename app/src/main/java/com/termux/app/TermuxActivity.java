@@ -779,6 +779,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Set when {@link WallpaperManager#getDrawable()} threw for want of the storage permission. */
     private boolean mWallpaperReadPermissionDenied;
     private boolean mWallpaperReadPermissionPromptShowing;
+    /**
+     * Wallpaper alignment the resident blur frames were captured at (percent), or -1 before the
+     * first read. See {@link #applyWallpaperRenderZoomIfChanged()}.
+     */
+    private int mAppliedWallpaperRenderZoomPercent = -1;
     @Nullable private FrameLayout mDecorNavBarSurfaceOverlay;
     @Nullable private ImageView mDecorNavBarBlurBackdrop;
     @Nullable private View mDecorNavBarTintOverlay;
@@ -977,6 +982,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyWidgetGridPreference();
         }
         mPreferences.migrateTerminalMarginAdjustmentDefaultIfNeeded();
+        // Every blur frame this activity captures is aligned with this value; remembering it here
+        // is what lets a later styling reload tell a moved slider from any other restyle.
+        mAppliedWallpaperRenderZoomPercent = mPreferences.getWallpaperRenderZoom();
         mLauncherTransitionController = new LauncherTransitionController(this, mPreferences);
         setMargins();
         setSuggestionBarView();
@@ -4507,48 +4515,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    @Nullable
     /**
      * Extra magnification the system applies when it renders the static wallpaper, about the
-     * display center. ROMs that honor {@code setWallpaperZoomOut(0)} render at 1.0 and need no
-     * compensation; Nothing OS applies its own regardless of what the launcher asks for.
+     * display center, as a factor. ROMs that honor {@code setWallpaperZoomOut(0)} render at 1.0 and
+     * need no compensation; Nothing OS applies its own regardless of what the launcher asks for —
+     * and by an amount that depends on the wallpaper, which is why this is the user's Wallpaper
+     * alignment setting and not a constant. A stored 1328x2654 wallpaper measured 1.03, a
+     * 1400x3100 one about 1.084, on the same panel and the same ROM.
      *
-     * <p>Re-measured 2026-08-20 and corrected from 1.10 to
-     * {@link #NOTHING_OS_WALLPAPER_RENDER_ZOOM}. The method: set the wallpaper through the in-app
-     * picker, which keeps a byte-exact copy of the source, then fit the mapping
-     * {@code source = ((screen - centre) / zoom + centre) / fillScale} against the sharp wallpaper
-     * still visible in a screenshot's margins. 1.03 fit to a mean squared error of 4 with no pan
-     * term; 1.00 gave 355 and the old 1.10 gave 564. Over-compensating by those seven percent
-     * displaced every frost by ~7% of its distance from the centre — around 75px at the status
-     * bar — which is what "the blur is offset" was.
+     * <p>Only the composite zoom belongs here. Whatever scaling is baked into the stored bitmap is
+     * already in the pixels: the frost samples {@code WallpaperManager.getDrawable()}, which
+     * returns the wallpaper <em>as the system stored it</em>, so re-applying the store-scale
+     * double-counts it — that was the original bug.
      *
-     * <p>If a future ROM changes this again, that measurement is how to re-derive it: the numbers
-     * above are the fit quality to beat, not a value to nudge by eye.
+     * <p>How to measure one: set the wallpaper through the in-app picker, which keeps a byte-exact
+     * copy of the source, then fit {@code source = ((screen - centre) / zoom + centre) / fillScale}
+     * against the sharp wallpaper still visible in a screenshot's margins. For the 1328x2654 case
+     * 1.03 fit to a mean squared error of 4 with no pan term, against 355 for 1.00 and 564 for
+     * 1.10. Over-compensating displaces every frost by that error times its distance from the
+     * centre — around 75px at the status bar for seven percent — which is what "the blur is offset"
+     * looks like. Fit the number; do not nudge it by eye.
      */
     private float systemWallpaperRenderZoom() {
-        return "nothing".equalsIgnoreCase(Build.MANUFACTURER)
-            ? NOTHING_OS_WALLPAPER_RENDER_ZOOM : 1f;
+        int percent = mPreferences != null
+            ? mPreferences.getWallpaperRenderZoom()
+            : TermuxAppSharedPreferences.defaultWallpaperRenderZoom(Build.MANUFACTURER);
+        return percent / 100f;
     }
 
     /**
-     * Extra magnification Nothing OS applies at composite time, on top of whatever scaling is
-     * already baked into the stored wallpaper bitmap.
+     * Drops the pre-blurred frames when the wallpaper alignment moved.
      *
-     * <p>Why one constant covers both a wallpaper this app set and one the system cropped: the
-     * frost samples {@code WallpaperManager.getDrawable()}, which returns the bitmap <em>as the
-     * system stored it</em>, not the file the user picked. The ROM upscales what it is given until
-     * the stored bitmap is ~1.10x the display and shows the middle — with a 1250x2500 image applied
-     * through the system picker on a 1080x2412 panel, {@code dumpsys wallpaper} reports
-     * {@code mCropHint=Rect(0, 0 - 1328, 2654)}, and 2654 / 2412 = 1.1003. That 1.10 is therefore
-     * already present in the pixels handed to us, and re-applying it was the bug: it double-counted
-     * the store-scale. What remains is the composite zoom, measured at 1.03 (see
-     * {@link #systemWallpaperRenderZoom()} for the method and the fit quality).
-     *
-     * <p>The in-app picker is the well-defined case regardless: it hands the system a bitmap
-     * already in the display's aspect and a crop hint covering all of it, so the store-scale is a
-     * no-op and only this composite zoom applies.
+     * <p>Every resident frame was captured at the old zoom and the cache's identity does not
+     * include it (frame rect, source and wallpaper id only), so a styling reload alone would keep
+     * serving the misaligned crops. The value the frames were captured at is recorded in
+     * {@code onCreate}, so the comparison holds for a change made in Settings before this process
+     * had ever reloaded its styling.
      */
-    private static final float NOTHING_OS_WALLPAPER_RENDER_ZOOM = 1.03f;
+    private void applyWallpaperRenderZoomIfChanged() {
+        if (mPreferences == null)
+            return;
+        int percent = mPreferences.getWallpaperRenderZoom();
+        if (percent == mAppliedWallpaperRenderZoomPercent)
+            return;
+        mAppliedWallpaperRenderZoomPercent = percent;
+        mChrome.blurCache().clear();
+        updateTerminalGlassFrost();
+        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
 
     /**
      * The glass bands blur a crop of the system wallpaper read through {@link WallpaperManager}.
@@ -16631,6 +16645,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the running launcher on the way back from Settings, without a recreate.
         syncPlaceLayout();
         applySuggestionBarInputChar();
+        // Before the backdrop sync below: the sync re-cuts crops, and this is what makes it
+        // re-capture instead of re-cutting frames blurred at the old alignment.
+        applyWallpaperRenderZoomIfChanged();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
         applySeamlessStatusBackgroundModeIfNeeded();
         applyTerminalSurfaceAppearance();

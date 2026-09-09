@@ -50,6 +50,14 @@
             app:title="@string/settings_wallpaper_title"
             app:summary="@string/termux_use_system_wallpaper_summary"
             android:defaultValue="true" />
+        <SeekBarPreference
+            app:key="wallpaper_render_zoom"
+            app:title="@string/settings_wallpaper_alignment_title"
+            app:summary="@string/settings_wallpaper_alignment_summary"
+            app:showSeekBarValue="true"
+            app:min="90"
+            android:max="120"
+            android:defaultValue="100" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_icon_appearance_header">

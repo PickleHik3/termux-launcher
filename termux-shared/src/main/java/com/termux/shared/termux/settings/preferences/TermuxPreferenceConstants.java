@@ -477,6 +477,22 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_WALLPAPER_BACKDROP_DIM = 0;
 
         /**
+         * Extra magnification (percent) applied to the wallpaper copy the glass surfaces blur, so
+         * it lands where the system draws the wallpaper behind the app. 100 means no compensation.
+         *
+         * <p>It is a setting rather than a constant because the magnification a ROM applies at
+         * composite time turned out to depend on the wallpaper: a stored 1328x2654 wallpaper needed
+         * 103 on Nothing OS, a 1400x3100 one about 108. The shipped defaults are the measured
+         * per-manufacturer starting points, resolved by
+         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}.
+         */
+        public static final String KEY_WALLPAPER_RENDER_ZOOM = "wallpaper_render_zoom";
+        public static final int DEFAULT_WALLPAPER_RENDER_ZOOM = 100;
+        public static final int DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS = 103;
+        public static final int MIN_WALLPAPER_RENDER_ZOOM = 90;
+        public static final int MAX_WALLPAPER_RENDER_ZOOM = 120;
+
+        /**
          * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
          * fixed 1dp hairline is the default; with the glass panes on, the gap is what makes each
          * pane read as its own floating terminal rather than a cell of one sheet.
