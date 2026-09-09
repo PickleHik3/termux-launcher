@@ -20,6 +20,8 @@ import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.wall.PaneWallController;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
@@ -428,6 +430,52 @@ public class TermuxActivityInAppKeyboardGeometryTest {
             mActivity.findViewById(R.id.inapp_keyboard_container).getVisibility());
     }
 
+    // The wall always carries its Display place, whose surface loads the X server's native
+    // library as it inflates; instrumenting that package lets Robolectric stub the load.
+    @Config(instrumentedPackages = {"com.termux.x11"})
+    @Test
+    public void coldStartOnTheWidgetsPlaceLandsWithTheKeyboardDown() {
+        TermuxAppSharedPreferences preferences = prepareActivity(true);
+        preferences.setAppLauncherWidgetPaneEnabled(true);
+        preferences.setWallLastPage(PaneWallPage.WIDGETS.name());
+
+        PaneWallController wall = buildWall();
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+
+        // The keyboard is built after the wall, remembering itself up (no saved state).
+        hostKeyboard(null);
+        assertTrue(mController.isEnabled());
+        assertFalse(mController.isVisible());
+
+        // And the wall put it down, not the user: the terminal gets it back like it does after
+        // any Widgets -> Terminal move.
+        wall.goTo(PaneWallPage.TERMINAL, false);
+        assertTrue(mController.isVisible());
+    }
+
+    @Config(instrumentedPackages = {"com.termux.x11"})
+    @Test
+    public void coldStartOnTheTerminalKeepsTheRestoredKeyboardState() {
+        TermuxAppSharedPreferences preferences = prepareActivity(true);
+        preferences.setAppLauncherWidgetPaneEnabled(true);
+        preferences.setWallLastPage(PaneWallPage.TERMINAL.name());
+
+        PaneWallController wall = buildWall();
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+
+        hostKeyboard(null);
+        assertTrue(mController.isVisible());
+
+        // A recreation on the terminal still comes back the way it was left, up or down.
+        mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+        Bundle state = new Bundle();
+        mController.onSaveInstanceState(state);
+        mController.onDestroy();
+        ReflectionHelpers.setField(mActivity, "mInAppKeyboard", null);
+        hostKeyboard(state);
+        assertFalse(mController.isVisible());
+    }
+
     @Test
     public void liveHeightPreviewInvalidatesCachedKeyboardAndTerminalGeometry() {
         createActivityHostedController(null);
@@ -499,11 +547,22 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     private void createActivityHostedController(Bundle state) {
         prepareActivity(true);
+        hostKeyboard(state);
+    }
 
+    private void hostKeyboard(Bundle state) {
         ReflectionHelpers.callInstanceMethod(mActivity, "initializeInAppKeyboard",
             ReflectionHelpers.ClassParameter.from(Bundle.class, state));
         mController = ReflectionHelpers.getField(mActivity, "mInAppKeyboard");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+    }
+
+    /** The wall, built the way onCreate builds it: before the keyboard exists. */
+    private PaneWallController buildWall() {
+        FrameLayout paneHost = mActivity.findViewById(R.id.terminal_pane_host);
+        ReflectionHelpers.callInstanceMethod(mActivity, "createPaneWallController",
+            ReflectionHelpers.ClassParameter.from(View.class, paneHost));
+        return ReflectionHelpers.getField(mActivity, "mPaneWallController");
     }
 
     private TermuxAppSharedPreferences prepareActivity(boolean keyboardEnabled) {

@@ -7688,6 +7688,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mInAppKeyboard = new TermuxInAppKeyboard(new InAppKeyboardActivityHost(), mPreferences);
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
         mInAppKeyboard.onCreate(savedInstanceState);
+        syncWallKeyboardForRestoredPlace();
+    }
+
+    /**
+     * The wall is put back on the place a launch returns to before this keyboard exists, so the
+     * page change that restored it ran {@link #syncWallKeyboard} with no keyboard to move and
+     * every branch of it was skipped: the keyboard then came up over the widget grid, on a place
+     * layout that was never inset for it. The rule is applied here instead, at the first moment
+     * {@link TermuxInAppKeyboard#isVisible()} means anything — the keyboard restores its own
+     * visibility inside the {@code onCreate} above.
+     *
+     * <p>The terminal is left alone: there the keyboard's restored state is the answer already.
+     * {@code mLastWallPage} names the restored place by now, so this re-run moves the keyboard
+     * without rewriting another place's memory, and the pair of flags it leaves behind is the
+     * one a Widgets/Display arrival normally leaves — returning to the terminal brings the
+     * keyboard back exactly as any other transition does.
+     */
+    private void syncWallKeyboardForRestoredPlace() {
+        if (mInAppKeyboard == null) return;
+        com.termux.app.wall.PaneWallPage page = currentWallPage();
+        if (page == com.termux.app.wall.PaneWallPage.TERMINAL) return;
+        syncWallKeyboard(page);
+        syncPlaceLayout();
     }
 
     private void handleInAppKeyboardHeightAdjustIntent(@Nullable Intent intent) {
