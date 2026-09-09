@@ -693,6 +693,35 @@ public class LorieView extends SurfaceView implements InputStub {
         }, 10);
     }
 
+    /** Told the name of the cursor the X pointer is showing whenever it changes. */
+    public interface CursorNameListener { void onCursorNameChanged(String name); }
+    private CursorNameListener mCursorNameListener;
+    private String cursorName = "";
+
+    /** Notifies {@code listener} of every cursor-name change; pass null to stop. */
+    public void setCursorNameListener(@Nullable CursorNameListener listener) {
+        mCursorNameListener = listener;
+    }
+
+    /** The name of the cursor the X pointer is showing, empty when the cursor has none. */
+    public String getCursorName() {
+        return cursorName;
+    }
+
+    /**
+     * The name the window under the pointer asked its cursor to be - "xterm" over a text field,
+     * "left_ptr" over most other things. X gives the host nothing else to tell those apart, so
+     * the server reports the name over its own socket; see
+     * ci/x11-patch/0002-forward-the-cursor-name-to-the-host.patch.
+     * It is called from native code, not from Java.
+     * @noinspection unused
+     */
+    @Keep void onCursorNameChanged(String name) {
+        cursorName = name == null ? "" : name;
+        if (mCursorNameListener != null)
+            mCursorNameListener.onCursorNameChanged(cursorName);
+    }
+
     @FastNative private native long nativeInit();
     @FastNative private native void nativeDestroy(long ptr);
     @FastNative private native void surfaceChanged(long ptr, Surface surface);

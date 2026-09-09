@@ -86,6 +86,17 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
   type-checks either, so the abort is at runtime, on the first `LorieView`. Two string literals
   become `LorieHost`; `clientConnectedStateChanged()` and the view's `resetIme()` keep their names
   and signatures. The rest of the JNI surface (`LorieView`, `CmdEntryPoint`) is untouched.
+- **`ci/x11-patch/0002-forward-the-cursor-name-to-the-host.patch`** adds the second native change:
+  an `EVENT_CURSOR_NAME_CHANGED` event that carries the name of the cursor the X pointer is
+  showing (`CursorRec.name`, resolved with `ValidAtom`/`NameForAtom` in `lorieSetCursor`, sent only
+  when it changed, and repeated when a host attaches). It is how the Display page can tell that a
+  tap landed on a text field: X tells the host nothing about focus, and XFixes publishes the name
+  only to X clients, which the host is not. The patch applies **after 0001** — it extends the same
+  `nativeInit` block — and pairs with `LorieView.onCursorNameChanged` below; `FindMethodOrDie`
+  kills the process if the Java method and the prebuilt ever disagree.
+- **`LorieView.onCursorNameChanged(String)` (new)** is the Java end of that event: it keeps the
+  last name (`getCursorName()`) and forwards it to an optional `CursorNameListener`. Upstream has
+  no such method, so a nightly merge must carry it forward with the native patch.
 - **`stub/`** is upstream's `shell-loader/stub` — compile-only declarations of the hidden
   framework classes `CmdEntryPoint` reaches for while it runs outside an app process.
 - Only `res/values/arrays.xml` and `res/xml/preferences.xml` are vendored from upstream's
