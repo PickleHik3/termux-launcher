@@ -218,6 +218,14 @@ public final class TermuxPreferenceConstants {
 
         public static final int DEFAULT_X11_DISPLAY_DPI = 0;
 
+        /**
+         * Raise the keyboard when a tap on the display lands on a text field, and put it down
+         * when the next tap lands elsewhere. Only read while the touch mode is Touchscreen.
+         */
+        public static final String KEY_X11_KEYBOARD_FOLLOWS_TEXT = "x11_keyboard_follows_text";
+
+        public static final boolean DEFAULT_X11_KEYBOARD_FOLLOWS_TEXT = true;
+
         /** Pass {@code -legacy-drawing} when the launcher starts the server. */
         public static final String KEY_X11_LEGACY_DRAWING = "x11_legacy_drawing";
 

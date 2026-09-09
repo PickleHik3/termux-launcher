@@ -238,6 +238,9 @@
     <string name="permission_x11_display_label">Run a Linux display</string>
     <string name="settings_x11_category_display">Display</string>
     <string name="settings_x11_touch_mode_title">Touch</string>
+    <string name="settings_x11_keyboard_follows_text_title">Keyboard follows text fields</string>
+    <string name="settings_x11_keyboard_follows_text_summary">Open the keyboard when you tap a text field and close it when you tap elsewhere.</string>
+    <string name="settings_x11_keyboard_follows_text_unavailable">Available in Touchscreen touch mode.</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
     <string name="settings_x11_scale_title">Scale</string>
     <string name="settings_x11_resolution_exact_title">Fixed size</string>

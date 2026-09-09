@@ -35,6 +35,8 @@ import java.util.concurrent.Executors;
  */
 public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
 
+    private static final String KEY_TOUCH_MODE = "touchMode";
+    private static final String KEY_KEYBOARD_FOLLOWS_TEXT = "x11_keyboard_follows_text";
     private static final String KEY_RESOLUTION_MODE = "displayResolutionMode";
     private static final String KEY_SCALE = "displayScale";
     private static final String KEY_RESOLUTION_EXACT = "displayResolutionExact";
@@ -56,6 +58,14 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
         manager.setPreferenceDataStore(new X11DisplayPreferencesDataStore(context));
         setPreferencesFromResource(R.xml.x11_display_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
+        ListPreference touch = findPreference(KEY_TOUCH_MODE);
+        if (touch != null) {
+            applyKeyboardFollowsTextRow(touch.getValue());
+            touch.setOnPreferenceChangeListener((preference, value) -> {
+                applyKeyboardFollowsTextRow(String.valueOf(value));
+                return true;
+            });
+        }
         ListPreference mode = findPreference(KEY_RESOLUTION_MODE);
         if (mode != null) {
             applyResolutionRows(mode.getValue());
@@ -81,6 +91,21 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
         if (scale != null) scale.setVisible("scaled".equals(mode));
         if (exact != null) exact.setVisible("exact".equals(mode));
         if (custom != null) custom.setVisible("custom".equals(mode));
+    }
+
+    /**
+     * A tap only means "here" while touch is read as a touchscreen, so the keyboard row says as
+     * much in the other two modes rather than offering a switch that would do nothing.
+     */
+    private void applyKeyboardFollowsTextRow(@Nullable String touchMode) {
+        Preference row = findPreference(KEY_KEYBOARD_FOLLOWS_TEXT);
+        if (row == null) return;
+        boolean touchscreen = String.valueOf(
+            com.termux.app.x11.DisplayTextFocusPolicy.TOUCH_MODE_TOUCHSCREEN).equals(touchMode);
+        row.setEnabled(touchscreen);
+        row.setSummary(touchscreen
+            ? R.string.settings_x11_keyboard_follows_text_summary
+            : R.string.settings_x11_keyboard_follows_text_unavailable);
     }
 
     /** What this phone's GPU can do for Linux apps, worked out off the main thread. */
@@ -222,6 +247,13 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_FORCE_BGRA:
                     launcher.setX11ForceBgraEnabled(value);
                     break;
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT:
+                    launcher.setX11KeyboardFollowsTextEnabled(value);
+                    // The launcher's own key, but the display's page reads it, so it goes out on
+                    // the same broadcast the display keys use: a Display place already on screen
+                    // picks the change up without having to be left and come back to.
+                    notifyDisplay(key);
+                    break;
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
                     launcher.setX11DrawerAppsEnabled(value);
                     com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context)
@@ -247,6 +279,8 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                     return launcher.isX11LegacyDrawingEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_FORCE_BGRA:
                     return launcher.isX11ForceBgraEnabled();
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT:
+                    return launcher.isX11KeyboardFollowsTextEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
                     return launcher.isX11DrawerAppsEnabled();
                 default:
