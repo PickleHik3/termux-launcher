@@ -2085,19 +2085,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             wallpaperManager.setWallpaperOffsetSteps(1f, 1f);
             wallpaperManager.setWallpaperOffsets(windowToken, 0.5f, 0.5f);
-            // Ask the system to render the wallpaper at true size. Home apps are expected to
-            // drive this; left alone, some OEMs keep the launcher-state "zoom out" at maximum
-            // (~1.10x about the screen center — measured 1.105x on Nothing OS with a grid
-            // wallpaper), and every pre-blurred glass crop then shows content displaced by
-            // ~10% of its distance from the center: a few dp at the dock, worst under the
-            // keyboard. The frost math models an unzoomed wallpaper, so request exactly that.
-            // setWallpaperZoomOut is hidden API; launchers reach it by reflection, and when a
-            // ROM blocks the call nothing changes from today's behavior.
+            // Ask the system to render the wallpaper at true size. WindowManager scales the
+            // wallpaper by lerp(config_wallpaperMinScale, config_wallpaperMaxScale, 1 - zoomOut)
+            // (WallpaperController.zoomOutToScale), so zoomOut 0 is the MAXIMUM scale — 1.10x
+            // about the screen centre on stock — and 1 is the minimum, 1.0. The value here used
+            // to be 0, which asked for the very zoom the frost math does not model. Measured on
+            // Nothing OS (2026-09-09): the ROM renders ~1.08x either way, so there the
+            // Wallpaper alignment setting still carries the difference. setWallpaperZoomOut is
+            // hidden API; launchers reach it by reflection, and when a ROM blocks the call
+            // nothing changes from today's behavior.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 try {
                     WallpaperManager.class
                         .getMethod("setWallpaperZoomOut", IBinder.class, float.class)
-                        .invoke(wallpaperManager, windowToken, 0f);
+                        .invoke(wallpaperManager, windowToken, 1f);
                 } catch (Throwable t) {
                     Logger.logVerbose(LOG_TAG, "setWallpaperZoomOut unavailable: " + t);
                 }
