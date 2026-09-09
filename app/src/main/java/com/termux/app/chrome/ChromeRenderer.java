@@ -262,7 +262,9 @@ public final class ChromeRenderer {
         if (scopes == 0) {
             return;
         }
-        Trace.beginSection("Chrome.requestSync");
+        // The scopes ride in the section name so a trace shows which kind of request each caller
+        // made; the concatenation only happens while a trace is being recorded.
+        Trace.beginSection(Trace.isEnabled() ? "Chrome.requestSync " + scopes : "Chrome.requestSync");
         try {
             sync(scopes);
         } finally {
@@ -287,7 +289,12 @@ public final class ChromeRenderer {
             scheduleCommit();
         }
         if ((scopes & SCOPE_TOP_PANE_FROST) != 0) {
-            mFrost.updateTopPane();
+            Trace.beginSection("Frost.updateTopPane");
+            try {
+                mFrost.updateTopPane();
+            } finally {
+                Trace.endSection();
+            }
         }
         if ((scopes & SCOPE_ACCESSORY_RENDER) != 0 && !mRenderSyncPending) {
             mRenderSyncPending = true;
