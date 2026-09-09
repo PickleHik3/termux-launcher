@@ -25,9 +25,15 @@ import com.termux.R;
 public final class PaneRim {
 
     private static final int GLASS_FOCUSED_ALPHA = 255;
-    private static final int GLASS_UNFOCUSED_ALPHA = 110;
+    /**
+     * An unfocused pane still has to show its edges. At 110 over frost the outline-variant rim
+     * disappeared wherever the pane held no text, so a fresh split read as one slab with a line
+     * through it; the unfocused rim is now the outline colour at two thirds, distinct from the
+     * accent-coloured focused rim by hue as well as by weight.
+     */
+    private static final int GLASS_UNFOCUSED_ALPHA = 170;
     private static final int STOCK_FOCUSED_ALPHA = 255;
-    private static final int STOCK_UNFOCUSED_ALPHA = 64;
+    private static final int STOCK_UNFOCUSED_ALPHA = 128;
     /** How long the focus crossfade runs. */
     private static final long FOCUS_BORDER_MS = 160L;
 
@@ -76,7 +82,7 @@ public final class PaneRim {
                 com.google.android.material.R.attr.colorPrimary,
                 ContextCompat.getColor(frame.getContext(), R.color.termux_primary));
             unfocusedTint = MaterialColors.getColor(frame.getContext(),
-                com.google.android.material.R.attr.colorOutlineVariant,
+                com.google.android.material.R.attr.colorOutline,
                 ContextCompat.getColor(frame.getContext(), R.color.termux_outline_variant));
             radius = radiusPx;
         }
