@@ -97,6 +97,25 @@ public final class LayoutModifier
     return result;
   }
 
+  /**
+   * The parting the split keyboard type asks for, in key-width units, for a fraction of the
+   * keyboard's width. Read from the layout as parsed, never from one already parted.
+   */
+  public static float gapUnits(KeyboardData keyboard, float gapFraction)
+  {
+    return SplitLayout.gapUnits(keyboard, gapFraction);
+  }
+
+  /**
+   * The split keyboard type: every row of the composed layout parted at its midpoint by
+   * [gapUnits]. A step of its own, applied after {@link #modify}, so the bottom row and the
+   * extra keys part with the rest. See {@link SplitLayout}.
+   */
+  public static KeyboardData split(KeyboardData keyboard, float gapUnits)
+  {
+    return SplitLayout.split(keyboard, gapUnits);
+  }
+
   static KeyboardData.Row modify_number_row(KeyboardData.Row row,
       KeyboardData keyboard)
   {

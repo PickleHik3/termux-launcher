@@ -493,6 +493,12 @@ pick it. The palette's Keyboard section lists the three types with the one in us
 that watches for text focus says the keyboard is opening on its own rather than because someone
 asked; both need the launcher on screen.
 
+The parting of a split keyboard is not part of the keyboard: what is behind the keyboard shows
+through it and takes taps, so on Home and on the display you can reach the wall between your
+thumbs. On the terminal the keyboard makes room for itself rather than lying over it, so there is
+nothing behind the parting to reach. In mouse mode the touchpad moves into the parting and both
+halves keep typing; a parting too narrow for that keeps the touchpad over the whole keyboard.
+
 ### Modal keymaps
 
 A root key can enter a named mode. The mode can time out, decide what an unknown key does, and stay
