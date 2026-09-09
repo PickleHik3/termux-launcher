@@ -915,7 +915,13 @@ public class TerminalPaneController {
         if (mActiveWindow == null || mActiveWindow.active == null) return false;
         Leaf oldLeaf = splitAnchor(mActiveWindow);
         String cwd = oldLeaf.session.getCwd();
-        TerminalSession newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
+        TerminalSession newSession;
+        Trace.beginSection("Panes.createShell");
+        try {
+            newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
+        } finally {
+            Trace.endSection();
+        }
         if (newSession == null) return false;
         insertPane(oldLeaf, newSession, orientation, true);
         return true;
@@ -974,7 +980,13 @@ public class TerminalPaneController {
         if (focus) mActiveWindow.active = newLeaf;
         // Captured before the re-render detaches it: the divider reveal needs the pane's surface
         // as it looked while it still owned the whole region the split is about to share.
-        Bitmap revealSnapshot = captureSplitRevealSnapshot(oldLeaf.session);
+        RevealSnapshot revealSnapshot;
+        Trace.beginSection("Panes.snapshot");
+        try {
+            revealSnapshot = captureSplitRevealSnapshot(oldLeaf.session);
+        } finally {
+            Trace.endSection();
+        }
         Rect revealOrigin = revealSnapshot != null
             ? boundsInHost(mPaneFrames.get(oldLeaf.session)) : null;
         // A managed window re-tiles around the new pane instead of keeping the binary split that
@@ -2247,18 +2259,19 @@ public class TerminalPaneController {
      * pure overlay — exactly the window-switch snapshot discipline, applied to a split.
      */
     private static final class SplitRevealDrawable extends Drawable {
-        final Bitmap bitmap;
+        final RevealSnapshot snapshot;
         final Rect clip = new Rect();
 
-        SplitRevealDrawable(@NonNull Bitmap bitmap) {
-            this.bitmap = bitmap;
+        SplitRevealDrawable(@NonNull RevealSnapshot snapshot) {
+            this.snapshot = snapshot;
         }
 
         @Override
         public void draw(@NonNull Canvas canvas) {
             canvas.save();
             canvas.clipRect(clip);
-            canvas.drawBitmap(bitmap, getBounds().left, getBounds().top, null);
+            canvas.translate(getBounds().left, getBounds().top);
+            snapshot.draw(canvas);
             canvas.restore();
         }
 
@@ -2267,18 +2280,69 @@ public class TerminalPaneController {
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
 
+    /**
+     * A frozen copy of a pane's surface: on a hardware window a recorded display list, which costs
+     * the draw ops and no pixels; otherwise a bitmap. The bitmap path was 32 ms of a split's 73 ms
+     * key handler on Pong (2026-09-09): a full-pane ARGB allocation plus a software render of the
+     * terminal, spent on the animation before the new pane could appear.
+     */
+    private static final class RevealSnapshot {
+        @Nullable final Bitmap bitmap;
+        @Nullable final Object node;
+
+        RevealSnapshot(@Nullable Bitmap bitmap, @Nullable Object node) {
+            this.bitmap = bitmap;
+            this.node = node;
+        }
+
+        /** Draws at the canvas origin; the caller has translated to the pane's bounds. */
+        void draw(@NonNull Canvas canvas) {
+            if (node != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && canvas.isHardwareAccelerated()) {
+                canvas.drawRenderNode((android.graphics.RenderNode) node);
+            } else if (bitmap != null && !bitmap.isRecycled()) {
+                canvas.drawBitmap(bitmap, 0f, 0f, null);
+            }
+        }
+
+        void release() {
+            if (bitmap != null) bitmap.recycle();
+            if (node != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                ((android.graphics.RenderNode) node).discardDisplayList();
+        }
+    }
+
     /** The old pane's surface as drawn right now, or null when the reveal cannot run. */
     @Nullable
-    private Bitmap captureSplitRevealSnapshot(@NonNull TerminalSession session) {
+    private RevealSnapshot captureSplitRevealSnapshot(@NonNull TerminalSession session) {
         if (!arePaneAnimationsEnabled()) return null;
         FrameLayout frame = mPaneFrames.get(session);
         if (frame == null || !frame.isLaidOut()
             || frame.getWidth() <= 0 || frame.getHeight() <= 0) return null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && frame.isHardwareAccelerated()) {
+            android.graphics.RenderNode node = new android.graphics.RenderNode("SplitReveal");
+            node.setPosition(0, 0, frame.getWidth(), frame.getHeight());
+            // The terminal must record its glyphs, not its row nodes: those are re-recorded the
+            // moment the pane reflows, and the reveal has to keep showing what was there before.
+            TerminalView view = mPaneViews.get(session);
+            if (view != null) view.setRowCacheBypassed(true);
+            try {
+                Canvas recording = node.beginRecording(frame.getWidth(), frame.getHeight());
+                try {
+                    frame.draw(recording);
+                } finally {
+                    node.endRecording();
+                }
+            } finally {
+                if (view != null) view.setRowCacheBypassed(false);
+            }
+            return new RevealSnapshot(null, node);
+        }
         try {
             Bitmap snapshot = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(),
                 Bitmap.Config.ARGB_8888);
             frame.draw(new Canvas(snapshot));
-            return snapshot;
+            return new RevealSnapshot(snapshot, null);
         } catch (OutOfMemoryError e) {
             return null;
         }
@@ -2303,7 +2367,7 @@ public class TerminalPaneController {
      * the new pane from the shared edge outward. Falls back to the plain entry pop whenever the
      * layout policy re-tiled the old pane somewhere the sweep cannot explain.
      */
-    private void animateSplitReveal(@Nullable Bitmap snapshot, @Nullable Rect origin,
+    private void animateSplitReveal(@Nullable RevealSnapshot snapshot, @Nullable Rect origin,
                                     @NonNull TerminalSession oldSession,
                                     @Nullable TerminalSession newSession) {
         if (snapshot == null || origin == null) {
@@ -2314,7 +2378,7 @@ public class TerminalPaneController {
             Rect settled = boundsInHost(mPaneFrames.get(oldSession));
             int movedEdge = splitRevealMovedEdge(origin, settled);
             if (settled == null || movedEdge == 0) {
-                snapshot.recycle();
+                snapshot.release();
                 animatePaneEntry(newSession);
                 return;
             }
@@ -2343,7 +2407,7 @@ public class TerminalPaneController {
             animator.addListener(new AnimatorListenerAdapter() {
                 @Override public void onAnimationEnd(Animator a) {
                     mHostView.getOverlay().remove(reveal);
-                    snapshot.recycle();
+                    snapshot.release();
                     if (mSplitRevealAnimator == a) mSplitRevealAnimator = null;
                 }
             });

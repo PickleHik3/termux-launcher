@@ -339,6 +339,7 @@ public final class TerminalRenderer {
 
     /** How many rows the last frame had to record again, for tests and for a trace to read. */
     private int mRowsRecordedLastFrame;
+    private boolean mRowCacheBypassed;
 
     private final Paint mTextPaint = new Paint();
     /** Fills for the find overlay, kept off the text paint's per-run state. */
@@ -758,6 +759,20 @@ public final class TerminalRenderer {
         return mFallbackResolver;
     }
 
+    /**
+     * While set, every row is drawn directly even on a hardware canvas. A recording made through
+     * the row cache would hold references to the live row nodes and follow their next re-record;
+     * a frozen copy of the pane — the split reveal's snapshot — needs the glyphs themselves.
+     */
+    public void setRowCacheBypassed(boolean bypassed) {
+        mRowCacheBypassed = bypassed;
+    }
+
+    /** The ASCII advance table, for tests that check when a rebuild shares it. */
+    float[][] asciiMeasures() {
+        return mAsciiMeasures;
+    }
+
     static float adjustMetric(float original, @Nullable MetricAdjustment adjustment) {
         if (adjustment == null) return original;
         return adjustment.percent ? original * adjustment.value / 100f : original + adjustment.value;
@@ -879,7 +894,8 @@ public final class TerminalRenderer {
                                          boolean boldWithBright, boolean reverseVideo,
                                          boolean transparentBackground, int transparentOverlayColor,
                                          float horizontalOffset, int extraRows) {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
+        if (mRowCacheBypassed
+            || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
             || !canvas.isHardwareAccelerated()
             || !(canvas instanceof android.graphics.RecordingCanvas))
             return false;

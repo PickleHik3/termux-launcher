@@ -885,6 +885,11 @@ public final class TerminalView extends View {
         updateSize();
     }
 
+    /** See {@link TerminalRenderer#setRowCacheBypassed}: for a frozen copy of this view. */
+    public void setRowCacheBypassed(boolean bypassed) {
+        if (mRenderer != null) mRenderer.setRowCacheBypassed(bypassed);
+    }
+
     public void setTypeface(Typeface newTypeface, Typeface newItalicTypeface) {
         setTypeface(newTypeface, null, newItalicTypeface, null);
     }
