@@ -51,6 +51,12 @@
         app:summary="@string/settings_layout_keyboard_mode_summary"
         app:defaultValue="resize" />
 
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="layout_keyboard_form"
+        app:title="@string/settings_layout_keyboard_form_title"
+        app:summary="@string/settings_layout_keyboard_form_summary"
+        app:defaultValue="docked" />
+
     <SeekBarPreference
         app:key="layout_grid_columns"
         app:title="@string/settings_widget_grid_columns_title"

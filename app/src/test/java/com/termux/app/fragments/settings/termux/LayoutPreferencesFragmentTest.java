@@ -81,6 +81,7 @@ public class LayoutPreferencesFragmentTest {
         assertTrue(screen.findPreference("layout_extra_keys") instanceof SegmentedPillPreference);
         assertTrue(screen.findPreference("layout_keyboard_on_enter") instanceof SegmentedPillPreference);
         assertTrue(screen.findPreference("layout_keyboard_mode") instanceof SegmentedPillPreference);
+        assertTrue(screen.findPreference("layout_keyboard_form") instanceof SegmentedPillPreference);
         assertTrue(screen.findPreference("layout_grid_columns") instanceof SeekBarPreference);
         assertTrue(screen.findPreference("layout_grid_rows") instanceof SeekBarPreference);
         assertNotNull(screen.findPreference("layout_look"));
@@ -90,6 +91,9 @@ public class LayoutPreferencesFragmentTest {
         // Phase 5 has not built the overlay keyboard yet, so that row stays invisible even though
         // it is wired all the way through the store.
         assertFalse("keyboard mode row", screen.findPreference("layout_keyboard_mode").isVisible());
+
+        // The keyboard type is a choice on every place, the terminal included.
+        assertTrue("keyboard type row", screen.findPreference("layout_keyboard_form").isVisible());
 
         // The default selection is Terminal, not Home, so the widget grid has nothing to show yet.
         assertFalse("grid columns row", screen.findPreference("layout_grid_columns").isVisible());
@@ -199,6 +203,42 @@ public class LayoutPreferencesFragmentTest {
             .findPreference("layout_alphabets_row");
         assertNotNull(railSwitch);
         assertTrue("enabled with the apps row on a rail", railSwitch.isEnabled());
+    }
+
+    @Test
+    public void theKeyboardTypeRowOffersAllThreeTypesInEitherOrientation() {
+        LayoutPreferencesFragment portraitFragment = launch();
+        SegmentedPillPreference portraitPill = portraitFragment.getPreferenceScreen()
+            .findPreference("layout_keyboard_form");
+        assertNotNull(portraitPill);
+        assertEquals(3, portraitPill.segmentCount());
+
+        RuntimeEnvironment.setQualifiers("+land");
+        LayoutPreferencesFragment landscapeFragment = launch();
+        SegmentedPillPreference landscapePill = landscapeFragment.getPreferenceScreen()
+            .findPreference("layout_keyboard_form");
+        assertNotNull(landscapePill);
+        assertEquals(3, landscapePill.segmentCount());
+    }
+
+    @Test
+    public void aWriteToTheKeyboardTypeLandsInTheScopedKey() {
+        Application app = RuntimeEnvironment.getApplication();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
+        LayoutPreferencesFragment.LayoutPreferencesDataStore store =
+            new LayoutPreferencesFragment.LayoutPreferencesDataStore(app, preferences);
+        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
+
+        store.putString("layout_keyboard_form", "floating");
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
+
+        SharedPreferences prefs = preferences.getSharedPreferences();
+        assertEquals("floating",
+            prefs.getString("place.terminal.landscape.keyboard_form", null));
+        assertEquals("floating", store.getString("layout_keyboard_form", "docked"));
+        // A different orientation on the same place keeps the keyboard it had.
+        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
+        assertEquals("docked", store.getString("layout_keyboard_form", "docked"));
     }
 
     @Test

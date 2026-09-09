@@ -1326,6 +1326,69 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE, value));
     }
 
+    /**
+     * How wide a floating keyboard is, as a fraction of the width it could take. One value per
+     * orientation, each with its own default and its own key: unlike the height scale, landscape
+     * does not fall back to what portrait was set to, because a fraction that suits one is wrong
+     * for the other.
+     */
+    public float getInAppKeyboardFloatingWidthScale() {
+        boolean landscape = isLandscapeOrientation();
+        float defaultValue = landscape
+            ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE;
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            landscape ? TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        return clampInAppKeyboardFloatingWidthScale(value);
+    }
+
+    public void setInAppKeyboardFloatingWidthScale(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            isLandscapeOrientation()
+                ? TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
+            clampInAppKeyboardFloatingWidthScale(value), false);
+    }
+
+    public static float clampInAppKeyboardFloatingWidthScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE, value));
+    }
+
+    /** The gap a split keyboard parts its rows by, as a fraction of the keyboard's width. */
+    public float getInAppKeyboardSplitGapFraction() {
+        boolean landscape = isLandscapeOrientation();
+        float defaultValue = landscape
+            ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION;
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            landscape ? TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION,
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        return clampInAppKeyboardSplitGapFraction(value);
+    }
+
+    public void setInAppKeyboardSplitGapFraction(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            isLandscapeOrientation()
+                ? TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION,
+            clampInAppKeyboardSplitGapFraction(value), false);
+    }
+
+    public static float clampInAppKeyboardSplitGapFraction(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION, value));
+    }
+
     public float getInAppKeyboardKeyMarginScale() {
         float defaultValue = getDefaultInAppKeyboardKeyMarginScale();
         float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
