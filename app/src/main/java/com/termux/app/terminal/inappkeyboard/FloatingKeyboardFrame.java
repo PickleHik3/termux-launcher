@@ -72,6 +72,9 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         setClipToPadding(false);
         setBackgroundResource(R.drawable.floating_keyboard_card);
         setElevation(dp(8f));
+        // The card is opaque, so it takes the taps that land on its rim rather than letting them
+        // through to the place it is parked over.
+        setClickable(true);
 
         mHandle = new FrameLayout(context);
         mHandle.setContentDescription(

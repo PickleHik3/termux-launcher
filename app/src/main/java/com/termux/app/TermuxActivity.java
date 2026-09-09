@@ -3573,9 +3573,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean shouldUseUnifiedDefaultKeyboardGlassSurface(@NonNull ChromeSpec state) {
         // A scheme background color or a non-default background opacity must repaint only the
         // keyboard, not the material it would share with the dock, so either drops the keyboard
-        // to its own local surface path.
-        // A floating keyboard shares no material with the dock — it is somewhere else entirely — so
-        // it always paints its own local glass rather than exposing a dock crop that is not there.
+        // to its own local surface path. So does a floating keyboard: it shares no material with
+        // the dock, and a dock crop is not behind it to be exposed.
         return ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
             state.keyboardShown, isRoundedDockStyle(), isInAppKeyboardGlassSurface())
             && !hasInAppKeyboardBackgroundOverride()
@@ -8924,8 +8923,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAppliedPlaceLayout = layout;
         // The keyboard hears the type from here rather than from the tool that wrote it: a
         // rotation and a wall page change move it too, and this is the one pass all three take.
-        // Hosting first, then the keyboard: the geometry pass the keyboard asks for has to see the
-        // keyboard where it is going to be, not where it was.
+        // Hosting first: the geometry pass the keyboard then asks for has to see the keyboard where
+        // it is going to be, not where it was.
         if (mFloatingKeyboard != null)
             mFloatingKeyboard.onKeyboardFormResolved(layout.keyboardForm);
         if (mInAppKeyboard != null) mInAppKeyboard.onKeyboardFormChanged(layout.keyboardForm);
