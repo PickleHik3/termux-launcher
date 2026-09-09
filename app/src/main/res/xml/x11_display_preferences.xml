@@ -19,6 +19,11 @@
             app:entries="@array/x11_touch_mode_entries"
             app:entryValues="@array/x11_touch_mode_values"
             app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="x11_keyboard_follows_text"
+            app:title="@string/settings_x11_keyboard_follows_text_title"
+            app:summary="@string/settings_x11_keyboard_follows_text_summary"
+            android:defaultValue="true" />
         <ListPreference
             app:key="displayResolutionMode"
             app:title="@string/settings_x11_resolution_mode_title"

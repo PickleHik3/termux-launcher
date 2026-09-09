@@ -11,6 +11,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
@@ -145,7 +146,7 @@ public class PlaceLayoutStoreTest {
 
         PlaceLayout layout = store.resolve(place, orientation);
         assertEquals(new PlaceLayout(Edge.LEFT, RowPlacement.HIDDEN, false, Edge.RIGHT,
-            RowPlacement.LEFT, KeyboardMode.OVERLAY, 6, 3), layout);
+            RowPlacement.LEFT, KeyboardMode.OVERLAY, KeyboardForm.DOCKED, 6, 3), layout);
         assertTrue(layout.toString().contains("grid=6x3"));
         assertNotEquals(layout, store.resolve(place, PlaceOrientation.PORTRAIT));
     }

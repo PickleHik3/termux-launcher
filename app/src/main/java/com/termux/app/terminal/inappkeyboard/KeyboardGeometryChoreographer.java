@@ -50,11 +50,40 @@ public final class KeyboardGeometryChoreographer {
     /** Slider events can outrun display frames; collapse them to one geometry pass per frame. */
     static final long PREVIEW_GEOMETRY_SYNC_MS = 16L;
 
+    /**
+     * The bounds a keyboard hosted outside the accessory stack is measured against — the floating
+     * frame's own width and the room it may be placed in.
+     *
+     * <p>The keyboard's fractional height cap needs one stable reference or its two {@code AT_MOST}
+     * passes chase each other. Docked, that reference is the content root. Floating, it is the
+     * frame: the width is a share of the content rather than all of it, and the height the cap is a
+     * fraction of is the room the frame can be dragged around in.</p>
+     */
+    public static final class HostReference {
+
+        public final int widthPx;
+        public final int availableHeightPx;
+
+        public HostReference(int widthPx, int availableHeightPx) {
+            this.widthPx = Math.max(0, widthPx);
+            this.availableHeightPx = Math.max(0, availableHeightPx);
+        }
+    }
+
     /** The Activity-side slots, painters and lookups the choreography drives. */
     public interface Surface {
 
         /** Resolves a view slot by id; null before inflation, or when the slot is absent. */
         @Nullable View findView(int viewId);
+
+        /**
+         * The floating frame the keyboard is hosted in, or null while it is docked in the accessory
+         * stack. A floating keyboard is measured and laid out by its frame, so it contributes no
+         * height to the stack and takes no room from the place under it.
+         */
+        @Nullable default HostReference floatingKeyboardReference() {
+            return null;
+        }
 
         @NonNull DisplayMetrics displayMetrics();
 
@@ -140,6 +169,8 @@ public final class KeyboardGeometryChoreographer {
     private int mMeasureWidthPx;
     private int mAvailableHeightPx;
     private boolean mPreviewGeometrySyncPosted;
+    /** Last height-cap reference handed to the keyboard view, for tests. */
+    private int mHeightCapReferencePx;
     /** Last {@code keyboardShown} the accessory stack was actually laid out for. */
     private boolean mAppliedKeyboardShown;
 
@@ -174,20 +205,30 @@ public final class KeyboardGeometryChoreographer {
         View keyboardContainer = mSurface.findView(R.id.inapp_keyboard_container);
         if (keyboardContainer == null)
             return 0;
+        HostReference floating = mSurface.floatingKeyboardReference();
         View availableRoot = mSurface.findView(R.id.activity_termux_root_relative_layout);
-        int width = availableRoot != null ? availableRoot.getWidth() : 0;
-        int availableHeight = availableRoot != null ? availableRoot.getHeight() : 0;
+        int width = floating != null ? floating.widthPx
+            : availableRoot != null ? availableRoot.getWidth() : 0;
+        int availableHeight = floating != null ? floating.availableHeightPx
+            : availableRoot != null ? availableRoot.getHeight() : 0;
         DisplayMetrics metrics = mSurface.displayMetrics();
         if (width <= 0)
             width = metrics.widthPixels;
         if (availableHeight <= 0)
             availableHeight = metrics.heightPixels;
+        mHeightCapReferencePx = availableHeight;
         View attached = mSurface.attachedKeyboardView();
         if (attached instanceof Keyboard2View) {
             // The keyboard is measured here against the full content root, but RelativeLayout later
             // measures it inside the shorter exact accessory stack. Keep its fractional height cap
-            // tied to this stable root height so both AT_MOST passes resolve identically.
+            // tied to this stable root height so both AT_MOST passes resolve identically. A floating
+            // keyboard is measured inside its frame instead, so the frame is the reference there.
             ((Keyboard2View) attached).setHeightCapReferencePx(Math.max(0, availableHeight));
+        }
+        if (floating != null) {
+            // The frame lays the keyboard out itself, over the place rather than inside the stack.
+            // Its height is therefore not the stack's to reserve and not the content's to give back.
+            return 0;
         }
         if (!mHeightDirty && mDesiredHeightPx > 0
             && mMeasureWidthPx == width
@@ -581,5 +622,10 @@ public final class KeyboardGeometryChoreographer {
     /** How many frames the open gate has held so far, against the fail-safe cap. */
     int openRevealBlockedFrames() {
         return mOpenRevealBlockedFrames;
+    }
+
+    /** The stable available height the keyboard's fractional height cap was last measured from. */
+    int heightCapReferencePx() {
+        return mHeightCapReferencePx;
     }
 }

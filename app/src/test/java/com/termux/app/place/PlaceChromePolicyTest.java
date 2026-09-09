@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 
@@ -21,7 +22,7 @@ public class PlaceChromePolicyTest {
     private static PlaceLayout layout(RowPlacement appsRow, boolean azRowShown, Edge azBarEdge,
                                       RowPlacement extraKeys) {
         return new PlaceLayout(Edge.TOP, appsRow, azRowShown, azBarEdge, extraKeys,
-            KeyboardMode.RESIZE, 4, 5);
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5);
     }
 
     @Test

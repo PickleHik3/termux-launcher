@@ -42,6 +42,11 @@
     <string name="settings_layout_keyboard_mode_summary">Whether the keyboard resizes the display or floats over it.</string>
     <string name="settings_layout_keyboard_mode_resize">Resizes</string>
     <string name="settings_layout_keyboard_mode_overlay">Overlay</string>
+    <string name="settings_layout_keyboard_form_title">Keyboard type</string>
+    <string name="settings_layout_keyboard_form_summary">Docked, floating or split, remembered for this place.</string>
+    <string name="settings_layout_keyboard_form_docked">Docked</string>
+    <string name="settings_layout_keyboard_form_floating">Floating</string>
+    <string name="settings_layout_keyboard_form_split">Split</string>
     <string name="settings_layout_look_title">Look of this place</string>
     <string name="settings_layout_look_summary">Open the surface editor for what\'s on screen here.</string>
     <string name="settings_layout_miniature_status">Status bar</string>
@@ -235,6 +240,9 @@
     <string name="permission_x11_display_label">Run a Linux display</string>
     <string name="settings_x11_category_display">Display</string>
     <string name="settings_x11_touch_mode_title">Touch</string>
+    <string name="settings_x11_keyboard_follows_text_title">Keyboard follows text fields</string>
+    <string name="settings_x11_keyboard_follows_text_summary">Open the keyboard when you tap a text field and close it when you tap elsewhere.</string>
+    <string name="settings_x11_keyboard_follows_text_unavailable">Available in Touchscreen touch mode.</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
     <string name="settings_x11_scale_title">Scale</string>
     <string name="settings_x11_resolution_exact_title">Fixed size</string>
@@ -858,6 +866,7 @@
                 <string name="termux_keyboard_color_scheme_hex_title">Enter hex color</string>
                 <string name="termux_keyboard_color_scheme_hex_error">Use #RRGGBB or #AARRGGBB</string>
                 <string name="termux_in_app_keyboard_height_adjust_handle">Drag to adjust keyboard height</string>
+                <string name="termux_in_app_keyboard_floating_handle">Drag to move the keyboard</string>
                 <string name="termux_in_app_keyboard_height_adjust_confirm">Confirm keyboard adjustments</string>
                 <string name="termux_in_app_keyboard_height_adjust_cancel">Cancel keyboard adjustments</string>
                 <string name="termux_in_app_keyboard_height_adjust_confirm_symbol">✓</string>
@@ -1349,6 +1358,11 @@
     <string name="palette_category_session">Session</string>
     <string name="palette_category_window">Window</string>
     <string name="palette_category_pane">Pane</string>
+    <string name="settings_keyboard_shapes_header">Floating and split</string>
+    <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
+    <string name="settings_keyboard_floating_width_summary">How much of the screen width a floating keyboard takes, set separately for portrait and landscape.</string>
+    <string name="settings_keyboard_split_gap_title">Split keyboard gap</string>
+    <string name="settings_keyboard_split_gap_summary">How far apart the two halves of a split keyboard sit, set separately for portrait and landscape.</string>
     <string name="palette_category_terminal">Terminal</string>
     <string name="palette_category_clipboard">Clipboard</string>
     <string name="palette_category_appearance">Appearance</string>
@@ -1357,6 +1371,8 @@
     <string name="palette_category_wall">Places</string>
     <string name="palette_category_sessions">Sessions</string>
     <string name="palette_category_keyboard">Keyboard</string>
+    <string name="palette_keyboard_form_row">%1$s keyboard</string>
+    <string name="palette_keyboard_form_active">Current type</string>
     <string name="palette_keyboard_layout_active">Current layout</string>
     <string name="palette_keyboard_layout_row">Layout: %1$s</string>
     <string name="palette_app_row_subtitle">%1$s · hold to bind a key</string>
@@ -1414,6 +1430,10 @@
     <string name="tool_session_panel">Sessions panel</string>
     <string name="tool_session_clone_current">Clone session with CWD</string>
     <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
+    <string name="tool_keyboard_cycle_form">Next keyboard type</string>
+    <string name="tool_keyboard_set_form">Keyboard type</string>
+    <string name="tool_keyboard_show">Show keyboard</string>
+    <string name="tool_keyboard_hide">Hide keyboard</string>
     <string name="tool_keyboard_cycle_layout">Cycle keyboard layout</string>
     <string name="tool_keyboard_select_layout">Switch keyboard layout</string>
     <string name="tool_terminal_toggle_toolbar">Toggle dock</string>
@@ -1497,6 +1517,10 @@
     <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
     <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
     <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
+    <string name="tool_desc_keyboard_cycle_form">Switch the keyboard between docked, floating and split.</string>
+    <string name="tool_desc_keyboard_set_form">Use a docked, floating or split keyboard.</string>
+    <string name="tool_desc_keyboard_show">Open the on-screen keyboard.</string>
+    <string name="tool_desc_keyboard_hide">Close the on-screen keyboard.</string>
     <string name="tool_desc_keyboard_cycle_layout">Move to the next layout in the in-app keyboard\'s cycle.</string>
     <string name="tool_desc_keyboard_select_layout">Switch the in-app keyboard to a named layout.</string>
     <string name="tool_desc_terminal_toggle_toolbar">Show or hide the dock.</string>

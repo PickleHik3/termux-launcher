@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxService;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
@@ -323,6 +324,38 @@ class FakeTerminalHost implements TerminalHost {
     @NonNull
     @Override public String activeInAppKeyboardLayout() {
         return inAppKeyboardLayout;
+    }
+
+    /** The place's keyboard type, as a real store would hold it for one place and orientation. */
+    KeyboardForm keyboardForm = KeyboardForm.DOCKED;
+    /** False makes the write fail the way an activity with no preferences yet does. */
+    boolean keyboardFormWritable = true;
+    boolean inAppKeyboardShown;
+
+    @NonNull
+    @Override public KeyboardForm keyboardForm() {
+        return keyboardForm;
+    }
+
+    @Override public boolean setKeyboardForm(@NonNull KeyboardForm form) {
+        record("setKeyboardForm:" + form.storageValue());
+        if (!keyboardFormWritable) return false;
+        keyboardForm = form;
+        return true;
+    }
+
+    @Override public boolean showInAppKeyboard(boolean fromFocus) {
+        record("showInAppKeyboard:" + (fromFocus ? "focus" : "manual"));
+        if (!inAppKeyboardEnabled) return false;
+        inAppKeyboardShown = true;
+        return true;
+    }
+
+    @Override public boolean hideInAppKeyboard(boolean fromFocus) {
+        record("hideInAppKeyboard:" + (fromFocus ? "focus" : "manual"));
+        if (!inAppKeyboardEnabled) return false;
+        inAppKeyboardShown = false;
+        return true;
     }
 
     @Override public void runOnUiThread(@NonNull Runnable runnable) {

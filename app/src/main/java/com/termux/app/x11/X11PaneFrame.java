@@ -49,6 +49,12 @@ public final class X11PaneFrame extends PaneContentFrame {
         default boolean consumeLauncherKey(@NonNull android.view.KeyEvent event) { return false; }
     }
 
+    /** Told about a tap that landed on the display's own picture. */
+    public interface TapListener {
+        /** A finger went down and came up on the display without drifting into a gesture. */
+        void onDisplayTap();
+    }
+
     /** A tap this close to the frame's edge, inside it, is for the page rather than for X. */
     private static final float BORDER_BAND_DP = 12f;
 
@@ -63,7 +69,14 @@ public final class X11PaneFrame extends PaneContentFrame {
     @Nullable private View mEmptyState;
     @Nullable private Host mHost;
     @Nullable private PaneSurfaceStyle mStyle;
+    @Nullable private TapListener mTapListener;
+    /** Where the finger the tap listener is watching went down, and whether it has drifted. */
+    private float mWatchDownX, mWatchDownY;
+    private boolean mWatchMoved;
+    private boolean mWatchIsDisplays;
     private boolean mRunning;
+    /** True while the wall is showing this place; the place it has left is INVISIBLE. */
+    private boolean mPageOnScreen = true;
     /** The Linux display setting. Off, the page is still a place — it just says so. */
     private boolean mEnabled = true;
     /** The display's size while the frame around it animates; unset when it follows the frame. */
@@ -190,6 +203,64 @@ public final class X11PaneFrame extends PaneContentFrame {
         mHost = host;
     }
 
+    /**
+     * Watch the taps that reach the display. Nothing is taken from X: this only reports what went
+     * past, so a policy on the launcher's side can tell a tap from a drag.
+     */
+    public void setTapListener(@Nullable TapListener listener) {
+        mTapListener = listener;
+    }
+
+    /**
+     * Every touch aimed at the page passes through here, so this is where a tap is recognised —
+     * before the page's own controls take theirs and before the rest goes to X, neither of which
+     * is changed by the watching.
+     */
+    @Override
+    public boolean dispatchTouchEvent(@NonNull android.view.MotionEvent event) {
+        watchForTap(event);
+        return super.dispatchTouchEvent(event);
+    }
+
+    /**
+     * A tap is one finger down and up on the display's own picture with no drift: not a drag, not
+     * a two-finger gesture, and not one of the page's controls or its border band.
+     */
+    private void watchForTap(@NonNull android.view.MotionEvent event) {
+        if (mTapListener == null) return;
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_DOWN:
+                mWatchDownX = event.getX();
+                mWatchDownY = event.getY();
+                mWatchMoved = false;
+                boolean onControl = mControls != null && mControls.isControlsShown()
+                    && mControls.actionAt(mWatchDownX, mWatchDownY) != DisplayControlsView.ACTION_NONE;
+                mWatchIsDisplays = mRunning && !onControl
+                    && !isNearBorder(mWatchDownX, mWatchDownY);
+                break;
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (Math.hypot(event.getX() - mWatchDownX, event.getY() - mWatchDownY)
+                        > android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
+                    mWatchMoved = true;
+                }
+                break;
+            case android.view.MotionEvent.ACTION_POINTER_DOWN:
+                // A second finger makes this a gesture — a scroll, a pinch — and never a tap.
+                mWatchMoved = true;
+                break;
+            case android.view.MotionEvent.ACTION_UP:
+                boolean tap = mWatchIsDisplays && !mWatchMoved;
+                mWatchIsDisplays = false;
+                if (tap) mTapListener.onDisplayTap();
+                break;
+            case android.view.MotionEvent.ACTION_CANCEL:
+                mWatchIsDisplays = false;
+                break;
+            default:
+                break;
+        }
+    }
+
     @NonNull
     public LorieView display() {
         if (mDisplay == null) throw new IllegalStateException("Display page is not inflated");
@@ -213,7 +284,7 @@ public final class X11PaneFrame extends PaneContentFrame {
     public void applyRunning(boolean running) {
         mRunning = running;
         if (mControls != null) mControls.setRunning(running);
-        if (mDisplay != null) mDisplay.setVisibility(running ? VISIBLE : INVISIBLE);
+        applyDisplaySurfaceVisibility();
         if (mCornerMask != null) mCornerMask.setVisibility(running ? VISIBLE : GONE);
         if (mEmptyState != null) mEmptyState.setVisibility(running ? GONE : VISIBLE);
         if (running) return;
@@ -231,6 +302,57 @@ public final class X11PaneFrame extends PaneContentFrame {
                 ? R.string.termux_x11_start_display : R.string.termux_x11_turn_on);
         }
         if (start != null) start.setVisibility(mEnabled && !ready ? GONE : VISIBLE);
+    }
+
+    /**
+     * The display's surface is only ever on screen while a display runs <em>and</em> the wall is
+     * showing this place.
+     *
+     * <p>A {@code SurfaceView}'s surface is composited outside the view hierarchy, and it follows
+     * that view's own visibility alone: an {@code INVISIBLE} ancestor — which is exactly how the
+     * wall parks the place it is not showing — never reaches it. The surface is then kept off
+     * screen only by the render thread, which moves and hides it as the page's render node is
+     * drawn; a page that is not drawn at all has no such frame, so any surface pass that runs
+     * while the place is parked (the page is re-laid-out behind the wall, the server comes up, a
+     * geometry pass resizes the stack) puts the surface back on screen at the page's own layout
+     * position — which is the terminal pane's rect, since every place is laid out in the same
+     * frame. Handing the place's visibility down to the display view instead tears the surface
+     * down for real, which is what {@code syncDisplayPageAttachment} means by a hidden page
+     * holding no screen-sized buffer.</p>
+     */
+    private void applyDisplaySurfaceVisibility() {
+        if (mDisplay != null) mDisplay.setVisibility(displaySurfaceVisibility());
+    }
+
+    /** The visibility the display view carries for the page's current state. */
+    int displaySurfaceVisibility() {
+        return mRunning && mPageOnScreen ? VISIBLE : INVISIBLE;
+    }
+
+    /**
+     * The wall's own visibility for this place reaches the frame here — its pages are moved and
+     * hidden, never re-attached — and the window's is left to the display view, which follows
+     * that one itself.
+     */
+    @Override
+    protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        syncPageOnScreen();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        // A place can be added to the wall while the wall is resting on another one.
+        syncPageOnScreen();
+    }
+
+    private void syncPageOnScreen() {
+        // Before the wall has placed the frame there is nothing to hide from.
+        boolean onScreen = !isAttachedToWindow() || isShown();
+        if (mPageOnScreen == onScreen) return;
+        mPageOnScreen = onScreen;
+        applyDisplaySurfaceVisibility();
     }
 
     public boolean isRunning() {

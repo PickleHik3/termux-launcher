@@ -128,6 +128,7 @@ import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
+import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
@@ -394,6 +395,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Activity-scoped embedded-keyboard controller and its currently attached renderer. */
     @Nullable private TermuxInAppKeyboard mInAppKeyboard;
+    /** Hosts that keyboard in its floating frame while the place asks for a floating one. */
+    @Nullable private FloatingKeyboardController mFloatingKeyboard;
     @Nullable private View mAttachedInAppKeyboardView;
     private boolean mInAppKeyboardShiftLocked;
     private float mInAppKeyboardHeightDragStartY;
@@ -3603,10 +3606,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean shouldUseUnifiedDefaultKeyboardGlassSurface(@NonNull ChromeSpec state) {
         // A scheme background color or a non-default background opacity must repaint only the
         // keyboard, not the material it would share with the dock, so either drops the keyboard
-        // to its own local surface path.
+        // to its own local surface path. A split keyboard drops out of it too: one material
+        // spanning the dock and the keyboard would also span the parting between the halves. So
+        // does a floating keyboard: it shares no material with the dock, and a dock crop is not
+        // behind it to be exposed.
         return ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
             state.keyboardShown, isRoundedDockStyle(), isInAppKeyboardGlassSurface())
-            && !hasInAppKeyboardBackgroundOverride();
+            && !hasInAppKeyboardBackgroundOverride() && !isInAppKeyboardSplit()
+            && !isKeyboardFloating();
     }
 
 
@@ -3925,6 +3932,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
     }
 
+    /** Whether the keyboard on screen is the split one, whose parting no surface may fill. */
+    private boolean isInAppKeyboardSplit() {
+        return mInAppKeyboard != null
+            && mInAppKeyboard.getForm() == PlaceLayout.KeyboardForm.SPLIT;
+    }
+
     /**
      * True when the scheme's background color or the opacity slider repaints the surface.
      *
@@ -3975,8 +3988,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** True when the keyboard renders as the floating Rounded surface. */
     private boolean isInAppKeyboardCapsule() {
         // The keyboard's shape always follows the single global surface shape; the old dock-match
-        // mode that let it differ is gone.
-        return isRoundedDockStyle();
+        // mode that let it differ is gone. A floating keyboard is a card wherever it is parked,
+        // though: a square slab in the middle of the place reads as a rendering fault.
+        return isRoundedDockStyle() || isKeyboardFloating();
+    }
+
+    /** True while the keyboard is hosted in its floating frame rather than in the dock. */
+    private boolean isKeyboardFloating() {
+        return mFloatingKeyboard != null && mFloatingKeyboard.isFloating();
     }
 
     /**
@@ -4035,6 +4054,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
+        // A split keyboard paints its own background under each half. The launcher's slab would
+        // fill the parting the halves leave open, so it is dropped and the keys keep the shape
+        // and insets applied above.
+        if (isInAppKeyboardSplit()) {
+            surfaceHost.setBackground(null);
+            clearInAppKeyboardBackdrop();
+            return;
+        }
         if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
             // Once accessory_surface_host has actually laid out at the expanded height and its
             // matching crop is installed, the transparent keyboard exposes that one unified
@@ -5093,6 +5120,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mAttachedInAppKeyboardView;
             }
 
+            @Nullable @Override
+            public KeyboardGeometryChoreographer.HostReference floatingKeyboardReference() {
+                return mFloatingKeyboard == null ? null : mFloatingKeyboard.reference();
+            }
+
             @NonNull @Override public ChromeSpec buildChromeSpec() {
                 return TermuxActivity.this.buildChromeSpec();
             }
@@ -5642,6 +5674,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.setInAppKeyboardController(null);
             mInAppKeyboard.onDestroy();
             mInAppKeyboard = null;
+        }
+        if (mFloatingKeyboard != null) {
+            mFloatingKeyboard.onDestroy();
+            mFloatingKeyboard = null;
         }
         // The display controller is this activity's; the server it talks to is not. Letting go
         // here hands the server's announcement on to the next activity's controller, and stops
@@ -7715,8 +7751,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || !mPreferences.isInAppKeyboardEnabled())
             return;
         mInAppKeyboard = new TermuxInAppKeyboard(new InAppKeyboardActivityHost(), mPreferences);
+        mFloatingKeyboard = new FloatingKeyboardController(new FloatingKeyboardActivityHost());
+        // Every way the keyboard goes up or down that is not the Display place's own text-focus
+        // policy - the dock button, the keyboard's hide key, a tool, the wall paging, a
+        // preference - is the user's doing to that policy, and reaches it from here alone.
+        mInAppKeyboard.setVisibilityListener(shown -> {
+            if (mX11Display != null) mX11Display.onUserKeyboardIntent(shown);
+        });
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
         mInAppKeyboard.onCreate(savedInstanceState);
+        // A cold start on a place whose type is Floating has to be hosted before the first
+        // geometry pass, or the stack reserves a keyboard that is not in it.
+        mFloatingKeyboard.onKeyboardFormResolved(currentPlaceLayout().keyboardForm);
         syncWallKeyboardForRestoredPlace();
     }
 
@@ -8164,6 +8210,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mInAppKeyboard.endExternalTextInput();
     }
 
+    /**
+     * The two slots, two settings and two notifications the floating frame needs. Everything about
+     * where the frame goes and how wide it is lives in the controller; this only answers questions.
+     */
+    private final class FloatingKeyboardActivityHost implements FloatingKeyboardController.Host {
+
+        @Nullable @Override public View floatingHost() {
+            return findViewById(R.id.floating_keyboard_host);
+        }
+
+        @Nullable @Override public View keyboardContainer() {
+            return findViewById(R.id.inapp_keyboard_container);
+        }
+
+        @Override public float floatingKeyboardWidthScale() {
+            return mPreferences == null ? 1f : mPreferences.getInAppKeyboardFloatingWidthScale();
+        }
+
+        @Nullable @Override public PlaceLayoutStore placeLayoutStore() {
+            return TermuxActivity.this.placeLayoutStore();
+        }
+
+        @NonNull @Override public com.termux.app.wall.PaneWallPage place() {
+            return currentWallPlace();
+        }
+
+        @NonNull @Override public PlaceOrientation orientation() {
+            return currentPlaceOrientation();
+        }
+
+        @Override public void onFloatingHostingChanged() {
+            // The stack no longer reserves the keyboard (or reserves it again), and the keyboard's
+            // own surface moved from the dock material to its own card.
+            mKeyboardGeometry.invalidateMeasurementAndForceLayout();
+            setTerminalToolbarHeight();
+            mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
+                | ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        }
+
+        @Override public void onFloatingFrameMoved(boolean committed) {
+            // The keyboard's blurred backdrop is cropped from where the frame is on screen, so a
+            // moved frame needs a fresh crop; per-frame during the drag, coalesced by the renderer.
+            mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+        }
+    }
+
     private final class InAppKeyboardActivityHost implements InAppKeyboardHost {
 
         @Override
@@ -8173,6 +8265,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void setKeyboardContainerVisible(boolean visible) {
+            // Before the choreographer: a floating keyboard is staged in a host that has to be
+            // visible for the reveal gate to observe destination layout at all.
+            if (mFloatingKeyboard != null)
+                mFloatingKeyboard.onKeyboardVisibilityRequested(visible);
             mKeyboardGeometry.onVisibilityRequested(visible);
         }
 
@@ -8583,6 +8679,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final PlaceLayout NO_PREFERENCES_PLACE_LAYOUT = new PlaceLayout(
         PlaceLayout.Edge.TOP, PlaceLayout.RowPlacement.HIDDEN, false, PlaceLayout.Edge.BOTTOM,
         PlaceLayout.RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED,
         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
 
@@ -8925,6 +9022,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
+        // The keyboard hears the type from here rather than from the tool that wrote it: a
+        // rotation and a wall page change move it too, and this is the one pass all three take.
+        // Hosting first: the geometry pass the keyboard then asks for has to see the keyboard where
+        // it is going to be, not where it was.
+        if (mFloatingKeyboard != null)
+            mFloatingKeyboard.onKeyboardFormResolved(layout.keyboardForm);
+        if (mInAppKeyboard != null) {
+            PlaceLayout.KeyboardForm appliedForm = mInAppKeyboard.getForm();
+            mInAppKeyboard.onKeyboardFormChanged(layout.keyboardForm);
+            // In mouse mode the touchpad follows the keyboard into its type.
+            if (appliedForm != mInAppKeyboard.getForm()) syncDisplayTouchpad();
+        }
         applyPlaceSystemImeOwner();
         applyStatusBarEdge(layout);
         applyWidgetGridPreference();
@@ -12484,6 +12593,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setTopStatusBarCollapsed(isStatusBarCompact(), true);
     }
 
+    /**
+     * Writes a keyboard type for the place and orientation on screen and re-runs the arrangement,
+     * which is what tells the keyboard the type moved. False before there are preferences to
+     * write it to.
+     */
+    private boolean setKeyboardFormForCurrentPlace(@NonNull PlaceLayout.KeyboardForm form) {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return false;
+        store.setKeyboardForm(currentWallPlace(), currentPlaceOrientation(), form);
+        syncPlaceLayout();
+        return true;
+    }
+
     /** Records how a place is being left, so "as left" has something to come back to. */
     private void rememberPlaceKeyboard(@NonNull com.termux.app.wall.PaneWallPage place) {
         PlaceLayoutStore store = placeLayoutStore();
@@ -12937,11 +13059,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
             mX11Display.attachView(display.display());
             display.display().requestFocus();
+            // A place that asked for the keyboard as it arrived asked for it itself, so the
+            // text-focus policy leaves that keyboard alone until it is put down again.
+            mX11Display.onDisplayPlaceEntered(
+                wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.DISPLAY));
             // The in-app keyboard and the extra-keys row type into X while the page is showing;
             // the terminal never sees those values.
             if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
         } else {
             mX11Display.detachView();
+            mX11Display.onDisplayPlaceLeft();
             if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
         }
     }
@@ -13056,6 +13183,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     syncPlaceBar();
                 }
             });
+        mX11Display.setTextFocusKeyboard(new com.termux.app.x11.DisplayTextFocusPolicy.Keyboard() {
+            @Override public void showKeyboardForTextFocus() {
+                if (mInAppKeyboard != null) mInAppKeyboard.show(com.termux.app.terminal
+                    .inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS);
+            }
+            @Override public void hideKeyboardForTextFocus() {
+                if (mInAppKeyboard != null) mInAppKeyboard.hide(com.termux.app.terminal
+                    .inappkeyboard.TermuxInAppKeyboard.HideReason.FOCUS);
+            }
+            @Override public boolean isKeyboardUp() {
+                return mInAppKeyboard != null && mInAppKeyboard.isVisible();
+            }
+        });
+        page.setTapListener(() -> {
+            if (mX11Display != null) mX11Display.onDisplayTap();
+        });
         mX11Display.host().setLorieView(page.display());
         mX11Display.setListener(running -> {
             com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
@@ -13147,6 +13290,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void setMouseMode(boolean enabled) {
         if (mMouseMode == enabled) return;
         mMouseMode = enabled;
+        // Mouse mode takes the keyboard's place, so turning it on is the user asking for that
+        // frame to be up; the text-focus policy must not pull it away under the touchpad. The
+        // keyboard's own listener cannot report this one: with the keyboard already up nothing
+        // about its visibility changes.
+        if (enabled && mX11Display != null) mX11Display.onUserKeyboardIntent(true);
         if (mPaneController != null) mPaneController.setTouchMouseMode(enabled);
         syncDisplayTouchpad();
         syncMouseModeMark();
@@ -13180,6 +13328,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * and a display is running. It lies over the in-app keyboard inside the keyboard's host, so
      * it has the keyboard's size — whatever the user set — and the keyboard's place; the keys
      * fade under it and come back when it goes.
+     *
+     * <p>That host is also what a floating keyboard carries into its frame, so the pad takes the
+     * floating card and is dragged around with it for free. It deliberately stops at the keyboard,
+     * not at the card: the grab handle above it has to stay grabbable while mouse mode is on.
      */
     private void syncDisplayTouchpad() {
         FrameLayout host = findViewById(R.id.inapp_keyboard_view_host);
@@ -13215,7 +13367,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .ShowReason.KEYBOARD_ACTION);
         }
-        if (pad != null && pad.getParent() == host) return;
+        if (pad != null && pad.getParent() == host) {
+            // The keyboard's type may have moved under a pad that is already up.
+            applyDisplayTouchpadFrame(pad, mAttachedInAppKeyboardView);
+            return;
+        }
         if (pad == null) {
             pad = new com.termux.app.x11.DisplayTouchpadView(this,
                 () -> {
@@ -13234,27 +13390,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDisplayTouchpad = pad;
         }
         if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
-        // The keyboard's height is the pad's: the host wraps its content, so a match-parent pad
-        // would take every pixel above the keyboard instead of the keyboard's own room.
+        // The keyboard's frame is the pad's: the host wraps its content, so a match-parent pad
+        // would take every pixel above the keyboard instead of the keyboard's own room. Over a
+        // split keyboard that frame is the parting between the two halves.
         View keyboardView = mAttachedInAppKeyboardView;
-        int padHeight = keyboardView != null && keyboardView.getHeight() > 0
-            ? keyboardView.getHeight() : ViewGroup.LayoutParams.WRAP_CONTENT;
-        host.addView(pad, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            padHeight, Gravity.TOP));
+        Rect gap = splitKeyboardTouchpadGap(keyboardView);
+        host.addView(pad, com.termux.app.x11.DisplayTouchpadPlacement.padParams(gap,
+            keyboardView == null ? 0 : keyboardView.getHeight(),
+            getResources().getDisplayMetrics().density));
         if (keyboardView != null) {
             final com.termux.app.x11.DisplayTouchpadView following = pad;
             keyboardView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 if (following.getParent() != host) return;
-                int h = b - t;
-                ViewGroup.LayoutParams lp = following.getLayoutParams();
-                if (h > 0 && lp != null && lp.height != h) {
-                    lp.height = h;
-                    following.setLayoutParams(lp);
-                }
+                applyDisplayTouchpadFrame(following, v);
             });
         }
         View keys = mAttachedInAppKeyboardView;
-        if (keys != null) {
+        // A pad standing in the parting leaves both halves typing, so the keys stay lit.
+        if (keys != null && gap == null) {
             keys.animate().cancel();
             if (reduced) keys.setAlpha(0f);
             else keys.animate().alpha(0f).setDuration(duration).setInterpolator(settle).start();
@@ -13269,6 +13422,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         pad.setTranslationY(dpToPx(12));
         pad.animate().alpha(1f).translationY(0f).setDuration(duration).setInterpolator(settle)
             .start();
+    }
+
+    /**
+     * Sizes the touchpad to the keyboard frame it stands in: the whole of it, or the parting of a
+     * split keyboard. Beside a pad in the parting the halves keep typing, so their keys are lit.
+     */
+    private void applyDisplayTouchpadFrame(@NonNull View pad, @Nullable View keyboardView) {
+        Rect gap = splitKeyboardTouchpadGap(keyboardView);
+        FrameLayout.LayoutParams params = com.termux.app.x11.DisplayTouchpadPlacement.padParams(
+            gap, keyboardView == null ? 0 : keyboardView.getHeight(),
+            getResources().getDisplayMetrics().density);
+        if (!com.termux.app.x11.DisplayTouchpadPlacement.describes(pad.getLayoutParams(), params)) {
+            pad.setLayoutParams(params);
+        }
+        if (gap != null && keyboardView != null && keyboardView.getAlpha() != 1f) {
+            keyboardView.animate().cancel();
+            keyboardView.setAlpha(1f);
+        }
+    }
+
+    /** The parting of a split keyboard in the keyboard view's pixels; null when it has none. */
+    @Nullable
+    private Rect splitKeyboardTouchpadGap(@Nullable View keyboardView) {
+        if (!(keyboardView instanceof Keyboard2View) || mInAppKeyboard == null
+            || mInAppKeyboard.getForm() != PlaceLayout.KeyboardForm.SPLIT) {
+            return null;
+        }
+        Rect gap = new Rect();
+        return ((Keyboard2View) keyboardView).getSplitGapBounds(gap) ? gap : null;
     }
 
     private void createWidgetPaneController() {
@@ -15430,6 +15612,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mInAppKeyboard == null
                 ? com.termux.app.terminal.inappkeyboard.LauncherKeyboardLayouts.LAYOUT_MAIN
                 : mInAppKeyboard.getActiveTextLayoutId();
+        }
+
+        @NonNull
+        @Override public PlaceLayout.KeyboardForm keyboardForm() {
+            return currentPlaceLayout().keyboardForm;
+        }
+
+        @Override public boolean setKeyboardForm(@NonNull PlaceLayout.KeyboardForm form) {
+            return TermuxActivity.this.setKeyboardFormForCurrentPlace(form);
+        }
+
+        @Override public boolean showInAppKeyboard(boolean fromFocus) {
+            if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()) return false;
+            // A focus source is a signal, not an order: on the Display place the policy decides
+            // whether it means a keyboard, and it is the one that will close it again.
+            if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(true)) return true;
+            mInAppKeyboard.show(fromFocus
+                ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS
+                : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            return true;
+        }
+
+        @Override public boolean hideInAppKeyboard(boolean fromFocus) {
+            if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()) return false;
+            if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(false)) return true;
+            mInAppKeyboard.hide(fromFocus
+                ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.FOCUS
+                : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
+            return true;
         }
 
         @Override public boolean isKeybindHintPopupVisible() {

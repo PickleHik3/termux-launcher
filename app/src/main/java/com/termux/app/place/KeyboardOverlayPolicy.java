@@ -2,6 +2,7 @@ package com.termux.app.place;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.wall.PaneWallPage;
 
@@ -17,6 +18,10 @@ import com.termux.app.wall.PaneWallPage;
  * it always floats there, whatever is stored. Everywhere else the content is text that wants the
  * room, so the keyboard takes it, and a stored overlay is ignored rather than obeyed.
  *
+ * <p>A floating keyboard is the exception on every place, the terminal included: it is a frame the
+ * user has moved somewhere of their own choosing, so it is over the content by definition and
+ * there is no arrangement in which it takes room from it.
+ *
  * <p>Pure, so the answer can be read and tested without a window: the view layer only applies it.
  */
 public final class KeyboardOverlayPolicy {
@@ -25,6 +30,7 @@ public final class KeyboardOverlayPolicy {
 
     /** Whether an open keyboard floats over the place on screen rather than shrinking it. */
     public static boolean overlays(@NonNull PaneWallPage place, @NonNull PlaceLayout layout) {
+        if (layout.keyboardForm == KeyboardForm.FLOATING) return true;
         if (place == PaneWallPage.WIDGETS) return true;
         return place == PaneWallPage.DISPLAY && layout.keyboardMode == KeyboardMode.OVERLAY;
     }

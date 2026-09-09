@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
@@ -48,19 +49,25 @@ public final class PlaceLayoutStore {
     private static final String KEY_AZ_BAR = "az_bar";
     private static final String KEY_EXTRA_KEYS = "extra_keys";
     private static final String KEY_KEYBOARD_MODE = "keyboard_mode";
+    private static final String KEY_KEYBOARD_FORM = "keyboard_form";
     private static final String KEY_WIDGET_COLUMNS = "widget_columns";
     private static final String KEY_WIDGET_ROWS = "widget_rows";
 
     private static final String KEY_STATUS_COMPACT = "status_compact";
     private static final String KEY_KEYBOARD_ON_ENTER = "keyboard_on_enter";
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
+    private static final String KEY_KEYBOARD_FLOAT_X = "keyboard_float_x";
+    private static final String KEY_KEYBOARD_FLOAT_Y = "keyboard_float_y";
+
+    /** A floating keyboard that has never been moved has no remembered place to come back to. */
+    public static final float FLOAT_POSITION_UNSET = -1f;
 
     /** The launcher's status-bar hide switch for the display, dropped with the hidden state. */
     private static final String LEGACY_KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
 
     private static final String[] ARRANGEMENT_KEYS = {
         KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS, KEY_KEYBOARD_MODE,
-        KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS
+        KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS
     };
 
     @NonNull private final TermuxAppSharedPreferences mPreferences;
@@ -110,6 +117,7 @@ public final class PlaceLayoutStore {
             azBarEdge(place, orientation),
             extraKeys,
             keyboardMode(place, orientation),
+            keyboardForm(place, orientation),
             widgetColumns(place, orientation),
             widgetRows(place, orientation));
     }
@@ -223,6 +231,23 @@ public final class PlaceLayoutStore {
         writeString(place, orientation, KEY_KEYBOARD_MODE, mode.storageValue());
     }
 
+    /**
+     * The shape the keyboard takes here. Docked everywhere until the user asks for something else:
+     * floating and split are choices, never a default, so nothing has to be written for a place to
+     * keep the keyboard it has always had.
+     */
+    @NonNull
+    public KeyboardForm keyboardForm(@NonNull PaneWallPage place,
+                                     @NonNull PlaceOrientation orientation) {
+        return KeyboardForm.parse(readString(place, orientation, KEY_KEYBOARD_FORM),
+            KeyboardForm.DOCKED);
+    }
+
+    public void setKeyboardForm(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+                                @NonNull KeyboardForm form) {
+        writeString(place, orientation, KEY_KEYBOARD_FORM, form.storageValue());
+    }
+
     public int widgetColumns(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
         return clamp(readInt(place, orientation, KEY_WIDGET_COLUMNS,
                 mPreferences.getAppLauncherWidgetGridColumns()),
@@ -296,6 +321,51 @@ public final class PlaceLayoutStore {
 
     public void setKeyboardOpen(@NonNull PaneWallPage place, boolean open) {
         writeBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), open);
+    }
+
+    /**
+     * Where a floating keyboard was left on this place, as a fraction of the room it can be moved
+     * in — {@code 0} against the left or top edge, {@code 1} against the right or bottom one. A
+     * fraction rather than pixels, so the same memory survives a rotation, a font-scale change and
+     * a keyboard the user has since made taller; {@link #FLOAT_POSITION_UNSET} until it is dragged
+     * for the first time, which is the caller's cue to place it wherever it starts.
+     *
+     * <p>Remembered per place and orientation, like the arrangement it belongs to: a keyboard
+     * parked clear of the widget grid has no business moving the terminal's.
+     */
+    public float floatingKeyboardX(@NonNull PaneWallPage place,
+                                   @NonNull PlaceOrientation orientation) {
+        return readFraction(arrangementKey(place, orientation, KEY_KEYBOARD_FLOAT_X));
+    }
+
+    public float floatingKeyboardY(@NonNull PaneWallPage place,
+                                   @NonNull PlaceOrientation orientation) {
+        return readFraction(arrangementKey(place, orientation, KEY_KEYBOARD_FLOAT_Y));
+    }
+
+    /** Remembers a dragged position; either fraction outside 0..1 forgets it instead. */
+    public void setFloatingKeyboardPosition(@NonNull PaneWallPage place,
+                                            @NonNull PlaceOrientation orientation,
+                                            float x, float y) {
+        writeFraction(arrangementKey(place, orientation, KEY_KEYBOARD_FLOAT_X), x);
+        writeFraction(arrangementKey(place, orientation, KEY_KEYBOARD_FLOAT_Y), y);
+    }
+
+    private float readFraction(@NonNull String key) {
+        if (mStore == null || !mStore.contains(key)) return FLOAT_POSITION_UNSET;
+        float value = mStore.getFloat(key, FLOAT_POSITION_UNSET);
+        if (Float.isNaN(value) || value < 0f || value > 1f) return FLOAT_POSITION_UNSET;
+        return value;
+    }
+
+    private void writeFraction(@NonNull String key, float value) {
+        if (mStore == null) return;
+        if (Float.isNaN(value) || value < 0f || value > 1f) {
+            mStore.edit().remove(key).apply();
+        } else {
+            mStore.edit().putFloat(key, value).apply();
+        }
+        mRevision++;
     }
 
     // ---------------------------------------------------------------- keys

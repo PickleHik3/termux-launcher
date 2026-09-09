@@ -26,6 +26,7 @@ import com.termux.app.place.KeyboardOnEnter;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
@@ -54,6 +55,7 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     private static final String KEY_EXTRA_KEYS = "layout_extra_keys";
     private static final String KEY_KEYBOARD_ON_ENTER = "layout_keyboard_on_enter";
     private static final String KEY_KEYBOARD_MODE = "layout_keyboard_mode";
+    private static final String KEY_KEYBOARD_FORM = "layout_keyboard_form";
     private static final String KEY_GRID_COLUMNS = "layout_grid_columns";
     private static final String KEY_GRID_ROWS = "layout_grid_rows";
     private static final String KEY_LOOK = "layout_look";
@@ -88,6 +90,13 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     private static final String[] KEYBOARD_MODE_VALUES = {"resize", "overlay"};
     private static final int[] KEYBOARD_MODE_LABELS = {
         R.string.settings_layout_keyboard_mode_resize, R.string.settings_layout_keyboard_mode_overlay};
+
+    /** Every place offers all three types; the cycle key edits the same value from the terminal. */
+    private static final String[] KEYBOARD_FORM_VALUES = {"docked", "floating", "split"};
+    private static final int[] KEYBOARD_FORM_LABELS = {
+        R.string.settings_layout_keyboard_form_docked,
+        R.string.settings_layout_keyboard_form_floating,
+        R.string.settings_layout_keyboard_form_split};
 
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
@@ -248,6 +257,11 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
             keyboardMode.setSegments(KEYBOARD_MODE_VALUES, KEYBOARD_MODE_LABELS);
             keyboardMode.setOnPreferenceChangeListener(this::onRowChanged);
         }
+        SegmentedPillPreference keyboardForm = findPreference(KEY_KEYBOARD_FORM);
+        if (keyboardForm != null) {
+            keyboardForm.setSegments(KEYBOARD_FORM_VALUES, KEYBOARD_FORM_LABELS);
+            keyboardForm.setOnPreferenceChangeListener(this::onRowChanged);
+        }
         SeekBarPreference gridColumns = findPreference(KEY_GRID_COLUMNS);
         if (gridColumns != null) gridColumns.setOnPreferenceChangeListener(this::onRowChanged);
         SeekBarPreference gridRows = findPreference(KEY_GRID_ROWS);
@@ -310,6 +324,8 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         }
         SegmentedPillPreference keyboardMode = findPreference(KEY_KEYBOARD_MODE);
         if (keyboardMode != null) keyboardMode.setSegments(KEYBOARD_MODE_VALUES, KEYBOARD_MODE_LABELS);
+        SegmentedPillPreference keyboardForm = findPreference(KEY_KEYBOARD_FORM);
+        if (keyboardForm != null) keyboardForm.setSegments(KEYBOARD_FORM_VALUES, KEYBOARD_FORM_LABELS);
         SwitchPreferenceCompat alphabetsRow = findPreference(KEY_ALPHABETS_ROW);
         if (alphabetsRow != null) alphabetsRow.setChecked(mStore.getBoolean(KEY_ALPHABETS_ROW, true));
         SeekBarPreference gridColumns = findPreference(KEY_GRID_COLUMNS);
@@ -428,6 +444,13 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
                     relayoutLauncher();
                     break;
                 }
+                case KEY_KEYBOARD_FORM: {
+                    KeyboardForm form = KeyboardForm.parse(value, KeyboardForm.DOCKED);
+                    if (form == mPlaces.keyboardForm(mPlace, mOrientation)) return;
+                    mPlaces.setKeyboardForm(mPlace, mOrientation, form);
+                    relayoutLauncher();
+                    break;
+                }
                 default:
                     break;
             }
@@ -450,6 +473,8 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
                     return mPlaces.keyboardOnEnter(mPlace).storageValue();
                 case KEY_KEYBOARD_MODE:
                     return mPlaces.keyboardMode(mPlace, mOrientation).storageValue();
+                case KEY_KEYBOARD_FORM:
+                    return mPlaces.keyboardForm(mPlace, mOrientation).storageValue();
                 default:
                     return defValue;
             }

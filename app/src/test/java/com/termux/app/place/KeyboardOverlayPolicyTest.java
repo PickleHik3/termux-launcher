@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
@@ -53,8 +54,12 @@ public class KeyboardOverlayPolicyTest {
     }
 
     private static PlaceLayout layout(KeyboardMode mode) {
+        return layout(mode, KeyboardForm.DOCKED);
+    }
+
+    private static PlaceLayout layout(KeyboardMode mode, KeyboardForm form) {
         return new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
-            RowPlacement.BOTTOM, mode, 4, 5);
+            RowPlacement.BOTTOM, mode, form, 4, 5);
     }
 
     // ------------------------------------------------------------------ when it applies
@@ -105,6 +110,39 @@ public class KeyboardOverlayPolicyTest {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 store.setKeyboardMode(place, orientation, KeyboardMode.OVERLAY);
                 assertFalse(place + " " + orientation, overlays(store, place, orientation));
+            }
+        }
+    }
+
+    /**
+     * A floating keyboard is a frame the user parked somewhere: it is over the content by
+     * definition, on the terminal as much as anywhere else.
+     */
+    @Test
+    public void aFloatingTypeFloatsOnEveryPlaceWhateverTheModeSays() {
+        for (PaneWallPage place : PaneWallPage.values()) {
+            assertTrue(place + " resize", KeyboardOverlayPolicy.overlays(place,
+                layout(KeyboardMode.RESIZE, KeyboardForm.FLOATING)));
+            assertTrue(place + " overlay", KeyboardOverlayPolicy.overlays(place,
+                layout(KeyboardMode.OVERLAY, KeyboardForm.FLOATING)));
+        }
+        PlaceLayoutStore store = store();
+        for (PaneWallPage place : PaneWallPage.values()) {
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                store.setKeyboardForm(place, orientation, KeyboardForm.FLOATING);
+                assertTrue(place + " " + orientation, overlays(store, place, orientation));
+            }
+        }
+    }
+
+    /** Split is docked: it parts the rows, it does not lift off the bottom edge. */
+    @Test
+    public void aSplitTypeFloatsExactlyWhereADockedOneDoes() {
+        for (PaneWallPage place : PaneWallPage.values()) {
+            for (KeyboardMode mode : KeyboardMode.values()) {
+                assertEquals(place + " " + mode,
+                    KeyboardOverlayPolicy.overlays(place, layout(mode, KeyboardForm.DOCKED)),
+                    KeyboardOverlayPolicy.overlays(place, layout(mode, KeyboardForm.SPLIT)));
             }
         }
     }

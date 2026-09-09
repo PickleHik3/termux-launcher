@@ -19,6 +19,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
+import com.termux.app.place.PlaceLayout;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.terminal.TerminalSession;
@@ -116,6 +117,33 @@ public class TermuxInAppKeyboardTest {
     }
 
     @Test
+    public void everyVisibilityChangeButAFocusOneIsReported() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        List<String> reported = new java.util.ArrayList<>();
+        mController.setVisibilityListener(shown -> reported.add(shown ? "shown" : "hidden"));
+
+        // The dock button, the keyboard's own hide key, a tool: whatever the reason, a real
+        // change is reported once.
+        mController.hide(TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
+        mController.show(TermuxInAppKeyboard.ShowReason.TOOL);
+        assertEquals(List.of("hidden", "shown"), reported);
+
+        // A call that changes nothing is not a change.
+        mController.show(TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+        assertEquals(List.of("hidden", "shown"), reported);
+
+        // The text-focus policy's own doing must never come back to it.
+        mController.hide(TermuxInAppKeyboard.HideReason.FOCUS);
+        mController.show(TermuxInAppKeyboard.ShowReason.FOCUS);
+        assertEquals(List.of("hidden", "shown"), reported);
+
+        // And the wall paging away from the terminal is the user's as far as the policy cares.
+        mController.hide(TermuxInAppKeyboard.HideReason.WALL_PAGE);
+        assertEquals(List.of("hidden", "shown", "hidden"), reported);
+    }
+
+    @Test
     public void toggleShowAndHideKeepTheirReasons() {
         mPreferences.setInAppKeyboardEnabled(true);
         mController.onCreate(null);
@@ -157,6 +185,67 @@ public class TermuxInAppKeyboardTest {
 
         assertFalse(mController.isVisible());
         assertEquals(View.GONE, mHost.container.getVisibility());
+    }
+
+    /**
+     * The keyboard is the observer of the place's keyboard type, not its owner: it hears a change
+     * and re-runs the geometry pass. That pass is all phase 1 does with it — the floating frame
+     * and the split row transform hang off the same callback.
+     */
+    @Test
+    public void aKeyboardTypeChangeRerunsTheGeometryPassOnceEach() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        assertEquals(PlaceLayout.KeyboardForm.DOCKED, mController.getForm());
+        int geometrySyncs = mHost.geometrySyncCount;
+
+        mController.onKeyboardFormChanged(PlaceLayout.KeyboardForm.FLOATING);
+
+        assertEquals(PlaceLayout.KeyboardForm.FLOATING, mController.getForm());
+        assertEquals(geometrySyncs + 1, mHost.geometrySyncCount);
+
+        // The same type again is not a change: every arrangement pass hands the type in, and
+        // most of them hand in the one already applied.
+        mController.onKeyboardFormChanged(PlaceLayout.KeyboardForm.FLOATING);
+        assertEquals(geometrySyncs + 1, mHost.geometrySyncCount);
+
+        mController.onKeyboardFormChanged(PlaceLayout.KeyboardForm.SPLIT);
+        assertEquals(PlaceLayout.KeyboardForm.SPLIT, mController.getForm());
+        assertEquals(geometrySyncs + 2, mHost.geometrySyncCount);
+    }
+
+    /** A type stored while the keyboard is off is remembered, without a pass for nobody. */
+    @Test
+    public void aKeyboardTypeChangeWithTheKeyboardOffIsRememberedButNotLaidOut() {
+        mPreferences.setInAppKeyboardEnabled(false);
+        mController.onCreate(null);
+        assertFalse(mController.isEnabled());
+        int geometrySyncs = mHost.geometrySyncCount;
+
+        mController.onKeyboardFormChanged(PlaceLayout.KeyboardForm.SPLIT);
+
+        assertEquals(PlaceLayout.KeyboardForm.SPLIT, mController.getForm());
+        assertEquals(geometrySyncs, mHost.geometrySyncCount);
+    }
+
+    /** Phase 5 has to be able to tell a focus signal's doing from a person's. */
+    @Test
+    public void theToolAndFocusReasonsAreCarriedThroughShowAndHide() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+
+        mController.show(TermuxInAppKeyboard.ShowReason.FOCUS);
+        assertTrue(mController.isVisible());
+        assertEquals(TermuxInAppKeyboard.ShowReason.FOCUS, mController.getLastShowReason());
+
+        mController.hide(TermuxInAppKeyboard.HideReason.FOCUS);
+        assertFalse(mController.isVisible());
+        assertEquals(TermuxInAppKeyboard.HideReason.FOCUS, mController.getLastHideReason());
+
+        mController.show(TermuxInAppKeyboard.ShowReason.TOOL);
+        assertEquals(TermuxInAppKeyboard.ShowReason.TOOL, mController.getLastShowReason());
+        mController.hide(TermuxInAppKeyboard.HideReason.TOOL);
+        assertEquals(TermuxInAppKeyboard.HideReason.TOOL, mController.getLastHideReason());
     }
 
     @Test

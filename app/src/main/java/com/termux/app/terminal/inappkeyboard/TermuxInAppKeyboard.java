@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.place.PlaceLayout;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.view.KeyboardUtils;
@@ -51,7 +52,11 @@ public final class TermuxInAppKeyboard {
         FIRST_ENABLE,
         TERMINAL_TAP,
         KEYBOARD_ACTION,
-        HEIGHT_ADJUSTMENT
+        HEIGHT_ADJUSTMENT,
+        /** A person asked, through {@code keyboard.show} on a key, a chord or the palette. */
+        TOOL,
+        /** Something on screen took text focus and the keyboard was opened for it. */
+        FOCUS
     }
 
     public enum HideReason {
@@ -60,11 +65,25 @@ public final class TermuxInAppKeyboard {
         PREFERENCE_DISABLED,
         DESTROYED,
         /** The pane wall left the terminal: there is nothing on the other pages to type into. */
-        WALL_PAGE
+        WALL_PAGE,
+        /** A person asked, through {@code keyboard.hide}. */
+        TOOL,
+        /** Text focus went away, so what a focus signal opened is closed again. */
+        FOCUS
     }
 
     public enum ToggleReason {
         KEYBOARD_ACTION
+    }
+
+    /**
+     * Told whenever the keyboard goes up or down for any reason but {@code FOCUS} — every dock
+     * button, key, tool, wall page and preference, all of which are the user's doing as far as a
+     * policy that opens the keyboard for a text field is concerned. {@code FOCUS} is that policy's
+     * own doing and is deliberately not reported back to it.
+     */
+    public interface VisibilityListener {
+        void onKeyboardVisibilityChanged(boolean shown);
     }
 
     private InAppKeyboardHost mHost;
@@ -81,6 +100,10 @@ public final class TermuxInAppKeyboard {
     private KeyboardData mGreekMathKeyboardData;
     /** Parsed bundled text layouts, keyed by catalogue id. Dropped whenever extra keys move. */
     private final Map<String, KeyboardData> mTextLayoutCache = new HashMap<>();
+    /** One-entry memo of the parted layout: what it was parted from, by how much, and the result. */
+    @Nullable private KeyboardData mPartedSource;
+    @Nullable private KeyboardData mPartedResult;
+    private float mPartedGapUnits;
     private View.OnFocusChangeListener mSystemImeFocusListener;
     private TerminalKeyEventHandler.KeyValueInterceptor mKeyValueInterceptor;
 
@@ -120,8 +143,11 @@ public final class TermuxInAppKeyboard {
     private LayoutModifier.LayoutOptions mLayoutOptions;
     private final int[] mLaunchWaveLocation = new int[2];
 
+    @Nullable private VisibilityListener mVisibilityListener;
     private ShowReason mLastShowReason;
     private HideReason mLastHideReason;
+    /** The place's keyboard type as this keyboard last heard it. */
+    @NonNull private PlaceLayout.KeyboardForm mForm = PlaceLayout.KeyboardForm.DOCKED;
     private ToggleReason mLastToggleReason;
 
     public TermuxInAppKeyboard(InAppKeyboardHost host,
@@ -334,6 +360,9 @@ public final class TermuxInAppKeyboard {
                 applyKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
                 applyKeyCornerRadiusDp(mPreferences.getInAppKeyboardKeyCornerRadiusDp());
                 applyKeyOpacity(mPreferences.getInAppKeyboardKeyOpacity());
+                // The gap slider is global and lands on the next resume, like the rows above.
+                if (mForm == PlaceLayout.KeyboardForm.SPLIT)
+                    applyKeyboardForm();
             }
         }
         recheckLayout();
@@ -342,12 +371,14 @@ public final class TermuxInAppKeyboard {
     public void show(ShowReason reason) {
         if (!mEnabled || mDestroyed)
             return;
+        boolean wasVisible = mVisible;
         mLastShowReason = Objects.requireNonNull(reason, "reason");
         mVisible = true;
         // Shown, this keyboard is the one typing: the place gives the IME back.
         mPlaceHoldsSystemIme = false;
         suppressSystemIme();
         showInternal();
+        if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
     }
 
     public void hide(HideReason reason) {
@@ -355,6 +386,7 @@ public final class TermuxInAppKeyboard {
             return;
         if (mHeightAdjusting && reason != HideReason.PREFERENCE_DISABLED)
             return;
+        boolean wasVisible = mVisible;
         mLastHideReason = Objects.requireNonNull(reason, "reason");
         mVisible = false;
         resetInputPipeline();
@@ -362,6 +394,17 @@ public final class TermuxInAppKeyboard {
         mHost.requestAccessoryGeometrySync();
         // Down on a place that has its own fields, the IME goes back to the place.
         syncPlaceSystemIme();
+        if (wasVisible && reason != HideReason.FOCUS) notifyVisibilityChanged(false);
+    }
+
+    /** Watch every show and hide that is not a focus signal; pass null to stop. */
+    public void setVisibilityListener(@Nullable VisibilityListener listener) {
+        mVisibilityListener = listener;
+    }
+
+    private void notifyVisibilityChanged(boolean shown) {
+        VisibilityListener listener = mVisibilityListener;
+        if (listener != null) listener.onKeyboardVisibilityChanged(shown);
     }
 
     public void toggle(ToggleReason reason) {
@@ -372,6 +415,30 @@ public final class TermuxInAppKeyboard {
             hide(HideReason.KEYBOARD_ACTION);
         else
             show(ShowReason.KEYBOARD_ACTION);
+    }
+
+    /**
+     * The keyboard type the place on screen resolves to, as last handed in. The keyboard is the
+     * observer here, not the owner: the value lives in {@code PlaceLayoutStore} and reaches this
+     * from the activity's arrangement pass, so the cycle key, the Layout page, a rotation and a
+     * move to another place all arrive the same way.
+     */
+    @NonNull
+    public PlaceLayout.KeyboardForm getForm() {
+        return mForm;
+    }
+
+    /**
+     * Hears that the place's keyboard type moved. Split re-parts the layout on screen and docked
+     * puts it back together; the floating frame hangs off this callback too.
+     */
+    public void onKeyboardFormChanged(@NonNull PlaceLayout.KeyboardForm form) {
+        if (mDestroyed || mForm == form)
+            return;
+        mForm = form;
+        if (!mEnabled)
+            return;
+        applyKeyboardForm();
     }
 
     public void attachSession(TerminalSession session) {
@@ -947,9 +1014,7 @@ public final class TermuxInAppKeyboard {
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
         mTapCorrection.setLayoutId(mSelectedLayoutId);
         mKeyboardView.setTapResolver(mTapCorrection);
-        KeyboardData data = getSelectedLayoutData();
-        if (data != null)
-            mKeyboardView.setKeyboard(data);
+        applyKeyboardToView(getSelectedLayoutData());
         applyCustomColorScheme();
         mHost.attachKeyboardView(mKeyboardView);
     }
@@ -968,9 +1033,7 @@ public final class TermuxInAppKeyboard {
             mLayoutLoader.setLayoutOptions(mLayoutOptions);
         if (mKeyboardView != null) {
             resetInputPipeline();
-            KeyboardData data = getSelectedLayoutData();
-            if (data != null)
-                mKeyboardView.setKeyboard(data);
+            applyKeyboardToView(getSelectedLayoutData());
         }
     }
 
@@ -1142,8 +1205,7 @@ public final class TermuxInAppKeyboard {
             mMainKeyboardData = data;
             if (LAYOUT_MAIN.equals(mSelectedLayoutId)) {
                 resetInputPipeline();
-                if (mKeyboardView != null)
-                    mKeyboardView.setKeyboard(data);
+                applyKeyboardToView(formed(data));
             }
             requestIntrinsicSizeGeometrySync();
         });
@@ -1159,13 +1221,72 @@ public final class TermuxInAppKeyboard {
         mSelectedLayoutId = normalizedId;
         mTapCorrection.setLayoutId(normalizedId);
         resetInputPipeline();
-        if (mKeyboardView != null)
-            mKeyboardView.setKeyboard(data);
+        applyKeyboardToView(data);
         requestIntrinsicSizeGeometrySync();
     }
 
     private KeyboardData getSelectedLayoutData() {
         return getLayoutData(mSelectedLayoutId);
+    }
+
+    /** A layout as the resolved keyboard type renders it, which is where the parting happens. */
+    @Nullable
+    private KeyboardData getLayoutData(String layoutId) {
+        return formed(getParsedLayoutData(layoutId));
+    }
+
+    /**
+     * [data] parted at every row's midpoint while the type is split, and [data] itself otherwise.
+     * Memoised on the layout and gap it was built from: the whole host reads the layout through
+     * here, so the view and every index-keyed override describe the same keys.
+     */
+    @Nullable
+    private KeyboardData formed(@Nullable KeyboardData data) {
+        if (data == null)
+            return null;
+        float gapUnits = splitGapUnits(data);
+        if (gapUnits <= 0f)
+            return data;
+        if (mPartedSource != data || Float.compare(mPartedGapUnits, gapUnits) != 0) {
+            mPartedSource = data;
+            mPartedGapUnits = gapUnits;
+            mPartedResult = LayoutModifier.split(data, gapUnits);
+        }
+        return mPartedResult;
+    }
+
+    /** The parting [data] asks for, in key-width units; zero for any type but split. */
+    private float splitGapUnits(@Nullable KeyboardData data) {
+        if (data == null || mForm != PlaceLayout.KeyboardForm.SPLIT)
+            return 0f;
+        return LayoutModifier.gapUnits(data, mPreferences.getInAppKeyboardSplitGapFraction());
+    }
+
+    /** The parting for the layout on screen, read fresh: the gap is stored per orientation. */
+    private float appliedSplitGapUnits() {
+        return splitGapUnits(getParsedLayoutData(mSelectedLayoutId));
+    }
+
+    /**
+     * Hands the view a layout together with the parting it was built with. The two travel
+     * together: the view sizes its keys from the layout, and the gap tells it where to stop
+     * painting and which presses are not its own.
+     */
+    private void applyKeyboardToView(@Nullable KeyboardData data) {
+        if (mKeyboardView == null)
+            return;
+        mKeyboardView.setSplitGapUnits(appliedSplitGapUnits());
+        if (data != null)
+            mKeyboardView.setKeyboard(data);
+    }
+
+    /** Re-parts, or un-parts, what is on screen after the keyboard type or the gap moved. */
+    private void applyKeyboardForm() {
+        if (mKeyboardView != null) {
+            resetInputPipeline();
+            applyKeyboardToView(getSelectedLayoutData());
+        }
+        requestIntrinsicSizeGeometrySync();
     }
 
     /**
@@ -1305,7 +1426,7 @@ public final class TermuxInAppKeyboard {
         }
     }
 
-    private KeyboardData getLayoutData(String layoutId) {
+    private KeyboardData getParsedLayoutData(String layoutId) {
         switch (layoutId) {
             case LAYOUT_NUMERIC:
                 if (mNumericKeyboardData == null)
@@ -1339,10 +1460,10 @@ public final class TermuxInAppKeyboard {
         LauncherKeyboardLayouts.Layout layout = LauncherKeyboardLayouts.find(
             requireContainer().getResources(), layoutId);
         if (layout == null || layout.xmlResId == 0)
-            return getLayoutData(LAYOUT_MAIN);
+            return getParsedLayoutData(LAYOUT_MAIN);
         KeyboardData data = loadBundledLayout(layout.xmlResId);
         if (data == null)
-            return getLayoutData(LAYOUT_MAIN);
+            return getParsedLayoutData(LAYOUT_MAIN);
         mTextLayoutCache.put(layoutId, data);
         return data;
     }

@@ -53,6 +53,8 @@ public class Keyboard2View extends View
   private float _keyCornerRadiusOverridePx = -1f;
   /** Absolute key cap background opacity (0..1), or -1 to keep the theme's translucency. */
   private float _keyOpacity = -1f;
+  /** Parting of the split keyboard type in key-width units; 0 is the full-width docked one. */
+  private float _splitGapUnits;
 
   /** Stable host content height used as the fractional keyboard-height cap reference. */
   private int _heightCapReferencePx;
@@ -66,6 +68,7 @@ public class Keyboard2View extends View
 
   private Theme _theme;
   private Theme.Computed _tc;
+  private final Paint _splitBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _overrideBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _overrideBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private SparseArray<KeyColorOverride> _keyColorOverrides = new SparseArray<>();
@@ -183,7 +186,18 @@ public class Keyboard2View extends View
     _fxFillPaint.setColor(_theme.pressedColor);
     _fxStrokePaint.setColor(_theme.pressedColor);
     _fxHaloPaint.setColor(_theme.pressedColor);
-    setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
+    applyKeyboardBackground();
+  }
+
+  /**
+   * The keyboard's own background. Docked it is the view's, filling it; split, the view keeps
+   * none and {@link #drawSplitBackground} paints it under the key runs alone, so the parting
+   * shows whatever lies beneath the keyboard.
+   */
+  private void applyKeyboardBackground()
+  {
+    setBackgroundColor(_splitGapUnits > 0f ? Color.TRANSPARENT
+        : withOpacity(_theme.colorKeyboard, _theme.opacity));
   }
 
   /** Brief host-triggered wave that subtly modulates each key as the dock front reaches it. */
@@ -571,6 +585,52 @@ public class Keyboard2View extends View
     return _heightScale;
   }
 
+  /**
+   * Parts the keyboard for the split type: the layout the host hands in is already parted, and
+   * this is the gap it was parted by, in key-width units. The view then paints its background
+   * under the key runs alone and lets a press that starts in the parting fall through to what is
+   * beneath it. Zero — the default — is the docked keyboard, which is untouched. Local addition,
+   * see UPSTREAM.md.
+   */
+  public void setSplitGapUnits(float gapUnits)
+  {
+    requireMainThread();
+    float units = Float.isNaN(gapUnits) || Float.isInfinite(gapUnits)
+        || gapUnits < SplitLayout.MIN_GAP_UNITS ? 0f : gapUnits;
+    if (Float.compare(_splitGapUnits, units) == 0)
+      return;
+    _splitGapUnits = units;
+    applyKeyboardBackground();
+    requestLayout();
+    invalidate();
+  }
+
+  public float getSplitGapUnits()
+  {
+    return _splitGapUnits;
+  }
+
+  /**
+   * The band the parting leaves empty on every row, in view pixels, for a host that wants to
+   * stand something in the gap. False, leaving [out] alone, when the keyboard is not split, has
+   * not been measured, or its rows share no band.
+   */
+  public boolean getSplitGapBounds(Rect out)
+  {
+    if (_splitGapUnits <= 0f || _keyboard == null || _tc == null || _keyWidth <= 0f)
+      return false;
+    float[] band = SplitLayout.commonGap(_keyboard, _splitGapUnits);
+    if (band == null)
+      return false;
+    int left = Math.round(_marginLeft + band[0] * _keyWidth);
+    int right = Math.round(_marginLeft + band[1] * _keyWidth);
+    int height = getHeight() > 0 ? getHeight() : getMeasuredHeight();
+    if (right <= left || height <= 0)
+      return false;
+    out.set(left, 0, right, height);
+    return true;
+  }
+
   /** Scales both horizontal and vertical gaps without replacing immutable Config. */
   public void setKeyMarginScale(float keyMarginScale)
   {
@@ -904,9 +964,13 @@ public class Keyboard2View extends View
         p = event.getActionIndex();
         float tx = event.getX(p);
         float ty = event.getY(p);
+        KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
+        // The parting of a split keyboard is not the keyboard's: refusing the press hands the
+        // whole stream to whatever is under the gap.
+        if (rawKey == null && _splitGapUnits > 0f)
+          return false;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
-        KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
         KeyboardData.Key key = resolveTap(rawKey, tx, ty);
         if (key != null)
         {
@@ -1213,6 +1277,42 @@ public class Keyboard2View extends View
     Vertical.BOTTOM
   };
 
+  /**
+   * The keyboard background of a split keyboard: one slab under each run of keys, so the parting
+   * between the halves is left clear. Slabs meet vertically and reach both view edges, so the
+   * result is the docked background with the gap taken out of it.
+   */
+  private void drawSplitBackground(Canvas canvas)
+  {
+    _splitBackgroundPaint.setColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
+    float y = getPaddingTop() + _tc.margin_top;
+    int lastRow = _keyboard.rows.size() - 1;
+    for (int rowIndex = 0; rowIndex <= lastRow; rowIndex++)
+    {
+      KeyboardData.Row row = _keyboard.rows.get(rowIndex);
+      float top = rowIndex == 0 ? 0f : y;
+      y += (row.shift + row.height) * _tc.row_height;
+      float bottom = rowIndex == lastRow ? getHeight() : y;
+      float x = _marginLeft;
+      float runLeft = 0f;
+      float runRight = -1f;
+      for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++)
+      {
+        KeyboardData.Key key = row.keys.get(keyIndex);
+        float keyLeft = x + key.shift * _keyWidth;
+        if (keyIndex > 0 && SplitLayout.startsRun(key, _splitGapUnits))
+        {
+          canvas.drawRect(runLeft, top, runRight, bottom, _splitBackgroundPaint);
+          runLeft = keyLeft;
+        }
+        x = keyLeft + key.width * _keyWidth;
+        runRight = x;
+      }
+      if (runRight > runLeft)
+        canvas.drawRect(runLeft, top, getWidth(), bottom, _splitBackgroundPaint);
+    }
+  }
+
   @Override
   protected void onDraw(Canvas canvas)
   {
@@ -1223,6 +1323,8 @@ public class Keyboard2View extends View
     _launchWaveDensity = getResources().getDisplayMetrics().density;
     boolean animateNextFrame = false;
     int hintTraceIndex = 0;
+    if (_splitGapUnits > 0f)
+      drawSplitBackground(canvas);
     float y = getPaddingTop() + _tc.margin_top;
     for (int rowIndex = 0; rowIndex < _keyboard.rows.size(); rowIndex++)
     {

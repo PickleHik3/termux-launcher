@@ -5,6 +5,7 @@ import android.graphics.drawable.Drawable;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
@@ -12,6 +13,7 @@ import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.launcherctl.LauncherToolRegistry;
 
 import org.json.JSONArray;
@@ -256,6 +258,71 @@ public final class TerminalCommandPalette {
     }
 
     /**
+     * One row per keyboard type, with the one in use marked, so a type can be reached by name
+     * rather than only by cycling to it. Each row runs {@code keyboard.set_form} with its own
+     * value, which is also what makes a type bindable from the config file
+     * ({@code map ctrl+alt+f keyboard.set_form floating}).
+     *
+     * <p>Empty while the in-app keyboard is off: the types describe that keyboard, and the
+     * Android IME has no shape of ours to take.
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildKeyboardFormEntries(
+        @NonNull TermuxActivity activity) {
+        if (!activity.isInAppKeyboardEnabled()) return Collections.emptyList();
+        KeyboardForm current = TerminalActionDispatcher.getInstance().keyboardForm();
+        List<CommandPaletteFilter.Entry> entries =
+            new ArrayList<>(KeyboardForm.values().length);
+        for (KeyboardForm form : KeyboardForm.values()) {
+            entries.add(keyboardFormEntry(form,
+                activity.getString(R.string.palette_keyboard_form_row,
+                    activity.getString(formLabel(form))),
+                activity.getString(form == current
+                    ? R.string.palette_keyboard_form_active
+                    : R.string.tool_desc_keyboard_set_form)));
+        }
+        return entries;
+    }
+
+    /** The Layout page's own label for a type, so the palette and the page name them alike. */
+    @StringRes
+    static int formLabel(@NonNull KeyboardForm form) {
+        switch (form) {
+            case FLOATING: return R.string.settings_layout_keyboard_form_floating;
+            case SPLIT: return R.string.settings_layout_keyboard_form_split;
+            case DOCKED:
+            default: return R.string.settings_layout_keyboard_form_docked;
+        }
+    }
+
+    /**
+     * One type's row: the value is supplied by the row rather than typed, the same way the
+     * per-layout rows supply a catalogue id. Pure and static so the row shape is testable
+     * without an activity.
+     */
+    @NonNull
+    static CommandPaletteFilter.Entry keyboardFormEntry(@NonNull KeyboardForm form,
+                                                        @NonNull String title,
+                                                        @NonNull String subtitle) {
+        JSONObject arguments = new JSONObject();
+        try {
+            arguments.put("form", form.storageValue());
+        } catch (JSONException ignored) {
+        }
+        return new CommandPaletteFilter.Entry(
+            LauncherToolRegistry.TOOL_KEYBOARD_SET_FORM,
+            title,
+            subtitle,
+            LauncherToolRegistry.CATEGORY_KEYBOARD,
+            Collections.<String>emptyList(),
+            true,
+            null,
+            false,
+            LauncherToolRegistry.ToolRisk.LOW,
+            arguments);
+    }
+
+    /**
      * App rows for the current query, built from the provider's warm cache only —
      * the palette must never block the main thread on a PackageManager sweep.
      * Without a query the rows are usage-ranked, so the apps actually used land on
@@ -359,6 +426,9 @@ public final class TerminalCommandPalette {
         // Same reason as app.launch: the Keyboard section already supplies a row per layout, and
         // asking the user to type a catalogue id would be the worse of the two ways in.
         if (LauncherToolRegistry.TOOL_KEYBOARD_SELECT_LAYOUT.equals(tool.name)) return null;
+        // And a row per keyboard type, with the one in use marked, which a submenu of three
+        // storage values could not say.
+        if (LauncherToolRegistry.TOOL_KEYBOARD_SET_FORM.equals(tool.name)) return null;
         JSONArray required = tool.schema.optJSONArray("required");
         if (required == null || required.length() != 1) return null;
         String name = required.optString(0, "");

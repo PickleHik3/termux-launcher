@@ -6,5 +6,14 @@ checkout of `termux/termux-x11` (at the commit pinned in `x11-server/UPSTREAM.md
 
 Almost nothing needs to change in the X server core to run it inside the launcher. Add a patch
 here only for something that genuinely has to, and say in its header why the Java side could not
-do it instead. What is here now is one rename on the JNI surface, which names the host class the
-launcher does not have.
+do it instead. Two things are here:
+
+- `0001-look-up-the-host-class-as-LorieHost.patch` — a rename on the JNI surface, which names a
+  host class the launcher does not have.
+- `0002-forward-the-cursor-name-to-the-host.patch` — a new event carrying the name of the cursor
+  the X pointer is showing. The server keeps that name in its own atom table and publishes it only
+  to X clients; the host is not one.
+
+Order matters: 0002 extends the same `nativeInit` block 0001 renames, so it applies only after it.
+A patch that adds a JNI call also needs its Java method in the same commit — the native side
+resolves methods with `FindMethodOrDie`, which kills the process when one is missing.

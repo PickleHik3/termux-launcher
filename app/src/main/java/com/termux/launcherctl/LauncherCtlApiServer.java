@@ -551,6 +551,8 @@ public class LauncherCtlApiServer {
                     return jsonResponse(error);
                 }
                 return jsonResponse(runPaneRequest(request));
+            } else if (request.path.startsWith("/v1/keyboard/")) {
+                return jsonResponse(runKeyboardRequest(request));
             } else if ("GET".equals(request.method) && "/v1/x11/gpu".equals(request.path)) {
                 // Off the request thread's main-thread worries already: this is the server's own
                 // worker, and the probe builds a throwaway GL context the first time.
@@ -738,6 +740,61 @@ public class LauncherCtlApiServer {
             return error;
         }
         return dispatcher.execute(toolName, arguments);
+    }
+
+    /**
+     * The on-screen keyboard, for a script that knows when a text field took focus — an input
+     * method on the Linux display, say; see {@code docs/en/X11_Display.md}. A {@code focus} source
+     * is a signal the Display place's own policy reads and can ignore, a {@code manual} source is
+     * the user asking. Both put a keyboard on a screen, so neither is background-safe: a stopped
+     * launcher answers 409.
+     */
+    private JSONObject runKeyboardRequest(HttpRequest request) throws JSONException {
+        String toolName = keyboardToolFor(request.method, request.path);
+        if (toolName == null) {
+            JSONObject error = jsonError("not_found", "Unknown keyboard endpoint");
+            error.put("_statusCode", 404);
+            return error;
+        }
+        JSONObject arguments;
+        if (request.body == null || request.body.trim().isEmpty()) {
+            arguments = new JSONObject();
+        } else {
+            try {
+                arguments = new JSONObject(request.body);
+            } catch (JSONException e) {
+                JSONObject error = jsonError("bad_request", "Request body must be a JSON object");
+                error.put("_statusCode", 400);
+                return error;
+            }
+        }
+        for (Map.Entry<String, String> parameter : queryParameters(request.query).entrySet()) {
+            if (!arguments.has(parameter.getKey())) {
+                arguments.put(parameter.getKey(), parameter.getValue());
+            }
+        }
+        com.termux.app.terminal.TerminalActionDispatcher dispatcher =
+            com.termux.app.terminal.TerminalActionDispatcher.getInstance();
+        if (!dispatcher.isAttached()) {
+            JSONObject error = jsonError("activity_not_running",
+                "The launcher is not running right now, so there is no keyboard to move");
+            error.put("_statusCode", 409);
+            return error;
+        }
+        return dispatcher.execute(toolName, arguments);
+    }
+
+    /** The terminal action a keyboard route maps to, or null for anything else. */
+    @Nullable
+    static String keyboardToolFor(@NonNull String method, @NonNull String path) {
+        if (!"POST".equals(method)) return null;
+        if ("/v1/keyboard/show".equals(path)) {
+            return com.termux.app.terminal.TerminalActionDispatcher.TOOL_KEYBOARD_SHOW;
+        }
+        if ("/v1/keyboard/hide".equals(path)) {
+            return com.termux.app.terminal.TerminalActionDispatcher.TOOL_KEYBOARD_HIDE;
+        }
+        return null;
     }
 
     /** The terminal action a pane route maps to, or null for a path that is not a pane route. */
@@ -1274,6 +1331,9 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/panes/*/close", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/panes/*/write", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("GET:/v1/panes/*/text", new SimpleRateLimiter(240, 60_000));
+        // A focus script calls these once per field the user touches.
+        rateLimiters.put("POST:/v1/keyboard/show", new SimpleRateLimiter(240, 60_000));
+        rateLimiters.put("POST:/v1/keyboard/hide", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/models", new SimpleRateLimiter(120, 60_000));
@@ -1663,6 +1723,7 @@ public class LauncherCtlApiServer {
             "  launcherctl pane write <id> [--enter] <text> | launcherctl pane write <id> [--enter] < file\n" +
             "  launcherctl pane read <id> [--lines N]\n" +
             "  launcherctl pane close <id>\n" +
+            "  launcherctl keyboard show|hide [--source manual|focus]\n" +
             "  launcherctl x11 gpu [--env]\n" +
             "\n" +
             "Examples:\n" +
@@ -1670,6 +1731,7 @@ public class LauncherCtlApiServer {
             "  id=$(launcherctl pane open --title preview --no-focus -- kitten icat out.png | sed -n 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/p')\n" +
             "  launcherctl pane write \"$id\" --enter 'make test'\n" +
             "  launcherctl pane read \"$id\" --lines 40\n" +
+            "  launcherctl keyboard show --source focus   # a text field took focus\n" +
             "\n" +
             "A pane opened here belongs to the opener: write, read and close only work on panes\n" +
             "opened through this command; list and focus work on every pane. Output is JSON.\n" +
@@ -1786,6 +1848,18 @@ public class LauncherCtlApiServer {
             "    shift || true\n" +
             "    pane_cmd \"$@\"\n" +
             "    ;;\n" +
+            "  keyboard)\n" +
+            "    shift || true\n" +
+            "    sub=\"${1:-}\"\n" +
+            "    [ \"$sub\" = show ] || [ \"$sub\" = hide ] || \\\n" +
+            "      { echo \"usage: launcherctl keyboard show|hide [--source manual|focus]\" >&2; exit 2; }\n" +
+            "    shift || true\n" +
+            "    source=manual\n" +
+            "    if [ \"${1:-}\" = \"--source\" ]; then source=\"${2:-}\"; shift 2 || true; fi\n" +
+            "    [ \"$source\" = manual ] || [ \"$source\" = focus ] || \\\n" +
+            "      { echo \"launcherctl keyboard: --source must be manual or focus\" >&2; exit 2; }\n" +
+            "    api POST \"/v1/keyboard/$sub\" \"{\\\"source\\\":\\\"$source\\\"}\"\n" +
+            "    ;;\n" +
             "  x11)\n" +
             "    shift || true\n" +
             "    case \"${1:-}\" in\n" +
@@ -1799,7 +1873,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, x11. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, keyboard, x11. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

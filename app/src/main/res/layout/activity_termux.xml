@@ -805,6 +805,23 @@
             </LinearLayout>
         </RelativeLayout>
 
+        <!-- Where the keyboard goes when the place's keyboard type is Floating: the whole content
+             region, so the frame inside it can be dragged anywhere and still be touchable, and
+             deliberately not clickable, so everything outside the frame reaches the place under it.
+             FloatingKeyboardController moves inapp_keyboard_container in here and back out. -->
+        <FrameLayout
+            android:id="@+id/floating_keyboard_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentBottom="true"
+            android:clickable="false"
+            android:focusable="false"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:elevation="14dp"
+            android:visibility="gone" />
+
         <!-- Capture layer for the surface editor's surface taps and drag gestures. Sized in code to
              each surface's measured rect (expanded upward so the top-border handle is inside the hit
              area); the frame itself is not clickable, so touches outside the groups fall through.

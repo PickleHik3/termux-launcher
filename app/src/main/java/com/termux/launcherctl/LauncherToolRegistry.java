@@ -417,6 +417,11 @@ public final class LauncherToolRegistry {
     public static final String TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD = "terminal.toggle_soft_keyboard";
     public static final String TOOL_KEYBOARD_CYCLE_LAYOUT = "keyboard.cycle_layout";
     public static final String TOOL_KEYBOARD_SELECT_LAYOUT = "keyboard.select_layout";
+    /** The keyboard's shape — docked, floating, split — for the place and orientation on screen. */
+    public static final String TOOL_KEYBOARD_CYCLE_FORM = "keyboard.cycle_form";
+    public static final String TOOL_KEYBOARD_SET_FORM = "keyboard.set_form";
+    public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
+    public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -809,6 +814,45 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_KEYBOARD, R.string.tool_keyboard_select_layout,
             R.string.tool_desc_keyboard_select_layout, null, REQUIRES_IN_APP_KEYBOARD);
+        // The keyboard's shape, as opposed to its layout. Unbound by default for the same reason
+        // the layout cycle is: it spends a Ctrl+Alt letter on a choice most installs make once,
+        // and the key is offered on the extra-keys row and the in-app keyboard for the installs
+        // that switch often.
+        addUi(map, TOOL_KEYBOARD_CYCLE_FORM,
+            "Move the keyboard to the next type: docked, floating, split.",
+            schemaObject()
+                .withEnum("direction", new String[]{"forward", "backward"}, false, "forward")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_cycle_form,
+            R.string.tool_desc_keyboard_cycle_form, null, REQUIRES_IN_APP_KEYBOARD);
+        addUi(map, TOOL_KEYBOARD_SET_FORM,
+            "Set the keyboard type for the place and orientation on screen.",
+            schemaObject()
+                .withEnum("form", new String[]{"docked", "floating", "split"}, true, "docked")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_set_form,
+            R.string.tool_desc_keyboard_set_form, null, REQUIRES_IN_APP_KEYBOARD);
+        // Open and close, as opposed to terminal.toggle_soft_keyboard's one key for both: a
+        // policy that hears "a text field took focus" has to be able to say which it means, and
+        // the source says whether a person or a focus signal asked.
+        addUi(map, TOOL_KEYBOARD_SHOW,
+            "Show the on-screen keyboard.",
+            schemaObject()
+                .withEnum("source", new String[]{"manual", "focus"}, false, "manual")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_show, R.string.tool_desc_keyboard_show,
+            null, REQUIRES_IN_APP_KEYBOARD);
+        addUi(map, TOOL_KEYBOARD_HIDE,
+            "Hide the on-screen keyboard.",
+            schemaObject()
+                .withEnum("source", new String[]{"manual", "focus"}, false, "manual")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_hide, R.string.tool_desc_keyboard_hide,
+            null, REQUIRES_IN_APP_KEYBOARD);
         addUi(map, TOOL_TERMINAL_TOGGLE_TOOLBAR,
             "Show or hide the dock.",
             schemaEmpty(),
