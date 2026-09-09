@@ -768,6 +768,49 @@ public final class TermuxPreferenceConstants {
         public static final float MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 24.0f;
 
         /**
+         * Defines how wide a floating keyboard is, as a fraction of the width it could take.
+         * Landscape and portrait keep their own value: the fraction that leaves a landscape
+         * keyboard comfortably thumb-sized leaves a portrait one too narrow to type on, so each
+         * orientation has both its own key and its own default rather than falling back to the
+         * other's.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE =
+            "in_app_keyboard_floating_width_scale";
+
+        public static final String KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE =
+            "in_app_keyboard_floating_width_scale_landscape";
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE = 0.90f;
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE = 0.60f;
+
+        // Narrower than a third of the screen stops being a keyboard, and a full-width float is a
+        // docked keyboard that has left the edge — both ends are reachable on purpose.
+        public static final float MIN_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE = 0.35f;
+
+        public static final float MAX_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE = 1.0f;
+
+        /**
+         * Defines the gap a split keyboard parts its rows by, as a fraction of the keyboard's
+         * width. Per orientation for the same reason as the floating width: a landscape keyboard
+         * is wide enough to give a quarter of itself away, a portrait one is not.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION =
+            "in_app_keyboard_split_gap_fraction";
+
+        public static final String KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE =
+            "in_app_keyboard_split_gap_fraction_landscape";
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION = 0.12f;
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE = 0.25f;
+
+        /** No gap is a docked keyboard; half the width would leave nothing to type on. */
+        public static final float MIN_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION = 0.0f;
+
+        public static final float MAX_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION = 0.45f;
+
+        /**
          * Defines the extra air in dp under the last key row, inside the keyboard's own surface.
          * The slab keeps its bounds, so the material still runs to the screen edge; only the keys
          * move up — which is what clears a gesture bar without leaving a bare strip under the

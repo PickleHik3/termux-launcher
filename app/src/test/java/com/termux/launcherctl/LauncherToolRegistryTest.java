@@ -62,8 +62,9 @@ public class LauncherToolRegistryTest {
         // session.rename when the rename vocabulary was straightened out, then by extrakeys.edit,
         // the row editor's in-terminal entry, then by terminal.select_at_cursor and
         // terminal.select_all, which gave selection an entry point outside a long-press, and
-        // finally by the keyboard layout pair.
-        assertEquals(72, registry.getUiTools().size());
+        // then by the keyboard layout pair, and finally by the four keyboard-type and
+        // keyboard-visibility tools.
+        assertEquals(76, registry.getUiTools().size());
     }
 
     @Test
@@ -291,10 +292,17 @@ public class LauncherToolRegistryTest {
 
     private static LauncherToolRegistry.ActionContext context(boolean splits, boolean session,
                                                              boolean selection) {
+        return context(splits, session, selection, false);
+    }
+
+    private static LauncherToolRegistry.ActionContext context(boolean splits, boolean session,
+                                                             boolean selection,
+                                                             boolean inAppKeyboard) {
         return new LauncherToolRegistry.ActionContext() {
             @Override public boolean isSplitPanesEnabled() { return splits; }
             @Override public boolean hasCurrentSession() { return session; }
             @Override public boolean hasSelectedText() { return selection; }
+            @Override public boolean isInAppKeyboardEnabled() { return inAppKeyboard; }
         };
     }
 
@@ -453,6 +461,51 @@ public class LauncherToolRegistryTest {
         // Sharing leaves the device; copying stays on it.
         assertTrue(registry.getTool("terminal.share_selected").requiresConfirmation);
         assertFalse(registry.getTool("clipboard.copy_selected").requiresConfirmation);
+    }
+
+    @Test
+    public void keyboardFormTools_areUserFacingUnboundAndNeedTheInAppKeyboard() {
+        // Unbound by default on purpose: the type is a choice most installs make once, and the
+        // key is offered on the extra-keys row and in the keyboard's own catalogue instead.
+        for (String name : new String[]{"keyboard.cycle_form", "keyboard.set_form",
+                "keyboard.show", "keyboard.hide"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertNotNull(name, tool);
+            assertEquals(name, LauncherToolRegistry.CATEGORY_KEYBOARD, tool.category);
+            assertTrue(name + " needs a titleRes", tool.titleRes != 0);
+            assertTrue(name + " needs a descriptionRes", tool.descriptionRes != 0);
+            assertEquals(name, LauncherToolRegistry.ToolRisk.LOW, tool.risk);
+            assertFalse(name, tool.requiresConfirmation);
+            assertTrue(name + " must stay unbound", tool.defaultBindings.isEmpty());
+            assertFalse(name + " needs the in-app keyboard",
+                tool.availabilityIn(context(true, true)).available);
+            assertTrue(name + " is available with it",
+                tool.availabilityIn(context(true, true, false, true)).available);
+        }
+    }
+
+    @Test
+    public void keyboardFormSchemas_constrainTheirValues() {
+        JSONObject cycle = registry.getTool("keyboard.cycle_form").schema;
+        JSONArray direction = cycle.optJSONObject("properties")
+            .optJSONObject("direction").optJSONArray("enum");
+        assertEquals(2, direction.length());
+        assertNull("a direction-less cycle steps forward", cycle.optJSONArray("required"));
+
+        LauncherToolRegistry.ToolMetadata set = registry.getTool("keyboard.set_form");
+        assertEquals("form", set.schema.optJSONArray("required").optString(0));
+        assertEquals(3, set.schema.optJSONObject("properties")
+            .optJSONObject("form").optJSONArray("enum").length());
+
+        for (String name : new String[]{"keyboard.show", "keyboard.hide"}) {
+            JSONObject schema = registry.getTool(name).schema;
+            assertNull(name + " asks for nothing", schema.optJSONArray("required"));
+            JSONArray source = schema.optJSONObject("properties")
+                .optJSONObject("source").optJSONArray("enum");
+            assertEquals(name, 2, source.length());
+            assertEquals(name, "manual", schema.optJSONObject("properties")
+                .optJSONObject("source").optString("default"));
+        }
     }
 
     @Test

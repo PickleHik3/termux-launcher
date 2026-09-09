@@ -55,6 +55,25 @@
             app:title="@string/settings_supported_keys_title" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:key="keyboard_shapes" app:title="@string/settings_keyboard_shapes_header">
+        <SeekBarPreference
+            app:key="in_app_keyboard_floating_width"
+            app:title="@string/settings_keyboard_floating_width_title"
+            app:summary="@string/settings_keyboard_floating_width_summary"
+            android:defaultValue="90"
+            app:min="35"
+            android:max="100"
+            app:showSeekBarValue="true" />
+        <SeekBarPreference
+            app:key="in_app_keyboard_split_gap"
+            app:title="@string/settings_keyboard_split_gap_title"
+            app:summary="@string/settings_keyboard_split_gap_summary"
+            android:defaultValue="12"
+            app:min="0"
+            android:max="45"
+            app:showSeekBarValue="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:key="keyboard_typing" app:title="@string/settings_typing_header">
         <SwitchPreferenceCompat
             app:key="in_app_keyboard_tap_correction"

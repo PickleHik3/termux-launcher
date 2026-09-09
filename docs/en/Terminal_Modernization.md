@@ -470,6 +470,29 @@ swap says where it landed, and the numeric and Greek/math pads are unchanged: th
 ring, they keep their own keys on the Ctrl cap, and the text key returns to whichever layout the
 ring is on.
 
+### Keyboard types
+
+The keyboard is docked along the bottom of the screen by default. Two other types are stored
+beside it: **Floating**, a narrower keyboard over the content that you place where you want it,
+and **Split**, the same bottom keyboard with every row parted in the middle for two thumbs. The
+choice belongs to the place and the orientation — the terminal in landscape can float while Home
+in portrait stays docked — and Settings ▸ Layout ▸ **Keyboard type** is where it is picked. How
+wide a float is and how far a split parts are on Settings ▸ Keyboard, one value per orientation.
+
+```text
+map ctrl+alt+f keyboard.cycle_form                      # docked, floating, split, round again
+map ctrl+alt+shift+f keyboard.cycle_form direction=backward
+map --label Floating ctrl+alt+g keyboard.set_form floating
+map ctrl+alt+k keyboard.show                            # and keyboard.hide
+```
+
+On a keyboard key the cycle is `tool:keyboard.cycle_form` in any slot, and **Next keyboard type**
+is offered in Settings ▸ Keyboard ▸ Extra keys and in the extra-keys row editor, off until you
+pick it. The palette's Keyboard section lists the three types with the one in use marked.
+`keyboard.show` and `keyboard.hide` take `source=manual` or `source=focus`, which is how a script
+that watches for text focus says the keyboard is opening on its own rather than because someone
+asked; both need the launcher on screen.
+
 ### Modal keymaps
 
 A root key can enter a named mode. The mode can time out, decide what an unknown key does, and stay

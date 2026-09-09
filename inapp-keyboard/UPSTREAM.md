@@ -112,6 +112,15 @@ fails when the catalogue has gone stale.
   enabled set supplied by the host through `LayoutOptions.extraKeys` instead
   of a global config; locale/method extra keys and the always-added `CONFIG`
   key are not ported.
+- Launcher tool keys (local addition): the `Launcher_tool` kind, its
+  `LauncherTool` payload, `makeLauncherToolKey`, `parseLauncherToolKey` and the
+  `tool:` name prefix have no upstream counterpart. They are the one seam
+  between a key slot and the launcher's action registry, so any slot — including
+  a space-bar swipe written in `~/.termux/keyboard/layout.xml` — can run a
+  registry tool with no per-tool code in this module. `LauncherTool` carries its
+  own `hashCode`/`equals`: `KeyValue.hashCode` delegates to the payload, and
+  tool keys are freshly built on every `getKeyByName`, so without them a tool
+  key could not be looked up in the key maps `addExtraKeys` uses.
 - Stateful suggestion labels have no global provider and render empty.
 - Tap correction hook (local addition): `Keyboard2View.TapResolver` plus
   `setTapResolver`, and the new file `TapGeometry.java`. At `ACTION_DOWN` the

@@ -161,8 +161,10 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
     private void updateBuiltInKeyboardRows(boolean enabled) {
         Preference layout = findPreference("keyboard_layout");
+        Preference shapes = findPreference("keyboard_shapes");
         Preference feedback = findPreference("keyboard_feedback");
         if (layout != null) layout.setEnabled(enabled);
+        if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);
     }
 
@@ -230,6 +232,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             case "f12_placeholder": return "F12";
             case "menu": return "Menu";
             case "scroll_lock": return "Scroll Lock";
+            case InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM: return "Next keyboard type";
             default:
                 if (name.startsWith("accent_"))
                     return "Dead key: " + name.substring("accent_".length()).replace('_', ' ');
@@ -339,9 +342,23 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
 
     @Override
     public void putInt(String key, int value) {
-        if (mPreferences == null || !"in_app_keyboard_bottom_padding".equals(key))
+        if (mPreferences == null || key == null)
             return;
-        mPreferences.setInAppKeyboardBottomPadding(value);
+        switch (key) {
+            case "in_app_keyboard_bottom_padding":
+                mPreferences.setInAppKeyboardBottomPadding(value);
+                break;
+            // The two shape sliders are percentages on screen and fractions in the store, and
+            // each is remembered for the orientation the phone is being held in.
+            case "in_app_keyboard_floating_width":
+                mPreferences.setInAppKeyboardFloatingWidthScale(value / 100f);
+                break;
+            case "in_app_keyboard_split_gap":
+                mPreferences.setInAppKeyboardSplitGapFraction(value / 100f);
+                break;
+            default:
+                return;
+        }
         // The keyboard is laid out by the activity, not by this screen, so the change lands when
         // the user goes back to it — the same route the extra-keys row toggle takes.
         TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
@@ -349,9 +366,18 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
 
     @Override
     public int getInt(String key, int defValue) {
-        if (mPreferences == null || !"in_app_keyboard_bottom_padding".equals(key))
+        if (mPreferences == null || key == null)
             return defValue;
-        return mPreferences.getInAppKeyboardBottomPadding();
+        switch (key) {
+            case "in_app_keyboard_bottom_padding":
+                return mPreferences.getInAppKeyboardBottomPadding();
+            case "in_app_keyboard_floating_width":
+                return Math.round(mPreferences.getInAppKeyboardFloatingWidthScale() * 100f);
+            case "in_app_keyboard_split_gap":
+                return Math.round(mPreferences.getInAppKeyboardSplitGapFraction() * 100f);
+            default:
+                return defValue;
+        }
     }
 
     @Override

@@ -35,6 +35,9 @@ underneath.
   On Home the keyboard opens over the page rather than shrinking it, so the widgets keep their
   places; a text field inside a widget opens the Android keyboard, and the keyboard key on the
   extra keys row opens the built-in one.
+- **Keyboard type**: whether the on-screen keyboard is docked along the bottom, floats over the
+  content where you put it, or is split in the middle for two thumbs. Remembered for this place
+  and orientation, and reachable from a key or the command palette as well.
 - **Grid columns** and **Grid rows** (Home only): how many widgets fit across and down a page, set
   separately for portrait and landscape; widgets that no longer fit a smaller grid move to free
   space or a new page rather than being dropped.
@@ -172,6 +175,9 @@ Open-Meteo attribution.
   and nudges presses near a boundary toward the key you usually mean. Only letters, digits and
   punctuation are ever moved; Enter, Backspace, Ctrl and the other action keys are not. **Forget
   learned taps** clears what it has learned. It stores per-key averages only, never what you typed.
+- **Floating keyboard width** and **Split keyboard gap**: how much of the screen a floating
+  keyboard takes, and how far apart the halves of a split one sit. Both are set separately for
+  portrait and landscape; which type a place uses is chosen on the **Layout** page.
 - **Layout documentation** and **Supported key values**.
 - **Haptic feedback** and **Keypress sound**.
 

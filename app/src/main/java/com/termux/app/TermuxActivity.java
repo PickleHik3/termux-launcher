@@ -8504,6 +8504,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final PlaceLayout NO_PREFERENCES_PLACE_LAYOUT = new PlaceLayout(
         PlaceLayout.Edge.TOP, PlaceLayout.RowPlacement.HIDDEN, false, PlaceLayout.Edge.BOTTOM,
         PlaceLayout.RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED,
         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
 
@@ -8846,6 +8847,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
+        // The keyboard hears the type from here rather than from the tool that wrote it: a
+        // rotation and a wall page change move it too, and this is the one pass all three take.
+        if (mInAppKeyboard != null) mInAppKeyboard.onKeyboardFormChanged(layout.keyboardForm);
         applyPlaceSystemImeOwner();
         applyStatusBarEdge(layout);
         applyWidgetGridPreference();
@@ -12363,6 +12367,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setTopStatusBarCollapsed(isStatusBarCompact(), true);
     }
 
+    /**
+     * Writes a keyboard type for the place and orientation on screen and re-runs the arrangement,
+     * which is what tells the keyboard the type moved. False before there are preferences to
+     * write it to.
+     */
+    private boolean setKeyboardFormForCurrentPlace(@NonNull PlaceLayout.KeyboardForm form) {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return false;
+        store.setKeyboardForm(currentWallPlace(), currentPlaceOrientation(), form);
+        syncPlaceLayout();
+        return true;
+    }
+
     /** Records how a place is being left, so "as left" has something to come back to. */
     private void rememberPlaceKeyboard(@NonNull com.termux.app.wall.PaneWallPage place) {
         PlaceLayoutStore store = placeLayoutStore();
@@ -15309,6 +15326,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mInAppKeyboard == null
                 ? com.termux.app.terminal.inappkeyboard.LauncherKeyboardLayouts.LAYOUT_MAIN
                 : mInAppKeyboard.getActiveTextLayoutId();
+        }
+
+        @NonNull
+        @Override public PlaceLayout.KeyboardForm keyboardForm() {
+            return currentPlaceLayout().keyboardForm;
+        }
+
+        @Override public boolean setKeyboardForm(@NonNull PlaceLayout.KeyboardForm form) {
+            return TermuxActivity.this.setKeyboardFormForCurrentPlace(form);
+        }
+
+        @Override public boolean showInAppKeyboard(boolean fromFocus) {
+            if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()) return false;
+            mInAppKeyboard.show(fromFocus
+                ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS
+                : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            return true;
+        }
+
+        @Override public boolean hideInAppKeyboard(boolean fromFocus) {
+            if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()) return false;
+            mInAppKeyboard.hide(fromFocus
+                ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.FOCUS
+                : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
+            return true;
         }
 
         @Override public boolean isKeybindHintPopupVisible() {

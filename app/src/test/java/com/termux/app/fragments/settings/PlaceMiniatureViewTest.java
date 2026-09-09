@@ -12,6 +12,7 @@ import android.view.View;
 
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceOrientation;
@@ -30,24 +31,24 @@ public class PlaceMiniatureViewTest {
 
     private static PlaceLayout layout(Edge statusBar, RowPlacement appsRow, RowPlacement extraKeys) {
         return new PlaceLayout(statusBar, appsRow, true, Edge.BOTTOM, extraKeys, KeyboardMode.RESIZE,
-            4, 5);
+            KeyboardForm.DOCKED, 4, 5);
     }
 
     private static PlaceLayout layout(Edge statusBar, RowPlacement appsRow, boolean azRowShown,
                                       RowPlacement extraKeys) {
         return new PlaceLayout(statusBar, appsRow, azRowShown, Edge.BOTTOM, extraKeys,
-            KeyboardMode.RESIZE, 4, 5);
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5);
     }
 
     private static PlaceLayout layout(Edge statusBar, RowPlacement appsRow, boolean azRowShown,
                                       Edge azBarEdge, RowPlacement extraKeys) {
         return new PlaceLayout(statusBar, appsRow, azRowShown, azBarEdge, extraKeys,
-            KeyboardMode.RESIZE, 4, 5);
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5);
     }
 
     private static PlaceLayout layout(RowPlacement appsRow, int widgetColumns, int widgetRows) {
         return new PlaceLayout(Edge.TOP, appsRow, true, Edge.BOTTOM, RowPlacement.BOTTOM,
-            KeyboardMode.RESIZE, widgetColumns, widgetRows);
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, widgetColumns, widgetRows);
     }
 
     private static PlaceMiniatureView sized() {
