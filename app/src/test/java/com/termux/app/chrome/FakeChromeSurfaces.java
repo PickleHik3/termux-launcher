@@ -123,10 +123,10 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
 
     @Nullable
     @Override
-    public Bitmap captureWallpaperFrame(@NonNull Rect frameRect, @NonNull View wallpaperFrame) {
+    public WallpaperBlurCache.FrameCapture beginCapture(@NonNull Rect frameRect, @NonNull View wallpaperFrame) {
         captureCount++;
-        return Bitmap.createBitmap(Math.max(1, frameRect.width()), Math.max(1, frameRect.height()),
-            Bitmap.Config.ARGB_8888);
+        return WallpaperBlurCache.FrameCapture.ready(Bitmap.createBitmap(Math.max(1, frameRect.width()),
+            Math.max(1, frameRect.height()), Bitmap.Config.ARGB_8888));
     }
 
     @Nullable

@@ -853,9 +853,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return getManagedWallpaperExactFile();
         }
 
-        @Nullable @Override public Bitmap captureWallpaperFrame(@NonNull Rect frameRect,
-                                                                @NonNull View wallpaperFrame) {
-            return createWallpaperBackdropBitmapForRect(frameRect, wallpaperFrame);
+        @Nullable @Override public com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginCapture(
+                @NonNull Rect frameRect, @NonNull View wallpaperFrame) {
+            return beginWallpaperFrameCapture(frameRect, wallpaperFrame);
         }
 
         @Override public boolean isFrameInUse(@Nullable Bitmap frame) {
@@ -4614,53 +4614,67 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .show();
     }
 
+    /**
+     * The blur cache's capture, split across threads: the managed source answers from its own
+     * decode (or says it is reading), and for the system wallpaper only the geometry is read here,
+     * on the main thread — the decode itself is handed back as a job for the blur worker. Reading
+     * the system wallpaper was a ~46 ms decode per miss on the main thread (Pong, 2026-09-09).
+     */
     @Nullable
-    private Bitmap createWallpaperBackdropBitmapForRect(@NonNull Rect targetRect, @NonNull View wallpaperFrame) {
+    private com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginWallpaperFrameCapture(
+            @NonNull Rect targetRect, @NonNull View wallpaperFrame) {
         if (shouldUseManagedWallpaperBlurSource()) {
             Bitmap managedBackdrop = createManagedWallpaperBackdropBitmapForRect(targetRect, wallpaperFrame);
             if (managedBackdrop != null) {
-                return managedBackdrop;
+                return com.termux.app.chrome.WallpaperBlurCache.FrameCapture.ready(managedBackdrop);
             }
             // While the file is being read there is nothing to draw yet; the system drawable
             // would be the same picture decoded again, on this thread, for a frame about to be
-            // replaced.
+            // replaced by the managed one.
             if (mManagedWallpaperPending) return null;
         }
+        final Rect target = new Rect(targetRect);
+        final Rect frameRect = getManagedWallpaperFrameRect();
+        final float zoom = systemWallpaperRenderZoom();
+        final WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
+        return com.termux.app.chrome.WallpaperBlurCache.FrameCapture.deferred(
+            () -> decodeSystemWallpaperBackdrop(wallpaperManager, target, frameRect, zoom));
+    }
 
-        WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
+    /** Worker thread. The system wallpaper drawn into {@code targetRect}, or null. */
+    @Nullable
+    private Bitmap decodeSystemWallpaperBackdrop(@NonNull WallpaperManager wallpaperManager,
+                                                 @NonNull Rect targetRect, @NonNull Rect frameRect,
+                                                 float zoom) {
         Drawable wallpaper;
         try {
             wallpaper = wallpaperManager.getDrawable();
         } catch (SecurityException e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Cannot read system wallpaper for accessory backdrop", e);
-            onSystemWallpaperReadDenied();
+            runOnUiThread(this::onSystemWallpaperReadDenied);
             return null;
         }
-        mWallpaperReadPermissionDenied = false;
+        runOnUiThread(() -> mWallpaperReadPermissionDenied = false);
         if (wallpaper == null) {
             return null;
         }
         try {
-            return drawWallpaperBackdrop(wallpaper, targetRect);
+            return drawWallpaperBackdrop(wallpaper, targetRect, frameRect, zoom);
         } finally {
             // getDrawable() leaves the framework holding the decoded wallpaper in
-            // WallpaperManager$Globals for the life of the process — 16.6 MB of this one, at
-            // 1400x3100 against a 1080x2412 screen, because the wallpaper is zoomed. It is a pure
-            // cache and nothing here reads it again: the crop drawn just now is what gets cached,
-            // and this runs only when that cache misses, so the re-read costs nothing anyone waits
-            // for. Ours is drawn by the time this runs.
+            // WallpaperManager's globals; it is copied into our frame now, so let it go.
             try {
                 wallpaperManager.forgetLoadedWallpaper();
             } catch (Exception ignored) {
-                // A vendor implementation that refuses simply keeps its cache.
             }
         }
     }
 
-    private Bitmap drawWallpaperBackdrop(@NonNull Drawable wallpaper, @NonNull Rect targetRect) {
+    /** Any thread: pure drawing from geometry the caller read on the main thread. */
+    private static Bitmap drawWallpaperBackdrop(@NonNull Drawable wallpaper, @NonNull Rect targetRect,
+                                                @NonNull Rect frameRect, float zoom) {
         int targetWidth = Math.max(1, targetRect.width());
         int targetHeight = Math.max(1, targetRect.height());
-        Rect frameRect = getManagedWallpaperFrameRect();
         int frameWidth = Math.max(1, frameRect.width());
         int frameHeight = Math.max(1, frameRect.height());
 
@@ -4675,7 +4689,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int offsetLeft = frameScreenX + Math.round((frameWidth - drawWidth) / 2f);
         int offsetTop = frameScreenY + Math.round((frameHeight - drawHeight) / 2f);
 
-        float zoom = systemWallpaperRenderZoom();
         if (zoom != 1f) {
             float centerX = frameRect.exactCenterX();
             float centerY = frameRect.exactCenterY();

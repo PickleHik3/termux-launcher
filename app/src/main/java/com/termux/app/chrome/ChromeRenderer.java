@@ -14,6 +14,10 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
  * The accessory chrome: the glass, blur, frost and backdrop treatment shared by the dock, the
  * in-app keyboard, the under-pill nav strip, the top pane, the command palette and the app drawer
@@ -139,6 +143,8 @@ public final class ChromeRenderer {
     private static final long ACCESSORY_BLUR_RECOVERY_RETRY_MS = 120L;
 
     @NonNull private final Surfaces mSurfaces;
+    @Nullable private final Executor mBlurWorker;
+    private boolean mDestroyed;
     @NonNull private final SurfaceDirtyLedger mLedger = new SurfaceDirtyLedger();
     @NonNull private final WallpaperBlurCache mBlurCache;
     @NonNull private final GlassSurfaceFactory mGlass;
@@ -158,8 +164,19 @@ public final class ChromeRenderer {
     private final Runnable mBlurHeartbeatRunnable;
     private final Runnable mBlurRecoveryRunnable;
 
+    /** The production renderer: wallpaper decodes and blurs run on their own thread. */
     public ChromeRenderer(@NonNull Surfaces surfaces) {
+        this(surfaces, newBlurWorker());
+    }
+
+    /**
+     * {@code blurWorker} null keeps every blur-cache miss synchronous, which is what a window-less
+     * test wants; the Activity passes a worker so a miss costs the main thread nothing but a
+     * re-render when the frame lands.
+     */
+    public ChromeRenderer(@NonNull Surfaces surfaces, @Nullable Executor blurWorker) {
         mSurfaces = surfaces;
+        mBlurWorker = blurWorker;
         mRenderSyncRunnable = () -> {
             mRenderSyncPending = false;
             mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
@@ -196,9 +213,36 @@ public final class ChromeRenderer {
             requestSync(SCOPE_BACKDROPS | SCOPE_ACCESSORY_RENDER);
         };
         // Every frost crop was cut from a frame that a clear destroys.
-        mBlurCache = new WallpaperBlurCache(surfaces, mLedger::markFrostDirty);
+        mBlurCache = new WallpaperBlurCache(surfaces, mLedger::markFrostDirty,
+            WallpaperBlurCache.DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES, blurWorker,
+            blurWorker == null ? null : mHandler::post,
+            blurWorker == null ? null : this::onBlurFrameReady);
         mGlass = new GlassSurfaceFactory(surfaces);
         mFrost = new WallpaperFrostPainter(surfaces, mBlurCache, mLedger);
+    }
+
+    /** One low-priority thread: decodes and blurs are sequential, and never on the main thread. */
+    @NonNull
+    public static Executor newBlurWorker() {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "wallpaper-blur");
+            thread.setPriority(Thread.NORM_PRIORITY - 1);
+            return thread;
+        });
+    }
+
+    /**
+     * A frame the worker finished has just been filed. Every surface that drew nothing for want of
+     * it re-cuts its crop now: the accessory backdrops, the keyboard's, the top pane's frost and
+     * the terminal glass, then one coalesced render.
+     */
+    private void onBlurFrameReady() {
+        if (mDestroyed) return;
+        mLedger.markAllBackdropsDirty();
+        mLedger.markFrostDirty();
+        mSurfaces.updateTerminalGlassFrost();
+        requestSync(SCOPE_BACKDROPS | SCOPE_KEYBOARD_BACKDROP | SCOPE_TOP_PANE_FROST
+            | SCOPE_ACCESSORY_RENDER);
     }
 
     // ------------------------------------------------------------------- entry
@@ -390,6 +434,8 @@ public final class ChromeRenderer {
     }
 
     public void onDestroy() {
+        mDestroyed = true;
+        if (mBlurWorker instanceof ExecutorService) ((ExecutorService) mBlurWorker).shutdownNow();
         unscheduleCommit();
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);

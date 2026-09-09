@@ -32,7 +32,7 @@ public class ChromeRendererTest {
     @Before
     public void setUp() {
         surfaces = new FakeChromeSurfaces(RuntimeEnvironment.getApplication());
-        chrome = new ChromeRenderer(surfaces);
+        chrome = new ChromeRenderer(surfaces, null);
         wallpaperFrame = new View(RuntimeEnvironment.getApplication());
     }
 
