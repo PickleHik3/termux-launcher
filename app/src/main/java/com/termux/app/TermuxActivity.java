@@ -8849,7 +8849,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAppliedPlaceLayout = layout;
         // The keyboard hears the type from here rather than from the tool that wrote it: a
         // rotation and a wall page change move it too, and this is the one pass all three take.
-        if (mInAppKeyboard != null) mInAppKeyboard.onKeyboardFormChanged(layout.keyboardForm);
+        if (mInAppKeyboard != null) {
+            PlaceLayout.KeyboardForm appliedForm = mInAppKeyboard.getForm();
+            mInAppKeyboard.onKeyboardFormChanged(layout.keyboardForm);
+            // In mouse mode the touchpad follows the keyboard into its type.
+            if (appliedForm != mInAppKeyboard.getForm()) syncDisplayTouchpad();
+        }
         applyPlaceSystemImeOwner();
         applyStatusBarEdge(layout);
         applyWidgetGridPreference();
@@ -13111,7 +13116,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .ShowReason.KEYBOARD_ACTION);
         }
-        if (pad != null && pad.getParent() == host) return;
+        if (pad != null && pad.getParent() == host) {
+            // The keyboard's type may have moved under a pad that is already up.
+            applyDisplayTouchpadFrame(pad, mAttachedInAppKeyboardView);
+            return;
+        }
         if (pad == null) {
             pad = new com.termux.app.x11.DisplayTouchpadView(this,
                 () -> {
@@ -13130,27 +13139,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDisplayTouchpad = pad;
         }
         if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
-        // The keyboard's height is the pad's: the host wraps its content, so a match-parent pad
-        // would take every pixel above the keyboard instead of the keyboard's own room.
+        // The keyboard's frame is the pad's: the host wraps its content, so a match-parent pad
+        // would take every pixel above the keyboard instead of the keyboard's own room. Over a
+        // split keyboard that frame is the parting between the two halves.
         View keyboardView = mAttachedInAppKeyboardView;
-        int padHeight = keyboardView != null && keyboardView.getHeight() > 0
-            ? keyboardView.getHeight() : ViewGroup.LayoutParams.WRAP_CONTENT;
-        host.addView(pad, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            padHeight, Gravity.TOP));
+        Rect gap = splitKeyboardTouchpadGap(keyboardView);
+        host.addView(pad, com.termux.app.x11.DisplayTouchpadPlacement.padParams(gap,
+            keyboardView == null ? 0 : keyboardView.getHeight(),
+            getResources().getDisplayMetrics().density));
         if (keyboardView != null) {
             final com.termux.app.x11.DisplayTouchpadView following = pad;
             keyboardView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 if (following.getParent() != host) return;
-                int h = b - t;
-                ViewGroup.LayoutParams lp = following.getLayoutParams();
-                if (h > 0 && lp != null && lp.height != h) {
-                    lp.height = h;
-                    following.setLayoutParams(lp);
-                }
+                applyDisplayTouchpadFrame(following, v);
             });
         }
         View keys = mAttachedInAppKeyboardView;
-        if (keys != null) {
+        // A pad standing in the parting leaves both halves typing, so the keys stay lit.
+        if (keys != null && gap == null) {
             keys.animate().cancel();
             if (reduced) keys.setAlpha(0f);
             else keys.animate().alpha(0f).setDuration(duration).setInterpolator(settle).start();
@@ -13165,6 +13171,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         pad.setTranslationY(dpToPx(12));
         pad.animate().alpha(1f).translationY(0f).setDuration(duration).setInterpolator(settle)
             .start();
+    }
+
+    /**
+     * Sizes the touchpad to the keyboard frame it stands in: the whole of it, or the parting of a
+     * split keyboard. Beside a pad in the parting the halves keep typing, so their keys are lit.
+     */
+    private void applyDisplayTouchpadFrame(@NonNull View pad, @Nullable View keyboardView) {
+        Rect gap = splitKeyboardTouchpadGap(keyboardView);
+        FrameLayout.LayoutParams params = com.termux.app.x11.DisplayTouchpadPlacement.padParams(
+            gap, keyboardView == null ? 0 : keyboardView.getHeight(),
+            getResources().getDisplayMetrics().density);
+        if (!com.termux.app.x11.DisplayTouchpadPlacement.describes(pad.getLayoutParams(), params)) {
+            pad.setLayoutParams(params);
+        }
+        if (gap != null && keyboardView != null && keyboardView.getAlpha() != 1f) {
+            keyboardView.animate().cancel();
+            keyboardView.setAlpha(1f);
+        }
+    }
+
+    /** The parting of a split keyboard in the keyboard view's pixels; null when it has none. */
+    @Nullable
+    private Rect splitKeyboardTouchpadGap(@Nullable View keyboardView) {
+        if (!(keyboardView instanceof Keyboard2View) || mInAppKeyboard == null
+            || mInAppKeyboard.getForm() != PlaceLayout.KeyboardForm.SPLIT) {
+            return null;
+        }
+        Rect gap = new Rect();
+        return ((Keyboard2View) keyboardView).getSplitGapBounds(gap) ? gap : null;
     }
 
     private void createWidgetPaneController() {
