@@ -722,6 +722,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_X11_FORCE_BGRA, value, false);
     }
 
+    /** Whether a tap on a text field inside the display raises the keyboard. */
+    public boolean isX11KeyboardFollowsTextEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT, TERMUX_APP.DEFAULT_X11_KEYBOARD_FOLLOWS_TEXT);
+    }
+
+    public void setX11KeyboardFollowsTextEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT, value, false);
+    }
+
     public boolean isX11DrawerAppsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_X11_DRAWER_APPS, TERMUX_APP.DEFAULT_X11_DRAWER_APPS);

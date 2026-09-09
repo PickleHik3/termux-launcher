@@ -27,6 +27,15 @@ public class LauncherCtlApiServerPaneRoutesTest {
     }
 
     @Test
+    public void keyboardRoutes_mapToTheirActions() {
+        assertEquals("keyboard.show", LauncherCtlApiServer.keyboardToolFor("POST", "/v1/keyboard/show"));
+        assertEquals("keyboard.hide", LauncherCtlApiServer.keyboardToolFor("POST", "/v1/keyboard/hide"));
+        assertNull(LauncherCtlApiServer.keyboardToolFor("GET", "/v1/keyboard/show"));
+        assertNull(LauncherCtlApiServer.keyboardToolFor("POST", "/v1/keyboard/toggle"));
+        assertNull(LauncherCtlApiServer.keyboardToolFor("POST", "/v1/keyboard/"));
+    }
+
+    @Test
     public void rateLimitKey_sharesOneBucketPerPaneAction() {
         assertEquals("POST:/v1/panes/*/write", LauncherCtlApiServer.rateLimitKey("POST", "/v1/panes/abc/write"));
         assertEquals("GET:/v1/panes/*/text", LauncherCtlApiServer.rateLimitKey("GET", "/v1/panes/xyz/text"));

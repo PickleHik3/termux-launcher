@@ -12833,11 +12833,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
             mX11Display.attachView(display.display());
             display.display().requestFocus();
+            // A place that asked for the keyboard as it arrived asked for it itself, so the
+            // text-focus policy leaves that keyboard alone until it is put down again.
+            mX11Display.onDisplayPlaceEntered(
+                wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.DISPLAY));
             // The in-app keyboard and the extra-keys row type into X while the page is showing;
             // the terminal never sees those values.
             if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
         } else {
             mX11Display.detachView();
+            mX11Display.onDisplayPlaceLeft();
             if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
         }
     }
@@ -12937,13 +12942,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new com.termux.x11.LorieHost.Callbacks() {
                 @Override public void toggleKeyboardVisibility() {
                     if (mInAppKeyboard == null) return;
-                    if (mInAppKeyboard.isVisible()) {
-                        mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
-                            .TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
-                    } else {
+                    boolean shown = !mInAppKeyboard.isVisible();
+                    if (shown) {
                         mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
                             .TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
+                    } else {
+                        mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
+                            .TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
                     }
+                    if (mX11Display != null) mX11Display.onUserKeyboardIntent(shown);
                 }
                 @Override public void onDisplayStopped() {
                     com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
@@ -12952,6 +12959,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     syncPlaceBar();
                 }
             });
+        mX11Display.setTextFocusKeyboard(new com.termux.app.x11.DisplayTextFocusPolicy.Keyboard() {
+            @Override public void showKeyboardForTextFocus() {
+                if (mInAppKeyboard != null) mInAppKeyboard.show(com.termux.app.terminal
+                    .inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS);
+            }
+            @Override public void hideKeyboardForTextFocus() {
+                if (mInAppKeyboard != null) mInAppKeyboard.hide(com.termux.app.terminal
+                    .inappkeyboard.TermuxInAppKeyboard.HideReason.FOCUS);
+            }
+            @Override public boolean isKeyboardUp() {
+                return mInAppKeyboard != null && mInAppKeyboard.isVisible();
+            }
+        });
+        page.setTapListener(() -> {
+            if (mX11Display != null) mX11Display.onDisplayTap();
+        });
         mX11Display.host().setLorieView(page.display());
         mX11Display.setListener(running -> {
             com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
@@ -13043,6 +13066,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void setMouseMode(boolean enabled) {
         if (mMouseMode == enabled) return;
         mMouseMode = enabled;
+        // Mouse mode takes the keyboard's place, so turning it on is the user asking for that
+        // frame to be up; the text-focus policy must not pull it away under the touchpad.
+        if (enabled && mX11Display != null) mX11Display.onUserKeyboardIntent(true);
         if (mPaneController != null) mPaneController.setTouchMouseMode(enabled);
         syncDisplayTouchpad();
         syncMouseModeMark();
@@ -15339,17 +15365,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean showInAppKeyboard(boolean fromFocus) {
             if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()) return false;
+            // A focus source is a signal, not an order: on the Display place the policy decides
+            // whether it means a keyboard, and it is the one that will close it again.
+            if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(true)) return true;
             mInAppKeyboard.show(fromFocus
                 ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS
                 : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            if (!fromFocus && mX11Display != null) mX11Display.onUserKeyboardIntent(true);
             return true;
         }
 
         @Override public boolean hideInAppKeyboard(boolean fromFocus) {
             if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()) return false;
+            if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(false)) return true;
             mInAppKeyboard.hide(fromFocus
                 ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.FOCUS
                 : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
+            if (!fromFocus && mX11Display != null) mX11Display.onUserKeyboardIntent(false);
             return true;
         }
 

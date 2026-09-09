@@ -52,6 +52,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   showing, and a hardware keyboard is the display's entirely: every key and every chord goes to
   X, and the launcher's shortcuts and their hints stay out of the way. Leave the display by
   touch, by the place icons, or with Home.
+- **The keyboard follows text fields.** In Touchscreen touch mode, tapping a text field on the
+  display brings the keyboard up and tapping elsewhere puts it down — see
+  [The keyboard follows text fields](#the-keyboard-follows-text-fields).
 - **The keyboard floats.** In landscape the keyboard comes up over the display instead of
   squeezing it, so the picture keeps the size it was given and nothing on it moves as you type. In
   portrait the display makes room for the keyboard instead. Either place can be set the other way
@@ -88,6 +91,61 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 - **Server flags.** `termux-x11 :0 -ac -dpi 240 -legacy-drawing -force-bgra -xstartup "xfce4-session"`
   — all Xorg flags and Termux:X11's own are accepted. `-legacy-drawing` is the one to try if the
   picture stays black on an unusual GPU.
+
+## The keyboard follows text fields
+
+Tap a text field on the display and the keyboard comes up; tap anywhere else and it goes away
+again. It is on by default — Settings → **Display** → **Keyboard follows text fields** — and it
+only applies in **Touchscreen** touch mode, where a tap means "here". Trackpad and Direct touch
+are unchanged.
+
+A keyboard you opened yourself is yours: it stays until you close it, and taps on the desktop
+never take it away. Only a keyboard that came up for a text field is put away for one.
+
+Two signals tell the launcher that a text field is under your finger.
+
+**The pointer's shape.** Nothing to set up. X tells the launcher nothing about focus, but the
+window under the pointer names the cursor it wants — `xterm` over text, `left_ptr` over most other
+things — and the display server passes that name on. Only the name seen in the moment after a tap
+counts, so a pointer crossing a text field on its way somewhere else opens nothing. An app that
+never asks for a text cursor, or a session with no cursor theme installed, cannot be recognised
+this way; the keyboard key, the display's Back button and the signal below all still work.
+
+**Your input method's own focus.** Exact, and opt in. Two commands feed the same behaviour from a
+shell, so anything that knows when a field takes focus can drive it:
+
+```sh
+launcherctl keyboard show --source focus
+launcherctl keyboard hide --source focus
+```
+
+They are read as a signal, not an order: on the display they go through the same rules as a tap,
+and elsewhere they simply open or close the keyboard. `--source manual` (the default) is you
+asking, which pins the keyboard until you put it down again.
+
+With fcitx5, tell your toolkits to use it and run a small watcher beside your session:
+
+```sh
+pkg install fcitx5
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+```
+
+```sh
+# focus-keyboard.sh — run it in the background: sh focus-keyboard.sh &
+dbus-monitor --session "type='method_call',interface='org.fcitx.Fcitx.InputContext1'" |
+while read -r line; do
+    case "$line" in
+        *FocusIn*)  launcherctl keyboard show --source focus ;;
+        *FocusOut*) launcherctl keyboard hide --source focus ;;
+    esac
+done
+```
+
+This recipe is documented, not device-verified: it needs a session D-Bus running in the same
+session as fcitx5, and the interface name is fcitx5's own. If nothing happens, check that
+`dbus-monitor` prints anything at all while you move between fields.
 
 ## GPU acceleration for your apps
 

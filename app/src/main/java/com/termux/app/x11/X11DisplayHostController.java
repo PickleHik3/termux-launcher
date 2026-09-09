@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.logger.Logger;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.x11.ICmdEntryInterface;
 import com.termux.x11.LorieHost;
 import com.termux.x11.LorieView;
@@ -32,6 +33,8 @@ import com.termux.x11.LorieView;
 public final class X11DisplayHostController {
 
     private static final String LOG_TAG = "X11DisplayHost";
+    /** Where the text-focus policy's decisions go, so a device run can be read from logcat. */
+    private static final String TEXT_FOCUS_LOG_TAG = "X11TextFocus";
     /** How long to wait before asking the server for its socket again. */
     private static final long CONNECT_RETRY_MS = 250L;
 
@@ -45,6 +48,13 @@ public final class X11DisplayHostController {
     @NonNull private final LorieHost host;
     /** The server's Binder and the one death link on it. */
     @NonNull private final X11ServerLink link = new X11ServerLink();
+
+    /** Whether the keyboard should follow the text fields inside the X session, and when. */
+    @NonNull private final DisplayTextFocusPolicy textFocus;
+    /** The launcher's end of the policy, handed in by the activity that owns the keyboard. */
+    @Nullable private DisplayTextFocusPolicy.Keyboard keyboard;
+    /** The tap window's pending decision, so it can be dropped. */
+    @Nullable private Runnable tapWindow;
 
     @Nullable private LorieView view;
     @Nullable private Listener listener;
@@ -68,6 +78,29 @@ public final class X11DisplayHostController {
                                     @NonNull LorieHost.Callbacks callbacks) {
         this.appContext = context.getApplicationContext();
         this.host = new LorieHost(appContext, callbacks);
+        this.textFocus = new DisplayTextFocusPolicy(
+            new DisplayTextFocusPolicy.Keyboard() {
+                @Override public void showKeyboardForTextFocus() {
+                    if (keyboard != null) keyboard.showKeyboardForTextFocus();
+                }
+                @Override public void hideKeyboardForTextFocus() {
+                    if (keyboard != null) keyboard.hideKeyboardForTextFocus();
+                }
+                @Override public boolean isKeyboardUp() {
+                    return keyboard != null && keyboard.isKeyboardUp();
+                }
+            },
+            new DisplayTextFocusPolicy.Scheduler() {
+                @Override public void schedule(long delayMs, @NonNull Runnable action) {
+                    tapWindow = action;
+                    handler.postDelayed(action, delayMs);
+                }
+                @Override public void cancel() {
+                    if (tapWindow != null) handler.removeCallbacks(tapWindow);
+                    tapWindow = null;
+                }
+            },
+            message -> android.util.Log.d(TEXT_FOCUS_LOG_TAG, message));
         // The broadcast is sent to this package only, and the app targets sdk 28, so the plain
         // registration is right below Android 13; from 13 on the flag says the same thing.
         android.content.IntentFilter filter = new android.content.IntentFilter(
@@ -105,6 +138,9 @@ public final class X11DisplayHostController {
     public void attachView(@NonNull LorieView view) {
         this.view = view;
         host.setLorieView(view);
+        // The server repeats the current cursor name when a host attaches, so the policy starts
+        // with the name the pointer is actually showing rather than with nothing.
+        view.setCursorNameListener(name -> handler.post(() -> textFocus.onCursorName(name)));
         // Re-announce to ourselves: a server that came up while the page was elsewhere already
         // handed us its Binder, and this is the point at which it can be used.
         if (announcement != null) connect(announcement);
@@ -114,6 +150,8 @@ public final class X11DisplayHostController {
     /** The page has gone: drop the view but leave the server and its clients alone. */
     public void detachView() {
         handler.removeCallbacks(connectRetry);
+        LorieView attached = view;
+        if (attached != null) attached.setCursorNameListener(null);
         // The surface itself goes with the page (SurfaceView tears it down on its own); the X
         // socket stays open, so the server and its clients never notice the page went away.
         view = null;
@@ -133,6 +171,9 @@ public final class X11DisplayHostController {
             // Never registered, or already gone with the process.
         }
         X11DisplayReceiver.unregister(this);
+        LorieView attached = view;
+        if (attached != null) attached.setCursorNameListener(null);
+        textFocus.onPlaceLeft();
         if (announcement != null && link.isLinked()) X11DisplayReceiver.keepAnnouncement(announcement);
         link.release();
         announcement = null;
@@ -252,6 +293,7 @@ public final class X11DisplayHostController {
      * applied to the X screen.
      */
     public void reloadPreferences() {
+        reloadTextFocusPreferences();
         LorieView live = view;
         if (live == null) return;
         com.termux.x11.Prefs prefs = LorieHost.getPrefs();
@@ -274,6 +316,72 @@ public final class X11DisplayHostController {
             return ":" + sockets[0].substring(1);
         }
         return ":0";
+    }
+
+    // ---- The keyboard that follows text fields ------------------------------------------------
+
+    /** The launcher's end of the policy: what raises and lowers the in-app keyboard. */
+    public void setTextFocusKeyboard(@Nullable DisplayTextFocusPolicy.Keyboard keyboard) {
+        this.keyboard = keyboard;
+    }
+
+    /**
+     * The wall rests on the Display place. {@code keyboardRaisedOnEnter} says the place asked for
+     * the keyboard as it arrived, which pins it. A page that re-attaches while the wall has not
+     * moved is not a fresh arrival and leaves the policy as it stands.
+     */
+    public void onDisplayPlaceEntered(boolean keyboardRaisedOnEnter) {
+        reloadTextFocusPreferences();
+        if (textFocus.isOnPlace()) return;
+        textFocus.onPlaceEntered(keyboardRaisedOnEnter);
+    }
+
+    /** The wall left the Display place. */
+    public void onDisplayPlaceLeft() {
+        if (textFocus.isOnPlace()) textFocus.onPlaceLeft();
+    }
+
+    /** A tap landed on the display's own picture. */
+    public void onDisplayTap() {
+        textFocus.onDisplayTap();
+    }
+
+    /**
+     * The user put the keyboard up or down themselves. Up is theirs and pins the policy off; down
+     * hands the keyboard back to it.
+     */
+    public void onUserKeyboardIntent(boolean shown) {
+        textFocus.onUserKeyboardIntent(shown);
+    }
+
+    /**
+     * An input method on the Linux side says a text field took focus, or lost it — signal B, from
+     * {@code keyboard.show --source focus}. False when the policy is inert and the caller should
+     * do the plain thing itself.
+     */
+    public boolean onTextFocusSignal(boolean focused) {
+        return textFocus.onTextFocusSignal(focused);
+    }
+
+    /** For tests and for anyone reading the state in a debugger. */
+    @NonNull
+    public DisplayTextFocusPolicy textFocusPolicy() {
+        return textFocus;
+    }
+
+    /** The touch mode and the setting, both of which can move while the place is on screen. */
+    private void reloadTextFocusPreferences() {
+        com.termux.x11.Prefs prefs = LorieHost.getPrefs();
+        if (prefs != null) {
+            try {
+                textFocus.setTouchMode(Integer.parseInt(prefs.touchMode.get()));
+            } catch (NumberFormatException ignored) {
+                // An unreadable mode is not Touchscreen, so the policy sleeps.
+                textFocus.setTouchMode(0);
+            }
+        }
+        TermuxAppSharedPreferences launcher = TermuxAppSharedPreferences.build(appContext);
+        textFocus.setEnabled(launcher == null || launcher.isX11KeyboardFollowsTextEnabled());
     }
 
     /** Hardware keys the page routes into X; true when X took the key. */
