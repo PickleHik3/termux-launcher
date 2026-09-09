@@ -2037,20 +2037,27 @@ public class TerminalPaneController {
         if (mFocusGrowAnimator != null) mFocusGrowAnimator.cancel();
         applyFocusGrowth(false);
         captureMoveOrigins();
-        mHostView.removeAllViews();
+        // The tiled tree is the host's first child; everything above it (interaction overlay,
+        // floats, motion overlay) is rebuilt below, the tree itself is reconciled in place.
+        View previousTree = mHostView.getChildCount() > 0 ? mHostView.getChildAt(0) : null;
+        for (int i = mHostView.getChildCount() - 1; i >= 1; i--) mHostView.removeViewAt(i);
         mSplitLayouts.clear();
         mFloatContainers.clear();
         // Whatever the scratchpad's hide animation was holding has just been detached; its guard
         // must not outlive it or the scratchpad can never be shown again.
         mHidingScratchpadLeaf = null;
         if (mActiveWindow == null) {
+            mHostView.removeAllViews();
             mHost.onPanesRendered();
             return;
         }
-        View built = mMaximizedLeaf != null
-            ? paneFrameFor(mMaximizedLeaf.session) : buildView(mActiveWindow.root);
-        mHostView.addView(built, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        View built = reconcile(previousTree,
+            mMaximizedLeaf != null ? mMaximizedLeaf : mActiveWindow.root);
+        if (built != previousTree) {
+            mHostView.removeAllViews();
+            mHostView.addView(built, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
         if (mInteractionOverlay.getParent() instanceof ViewGroup) {
             ((ViewGroup) mInteractionOverlay.getParent()).removeView(mInteractionOverlay);
         }
@@ -2185,7 +2192,12 @@ public class TerminalPaneController {
     // --- Pane appearance / disappearance / cursor travel ---
 
     /** Hyprland-ish open: the pane pops in from slightly small rather than blinking into place. */
-    private static final long PANE_ENTER_MS = 280L;
+    /**
+     * Entry and split-reveal motion. 280 ms read as a wait: on Pong a Ctrl+Alt+H had its new pane
+     * on screen ~126 ms after the key and then spent 280 ms easing the divider — three quarters of
+     * the time between the key and the pane "landing" was this animation (2026-09-09).
+     */
+    private static final long PANE_ENTER_MS = 170L;
     private static final float PANE_ENTER_SCALE = 0.92f;
 
     /**
@@ -2223,7 +2235,7 @@ public class TerminalPaneController {
      * How long the divider takes to sweep in. Long enough to read as geometry forming, short
      * enough that the ~300 ms shell start after it feels like part of the same gesture.
      */
-    private static final long SPLIT_REVEAL_MS = 280L;
+    private static final long SPLIT_REVEAL_MS = PANE_ENTER_MS;
     /** Bounds agreement below this is layout noise, not a moved edge. */
     private static final int SPLIT_REVEAL_SLACK_PX = 2;
 
@@ -2690,34 +2702,83 @@ public class TerminalPaneController {
         updateActiveBorders();
     }
 
-    private View buildView(Node node) {
+    /**
+     * Brings the view tree for {@code node} into being, reusing {@code existing} wherever its shape
+     * already matches: a pane frame that is already in its slot stays there, a split container
+     * keeps its children and only takes new weights and orientation, and only the branch a split,
+     * a close or a re-tile actually changed is built afresh. The old render detached every pane on
+     * every call — 27 ms of the 82 ms a Ctrl+Alt+H spent before its first frame on Pong
+     * (2026-09-09), for panes that had not moved — and each re-attach cost the view its layout.
+     */
+    private View reconcile(@Nullable View existing, @NonNull Node node) {
         if (node instanceof Leaf) {
-            return paneFrameFor(((Leaf) node).session);
+            TerminalSession session = ((Leaf) node).session;
+            PaneContentFrame frame = mPaneFrames.get(session);
+            if (frame != null && existing == frame) {
+                // A cached frame may still carry a half-finished entry animation's alpha/scale.
+                resetFrameTransform(frame);
+                refreshAttachedPaneView(session);
+                return frame;
+            }
+            return paneFrameFor(session);
         }
         Split split = (Split) node;
-        LinearLayout ll = new LinearLayout(mHostView.getContext());
-        mSplitLayouts.put(split, ll);
-        ll.setOrientation(split.orientation);
-        ll.setClipChildren(false);
-        ll.setClipToPadding(false);
         boolean vertical = split.orientation == LinearLayout.VERTICAL;
         int match = LinearLayout.LayoutParams.MATCH_PARENT;
-
-        View va = buildView(split.a);
-        View vb = buildView(split.b);
-        ll.addView(va, new LinearLayout.LayoutParams(
-            vertical ? match : 0, vertical ? 0 : match, split.weightA));
-        View divider = new View(mHostView.getContext());
-        divider.setBackground(ContextCompat.getDrawable(mHostView.getContext(),
-            R.drawable.pane_divider));
-        // Inner padding: the gap is what turns two panes into two slabs rather than one sheet with
-        // a line through it, so it is user-tunable rather than the old fixed hairline.
         int gapPx = dp(paneGapDp());
-        ll.addView(divider, new LinearLayout.LayoutParams(
-            vertical ? match : gapPx, vertical ? gapPx : match));
-        ll.addView(vb, new LinearLayout.LayoutParams(
-            vertical ? match : 0, vertical ? 0 : match, split.weightB));
+        LinearLayout ll = existing instanceof LinearLayout
+            && ((LinearLayout) existing).getChildCount() == 3
+            && ((LinearLayout) existing).getOrientation() == split.orientation
+            ? (LinearLayout) existing : null;
+        if (ll == null) {
+            ll = new LinearLayout(mHostView.getContext());
+            ll.setOrientation(split.orientation);
+            ll.setClipChildren(false);
+            ll.setClipToPadding(false);
+            View divider = new View(mHostView.getContext());
+            divider.setBackground(ContextCompat.getDrawable(mHostView.getContext(),
+                R.drawable.pane_divider));
+            ll.addView(reconcile(null, split.a), new LinearLayout.LayoutParams(
+                vertical ? match : 0, vertical ? 0 : match, split.weightA));
+            // Inner padding: the gap is what turns two panes into two slabs rather than one sheet
+            // with a line through it, so it is user-tunable rather than the old fixed hairline.
+            ll.addView(divider, new LinearLayout.LayoutParams(
+                vertical ? match : gapPx, vertical ? gapPx : match));
+            ll.addView(reconcile(null, split.b), new LinearLayout.LayoutParams(
+                vertical ? match : 0, vertical ? 0 : match, split.weightB));
+        } else {
+            View oldA = ll.getChildAt(0);
+            View oldB = ll.getChildAt(2);
+            // Reconciling a child may pull a frame out of this container into a new nested one,
+            // so both are resolved before either slot is touched.
+            View newA = reconcile(oldA, split.a);
+            View newB = reconcile(oldB, split.b);
+            placeSplitChild(ll, oldA, newA, 0, vertical, split.weightA);
+            placeSplitChild(ll, oldB, newB, 2, vertical, split.weightB);
+            ViewGroup.LayoutParams dividerParams = ll.getChildAt(1).getLayoutParams();
+            dividerParams.width = vertical ? match : gapPx;
+            dividerParams.height = vertical ? gapPx : match;
+            ll.getChildAt(1).setLayoutParams(dividerParams);
+        }
+        mSplitLayouts.put(split, ll);
         return ll;
+    }
+
+    /** Puts {@code child} into slot {@code index} of a reused split container, with its weight. */
+    private static void placeSplitChild(@NonNull LinearLayout ll, @Nullable View old,
+                                        @NonNull View child, int index, boolean vertical,
+                                        float weight) {
+        int match = LinearLayout.LayoutParams.MATCH_PARENT;
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            vertical ? match : 0, vertical ? 0 : match, weight);
+        if (child == old) {
+            child.setLayoutParams(params);
+            return;
+        }
+        int oldIndex = old == null ? -1 : ll.indexOfChild(old);
+        if (oldIndex >= 0) ll.removeViewAt(oldIndex);
+        if (child.getParent() instanceof ViewGroup) ((ViewGroup) child.getParent()).removeView(child);
+        ll.addView(child, Math.min(index, ll.getChildCount()), params);
     }
 
     private FrameLayout paneFrameFor(TerminalSession session) {
@@ -2747,16 +2808,20 @@ public class TerminalPaneController {
             if (frame.getParent() instanceof ViewGroup)
                 ((ViewGroup) frame.getParent()).removeView(frame);
         }
-        TerminalView attachedView = mPaneViews.get(session);
-        if (attachedView != null) {
-            mHost.configureAttachedPaneView(attachedView, session);
-            // Reapply the pane's pinned zoom after the host stamped its default, so re-showing a
-            // window (or any re-render) can't fold every pane back to the app-wide size.
-            Window owner = windowOf(session);
-            Leaf leaf = owner == null ? null : findLeafInWindow(owner, session);
-            if (leaf != null && leaf.fontSize > 0) attachedView.setTextSize(leaf.fontSize);
-        }
+        refreshAttachedPaneView(session);
         return frame;
+    }
+
+    /** The per-render re-stamp of a pane's view: the host's defaults, then the pane's own zoom. */
+    private void refreshAttachedPaneView(TerminalSession session) {
+        TerminalView attachedView = mPaneViews.get(session);
+        if (attachedView == null) return;
+        mHost.configureAttachedPaneView(attachedView, session);
+        // Reapply the pane's pinned zoom after the host stamped its default, so re-showing a
+        // window (or any re-render) can't fold every pane back to the app-wide size.
+        Window owner = windowOf(session);
+        Leaf leaf = owner == null ? null : findLeafInWindow(owner, session);
+        if (leaf != null && leaf.fontSize > 0) attachedView.setTextSize(leaf.fontSize);
     }
 
     /** The focused pane's pinned font size, or 0 while it follows the app-wide default. */

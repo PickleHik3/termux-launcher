@@ -357,6 +357,31 @@ public class TerminalPaneControllerTest {
         assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
     }
 
+    /** A split rebuilds only the branch it touched; the other pane is never detached. */
+    @Test
+    public void aSplitLeavesTheUntouchedPaneInItsContainer() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        TerminalSession first = controller.getActiveSession();
+        assertTrue(controller.split(LinearLayout.VERTICAL));
+        android.view.View firstFrame =
+            (android.view.View) controller.getViewForSession(first).getParent();
+        android.view.ViewGroup rootContainer = (android.view.ViewGroup) firstFrame.getParent();
+        assertSame("the tiled tree is the host's first child", host.getChildAt(0), rootContainer);
+
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+
+        assertEquals(3, controller.shellsOf(window).size());
+        assertSame("the root container is reused", rootContainer, host.getChildAt(0));
+        assertSame("the first pane kept its slot", rootContainer, firstFrame.getParent());
+        assertSame(firstFrame, rootContainer.getChildAt(0));
+        assertEquals(3, rootContainer.getChildCount());
+    }
+
     @Test
     public void dwindle_keepsDraggedDividersAcrossSplits() {
         FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
