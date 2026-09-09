@@ -127,8 +127,10 @@ fails when the catalogue has gone stale.
   Upstream's own split — `split_middle_column.xml` plus its layout modifier —
   was not ported (see "Deliberate removals"); this one is a step of its own
   after `modify`, parting every composed row at its midpoint by a gap given in
-  key-width units, and cutting a key that straddles the midpoint into two keys
-  of the same values. The view is told the same gap: it then keeps no view
+  key-width units. A key straddling the midpoint is cut into two keys of the
+  same values only when it is at least 1.5 units wide — the space bar; a letter
+  key keeps its shape and the parting takes its nearer edge, so the halves may
+  differ by one key. The view is told the same gap: it then keeps no view
   background and paints one slab under each run of keys instead, and refuses
   (`onTouch` returns false) a press that starts in the parting, so the press
   reaches whatever the keyboard is over. Both are inert at gap zero, which is

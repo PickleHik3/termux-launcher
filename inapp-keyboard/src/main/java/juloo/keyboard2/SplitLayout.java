@@ -16,7 +16,10 @@ public final class SplitLayout
   /** A parting thinner than this is not worth having; the layout stays as it was parsed. */
   public static final float MIN_GAP_UNITS = 0.1f;
 
-  /** A half thinner than this is not cut off a straddling key; the parting takes its edge. */
+  /** Only a key at least this wide is a bar the parting can be cut through. */
+  public static final float MIN_CUT_WIDTH_UNITS = 1.5f;
+
+  /** A half thinner than this is not cut off even a bar; the parting takes its edge. */
   private static final float MIN_HALF_UNITS = 0.25f;
 
   private static final float EPS = 1e-3f;
@@ -34,9 +37,11 @@ public final class SplitLayout
 
   /**
    * Every row parted by [gapUnits] at its midpoint: the gap is added to the shift of the key
-   * whose span crosses half the row, and a key straddling the midpoint — the space bar — is cut
-   * into two keys of the same value with the gap between them. Returns [keyboard] itself when
-   * there is nothing to part.
+   * whose span crosses half the row. A key straddling the midpoint is cut into two keys of the
+   * same value only when it is a bar — {@link #MIN_CUT_WIDTH_UNITS} wide or more, which is the
+   * space bar and nothing else. A letter key keeps its shape and the parting snaps to whichever
+   * of its edges is nearer, so the two halves may differ by a key. Returns [keyboard] itself
+   * when there is nothing to part.
    */
   public static KeyboardData split(KeyboardData keyboard, float gapUnits)
   {
@@ -78,15 +83,16 @@ public final class SplitLayout
       }
       if (half < right - EPS)
       {
-        if (half - left < MIN_HALF_UNITS)
-          partAt = i;
-        else if (right - half < MIN_HALF_UNITS)
-          partAt = i + 1;
-        else
+        if (key.width >= MIN_CUT_WIDTH_UNITS && half - left >= MIN_HALF_UNITS
+            && right - half >= MIN_HALF_UNITS)
         {
           partAt = i;
           cutWidth = half - left;
         }
+        else
+          // Not a bar: the key stays whole and the parting takes its nearer edge, the left one
+          // when the midpoint sits dead centre.
+          partAt = half - left <= right - half ? i : i + 1;
         break;
       }
       x = right;
