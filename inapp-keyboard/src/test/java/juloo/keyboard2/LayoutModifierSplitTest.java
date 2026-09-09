@@ -70,16 +70,61 @@ public class LayoutModifierSplitTest
   }
 
   @Test
-  public void aMidpointNearAKeyEdgeTakesTheEdgeInsteadOfLeavingASliver() throws Exception
+  public void aLetterKeyOnTheMidpointIsNeverCutAndTheHalvesDifferByOne() throws Exception
   {
-    // Half of 4.2 is 2.1: a tenth of a unit inside the third key.
+    // Half of 9 is 4.5, dead centre of the fifth key: the halves cannot both have four and a
+    // half keys, and a letter key is not a bar, so the parting takes its left edge.
+    KeyboardData keyboard = keyboard(
+        "<row><key c='a'/><key c='b'/><key c='c'/><key c='d'/><key c='e'/>"
+        + "<key c='f'/><key c='g'/><key c='h'/><key c='i'/></row>");
+
+    KeyboardData.Row row = LayoutModifier.split(keyboard, 1f).rows.get(0);
+
+    assertEquals("no letter key is cut in two", 9, row.keys.size());
+    assertArrayEquals(new float[]{ 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f }, shifts(row), EPS);
+    assertArrayEquals(new float[]{ 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f }, widths(row), EPS);
+  }
+
+  @Test
+  public void aBarOnTheMidpointOfThatSameRowIsCutInTwo() throws Exception
+  {
+    // Half of 8 is 4, dead centre of the 4-unit bar, which is wide enough to be cut.
+    KeyboardData keyboard = keyboard(
+        "<row><key c='a'/><key c='b'/><key width='4' c='space'/>"
+        + "<key c='c'/><key c='d'/></row>");
+
+    KeyboardData.Row row = LayoutModifier.split(keyboard, 1f).rows.get(0);
+
+    assertEquals(6, row.keys.size());
+    assertArrayEquals(new float[]{ 1f, 1f, 2f, 2f, 1f, 1f }, widths(row), EPS);
+    assertArrayEquals(new float[]{ 0f, 0f, 0f, 1f, 0f, 0f }, shifts(row), EPS);
+  }
+
+  @Test
+  public void aMidpointNearAKeyEdgeTakesThatEdge() throws Exception
+  {
+    // Half of 4.2 is 2.1: a tenth of a unit inside the third key, whose left edge is nearer.
     KeyboardData keyboard = keyboard(
         "<row><key c='a'/><key c='b'/><key width='1.2' c='c'/><key c='d'/></row>");
 
     KeyboardData.Row row = LayoutModifier.split(keyboard, 1f).rows.get(0);
 
-    assertEquals("the sliver is not cut off", 4, row.keys.size());
+    assertEquals(4, row.keys.size());
     assertArrayEquals(new float[]{ 0f, 0f, 1f, 0f }, shifts(row), EPS);
+  }
+
+  @Test
+  public void aMidpointPastTheMiddleOfAKeyTakesItsRightEdge() throws Exception
+  {
+    // Half of 4.2 is 2.1, and the second key spans 1..2.2: its right edge is the nearer one.
+    KeyboardData keyboard = keyboard(
+        "<row><key c='a'/><key width='1.2' c='b'/><key c='c'/><key c='d'/></row>");
+
+    KeyboardData.Row row = LayoutModifier.split(keyboard, 1f).rows.get(0);
+
+    assertEquals(4, row.keys.size());
+    assertArrayEquals(new float[]{ 0f, 0f, 1f, 0f }, shifts(row), EPS);
+    assertArrayEquals(new float[]{ 2.2f, 3.2f }, SplitLayout.rowGap(row, 1f), EPS);
   }
 
   @Test
@@ -139,8 +184,9 @@ public class LayoutModifierSplitTest
   @Test
   public void theBandTheRowsShareIsWhatTheirPartingsOverlap() throws Exception
   {
-    // The first row parts at 2.0; the second's midpoint is a tenth of a unit short of a key
-    // edge, so it snaps to 2.2 and the two partings overlap by 0.8 of the gap.
+    // The first row parts at 2.0; the second's midpoint is a tenth of a unit past the middle of
+    // its second key, so it snaps to that key's right edge at 2.2 and the two partings overlap
+    // by 0.8 of the gap.
     KeyboardData keyboard = keyboard(
         "<row><key c='a'/><key c='b'/><key c='c'/><key c='d'/></row>"
         + "<row><key c='e'/><key width='1.2' c='f'/><key c='g'/><key c='h'/></row>");
@@ -157,8 +203,9 @@ public class LayoutModifierSplitTest
   @Test
   public void rowsWhosePartingsMissEachOtherShareNoBand() throws Exception
   {
-    // Five unit keys part at 2.5; the second row's own shift pushes its parting to 3.0, half a
-    // unit away, which a 0.4 gap cannot bridge.
+    // Five unit keys part at 2.0 — the midpoint is the centre of the third key, which is no bar,
+    // so the parting takes its left edge; the second row's own shift pushes its parting to 3.0, a
+    // whole unit away, which a 0.4 gap cannot bridge.
     KeyboardData keyboard = keyboard(
         "<row><key c='a'/><key c='b'/><key c='c'/><key c='d'/><key c='e'/></row>"
         + "<row><key c='f'/><key shift='2' c='g'/><key c='h'/></row>");
@@ -219,9 +266,13 @@ public class LayoutModifierSplitTest
     float[] band = SplitLayout.commonGap(split, gap);
     assertNotNull("the rows share a band", band);
     assertTrue("the shared band is worth pointing in", band[1] - band[0] > gap / 2f);
-    // The space bar straddles the midpoint of the bottom row, so that row gains a key.
+    // The space bar straddles the midpoint of the bottom row, so that row gains a key -- and it
+    // is the only row that does: no letter key is ever cut in two.
     assertEquals(composed.rows.get(composed.rows.size() - 1).keys.size() + 1,
         split.rows.get(split.rows.size() - 1).keys.size());
+    for (int i = 0; i < split.rows.size() - 1; i++)
+      assertEquals("row " + i + " keeps every key whole",
+          composed.rows.get(i).keys.size(), split.rows.get(i).keys.size());
   }
 
   private static KeyboardData keyboard(String rows) throws Exception
