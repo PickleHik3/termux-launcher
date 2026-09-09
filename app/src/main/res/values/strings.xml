@@ -134,7 +134,7 @@
     </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_wallpaper_alignment_title">Wallpaper alignment</string>
-    <string name="settings_wallpaper_alignment_summary">Scales the wallpaper behind launcher surfaces so it lines up with the one behind the app.</string>
+    <string name="settings_wallpaper_alignment_summary">Line up the wallpaper behind the launcher surfaces with the one on your screen.</string>
     <string name="settings_sessions_sidebar_header">Sessions sidebar</string>
     <string name="settings_sessions_opacity_title">Sessions opacity</string>
     <string name="settings_sessions_opacity_summary">Background opacity of the legacy sessions drawer, shown only while split panes are off.</string>

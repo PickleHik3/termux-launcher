@@ -92,6 +92,8 @@ import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.chrome.SurfaceDirtyLedger;
+import com.termux.app.chrome.WallpaperBackdropPolicy;
+import com.termux.app.chrome.WallpaperBackdropView;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.place.ExtraKeysColumnGeometry;
@@ -662,6 +664,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bitmap mPaneGlassFrame;
     /** The unblurred wallpaper frame the Display page's corner mask paints; held so no eviction recycles it under a draw. */
     @Nullable private Bitmap mWallBehindFrame;
+    /** The self-drawn wallpaper behind everything; see {@link WallpaperBackdropPolicy}. */
+    @Nullable private WallpaperBackdropView mWallpaperBackdropView;
     /**
      * The colour the wall's ground was last painted with — what shows between and around the
      * panes — so a page that paints its own corners (the display) paints them with the same.
@@ -1000,12 +1004,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPreferences.migrateTerminalMarginAdjustmentDefaultIfNeeded();
         // Every blur frame this activity captures is aligned with this value; remembering it here
         // is what lets a later styling reload tell a moved slider from any other restyle.
-        mAppliedWallpaperRenderZoomPercent = mPreferences.getWallpaperRenderZoom();
+        mAppliedWallpaperRenderZoomPercent = effectiveWallpaperRenderZoomPercent();
         mLauncherTransitionController = new LauncherTransitionController(this, mPreferences);
         setMargins();
         setSuggestionBarView();
         mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
         mTermuxActivityRootView.setActivity(this);
+        mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
         mTermuxActivityRootView.setOnApplyWindowInsetsListener(new TermuxActivityRootView.WindowInsetsListener());
         View content = findViewById(android.R.id.content);
@@ -1944,10 +1949,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // panes have no slab of their own), the terminal surface over the base colour
                 // otherwise. Every time the two were computed separately they drifted apart, and
                 // the arcs showed as four faint squares a shade off the wall beside them.
-                if (mWallGroundPainted) return mWallGroundColor;
-                return shouldUseWallpaperPassthroughMode() ? resolveWallpaperBackdropDimColor()
-                    : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
-                        R.color.termux_surface_base);
+                return wallGroundColor();
             }
 
             @Override public int paneGlassTintColor() {
@@ -2011,10 +2013,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * rather than in a per-surface bitmap.
      */
     private void updateTerminalGlassFrost() {
+        // The backdrop shows the very frame the crops below are cut from, so it is dressed in this
+        // same pass: a backdrop and a glass that disagreed for even one frame would show as the
+        // misalignment this whole mode exists to remove.
+        updateWallpaperBackdrop();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         mPaneController.setSurfaceStyle(style);
         if (mPaneWallController != null) mPaneWallController.applyStyle(style);
+    }
+
+    /**
+     * Whether the launcher paints the wallpaper itself or leaves it to the ROM.
+     *
+     * @see WallpaperBackdropPolicy
+     */
+    @NonNull
+    private WallpaperBackdropPolicy.Mode wallpaperBackdropMode() {
+        return WallpaperBackdropPolicy.mode(shouldUseWallpaperPassthroughMode(),
+            isLiveWallpaperActive(), !mWallpaperReadPermissionDenied);
+    }
+
+    /**
+     * Dresses the self-drawn wallpaper behind everything with the shared radius-0 frame.
+     *
+     * <p>Radius 0 is the capture itself, and the pane wall's corner arcs already ask for it, so the
+     * backdrop costs no extra frame and no extra copy. A miss returns null while the blur worker
+     * decodes, and the view decides for itself whether the frame it still holds is safe to keep;
+     * {@code onBlurFrameReady} brings this pass round again when the new one lands.</p>
+     */
+    private void updateWallpaperBackdrop() {
+        WallpaperBackdropView backdrop = mWallpaperBackdropView;
+        if (backdrop == null) return;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (wallpaperFrame == null
+            || wallpaperBackdropMode() != WallpaperBackdropPolicy.Mode.SELF_DRAWN) {
+            backdrop.hide();
+            return;
+        }
+        Bitmap frame = mChrome.blurCache().obtain(0, wallpaperFrame);
+        backdrop.showFrame(frame, getManagedWallpaperFrameRect(), wallGroundColor());
+    }
+
+    /**
+     * The colour the wall's ground is painted with — the wallpaper dim, with the terminal tint
+     * folded in when the panes carry no slab of their own. Read by the pane wall's corner arcs and
+     * by the self-drawn backdrop, which paints it over its frame the way the root's background
+     * paints it over the system wallpaper.
+     */
+    private int wallGroundColor() {
+        if (mWallGroundPainted) return mWallGroundColor;
+        return shouldUseWallpaperPassthroughMode() ? resolveWallpaperBackdropDimColor()
+            : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
+                R.color.termux_surface_base);
     }
 
     /**
@@ -2061,6 +2112,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (root != null) {
             root.setBackgroundColor(color);
         }
+        // The self-drawn backdrop covers that background, so it carries the same dim over its own
+        // frame — set here, with the root's, so the two can never read differently.
+        if (mWallpaperBackdropView != null) mWallpaperBackdropView.setDimColor(color);
     }
 
     private void applyTerminalStatusBarSurfaceColor(boolean showSurface, int terminalSurfaceColor) {
@@ -4589,10 +4643,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * looks like. Fit the number; do not nudge it by eye.
      */
     private float systemWallpaperRenderZoom() {
+        return effectiveWallpaperRenderZoomPercent() / 100f;
+    }
+
+    /**
+     * The zoom the captures are actually taken at: the slider in passthrough mode, and 1.0 while
+     * the launcher draws the wallpaper itself, where backdrop and glass share one frame and a zoom
+     * would only slide the glass off our own backdrop.
+     */
+    private int effectiveWallpaperRenderZoomPercent() {
         int percent = mPreferences != null
             ? mPreferences.getWallpaperRenderZoom()
             : TermuxAppSharedPreferences.defaultWallpaperRenderZoom(Build.MANUFACTURER);
-        return percent / 100f;
+        return WallpaperBackdropPolicy.renderZoomPercent(wallpaperBackdropMode(), percent);
     }
 
     /**
@@ -4603,11 +4666,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * serving the misaligned crops. The value the frames were captured at is recorded in
      * {@code onCreate}, so the comparison holds for a change made in Settings before this process
      * had ever reloaded its styling.
+     *
+     * <p>It is the <em>effective</em> zoom that is compared, so switching to or from a live
+     * wallpaper — which moves the mode, and with it the zoom, without anyone touching the slider —
+     * drops the frames the same way a slider drag does.
      */
     private void applyWallpaperRenderZoomIfChanged() {
         if (mPreferences == null)
             return;
-        int percent = mPreferences.getWallpaperRenderZoom();
+        int percent = effectiveWallpaperRenderZoomPercent();
         if (percent == mAppliedWallpaperRenderZoomPercent)
             return;
         mAppliedWallpaperRenderZoomPercent = percent;
@@ -4794,6 +4861,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (frame == mPaneGlassFrame || frame == mWallBehindFrame) {
             return true;   // a pane is drawing it right now; recycling it would crash its next draw
+        }
+        if (mWallpaperBackdropView != null && mWallpaperBackdropView.heldFrame() == frame) {
+            // The self-drawn backdrop keeps the frame it is showing across a clear, so the wall
+            // does not flash the system wallpaper while the replacement is on the blur worker.
+            return true;
         }
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
             R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop,
@@ -5631,6 +5703,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!ChromePolicy.trimReleasesBlurFrames(level)) {
             return;
         }
+        // Before the cache clear, so the frame the backdrop is holding is actually recycled rather
+        // than merely dropped: it is a full-screen bitmap, and this level of pressure is exactly
+        // what it must not survive. Every glass surface goes flat in the same pass.
+        if (mWallpaperBackdropView != null) mWallpaperBackdropView.hide();
         mChrome.onTrimMemory();
         clearInAppKeyboardBackdrop();
         clearAccessoryRenderEffectBackdrop();
@@ -5804,6 +5880,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // landscape session collapsed stayed collapsed after rotating back, with their preferences
         // still enabled, until something else happened to sync the accessory stack.
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        // The frame rect has just moved, and the frame the backdrop holds was captured for the old
+        // one. This runs after the new layout, so it is the first point that can tell: it puts the
+        // backdrop away rather than let it show a shifted crop until the new capture lands.
+        updateWallpaperBackdrop();
         updateWindowBackgroundForCurrentSession();
     }
 

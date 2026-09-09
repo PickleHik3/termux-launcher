@@ -20,6 +20,7 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.launcherctl.LauncherCtlNotificationStore;
@@ -94,6 +95,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureDynamicColorsHint();
         refreshThemeEntries();
         updateKeyboardLookEnabled(context);
+        configureWallpaperAlignment(context);
     }
 
     @Override
@@ -110,6 +112,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureDynamicColorsHint();
         refreshThemeEntries();
         if (context != null) updateKeyboardLookEnabled(context);
+        if (context != null) updateWallpaperAlignmentVisibility(context);
     }
 
     /**
@@ -122,6 +125,45 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         if (category == null) return;
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
         category.setEnabled(preferences != null && preferences.isInAppKeyboardEnabled());
+    }
+
+    /**
+     * Wallpaper alignment only has something to correct while the system is the one drawing the
+     * wallpaper. With a still wallpaper the launcher draws it itself from the frame its own
+     * surfaces are cut from, so the row is put away rather than left as a knob that does nothing;
+     * a live wallpaper (or the switch being off) brings it back. The switch above it is on the
+     * same page, so it re-checks on the spot as well as on every resume.
+     */
+    private void configureWallpaperAlignment(@NonNull Context context) {
+        updateWallpaperAlignmentVisibility(context);
+        SwitchPreferenceCompat wallpaperSwitch = findPreference("use_system_wallpaper");
+        if (wallpaperSwitch == null) return;
+        wallpaperSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
+            Preference alignment = findPreference("wallpaper_render_zoom");
+            if (alignment != null) {
+                alignment.setVisible(WallpaperBackdropPolicy.alignmentSliderApplies(
+                    WallpaperBackdropPolicy.mode(Boolean.TRUE.equals(newValue),
+                        isLiveWallpaperActive(context), true)));
+            }
+            return true;
+        });
+    }
+
+    private void updateWallpaperAlignmentVisibility(@NonNull Context context) {
+        Preference alignment = findPreference("wallpaper_render_zoom");
+        if (alignment == null) return;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
+        boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
+        alignment.setVisible(WallpaperBackdropPolicy.alignmentSliderApplies(
+            WallpaperBackdropPolicy.mode(wallpaperMode, isLiveWallpaperActive(context), true)));
+    }
+
+    private static boolean isLiveWallpaperActive(@NonNull Context context) {
+        try {
+            return android.app.WallpaperManager.getInstance(context).getWallpaperInfo() != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void refreshThemeEntries() {

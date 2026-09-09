@@ -18,6 +18,17 @@
             android:clipChildren="false"
             android:clipToPadding="false">
 
+        <!-- The wallpaper the launcher draws for itself, from the same captured frame every glass
+             crop is cut from, so the two line up without guessing the ROM's composite zoom. Painted
+             at the decor's rect (past this container's bounds, under the transparent system bars),
+             and invisible whenever the system is drawing the wallpaper instead. -->
+        <com.termux.app.chrome.WallpaperBackdropView
+            android:id="@+id/wallpaper_backdrop"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="invisible" />
+
         <FrameLayout
             android:id="@+id/terminal_status_bar_background"
             android:layout_width="match_parent"
