@@ -642,6 +642,19 @@ re-apply (`RemoteViews#applyActions` 9–12 ms, that is T9), and a second commit
 the insets dispatch requests an apply mid-traversal. Those three are what is left of the arrival
 frame.
 
+**Landed 2026-09-09: the launcher draws its wallpaper (223e13a1).** The glass could never be exactly
+aligned while the system drew the wallpaper behind a translucent window: the ROM's composite zoom is
+per wallpaper (Nothing OS: 1.03 for a 1328×2654 store, 1.084 for 1400×3100, 1.0 for a display-sized
+image; `setWallpaperZoomOut` ignored) and the AOSP request the app made was the maximum zoom, not
+true size (WallpaperController maps zoomOut 0 → `config_wallpaperMaxScale`; fixed to 1 in 6692e132).
+Now `WallpaperBackdropView`, first child of the root container, paints the shared radius-0 frame at
+the decor rect, opaque, so every glass crop is cut from the picture actually on screen. Mode policy
+(`WallpaperBackdropPolicy`): self-drawn when the feature is on, the wallpaper is static and readable;
+otherwise passthrough with the "Wallpaper alignment" slider (hidden in self-drawn mode). Measured on
+pong with a coordinate-grid wallpaper: glass vs real wallpaper fit at zoom 1.01, shift (−2, 1), from
+1.08 before; no black first frame (screens at 1.2 s and 2.7 s after launch fully painted). Page-slide
+cost with the backdrop not yet re-traced.
+
 ## Recommended order
 
 **Landed on dev, 2026-09-08 (uncommitted at the time of writing): T10 and A1.** Twelve trace
