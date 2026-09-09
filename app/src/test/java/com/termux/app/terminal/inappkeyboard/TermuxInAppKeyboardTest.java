@@ -117,6 +117,33 @@ public class TermuxInAppKeyboardTest {
     }
 
     @Test
+    public void everyVisibilityChangeButAFocusOneIsReported() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        List<String> reported = new java.util.ArrayList<>();
+        mController.setVisibilityListener(shown -> reported.add(shown ? "shown" : "hidden"));
+
+        // The dock button, the keyboard's own hide key, a tool: whatever the reason, a real
+        // change is reported once.
+        mController.hide(TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
+        mController.show(TermuxInAppKeyboard.ShowReason.TOOL);
+        assertEquals(List.of("hidden", "shown"), reported);
+
+        // A call that changes nothing is not a change.
+        mController.show(TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+        assertEquals(List.of("hidden", "shown"), reported);
+
+        // The text-focus policy's own doing must never come back to it.
+        mController.hide(TermuxInAppKeyboard.HideReason.FOCUS);
+        mController.show(TermuxInAppKeyboard.ShowReason.FOCUS);
+        assertEquals(List.of("hidden", "shown"), reported);
+
+        // And the wall paging away from the terminal is the user's as far as the policy cares.
+        mController.hide(TermuxInAppKeyboard.HideReason.WALL_PAGE);
+        assertEquals(List.of("hidden", "shown", "hidden"), reported);
+    }
+
+    @Test
     public void toggleShowAndHideKeepTheirReasons() {
         mPreferences.setInAppKeyboardEnabled(true);
         mController.onCreate(null);

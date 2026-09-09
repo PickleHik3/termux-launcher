@@ -309,6 +309,26 @@ public class DisplayTextFocusPolicyTest {
     }
 
     @Test
+    public void aKeyboardTheUserPutDownWhilePinned_unpinsAndTextTapsWorkAgain() {
+        // Arriving with "keyboard on enter" pins the policy...
+        policy.onPlaceLeft();
+        policy.onPlaceEntered(true);
+        keyboard.up = true;
+        assertEquals(State.PINNED, policy.state());
+        tapOver("xterm");
+        assertEquals("pinned: the keyboard is the user's", List.of(), keyboard.calls);
+
+        // ...and the dock's keyboard button putting it down is reported as the user's doing,
+        // whatever reason the keyboard hid for, so the place goes back to following text fields.
+        policy.onUserKeyboardIntent(false);
+        assertEquals(State.CLOSED, policy.state());
+        keyboard.up = false;
+        tapOver("xterm");
+        assertEquals(State.AUTO_OPEN, policy.state());
+        assertEquals(List.of("show"), keyboard.calls);
+    }
+
+    @Test
     public void everyDecisionIsTraced() {
         trace.clear();
         tapOver("xterm");
