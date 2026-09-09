@@ -215,7 +215,9 @@ page now, one place and orientation at a time, and its dock look is tuned from t
 
 The Linux display has its own page: the **Display** switch runs a Linux desktop or X11 apps
 as the third place of the home screen — see [The Linux display](X11_Display.md). Under it sit touch
-mode, resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
+mode, **Keyboard follows text fields** — the keyboard opens when you tap a text field on the
+display and closes when you tap elsewhere, on by default and available in Touchscreen touch mode —
+resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
 the window manager started with the display, the mark on the Display place's badge in the status
 bar, starting the display with the launcher, the start command, pointing new shells at the
 display, two compatibility switches, and what your GPU can do for Linux apps. Where the extra keys
