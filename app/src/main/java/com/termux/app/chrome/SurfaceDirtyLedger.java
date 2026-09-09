@@ -67,6 +67,7 @@ public final class SurfaceDirtyLedger {
     @NonNull private final EnumMap<FrostRect, Rect> mFrostRects = new EnumMap<>(FrostRect.class);
     @NonNull private final EnumMap<FrostRadius, Integer> mFrostRadii = new EnumMap<>(FrostRadius.class);
     private boolean mFrostDirty = true;
+    private long mDirtyGeneration;
 
     public SurfaceDirtyLedger() {
         for (Backdrop backdrop : Backdrop.values())
@@ -85,12 +86,14 @@ public final class SurfaceDirtyLedger {
 
     public void markDirty(@NonNull Backdrop backdrop) {
         entry(backdrop).dirty = true;
+        mDirtyGeneration++;
     }
 
     /** Invalidates every blurred backdrop — a wallpaper, style or blur change moves all of them. */
     public void markAllBackdropsDirty() {
         for (Backdrop backdrop : Backdrop.values())
             entry(backdrop).dirty = true;
+        mDirtyGeneration++;
     }
 
     public int lastRadiusDp(@NonNull Backdrop backdrop) {
@@ -131,11 +134,13 @@ public final class SurfaceDirtyLedger {
         entry.lastRadiusDp = -1;
         entry.lastManagedSource = false;
         entry.lastRect.setEmpty();
+        mDirtyGeneration++;
     }
 
     /** Forgets only the geometry, leaving the radius/source memo — a pure re-crop request. */
     public void invalidateRect(@NonNull Backdrop backdrop) {
         entry(backdrop).lastRect.setEmpty();
+        mDirtyGeneration++;
     }
 
     // ------------------------------------------------------------------- frosts
@@ -146,6 +151,7 @@ public final class SurfaceDirtyLedger {
 
     public void markFrostDirty() {
         mFrostDirty = true;
+        mDirtyGeneration++;
     }
 
     public void clearFrostDirty() {
@@ -171,6 +177,16 @@ public final class SurfaceDirtyLedger {
 
     public void setFrostRadiusDp(@NonNull FrostRadius key, int radiusDp) {
         mFrostRadii.put(key, radiusDp);
+    }
+
+    /**
+     * How many times a surface has been told its crop went stale, ever. Only the difference
+     * across a span of work means anything: the render pass reads it either side of its own run,
+     * because a pass that invalidated nothing has nothing left to re-cut, and a bare re-render
+     * request made from inside it is then the pass asking to be run again.
+     */
+    public long dirtyGeneration() {
+        return mDirtyGeneration;
     }
 
     @NonNull

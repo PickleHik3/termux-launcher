@@ -87,6 +87,46 @@ public class ChromeRendererTest {
         assertEquals(2, surfaces.applied.size());
     }
 
+    /**
+     * The post-layout render pass exists to re-cut crops against geometry the commit could not
+     * read, so a commit whose apply asks for it gets exactly one — and that pass asking again for
+     * itself is not a reason to run a third. Two page changes cost 37 of these passes when every
+     * caller inside a pass could book its successor (Pong, 2026-09-09).
+     */
+    @Test
+    public void anApplyThatAsksForARenderGetsOnePassNotAChain() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_ACCESSORY_RENDER;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+
+        assertEquals("the frame's commit, then one post-layout pass", 2, surfaces.applied.size());
+        assertEquals(1, surfaces.invariantsEnforced);
+        assertFalse(chrome.isRenderSyncPending());
+
+        // And nothing is left circling.
+        mainLooper().idle();
+        assertEquals(2, surfaces.applied.size());
+    }
+
+    /** A pass that left a crop stale has work its own run could not do, and books the follow-up. */
+    @Test
+    public void aRenderPassThatInvalidatesACropBooksOneMore() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes =
+            ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_DOCK_BACKDROP;
+        surfaces.applyRequestsRemaining = 2;   // the commit's apply, then the first render pass
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+
+        assertEquals("the commit, the pass it books, and the pass that one earns",
+            3, surfaces.applied.size());
+        assertEquals(2, surfaces.invariantsEnforced);
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
     /** The commit runs before layout, the render after it: two phases, so two passes. */
     @Test
     public void anApplyAndARenderInOneFrameAreStillTwoPasses() {

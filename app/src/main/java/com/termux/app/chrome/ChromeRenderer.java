@@ -153,6 +153,10 @@ public final class ChromeRenderer {
 
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     private boolean mRenderSyncPending;
+    /** True only while {@link #mRenderSyncRunnable} is on the stack. */
+    private boolean mRenderSyncRunning;
+    /** Set when the render pass's own apply asked for another render pass. */
+    private boolean mRenderSyncAskedForItself;
 
     /** True while a {@link #SCOPE_APPLY_THIS_FRAME} commit waits for its frame. */
     private boolean mCommitPending;
@@ -180,8 +184,23 @@ public final class ChromeRenderer {
         mBlurWorker = blurWorker;
         mRenderSyncRunnable = () -> {
             mRenderSyncPending = false;
-            mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
-            mSurfaces.enforceAccessoryFxInvariants();
+            mRenderSyncAskedForItself = false;
+            // What the pass is for is re-cutting the crops that went stale under settled
+            // geometry. Anything the apply below invalidates is therefore work this pass cannot
+            // do — it has already read the geometry — and earns the one follow-up pass; anything
+            // it merely asks for again does not. Two page changes cost 37 of these passes for a
+            // handful of distinct states, because the apply asks unconditionally (Pong, 2026-09-09).
+            long dirtyBefore = mLedger.dirtyGeneration();
+            mRenderSyncRunning = true;
+            try {
+                mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+                mSurfaces.enforceAccessoryFxInvariants();
+            } finally {
+                mRenderSyncRunning = false;
+            }
+            if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
+                requestSync(SCOPE_ACCESSORY_RENDER);
+            }
         };
         mBlurHeartbeatRunnable = new Runnable() {
             @Override
@@ -307,9 +326,16 @@ public final class ChromeRenderer {
                 Trace.endSection();
             }
         }
-        if ((scopes & SCOPE_ACCESSORY_RENDER) != 0 && !mRenderSyncPending) {
-            mRenderSyncPending = true;
-            mHandler.post(mRenderSyncRunnable);
+        if ((scopes & SCOPE_ACCESSORY_RENDER) != 0) {
+            if (mRenderSyncRunning) {
+                // The pass that would run is the pass asking. It decides for itself, once, at the
+                // end of its run — from whether it left anything stale — rather than each caller
+                // inside it booking a successor.
+                mRenderSyncAskedForItself = true;
+            } else if (!mRenderSyncPending) {
+                mRenderSyncPending = true;
+                mHandler.post(mRenderSyncRunnable);
+            }
         }
         if ((scopes & SCOPE_BLUR_HEALTH) != 0) {
             restartBlurHeartbeat();
@@ -437,6 +463,7 @@ public final class ChromeRenderer {
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);
         mRenderSyncPending = false;
+        mRenderSyncAskedForItself = false;
     }
 
     /**
@@ -449,6 +476,7 @@ public final class ChromeRenderer {
         mHandler.removeCallbacks(mRenderSyncRunnable);
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mRenderSyncPending = false;
+        mRenderSyncAskedForItself = false;
     }
 
     public void onDestroy() {

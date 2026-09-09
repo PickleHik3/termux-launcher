@@ -920,14 +920,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The accessory geometry pass's skip path used to route its reason string through a keyword
-     * match to decide whether the blurred backdrops were invalidated too. Kept verbatim so a
-     * styling reload still drops them and a layout pass still does not.
+     * What a throttled accessory geometry pass still has to ask for. The pass itself moved
+     * nothing, so there is nothing for a render pass to re-cut — unless the reason is that the
+     * wallpaper, the style or the blur changed, which invalidates the crops whether or not the
+     * geometry settled. It used to ask for a render pass unconditionally, so a geometry pass that
+     * skipped its own work still cost a full apply of the chrome.
      */
     private static int accessorySkipScopes(@NonNull String reason) {
-        return ChromeRenderer.SCOPE_ACCESSORY_RENDER
-            | (reason.contains("wallpaper") || reason.contains("style") || reason.contains("blur")
-                ? ChromeRenderer.SCOPE_BACKDROPS : 0);
+        return reason.contains("wallpaper") || reason.contains("style") || reason.contains("blur")
+            ? ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER : 0;
     }
 
     /** The rotation geometry pass waiting for the new layout, or null when none is pending. */
@@ -6584,9 +6585,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         mLastAccessoryGeometryApplyUptimeMs = now;
-        updateAppLauncherBarHeight();
-        setTerminalToolbarHeight(true);
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        // Only a pass that moved something needs the frame's apply. The layout listeners that
+        // drive this pass fire on every band resize during a page slide, and each one used to book
+        // an apply whether or not the dock and the stack came out where they already were.
+        boolean dockMoved = updateAppLauncherBarHeight();
+        boolean stackMoved = setTerminalToolbarHeight(true);
+        if (dockMoved || stackMoved)
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
     }
 
     static int calculateSuggestionBarMaxButtons(DisplayMetrics displayMetrics) {
@@ -8545,10 +8550,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
     }
 
-    private void updateAppLauncherBarHeight() {
+    private boolean updateAppLauncherBarHeight() {
         if (mPreferences == null)
-            return;
-        applyDockLayout(buildDockLayout(0));
+            return false;
+        return applyDockLayout(buildDockLayout(0));
     }
 
     private boolean isLandscapeOrientation() {
@@ -9031,22 +9036,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setTerminalToolbarHeight(true);
     }
 
-    private void setTerminalToolbarHeight(boolean requestTerminalResize) {
+    /**
+     * Sizes the extra-keys row, the dock and the accessory stack, and answers whether any of that
+     * actually moved — which is what decides whether the chrome has to be applied again and its
+     * crops re-cut. A pass that lands the stack exactly where it already was leaves every crop
+     * valid, and used to book a full render pass regardless.
+     */
+    private boolean setTerminalToolbarHeight(boolean requestTerminalResize) {
         // Frozen while the app drawer plane is engaged: this path resizes the toolbar and the
         // terminal, and driving it per animation frame is a SIGWINCH storm. Replayed on close.
         if (isAppDrawerEngaged()) {
             mAppDrawerGeometryFreezePending = true;
-            return;
+            return false;
         }
         final ViewPager terminalToolbarViewPager = getTerminalToolbarViewPager();
         View accessoryStackContainer = findViewById(R.id.accessory_stack_container);
         if (terminalToolbarViewPager == null || accessoryStackContainer == null)
-            return;
+            return false;
         // Not before setTerminalToolbarView() has read the pager's XML height: a pass this early
         // (a wall page restored during creation, an insets dispatch) would write a zero height
         // that the capture then reads back, and the row would stay collapsed for the session.
         if (mTerminalToolbarDefaultHeight <= 0)
-            return;
+            return false;
         ViewGroup.LayoutParams toolbarLayoutParams = terminalToolbarViewPager.getLayoutParams();
 
         int matrix = 0;
@@ -9073,8 +9084,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The keyboard coming and going is also when the place's claim on the system IME changes.
         applyPlaceSystemImeOwner();
         int toolbarHeightPx = state.extraKeysRowEnabled ? measuredToolbarHeightPx : 0;
-        toolbarLayoutParams.height = toolbarHeightPx;
-        terminalToolbarViewPager.setLayoutParams(toolbarLayoutParams);
+        boolean toolbarHeightChanged = toolbarLayoutParams.height != toolbarHeightPx;
+        if (toolbarHeightChanged) {
+            toolbarLayoutParams.height = toolbarHeightPx;
+            terminalToolbarViewPager.setLayoutParams(toolbarLayoutParams);
+        }
 
         DockLayout dockMetrics = buildDockLayout(0);
         int accessoryBottomMarginPx = resolveAccessoryStackBottomMarginPx(state);
@@ -9093,7 +9107,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dockMetrics = buildDockLayout(
                 -(projectedStackPx - keyboardOverlapPx - maxAccessoryStackPx));
         }
-        applyDockLayout(dockMetrics);
+        boolean dockMoved = applyDockLayout(dockMetrics);
         int dockContentHeightPx = state.toolbarShown
             ? dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0;
         int accessoryContentHeightPx = computeAccessoryStackHeight(
@@ -9128,7 +9142,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
         int flushBottomInsetPx = terminalFlushPaddingPx / 2;
-        if (accessoryStackContainer.getPaddingBottom() != flushBottomInsetPx) {
+        boolean flushInsetChanged = accessoryStackContainer.getPaddingBottom() != flushBottomInsetPx;
+        if (flushInsetChanged) {
             accessoryStackContainer.setPadding(
                 accessoryStackContainer.getPaddingLeft(),
                 accessoryStackContainer.getPaddingTop(),
@@ -9140,7 +9155,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryStackContainer,
             accessoryBottomMarginPx
         );
-        applyContentKeyboardOverlap(keyboardOverlapPx);
+        boolean overlapChanged = applyContentKeyboardOverlap(keyboardOverlapPx);
         int contentReservationPx = KeyboardOverlayPolicy.contentReservationPx(
             combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
         boolean contentReservationChanged = contentReservationPx != mAppliedContentReservationPx;
@@ -9159,7 +9174,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
             });
         }
-        mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        // The post-layout render pass re-cuts the crops for geometry this pass moved. Nothing
+        // moved, nothing to re-cut: a page slide fires this pass on every band resize, and asking
+        // unconditionally is half of what made one page change cost 17 full applies.
+        boolean moved = toolbarHeightChanged || dockMoved || flushInsetChanged || overlapChanged
+            || accessoryHeightChanged || accessoryMarginChanged || contentReservationChanged
+            || keyboardShownChanged;
+        if (moved) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        return moved;
     }
 
     static boolean shouldRequestTerminalResize(boolean requested, boolean heightChanged,
@@ -9186,16 +9208,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * bottom margin against the {@code layout_above} rule that otherwise couples the two. The stack
      * is the later sibling, so it draws over what the content keeps.
      */
-    private void applyContentKeyboardOverlap(int overlapPx) {
+    private boolean applyContentKeyboardOverlap(int overlapPx) {
         View content = findViewById(R.id.drawer_layout);
-        if (content == null) return;
+        if (content == null) return false;
         ViewGroup.LayoutParams layoutParams = content.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return;
+        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
         ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
         int bottomMargin = -Math.max(0, overlapPx);
-        if (marginParams.bottomMargin == bottomMargin) return;
+        if (marginParams.bottomMargin == bottomMargin) return false;
         marginParams.bottomMargin = bottomMargin;
         content.setLayoutParams(marginParams);
+        return true;
     }
 
     private int resolveTerminalFlushDockPaddingPx(int accessoryContentHeightPx,
@@ -9280,54 +9303,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAccessoryStackContainerHeight(view, height);
     }
 
-    private void updateViewHeight(int viewId, int height) {
+    /**
+     * True when the height was not already this. Every writer here answers the same question,
+     * because what a geometry pass moved is what decides whether the chrome has to be applied and
+     * its crops re-cut afterwards — and writing a height back unchanged also asks for a layout
+     * pass nothing needed.
+     */
+    private boolean updateViewHeight(int viewId, int height) {
         View view = findViewById(viewId);
         if (view == null)
-            return;
+            return false;
         ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
         if (layoutParams == null)
-            return;
+            return false;
+        if (layoutParams.height == height)
+            return false;
         layoutParams.height = height;
         view.setLayoutParams(layoutParams);
+        return true;
     }
 
-    private void updateViewBottomMargin(int viewId, int marginBottom) {
+    private boolean updateViewBottomMargin(int viewId, int marginBottom) {
         View view = findViewById(viewId);
-        if (view == null) return;
+        if (view == null) return false;
         ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return;
+        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
         ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        if (marginParams.bottomMargin == marginBottom) return;
+        if (marginParams.bottomMargin == marginBottom) return false;
         marginParams.bottomMargin = marginBottom;
         view.setLayoutParams(marginParams);
+        return true;
     }
 
-    private void updateViewHorizontalMargins(int viewId, int marginHorizontal) {
+    private boolean updateViewHorizontalMargins(int viewId, int marginHorizontal) {
         View view = findViewById(viewId);
-        if (view == null) return;
+        if (view == null) return false;
         ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return;
+        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
         ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        if (marginParams.leftMargin == marginHorizontal && marginParams.rightMargin == marginHorizontal) return;
+        if (marginParams.leftMargin == marginHorizontal && marginParams.rightMargin == marginHorizontal) return false;
         marginParams.leftMargin = marginHorizontal;
         marginParams.rightMargin = marginHorizontal;
         view.setLayoutParams(marginParams);
+        return true;
     }
 
-    private void updateViewPadding(int viewId, int left, int top, int right, int bottom) {
-        updateViewPadding(findViewById(viewId), left, top, right, bottom);
+    private boolean updateViewPadding(int viewId, int left, int top, int right, int bottom) {
+        return updateViewPadding(findViewById(viewId), left, top, right, bottom);
     }
 
-    private void updateViewPadding(@Nullable View view, int left, int top, int right, int bottom) {
-        if (view == null) return;
+    private boolean updateViewPadding(@Nullable View view, int left, int top, int right, int bottom) {
+        if (view == null) return false;
         if (view.getPaddingLeft() == left && view.getPaddingTop() == top &&
             view.getPaddingRight() == right && view.getPaddingBottom() == bottom) {
-            return;
+            return false;
         }
         view.setPadding(left, top, right, bottom);
+        return true;
     }
 
-    private void applyDockRowHorizontalInsets() {
+    private boolean applyDockRowHorizontalInsets() {
         DockLayout layout = getDockLayout();
         int surfaceInset = layout.horizontalInsetPx;
         int contentInset = layout.capsule ? layout.capsuleContentInsetPx : surfaceInset;
@@ -9341,15 +9376,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
         // is set, so it reads as the bar's top edge rather than as a floating panel.
-        updateViewHorizontalMargins(R.id.terminal_find_bar_host, surfaceInset);
-        updateViewHorizontalMargins(R.id.apps_bar_viewpager, appsContentInset);
-        updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
-        updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
-        updateViewHorizontalMargins(R.id.terminal_toolbar_view_pager, extraKeysInset);
-        updateViewHorizontalMargins(R.id.extrakeys_divider, extraKeysInset);
-        updateViewPadding(R.id.apps_bar_viewpager, 0, appsTopPadding, 0, appsBottomPadding);
-        updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
-        updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
+        boolean moved = updateViewHorizontalMargins(R.id.terminal_find_bar_host, surfaceInset);
+        moved |= updateViewHorizontalMargins(R.id.apps_bar_viewpager, appsContentInset);
+        moved |= updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
+        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
+        moved |= updateViewHorizontalMargins(R.id.terminal_toolbar_view_pager, extraKeysInset);
+        moved |= updateViewHorizontalMargins(R.id.extrakeys_divider, extraKeysInset);
+        moved |= updateViewPadding(R.id.apps_bar_viewpager, 0, appsTopPadding, 0, appsBottomPadding);
+        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
+        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
 
         // Keep the extra-keys ViewPager from leaking its adjacent (text-input) page. In capsule mode
         // the pager is inset from the dock edges, so the off-screen page's edge (the "❮" button)
@@ -9364,6 +9399,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             toolbarPager.setOutlineProvider(ViewOutlineProvider.BOUNDS);
             toolbarPager.setClipToOutline(true);
         }
+        return moved;
     }
 
     private int getDockBaseToolbarHeightPx() {
@@ -9420,19 +9456,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return DockLayoutPolicy.compute(buildDockInputs(additionalAppsBarHeightPx));
     }
 
-    private void applyDockLayout(@NonNull DockLayout layout) {
-        updateViewHeight(R.id.apps_bar_viewpager, layout.appsBarHeightPx);
-        updateViewHeight(R.id.apps_bar_indicator_band, layout.indicatorBandHeightPx);
-        updateViewHeight(R.id.apps_bar_az_row, layout.azRowHeightPx);
+    /** The two row hints last handed over, since neither setter reads back out of a view. */
+    private int mAppliedDockRowHeightHintPx = Integer.MIN_VALUE;
+    private int mAppliedAzRowChinPaddingPx = Integer.MIN_VALUE;
+
+    /** True when this layout moved the dock. */
+    private boolean applyDockLayout(@NonNull DockLayout layout) {
+        boolean moved = updateViewHeight(R.id.apps_bar_viewpager, layout.appsBarHeightPx);
+        moved |= updateViewHeight(R.id.apps_bar_indicator_band, layout.indicatorBandHeightPx);
+        moved |= updateViewHeight(R.id.apps_bar_az_row, layout.azRowHeightPx);
         // The dock's chin is the dock's row's; a bar standing elsewhere carries the one its own
         // host was sized for, and must not have it taken away because the dock has no row.
-        if (mAzScrubRowView != null && mAzBarEdge == PlaceLayout.Edge.BOTTOM)
+        if (mAzScrubRowView != null && mAzBarEdge == PlaceLayout.Edge.BOTTOM) {
+            moved |= layout.azRowChinPaddingPx != mAppliedAzRowChinPaddingPx;
+            mAppliedAzRowChinPaddingPx = layout.azRowChinPaddingPx;
             mAzScrubRowView.setChinPaddingPx(layout.azRowChinPaddingPx);
-        updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
-        applyDockRowHorizontalInsets();
+        }
+        moved |= updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
+        moved |= applyDockRowHorizontalInsets();
         if (mSuggestionBarView != null) {
+            moved |= layout.appsBarHeightHintPx != mAppliedDockRowHeightHintPx;
+            mAppliedDockRowHeightHintPx = layout.appsBarHeightHintPx;
             mSuggestionBarView.setDockRowHeightHintPx(layout.appsBarHeightHintPx);
         }
+        return moved;
     }
 
     public void toggleTerminalToolbar() {
@@ -16680,8 +16727,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applySeamlessStatusBackgroundModeIfNeeded();
         applyTerminalSurfaceAppearance();
         // After appearance: applyTerminalSurfaceAppearance() flat-colors the dock surfaces, so the
-        // accessory pass must rebuild the dock glass last (mirrors the onCreate order).
+        // accessory pass must rebuild the dock glass last (mirrors the onCreate order). The apply
+        // is asked for here rather than left to the geometry pass, which only books one when it
+        // moved something: a styling reload can change every surface's material without moving a
+        // single band, and that is exactly the case that needs re-glazing.
         applyAccessoryGeometryIfNeeded(true, "reloadActivityStyling");
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         syncTerminalWallpaperRenderingMode();
         updateWindowBackgroundForCurrentSession();
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);

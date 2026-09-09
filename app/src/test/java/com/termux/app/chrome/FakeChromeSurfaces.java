@@ -38,6 +38,16 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     boolean blurHealthy = true;
     @NonNull ChromeSpec spec = new ChromeSpec(true, false, 0, true, true, false, true, 1f, 12);
 
+    /**
+     * The chrome the apply itself asks for, which is how the Activity's apply behaves: it re-cuts
+     * crops, dresses panes and completes the keyboard's reveal protocol, and any of those can say
+     * something went stale. Set {@link #chrome} for the request to reach the renderer.
+     */
+    @Nullable ChromeRenderer chrome;
+    int applyRequestsScopes;
+    /** How many more applies make that request; the default lets every apply make it. */
+    int applyRequestsRemaining = Integer.MAX_VALUE;
+
     // ---- what the test observes
     @NonNull final List<ChromeSpec> applied = new ArrayList<>();
     int invariantsEnforced;
@@ -175,6 +185,10 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     @Override
     public void applyChromeSpec(@NonNull ChromeSpec spec) {
         applied.add(spec);
+        if (chrome != null && applyRequestsScopes != 0 && applyRequestsRemaining > 0) {
+            applyRequestsRemaining--;
+            chrome.requestSync(applyRequestsScopes);
+        }
     }
 
     @Override
