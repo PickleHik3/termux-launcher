@@ -110,6 +110,9 @@ things — and the display server passes that name on. Only the name seen in the
 counts, so a pointer crossing a text field on its way somewhere else opens nothing. An app that
 never asks for a text cursor, or a session with no cursor theme installed, cannot be recognised
 this way; the keyboard key, the display's Back button and the signal below all still work.
+GTK and Qt apps pick up the Adwaita theme that ships with them; core X apps such as xterm only
+use it with `XCURSOR_THEME=Adwaita` in their environment (or a `default` cursor theme that
+inherits it).
 
 **Your input method's own focus.** Exact, and opt in. Two commands feed the same behaviour from a
 shell, so anything that knows when a field takes focus can drive it:
