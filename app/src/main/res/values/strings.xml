@@ -861,6 +861,7 @@
                 <string name="termux_keyboard_color_scheme_hex_title">Enter hex color</string>
                 <string name="termux_keyboard_color_scheme_hex_error">Use #RRGGBB or #AARRGGBB</string>
                 <string name="termux_in_app_keyboard_height_adjust_handle">Drag to adjust keyboard height</string>
+                <string name="termux_in_app_keyboard_floating_handle">Drag to move the keyboard</string>
                 <string name="termux_in_app_keyboard_height_adjust_confirm">Confirm keyboard adjustments</string>
                 <string name="termux_in_app_keyboard_height_adjust_cancel">Cancel keyboard adjustments</string>
                 <string name="termux_in_app_keyboard_height_adjust_confirm_symbol">✓</string>
