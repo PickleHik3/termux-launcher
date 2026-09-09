@@ -278,6 +278,16 @@ briefly, and the crash-isolation wrapper `SafeLauncherAppWidgetHostView` must ke
 new thread. *Guard:* `LauncherAppWidgetRemoteViewsInflationTest`,
 `SafeLauncherAppWidgetHostViewTest`, `WidgetGridHostViewIntegrationTest`,
 `LauncherWidgetProviderRefreshIntegrationTest`. *Effort:* **S**.
+**Landed, 2026-09-09.** `LauncherAppWidgetHost.onCreateView` hands every host view one shared
+low-priority `widget-inflate` executor. `SafeLauncherAppWidgetHostView` detects failure through
+`getErrorView()` (the framework's only error hook, on both paths) and recovery through
+`prepareView()`; the error tile is still applied inline so the measure/layout guards keep working,
+and after a framework error view the tile is re-applied as RemoteViews before the next update so the
+pre-API-33 layout-id recycling does not reapply a provider update onto the tile. Measured on pong,
+four Terminal↔Widgets page changes: `inflate` slices on main went from 64 (214 ms) to 0, all 64 now
+on `widget-inflate` (224 ms); main doFrame median 3.7 → 2.0 ms. The worst frames (38–42 ms) are
+unchanged because they are the page-arrival traversal: two `Chrome.commit` runs (13–17 ms together)
+plus layout/measure (18–20 ms) in one frame — that is the next lever, not widgets.
 
 **T9 — Stop the widget grid being re-sized by the terminal's insets.** `PaneWallLayout` measures
 and lays out **every** page inside the *terminal page's* margins

@@ -21,8 +21,14 @@ import androidx.core.content.ContextCompat;
 
 import com.termux.R;
 
+import java.util.concurrent.Executor;
+
 /**
  * AppWidgetHostView that contains recoverable provider RemoteViews failures to one tile.
+ *
+ * <p>Provider inflation runs on the executor handed to {@link #setExecutor(Executor)}, so an
+ * inflation failure surfaces on the UI thread later, through {@link #getErrorView()}, rather than
+ * as an exception out of {@link #updateAppWidget(RemoteViews)}. Both paths are covered.
  *
  * <p>Only {@link RuntimeException} is caught. OutOfMemoryError, StackOverflowError, ThreadDeath,
  * linkage/VM errors, native-renderer faults and process kills cannot safely be recovered here and
@@ -42,6 +48,18 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
 
     @Nullable private final FailureListener failureListener;
     @Nullable private BoundaryProbe boundaryProbe;
+    // Mirrors the framework's own executor field, which is private and has no getter; needed
+    // because replaceWithError() has to apply its tile inline. Null means every apply is inline.
+    @Nullable private Executor asyncExecutor;
+    // Set when the framework inserted its own error view. AppWidgetHostView remembers the layout
+    // id of the last RemoteViews it applied, and up to API 32 the asynchronous path reuses the
+    // current child whenever the next update declares that same id (inflateAsync:
+    // "layoutId == mLayoutId && mView != null"). An error view the framework inserted leaves that
+    // id naming the provider's layout, so the next update would be re-applied onto the tile —
+    // and since RemoteViews actions skip views they cannot find, that apply would "succeed" and
+    // the widget would never come back. Applying our tile ourselves, as RemoteViews, moves the
+    // framework's record onto the tile's own layout, which no provider update can match.
+    private boolean frameworkErrorViewShown;
     private boolean showingLocalError;
     private boolean replacingPosted;
 
@@ -57,12 +75,15 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
 
     public boolean isShowingLocalError() { return showingLocalError; }
 
+    @Nullable Executor asyncExecutorForTests() { return asyncExecutor; }
+
     @Override
     protected View getErrorView() {
         if (!showingLocalError) {
             showingLocalError = true;
             if (failureListener != null) failureListener.onRenderFailure(getAppWidgetId(), "framework");
         }
+        frameworkErrorViewShown = true;
         return createLocalErrorView();
     }
 
@@ -72,21 +93,51 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
     }
 
     @Override
+    public void setExecutor(@Nullable Executor executor) {
+        asyncExecutor = executor;
+        super.setExecutor(executor);
+    }
+
+    @Override
     public void updateAppWidget(@Nullable RemoteViews remoteViews) {
         boolean wasShowingError = showingLocalError;
         try {
             probe("update");
+            // Hand the framework content it will not try to recycle, so this update actually
+            // reaches the provider again; see frameworkErrorViewShown.
+            if (frameworkErrorViewShown) applyErrorTileInline();
             super.updateAppWidget(remoteViews);
+            // With an executor installed the call above only starts the inflation, and the
+            // outcome arrives on the UI thread a frame or more later through getErrorView() and
+            // prepareView(). Inline it is already on screen, and reading it back is the one
+            // check that does not depend on the framework routing through prepareView().
+            if (asyncExecutor != null) return;
             boolean frameworkError = getChildCount() == 1
                 && ERROR_TILE_TAG.equals(getChildAt(0).getTag());
             if (frameworkError) {
                 showingLocalError = true;
-            } else if (wasShowingError) {
+            } else if (wasShowingError && showingLocalError) {
                 showingLocalError = false;
                 if (failureListener != null) failureListener.onRenderRecovered(getAppWidgetId());
             }
         } catch (RuntimeException exception) {
             replaceWithError("update");
+        }
+    }
+
+    @Override
+    protected void prepareView(@NonNull View view) {
+        super.prepareView(view);
+        // The framework calls this on the UI thread for every content view it is about to add,
+        // inline or from the executor's apply listener: a provider view that inflated cleanly, or
+        // the error tile it just took from getErrorView(). Every error tile of ours carries the
+        // tag, so anything without it is a good render — and a good render after an error is the
+        // recovery. Only a recycled reapply skips this hook, and applyErrorTileInline() is what
+        // keeps one from happening on top of a tile.
+        if (ERROR_TILE_TAG.equals(view.getTag())) return;
+        if (showingLocalError) {
+            showingLocalError = false;
+            if (failureListener != null) failureListener.onRenderRecovered(getAppWidgetId());
         }
     }
 
@@ -152,8 +203,17 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
     private void replaceWithError(String phase) {
         if (showingLocalError) return;
         showingLocalError = true;
-        // Let AppWidgetHostView replace its tracked mView/mViewMode content. Direct child
-        // mutation leaves those private fields pointing at a detached provider view.
+        applyErrorTileInline();
+        if (failureListener != null) failureListener.onRenderFailure(getAppWidgetId(), phase);
+    }
+
+    /**
+     * Puts the tile on screen in this frame, as RemoteViews, so that AppWidgetHostView replaces
+     * its tracked mView/mViewMode/layout id content. Direct child mutation leaves those private
+     * fields pointing at a detached provider view.
+     */
+    private void applyErrorTileInline() {
+        frameworkErrorViewShown = false;
         String message = getContext().getString(R.string.launcher_widget_error);
         String providerLabel = safeProviderLabel();
         RemoteViews error = new RemoteViews(getContext().getPackageName(),
@@ -162,8 +222,17 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
             providerLabel == null ? message : message + "\n" + providerLabel);
         error.setContentDescription(R.id.launcher_widget_error_tile,
             providerLabel == null ? message : message + ", " + providerLabel);
-        super.updateAppWidget(error);
-        if (failureListener != null) failureListener.onRenderFailure(getAppWidgetId(), phase);
+        // Inline, even when an executor is installed: the measure and layout guards call straight
+        // back into super after replacing the content, and an apply that landed a frame later
+        // would leave the crashing provider view in place to throw again outside any boundary.
+        // Dropping the executor also cancels the provider inflation this tile supersedes.
+        Executor executor = asyncExecutor;
+        if (executor != null) super.setExecutor(null);
+        try {
+            super.updateAppWidget(error);
+        } finally {
+            if (executor != null) super.setExecutor(executor);
+        }
     }
 
     private View createLocalErrorView() {

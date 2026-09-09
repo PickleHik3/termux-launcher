@@ -12,6 +12,8 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.RemoteViews;
 
+import androidx.test.core.app.ApplicationProvider;
+
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 
@@ -33,6 +35,18 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.S, application = Application.class)
 public class LauncherAppWidgetRemoteViewsInflationTest {
+    @Test public void productionHostHandsEveryViewTheSharedInflateExecutor() {
+        Context context = ApplicationProvider.getApplicationContext();
+        LauncherAppWidgetHost host = new LauncherAppWidgetHost(context);
+        AppWidgetHostView created = ReflectionHelpers.callInstanceMethod(host, "onCreateView",
+            from(Context.class, context), from(int.class, 21),
+            from(AppWidgetProviderInfo.class, WidgetTestFixtures.info(false)));
+        SafeLauncherAppWidgetHostView view = (SafeLauncherAppWidgetHostView) created;
+        // RemoteViews inflation must not run on the main thread; the framework reads the executor
+        // from its own private field, so this checks the value the host handed to setExecutor.
+        assertSame(LauncherAppWidgetHost.INFLATE_EXECUTOR, view.asyncExecutorForTests());
+    }
+
     @Test public void productionHostUsesFactoryFreeContextAndAcceptsFrameworkImageBitmapAction() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         activity.getDelegate().installViewFactory();
