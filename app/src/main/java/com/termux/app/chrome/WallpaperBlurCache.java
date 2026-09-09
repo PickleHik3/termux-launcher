@@ -108,15 +108,22 @@ public final class WallpaperBlurCache {
         void post(@NonNull Runnable runnable);
     }
 
-    public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 4;
+    /**
+     * How many radii stay resident. A look uses one radius per surface — dock, status bar, pane
+     * glass, the wall's own radius 0, and more when the keyboard and a palette are dressed apart —
+     * and a rotation on Pong asked for six distinct radii in one frame while four fit, so the first
+     * two were evicted as the last two landed (2026-09-09). Six holds a full look; the byte budget
+     * below still bounds what a larger panel keeps.
+     */
+    public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 6;
     /**
      * How many bytes of pre-blurred frames stay resident, whatever the radius count. A frame is a
      * full-screen ARGB_8888 bitmap — about 10 MB on a 1080x2400 panel and 18 MB at 1440x3200 — so
      * a count alone let a QHD phone hold 55 MB of wallpaper nobody was looking at. The most recent
-     * frame always stays, however large. Sized so the four radii above fit a 1080x2412 panel
-     * (4 x 10.4 MB); a QHD phone still holds only what fits.
+     * frame always stays, however large. Sized so the six radii above fit a 1080x2412 panel
+     * (6 x 10.4 MB); a QHD phone still holds only what fits.
      */
-    public static final long DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES = 48L * 1024 * 1024;
+    public static final long DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES = 72L * 1024 * 1024;
 
     @NonNull private final Source mSource;
     @Nullable private final Runnable mOnCleared;
