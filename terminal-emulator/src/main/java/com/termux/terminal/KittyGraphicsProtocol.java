@@ -795,7 +795,13 @@ final class KittyGraphicsProtocol {
         out.sourceHeight = placement.sourceHeight;
         out.columns = placement.columns;
         out.rows = placement.rows;
+        out.generation = entry.pixelGeneration;
         return true;
+    }
+
+    /** The pixel generation of a stored image, 0 when there is none; see {@link #getPlaceholder}. */
+    long imageGeneration(long imageId) {
+        return store.generationOf(imageId);
     }
 
     boolean hasVirtualPlacement(long imageId, long placementId) {
@@ -948,6 +954,7 @@ final class KittyGraphicsProtocol {
                             store.replaceFrameBitmap(entry, targetNumber, frameBitmap, byteCount);
                             if (command.z != 0)
                                 KittyImageStore.setFrameGap(entry, targetNumber, Math.max(0, command.z));
+                            // Inside a posted update, which notifies the client on its own.
                             if (targetNumber == entry.currentFrame + 1) renderAnimationFrame(entry);
                         } else {
                             int gap = command.z > 0 ? command.z
@@ -986,6 +993,8 @@ final class KittyGraphicsProtocol {
             && command.displayColumns - 1 != entry.currentFrame) {
             entry.currentFrame = command.displayColumns - 1;
             entry.frameShownAtUptime = SystemClock.uptimeMillis();
+            KittyImageStore.notePixelsChanged(entry);
+            // The client asked for this frame in the escape stream, which notifies on its own.
             renderAnimationFrame(entry);
         }
         String state = command.values.get('s');
@@ -1131,9 +1140,12 @@ final class KittyGraphicsProtocol {
     /** Fast-forward every animation to where it would have been, composite once, and resume. */
     private void resumeAnimations() {
         long now = SystemClock.uptimeMillis();
+        boolean redraw = false;
         for (KittyImageStore.Entry entry : store.entries()) {
-            if (KittyImageStore.catchUpAnimation(entry, now)) renderAnimationFrame(entry);
+            if (KittyImageStore.catchUpAnimation(entry, now) && !renderAnimationFrame(entry))
+                redraw = true;
         }
+        if (redraw) output.onScreenChanged();
         scheduleAnimationTick();
     }
 
@@ -1154,14 +1166,32 @@ final class KittyGraphicsProtocol {
     private void animationTick() {
         animationTickScheduled = false;
         long now = SystemClock.uptimeMillis();
+        boolean redraw = false;
+        // Asked at most once a tick, and only when a placeholder-displayed animation flipped.
+        Boolean placeholderCellsOnScreen = null;
         for (KittyImageStore.Entry entry : store.entries()) {
             // The frame index advances whether or not anything can see it — that is what keeps a
             // scrolled-away animation in step, and keeps the scheduler from finding a deadline
-            // permanently in the past and spinning on it. Only the composite, which is the
-            // expensive half, waits until there is a cell on screen to composite into.
-            if (KittyImageStore.advanceAnimation(entry, now) && emulator.isKittyImageOnScreen(entry.id))
-                renderAnimationFrame(entry);
+            // permanently in the past and spinning on it. Only showing the frame, which is the
+            // expensive half, waits until there is a cell on screen to show it in.
+            if (!KittyImageStore.advanceAnimation(entry, now)) continue;
+            boolean onScreen = emulator.isKittyImageOnScreen(entry.id);
+            if (!onScreen && !entry.virtualPlacements.isEmpty()) {
+                if (placeholderCellsOnScreen == null)
+                    placeholderCellsOnScreen = emulator.isAnyKittyPlaceholderCellOnScreen();
+                onScreen = placeholderCellsOnScreen;
+            }
+            if (!onScreen) continue;
+            // A placement re-composites off the update thread and asks for the redraw itself when
+            // its new pixels are swapped in; an image displayed through Unicode placeholders is
+            // drawn straight out of the store, so for that one the flip is the whole change.
+            if (!renderAnimationFrame(entry)) redraw = true;
         }
+        // At most one redraw request per tick, and none for a tick that only moved a scrolled-away
+        // animation along or that re-composited placements. The tick is armed at the earliest frame
+        // deadline across every animation, so what reaches the view is one redraw per frame the
+        // user can actually see change.
+        if (redraw) output.onScreenChanged();
         scheduleAnimationTick();
     }
 
@@ -1241,11 +1271,11 @@ final class KittyGraphicsProtocol {
      * nothing. Displaced immutable bitmaps are dropped to the garbage collector, never recycled,
      * because the render thread may still be uploading them.
      */
-    private void renderAnimationFrame(KittyImageStore.Entry entry) {
+    private boolean renderAnimationFrame(KittyImageStore.Entry entry) {
         final Bitmap frame = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
-        if (frame == null) return;
+        if (frame == null) return false;
         final List<TerminalBitmap> placements = emulator.kittyPlacementsFor(entry.id);
-        if (placements.isEmpty()) return;
+        if (placements.isEmpty()) return false;
         final Bitmap[] buffers = new Bitmap[placements.size()];
         for (int i = 0; i < placements.size(); i++) {
             TerminalBitmap placement = placements.get(i);
@@ -1275,6 +1305,7 @@ final class KittyGraphicsProtocol {
                 }
             }
             output.postTerminalUpdate(() -> {
+                boolean swapped = false;
                 for (int i = 0; i < placements.size(); i++) {
                     Bitmap fresh = buffers[i];
                     if (fresh == null) continue;
@@ -1282,9 +1313,14 @@ final class KittyGraphicsProtocol {
                     Bitmap old = placement.bitmap;
                     placement.bitmap = fresh;
                     placement.kittyBackBuffer = (old != null && old.isMutable()) ? old : null;
+                    swapped = true;
                 }
+                // The pixels of a placement are replaced under an unchanged cell style, so the
+                // renderer cannot see this any other way.
+                if (swapped) emulator.noteKittyPlacementPixelsReplaced();
             });
         });
+        return true;
     }
 
     /**

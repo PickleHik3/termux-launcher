@@ -814,6 +814,29 @@ public final class TerminalBuffer {
         return false;
     }
 
+    /**
+     * The same coarse question as {@link #hasAnyKittyPlaceholderCell}, asked of the
+     * {@code rowCount} rows starting at external row {@code topRow} — what the user is looking at.
+     * A placeholder-displayed image cannot be located per image without decoding every cluster and
+     * carrying the run-inheritance chain, so an animation drawn that way plays on while any
+     * placeholder cell is on screen and stops flipping when none is.
+     */
+    boolean hasKittyPlaceholderCellInRows(int topRow, int rowCount) {
+        int firstRow = Math.max(-getActiveTranscriptRows(), topRow);
+        int lastRow = Math.min(mScreenRows, topRow + rowCount);
+        for (int row = firstRow; row < lastRow; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line == null) continue;
+            char[] text = line.mText;
+            int used = line.getSpaceUsed();
+            for (int i = 0; i < used - 1; i++) {
+                if (text[i] == KITTY_PLACEHOLDER_HIGH && text[i + 1] == KITTY_PLACEHOLDER_LOW)
+                    return true;
+            }
+        }
+        return false;
+    }
+
     /** U+10EEEE as a surrogate pair, which is how it sits in a row's char array. */
     private static final char KITTY_PLACEHOLDER_HIGH =
         Character.highSurrogate(KittyUnicodePlaceholder.CODE_POINT);

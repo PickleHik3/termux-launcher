@@ -375,6 +375,54 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
             "\033_Gi=3;ENOENT:image not found\033\\");
     }
 
+    /**
+     * The renderer replays a row showing an image unless that image's stamp moved, so the stamp
+     * has to be readable through the protocol and has to be 0 for an image that is not there: a
+     * placeholder cell whose image has not arrived draws nothing, and has to be drawn on the frame
+     * it does.
+     */
+    public void testImageGenerationIsReadableThroughTheProtocolAndZeroWhenTheImageIsGone() {
+        assertEquals("nothing was ever transmitted under this id", 0,
+            mTerminal.getKittyImageGeneration(3));
+
+        enterString("\033_Gi=3,a=t,q=2,f=24,s=2,v=2;" + base64(new byte[12]) + "\033\\");
+        long transmitted = mTerminal.getKittyImageGeneration(3);
+        assertTrue(transmitted > 0);
+
+        enterString("\033_Gi=3,p=7,a=p,U=1,c=2,r=2,q=2\033\\");
+        long placed = mTerminal.getKittyImageGeneration(3);
+        assertTrue("a virtual placement is half of what a placeholder cell draws",
+            placed > transmitted);
+
+        enterString("\033_Gi=3,p=7,a=d,d=i,q=2\033\\");
+        assertTrue("and taking it away is the other half",
+            mTerminal.getKittyImageGeneration(3) > placed);
+
+        enterString("\033_Gi=3,a=d,d=I,q=2\033\\");
+        assertEquals("a freed image draws nothing at all", 0,
+            mTerminal.getKittyImageGeneration(3));
+    }
+
+    /**
+     * The coarse on-screen test for an image displayed through Unicode placeholders, which is what
+     * decides whether an animation's frame flip is worth a redraw. Scoped to the rows in view: an
+     * animation scrolled into the transcript keeps its place in its frames and stops costing them.
+     */
+    public void testPlaceholderCellsAreFoundOnlyInTheRowsInView() {
+        TerminalBuffer screen = mTerminal.getScreen();
+        assertFalse(screen.hasKittyPlaceholderCellInRows(0, 4));
+
+        enterString(new String(Character.toChars(KittyUnicodePlaceholder.CODE_POINT)) + "\r\n");
+        assertTrue(screen.hasKittyPlaceholderCellInRows(0, 4));
+
+        // Push the placeholder row off the top of the four-row screen.
+        enterString("a\r\nb\r\nc\r\nd\r\n");
+        assertFalse("out of view, so no frame of it is worth a redraw",
+            screen.hasKittyPlaceholderCellInRows(0, 4));
+        assertTrue("and found again when the transcript is scrolled back to it",
+            screen.hasKittyPlaceholderCellInRows(-4, 4));
+    }
+
     public void testTransmitAndDisplayCanCreateVirtualPlacementWithoutStampingCells() {
         enterString("\033_Gi=4,p=9,a=T,U=1,q=2,f=24,s=2,v=2,c=2,r=2;"
             + base64(new byte[12]) + "\033\\");

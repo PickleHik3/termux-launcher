@@ -53,6 +53,16 @@ public abstract class TerminalOutput {
     }
 
     /**
+     * Ask the terminal client to redraw, for a change to what is on screen that it has no other
+     * way to notice — the pixels behind a kitty animation's cells, which move without a single
+     * cell or byte of the screen buffer changing. Everything the emulator parses already reaches
+     * the client through the screen-update path; this is the one thing that does not. The default
+     * has no client to tell.
+     */
+    public void onScreenChanged() {
+    }
+
+    /**
      * Return work produced off-thread to the terminal's serialized update thread. Test outputs that do not own a
      * looper may use this default; a live {@link TerminalSession} overrides it and posts to its main-thread handler.
      */
@@ -62,9 +72,12 @@ public abstract class TerminalOutput {
 
     /**
      * Run work on the terminal's serialized update thread after a delay, used to drive
-     * terminal-side kitty graphics animation. The default drops the request — an environment
-     * without a looper has no way to wait, and running it synchronously would spin the animation
-     * scheduler — so tests drive frame advancement explicitly instead.
+     * terminal-side kitty graphics animation. The delayed work asks for a redraw itself, through
+     * {@link #onScreenChanged}, if it changed anything visible — the animation scheduler wakes at
+     * the next frame deadline, and a tick that finds nothing to flip must not cost a frame. The
+     * default drops the request — an environment without a looper has no way to wait, and running
+     * it synchronously would spin the animation scheduler — so tests drive frame advancement
+     * explicitly instead.
      */
     public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
     }

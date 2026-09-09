@@ -414,13 +414,16 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public void onScreenChanged() {
+        notifyScreenUpdate();
+    }
+
+    @Override
     public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
-        // The runnable posted is a wrapper, so the caller's own runnable is used as the message
-        // token — that is what makes the post withdrawable by identity below.
-        mMainThreadHandler.postAtTime(() -> {
-            update.run();
-            notifyScreenUpdate();
-        }, update, SystemClock.uptimeMillis() + delayMillis);
+        // The runnable is also its own message token, which is what makes the post withdrawable
+        // by identity below. Nothing is notified here: an animation tick asks for its own redraw,
+        // and only when a frame someone can see actually moved.
+        mMainThreadHandler.postAtTime(update, update, SystemClock.uptimeMillis() + delayMillis);
     }
 
     @Override

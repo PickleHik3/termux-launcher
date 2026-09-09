@@ -270,6 +270,121 @@ public class RowRenderCacheTest {
         assertNone(frame());
     }
 
+    // ---------------------------------------------------------------- image generations
+
+    /** The emulator's stamps, as the renderer asks for them. */
+    private final java.util.Map<Long, Long> mGenerations = new java.util.HashMap<>();
+    private final RowRenderCache.ImageGenerations mSource =
+        imageId -> mGenerations.getOrDefault(imageId, 0L);
+    private long mPlacementGeneration;
+
+    /** What the renderer does when it records a row's image node: forget, then report each image. */
+    private void recordImages(int row, long... imageIds) {
+        mCache.beginRowImages(row, mPlacementGeneration);
+        for (long id : imageIds) mCache.noteRowImage(row, id, mSource.generationOf(id));
+    }
+
+    private boolean movedFor(int row) {
+        return mCache.rowImagesMoved(row, mPlacementGeneration, mSource);
+    }
+
+    @Test
+    public void aRowIsNeverReportedCleanBeforeItsImagesWereRecorded() {
+        mRows[1].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
+        frame();
+
+        assertTrue("nothing is remembered yet, so nothing can be replayed", movedFor(1));
+    }
+
+    @Test
+    public void aPlaceholderRowIsCleanUntilItsImageMoves() {
+        mGenerations.put(4L, 11L);
+        mRows[1].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
+        frame();
+        recordImages(1, 4L, 4L, 4L);
+
+        assertFalse("the same frame of the animation is still on screen", movedFor(1));
+        assertFalse(movedFor(1));
+
+        mGenerations.put(4L, 12L);
+        assertTrue("the animation flipped a frame", movedFor(1));
+
+        // Until the row is recorded again the answer stands, which is what keeps a skipped frame
+        // from being mistaken for a caught-up one.
+        assertTrue(movedFor(1));
+        recordImages(1, 4L);
+        assertFalse(movedFor(1));
+    }
+
+    @Test
+    public void anImageThatHasNotArrivedYetIsRedrawnWhenItDoes() {
+        mRows[0].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
+        frame();
+        // The transmission is still in flight: the cell decodes to an id and draws nothing.
+        recordImages(0, 9L);
+        assertFalse(movedFor(0));
+
+        mGenerations.put(9L, 1L);
+        assertTrue("the frame its image lands is the frame it is drawn", movedFor(0));
+
+        recordImages(0, 9L);
+        mGenerations.remove(9L);
+        assertTrue("and the frame it is deleted is the frame it goes", movedFor(0));
+    }
+
+    @Test
+    public void eachRowFollowsItsOwnImages() {
+        mGenerations.put(1L, 5L);
+        mGenerations.put(2L, 5L);
+        mRows[0].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
+        mRows[1].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
+        frame();
+        recordImages(0, 1L);
+        recordImages(1, 2L);
+
+        mGenerations.put(2L, 6L);
+        assertFalse("a still image beside an animation is not redrawn with it", movedFor(0));
+        assertTrue(movedFor(1));
+    }
+
+    @Test
+    public void aRowCarryingABitmapCellFollowsThePlacementStamp() {
+        mRows[2].setChar(0, 'a', TextStyle.encodeBitmap(1, 0, 0));
+        frame();
+        recordImages(2);
+
+        assertFalse("a sixel's pixels are written once, so its row is recorded once",
+            movedFor(2));
+
+        // A kitty placement's bitmap is swapped under an unchanged cell style; nothing else can
+        // report that, so the whole row of bitmap cells follows the one stamp.
+        mPlacementGeneration++;
+        assertTrue(movedFor(2));
+        recordImages(2);
+        assertFalse(movedFor(2));
+    }
+
+    @Test
+    public void aPlaceholderRowIgnoresThePlacementStamp() {
+        mGenerations.put(3L, 1L);
+        mRows[0].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
+        frame();
+        recordImages(0, 3L);
+
+        mPlacementGeneration++;
+        assertFalse("a placeholder draws from the store, not from a placement", movedFor(0));
+    }
+
+    @Test
+    public void aRowReferencingMoreImagesThanAreTrackedKeepsRedrawing() {
+        mRows[1].setChar(0, KittyUnicodePlaceholder.CODE_POINT, 0L);
+        frame();
+        mCache.beginRowImages(1, mPlacementGeneration);
+        for (long id = 1; id <= 9; id++) mCache.noteRowImage(1, id, id);
+
+        assertTrue("giving up is the safe answer, not the clean one", movedFor(1));
+    }
+
     @Test
     public void anExplicitInvalidateRecordsEveryRowOnce() {
         frame();

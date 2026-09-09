@@ -6,6 +6,9 @@ import android.graphics.Canvas;
 import android.graphics.Typeface;
 import android.os.Build;
 
+import androidx.annotation.RequiresApi;
+
+import com.termux.terminal.KittyUnicodePlaceholder;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalOutput;
 import com.termux.terminal.TerminalSessionClient;
@@ -21,9 +24,11 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.Assert.assertEquals;
 
 /**
- * The software path is what a Robolectric canvas gives us, and it is also what runs on a device
- * whenever the pane is drawn without hardware acceleration. It must keep drawing every row every
- * frame — glyphs and images together, in one walk — and it must keep reporting that it did.
+ * The two draw paths, told apart by the canvas they are handed. A plain Robolectric canvas is the
+ * software path, which also runs on a device whenever the pane is drawn without hardware
+ * acceleration: it must keep drawing every row every frame — glyphs and images together, in one
+ * walk — and keep reporting that it did. A canvas taken from a {@code RenderNode} is the node
+ * path, where a row is only recorded again when something it draws from moved.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -113,6 +118,59 @@ public class TerminalRendererRowCacheTest {
         mRenderer.render(mEmulator, mCanvas, -1, -1, -1, -1, -1, false, 0, 0f, 1);
 
         assertEquals(ROWS + 1, mRenderer.rowsRecordedLastFrame());
+    }
+
+    /**
+     * A placeholder cell addressing image 3, cell (0,0): the foreground colour carries the low
+     * image-id bits and the two diacritics carry the row and the column, so this is the smallest
+     * grapheme the renderer will decode.
+     */
+    private static final String PLACEHOLDER_CELL = "\033[38;5;3m"
+        + new String(Character.toChars(KittyUnicodePlaceholder.CODE_POINT))
+        + "̅̅";
+
+    /** Draw through a real {@link android.graphics.RecordingCanvas}, which is the node path. */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private void renderThroughNodes() {
+        android.graphics.RenderNode node = new android.graphics.RenderNode("test");
+        Canvas canvas = node.beginRecording(400, 400);
+        try {
+            mRenderer.render(mEmulator, canvas, 0, -1, -1, -1, -1, false, 0, 0f);
+        } finally {
+            node.endRecording();
+        }
+    }
+
+    /**
+     * The whole point of the third row node: an animation's row keeps its glyph recording, and it
+     * keeps its image recording too on every frame the image did not actually move. Before the
+     * image generation existed this row was re-recorded on every frame the display drew, which on
+     * a 120 Hz panel is an order of magnitude more often than a GIF changes frame.
+     */
+    @Test
+    @Config(sdk = Build.VERSION_CODES.Q)
+    public void aPlaceholderRowIsRecordedAgainOnlyWhenItsImageMoves() {
+        enter(PLACEHOLDER_CELL);
+
+        renderThroughNodes();
+        assertEquals("the first frame has to record it", 1,
+            mRenderer.imageRowsRecordedLastFrame());
+
+        renderThroughNodes();
+        assertEquals("nothing moved, so the image node is replayed", 0,
+            mRenderer.imageRowsRecordedLastFrame());
+        assertEquals("and so is the glyph node", 0, mRenderer.rowsRecordedLastFrame());
+
+        // The image the cell has been addressing all along arrives. Not one char of the row moved.
+        enter("\033_Gi=3,a=t,q=2,f=24,s=2,v=2;AAAAAAAAAAAAAAAA\033\\");
+
+        renderThroughNodes();
+        assertEquals("the frame its image lands is the frame it is drawn", 1,
+            mRenderer.imageRowsRecordedLastFrame());
+        assertEquals("still without re-shaping its text", 0, mRenderer.rowsRecordedLastFrame());
+
+        renderThroughNodes();
+        assertEquals(0, mRenderer.imageRowsRecordedLastFrame());
     }
 
     @Test

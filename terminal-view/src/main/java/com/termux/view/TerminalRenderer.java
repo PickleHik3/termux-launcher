@@ -466,6 +466,17 @@ public final class TerminalRenderer {
 
     /** Reused by the Unicode-placeholder image path so drawing a cell allocates nothing. */
     private final KittyImagePlaceholder mKittyPlaceholder = new KittyImagePlaceholder();
+    /**
+     * The row whose image node is being recorded, or -1. It is a field rather than a parameter
+     * because the cell walk that reports images is shared with the software path, which has no row
+     * node to record into and nothing to remember.
+     */
+    private int mRecordingImagesForRow = -1;
+    /** The emulator {@link #mImageGenerations} asks, kept so the lookup allocates nothing. */
+    @Nullable private TerminalEmulator mImageGenerationSource;
+    private final RowRenderCache.ImageGenerations mImageGenerations =
+        imageId -> mImageGenerationSource == null ? 0
+            : mImageGenerationSource.getKittyImageGeneration(imageId);
     private final Rect mKittySourceRect = new Rect();
     private final RectF mKittyDestRect = new RectF();
     private final RectF mKittyCellRect = new RectF();
@@ -937,6 +948,8 @@ public final class TerminalRenderer {
         // Sizing the nodes after the cache, so a pane that lost rows drops their recordings here.
         nodes.resize(visibleRows);
         final int cursorColor = palette[TextStyle.COLOR_INDEX_CURSOR];
+        final long placementGeneration = mEmulator.getKittyPlacementGeneration();
+        mImageGenerationSource = mEmulator;
         int recorded = 0;
         int imageRowsRecorded = 0;
         for (int index = 0; index < visibleRows; index++) {
@@ -967,17 +980,25 @@ public final class TerminalRenderer {
             final float heightOffset = mFontLineSpacingAndAscent + (index + 1) * mFontLineSpacing;
             if (carriesAnImage) {
                 // The pixels a placeholder or a bitmap cell draws from are replaced without any
-                // input the cache compares moving, so this is the node that is re-recorded every
-                // frame — a cell walk and a drawBitmap each, no shaping and no measuring. The
-                // glyph node above it keeps the recording it already had.
-                Canvas imagesInto = images.beginRecording(viewWidth, viewHeight);
-                try {
-                    drawRowImages(mEmulator, imagesInto, lineObject, palette, heightOffset,
-                        columns, cursorX, cursorVisible, cursorShape, horizontalOffset);
-                } finally {
-                    images.endRecording();
+                // input the cache compares moving, so this node is re-recorded whenever the
+                // emulator says those pixels moved — a cell walk and a drawBitmap each, no shaping
+                // and no measuring. An animation flips frames far more slowly than the display
+                // draws them, so most frames of an animating row answer no here and replay both
+                // nodes. The glyph node above it keeps its recording either way.
+                if (changed || !images.hasDisplayList()
+                    || mRowCache.rowImagesMoved(index, placementGeneration, mImageGenerations)) {
+                    mRowCache.beginRowImages(index, placementGeneration);
+                    mRecordingImagesForRow = index;
+                    Canvas imagesInto = images.beginRecording(viewWidth, viewHeight);
+                    try {
+                        drawRowImages(mEmulator, imagesInto, lineObject, palette, heightOffset,
+                            columns, cursorX, cursorVisible, cursorShape, horizontalOffset);
+                    } finally {
+                        images.endRecording();
+                        mRecordingImagesForRow = -1;
+                    }
+                    imageRowsRecorded++;
                 }
-                imageRowsRecorded++;
             } else if (images.hasDisplayList()) {
                 // The frame a row stops carrying an image is the last one it costs anything.
                 images.discardDisplayList();
@@ -1471,8 +1492,16 @@ public final class TerminalRenderer {
             TextStyle.decodeForeColor(style), decorationColor,
             TextStyle.DECORATION_COLOR_DEFAULT, inherited);
         if (cell == null) return null;
-        if (mEmulator.getKittyImagePlaceholder(cell.imageId, cell.placementId, mKittyPlaceholder))
-            drawKittyPlaceholderCell(canvas, cell, column, heightOffset, horizontalOffset);
+        final boolean resolved =
+            mEmulator.getKittyImagePlaceholder(cell.imageId, cell.placementId, mKittyPlaceholder);
+        if (mRecordingImagesForRow >= 0) {
+            // Reported whether or not it resolved: a cell whose image has not arrived draws
+            // nothing, and the row has to be recorded again on the frame it does arrive.
+            mRowCache.noteRowImage(mRecordingImagesForRow, cell.imageId, resolved
+                ? mKittyPlaceholder.generation
+                : mEmulator.getKittyImageGeneration(cell.imageId));
+        }
+        if (resolved) drawKittyPlaceholderCell(canvas, cell, column, heightOffset, horizontalOffset);
         return cell;
     }
 
@@ -2566,6 +2595,7 @@ public final class TerminalRenderer {
         }
         mRowNodes = null;
         mRowCache.invalidate();
+        mImageGenerationSource = null;
         mRowsRecordedLastFrame = 0;
         mImageRowsRecordedLastFrame = 0;
     }

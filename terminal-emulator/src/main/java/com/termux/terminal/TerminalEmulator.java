@@ -361,6 +361,9 @@ public final class TerminalEmulator {
 
     private final KittyGraphicsProtocol mKittyGraphics;
 
+    /** See {@link #getKittyPlacementGeneration()}. */
+    private long mKittyPlacementGeneration;
+
     TerminalSessionClient mClient;
 
     /**
@@ -4173,6 +4176,30 @@ public final class TerminalEmulator {
         return mKittyGraphics.getPlaceholder(imageId, placementId, out);
     }
 
+    /**
+     * The pixel generation of a stored kitty image — see {@link KittyImagePlaceholder#generation}
+     * — without resolving a placement. 0 when there is no such image, so a renderer that asked
+     * about an id whose image had not arrived yet sees the answer move when it does.
+     */
+    public long getKittyImageGeneration(long imageId) {
+        return mKittyGraphics.imageGeneration(imageId);
+    }
+
+    /**
+     * Bumped whenever an animation frame flip replaces the pixels of a placed kitty image in
+     * place. Placements are drawn from {@link TerminalBuffer#getSixelBitmap}, keyed by a cell
+     * style that does not move when the bitmap behind it is swapped, so this is the only thing a
+     * renderer can compare for a row holding bitmap cells. Sixel and iTerm images never move it:
+     * their pixels are written once, so a row showing one is recorded once.
+     */
+    public long getKittyPlacementGeneration() {
+        return mKittyPlacementGeneration;
+    }
+
+    void noteKittyPlacementPixelsReplaced() {
+        mKittyPlacementGeneration++;
+    }
+
     boolean hasKittyVirtualPlacement(long imageId, long placementId) {
         return mKittyGraphics.hasVirtualPlacement(imageId, placementId);
     }
@@ -4237,6 +4264,12 @@ public final class TerminalEmulator {
     boolean isKittyImageOnScreen(long imageId) {
         if (mTopRowProvider == null) return true;
         return mScreen.hasKittyImageInRows(imageId, mTopRowProvider.topRow(), mRows);
+    }
+
+    /** Whether any U+10EEEE cell is in view, the coarse test for placeholder-displayed images. */
+    boolean isAnyKittyPlaceholderCellOnScreen() {
+        if (mTopRowProvider == null) return true;
+        return mScreen.hasKittyPlaceholderCellInRows(mTopRowProvider.topRow(), mRows);
     }
 
     /**

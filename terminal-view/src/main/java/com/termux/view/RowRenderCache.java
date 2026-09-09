@@ -30,6 +30,12 @@ import java.util.Arrays;
  * frame that redraws their pixels does not also re-shape their text — the two answers are recorded
  * into different nodes.
  *
+ * <p>What those rows draw from is still comparable, one step removed: the emulator stamps each
+ * stored image with a generation that moves when its pixels do. A row remembers the images it was
+ * last recorded from and their stamps ({@link #noteRowImage}), and {@link #rowImagesMoved} asks
+ * whether any of them has moved since — so an animation costs a row's image node once per frame
+ * of the animation rather than once per frame of the display.
+ *
  * <p>This class knows nothing about how a row is drawn or what it is drawn into — see
  * {@link TerminalRowNodes} for that half.
  */
@@ -61,8 +67,18 @@ final class RowRenderCache {
         int[] decorationColors = NO_INTS;
         boolean hasHyperlinks;
         int[] hyperlinkIds = NO_INTS;
-        /** Drawn from image state this class cannot compare, so its image node is never clean. */
+        /** Drawn from image state this class cannot compare directly; see {@link #imageIds}. */
         boolean carriesAnImage;
+        /** Holds a sixel, iTerm or kitty-placement cell, whose pixels the emulator swaps in place. */
+        boolean carriesABitmapCell;
+        /** The images this row's image node was last recorded from, and their stamps then. */
+        long[] imageIds = NO_LONGS;
+        long[] imageGenerations = NO_LONGS;
+        int imageCount;
+        /** More distinct images on one row than are tracked: such a row is never reported clean. */
+        boolean imagesUntracked = true;
+        /** The placement stamp when this row's bitmap cells were last recorded. */
+        long placementGeneration;
         /** The column the cursor is drawn at on this row, or -1 when it is not drawn here. */
         int cursorColumn = -1;
         int cursorShape;
@@ -97,6 +113,19 @@ final class RowRenderCache {
      * from the shell repaints the screen without replacing the array.
      */
     private int[] mPalette = NO_INTS;
+
+    /**
+     * How many distinct images one row's clean answer is worth tracking. A row is a strip of one
+     * image in every case that matters — a logo, a plot, an image grid one row tall — and the cost
+     * of the check is linear in this, so a row that somehow references more images than this is
+     * left redrawing every frame instead.
+     */
+    private static final int MAX_TRACKED_IMAGES = 8;
+
+    /** Answers the current generation of a stored image; see {@link #rowImagesMoved}. */
+    interface ImageGenerations {
+        long generationOf(long imageId);
+    }
 
     /** Force every row to be recorded again on the next frame. */
     void invalidate() {
@@ -200,6 +229,68 @@ final class RowRenderCache {
         return mRows[index].carriesAnImage;
     }
 
+    /**
+     * Whether the pixels the row at this visible index draws its images from have moved since its
+     * image node was last recorded — or were never recorded at all. Call it only for a row
+     * {@link #rowCarriesAnImage} reported, after that row's {@link #rowChanged}.
+     *
+     * <p>The set of images a row references comes out of its own text, which {@link #rowChanged}
+     * compares, so a row whose text held still references the same images as when it was recorded
+     * and the stamps of exactly those images are the whole answer. An image that has gone, or has
+     * not arrived yet, stamps as 0 — a value no stored image has — so the cell that draws nothing
+     * today is redrawn on the frame its image lands.
+     */
+    boolean rowImagesMoved(int index, long placementGeneration, ImageGenerations generations) {
+        final Row state = mRows[index];
+        if (state.imagesUntracked) return true;
+        if (state.carriesABitmapCell && state.placementGeneration != placementGeneration)
+            return true;
+        for (int i = 0; i < state.imageCount; i++) {
+            if (generations.generationOf(state.imageIds[i]) != state.imageGenerations[i])
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Start collecting what the row at this visible index is being recorded from, forgetting what
+     * it was recorded from before. Every image the recording pass draws — and every one it tried
+     * to and could not — is then reported through {@link #noteRowImage}.
+     */
+    void beginRowImages(int index, long placementGeneration) {
+        final Row state = mRows[index];
+        state.imageCount = 0;
+        state.imagesUntracked = false;
+        state.placementGeneration = placementGeneration;
+    }
+
+    /**
+     * Remember that the row being recorded draws from this image at this generation. Repeats are
+     * folded, because a placeholder grid references its image once per cell.
+     */
+    void noteRowImage(int index, long imageId, long generation) {
+        final Row state = mRows[index];
+        if (state.imagesUntracked) return;
+        for (int i = 0; i < state.imageCount; i++) {
+            if (state.imageIds[i] == imageId) {
+                state.imageGenerations[i] = generation;
+                return;
+            }
+        }
+        if (state.imageCount == MAX_TRACKED_IMAGES) {
+            state.imagesUntracked = true;
+            state.imageCount = 0;
+            return;
+        }
+        if (state.imageIds.length == 0) {
+            state.imageIds = new long[MAX_TRACKED_IMAGES];
+            state.imageGenerations = new long[MAX_TRACKED_IMAGES];
+        }
+        state.imageIds[state.imageCount] = imageId;
+        state.imageGenerations[state.imageCount] = generation;
+        state.imageCount++;
+    }
+
     /** True when the palette's contents moved; the copy is refreshed either way. */
     private boolean paletteMoved(int[] palette) {
         if (mPalette.length != palette.length) {
@@ -255,6 +346,7 @@ final class RowRenderCache {
                 placeholder = true;
         }
         state.textLength = spaceUsed;
+        state.carriesABitmapCell = line.mHasBitmap;
         state.carriesAnImage = placeholder || line.mHasBitmap;
         return changed;
     }
@@ -273,7 +365,10 @@ final class RowRenderCache {
             }
             // A sixel cell draws from a bitmap the buffer owns, which can be replaced under an
             // unchanged style. The row flag says the same thing; this does not trust it alone.
-            if (TextStyle.isBitmap(style)) state.carriesAnImage = true;
+            if (TextStyle.isBitmap(style)) {
+                state.carriesAnImage = true;
+                state.carriesABitmapCell = true;
+            }
         }
         state.styleLength = columns;
         return changed;
