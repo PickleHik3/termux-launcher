@@ -34,6 +34,11 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     /** Narrower than this and there is no keyboard left to type on, whatever the share says. */
     private static final float MIN_WIDTH_DP = 240f;
 
+    /** The user's floating width, read at measure time so the frame is never a pass behind it. */
+    public interface WidthScaleSource {
+        float widthScale();
+    }
+
     /** Where the frame ended up, in pixels from the content's top-left corner. */
     public interface OnFrameMovedListener {
         /**
@@ -48,7 +53,7 @@ public final class FloatingKeyboardFrame extends LinearLayout {
 
     @Nullable private OnFrameMovedListener mListener;
 
-    private float mWidthScale = 1f;
+    @Nullable private WidthScaleSource mWidthScale;
     private int mTravelXPx;
     private int mTravelYPx;
     private int mPositionXPx;
@@ -101,19 +106,19 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     }
 
     /**
-     * The user's width share. The frame resolves it against the room it is measured in rather than
-     * being handed a pixel width: a layout param written from a layout-change listener is a request
-     * the parent has already passed, and the frame would stay a pass behind every rotation.
+     * Where the frame reads the user's width share from, every time it is measured. Pull rather
+     * than push: the share changes with the orientation, and a width written into the frame from a
+     * layout-change listener is a request the parent has already passed — the frame would sit a
+     * pass behind every rotation.
      */
-    public void setWidthScale(float widthScale) {
-        if (Float.compare(mWidthScale, widthScale) == 0) return;
-        mWidthScale = widthScale;
-        requestLayout();
+    public void setWidthScaleSource(@Nullable WidthScaleSource source) {
+        mWidthScale = source;
     }
 
     /** The width the frame takes in a content region this wide. */
     public int frameWidthPx(int contentWidthPx) {
-        return frameWidthPx(getContext(), contentWidthPx, mWidthScale);
+        return frameWidthPx(getContext(), contentWidthPx,
+            mWidthScale == null ? 1f : mWidthScale.widthScale());
     }
 
     /** The room the frame may be dragged in, from the content bounds it floats over. */
