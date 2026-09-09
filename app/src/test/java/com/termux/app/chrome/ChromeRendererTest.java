@@ -213,6 +213,21 @@ public class ChromeRendererTest {
         assertEquals(200, chrome.blurCache().frameRectWidth());
     }
 
+    /** A keyboard or navigation change arrives through the same callback and moves nothing. */
+    @Test
+    public void aConfigurationChangeThatKeepsTheOrientationKeepsTheFrames() {
+        chrome.blurCache().obtain(0, wallpaperFrame);
+        int clearsBefore = surfaces.cacheClearedCallbacks;
+
+        chrome.onConfigurationChanged();
+
+        assertEquals(1, chrome.blurCache().residentRadiiCount());
+        assertEquals(clearsBefore, surfaces.cacheClearedCallbacks);
+        assertSame("the same frame is still the one handed out",
+            chrome.blurCache().obtain(0, wallpaperFrame), chrome.blurCache().obtain(0, wallpaperFrame));
+        assertEquals(1, surfaces.captureCount);
+    }
+
     @Test
     public void aNewWallpaperDropsTheFramesAndSchedulesOneRender() {
         chrome.blurCache().obtain(0, wallpaperFrame);

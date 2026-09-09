@@ -52,4 +52,19 @@ public class ChromePolicyTest {
         Assert.assertEquals(30, ChromePolicy.dockGlassGrainAlpha(50));
         Assert.assertEquals(60, ChromePolicy.dockGlassGrainAlpha(100));
     }
+
+    /** An ordinary trip to the background is not pressure; the frames stay for the way back. */
+    @Test
+    public void onlyRealPressureReleasesTheBlurFrames() {
+        Assert.assertFalse(ChromePolicy.trimReleasesBlurFrames(
+            android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN));
+        Assert.assertFalse(ChromePolicy.trimReleasesBlurFrames(
+            android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND));
+        Assert.assertFalse(ChromePolicy.trimReleasesBlurFrames(
+            android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL));
+        Assert.assertTrue(ChromePolicy.trimReleasesBlurFrames(
+            android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE));
+        Assert.assertTrue(ChromePolicy.trimReleasesBlurFrames(
+            android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE));
+    }
 }

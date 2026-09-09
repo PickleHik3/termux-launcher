@@ -5517,8 +5517,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * A backgrounded home app that keeps several full-screen blur bitmaps alive is exactly what
      * aggressive vendor memory killers reap first — and a reaped default launcher reads to the
      * user as "the app crashed" the moment they press home. Everything released here is rebuilt
-     * on demand through the existing dirty flags, so the only cost of a trim is one blur redraw
-     * on the way back in.
+     * on demand through the existing dirty flags.
+     *
+     * <p>That rebuild is not free, and the level matters. {@code TRIM_MEMORY_BACKGROUND} is not
+     * pressure: the activity manager hands it to the home process every time another app comes in
+     * front, with memory at its normal level, so releasing on it meant every return to the launcher
+     * re-decoded and re-blurred the wallpaper for every radius in use inside one frame — 4 misses,
+     * 389 ms of a 481 ms frame, measured on Pong 2026-09-09. The frames now stay across an ordinary
+     * background and go only from {@code TRIM_MEMORY_MODERATE} up. On API 34 and later the system
+     * delivers only {@code UI_HIDDEN} and {@code BACKGROUND} at all, so there the frames are never
+     * trimmed by this path and the cache's own byte budget is the bound; on older releases MODERATE
+     * and COMPLETE still arrive when the system is short and this process is next in line.</p>
      */
     @Override
     public void onTrimMemory(int level) {
@@ -5535,7 +5544,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pressure, and the second only means the UI went away — an animation that is merely
         // hidden already costs nothing, because the visibility gate has stopped it.
         if (level >= TRIM_MEMORY_RUNNING_LOW) dropTerminalAnimationFrames();
-        if (level < TRIM_MEMORY_BACKGROUND) {
+        if (!ChromePolicy.trimReleasesBlurFrames(level)) {
             return;
         }
         mChrome.onTrimMemory();

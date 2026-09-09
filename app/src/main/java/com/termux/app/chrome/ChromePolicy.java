@@ -142,4 +142,19 @@ public final class ChromePolicy {
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
         }
     }
+
+    /**
+     * Whether a {@code ComponentCallbacks2} trim level is real pressure, worth dropping the
+     * pre-blurred wallpaper frames for. {@code TRIM_MEMORY_BACKGROUND} is not: the activity
+     * manager sends it to the home process on every ordinary departure to another app, with memory
+     * at its normal level, and rebuilding the frames on the way back cost a 481 ms frame (Pong,
+     * 2026-09-09). {@code TRIM_MEMORY_MODERATE} and {@code TRIM_MEMORY_COMPLETE} only arrive when
+     * the system is short and this process is far enough down the list to be reaped next — and
+     * since API 34 they are not delivered at all (ComponentCallbacks2: "Apps are not notified of
+     * this level since API level 34"), which makes a launcher on a current release keep its frames
+     * until its own cache budget evicts them.
+     */
+    public static boolean trimReleasesBlurFrames(int trimLevel) {
+        return trimLevel >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE;
+    }
 }

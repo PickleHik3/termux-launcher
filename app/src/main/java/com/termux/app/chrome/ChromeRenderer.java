@@ -343,17 +343,21 @@ public final class ChromeRenderer {
     }
 
     /**
-     * Every pre-blurred wallpaper frame describes the orientation being left; a rotation makes all
-     * of them wrong at once.
+     * Every pre-blurred wallpaper frame describes the orientation and frame it was captured in; a
+     * rotation makes all of them wrong at once. The same callback also carries changes that leave
+     * the frames right — a hardware keyboard, navigation, screen layout — so the cache decides by
+     * comparing its recorded source rather than clearing on every call.
      */
     public void onConfigurationChanged() {
-        mBlurCache.clear();
+        mBlurCache.dropIfSourceMoved();
     }
 
     /**
-     * A backgrounded home app that keeps several full-screen blur bitmaps alive is exactly what
-     * aggressive vendor memory killers reap first. Everything released here is rebuilt on demand
-     * through the ledger, so the only cost of a trim is one blur redraw on the way back in.
+     * Real memory pressure ({@link ChromePolicy#trimReleasesBlurFrames}): a home app that keeps
+     * several full-screen blur bitmaps alive is exactly what aggressive vendor memory killers reap
+     * first. Everything released here is rebuilt on demand through the ledger — one decode and
+     * blur per radius on the way back in, which is why an ordinary trip to the background does not
+     * reach this method.
      */
     public void onTrimMemory() {
         mBlurCache.clear();

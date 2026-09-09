@@ -187,12 +187,8 @@ public final class WallpaperBlurCache {
         File managedFile = managedSource ? mSource.managedWallpaperExactFile() : null;
         long managedLastModified = managedFile != null ? managedFile.lastModified() : -1L;
         long managedLength = managedFile != null ? managedFile.length() : -1L;
-        boolean sourceValid = mManagedSource == managedSource
-            && mSystemId == systemWallpaperId
-            && mManagedLastModified == managedLastModified
-            && mManagedLength == managedLength
-            && mOrientation == mSource.orientation()
-            && mFrameRect.equals(frameRect);
+        boolean sourceValid = sourceStillMatches(frameRect, managedSource, systemWallpaperId,
+            managedLastModified, managedLength);
         if (sourceValid) {
             Bitmap cached = mByRadius.get(blurRadiusDp);
             if (cached != null && !cached.isRecycled()) {
@@ -273,8 +269,51 @@ public final class WallpaperBlurCache {
         return crop;
     }
 
-    /** Empties the cache, recycling every frame nothing is drawing. */
+    /** True while the resident frames still describe the wallpaper, orientation and frame rect. */
+    private boolean sourceStillMatches(@NonNull Rect frameRect, boolean managedSource,
+                                       int systemWallpaperId, long managedLastModified,
+                                       long managedLength) {
+        return mManagedSource == managedSource
+            && mSystemId == systemWallpaperId
+            && mManagedLastModified == managedLastModified
+            && mManagedLength == managedLength
+            && mOrientation == mSource.orientation()
+            && mFrameRect.equals(frameRect);
+    }
+
+    /**
+     * Drops the frames only if the source they were captured from has moved: a rotation, a
+     * resized frame, another wallpaper. For the configuration-change path, which used to clear
+     * unconditionally — a hardware keyboard, a navigation or screen-layout change arrives through
+     * the same callback as a rotation and none of them makes a portrait frame wrong, yet each cost
+     * a decode and a blur per radius on the next frame.
+     */
+    public void dropIfSourceMoved() {
+        if (mByRadius.isEmpty()) return;
+        boolean managedSource = mSource.useManagedWallpaperSource();
+        File managedFile = managedSource ? mSource.managedWallpaperExactFile() : null;
+        if (!sourceStillMatches(mSource.wallpaperFrameRect(), managedSource,
+                mSource.systemWallpaperId(),
+                managedFile != null ? managedFile.lastModified() : -1L,
+                managedFile != null ? managedFile.length() : -1L)) {
+            clear();
+        }
+    }
+
+    /**
+     * Empties the cache, recycling every frame nothing is drawing. Traced as {@code Blur.clear} so
+     * a system trace shows which event emptied it before a run of {@code Blur.miss}.
+     */
     public void clear() {
+        Trace.beginSection("Blur.clear");
+        try {
+            doClear();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doClear() {
         for (Bitmap cached : mByRadius.values()) {
             if (cached != null && !cached.isRecycled() && !mSource.isFrameInUse(cached)) {
                 cached.recycle();
