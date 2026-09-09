@@ -212,6 +212,27 @@ launcherctl pane close "$id"
 Every `pane` command prints the server's JSON body and exits 1 on an HTTP error, so the error code
 (`not_owned`, `pane_not_found`, …) is always visible to the caller.
 
+### The on-screen keyboard
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/keyboard/show` | Raise the in-app keyboard |
+| POST | `/v1/keyboard/hide` | Put the in-app keyboard down |
+
+Both take `{"source": "manual"}` (the default) or `{"source": "focus"}`. `manual` is the user
+asking. `focus` says a text field took focus, which is a signal rather than an order: on the
+Display place it goes through the same rules a tap there does — see
+[The keyboard follows text fields](X11_Display.md#the-keyboard-follows-text-fields) — and
+elsewhere it simply opens or closes the keyboard. Both put something on a screen, so a stopped
+launcher answers 409 `activity_not_running`; 409 `unavailable` means the in-app keyboard is off.
+Rate limit: 240 a minute each.
+
+```sh
+launcherctl keyboard show --source focus
+launcherctl keyboard hide --source focus
+launcherctl keyboard show          # source=manual
+```
+
 ### OpenAI-compatible
 
 | Method | Path | Purpose |
