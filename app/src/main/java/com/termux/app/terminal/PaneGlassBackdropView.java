@@ -40,6 +40,11 @@ public final class PaneGlassBackdropView extends View {
     @Nullable private Bitmap mFrame;
     @Nullable private BitmapShader mFrameShader;
     @Nullable private Drawable mGrain;
+    /** The grain strength {@link #mGrain} was built from: a fresh drawable is not comparable. */
+    private int mGrainStrength;
+    @Nullable private ColorFilter mFrostFilter;
+    /** False until the first {@link #setGlass} call, so the defaults are never mistaken for a dress. */
+    private boolean mDressed;
     private int mTintColor;
     private float mRadiusPx;
     /** Non-zero while this view paints only the corner arcs of an opaque page. */
@@ -67,14 +72,33 @@ public final class PaneGlassBackdropView extends View {
     }
 
     /**
-     * @param frame     shared pre-blurred wallpaper frame, or null for a tint-and-grain-only pane
-     * @param frameRect that frame's rect in screen coordinates
-     * @param grain     tiled grain layer, or null when grain is off
+     * Dress this pane, or leave it exactly as it is.
+     *
+     * <p>Every chrome apply re-dresses every pane, and there are two applies to a frame; a page
+     * change cost 78 of these passes, 174 ms, for panes whose glass had not moved (Pong,
+     * 2026-09-09). So a re-dress with the frame the pane is already drawing, at the same rect,
+     * tint, grain, radius and filter, is not a re-dress: it returns without building a shader or
+     * invalidating, and the pane keeps the matrix it had. The frame is compared by identity, never
+     * by pixels — a newly blurred frame is a new bitmap, which is what makes that sound.</p>
+     *
+     * @param frame         shared pre-blurred wallpaper frame, or null for a tint-and-grain-only pane
+     * @param frameRect     that frame's rect in screen coordinates
+     * @param grain         tiled grain layer, or null when grain is off
+     * @param grainStrength what {@code grain} was built from; a fresh drawable compares equal to
+     *                      nothing, so this is the grain's identity
+     * @return true when this call actually re-dressed the pane
      */
-    public void setGlass(@Nullable Bitmap frame, @NonNull Rect frameRect, int tintColor,
-                         @Nullable Drawable grain, float radiusPx,
-                         @Nullable ColorFilter frostFilter) {
-        mFrame = frame != null && !frame.isRecycled() ? frame : null;
+    public boolean setGlass(@Nullable Bitmap frame, @NonNull Rect frameRect, int tintColor,
+                            @Nullable Drawable grain, int grainStrength, float radiusPx,
+                            @Nullable ColorFilter frostFilter) {
+        Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
+        if (mDressed && live == mFrame && mTintColor == tintColor && mRadiusPx == radiusPx
+            && mGrainStrength == grainStrength && (mGrain == null) == (grain == null)
+            && mFrostFilter == frostFilter && mFrameRect.equals(frameRect)) {
+            return false;
+        }
+        mDressed = true;
+        mFrame = live;
         // CLAMP, and drawn as a shader rather than as a bitmap: the cached frame does not always
         // reach the full width of the screen (it is downsampled for the blur, and on ROMs that
         // magnify the wallpaper it is captured against a compensated rect), and a plain drawBitmap
@@ -87,10 +111,13 @@ public final class PaneGlassBackdropView extends View {
         mFrameRect.set(frameRect);
         mTintColor = tintColor;
         mGrain = grain;
+        mGrainStrength = grainStrength;
         mRadiusPx = radiusPx;
+        mFrostFilter = frostFilter;
         mFramePaint.setColorFilter(frostFilter);
         mLastLeft = Integer.MIN_VALUE;   // force the matrix to be rebuilt against the new frame
         invalidate();
+        return true;
     }
 
     /** Recompute the frame matrix on the next draw; call after this pane has moved. */

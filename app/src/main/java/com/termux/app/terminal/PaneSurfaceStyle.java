@@ -24,6 +24,12 @@ public interface PaneSurfaceStyle {
     int paneGlassTintColor();
     /** Film grain layer for one pane, or null while grain is off. */
     @Nullable android.graphics.drawable.Drawable paneGlassGrainLayer();
+    /**
+     * The grain strength {@link #paneGlassGrainLayer()} is built from, and a cheap identity for
+     * it: the layer is a fresh drawable per call, so a pane comparing what it is already wearing
+     * against what it is being handed can only tell the two apart by this.
+     */
+    int paneGlassGrainStrength();
     /** Corner radius of a pane slab, in px. */
     float paneGlassCornerRadiusPx();
     /** Gap between tiled panes, in dp — the surface editor's Inner padding. */

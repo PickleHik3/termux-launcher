@@ -1235,6 +1235,57 @@ public class TerminalPaneControllerTest {
         }
     }
 
+    /**
+     * The glass pass runs twice a frame behind every chrome apply, and the usual reason it runs —
+     * a freshly blurred wallpaper frame — re-paints the slabs without moving a single corner. So
+     * it re-shapes the panes only when the shape itself moved.
+     */
+    @Test
+    public void aRepeatedPaneGlassPassLeavesThePaneShapeAlone() {
+        TerminalPaneController controller = newController();
+        TerminalSession session = terminal();
+        controller.showWindow(controller.newWindow(session));
+        controller.setSurfaceStyle(new FakePaneSurfaceStyle(12f));
+        Map<TerminalSession, PaneContentFrame> frames =
+            ReflectionHelpers.getField(controller, "mPaneFrames");
+        PaneContentFrame frame = frames.get(session);
+        assertEquals("the first pass shapes the pane", 12f, paneShapeRadius(frame), 0f);
+
+        // Only the shape pass writes this back, so a hand-set value survives a pass that skips it.
+        frame.setPaneShape(0f, false);
+        controller.setSurfaceStyle(new FakePaneSurfaceStyle(12f));
+        assertEquals("nothing moved, so the panes were not re-shaped",
+            0f, paneShapeRadius(frame), 0f);
+
+        controller.setSurfaceStyle(new FakePaneSurfaceStyle(24f));
+        assertEquals("a moved radius does reach them", 24f, paneShapeRadius(frame), 0f);
+    }
+
+    private static float paneShapeRadius(@NonNull PaneContentFrame frame) {
+        return ReflectionHelpers.getField(frame, "mRequestedRadiusPx");
+    }
+
+    /** Glass on, with one tunable: the radius, which is the pane's shape. */
+    private static final class FakePaneSurfaceStyle implements PaneSurfaceStyle {
+        private final float radiusPx;
+
+        FakePaneSurfaceStyle(float radiusPx) {
+            this.radiusPx = radiusPx;
+        }
+
+        @Override public boolean isPaneGlassActive() { return true; }
+        @Override public android.graphics.Bitmap paneGlassBlurFrame() { return null; }
+        @Override public android.graphics.Rect paneGlassBlurFrameRect() {
+            return new android.graphics.Rect(0, 0, 100, 200);
+        }
+        @Override public android.graphics.ColorFilter paneGlassFrostFilter() { return null; }
+        @Override public int paneGlassTintColor() { return 0x40000000; }
+        @Override public android.graphics.drawable.Drawable paneGlassGrainLayer() { return null; }
+        @Override public int paneGlassGrainStrength() { return 0; }
+        @Override public float paneGlassCornerRadiusPx() { return radiusPx; }
+        @Override public int paneGapDp() { return 4; }
+    }
+
     private static TerminalPaneController newController() {
         Context context = RuntimeEnvironment.getApplication();
         return new TerminalPaneController(new TerminalPaneController.Host() {

@@ -1933,8 +1933,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override @Nullable public Drawable paneGlassGrainLayer() {
-                int grain = mPreferences != null ? mPreferences.getTerminalGlassGrain() : 0;
+                int grain = paneGlassGrainStrength();
                 return grain > 0 ? mChrome.glass().grainLayer(grain) : null;
+            }
+
+            @Override public int paneGlassGrainStrength() {
+                return mPreferences != null ? mPreferences.getTerminalGlassGrain() : 0;
             }
 
             @Override public float paneGlassCornerRadiusPx() {

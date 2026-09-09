@@ -307,11 +307,14 @@ public final class X11PaneFrame extends PaneContentFrame {
                 // unfrosted - the panes' frost belongs to their slabs, and in a small arc it read
                 // as a flat swatch of colour - or the flat base colour when no wallpaper is
                 // behind. The arcs are never left open, or the surface would show square.
-                mCornerMask.setGlass(style.wallBehindFrame(), style.paneGlassBlurFrameRect(),
-                    android.graphics.Color.TRANSPARENT, null, radiusPx, null);
+                // Only a mask that actually took new paint needs re-aiming: every chrome apply
+                // comes through here, and the page's own layout listener re-aims it when it moves.
+                if (mCornerMask.setGlass(style.wallBehindFrame(), style.paneGlassBlurFrameRect(),
+                    android.graphics.Color.TRANSPARENT, null, 0, radiusPx, null)) {
+                    mCornerMask.invalidateGlassPosition();
+                }
                 mCornerMask.setCornerMaskFallbackColor(style.wallBehindColor());
             }
-            mCornerMask.invalidateGlassPosition();
         }
         if (glass) mRim.apply(this, true, radiusPx, true);
         else mRim.clear(this);

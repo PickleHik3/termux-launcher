@@ -38,8 +38,8 @@ public final class PaneGlass {
 
     /**
      * Feed one frame's backdrop, or hide it. Idempotent and cheap — the backdrop view is created
-     * once per frame and only re-fed here — so this can run on every editor slider tick and on
-     * every frost refresh.
+     * once per frame, only re-fed here, and a re-feed with the glass it is already wearing costs
+     * nothing at all — so this can run on every editor slider tick and on every frost refresh.
      *
      * @param requestedRadiusPx the slab radius before it is capped against this frame's own size
      * @return true when the slab is showing
@@ -57,8 +57,8 @@ public final class PaneGlass {
         float radiusPx = PaneShape.radiusForBounds(requestedRadiusPx,
             frame.getWidth(), frame.getHeight());
         backdrop.setGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
-            style.paneGlassTintColor(), style.paneGlassGrainLayer(), radiusPx,
-            style.paneGlassFrostFilter());
+            style.paneGlassTintColor(), style.paneGlassGrainLayer(),
+            style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter());
         backdrop.setVisibility(View.VISIBLE);
         return true;
     }

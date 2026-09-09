@@ -2747,6 +2747,11 @@ public class TerminalPaneController {
         return PaneGlass.isActive(mSurfaceStyle);
     }
 
+    /** What the last {@link #applyPaneGlass()} shaped the panes for; a repeat re-shapes nothing. */
+    private boolean mDressedGlassActive;
+    private float mDressedGlassRadiusPx = Float.NaN;
+    private int mDressedGlassPaneCount = -1;
+
     /**
      * Dress (or undress) every live pane frame as a glass slab. Idempotent and cheap: the backdrop
      * view is created once per pane and only re-fed here, so this can run on every editor slider
@@ -2754,6 +2759,8 @@ public class TerminalPaneController {
      */
     public void applyPaneGlass() {
         float radiusPx = paneGlassRadiusPx();
+        boolean active = paneGlassActive();
+        // NaN and -1: the first pass always shapes the panes, whatever the style turns out to be.
         for (FrameLayout frame : mPaneFrames.values()) {
             PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
             if (backdrop == null) continue;
@@ -2763,7 +2770,17 @@ public class TerminalPaneController {
         // The clip that keeps the terminal's rectangular cell backgrounds from poking past the
         // slab's corners is part of the pane's shape, which updateActiveBorders owns for every
         // pane, glass or not — it runs on every render, and this does not.
-        updateActiveBorders();
+        //
+        // Only when the shape moved, though: this pass runs twice a frame behind every chrome
+        // apply, and a new wallpaper frame (the usual reason it runs) re-paints the slabs without
+        // moving one corner. Everything else that pass reads — focus, the float set, a maximized
+        // pane — reaches it from render() and the focus paths, which call it themselves.
+        boolean shapeMoved = active != mDressedGlassActive || radiusPx != mDressedGlassRadiusPx
+            || mPaneFrames.size() != mDressedGlassPaneCount;
+        mDressedGlassActive = active;
+        mDressedGlassRadiusPx = radiusPx;
+        mDressedGlassPaneCount = mPaneFrames.size();
+        if (shapeMoved) updateActiveBorders();
     }
 
     /**
