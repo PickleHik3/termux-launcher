@@ -852,6 +852,9 @@ public final class TerminalView extends View {
      * @param textSize the new font size, in density-independent pixels.
      */
     public void setTextSize(int textSize) {
+        // The same size again is the same renderer; every caller that stamps a default and then
+        // the real value would otherwise build it twice.
+        if (mRenderer != null && mRenderer.mTextSize == textSize) return;
         final TerminalRenderer replaced = mRenderer;
         mRenderer = replaced == null
             ? new TerminalRenderer(textSize, Typeface.MONOSPACE, null, null, null)
@@ -863,6 +866,22 @@ public final class TerminalView extends View {
         // The new renderer has taken everything worth inheriting; the old one's per-row recordings
         // are the size of the screen and will never be replayed again.
         if (replaced != null) replaced.release();
+        updateSize();
+    }
+
+    /**
+     * Gives a view that has no renderer yet the fonts and size of {@code sibling}, built on the
+     * sibling's caches: the variable-font instances, the fallback memo and the measured ASCII
+     * advances all carry over, so a new pane does not pay for what a pane beside it already has.
+     * The host's own size and font pass follows and finds nothing to redo when they match.
+     */
+    public void adoptFontFrom(@Nullable TerminalView sibling) {
+        if (mRenderer != null || sibling == null || sibling.mRenderer == null) return;
+        TerminalRenderer r = sibling.mRenderer;
+        mRenderer = new TerminalRenderer(r.mTextSize, r.mTypeface, r.mBoldTypeface,
+            r.mItalicTypeface, r.mBoldItalicTypeface, r.mSymbolMaps, r.mLigaturePolicy,
+            r.mFontFeatures, r.mFontVariations, r.mFontMetricsAdjustments, r.mBoxDrawingPolicy,
+            r.mFallbackTypefaces, r.mSymbolExpansion, r);
         updateSize();
     }
 

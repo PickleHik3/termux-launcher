@@ -58,6 +58,34 @@ public class TerminalRendererRebuildTest {
         assertNotSame(first.variationTypefaceCache(), rechained.variationTypefaceCache());
     }
 
+    /** Same size, same faces, same axes: the 508 measured advances are the same numbers. */
+    @Test
+    public void aSameSizeRebuildSharesTheMeasuredAdvances() {
+        TerminalRenderer first = renderer(24, Typeface.MONOSPACE, CHAIN, null);
+        TerminalRenderer again = renderer(24, Typeface.MONOSPACE, CHAIN, first);
+        TerminalRenderer resized = renderer(30, Typeface.MONOSPACE, CHAIN, first);
+
+        assertSame(first.asciiMeasures(), again.asciiMeasures());
+        assertNotSame("a new size measures again", first.asciiMeasures(), resized.asciiMeasures());
+    }
+
+    @Test
+    public void differentAxesMeasureAgainEvenAtTheSameSize() {
+        TerminalRenderer.FontVariations wide = new TerminalRenderer.FontVariations(
+            "'wdth' 125", null, null, null, null);
+        TerminalRenderer first = new TerminalRenderer(24, Typeface.MONOSPACE, null, null, null,
+            null, null, null, wide, null, null, CHAIN, null, null);
+        TerminalRenderer sameAxes = new TerminalRenderer(24, Typeface.MONOSPACE, null, null, null,
+            null, null, null, new TerminalRenderer.FontVariations("'wdth' 125", null, null, null, null),
+            null, null, CHAIN, null, first);
+        TerminalRenderer otherAxes = new TerminalRenderer(24, Typeface.MONOSPACE, null, null, null,
+            null, null, null, TerminalRenderer.FontVariations.NONE, null, null, CHAIN, null, first);
+
+        assertSame("equal axes from another config object still share", first.asciiMeasures(),
+            sameAxes.asciiMeasures());
+        assertNotSame(first.asciiMeasures(), otherAxes.asciiMeasures());
+    }
+
     @Test
     public void theSameChainInADifferentArrayStillCounts() {
         TerminalRenderer first = renderer(24, Typeface.MONOSPACE, CHAIN, null);

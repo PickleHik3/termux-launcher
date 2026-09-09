@@ -2787,6 +2787,8 @@ public class TerminalPaneController {
             frame = (PaneContentFrame) mInflater.inflate(R.layout.view_terminal_pane, mHostView, false);
             TerminalView view = frame.findViewById(R.id.terminal_view);
             if (mHostSurfaceResizeDepth > 0) view.setTerminalSizeUpdatesPaused(true);
+            // A pane beside this one already measured these fonts at this size; start from it.
+            view.adoptFontFrom(anyFontInitializedPaneView());
             mHost.configurePaneView(view);
             view.setOnTouchListener((v, ev) -> {
                 if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -2810,6 +2812,15 @@ public class TerminalPaneController {
         }
         refreshAttachedPaneView(session);
         return frame;
+    }
+
+    /** Any live pane view whose fonts are set, to seed a new pane's renderer from; null if none. */
+    @Nullable
+    private TerminalView anyFontInitializedPaneView() {
+        for (TerminalView candidate : mPaneViews.values()) {
+            if (candidate != null && candidate.isFontInitialized()) return candidate;
+        }
+        return null;
     }
 
     /** The per-render re-stamp of a pane's view: the host's defaults, then the pane's own zoom. */

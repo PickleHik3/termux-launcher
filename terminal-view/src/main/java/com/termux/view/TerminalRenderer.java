@@ -117,6 +117,24 @@ public final class TerminalRenderer {
             if (isItalic) return italic;
             return regular;
         }
+
+        /** Two settings that name the same axes on every slot draw the same glyphs. */
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof FontVariations)) return false;
+            FontVariations o = (FontVariations) other;
+            return java.util.Objects.equals(regular, o.regular)
+                && java.util.Objects.equals(bold, o.bold)
+                && java.util.Objects.equals(italic, o.italic)
+                && java.util.Objects.equals(boldItalic, o.boldItalic)
+                && java.util.Objects.equals(symbols, o.symbols);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(regular, bold, italic, boldItalic, symbols);
+        }
     }
 
     public static final class MetricAdjustment {
@@ -435,7 +453,12 @@ public final class TerminalRenderer {
     private final int mFontBaselineDescent;
 
     /** Width cache for normal, bold, italic and bold-italic rendering. */
-    private final float[][] mAsciiMeasures = new float[4][127];
+    /**
+     * Advance of every ASCII character in each of the four SGR styles, measured once. Shared with
+     * the renderer this one replaced or was seeded from when the size, faces and axes are the
+     * same: the 508 measurements were 8.6 ms of a new pane's construction on Pong (2026-09-09).
+     */
+    private final float[][] mAsciiMeasures;
     private final RectF mSixelRect = new RectF();
 
     /** Reused by the Unicode-placeholder image path so drawing a cell allocates nothing. */
@@ -628,6 +651,10 @@ public final class TerminalRenderer {
         mFallbackResolver = inherit
             ? previous.mFallbackResolver : new FallbackFontResolver(mFallbackTypefaces.length);
         mVariationTypefaces = inherit ? previous.mVariationTypefaces : new VariationCache();
+        boolean inheritMeasures = inherit && previous.mTextSize == textSize
+            && previous.mFontVariations.equals(fontVariations == null
+                ? FontVariations.NONE : fontVariations);
+        mAsciiMeasures = inheritMeasures ? previous.mAsciiMeasures : new float[4][127];
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
@@ -678,12 +705,14 @@ public final class TerminalRenderer {
         mFontBaselineDescent = Math.round(mFontLineSpacing - baselineFromTop);
         mFontLineSpacingAndAscent = Math.round(clamp(fontMetrics.descent
             + (mFontLineSpacing - baseLineSpacing) / 2f, 0f, mFontLineSpacing));
-        StringBuilder sb = new StringBuilder(" ");
-        for (int style = 0; style < mAsciiMeasures.length; style++) {
-            configureFont((style & 1) != 0, (style & 2) != 0);
-            for (int i = 0; i < mAsciiMeasures[style].length; i++) {
-                sb.setCharAt(0, (char) i);
-                mAsciiMeasures[style][i] = mTextPaint.measureText(sb, 0, 1);
+        if (!inheritMeasures) {
+            StringBuilder sb = new StringBuilder(" ");
+            for (int style = 0; style < mAsciiMeasures.length; style++) {
+                configureFont((style & 1) != 0, (style & 2) != 0);
+                for (int i = 0; i < mAsciiMeasures[style].length; i++) {
+                    sb.setCharAt(0, (char) i);
+                    mAsciiMeasures[style][i] = mTextPaint.measureText(sb, 0, 1);
+                }
             }
         }
         configureFont(false, false);
