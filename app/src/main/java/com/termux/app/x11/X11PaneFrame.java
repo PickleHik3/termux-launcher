@@ -49,6 +49,12 @@ public final class X11PaneFrame extends PaneContentFrame {
         default boolean consumeLauncherKey(@NonNull android.view.KeyEvent event) { return false; }
     }
 
+    /** Told about a tap that landed on the display's own picture. */
+    public interface TapListener {
+        /** A finger went down and came up on the display without drifting into a gesture. */
+        void onDisplayTap();
+    }
+
     /** A tap this close to the frame's edge, inside it, is for the page rather than for X. */
     private static final float BORDER_BAND_DP = 12f;
 
@@ -63,6 +69,11 @@ public final class X11PaneFrame extends PaneContentFrame {
     @Nullable private View mEmptyState;
     @Nullable private Host mHost;
     @Nullable private PaneSurfaceStyle mStyle;
+    @Nullable private TapListener mTapListener;
+    /** Where the finger the tap listener is watching went down, and whether it has drifted. */
+    private float mWatchDownX, mWatchDownY;
+    private boolean mWatchMoved;
+    private boolean mWatchIsDisplays;
     private boolean mRunning;
     /** The Linux display setting. Off, the page is still a place — it just says so. */
     private boolean mEnabled = true;
@@ -188,6 +199,64 @@ public final class X11PaneFrame extends PaneContentFrame {
 
     public void setHost(@Nullable Host host) {
         mHost = host;
+    }
+
+    /**
+     * Watch the taps that reach the display. Nothing is taken from X: this only reports what went
+     * past, so a policy on the launcher's side can tell a tap from a drag.
+     */
+    public void setTapListener(@Nullable TapListener listener) {
+        mTapListener = listener;
+    }
+
+    /**
+     * Every touch aimed at the page passes through here, so this is where a tap is recognised —
+     * before the page's own controls take theirs and before the rest goes to X, neither of which
+     * is changed by the watching.
+     */
+    @Override
+    public boolean dispatchTouchEvent(@NonNull android.view.MotionEvent event) {
+        watchForTap(event);
+        return super.dispatchTouchEvent(event);
+    }
+
+    /**
+     * A tap is one finger down and up on the display's own picture with no drift: not a drag, not
+     * a two-finger gesture, and not one of the page's controls or its border band.
+     */
+    private void watchForTap(@NonNull android.view.MotionEvent event) {
+        if (mTapListener == null) return;
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_DOWN:
+                mWatchDownX = event.getX();
+                mWatchDownY = event.getY();
+                mWatchMoved = false;
+                boolean onControl = mControls != null && mControls.isControlsShown()
+                    && mControls.actionAt(mWatchDownX, mWatchDownY) != DisplayControlsView.ACTION_NONE;
+                mWatchIsDisplays = mRunning && !onControl
+                    && !isNearBorder(mWatchDownX, mWatchDownY);
+                break;
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (Math.hypot(event.getX() - mWatchDownX, event.getY() - mWatchDownY)
+                        > android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
+                    mWatchMoved = true;
+                }
+                break;
+            case android.view.MotionEvent.ACTION_POINTER_DOWN:
+                // A second finger makes this a gesture — a scroll, a pinch — and never a tap.
+                mWatchMoved = true;
+                break;
+            case android.view.MotionEvent.ACTION_UP:
+                boolean tap = mWatchIsDisplays && !mWatchMoved;
+                mWatchIsDisplays = false;
+                if (tap) mTapListener.onDisplayTap();
+                break;
+            case android.view.MotionEvent.ACTION_CANCEL:
+                mWatchIsDisplays = false;
+                break;
+            default:
+                break;
+        }
     }
 
     @NonNull

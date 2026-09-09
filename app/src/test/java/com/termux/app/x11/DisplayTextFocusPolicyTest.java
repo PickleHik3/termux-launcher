@@ -21,8 +21,10 @@ public class DisplayTextFocusPolicyTest {
     /** Records what the policy asked for, in order: {@code show} and {@code hide}. */
     private static final class RecordingKeyboard implements DisplayTextFocusPolicy.Keyboard {
         final List<String> calls = new ArrayList<>();
-        @Override public void showKeyboardForTextFocus() { calls.add("show"); }
-        @Override public void hideKeyboardForTextFocus() { calls.add("hide"); }
+        boolean up;
+        @Override public void showKeyboardForTextFocus() { calls.add("show"); up = true; }
+        @Override public void hideKeyboardForTextFocus() { calls.add("hide"); up = false; }
+        @Override public boolean isKeyboardUp() { return up; }
     }
 
     /** The tap window, stepped by hand. */
@@ -293,6 +295,17 @@ public class DisplayTextFocusPolicyTest {
         assertFalse(policy.isTapWindowOpen());
         scheduler.expire();
         assertEquals(List.of(), keyboard.calls);
+    }
+
+    @Test
+    public void aKeyboardTheUserPutDownBehindOurBack_isRaisedAgainByTheNextTextTap() {
+        tapOver("xterm");
+        // The keyboard's own hide key: down, with nothing telling the policy so.
+        keyboard.up = false;
+        keyboard.calls.clear();
+        tapOver("xterm");
+        assertEquals(State.AUTO_OPEN, policy.state());
+        assertEquals(List.of("show"), keyboard.calls);
     }
 
     @Test

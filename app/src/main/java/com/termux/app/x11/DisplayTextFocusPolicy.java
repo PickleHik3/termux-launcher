@@ -47,6 +47,12 @@ public final class DisplayTextFocusPolicy {
         void showKeyboardForTextFocus();
         /** Put down the keyboard this policy raised. */
         void hideKeyboardForTextFocus();
+        /**
+         * Whether a keyboard is on screen at all. The policy asks because the user can put one
+         * down by a route it never hears about - the keyboard's own hide key - and the next tap
+         * in a text field has to raise it again rather than assume it is already there.
+         */
+        boolean isKeyboardUp();
     }
 
     /** The tap window's timer, handed in so the window can be stepped in a test. */
@@ -104,6 +110,11 @@ public final class DisplayTextFocusPolicy {
     /** True while the signals mean anything at all. */
     public boolean isActive() {
         return enabled && onPlace && touchMode == TOUCH_MODE_TOUCHSCREEN;
+    }
+
+    /** True while the wall rests on the Display place. */
+    public boolean isOnPlace() {
+        return onPlace;
     }
 
     /** True while a tap is still waiting for the cursor name that answers it. */
@@ -186,7 +197,7 @@ public final class DisplayTextFocusPolicy {
             return true;
         }
         if (focused) {
-            if (state == State.CLOSED) {
+            if (state == State.CLOSED || !keyboard.isKeyboardUp()) {
                 state = State.AUTO_OPEN;
                 say("focus in -> show");
                 keyboard.showKeyboardForTextFocus();
@@ -228,7 +239,7 @@ public final class DisplayTextFocusPolicy {
             return;
         }
         if (text) {
-            if (state == State.CLOSED) {
+            if (state == State.CLOSED || !keyboard.isKeyboardUp()) {
                 state = State.AUTO_OPEN;
                 say("tap over " + seen + " -> show");
                 keyboard.showKeyboardForTextFocus();
