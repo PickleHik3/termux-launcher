@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.Message;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -482,7 +483,15 @@ public final class TerminalSession extends TerminalOutput {
         public void handleMessage(Message msg) {
             int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
             if (bytesRead > 0) {
-                mEmulator.append(mReceiveBuffer, bytesRead);
+                // Named in system traces so the parsing's share of the UI thread can be read next
+                // to Terminal.render and the frame clock: this is the emulator's only entry point
+                // for shell output, and it runs on the main thread by design.
+                Trace.beginSection("Terminal.append");
+                try {
+                    mEmulator.append(mReceiveBuffer, bytesRead);
+                } finally {
+                    Trace.endSection();
+                }
                 notifyScreenUpdate();
             }
             if (msg.what == MSG_PROCESS_EXITED) {
