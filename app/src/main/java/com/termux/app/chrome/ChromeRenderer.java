@@ -2,6 +2,7 @@ package com.termux.app.chrome;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Trace;
@@ -264,12 +265,22 @@ public final class ChromeRenderer {
         }
         // The scopes ride in the section name so a trace shows which kind of request each caller
         // made; the concatenation only happens while a trace is being recorded.
-        Trace.beginSection(Trace.isEnabled() ? "Chrome.requestSync " + scopes : "Chrome.requestSync");
+        Trace.beginSection(tracing() ? "Chrome.requestSync " + scopes : "Chrome.requestSync");
         try {
             sync(scopes);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /**
+     * Whether a trace is being recorded, and whether we may even ask. {@code Trace.isEnabled}
+     * arrived in API 29 and this app runs from 26, where the call site does not resolve at all —
+     * every chrome request threw {@link NoSuchMethodError} on Android 8 and 9, which for a home
+     * screen is the whole screen. Below 29 the plain section name is used.
+     */
+    private static boolean tracing() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && Trace.isEnabled();
     }
 
     private void sync(int scopes) {
