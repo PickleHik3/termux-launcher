@@ -3893,6 +3893,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
     }
 
+    /** Whether the keyboard on screen is the split one, whose parting no surface may fill. */
+    private boolean isInAppKeyboardSplit() {
+        return mInAppKeyboard != null
+            && mInAppKeyboard.getForm() == PlaceLayout.KeyboardForm.SPLIT;
+    }
+
     /**
      * True when the scheme's background color or the opacity slider repaints the surface.
      *
@@ -3902,12 +3908,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * every other surface until the keyboard section was reset. While surfaces are normalized the
      * keyboard renders the shared material and the scheme keeps only its key colours.</p>
      */
-    /** Whether the keyboard on screen is the split one, whose parting no surface may fill. */
-    private boolean isInAppKeyboardSplit() {
-        return mInAppKeyboard != null
-            && mInAppKeyboard.getForm() == PlaceLayout.KeyboardForm.SPLIT;
-    }
-
     private boolean hasInAppKeyboardBackgroundOverride() {
         return ChromePolicy.hasInAppKeyboardBackgroundOverride(isInAppKeyboardOpacityLinked(),
             resolveInAppKeyboardSchemeBackgroundColor(),
