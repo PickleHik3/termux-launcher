@@ -12866,6 +12866,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneWallController.displayPage() != null) {
                         mPaneWallController.displayPage().dismissControls();
                     }
+                    if (mPaneWallController.widgetsPage() != null) {
+                        mPaneWallController.widgetsPage().dismissControls();
+                    }
                     syncPlaceBar();
                     syncWallKeyboard(page);
                     syncDisplayTouchpad();
@@ -12883,7 +12886,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Widgets page is built before the widget controller looks its grid up, so the
         // controller finds it already on the wall.
         if (mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled()) {
-            mPaneWallController.attachWidgetsPage(getLayoutInflater());
+            attachWidgetsPage();
         }
         if (com.termux.BuildConfig.X11_SERVER) attachDisplayPage();
         installLinuxAppRunner();
@@ -13178,6 +13181,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)) return;
         ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setWallAvailable(
             mPaneWallController != null && mPaneWallController.canDrag());
+    }
+
+    /**
+     * Put the Widgets place on the wall: the app-widget grid, and the border tab that carries its
+     * settings and the pencil that starts editing it.
+     */
+    private void attachWidgetsPage() {
+        if (mPaneWallController == null) return;
+        com.termux.app.wall.WidgetPaneFrame page =
+            mPaneWallController.attachWidgetsPage(getLayoutInflater());
+        if (page == null) return;
+        page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
+            @Override public void openWidgetGridSettings() {
+                ActivityUtils.startActivity(TermuxActivity.this,
+                    com.termux.app.activities.SettingsActivity.createFragmentIntent(
+                        TermuxActivity.this,
+                        com.termux.app.fragments.settings.termux.LayoutPreferencesFragment.class,
+                        R.string.settings_destination_layout,
+                        com.termux.app.wall.PaneWallPage.WIDGETS.toolName(),
+                        com.termux.app.fragments.settings.termux.LayoutPreferencesFragment
+                            .KEY_GRID_COLUMNS));
+            }
+            @Override public void editWidgets() {
+                if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
+            }
+            @Override public int widgetGridColumns() {
+                return placeLayout(com.termux.app.wall.PaneWallPage.WIDGETS,
+                    currentPlaceOrientation()).widgetColumns;
+            }
+            @Override public int widgetGridRows() {
+                return placeLayout(com.termux.app.wall.PaneWallPage.WIDGETS,
+                    currentPlaceOrientation()).widgetRows;
+            }
+            @Override public void setWidgetGrid(int columns, int rows) {
+                PlaceLayoutStore store = placeLayoutStore();
+                if (store == null) return;
+                PlaceOrientation orientation = currentPlaceOrientation();
+                store.setWidgetColumns(com.termux.app.wall.PaneWallPage.WIDGETS, orientation,
+                    columns);
+                store.setWidgetRows(com.termux.app.wall.PaneWallPage.WIDGETS, orientation, rows);
+                // The grid is drawn from the place's layout, so the same re-read the Layout
+                // page's sliders trigger is what reflows it here - no second path to applyGrid.
+                syncPlaceLayout();
+            }
+        });
     }
 
     /**
@@ -13752,6 +13800,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void restoreWidgetSurfaceOrigin() {
                     if (mPaneWallController != null) {
                         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, false);
+                    }
+                }
+                @Override public void onWidgetEditSessionChanged(boolean editing) {
+                    // The page's border tab belongs to the mode: the grid's size while a widget
+                    // is being edited, the settings and the pencil otherwise.
+                    if (mPaneWallController != null && mPaneWallController.widgetsPage() != null) {
+                        mPaneWallController.widgetsPage().applyWidgetEditing(editing);
                     }
                 }
                 @Override public void onWidgetPageRendered() {

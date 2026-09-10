@@ -38,6 +38,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         default void onWidgetEditorClosed() { }
         /** The page on screen was drawn again: its number or its widgets may have changed. */
         default void onWidgetPageRendered() { }
+        /**
+         * The widget edit chrome came up or went away. The page's own border tab follows it: a
+         * render that drops the chrome ends the session as surely as Back does, so this is told
+         * from one place rather than from each way in and out.
+         */
+        default void onWidgetEditSessionChanged(boolean editing) { }
     }
 
     private final WidgetPaneView pane;
@@ -146,6 +152,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             case ADD_PAGE: menuAddPage(); break;
             case REMOVE_PAGE: menuRemovePage(); break;
         }
+    }
+
+    /**
+     * The Widgets page's edit pencil: the same entry the long-press menu's Edit widgets takes,
+     * with the same gestures and the same ways out.
+     */
+    public void editWidgets() {
+        menuEditWidgets();
     }
 
     /** Enters the edit chrome on the current page's first widget, without a live drag. */
@@ -368,6 +382,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         overlay.setListener(overlayListener);
         overlay.show(paneBounds(record.cell), horizontal, vertical);
+        syncEditSession();
         return true;
     }
 
@@ -375,6 +390,18 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         clearDisplacementPreview(false);
         edit = null;
         pane.hideWidgetEditOverlay();
+        syncEditSession();
+    }
+
+    /** Whether the host has been told the edit chrome is up. */
+    private boolean editSessionAnnounced;
+
+    /** Tell the host when, and only when, that has changed. */
+    private void syncEditSession() {
+        boolean active = pane.widgetEditActive();
+        if (active == editSessionAnnounced) return;
+        editSessionAnnounced = active;
+        host.onWidgetEditSessionChanged(active);
     }
 
     private void beginMoveDrag(float rawX, float rawY) {
@@ -560,6 +587,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
         pane.setReducedMotion(host.reducedMotion());
         pane.render(widgets.repository(), widgets.capability(), currentPage);
+        // A render hides the edit chrome, so the session can end here without anyone asking.
+        syncEditSession();
         host.onWidgetPageRendered();
     }
 
