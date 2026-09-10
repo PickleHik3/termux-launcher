@@ -59,6 +59,7 @@
 - The pull-down status pane is gone; the widget grid it held is the Widgets place of the home screen.
 - The status bar's own edge lines are gone; it wears the same thin rim as the dock.
 - The shipped extra-keys row is keyboard, new session, Widgets, Terminal, Display, split and workspaces.
+- Keyboards that lie over a place — floating, split, and the docked keyboard on the Display and Widgets places — are solid panels in the theme's colour. The terminal's docked keyboard keeps its glass, and the Keyboard surface's opacity applies to it alone.
 
 ## Fixes
 
