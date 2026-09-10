@@ -74,14 +74,21 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /** Build the wall's Widgets page: the app-widget grid, dressed as a pane. */
-    public void attachWidgetsPage(@NonNull LayoutInflater inflater) {
-        if (mWidgetsPage != null) return;
+    @Nullable
+    public WidgetPaneFrame attachWidgetsPage(@NonNull LayoutInflater inflater) {
+        if (mWidgetsPage != null) return mWidgetsPage;
         WidgetPaneFrame frame = (WidgetPaneFrame) inflater.inflate(
             com.termux.R.layout.view_widget_pane, mWall, false);
         mWall.addView(frame, 0);
         mWidgetsPage = frame;
         mWall.setPageView(PaneWallPage.WIDGETS, frame);
         applyStyle(mStyle);
+        return frame;
+    }
+
+    @Nullable
+    public WidgetPaneFrame widgetsPage() {
+        return mWidgetsPage;
     }
 
     /** True once the widget grid has been moved onto the wall. */

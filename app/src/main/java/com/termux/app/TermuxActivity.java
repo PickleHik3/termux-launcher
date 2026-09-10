@@ -12784,6 +12784,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneWallController.displayPage() != null) {
                         mPaneWallController.displayPage().dismissControls();
                     }
+                    if (mPaneWallController.widgetsPage() != null) {
+                        mPaneWallController.widgetsPage().dismissControls();
+                    }
                     syncPlaceBar();
                     syncWallKeyboard(page);
                     syncDisplayTouchpad();
@@ -12801,7 +12804,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Widgets page is built before the widget controller looks its grid up, so the
         // controller finds it already on the wall.
         if (mPreferences != null && mPreferences.isAppLauncherWidgetPaneEnabled()) {
-            mPaneWallController.attachWidgetsPage(getLayoutInflater());
+            attachWidgetsPage();
         }
         if (com.termux.BuildConfig.X11_SERVER) attachDisplayPage();
         installLinuxAppRunner();
@@ -13096,6 +13099,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)) return;
         ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setWallAvailable(
             mPaneWallController != null && mPaneWallController.canDrag());
+    }
+
+    /**
+     * Put the Widgets place on the wall: the app-widget grid, and the border tab that carries its
+     * settings and the pencil that starts editing it.
+     */
+    private void attachWidgetsPage() {
+        if (mPaneWallController == null) return;
+        com.termux.app.wall.WidgetPaneFrame page =
+            mPaneWallController.attachWidgetsPage(getLayoutInflater());
+        if (page == null) return;
+        page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
+            @Override public void openWidgetGridSettings() {
+                ActivityUtils.startActivity(TermuxActivity.this,
+                    com.termux.app.activities.SettingsActivity.createFragmentIntent(
+                        TermuxActivity.this,
+                        com.termux.app.fragments.settings.termux.LayoutPreferencesFragment.class,
+                        R.string.settings_destination_layout,
+                        com.termux.app.wall.PaneWallPage.WIDGETS.toolName(),
+                        com.termux.app.fragments.settings.termux.LayoutPreferencesFragment
+                            .KEY_GRID_COLUMNS));
+            }
+            @Override public void editWidgets() {
+                if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
+            }
+        });
     }
 
     /**

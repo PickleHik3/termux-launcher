@@ -57,7 +57,8 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     private static final String KEY_KEYBOARD_ON_ENTER = "layout_keyboard_on_enter";
     private static final String KEY_KEYBOARD_MODE = "layout_keyboard_mode";
     private static final String KEY_KEYBOARD_FORM = "layout_keyboard_form";
-    private static final String KEY_GRID_COLUMNS = "layout_grid_columns";
+    /** The Widgets page's own cog deep-links to this row, so it names itself. */
+    public static final String KEY_GRID_COLUMNS = "layout_grid_columns";
     private static final String KEY_GRID_ROWS = "layout_grid_rows";
     private static final String KEY_LOOK = "layout_look";
 
