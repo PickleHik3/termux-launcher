@@ -55,6 +55,12 @@ The release being written keeps its own `release-notes-v<version>.md` so `gh rel
 that file goes — one history, never two. Versions before v0.2.35 live on their GitHub releases only.
 AGENTS.md has the full convention.
 
+## Development environment
+
+| | |
+|---|---|
+| [`termux-on-device-build.md`](termux-on-device-build.md) | Building the launcher from a Termux session on the phone itself: where the aarch64 NDK and build-tools come from, the three workarounds AGP needs on an ARM host, and recommended minimum specs. |
+
 ## Verification
 
 [`verification/`](verification/) holds the runnable probes, not prose: on-device scripts for
