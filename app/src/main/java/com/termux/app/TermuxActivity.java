@@ -13480,8 +13480,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return frame == null || !isEmbeddedDisplayRunning() ? null : frame.display();
                 },
                 isInAppKeyboardCapsule(),
-                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanel,
-                    R.color.termux_surface_panel),
+                // The pad lies over the place, so it is an overlay: one opaque panel in the same
+                // surface role the drawer and the popups use, never the dock's glass.
+                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                    R.color.termux_surface_panel_high),
                 getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
                     R.color.termux_on_surface),
                 com.termux.app.statusbar.StatusBarLensView.accentFor(this,

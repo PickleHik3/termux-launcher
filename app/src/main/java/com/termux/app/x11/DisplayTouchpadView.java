@@ -26,8 +26,9 @@ import com.termux.x11.input.InputStub;
  * fingers tapping click the middle button, swiping sideways switch windows, and swiping down
  * bring the keyboard back. The small arrow in its bottom-left corner does the same.
  *
- * <p>It is drawn as a filled rounded slab where the dock is flush and as an outlined card where
- * the surfaces float, so it belongs to whichever kit is on.
+ * <p>It lies over the place, so it is drawn solid: one opaque rounded panel in the overlay
+ * surface colour, square-cornered against the dock or rounded as a card with the surfaces, and
+ * with no rim at rest. The only stroke it draws is the ring that appears while a drag is held.
  */
 public final class DisplayTouchpadView extends View {
 
@@ -134,11 +135,12 @@ public final class DisplayTouchpadView extends View {
         mSink = sink;
         mCard = card;
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mFillPaint.setColor(card ? ColorUtils.setAlphaComponent(onSurfaceColor, 10)
-            : ColorUtils.setAlphaComponent(surfaceColor, 230));
+        // The pad lies over the place in both shapes, so it is solid in both: the surface colour
+        // at full alpha, and no rim at rest. The only stroke left is the drag ring below.
+        mFillPaint.setColor(ColorUtils.setAlphaComponent(surfaceColor, 255));
         mStrokePaint.setStyle(Paint.Style.STROKE);
         mStrokePaint.setStrokeWidth(dp(1.5f));
-        mStrokePaint.setColor(ColorUtils.setAlphaComponent(onSurfaceColor, card ? 64 : 24));
+        mStrokePaint.setColor(ColorUtils.setAlphaComponent(onSurfaceColor, 120));
         mBackPaint.setColor(ColorUtils.setAlphaComponent(accentColor, 46));
         mGlyphPaint.setColor(accentColor);
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
@@ -168,7 +170,6 @@ public final class DisplayTouchpadView extends View {
         super.onDraw(canvas);
         float radius = dp(RADIUS_DP);
         canvas.drawRoundRect(mBounds, radius, radius, mFillPaint);
-        canvas.drawRoundRect(mBounds, radius, radius, mStrokePaint);
         // A faint grid of dots says "this is a surface you move across", nothing more.
         float step = dp(28f);
         for (float y = mBounds.top + step; y < mBounds.bottom - step / 2f; y += step) {
@@ -176,8 +177,8 @@ public final class DisplayTouchpadView extends View {
                 canvas.drawCircle(x, y, dp(1f), mDotPaint);
             }
         }
+        // The one stroke the pad draws: a ring while a drag is held, gone the moment it ends.
         if (mDragging) {
-            mStrokePaint.setAlpha(120);
             canvas.drawRoundRect(mBounds, radius, radius, mStrokePaint);
         }
         canvas.drawRoundRect(mBack, mBack.height() / 2f, mBack.height() / 2f, mBackPaint);
