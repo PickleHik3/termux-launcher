@@ -59,16 +59,17 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private boolean mDeferredReset;
     @Nullable private android.view.VelocityTracker mVelocityTracker;
     /**
-     * Drag hint: two glowing chevrons that bloom at the row's bottom edge on a tap of the bar's
+     * Drag hint: one small chevron that fades in at the row's inner edge on a tap of the bar's
      * chrome, pointing the way the bar can go from here - down while it is folded, up while it
-     * is open - and drifting that way as they fade.
+     * is open - and drifting that way as it fades. A single thin stroke, no glow: the bar is
+     * quiet chrome and the hint should read as a whisper, not a widget.
      */
     private static final long HINT_DURATION_MS = 680L;
-    private static final float HINT_CHEVRON_WIDTH_DP = 14f;
-    private static final float HINT_CHEVRON_HEIGHT_DP = 5f;
-    private static final float HINT_CHEVRON_GAP_DP = 4f;
-    private static final float HINT_INSET_DP = 4f;
-    private static final float HINT_TRAVEL_DP = 6f;
+    private static final float HINT_CHEVRON_WIDTH_DP = 10f;
+    private static final float HINT_CHEVRON_HEIGHT_DP = 4f;
+    private static final float HINT_STROKE_DP = 1.5f;
+    private static final float HINT_INSET_DP = 3f;
+    private static final float HINT_TRAVEL_DP = 5f;
     @Nullable private ValueAnimator mHintAnimator;
     private float mHintProgress;
     @Nullable private Paint mHintPaint;
@@ -139,8 +140,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     /**
      * A tap on the bar's own chrome answers with the direction the bar does not show at rest:
-     * two chevrons that glow in at the row's bottom edge, drift the way a swipe would take the
-     * bar and fade out. Taps that belong to a child (window chips, the stat and weather widgets,
+     * one chevron that fades in at the row's inner edge, drifts the way a swipe would take the
+     * bar and fades out. Taps that belong to a child (window chips, the stat and weather widgets,
      * the sessions chip) never reach here, so switching windows or opening a card stays silent.
      */
     private void showPullHint() {
@@ -177,7 +178,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     private void drawPullHint(@NonNull android.graphics.Canvas canvas) {
         if (mHintProgress <= 0f) return;
-        // One rise-and-fall envelope over the whole animation, so the chevrons never snap off.
+        // One rise-and-fall envelope over the whole animation, so the chevron never snaps off.
         float envelope = (float) Math.sin(Math.PI * mHintProgress);
         if (envelope <= 0.01f) return;
         float density = getResources().getDisplayMetrics().density;
@@ -186,10 +187,11 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             mHintPaint.setStyle(Paint.Style.STROKE);
             mHintPaint.setStrokeCap(Paint.Cap.ROUND);
             mHintPaint.setStrokeJoin(Paint.Join.ROUND);
+            mHintPaint.setStrokeWidth(HINT_STROKE_DP * density);
         }
         if (mHintPath == null) mHintPath = new android.graphics.Path();
-        // Folded, the bar opens by a pull down; open, it folds by a push up. The chevrons point
-        // that way and travel that way.
+        // Folded, the bar opens by a pull down; open, it folds by a push up. The chevron points
+        // that way and travels that way.
         boolean opening = mState.toCollapsedPreference();
         float expand = StatusBarGesturePolicy.expandSign(mEdge);
         // Folded, the bar opens away from its edge; open, it folds back towards it.
@@ -197,15 +199,14 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         float direction = down ? 1f : -1f;
         float width = HINT_CHEVRON_WIDTH_DP * density;
         float height = HINT_CHEVRON_HEIGHT_DP * density;
-        float gap = HINT_CHEVRON_GAP_DP * density;
         float travel = HINT_TRAVEL_DP * density * mHintProgress * direction;
         boolean vertical = StatusBarGesturePolicy.isVertical(mEdge);
-        // The chevrons bloom at the bar's inner edge — the one facing the terminal — and point
+        // The chevron sits at the bar's inner edge — the one facing the terminal — and points
         // the way a drag would take it, whichever edge the bar stands on.
         float cx = vertical ? getHeight() / 2f : getWidth() / 2f;
         float span = vertical ? getWidth() : getHeight();
-        float base = expand > 0f
-            ? span - HINT_INSET_DP * density - height - gap - height + travel
+        float top = expand > 0f
+            ? span - HINT_INSET_DP * density - height + travel
             : HINT_INSET_DP * density + travel;
         int chevronLayer = vertical ? canvas.save() : -1;
         if (vertical) {
@@ -215,25 +216,16 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             canvas.rotate(-90f, 0f, 0f);
             canvas.translate(-getHeight(), 0f);
         }
-        int color = pullHintColor();
-        for (int pass = 0; pass < 2; pass++) {
-            // A wide, faint stroke under a thin bright one is the glow.
-            boolean glow = pass == 0;
-            mHintPaint.setStrokeWidth((glow ? 6f : 1.75f) * density);
-            mHintPaint.setColor(color);
-            mHintPaint.setAlpha(Math.round((glow ? 70 : 230) * envelope));
-            for (int i = 0; i < 2; i++) {
-                float top = base + i * (height + gap);
-                // The tip leads: pointing down it is at the bottom, pointing up at the top.
-                float tipY = down ? top + height : top;
-                float tailY = down ? top : top + height;
-                mHintPath.reset();
-                mHintPath.moveTo(cx - width / 2f, tailY);
-                mHintPath.lineTo(cx, tipY);
-                mHintPath.lineTo(cx + width / 2f, tailY);
-                canvas.drawPath(mHintPath, mHintPaint);
-            }
-        }
+        mHintPaint.setColor(pullHintColor());
+        mHintPaint.setAlpha(Math.round(200 * envelope));
+        // The tip leads: pointing down it is at the bottom, pointing up at the top.
+        float tipY = down ? top + height : top;
+        float tailY = down ? top : top + height;
+        mHintPath.reset();
+        mHintPath.moveTo(cx - width / 2f, tailY);
+        mHintPath.lineTo(cx, tipY);
+        mHintPath.lineTo(cx + width / 2f, tailY);
+        canvas.drawPath(mHintPath, mHintPaint);
         if (chevronLayer >= 0) canvas.restoreToCount(chevronLayer);
     }
 
