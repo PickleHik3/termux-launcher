@@ -51,6 +51,16 @@ public final class X11WindowList {
         }
     }
 
+    /**
+     * The window a next/previous step lands on: a step past either end wraps round, and with no
+     * front window the step starts from the near end. -1 when there is nothing to go to.
+     */
+    public static int neighbourIndex(int activeIndex, int count, boolean forward) {
+        if (count <= 0) return -1;
+        if (activeIndex < 0 || activeIndex >= count) return forward ? 0 : count - 1;
+        return ((activeIndex + (forward ? 1 : -1)) % count + count) % count;
+    }
+
     public interface Listener {
         /** Called on the main thread with the windows in stacking-age order and which is in front. */
         void onWindowsChanged(@NonNull List<Window> windows, int activeIndex);

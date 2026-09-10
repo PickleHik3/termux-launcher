@@ -15379,8 +15379,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
     }
 
-    /** Switch to the next/previous window within the current session (Ctrl+Alt+] / [). */
+    /**
+     * Switch to the next/previous window (Ctrl+Alt+] / [): a window of the current session, or on
+     * the Display place the next app on the display — the same list the status bar's chips stand
+     * for, so a keyboard step and a chip tap agree on the order.
+     */
     void switchWindow(boolean forward) {
+        if (isDisplayPageShowing()) {
+            switchDisplayWindow(forward);
+            return;
+        }
         if (mPaneController == null || mCurrentWSession == null) return;
         int n = mCurrentWSession.windows.size();
         if (n < 2) return;
@@ -15389,6 +15397,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The pan narrates the switch and the window bar's selected pill names the position, so
         // with the bar on screen a chip would say what is already visible twice over. Only when
         // the bar is hidden does the position have no other voice.
+        View windowBar = findViewById(R.id.terminal_window_bar_host);
+        if (windowBar == null || !windowBar.isShown()) {
+            String direction = getString(forward ? R.string.tool_window_next : R.string.tool_window_previous);
+            showSessionSwitchIndicator(getString(R.string.msg_window_switch_position, direction, target + 1, n));
+        }
+    }
+
+    private void switchDisplayWindow(boolean forward) {
+        if (mX11Windows == null) return;
+        int n = mDisplayWindows.size();
+        int target = com.termux.app.x11.X11WindowList.neighbourIndex(mDisplayActiveWindow, n, forward);
+        if (target < 0 || target == mDisplayActiveWindow) return;
+        mX11Windows.activate(mDisplayWindows.get(target).id);
         View windowBar = findViewById(R.id.terminal_window_bar_host);
         if (windowBar == null || !windowBar.isShown()) {
             String direction = getString(forward ? R.string.tool_window_next : R.string.tool_window_previous);

@@ -52,6 +52,11 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   showing, and a hardware keyboard is the display's entirely: every key and every chord goes to
   X, and the launcher's shortcuts and their hints stay out of the way. Leave the display by
   touch, by the place icons, or with Home.
+- **Switching apps.** The keyboard's window actions work on the display's apps: swipe the space
+  bar from its top corners (**Next window** at the top right, **Previous window** at the top
+  left) to step through the apps the status bar lists, in the same order as its chips. The same
+  actions on the extra-keys row, a key chord or `launcherctl` do the same while the Display place
+  is up.
 - **The keyboard follows text fields.** In Touchscreen touch mode, tapping a text field on the
   display brings the keyboard up and tapping elsewhere puts it down — see
   [The keyboard follows text fields](#the-keyboard-follows-text-fields).

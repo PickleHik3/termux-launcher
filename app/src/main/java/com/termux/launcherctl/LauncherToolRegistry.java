@@ -728,7 +728,7 @@ public final class LauncherToolRegistry {
             ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_close, R.string.tool_desc_window_close, Collections.singletonList(Binding.of("ctrl+alt+x", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_NEXT,
-            "Switch to the next window in the current session.",
+            "Switch to the next window in the current session, or to the next app on the Display place.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_next, R.string.tool_desc_window_next,
@@ -736,7 +736,7 @@ public final class LauncherToolRegistry {
                 Binding.of("ctrl+alt+]", BindingCondition.SPLITS_ON),
                 Binding.of("ctrl+alt+right", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_PREVIOUS,
-            "Switch to the previous window in the current session.",
+            "Switch to the previous window in the current session, or to the previous app on the Display place.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_previous, R.string.tool_desc_window_previous,

@@ -1512,8 +1512,8 @@
     <string name="workspace_picker_failed">Could not load workspace: %1$s</string>
     <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
     <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
-    <string name="tool_desc_window_next">Switch to the next window in the current session.</string>
-    <string name="tool_desc_window_previous">Switch to the previous window in the current session.</string>
+    <string name="tool_desc_window_next">Switch to the next window, or the next app on the display.</string>
+    <string name="tool_desc_window_previous">Switch to the previous window, or the previous app on the display.</string>
     <string name="tool_desc_session_new">Create a new terminal session.</string>
     <string name="tool_desc_session_next">Switch to the next terminal session.</string>
     <string name="tool_desc_session_previous">Switch to the previous terminal session.</string>

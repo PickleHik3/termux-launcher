@@ -40,9 +40,14 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
     @Override
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
+        if (isLauncherSide(value)) return false;
         LorieView view = display.displayView();
         if (view == null || !view.connected()) return false;
         switch (value.getKind()) {
+            case Event:
+                // Only the action key is something X should see; the keyboard's other events
+                // are answered above.
+                return sendModified(view, KeyEvent.KEYCODE_ENTER, ctrl, alt, shift);
             case Char:
                 // With a modifier held the character is not the point — the keycode is, so X can
                 // build Ctrl+C rather than receiving the control character itself.
@@ -75,6 +80,23 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                 return true;
             default:
                 return true;
+        }
+    }
+
+    /**
+     * Values that belong to the launcher rather than to whatever is typing: a {@code tool:} key
+     * (window switching, the palette, the places) and the keyboard's own events (layout switch,
+     * hide, settings). They go on to the host, which knows it is on the Display place; taking
+     * them here would make the space bar's corners dead while the display is up.
+     */
+    static boolean isLauncherSide(@NonNull KeyValue value) {
+        switch (value.getKind()) {
+            case Launcher_tool:
+                return true;
+            case Event:
+                return value.getEvent() != KeyValue.Event.ACTION;
+            default:
+                return false;
         }
     }
 

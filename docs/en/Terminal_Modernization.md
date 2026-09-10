@@ -437,7 +437,8 @@ any key slot can carry a launcher action written `tool:<registry id>` — option
 Slots are `key1` NW, `key2` NE, `key3` SW, `key4` SE, `key5` W, `key6` E, `key7` N, `key8` S — the
 keyboard's own eight swipe directions, unchanged. A `tool:` key reaches the same dispatcher as a
 keybind and a palette row, so every tool in the registry is available on every slot with no
-per-tool code and no separate binding syntax.
+per-tool code and no separate binding syntax. The tools follow the place you are on: on the
+Display place `window.next` and `window.previous` step through the apps open on the display.
 
 The shipped defaults are in `inapp-keyboard/src/main/res/xml/bottom_row.xml`; the north swipe takes
 over the keyboard's layout-switch gesture and `switch_forward` is dropped, while plain east/west stay
