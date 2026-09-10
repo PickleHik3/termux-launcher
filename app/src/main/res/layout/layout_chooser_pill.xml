@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The segmented pill the Layout page's chooser sheets use, with the same track, indicator and
+     label styling as SegmentedPillPreference's own row. The segments are added in code, so one
+     layout serves a two, three or four value set. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/layout_chooser_pill_track"
+    android:layout_width="match_parent"
+    android:layout_height="44dp"
+    android:background="@drawable/settings_segmented_pill_track"
+    android:padding="3dp">
+
+    <View
+        android:id="@+id/layout_chooser_pill_indicator"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:background="@drawable/settings_segmented_pill_indicator" />
+
+    <LinearLayout
+        android:id="@+id/layout_chooser_pill_segments"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal" />
+</FrameLayout>
