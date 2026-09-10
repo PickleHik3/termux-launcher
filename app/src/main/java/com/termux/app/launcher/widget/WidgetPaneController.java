@@ -13,7 +13,10 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Production coordinator from the real picker through placement into the A-1 transaction. */
@@ -290,6 +293,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         Rect dragStartBounds;
         WidgetEditPolicy.Candidate moveCandidate;
         WidgetCellRect resizeCandidate;
+        /** Neighbours currently shown pushed aside, appWidgetId to the cell they preview. */
+        @NonNull Map<Integer, WidgetCellRect> previewDisplaced = Collections.emptyMap();
         EditState(int appWidgetId, int minColumnSpan, int minRowSpan,
                   boolean horizontalResizable, boolean verticalResizable) {
             this.appWidgetId = appWidgetId;
@@ -367,6 +372,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     private void exitEditMode() {
+        clearDisplacementPreview(false);
         edit = null;
         pane.hideWidgetEditOverlay();
     }
@@ -378,6 +384,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.dragStartRawY = rawY;
         edit.dragStartBounds = pane.grid().metrics().boundsFor(record.cell);
         edit.moveCandidate = null;
+        clearDisplacementPreview(false);
     }
 
     private void moveDrag(float rawX, float rawY) {
@@ -397,6 +404,61 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         overlay.setGhostBounds(edit.moveCandidate.valid
             ? paneBounds(edit.moveCandidate.rect) : null);
+        previewDisplacement(edit.moveCandidate.valid
+            ? edit.moveCandidate.displaced : Collections.emptyMap());
+    }
+
+    /**
+     * Slides the neighbours a candidate pushes aside to where they would land. Only the ones
+     * whose target actually changed since the last move event are touched, so a drag that keeps
+     * the same plan costs nothing per frame.
+     */
+    private void previewDisplacement(@NonNull Map<Integer, WidgetCellRect> next) {
+        Map<Integer, WidgetCellRect> previous = edit.previewDisplaced;
+        if (previous.equals(next)) return;
+        WidgetGridMetrics metrics = pane.grid().metrics();
+        for (Map.Entry<Integer, WidgetCellRect> entry : previous.entrySet()) {
+            if (!next.containsKey(entry.getKey())) slideCell(entry.getKey(), null, metrics, true);
+        }
+        for (Map.Entry<Integer, WidgetCellRect> entry : next.entrySet()) {
+            if (entry.getValue().equals(previous.get(entry.getKey()))) continue;
+            slideCell(entry.getKey(), entry.getValue(), metrics, true);
+        }
+        edit.previewDisplaced = next;
+    }
+
+    /** Returns every previewed neighbour to its real position; the plan is dropped either way. */
+    private void clearDisplacementPreview(boolean animate) {
+        if (edit == null || edit.previewDisplaced.isEmpty()) return;
+        WidgetGridMetrics metrics = pane.grid().metrics();
+        for (Integer appWidgetId : edit.previewDisplaced.keySet()) {
+            slideCell(appWidgetId, null, metrics, animate);
+        }
+        edit.previewDisplaced = Collections.emptyMap();
+    }
+
+    /** A null target means "back where the layout puts you". Never raises the cell. */
+    private void slideCell(int appWidgetId, @Nullable WidgetCellRect target,
+                           @NonNull WidgetGridMetrics metrics, boolean animate) {
+        WidgetCellView cell = pane.grid().cellForId(appWidgetId);
+        if (cell == null) return;
+        float translationX = 0f, translationY = 0f;
+        if (target != null) {
+            LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
+            if (record == null) return;
+            Rect from = metrics.boundsFor(record.cell);
+            Rect to = metrics.boundsFor(target);
+            translationX = to.left - from.left;
+            translationY = to.top - from.top;
+        }
+        cell.animate().cancel();
+        if (animate && !host.reducedMotion()) {
+            cell.animate().translationX(translationX).translationY(translationY)
+                .setDuration(160).start();
+        } else {
+            cell.setTranslationX(translationX);
+            cell.setTranslationY(translationY);
+        }
     }
 
     private void endMoveDrag(boolean canceled) {
@@ -407,10 +469,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.dragStartBounds = null;
         boolean committed = false;
         if (!canceled && record != null && candidate != null && candidate.valid
-            && !candidate.rect.equals(record.cell)
-            && widgets.repository().putRecord(record.withCell(candidate.rect))) {
-            committed = true;
+            && !candidate.rect.equals(record.cell)) {
+            committed = commitMove(record, candidate);
         }
+        // The real layout takes over on render(); a surviving translation would double the offset.
+        clearDisplacementPreview(!committed);
         if (cell != null) {
             if (committed || host.reducedMotion()) {
                 cell.setTranslationX(0f); cell.setTranslationY(0f); cell.setTranslationZ(0f);
@@ -427,6 +490,22 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             overlay.setDragging(false);
             overlay.setGhostBounds(null);
         }
+    }
+
+    /** One atomic commit for the dragged widget and everything it pushed aside. */
+    private boolean commitMove(@NonNull LauncherWidgetRecord record,
+                               @NonNull WidgetEditPolicy.Candidate candidate) {
+        if (candidate.displaced.isEmpty()) {
+            return widgets.repository().putRecord(record.withCell(candidate.rect));
+        }
+        List<LauncherWidgetRecord> batch = new ArrayList<>();
+        batch.add(record.withCell(candidate.rect));
+        for (Map.Entry<Integer, WidgetCellRect> entry : candidate.displaced.entrySet()) {
+            LauncherWidgetRecord neighbour = widgets.repository().get(entry.getKey());
+            if (neighbour == null) return false;
+            batch.add(neighbour.withCell(entry.getValue()));
+        }
+        return widgets.repository().putRecords(batch);
     }
 
     private void resizeDrag(@NonNull WidgetEditPolicy.Handle handle, int desiredEdgePx) {
@@ -476,6 +555,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     private void render() {
+        // Any surviving drag preview belongs to the layout this render is about to replace.
+        clearDisplacementPreview(false);
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
         pane.setReducedMotion(host.reducedMotion());
         pane.render(widgets.repository(), widgets.capability(), currentPage);

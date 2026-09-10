@@ -65,9 +65,13 @@ public final class WidgetGridPlacementPolicy {
         return occupied != null && isFree(grid, occupied, candidate);
     }
 
+    /**
+     * Cells taken by every record but {@code ignoredId}, or null when the snapshot itself is
+     * invalid. Callers that test many candidates build this once and reuse it.
+     */
     @Nullable
-    private static BitSet occupancy(WidgetGridDefinition grid,
-                                    List<LauncherWidgetRecord> records, int ignoredId) {
+    static BitSet occupancy(WidgetGridDefinition grid,
+                            List<LauncherWidgetRecord> records, int ignoredId) {
         BitSet occupied = new BitSet(grid.rows * grid.columns);
         for (LauncherWidgetRecord record : records) {
             if (record.appWidgetId == ignoredId) continue;
@@ -83,12 +87,12 @@ public final class WidgetGridPlacementPolicy {
         return occupied;
     }
 
-    private static boolean inBounds(WidgetGridDefinition grid, WidgetCellRect rect) {
+    static boolean inBounds(WidgetGridDefinition grid, WidgetCellRect rect) {
         return rect.left >= 0 && rect.top >= 0 && rect.right <= grid.columns
             && rect.bottom <= grid.rows;
     }
 
-    private static boolean isFree(WidgetGridDefinition grid, BitSet occupied,
+    static boolean isFree(WidgetGridDefinition grid, BitSet occupied,
                                   WidgetCellRect rect) {
         for (int row = rect.top; row < rect.bottom; row++) {
             for (int column = rect.left; column < rect.right; column++) {
@@ -98,7 +102,7 @@ public final class WidgetGridPlacementPolicy {
         return true;
     }
 
-    private static void mark(WidgetGridDefinition grid, BitSet occupied, WidgetCellRect rect) {
+    static void mark(WidgetGridDefinition grid, BitSet occupied, WidgetCellRect rect) {
         for (int row = rect.top; row < rect.bottom; row++) {
             for (int column = rect.left; column < rect.right; column++) {
                 occupied.set(row * grid.columns + column);

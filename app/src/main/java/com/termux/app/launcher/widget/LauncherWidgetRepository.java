@@ -15,6 +15,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -168,6 +169,26 @@ public final class LauncherWidgetRepository {
             throw new IllegalArgumentException("app-widget ID already belongs to another provider");
         }
         next.put(record.appWidgetId, record);
+        return commitValidated(next, pending, grid, pageCount, revision + 1);
+    }
+
+    /**
+     * Commits several records at once, so a move that pushes its neighbours aside never lands
+     * as a sequence of individually invalid layouts. All or nothing: one validation, one
+     * revision bump, and nothing changes when the resulting layout would collide.
+     */
+    public synchronized boolean putRecords(@NonNull Collection<LauncherWidgetRecord> values) {
+        if (values.isEmpty()) return true;
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        for (LauncherWidgetRecord record : values) {
+            LauncherWidgetRecord existing = records.get(record.appWidgetId);
+            if (existing != null && (!existing.provider.equals(record.provider)
+                || existing.profileSerial != record.profileSerial)) {
+                throw new IllegalArgumentException(
+                    "app-widget ID already belongs to another provider");
+            }
+            next.put(record.appWidgetId, record);
+        }
         return commitValidated(next, pending, grid, pageCount, revision + 1);
     }
 
