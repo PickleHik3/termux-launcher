@@ -69,6 +69,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private boolean mEditing;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
     private boolean mBorderPressed;
+    /** Whether the tab was out when the finger landed: a border tap puts it away, or brings it out. */
+    private boolean mShownAtDown;
     private boolean mTouchMoved;
     private float mDownX, mDownY;
 
@@ -125,6 +127,12 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     }
 
     /** Put the controls away, for a host that moved the wall on. */
+    /** Whether the border tab is out (or coming out). */
+    @androidx.annotation.VisibleForTesting
+    boolean isControlsTabShown() {
+        return mControls != null && mControls.isControlsShown();
+    }
+
     public void dismissControls() {
         dismissGridSizePopup();
         if (mControls != null) mControls.dismiss();
@@ -190,7 +198,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         mTouchMoved = false;
         mDownX = event.getX();
         mDownY = event.getY();
-        if (mControls != null && mControls.isControlsShown()) {
+        mShownAtDown = mControls != null && mControls.isControlsShown();
+        if (mShownAtDown) {
             int action = mControls.actionAt(mDownX, mDownY);
             if (action != PaneControlsView.ACTION_NONE) {
                 mPressedAction = action;
@@ -227,7 +236,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                         }
                     } else if (mBorderPressed) {
                         performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                        if (mControls.isControlsShown()) dismissControls();
+                        if (mShownAtDown) dismissControls();
                         else mControls.show();
                     }
                 }

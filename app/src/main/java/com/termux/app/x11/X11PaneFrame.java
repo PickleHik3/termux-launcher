@@ -77,6 +77,8 @@ public final class X11PaneFrame extends PaneContentFrame {
     @Nullable private PaneControlsView mControls;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
     private boolean mBorderPressed;
+    /** Whether the tab was out when the finger landed: a border tap puts it away, or brings it out. */
+    private boolean mShownAtDown;
     private boolean mTouchMoved;
     private float mDownX, mDownY;
     @Nullable private LorieView mDisplay;
@@ -158,7 +160,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         mTouchMoved = false;
         mDownX = event.getX();
         mDownY = event.getY();
-        if (mControls != null && mControls.isControlsShown()) {
+        mShownAtDown = mControls != null && mControls.isControlsShown();
+        if (mShownAtDown) {
             int action = mControls.actionAt(mDownX, mDownY);
             if (action != PaneControlsView.ACTION_NONE) {
                 mPressedAction = action;
@@ -193,7 +196,7 @@ public final class X11PaneFrame extends PaneContentFrame {
                         }
                     } else if (mBorderPressed) {
                         performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
-                        if (mControls.isControlsShown()) mControls.dismiss();
+                        if (mShownAtDown) mControls.dismiss();
                         else mControls.show();
                     }
                 }

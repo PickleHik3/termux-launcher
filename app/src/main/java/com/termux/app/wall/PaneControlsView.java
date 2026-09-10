@@ -88,6 +88,8 @@ public final class PaneControlsView extends View {
     private float mTrailingInsetPx = -1f;
     private float mProgress;
     private boolean mShown;
+    /** Sliding back in; cleared when the slide lands or a show() turns it round. */
+    private boolean mRetracting;
     @Nullable private Listener mListener;
 
     public PaneControlsView(@NonNull Context context) {
@@ -147,19 +149,26 @@ public final class PaneControlsView extends View {
         invalidate();
     }
 
+    /** Out, or on its way out: a retracting tab is already gone to a tap, and show() brings it back. */
     public boolean isControlsShown() {
-        return mShown;
+        return mShown && !mRetracting;
     }
 
+    /**
+     * Slide out. A tab still retracting turns round here rather than staying put - the pencil
+     * puts the pair away and, in the same touch, editing asks for the grid's size in its place.
+     */
     public void show() {
-        if (mShown) return;
-        mShown = true;
+        if (mShown && !mRetracting) return;
         animateTo(1f, false);
+        mShown = true;
+        mRetracting = false;
     }
 
     public void dismiss() {
-        if (!mShown) return;
+        if (!mShown || mRetracting) return;
         animateTo(0f, true);
+        mRetracting = true;
     }
 
     /** Run one button; false when the id is not on this tab. */
@@ -203,7 +212,10 @@ public final class PaneControlsView extends View {
         });
         mAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
-                if (clearOnEnd && mProgress <= 0f) mShown = false;
+                if (clearOnEnd && mProgress <= 0f) {
+                    mShown = false;
+                    mRetracting = false;
+                }
             }
         });
         mAnimator.start();

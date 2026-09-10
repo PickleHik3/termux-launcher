@@ -51,7 +51,7 @@ public class WidgetPaneFrameTapTest {
     private static final float TAB_SPLIT_DP = 39f;
 
     /** What the page asked the launcher for, in order, over a 4 x 5 grid. */
-    private static final class Calls implements WidgetPaneFrame.Host {
+    private static class Calls implements WidgetPaneFrame.Host {
         final List<String> log = new ArrayList<>();
         int columns = 4;
         int rows = 5;
@@ -180,6 +180,36 @@ public class WidgetPaneFrameTapTest {
         tap(page, pencilX(activity), tabCentreY(activity));
 
         assertEquals(Arrays.asList("settings", "edit"), calls.log);
+    }
+
+    /**
+     * On the phone the pencil put the pair away and the grid's size never came out: the tab was
+     * still retracting when editing asked it to show, and it took itself for shown. This runs the
+     * real order - editing begins inside the pencil's own tap.
+     */
+    @Test
+    public void thePencilsOwnTapBringsTheGridSizeOut() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        Calls calls = new Calls() {
+            @Override public void editWidgets() {
+                super.editWidgets();
+                page.applyWidgetEditing(true);
+            }
+        };
+        page.setHost(calls);
+
+        tapBorder(page);
+        tap(page, pencilX(activity), tabCentreY(activity));
+        assertEquals(Collections.singletonList("edit"), calls.log);
+        assertTrue("the grid tab is on its way out, not retracting with the pair",
+            page.isControlsTabShown());
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
+        assertTrue(page.isControlsTabShown());
+
+        // And the pair is not what is on it: the cog's old spot runs nothing now.
+        tap(page, cogX(activity), tabCentreY(activity));
+        assertEquals(Collections.singletonList("edit"), calls.log);
     }
 
     @Test
