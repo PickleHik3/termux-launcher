@@ -3671,8 +3671,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
+    /**
+     * True for the keyboard forms whose host paints no launcher surface at all: the split
+     * keyboard, whose halves paint their own, and the floating one, whose card is a solid panel.
+     * Nothing crops a backdrop for either, so nothing may wait on one.
+     */
+    private boolean paintsNoInAppKeyboardBackdrop() {
+        return isInAppKeyboardSplit() || isKeyboardFloating();
+    }
+
     /** Readiness of the keyboard-local (non-unified) blurred backdrop for the current target. */
     private boolean isInAppKeyboardLocalBackdropReady(@NonNull ChromeSpec state) {
+        // No backdrop is ever produced for these, so the reveal gate would wait for a bitmap that
+        // never arrives and hand the home screen to its 160 ms backstop on every open.
+        if (paintsNoInAppKeyboardBackdrop()) return true;
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null) return true;
         if (mInAppKeyboardBackdropBitmap == null
@@ -4072,10 +4084,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         boolean capsule = isInAppKeyboardCapsule();
+        boolean floating = isKeyboardFloating();
         boolean glassTheme = isInAppKeyboardGlassSurface();
         int horizontalMargin = resolveInAppKeyboardHorizontalInsetPx();
-        int topMargin = capsule ? Math.round(dpToPx(4)) : 0;
+        // A floating keyboard already sits under its card's grab handle, so the capsule's top gap
+        // would only push the keys further from it: the host runs straight up to the handle row
+        // and keeps a thin inner rim of the one surface the card and the host share.
+        int topMargin = capsule && !floating ? Math.round(dpToPx(4)) : 0;
         int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
+        int innerTopPadding = floating ? Math.round(dpToPx(4)) : innerPadding;
         // The user's own chin allowance, from Settings, and it lands in a different place per shape:
         // padding inside the docked slab, a taller gap under the floating capsule.
         int chinPaddingPx = resolveInAppKeyboardBottomPaddingPx();
@@ -4098,10 +4115,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         if (surfaceHost.getPaddingLeft() != innerPadding
-            || surfaceHost.getPaddingTop() != innerPadding
+            || surfaceHost.getPaddingTop() != innerTopPadding
             || surfaceHost.getPaddingRight() != innerPadding
             || surfaceHost.getPaddingBottom() != innerBottomPadding) {
-            surfaceHost.setPadding(innerPadding, innerPadding, innerPadding, innerBottomPadding);
+            surfaceHost.setPadding(innerPadding, innerTopPadding, innerPadding, innerBottomPadding);
             mKeyboardGeometry.markHeightDirty();
             mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         }
@@ -4110,8 +4127,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
         // A split keyboard paints its own background under each half. The launcher's slab would
         // fill the parting the halves leave open, so it is dropped and the keys keep the shape
-        // and insets applied above.
-        if (isInAppKeyboardSplit()) {
+        // and insets applied above. A floating keyboard drops it for the opposite reason: its
+        // card is already one solid panel in the same surface role, and a glass slice inside it
+        // would draw a second material over the first.
+        if (paintsNoInAppKeyboardBackdrop()) {
             surfaceHost.setBackground(null);
             clearInAppKeyboardBackdrop();
             return;
@@ -4202,7 +4221,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             fill.setCornerRadius(cornerRadiusPx);
             layers.add(fill);
         }
-        if (capsule) {
+        // The docked Floating-style capsule keeps its rim; a floating card is one solid panel and
+        // a rim inside it would read as a second edge just inside the card's own.
+        if (capsule && !isKeyboardFloating()) {
             GradientDrawable ring = new GradientDrawable();
             ring.setColor(Color.TRANSPARENT);
             ring.setCornerRadius(cornerRadiusPx);
@@ -8330,9 +8351,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onFloatingFrameMoved(boolean committed) {
-            // The keyboard's blurred backdrop is cropped from where the frame is on screen, so a
-            // moved frame needs a fresh crop; per-frame during the drag, coalesced by the renderer.
-            mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+            // Nothing to do: the card is a solid panel that travels with the frame, so a drag
+            // crops no backdrop. The controller has already remembered where the frame landed.
         }
     }
 

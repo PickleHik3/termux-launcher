@@ -52,7 +52,7 @@ public final class FloatingKeyboardController {
         /** The keyboard changed hosts: what the stack reserves and what it paints both moved. */
         void onFloatingHostingChanged();
 
-        /** The frame moved: its blurred backdrop is cropped from where it is on screen. */
+        /** The frame moved; the position itself is already stored by the controller. */
         void onFloatingFrameMoved(boolean committed);
     }
 

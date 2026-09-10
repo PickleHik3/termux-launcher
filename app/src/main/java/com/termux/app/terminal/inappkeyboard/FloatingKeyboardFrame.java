@@ -34,6 +34,19 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     /** Narrower than this and there is no keyboard left to type on, whatever the share says. */
     private static final float MIN_WIDTH_DP = 240f;
 
+    /** The strip above the keys the card is dragged by. */
+    static final float HANDLE_ROW_DP = 18f;
+
+    /** The pill drawn in the middle of that strip. */
+    static final float PILL_WIDTH_DP = 52f;
+    static final float PILL_HEIGHT_DP = 3.2f;
+
+    /**
+     * A 3.2dp pill rounds away to a hairline on the lowest densities, so it never draws thinner
+     * than this. {@link R.drawable#floating_keyboard_grab_handle} carries the matching radius.
+     */
+    static final int PILL_MIN_HEIGHT_PX = 2;
+
     /** The user's floating width, read at measure time so the frame is never a pass behind it. */
     public interface WidthScaleSource {
         float widthScale();
@@ -84,8 +97,10 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         View pill = new View(context);
         pill.setBackgroundResource(R.drawable.floating_keyboard_grab_handle);
         mHandle.addView(pill, new FrameLayout.LayoutParams(
-            Math.round(dp(52f)), Math.round(dp(4f)), Gravity.CENTER));
-        addView(mHandle, new LayoutParams(LayoutParams.MATCH_PARENT, Math.round(dp(22f))));
+            Math.round(dp(PILL_WIDTH_DP)), pillHeightPx(getResources().getDisplayMetrics().density),
+            Gravity.CENTER));
+        addView(mHandle,
+            new LayoutParams(LayoutParams.MATCH_PARENT, Math.round(dp(HANDLE_ROW_DP))));
 
         mContentHost = new FrameLayout(context);
         mContentHost.setClipChildren(false);
@@ -106,6 +121,17 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     @NonNull
     public View grabHandle() {
         return mHandle;
+    }
+
+    /** The pill inside that strip, for tests. */
+    @NonNull
+    View grabPill() {
+        return mHandle.getChildAt(0);
+    }
+
+    /** The pill's drawn thickness, never below {@link #PILL_MIN_HEIGHT_PX}. */
+    static int pillHeightPx(float density) {
+        return Math.max(PILL_MIN_HEIGHT_PX, Math.round(PILL_HEIGHT_DP * density));
     }
 
     /**

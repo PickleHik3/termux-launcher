@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The pill the floating keyboard is dragged by. Same bar as the height-adjust handle. -->
+<!-- The pill the floating keyboard is dragged by: 52 x 3.2dp, rounded to half its height. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <corners android:radius="2dp" />
+    <corners android:radius="1.6dp" />
     <solid android:color="?attr/termuxColorOnSurfaceVariant" />
 </shape>

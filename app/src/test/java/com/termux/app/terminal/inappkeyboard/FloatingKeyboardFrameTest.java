@@ -88,6 +88,46 @@ public class FloatingKeyboardFrameTest {
     // ------------------------------------------------------------------- the card
 
     @Test
+    public void theHandleRowIs18dpAndItsPillIs52By3Point2dp() {
+        // Robolectric's default qualifiers are mdpi, so a dp is a pixel here.
+        FloatingKeyboardFrame frame = newHostedFrame();
+        assertEquals(18, frame.grabHandle().getMeasuredHeight());
+        assertEquals(52, frame.grabPill().getMeasuredWidth());
+        assertEquals(3, frame.grabPill().getMeasuredHeight());
+    }
+
+    @Test
+    @Config(qualifiers = "xxhdpi")
+    public void theHandleRowAndPillScaleWithTheDensity() {
+        FloatingKeyboardFrame frame = newHostedFrame();
+        assertEquals(54, frame.grabHandle().getMeasuredHeight());
+        assertEquals(156, frame.grabPill().getMeasuredWidth());
+        assertEquals(10, frame.grabPill().getMeasuredHeight());
+    }
+
+    @Test
+    public void thePillNeverThinsBelowTwoPixels() {
+        assertEquals(10, FloatingKeyboardFrame.pillHeightPx(3f));
+        assertEquals(3, FloatingKeyboardFrame.pillHeightPx(1f));
+        // Under a density of 0.625 the rounded pill would be a hairline, so the floor takes over.
+        assertEquals(2, FloatingKeyboardFrame.pillHeightPx(0.625f));
+        assertEquals(2, FloatingKeyboardFrame.pillHeightPx(0.1f));
+    }
+
+    /** A frame with a keyboard inside it, measured and laid out once. */
+    @NonNull
+    private FloatingKeyboardFrame newHostedFrame() {
+        FloatingKeyboardFrame frame = new FloatingKeyboardFrame(context);
+        frame.setWidthScaleSource(() -> 1f);
+        frame.contentHost().addView(new FixedHeightView(context, KEYBOARD_HEIGHT),
+            new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        measure(frame, 600);
+        frame.layout(0, 0, frame.getMeasuredWidth(), frame.getMeasuredHeight());
+        return frame;
+    }
+
+    @Test
     public void theCardCollapsesWhileTheKeyboardInsideItIsGone() {
         FloatingKeyboardFrame frame = new FloatingKeyboardFrame(context);
         frame.setWidthScaleSource(() -> 1f);

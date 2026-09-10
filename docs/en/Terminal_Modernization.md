@@ -479,6 +479,8 @@ and **Split**, the same bottom keyboard with every row parted in the middle for 
 choice belongs to the place and the orientation — the terminal in landscape can float while Home
 in portrait stays docked — and Settings ▸ Layout ▸ **Keyboard type** is where it is picked. How
 wide a float is and how far a split parts are on Settings ▸ Keyboard, one value per orientation.
+A floating keyboard is a solid panel in the theme's own colour rather than glass, so it reads as
+a card over whatever it is parked on.
 
 ```text
 map ctrl+alt+f keyboard.cycle_form                      # docked, floating, split, round again
