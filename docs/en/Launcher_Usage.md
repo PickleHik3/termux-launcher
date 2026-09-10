@@ -99,7 +99,10 @@ or the strip already rests at the end you pull past, the swipe moves the wall in
 The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
 a widget to move or resize it, and swipe inside the grid to reach its other pages. Drop a widget on
 top of others and they slide aside into free space on the page; when there is no room for them the
-widget takes the nearest free spot instead, as before. The in-app
+widget takes the nearest free spot instead, as before. A tap on the page's edge drops a small tab
+holding the grid's settings and an edit button; while you are editing, that tab reads out the
+grid's size, and tapping it gives you two numbers to drag — columns and rows — which the widgets
+rearrange to as you drag. The same two numbers are sliders on the Layout settings page. The in-app
 keyboard goes away while you are on Widgets — nothing there takes typing — and comes back with the
 terminal.
 
