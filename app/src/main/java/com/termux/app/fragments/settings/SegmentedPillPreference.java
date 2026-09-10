@@ -22,12 +22,23 @@ import com.termux.R;
  * Inline segmented preference: a sliding indicator over two or three labelled segments. Defaults
  * to the global Default / Rounded surface-shape pair; {@link #setSegments} swaps in another value
  * set (the third segment stays hidden until a three-value set is configured).
+ *
+ * <p>{@link #VALUE_NONE} is the one value with no segment of its own: the indicator goes away and
+ * no label is lit, which is how a row that stands for several stored values says they disagree.
  */
 @Keep
 public final class SegmentedPillPreference extends Preference {
 
     public static final String VALUE_DEFAULT = "default";
     public static final String VALUE_ROUNDED = "rounded";
+
+    /**
+     * The one value that is not a segment: nothing is lit and the indicator is away. A row whose
+     * store answers for several things at once — the Keyboard page's keyboard type, which stands
+     * for every place — reads back as this when they disagree, so the pill says "these differ"
+     * rather than picking one of them for the user. Tapping a segment still writes it to all.
+     */
+    public static final String VALUE_NONE = "";
     private static final String VALUE_LEGACY_VALARIE_CAPSULE = "valarie_capsule";
     private static final long SLIDE_DURATION_MS = 190L;
 
@@ -99,7 +110,8 @@ public final class SegmentedPillPreference extends Preference {
         track.setContentDescription(getTitle());
         track.post(() -> {
             updateIndicatorWidth(track, indicator);
-            indicator.setTranslationX(selectedIndex() * segmentWidth(track));
+            indicator.setVisibility(selectedIndex() < 0 ? View.INVISIBLE : View.VISIBLE);
+            indicator.setTranslationX(indicatorOffset(track));
             updateLabelColors(labels);
         });
     }
@@ -118,12 +130,15 @@ public final class SegmentedPillPreference extends Preference {
         String normalized = normalize(value);
         if (normalized.equals(mValue)) return;
         if (!callChangeListener(normalized)) return;
+        boolean wasHidden = indicator.getVisibility() != View.VISIBLE;
         mValue = normalized;
         persistString(normalized);
         updateIndicatorWidth(track, indicator);
-        float target = selectedIndex() * segmentWidth(track);
+        indicator.setVisibility(View.VISIBLE);
+        float target = indicatorOffset(track);
         if (mIndicatorAnimator != null) mIndicatorAnimator.cancel();
-        if (animate && track.isLaidOut()) {
+        // Nothing to slide from when the pill was showing no segment at all.
+        if (animate && track.isLaidOut() && !wasHidden) {
             mIndicatorAnimator = ValueAnimator.ofFloat(indicator.getTranslationX(), target);
             mIndicatorAnimator.setDuration(SLIDE_DURATION_MS);
             mIndicatorAnimator.setInterpolator(new DecelerateInterpolator());
@@ -171,15 +186,22 @@ public final class SegmentedPillPreference extends Preference {
         return ContextCompat.getColor(getContext(), fallback);
     }
 
+    /** The lit segment, or -1 for {@link #VALUE_NONE}, where none of them is. */
     private int selectedIndex() {
         for (int i = 0; i < mValues.length; i++) {
             if (mValues[i].equals(mValue)) return i;
         }
-        return 0;
+        return VALUE_NONE.equals(mValue) ? -1 : 0;
+    }
+
+    /** Where the indicator rests: the lit segment, or the first one while it is hidden. */
+    private float indicatorOffset(@NonNull FrameLayout track) {
+        return Math.max(0, selectedIndex()) * segmentWidth(track);
     }
 
     @NonNull
     private String normalize(String value) {
+        if (VALUE_NONE.equals(value)) return VALUE_NONE;
         for (String known : mValues) {
             if (known.equals(value)) return value;
         }

@@ -19,11 +19,16 @@ import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
 import com.termux.app.terminal.inappkeyboard.TapCorrectionController;
 import com.termux.app.terminal.inappkeyboard.TapModelStore;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
@@ -51,6 +56,7 @@ import juloo.keyboard2.KeyboardData;
 public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
     private static final String KEY_EXTRA_KEYS = "in_app_keyboard_extra_keys";
+    static final String KEY_KEYBOARD_FORM = "in_app_keyboard_form";
     private static final String KEY_CREDITS_GITHUB = "keyboard_credits_github";
     private static final String KEY_CREDITS_PLAY = "keyboard_credits_play";
     private static final String KEY_DOCS_LAYOUTS = "keyboard_docs_layouts";
@@ -65,6 +71,13 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Custom-layouts.md";
     private static final String DOCS_KEYS_URL =
         "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Possible-key-values.md";
+
+    /** The same three types the Layout page offers, under the same labels. */
+    private static final String[] KEYBOARD_FORM_VALUES = {"docked", "floating", "split"};
+    private static final int[] KEYBOARD_FORM_LABELS = {
+        R.string.settings_layout_keyboard_form_docked,
+        R.string.settings_layout_keyboard_form_floating,
+        R.string.settings_layout_keyboard_form_split};
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -85,6 +98,10 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
+
+        SegmentedPillPreference keyboardForm = findPreference(KEY_KEYBOARD_FORM);
+        if (keyboardForm != null)
+            keyboardForm.setSegments(KEYBOARD_FORM_VALUES, KEYBOARD_FORM_LABELS);
 
         MultiSelectListPreference extraKeysPreference = findPreference(KEY_EXTRA_KEYS);
         if (extraKeysPreference != null)
@@ -253,6 +270,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
      */
     @Nullable private Properties mTermuxProperties;
 
+    /** Where every place keeps its keyboard type. Built on first use, since most rows never ask. */
+    @Nullable private PlaceLayoutStore mPlaces;
+
     private static KeyboardPreferencesDataStore mInstance;
 
     private KeyboardPreferencesDataStore(Context context) {
@@ -261,10 +281,24 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
     }
 
     public static synchronized KeyboardPreferencesDataStore getInstance(Context context) {
-        if (mInstance == null) {
-            mInstance = new KeyboardPreferencesDataStore(context);
+        Context application = context.getApplicationContext();
+        // One process has one application, so this only rebuilds under a test that made another.
+        if (mInstance == null || mInstance.mContext != application) {
+            mInstance = new KeyboardPreferencesDataStore(application);
         }
         return mInstance;
+    }
+
+    @Nullable
+    private PlaceLayoutStore places() {
+        if (mPlaces == null && mPreferences != null) mPlaces = new PlaceLayoutStore(mPreferences);
+        return mPlaces;
+    }
+
+    /** The orientation the phone is being held in, which is the one this page's row writes. */
+    @NonNull
+    private PlaceOrientation orientation() {
+        return PlaceOrientation.of(mContext.getResources().getConfiguration());
     }
 
     @NonNull
@@ -398,9 +432,47 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_theme":
                 mPreferences.setInAppKeyboardTheme(value);
                 break;
+            case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
+                putKeyboardForm(value);
+                break;
             default:
                 break;
         }
+    }
+
+    /**
+     * The keyboard type, for every place at once in the orientation the phone is in. The Layout
+     * page is where one place is given a type of its own; this row is the blunt one, for a user
+     * who wants the same keyboard wherever they are.
+     */
+    private void putKeyboardForm(@Nullable String value) {
+        PlaceLayoutStore places = places();
+        if (places == null) return;
+        KeyboardForm form = KeyboardForm.parse(value, KeyboardForm.DOCKED);
+        PlaceOrientation orientation = orientation();
+        boolean changed = false;
+        for (PaneWallPage place : PaneWallPage.values()) {
+            if (places.keyboardForm(place, orientation) == form) continue;
+            places.setKeyboardForm(place, orientation, form);
+            changed = true;
+        }
+        // The keyboard is arranged by the activity, so the change lands on the way back to it.
+        if (changed) TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+    }
+
+    /** The type every place agrees on, or nothing at all when they do not. */
+    @NonNull
+    private String keyboardForm() {
+        PlaceLayoutStore places = places();
+        if (places == null) return KeyboardForm.DOCKED.storageValue();
+        PlaceOrientation orientation = orientation();
+        KeyboardForm shared = null;
+        for (PaneWallPage place : PaneWallPage.values()) {
+            KeyboardForm form = places.keyboardForm(place, orientation);
+            if (shared == null) shared = form;
+            else if (shared != form) return SegmentedPillPreference.VALUE_NONE;
+        }
+        return shared == null ? KeyboardForm.DOCKED.storageValue() : shared.storageValue();
     }
 
     @Override
@@ -414,6 +486,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isSoftKeyboardEnabled() ? "android" : "none";
             case "in_app_keyboard_theme":
                 return mPreferences.getInAppKeyboardTheme();
+            case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
+                return keyboardForm();
             default:
                 return defValue;
         }

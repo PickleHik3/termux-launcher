@@ -178,6 +178,9 @@ Open-Meteo attribution.
   and nudges presses near a boundary toward the key you usually mean. Only letters, digits and
   punctuation are ever moved; Enter, Backspace, Ctrl and the other action keys are not. **Forget
   learned taps** clears what it has learned. It stores per-key averages only, never what you typed.
+- **Keyboard type:** docked, floating or split, on every place at once, for the orientation you
+  are holding the phone in. The **Layout** page is where one place is given a type of its own, and
+  this row shows no choice while the places disagree.
 - **Floating keyboard width**, **Floating keyboard height** and **Split keyboard gap**: how much
   of the screen a floating keyboard takes, how tall it is, and how far apart the halves of a split
   one sit. All three are set separately for portrait and landscape; which type a place uses is

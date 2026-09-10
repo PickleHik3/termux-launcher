@@ -1354,6 +1354,8 @@
     <string name="palette_category_window">Window</string>
     <string name="palette_category_pane">Pane</string>
     <string name="settings_keyboard_shapes_header">Floating and split</string>
+    <string name="settings_keyboard_form_title">Keyboard type</string>
+    <string name="settings_keyboard_form_summary">Docked, floating or split, on every place. The Layout page can set one place on its own.</string>
     <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
     <string name="settings_keyboard_floating_width_summary">How much of the screen width a floating keyboard takes, set separately for portrait and landscape.</string>
     <string name="settings_keyboard_floating_height_title">Floating keyboard height</string>

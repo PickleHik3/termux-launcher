@@ -56,6 +56,11 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_shapes" app:title="@string/settings_keyboard_shapes_header">
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="in_app_keyboard_form"
+            app:title="@string/settings_keyboard_form_title"
+            app:summary="@string/settings_keyboard_form_summary"
+            app:defaultValue="docked" />
         <SeekBarPreference
             app:key="in_app_keyboard_floating_width"
             app:title="@string/settings_keyboard_floating_width_title"
