@@ -3,6 +3,7 @@ package com.termux.app.fragments.settings.termux;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -10,8 +11,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Looper;
 
+import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceScreen;
@@ -53,9 +56,12 @@ import java.util.concurrent.TimeUnit;
 public class LayoutPreferencesFragmentTest {
 
     private LayoutPreferencesFragment launch() {
-        Application app = RuntimeEnvironment.getApplication();
-        Intent intent = new Intent(app, SettingsActivity.class)
-            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, LayoutPreferencesFragment.class.getName());
+        return launch(new Intent(RuntimeEnvironment.getApplication(), SettingsActivity.class)
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT,
+                LayoutPreferencesFragment.class.getName()));
+    }
+
+    private LayoutPreferencesFragment launch(@NonNull Intent intent) {
         ActivityController<SettingsActivity> controller =
             Robolectric.buildActivity(SettingsActivity.class, intent).create().start().resume();
         SettingsActivity activity = controller.get();
@@ -304,5 +310,84 @@ public class LayoutPreferencesFragmentTest {
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
 
         assertEquals(before, Shadows.shadowOf(app).getBroadcastIntents().size());
+    }
+
+    @Test
+    public void aDeepLinkOpensThePageOnTheNamedPlaceAndPointsAtItsRow() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch(new Intent(app, SettingsActivity.class)
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT,
+                LayoutPreferencesFragment.class.getName())
+            .putExtra(SettingsActivity.EXTRA_INITIAL_PLACE, PaneWallPage.WIDGETS.toolName())
+            .putExtra(SettingsActivity.EXTRA_SCROLL_TO_KEY, "layout_grid_columns"));
+
+        PreferenceScreen screen = fragment.getPreferenceScreen();
+        // The grid rows exist only on Home, so their visibility is the page's own answer to
+        // which place the deep link selected.
+        assertTrue("grid columns row", screen.findPreference("layout_grid_columns").isVisible());
+        assertTrue("grid rows row", screen.findPreference("layout_grid_rows").isVisible());
+        // The keyboard-mode row belongs to the Display place, so Home must not be showing it.
+        assertFalse("keyboard mode row", screen.findPreference("layout_keyboard_mode").isVisible());
+    }
+
+    @Test
+    public void theExtrasReachTheInitialFragmentAsArguments() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch(new Intent(app, SettingsActivity.class)
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT,
+                LayoutPreferencesFragment.class.getName())
+            .putExtra(SettingsActivity.EXTRA_INITIAL_PLACE, PaneWallPage.WIDGETS.toolName())
+            .putExtra(SettingsActivity.EXTRA_SCROLL_TO_KEY, "layout_grid_rows"));
+
+        Bundle arguments = fragment.getArguments();
+        assertNotNull(arguments);
+        assertEquals("widgets", arguments.getString(SettingsActivity.EXTRA_INITIAL_PLACE));
+        assertEquals("layout_grid_rows", arguments.getString(SettingsActivity.EXTRA_SCROLL_TO_KEY));
+    }
+
+    @Test
+    public void theDeepLinkExtrasAreParsedTolerantly() {
+        assertEquals(PaneWallPage.TERMINAL,
+            LayoutPreferencesFragment.placeFromArguments(null, PaneWallPage.TERMINAL));
+        assertNull(LayoutPreferencesFragment.scrollKeyFromArguments(null));
+
+        Bundle empty = new Bundle();
+        assertEquals(PaneWallPage.TERMINAL,
+            LayoutPreferencesFragment.placeFromArguments(empty, PaneWallPage.TERMINAL));
+        assertNull(LayoutPreferencesFragment.scrollKeyFromArguments(empty));
+
+        Bundle blank = new Bundle();
+        blank.putString(SettingsActivity.EXTRA_INITIAL_PLACE, "");
+        blank.putString(SettingsActivity.EXTRA_SCROLL_TO_KEY, "");
+        assertEquals(PaneWallPage.DISPLAY,
+            LayoutPreferencesFragment.placeFromArguments(blank, PaneWallPage.DISPLAY));
+        assertNull(LayoutPreferencesFragment.scrollKeyFromArguments(blank));
+
+        Bundle nonsense = new Bundle();
+        nonsense.putString(SettingsActivity.EXTRA_INITIAL_PLACE, "kitchen");
+        assertEquals("an unknown place leaves the page where it would have opened",
+            PaneWallPage.TERMINAL,
+            LayoutPreferencesFragment.placeFromArguments(nonsense, PaneWallPage.TERMINAL));
+
+        Bundle named = new Bundle();
+        named.putString(SettingsActivity.EXTRA_INITIAL_PLACE, " Widgets ");
+        named.putString(SettingsActivity.EXTRA_SCROLL_TO_KEY, "layout_grid_columns");
+        assertEquals(PaneWallPage.WIDGETS,
+            LayoutPreferencesFragment.placeFromArguments(named, PaneWallPage.TERMINAL));
+        assertEquals("layout_grid_columns",
+            LayoutPreferencesFragment.scrollKeyFromArguments(named));
+    }
+
+    @Test
+    public void aDeepLinkedIntentBuildsFromOneFactory() {
+        Application app = RuntimeEnvironment.getApplication();
+        Intent intent = SettingsActivity.createFragmentIntent(app,
+            LayoutPreferencesFragment.class, R.string.settings_destination_layout,
+            PaneWallPage.WIDGETS.toolName(), "layout_grid_columns");
+        assertEquals(LayoutPreferencesFragment.class.getName(),
+            intent.getStringExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT));
+        assertEquals("widgets", intent.getStringExtra(SettingsActivity.EXTRA_INITIAL_PLACE));
+        assertEquals("layout_grid_columns",
+            intent.getStringExtra(SettingsActivity.EXTRA_SCROLL_TO_KEY));
     }
 }

@@ -17,6 +17,7 @@ import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.LayoutOverviewPreference;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
@@ -103,6 +104,8 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     @Nullable private LayoutPreferencesDataStore mStore;
     @NonNull private PaneWallPage mSelectedPlace = PaneWallPage.TERMINAL;
     @NonNull private PlaceOrientation mSelectedOrientation = PlaceOrientation.PORTRAIT;
+    /** The row a deep link asked for, until the rows exist to scroll to it. */
+    @Nullable private String mPendingScrollKey;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -118,6 +121,10 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         SettingsLayoutUtils.applyScreenLayout(this);
 
         mSelectedOrientation = PlaceOrientation.of(getResources().getConfiguration());
+        // A deep link opens the page on the place it is about and points at one of its rows; a
+        // screen that has already been turned keeps whatever the user last selected instead.
+        mSelectedPlace = placeFromArguments(getArguments(), mSelectedPlace);
+        mPendingScrollKey = savedInstanceState == null ? scrollKeyFromArguments(getArguments()) : null;
         if (savedInstanceState != null) {
             restoreSelection(savedInstanceState);
         }
@@ -130,6 +137,37 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         configureOverview(displayAvailable);
         configureRows();
         refreshRows();
+        // Only now do the rows know which of them this place has, so this is the first moment a
+        // deep link's row can be found and brought into view.
+        if (mPendingScrollKey != null) {
+            scrollToRow(mPendingScrollKey);
+            mPendingScrollKey = null;
+        }
+    }
+
+    /**
+     * The place a deep link named, by its tool name ("widgets"). An unknown or missing name
+     * leaves the page on the place it would have opened on anyway.
+     */
+    @NonNull
+    static PaneWallPage placeFromArguments(@Nullable Bundle arguments,
+                                           @NonNull PaneWallPage fallback) {
+        String name = arguments == null
+            ? null : arguments.getString(SettingsActivity.EXTRA_INITIAL_PLACE);
+        if (name == null || name.isEmpty()) return fallback;
+        try {
+            return PaneWallPage.valueOf(name.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return fallback;
+        }
+    }
+
+    /** The preference key a deep link asked to be scrolled to, or null. */
+    @Nullable
+    static String scrollKeyFromArguments(@Nullable Bundle arguments) {
+        String key = arguments == null
+            ? null : arguments.getString(SettingsActivity.EXTRA_SCROLL_TO_KEY);
+        return key == null || key.isEmpty() ? null : key;
     }
 
     private void restoreSelection(@NonNull Bundle savedInstanceState) {
