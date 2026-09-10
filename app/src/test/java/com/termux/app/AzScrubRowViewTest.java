@@ -97,22 +97,22 @@ public class AzScrubRowViewTest {
 
     /**
      * The chin the dock hands this row when it is the bottom one: space under the letters, inside
-     * the row, so it takes touches like the rest of it — and the letters do not move with it.
+     * the row, so it takes touches like the rest of it. The letters ride the row's own centre
+     * line, chin included, so a chin carries them down by half of itself.
      */
     @Test
-    public void chinPadding_addsTouchableSpaceUnderTheLettersWithoutMovingThem() {
+    public void chinPadding_addsTouchableSpaceAndCarriesTheLettersToTheNewCentre() {
         AzScrubRowView bare = layoutRow(48, 0);
         AzScrubRowView chinned = layoutRow(58, 10);
 
         assertEquals(48, bare.letterBandThicknessPx());
         assertEquals(48, chinned.letterBandThicknessPx());
 
-        // The letters sit at the same place in the band, so the 10px lands below them.
         AzScrubRowView.LetterVisualMetrics bareMetrics = new AzScrubRowView.LetterVisualMetrics();
         AzScrubRowView.LetterVisualMetrics chinnedMetrics = new AzScrubRowView.LetterVisualMetrics();
         assertTrue(bare.getLetterVisualMetricsOnScreen('M', bareMetrics));
         assertTrue(chinned.getLetterVisualMetricsOnScreen('M', chinnedMetrics));
-        assertEquals(bareMetrics.baselineRawY, chinnedMetrics.baselineRawY, 0.01f);
+        assertEquals(bareMetrics.baselineRawY + 5f, chinnedMetrics.baselineRawY, 0.01f);
 
         // A touch down in the chin, below every glyph, still picks the letter above it.
         final char[] letter = {'?'};
@@ -408,6 +408,39 @@ public class AzScrubRowViewTest {
             @Override
             public void onCancel() {}
         };
+    }
+
+    // ------------------------------------------------------- the horizontal letter baseline
+
+    @Test
+    public void horizontalLettersSitOnTheBarsOwnCentreLine() {
+        // A 100px bar and a font 20 up, 6 down: the glyph's own centre lands on 50.
+        float centred = AzScrubRowView.horizontalLetterBaselinePx(100f, -20f, 6f, 0f, Edge.BOTTOM);
+        assertEquals(57f, centred, 0.001f);
+        assertEquals("both bars rest on the same line",
+            centred, AzScrubRowView.horizontalLetterBaselinePx(100f, -20f, 6f, 0f, Edge.TOP),
+            0.001f);
+        // Centred means centred: the glyph box's top gap equals its bottom gap.
+        assertEquals((centred - 20f) - 0f, 100f - (centred + 6f), 0.001f);
+    }
+
+    @Test
+    public void theWaveCarriesEachBarsLettersAwayFromItsEdge() {
+        float rest = AzScrubRowView.horizontalLetterBaselinePx(100f, -20f, 6f, 0f, Edge.BOTTOM);
+        // A bottom bar lifts its letters up the screen, which is a smaller baseline.
+        assertEquals(rest - 15f,
+            AzScrubRowView.horizontalLetterBaselinePx(100f, -20f, 6f, 15f, Edge.BOTTOM), 0.001f);
+        // A top bar mirrors it and pushes them down.
+        assertEquals(rest + 15f,
+            AzScrubRowView.horizontalLetterBaselinePx(100f, -20f, 6f, 15f, Edge.TOP), 0.001f);
+    }
+
+    @Test
+    public void theChinCountsTowardsTheCentreLine() {
+        // The chin is part of the view's height, so a taller bar moves the letters down with it.
+        float shortBar = AzScrubRowView.horizontalLetterBaselinePx(48f, -18f, 5f, 0f, Edge.BOTTOM);
+        float withChin = AzScrubRowView.horizontalLetterBaselinePx(72f, -18f, 5f, 0f, Edge.BOTTOM);
+        assertEquals(shortBar + 12f, withChin, 0.001f);
     }
 
     private static AzScrubRowView.ScrubCallback recordSelection(int[] out) {

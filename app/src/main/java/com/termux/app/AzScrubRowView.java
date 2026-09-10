@@ -267,18 +267,34 @@ public final class AzScrubRowView extends AppCompatTextView {
 
     /**
      * The baseline a letter sits on, for whatever text size {@code letterPaint} currently holds.
-     * A bottom bar hangs its letters off the bottom of the content box and lifts them up; a top
-     * bar mirrors that; a column centres each glyph on its own slot down the bar.
+     * A horizontal bar centres each glyph on the bar's own centre line and lets the wave carry it
+     * away from the edge; a column centres each glyph on its own slot down the bar.
      */
     private float letterDrawBaseline(float alongCenterPx, float waveLiftPx) {
         letterPaint.getFontMetrics(letterFontMetrics);
         if (isVerticalBar()) {
             return alongCenterPx - ((letterFontMetrics.ascent + letterFontMetrics.descent) * 0.5f);
         }
-        if (barEdge == Edge.TOP) {
-            return getPaddingTop() + dp(2) - letterFontMetrics.ascent + waveLiftPx;
-        }
-        return (getHeight() - getPaddingBottom() - dp(2) - letterFontMetrics.descent) - waveLiftPx;
+        return horizontalLetterBaselinePx(getHeight(), letterFontMetrics.ascent,
+            letterFontMetrics.descent, waveLiftPx, barEdge);
+    }
+
+    /**
+     * Where a glyph sits on a horizontal bar: centred on the view's full-height centre line, chin
+     * included, with the scrub wave riding on top of that. The lift always carries the letter away
+     * from the screen edge the bar is docked against — down from a top bar, up from a bottom one.
+     *
+     * @param heightPx the bar's whole height, padding and chin included
+     * @param ascent   the font's ascent, negative as {@link android.graphics.Paint.FontMetrics}
+     *                 reports it
+     * @param descent  the font's descent, positive
+     * @param liftPx   how far the wave carries this letter, never negative
+     * @param edge     the screen edge the bar is docked against
+     */
+    static float horizontalLetterBaselinePx(float heightPx, float ascent, float descent,
+                                            float liftPx, @NonNull Edge edge) {
+        float centred = (heightPx * 0.5f) - ((ascent + descent) * 0.5f);
+        return edge == Edge.TOP ? centred + liftPx : centred - liftPx;
     }
 
 
