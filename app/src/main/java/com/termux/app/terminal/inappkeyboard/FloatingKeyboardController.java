@@ -254,6 +254,17 @@ public final class FloatingKeyboardController {
         int travelXPx = travelXPx(frame);
         int travelYPx = travelYPx(frame);
         frame.setTravelPx(travelXPx, travelYPx);
+        if (frame.ownsPosition()) {
+            // A grip drag holds the card by its right and bottom edges, which is not a place any
+            // fraction describes while the height is still catching up. Read where the card put
+            // itself instead of putting it back where it was parked.
+            mXFraction = FloatingKeyboardGeometry.fractionFor(frame.positionXPx(), travelXPx);
+            mYFraction = FloatingKeyboardGeometry.fractionFor(frame.positionYPx(), travelYPx);
+            // The finger's own commit wrote where the card was before the keyboard answered with
+            // its new height; this is where the card actually came to rest.
+            if (!frame.isResizing()) rememberPosition();
+            return;
+        }
         frame.setPositionPx(
             FloatingKeyboardGeometry.positionPx(mXFraction, travelXPx),
             FloatingKeyboardGeometry.positionPx(mYFraction, travelYPx));
@@ -278,14 +289,16 @@ public final class FloatingKeyboardController {
         if (frame == null) return;
         mXFraction = FloatingKeyboardGeometry.fractionFor(xPx, travelXPx(frame));
         mYFraction = FloatingKeyboardGeometry.fractionFor(yPx, travelYPx(frame));
-        if (committed) {
-            PlaceLayoutStore store = mHost.placeLayoutStore();
-            if (store != null) {
-                store.setFloatingKeyboardPosition(mHost.place(), mHost.orientation(),
-                    mXFraction, mYFraction);
-            }
-        }
+        if (committed) rememberPosition();
         mHost.onFloatingFrameMoved(committed);
+    }
+
+    /** The place the card is in now, kept for this place and orientation. */
+    private void rememberPosition() {
+        PlaceLayoutStore store = mHost.placeLayoutStore();
+        if (store == null) return;
+        store.setFloatingKeyboardPosition(mHost.place(), mHost.orientation(),
+            mXFraction, mYFraction);
     }
 
     /**
@@ -297,13 +310,7 @@ public final class FloatingKeyboardController {
         FloatingKeyboardFrame frame = mFrame;
         if (frame == null) return;
         mXFraction = FloatingKeyboardGeometry.fractionFor(xPx, frame.travelXPx());
-        if (committed) {
-            PlaceLayoutStore store = mHost.placeLayoutStore();
-            if (store != null) {
-                store.setFloatingKeyboardPosition(mHost.place(), mHost.orientation(),
-                    mXFraction, mYFraction);
-            }
-        }
+        if (committed) rememberPosition();
         mHost.onFloatingFrameResized(widthScale, heightScale, committed);
     }
 

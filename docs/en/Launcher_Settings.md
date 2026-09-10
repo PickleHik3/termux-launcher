@@ -181,8 +181,9 @@ Open-Meteo attribution.
 - **Floating keyboard width**, **Floating keyboard height** and **Split keyboard gap**: how much
   of the screen a floating keyboard takes, how tall it is, and how far apart the halves of a split
   one sit. All three are set separately for portrait and landscape; which type a place uses is
-  chosen on the **Layout** page. A floating keyboard can also be resized in place by dragging its
-  bottom-left corner, which writes the same two values.
+  chosen on the **Layout** page. A floating keyboard can also be resized in place by dragging the
+  handle in its bottom-left corner: out to the left makes it wider, up makes its rows taller, and
+  the edges you are not holding stay where they are. It writes the same two values.
 - **Layout documentation** and **Supported key values**.
 - **Haptic feedback** and **Keypress sound**.
 

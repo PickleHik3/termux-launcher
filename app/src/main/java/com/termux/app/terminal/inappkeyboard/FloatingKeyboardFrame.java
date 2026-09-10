@@ -3,6 +3,8 @@ package com.termux.app.terminal.inappkeyboard;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
+import android.os.Build;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -14,12 +16,14 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 
 import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
+import java.util.Collections;
+import java.util.List;
 
 /**
  * The card a floating keyboard rides in: a grab handle along the top and the keyboard host under
@@ -32,7 +36,9 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * against the travel it was handed and reports where it ended up, so the arithmetic stays in
  * {@link FloatingKeyboardGeometry} and the memory stays in the store. The bottom-left corner is
  * the other half of that: a grip the card is resized from, which scales its width and the
- * keyboard's row height at once and reports both the same way.</p>
+ * keyboard's row height at once and reports both the same way. Out from that corner is bigger —
+ * left widens the card, up makes its rows taller — so the two edges the finger is not on, the
+ * right one and the bottom one, are the ones that stay put.</p>
  *
  * <p>It lives in {@code floating_keyboard_host}, which covers the whole content region. That is
  * what makes a keyboard parked halfway up the screen touchable: a view translated outside its
@@ -48,17 +54,16 @@ public final class FloatingKeyboardFrame extends LinearLayout {
 
     /**
      * The corner the card is resized from, mirrored across from the floating terminal pane's,
-     * which grips at bottom-right. Same size, so a thumb that has learnt one has learnt the other.
+     * which grips at bottom-right. A thumb, not a cursor: the zone is the whole 36dp corner even
+     * though the handle drawn inside it is smaller.
      */
-    static final float GRIP_DP = 28f;
+    static final float GRIP_DP = 36f;
 
-    /** The chevrons drawn in it: two short strokes, the pane's weight and inset. */
-    private static final float GRIP_STROKE_DP = 1.5f;
+    /** The handle drawn in it: two diagonals across the corner, the long one over the short one. */
+    private static final float GRIP_STROKE_DP = 2f;
     private static final float GRIP_INSET_DP = 4f;
-
-    /** Dim enough to stay out of the way at rest, unmistakable under a finger. */
-    private static final int GRIP_ALPHA_REST = 90;
-    private static final int GRIP_ALPHA_ACTIVE = 200;
+    private static final float GRIP_LONG_DP = 16f;
+    private static final float GRIP_SHORT_DP = 9f;
 
     /** The pill drawn in the middle of that strip. */
     static final float PILL_WIDTH_DP = 52f;
@@ -133,6 +138,28 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     private int mResizeStartKeyboardHeightPx;
     private float mResizeStartWidthScale = 1f;
     private float mResizeStartHeightScale = 1f;
+
+    /**
+     * The card's bottom edge is what a grip drag holds still, and the height that edge is measured
+     * against arrives a layout late — the keyboard is told its new row height and answers with a
+     * height of its own. So the pin outlives the finger: it is on from the touch down until the
+     * size the drag asked for has settled, and {@link #ownsPosition()} is how the controller knows
+     * not to put the card back where its remembered fraction says while that is going on.
+     */
+    private boolean mPinBottom;
+    private int mPinnedHeightPx;
+    private int mResizeStartHeightPx;
+    private int mResizeStartYPx;
+    private int mResizeStartContentHeightPx;
+
+    /**
+     * The grip's own rect, handed to the platform so a drag that starts in it is not read as a
+     * back or home gesture. Only the grip: a 36dp square is far inside the 200dp per edge the
+     * platform honours, and the keys have no business excluding themselves twice — the keyboard
+     * view already publishes its own.
+     */
+    private final Rect mGripExclusionRect = new Rect();
+    private final List<Rect> mGripExclusionRects = Collections.singletonList(mGripExclusionRect);
 
     public FloatingKeyboardFrame(@NonNull Context context) {
         super(context);
@@ -256,6 +283,9 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         mPositionYPx = FloatingKeyboardGeometry.clampPx(yPx, mTravelYPx);
         setTranslationX(mPositionXPx);
         setTranslationY(mPositionYPx);
+        // The rect is the card's own, so a move does not change it — but the platform maps it
+        // through the card's translation when it is handed the rect, and not again afterwards.
+        publishGripExclusionRect();
     }
 
     // --------------------------------------------------------------------- the grip
@@ -264,6 +294,11 @@ public final class FloatingKeyboardFrame extends LinearLayout {
      * Whether a touch landed in the corner the card is resized from. The zone gives way to the
      * handle row rather than growing into it, so a card squeezed down to almost nothing still has
      * a pill to drag and never two gestures fighting over one pixel.
+     *
+     * <p>Out from the corner is bigger: left widens the card with its right edge fixed, and
+     * <em>up</em> makes the keyboard's rows taller with its bottom edge fixed — the direction the
+     * dock's own height pill uses, and the only one a card parked along the bottom of the screen
+     * has any room for.</p>
      */
     boolean isInGripZone(float x, float y) {
         int height = getHeight();
@@ -276,6 +311,72 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     /** True for as long as a finger is on the grip. */
     boolean isResizing() {
         return mResizing;
+    }
+
+    /**
+     * True while the grip, rather than the remembered fraction, says where the card sits: from the
+     * touch down until the height the drag asked for has arrived and the bottom edge has been
+     * pinned back against it.
+     */
+    boolean ownsPosition() {
+        return mPinBottom;
+    }
+
+    /**
+     * The grip in the card's own coordinates — what is drawn into, what a touch is tested against
+     * and what the platform is asked to leave alone. Empty until the card has been laid out.
+     */
+    @NonNull
+    Rect gripRect() {
+        Rect rect = new Rect();
+        int width = getWidth();
+        int height = getHeight();
+        if (width <= 0 || height <= 0) return rect;
+        int grip = Math.round(dp(GRIP_DP));
+        int top = Math.max(Math.round(dp(HANDLE_ROW_DP)), height - grip);
+        rect.set(0, top, Math.min(width, grip), height);
+        return rect;
+    }
+
+    /**
+     * Tells the platform to leave the grip alone. Parked in the bottom-left corner — where a
+     * floating keyboard usually is — the grip lies under both the back-gesture strip along the
+     * left edge and the home band along the bottom, and the system cancels the drag a few pixels
+     * in. Published again on every layout and every move, because the platform maps the rect
+     * through the card's translation when it is handed the rect and not afterwards.
+     */
+    private void publishGripExclusionRect() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        Rect grip = gripRect();
+        if (grip.isEmpty()) {
+            if (mGripExclusionRect.isEmpty()) return;
+            mGripExclusionRect.setEmpty();
+            setSystemGestureExclusionRects(Collections.emptyList());
+            return;
+        }
+        mGripExclusionRect.set(grip);
+        setSystemGestureExclusionRects(mGripExclusionRects);
+    }
+
+    /**
+     * The card's height is the keyboard's, which answers a grip drag a layout later. Whatever it
+     * came back as, the bottom edge goes back where the drag found it.
+     */
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        publishGripExclusionRect();
+        if (!mPinBottom) return;
+        int heightPx = bottom - top;
+        if (heightPx == mPinnedHeightPx) {
+            // Nothing left to settle, so the remembered fraction owns the card again.
+            if (!mResizing) mPinBottom = false;
+            return;
+        }
+        mPinnedHeightPx = heightPx;
+        mTravelYPx = FloatingKeyboardGeometry.travelPx(mResizeStartContentHeightPx, heightPx);
+        applyPositionPx(mPositionXPx, FloatingKeyboardGeometry.resizeYPx(mResizeStartYPx,
+            mResizeStartHeightPx, heightPx, mResizeStartContentHeightPx));
     }
 
     /**
@@ -322,6 +423,11 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         mResizeStartWidthPx = getWidth();
         // Travel is what the frame is not, so the two together are the room it floats in.
         mResizeStartContentWidthPx = getWidth() + mTravelXPx;
+        mResizeStartHeightPx = getHeight();
+        mResizeStartYPx = mPositionYPx;
+        mResizeStartContentHeightPx = getHeight() + mTravelYPx;
+        mPinnedHeightPx = getHeight();
+        mPinBottom = true;
         mResizeStartKeyboardHeightPx = Math.max(1, mContentHost.getHeight());
         mResizeStartWidthScale = mWidthScale == null ? 1f : mWidthScale.widthScale();
         mResizeStartHeightScale = mHeightScale == null ? 1f : mHeightScale.heightScale();
@@ -366,23 +472,37 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         invalidate();
     }
 
-    /** The two chevrons in the grip, the floating pane's own pair mirrored to the other corner. */
+    /**
+     * The handle in the grip: two diagonals across the corner, at full strength so it reads as
+     * something to take hold of rather than a smudge, in the colour the grab pill already uses —
+     * and in the accent for as long as a finger is on it.
+     */
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         super.dispatchDraw(canvas);
         if (getWidth() <= 0 || getHeight() <= 0) return;
-        int primary = MaterialColors.getColor(getContext(),
-            com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(getContext(), R.color.termux_primary));
         mGripPaint.setStyle(Paint.Style.STROKE);
         mGripPaint.setStrokeWidth(dp(GRIP_STROKE_DP));
         mGripPaint.setStrokeCap(Paint.Cap.ROUND);
-        mGripPaint.setColor(ColorUtils.setAlphaComponent(primary,
-            mResizing ? GRIP_ALPHA_ACTIVE : GRIP_ALPHA_REST));
+        mGripPaint.setColor(gripColor());
         float left = dp(GRIP_INSET_DP);
         float bottom = getHeight() - dp(GRIP_INSET_DP);
-        canvas.drawLine(left + dp(10f), bottom, left, bottom - dp(10f), mGripPaint);
-        canvas.drawLine(left + dp(5f), bottom, left, bottom - dp(5f), mGripPaint);
+        canvas.drawLine(left + dp(GRIP_LONG_DP), bottom, left, bottom - dp(GRIP_LONG_DP),
+            mGripPaint);
+        canvas.drawLine(left + dp(GRIP_SHORT_DP), bottom, left, bottom - dp(GRIP_SHORT_DP),
+            mGripPaint);
+    }
+
+    /** {@link R.drawable#floating_keyboard_grab_handle}'s colour at rest, the accent under a
+     *  finger. */
+    private int gripColor() {
+        if (mResizing)
+            return MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorPrimary,
+                ContextCompat.getColor(getContext(), R.color.termux_primary));
+        return MaterialColors.getColor(getContext(),
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));
     }
 
     private boolean onHandleTouch(@NonNull MotionEvent event) {

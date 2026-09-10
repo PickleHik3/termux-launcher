@@ -92,22 +92,45 @@ public final class FloatingKeyboardGeometry {
      */
     public static int resizeXPx(int startXPx, int startWidthPx, int newWidthPx,
                                 int contentWidthPx) {
-        return clampPx(startXPx + (startWidthPx - newWidthPx),
-            travelPx(contentWidthPx, newWidthPx));
+        return resizeLeadingEdgePx(startXPx, startWidthPx, newWidthPx, contentWidthPx);
     }
 
     /**
-     * The row-height multiplier the same drag lands on. Vertical movement is read as a share of the
-     * keyboard's own height at the moment the drag began — a finger that drags down by half the
-     * keyboard makes it half again as tall, whatever height the user had already chosen — and every
-     * frame of the drag is measured from that same start, so the answer never accumulates drift.
+     * The same for the top edge: the card's <em>bottom</em> edge is what a grip drag holds still,
+     * so a keyboard that grew taller grew upward, out of its top edge, and one that shrank pulled
+     * that edge back down. A card that would grow out through the top of the content is held at it
+     * instead, which is the only place its bottom edge is allowed to move.
+     */
+    public static int resizeYPx(int startYPx, int startHeightPx, int newHeightPx,
+                                int contentHeightPx) {
+        return resizeLeadingEdgePx(startYPx, startHeightPx, newHeightPx, contentHeightPx);
+    }
+
+    /** One axis of the two above: the far edge stays, so the near one moves by the whole change. */
+    private static int resizeLeadingEdgePx(int startPx, int startSizePx, int newSizePx,
+                                           int contentPx) {
+        return clampPx(startPx + (startSizePx - newSizePx), travelPx(contentPx, newSizePx));
+    }
+
+    /**
+     * The row-height multiplier the same drag lands on. The grip is the card's bottom-left corner
+     * and the card's bottom edge is pinned, so <em>up is taller</em> — the same direction as the
+     * dock's own height pill, and the only one that works for a card parked along the bottom of
+     * the screen, where there is no room left to drag downward. Vertical movement is read as a
+     * share of the keyboard's own height at the moment the drag began — a finger that goes up by
+     * half the keyboard makes it half again as tall, whatever height the user had already chosen —
+     * and every frame of the drag is measured from that same start, so the answer never
+     * accumulates drift.
+     *
+     * @param deltaYPx how far the finger has travelled down the screen since the drag began, which
+     *     is the direction the card shrinks in
      */
     public static float heightScaleForResize(float startScale, int deltaYPx,
                                              int startKeyboardHeightPx, float minScale,
                                              float maxScale) {
         if (startKeyboardHeightPx <= 0 || Float.isNaN(startScale))
             return clampScale(startScale, minScale, maxScale);
-        float grown = (startKeyboardHeightPx + deltaYPx) / (float) startKeyboardHeightPx;
+        float grown = (startKeyboardHeightPx - deltaYPx) / (float) startKeyboardHeightPx;
         return clampScale(startScale * Math.max(0f, grown), minScale, maxScale);
     }
 

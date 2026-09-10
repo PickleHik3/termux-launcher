@@ -138,16 +138,30 @@ public class FloatingKeyboardGeometryTest {
     }
 
     @Test
+    public void theBottomEdgeStaysWhateverHeightTheCardTook() {
+        // 500 tall at y=200, grown to 600: the bottom edge stayed at 700, so the top came up
+        // to 100.
+        assertEquals(100, FloatingKeyboardGeometry.resizeYPx(200, 500, 600, 1800));
+        // Shorter instead, and the top edge walks back down.
+        assertEquals(300, FloatingKeyboardGeometry.resizeYPx(200, 500, 400, 1800));
+        // A card grown past the top of the room is held at it, which is the one thing that moves
+        // its bottom edge.
+        assertEquals(0, FloatingKeyboardGeometry.resizeYPx(40, 500, 900, 1800));
+        // And one that would end below the bottom is held inside too.
+        assertEquals(800, FloatingKeyboardGeometry.resizeYPx(1400, 400, 1000, 1800));
+    }
+
+    @Test
     public void theHeightFollowsTheShareOfTheKeyboardTheFingerDragged() {
-        // 400px of keyboard, dragged down by a quarter of itself.
+        // 400px of keyboard, dragged up by a quarter of itself: up is taller.
         assertEquals(1.25f, FloatingKeyboardGeometry.heightScaleForResize(
-            1f, 100, 400, 0.6f, 1.6f), 1e-6f);
-        assertEquals(0.75f, FloatingKeyboardGeometry.heightScaleForResize(
             1f, -100, 400, 0.6f, 1.6f), 1e-6f);
+        assertEquals(0.75f, FloatingKeyboardGeometry.heightScaleForResize(
+            1f, 100, 400, 0.6f, 1.6f), 1e-6f);
         // Every frame is measured from the scale the drag started at, so an already-grown card
         // grows from there rather than from 1.
         assertEquals(1.5f, FloatingKeyboardGeometry.heightScaleForResize(
-            1.2f, 100, 400, 0.6f, 1.6f), 1e-6f);
+            1.2f, -100, 400, 0.6f, 1.6f), 1e-6f);
         assertEquals(1f, FloatingKeyboardGeometry.heightScaleForResize(
             1f, 0, 400, 0.6f, 1.6f), 1e-6f);
     }
@@ -155,16 +169,16 @@ public class FloatingKeyboardGeometryTest {
     @Test
     public void theHeightDragStopsAtBothEndsOfItsRange() {
         assertEquals(1.6f, FloatingKeyboardGeometry.heightScaleForResize(
-            1f, 5000, 400, 0.6f, 1.6f), 1e-6f);
-        assertEquals(0.6f, FloatingKeyboardGeometry.heightScaleForResize(
             1f, -5000, 400, 0.6f, 1.6f), 1e-6f);
-        // A drag further up than the keyboard is tall is a zero height asked for, not a negative
+        assertEquals(0.6f, FloatingKeyboardGeometry.heightScaleForResize(
+            1f, 5000, 400, 0.6f, 1.6f), 1e-6f);
+        // A drag further down than the keyboard is tall is a zero height asked for, not a negative
         // one, and the floor answers it.
         assertEquals(0.6f, FloatingKeyboardGeometry.heightScaleForResize(
-            1f, -400, 400, 0.6f, 1.6f), 1e-6f);
+            1f, 400, 400, 0.6f, 1.6f), 1e-6f);
         // Nothing measured yet: nothing to scale against, so the scale stands.
         assertEquals(1.2f, FloatingKeyboardGeometry.heightScaleForResize(
-            1.2f, 300, 0, 0.6f, 1.6f), 1e-6f);
+            1.2f, -300, 0, 0.6f, 1.6f), 1e-6f);
     }
 
     @Test
