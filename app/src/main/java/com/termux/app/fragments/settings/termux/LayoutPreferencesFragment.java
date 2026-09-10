@@ -17,8 +17,10 @@ import com.termux.app.fragments.settings.LayoutElement;
 import com.termux.app.fragments.settings.LayoutElementRowPreference;
 import com.termux.app.fragments.settings.LayoutOverviewPreference;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
@@ -161,6 +163,13 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
             public void onBlockTapped(@NonNull PlaceMiniatureView.Block block) {
                 openChooser(LayoutElement.forBlock(block, mSelectedPlace));
             }
+
+            @Override
+            public void onBarDropped(@NonNull PlaceOrientation orientation,
+                                     @NonNull PlaceMiniatureView.Block bar,
+                                     @Nullable PlaceLayout.Edge edge) {
+                dropBar(orientation, bar, edge);
+            }
         });
     }
 
@@ -194,6 +203,21 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
             if (!on) continue;
             row.setSwatchColor(element.swatchColor(context));
             row.setSummary(LayoutChooserModel.summary(context, mPlaces, mSelectedPlace, element));
+        }
+    }
+
+    /**
+     * A bar dragged to another edge, or into the tray, writes its new placement at once — the same
+     * keys its chooser writes — and the page re-reads itself, so both miniatures and every row
+     * follow without a Done step.
+     */
+    @VisibleForTesting
+    void dropBar(@NonNull PlaceOrientation orientation, @NonNull PlaceMiniatureView.Block bar,
+                 @Nullable PlaceLayout.Edge edge) {
+        MiniatureDragPolicy.Bar dragged = PlaceMiniatureView.barOf(bar);
+        if (mPlaces == null || dragged == null) return;
+        if (LayoutChooserModel.applyDrop(mPlaces, mSelectedPlace, orientation, dragged, edge)) {
+            onLayoutWritten();
         }
     }
 
