@@ -31,6 +31,13 @@
 - On the Display place, mouse mode swaps the keyboard for a touchpad of the same size with a laptop's gestures: one finger points and taps, two fingers scroll, pinch to zoom and tap for the right button, three fingers tap for the middle button, swipe sideways to switch windows and swipe down to bring the keyboard back.
 - A small mouse at the end of the status bar shows the mode is on.
 
+### Keyboard
+
+- The in-app keyboard comes in three types: docked, floating and split. Swipe up on the keyboard key of the extra-keys row to switch, and each place remembers its own type for portrait and for landscape.
+- A floating keyboard is one solid panel in the theme's colour, dragged by the bar along its top, and it remembers where you left it on each place.
+- The split keyboard parts every row down the middle and lets taps in the gap through to what is behind it. The gap's width and the floating keyboard's width are sliders in Settings ▸ Keyboard.
+- On the Display place, tapping a text field brings the keyboard up and tapping elsewhere puts it away. Turn it off in Display options if you would rather not.
+
 ### Terminal
 
 - The session browser, the workspace panels, scrollback search and quick select rise out of the terminal's bottom edge instead of floating over it.
@@ -55,6 +62,7 @@
 - Editing pinned apps: the search field and the app list stay above the keyboard.
 - A large custom wallpaper no longer freezes the launcher while its blur is prepared.
 - TAI's Add a model dialog keeps its Import and Cancel buttons on screen.
+- The letters of the A–Z bar sit on the bar's centre line, whichever place and orientation it is on.
 
 ## Editions
 
