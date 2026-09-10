@@ -117,6 +117,12 @@ public final class TermuxInAppKeyboard {
     /** Whether the place actually has it right now — what was last applied to the window. */
     private boolean mPlaceHoldsSystemIme;
     private float mHeightScale = 1f;
+    /**
+     * The extra row-height multiplier a floating keyboard carries, from the card's grip and the
+     * Settings slider. Multiplies {@link #mHeightScale} rather than replacing it, and only while
+     * the keyboard is floating — docked and split keep the height the user set for them.
+     */
+    private float mFloatingHeightScale = 1f;
     private float mKeyMarginScale = 1f;
     private float mKeyCornerRadiusDp = -1f;
     private int mKeyOpacity = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY;
@@ -205,6 +211,7 @@ public final class TermuxInAppKeyboard {
             return;
         mEnabled = mPreferences.isInAppKeyboardEnabled();
         mHeightScale = mPreferences.getInAppKeyboardHeightScale();
+        mFloatingHeightScale = mPreferences.getInAppKeyboardFloatingHeightScale();
         mKeyMarginScale = mPreferences.getInAppKeyboardKeyMarginScale();
         mKeyCornerRadiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
         mKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
@@ -300,6 +307,7 @@ public final class TermuxInAppKeyboard {
         // before the keyboard view is rebuilt below.
         if (!mHeightAdjusting)
             mHeightScale = mPreferences.getInAppKeyboardHeightScale();
+        mFloatingHeightScale = mPreferences.getInAppKeyboardFloatingHeightScale();
         resetInputPipeline();
         if (mKeyboardView != null) {
             mHost.detachKeyboardView();
@@ -332,6 +340,7 @@ public final class TermuxInAppKeyboard {
         }
         if (!mEnabled && enabled) {
             mHeightScale = mPreferences.getInAppKeyboardHeightScale();
+            mFloatingHeightScale = mPreferences.getInAppKeyboardFloatingHeightScale();
             mKeyMarginScale = mPreferences.getInAppKeyboardKeyMarginScale();
             mKeyCornerRadiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
             mKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
@@ -355,6 +364,7 @@ public final class TermuxInAppKeyboard {
             }
             refreshPalette();
             reloadLayoutRing(true);
+            applyFloatingHeightScale(mPreferences.getInAppKeyboardFloatingHeightScale(), false);
             if (!mHeightAdjusting) {
                 applyHeightScale(mPreferences.getInAppKeyboardHeightScale());
                 applyKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
@@ -546,9 +556,54 @@ public final class TermuxInAppKeyboard {
         if (Float.compare(mHeightScale, clamped) == 0)
             return;
         mHeightScale = clamped;
-        if (mKeyboardView != null)
-            mKeyboardView.setHeightScale(mHeightScale);
+        pushHeightScaleToView();
         requestIntrinsicSizeGeometrySync(livePreview);
+    }
+
+    /** One drag-frame preview of the floating row height, with nothing written. */
+    public void previewFloatingHeightScale(float floatingHeightScale) {
+        applyFloatingHeightScale(floatingHeightScale, true);
+    }
+
+    /** The stored floating row height, after the grip drag lifted or the slider landed. */
+    public void setFloatingHeightScale(float floatingHeightScale) {
+        applyFloatingHeightScale(floatingHeightScale, false);
+    }
+
+    /** The floating multiplier the keyboard is currently sized by. */
+    public float getFloatingHeightScale() {
+        return mFloatingHeightScale;
+    }
+
+    private void applyFloatingHeightScale(float floatingHeightScale, boolean livePreview) {
+        if (!mEnabled || mDestroyed)
+            return;
+        float clamped = TermuxAppSharedPreferences.clampInAppKeyboardFloatingHeightScale(
+            floatingHeightScale);
+        if (Float.compare(mFloatingHeightScale, clamped) == 0)
+            return;
+        mFloatingHeightScale = clamped;
+        // Docked and split are sized by the height scale alone, so the new multiplier is only
+        // remembered until the keyboard floats again — which re-applies it through the form.
+        if (mForm != PlaceLayout.KeyboardForm.FLOATING)
+            return;
+        pushHeightScaleToView();
+        requestIntrinsicSizeGeometrySync(livePreview);
+    }
+
+    /**
+     * The row height the keyboard is actually laid out at: the user's height, times the floating
+     * multiplier while it is floating. {@link KeyboardGeometryChoreographer}'s frame cap still
+     * applies on top — this only asks for a height, it does not get to keep it.
+     */
+    private float effectiveHeightScale() {
+        return mForm == PlaceLayout.KeyboardForm.FLOATING
+            ? mHeightScale * mFloatingHeightScale : mHeightScale;
+    }
+
+    private void pushHeightScaleToView() {
+        if (mKeyboardView != null)
+            mKeyboardView.setHeightScale(effectiveHeightScale());
     }
 
     private void applyKeyMarginScale(float keyMarginScale) {
@@ -1008,7 +1063,7 @@ public final class TermuxInAppKeyboard {
         mAppliedPaletteInputs = paletteInputsSignature();
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
-        mKeyboardView.setHeightScale(mHeightScale);
+        mKeyboardView.setHeightScale(effectiveHeightScale());
         mKeyboardView.setKeyMarginScale(mKeyMarginScale);
         mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
@@ -1282,6 +1337,9 @@ public final class TermuxInAppKeyboard {
 
     /** Re-parts, or un-parts, what is on screen after the keyboard type or the gap moved. */
     private void applyKeyboardForm() {
+        // The floating multiplier is only in force while floating, so the form moving is what
+        // puts it on or takes it off. It has to land before the geometry sync below.
+        pushHeightScaleToView();
         if (mKeyboardView != null) {
             resetInputPipeline();
             applyKeyboardToView(getSelectedLayoutData());

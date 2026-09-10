@@ -10,7 +10,8 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Pins the arithmetic a floating keyboard is sized and placed by: the width share, the travel it
- * moves in, and the round trip between a dragged pixel and the fraction that is remembered for it.
+ * moves in, the round trip between a dragged pixel and the fraction that is remembered for it, and
+ * what a drag on the card's bottom-left grip does to its two scales.
  */
 public class FloatingKeyboardGeometryTest {
 
@@ -88,5 +89,110 @@ public class FloatingKeyboardGeometryTest {
         assertEquals(108, FloatingKeyboardGeometry.positionPx(0.5f, 216));
         // Nowhere to move is remembered as the edge it starts from, not as a division by zero.
         assertEquals(0f, FloatingKeyboardGeometry.fractionFor(120, 0), 0f);
+    }
+
+    // ------------------------------------------------------------------- the grip
+
+    @Test
+    public void aGripDragGrowsTheCardTowardTheFingerWithItsRightEdgeFixed() {
+        // 1080 wide, starting at 60%: 648px. The grip is on the left, so dragging 108px left is
+        // 108px of new width, and the share goes up by exactly that tenth of the room.
+        assertEquals(0.7f, FloatingKeyboardGeometry.widthScaleForResize(
+            0.6f, -108, 1080, 400, 0.35f, 1f), 1e-6f);
+        // And pushing the same distance the other way takes it back off again.
+        assertEquals(0.5f, FloatingKeyboardGeometry.widthScaleForResize(
+            0.6f, 108, 1080, 400, 0.35f, 1f), 1e-6f);
+        // A finger that has not moved has not resized anything.
+        assertEquals(0.6f, FloatingKeyboardGeometry.widthScaleForResize(
+            0.6f, 0, 1080, 400, 0.35f, 1f), 1e-6f);
+    }
+
+    @Test
+    public void theWidthDragStopsAtTheFloorAndAtTheHostWidth() {
+        // Dragged out past the room it floats in: the whole room, never more.
+        assertEquals(1f, FloatingKeyboardGeometry.widthScaleForResize(
+            0.6f, -5000, 1080, 400, 0.35f, 1f), 1e-6f);
+        // Dragged in past the point there is a keyboard left: 400px of the 1080 is the floor, and
+        // it is above the 0.35 the share itself allows, so it is the one that stops the drag.
+        assertEquals(400 / 1080f, FloatingKeyboardGeometry.widthScaleForResize(
+            0.6f, 5000, 1080, 400, 0.35f, 1f), 1e-6f);
+        // On a wider host the share's floor is the higher of the two, and takes over.
+        assertEquals(0.35f, FloatingKeyboardGeometry.widthScaleForResize(
+            0.6f, 5000, 2000, 400, 0.35f, 1f), 1e-6f);
+        // No room, no resize.
+        assertEquals(0.6f, FloatingKeyboardGeometry.widthScaleForResize(
+            0.6f, -300, 0, 400, 0.35f, 1f), 1e-6f);
+    }
+
+    @Test
+    public void theLeftEdgeMovesByWhateverWidthTheCardGained() {
+        // 648 wide at x=200, grown to 748: the right edge stayed at 848, so the left edge came out
+        // to 100.
+        assertEquals(100, FloatingKeyboardGeometry.resizeXPx(200, 648, 748, 1080));
+        // Narrowed instead, and the left edge walks back in.
+        assertEquals(300, FloatingKeyboardGeometry.resizeXPx(200, 648, 548, 1080));
+        // A card grown against the left edge is held there rather than walking off it.
+        assertEquals(0, FloatingKeyboardGeometry.resizeXPx(40, 648, 1000, 1080));
+        // And one that would end past the right edge is held inside too.
+        assertEquals(80, FloatingKeyboardGeometry.resizeXPx(600, 480, 1000, 1080));
+    }
+
+    @Test
+    public void theHeightFollowsTheShareOfTheKeyboardTheFingerDragged() {
+        // 400px of keyboard, dragged down by a quarter of itself.
+        assertEquals(1.25f, FloatingKeyboardGeometry.heightScaleForResize(
+            1f, 100, 400, 0.6f, 1.6f), 1e-6f);
+        assertEquals(0.75f, FloatingKeyboardGeometry.heightScaleForResize(
+            1f, -100, 400, 0.6f, 1.6f), 1e-6f);
+        // Every frame is measured from the scale the drag started at, so an already-grown card
+        // grows from there rather than from 1.
+        assertEquals(1.5f, FloatingKeyboardGeometry.heightScaleForResize(
+            1.2f, 100, 400, 0.6f, 1.6f), 1e-6f);
+        assertEquals(1f, FloatingKeyboardGeometry.heightScaleForResize(
+            1f, 0, 400, 0.6f, 1.6f), 1e-6f);
+    }
+
+    @Test
+    public void theHeightDragStopsAtBothEndsOfItsRange() {
+        assertEquals(1.6f, FloatingKeyboardGeometry.heightScaleForResize(
+            1f, 5000, 400, 0.6f, 1.6f), 1e-6f);
+        assertEquals(0.6f, FloatingKeyboardGeometry.heightScaleForResize(
+            1f, -5000, 400, 0.6f, 1.6f), 1e-6f);
+        // A drag further up than the keyboard is tall is a zero height asked for, not a negative
+        // one, and the floor answers it.
+        assertEquals(0.6f, FloatingKeyboardGeometry.heightScaleForResize(
+            1f, -400, 400, 0.6f, 1.6f), 1e-6f);
+        // Nothing measured yet: nothing to scale against, so the scale stands.
+        assertEquals(1.2f, FloatingKeyboardGeometry.heightScaleForResize(
+            1.2f, 300, 0, 0.6f, 1.6f), 1e-6f);
+    }
+
+    @Test
+    public void aResizedWidthAndItsPlaceComeBackTheSameOnTheNextDrag() {
+        // Out and back again by the same distance is the share it started at, and the left edge
+        // is where it started too.
+        float grown = FloatingKeyboardGeometry.widthScaleForResize(
+            0.6f, -108, 1080, 400, 0.35f, 1f);
+        int grownWidth = FloatingKeyboardGeometry.frameWidthPx(1080, grown, 400);
+        int grownX = FloatingKeyboardGeometry.resizeXPx(200, 648, grownWidth, 1080);
+        assertEquals(756, grownWidth);
+        assertEquals(92, grownX);
+
+        float back = FloatingKeyboardGeometry.widthScaleForResize(
+            grown, 108, 1080, 400, 0.35f, 1f);
+        int backWidth = FloatingKeyboardGeometry.frameWidthPx(1080, back, 400);
+        assertEquals(0.6f, back, 1e-6f);
+        assertEquals(648, backWidth);
+        assertEquals(200, FloatingKeyboardGeometry.resizeXPx(grownX, grownWidth, backWidth, 1080));
+    }
+
+    @Test
+    public void aScaleIsHeldBetweenTheTwoEndsItsPreferenceAllows() {
+        assertEquals(0.8f, FloatingKeyboardGeometry.clampScale(0.8f, 0.6f, 1.6f), 0f);
+        assertEquals(0.6f, FloatingKeyboardGeometry.clampScale(0.1f, 0.6f, 1.6f), 0f);
+        assertEquals(1.6f, FloatingKeyboardGeometry.clampScale(9f, 0.6f, 1.6f), 0f);
+        assertEquals(0.6f, FloatingKeyboardGeometry.clampScale(Float.NaN, 0.6f, 1.6f), 0f);
+        assertEquals(0.6f,
+            FloatingKeyboardGeometry.clampScale(Float.NEGATIVE_INFINITY, 0.6f, 1.6f), 0f);
     }
 }

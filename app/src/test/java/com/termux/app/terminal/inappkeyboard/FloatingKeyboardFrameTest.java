@@ -29,6 +29,7 @@ import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -38,6 +39,9 @@ import static org.junit.Assert.assertTrue;
  * The floating keyboard as it is hosted: the card collapses with the keyboard inside it, the handle
  * drags it and holds it inside the content, and the controller moves the keyboard's own container
  * between the accessory stack and the frame without rebuilding anything.
+ *
+ * <p>The bottom-left grip is here too: which touches it claims, that a drag on it resizes the card
+ * while a drag on the pill only moves it, and that both are written on release.
  *
  * <p>The container here is a stand-in with a height the test owns, because what is being pinned is
  * the hosting and the placement rather than the keys. Two measure/layout passes are spelled out
@@ -293,6 +297,147 @@ public class FloatingKeyboardFrameTest {
         assertEquals(2000, controller.reference().availableHeightPx);
     }
 
+    // -------------------------------------------------------------------- the grip
+
+    @Test
+    public void theGripIsTheBottomLeftCornerAndNowhereElse() {
+        // mdpi, so a dp is a pixel: a 600 x 418 card with a 28dp grip and an 18dp handle row.
+        FloatingKeyboardFrame frame = newHostedFrame();
+        int height = frame.getHeight();
+        assertEquals(418, height);
+
+        assertTrue(frame.isInGripZone(0, height));
+        assertTrue(frame.isInGripZone(14, height - 14));
+        assertTrue(frame.isInGripZone(28, height - 28));
+        // A pixel outside it in either direction is the keyboard's again.
+        assertFalse(frame.isInGripZone(29, height - 14));
+        assertFalse(frame.isInGripZone(14, height - 29));
+        // Not the other three corners, and not the handle row the pill lives in.
+        assertFalse(frame.isInGripZone(frame.getWidth() - 4, height - 4));
+        assertFalse(frame.isInGripZone(4, 4));
+        assertFalse(frame.isInGripZone(frame.getWidth() - 4, 4));
+        assertFalse(frame.isInGripZone(4, height / 2f));
+    }
+
+    @Test
+    public void theGripGivesWayToTheHandleRowRatherThanGrowingIntoIt() {
+        FloatingKeyboardFrame frame = new FloatingKeyboardFrame(context);
+        frame.setWidthScaleSource(() -> 1f);
+        frame.contentHost().addView(new FixedHeightView(context, 6),
+            new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        measure(frame, 600);
+        frame.layout(0, 0, frame.getMeasuredWidth(), frame.getMeasuredHeight());
+        // 18 of handle and 6 of keyboard: the 28dp zone would swallow the pill, so it stops at it.
+        assertEquals(24, frame.getHeight());
+        assertTrue(frame.isInGripZone(4, 20));
+        assertFalse(frame.isInGripZone(4, 17));
+        // And a card with nothing in it has no corner to grip.
+        assertFalse(new FloatingKeyboardFrame(context).isInGripZone(0, 0));
+    }
+
+    @Test
+    public void aDownInTheGripIsTakenFromTheKeysUnderIt() {
+        FloatingKeyboardFrame frame = newHostedFrame();
+        assertTrue(intercepts(frame, MotionEvent.ACTION_DOWN, 8, 410));
+        assertFalse(intercepts(frame, MotionEvent.ACTION_DOWN, 300, 200));
+        assertFalse(intercepts(frame, MotionEvent.ACTION_MOVE, 8, 410));
+    }
+
+    @Test
+    public void aGripDragWidensTheCardTowardTheFingerAndWritesBothScalesOnRelease() {
+        floatAndLayout();
+        FloatingKeyboardFrame frame = controller.frame();
+        assertEquals(600, frame.getWidth());
+        assertEquals(200, frame.positionXPx());
+
+        // 100px out to the left: 100px of new width on a 1000px host, so 0.6 becomes 0.7, and the
+        // right edge stays at 800 because the left edge came out to 100.
+        dispatchToFrame(frame, MotionEvent.ACTION_DOWN, 8, 410);
+        dispatchToFrame(frame, MotionEvent.ACTION_MOVE, -92, 410);
+        assertTrue("a card being dragged has to be the size it is dragged to",
+            frame.isResizing());
+        assertEquals(0.7f, fakeHost.previewedWidthScale, 1e-6f);
+        assertEquals("nothing is written while the finger is down", 0, fakeHost.resizeCommits);
+        assertTrue(fakeHost.resizePreviews > 0);
+        assertEquals(100, frame.positionXPx());
+        layoutHost();
+        assertEquals(700, frame.getWidth());
+        assertEquals("the right edge did not move", 800,
+            frame.positionXPx() + frame.getWidth());
+
+        dispatchToFrame(frame, MotionEvent.ACTION_UP, -92, 410);
+        assertFalse(frame.isResizing());
+        assertEquals(1, fakeHost.resizeCommits);
+        assertEquals(0.7f, fakeHost.widthScale, 1e-6f);
+        assertEquals("a level drag leaves the height alone", 1f, fakeHost.heightScale, 1e-6f);
+        // The card kept the width it was dragged to once the store took over from the preview.
+        layoutHost();
+        assertEquals(700, frame.getWidth());
+        assertEquals(100f / 300f, store.floatingKeyboardX(PaneWallPage.TERMINAL,
+            PlaceOrientation.LANDSCAPE), 1e-6f);
+    }
+
+    @Test
+    public void theWidthDragStopsAtTheHostWidthAndAtTheKeyboardFloor() {
+        floatAndLayout();
+        FloatingKeyboardFrame frame = controller.frame();
+
+        dispatchToFrame(frame, MotionEvent.ACTION_DOWN, 8, 410);
+        dispatchToFrame(frame, MotionEvent.ACTION_UP, -5000, 410);
+        assertEquals(1f, fakeHost.widthScale, 1e-6f);
+        layoutHost();
+        assertEquals("never wider than the room it floats in", HOST_WIDTH, frame.getWidth());
+        assertEquals(0, frame.positionXPx());
+
+        dispatchToFrame(frame, MotionEvent.ACTION_DOWN, 8, 410);
+        dispatchToFrame(frame, MotionEvent.ACTION_UP, 5000, 410);
+        // 0.35 of the room is 350px, which is above the 240dp keyboard floor, so it is the stop.
+        assertEquals(0.35f, fakeHost.widthScale, 1e-6f);
+        layoutHost();
+        assertEquals(350, frame.getWidth());
+    }
+
+    @Test
+    public void draggingTheGripDownwardsMakesTheRowsTaller() {
+        floatAndLayout();
+        FloatingKeyboardFrame frame = controller.frame();
+
+        // A quarter of the keyboard's 400px is a quarter more row height.
+        dispatchToFrame(frame, MotionEvent.ACTION_DOWN, 8, 410);
+        dispatchToFrame(frame, MotionEvent.ACTION_MOVE, 8, 510);
+        assertEquals(1.25f, fakeHost.previewedHeightScale, 1e-6f);
+        dispatchToFrame(frame, MotionEvent.ACTION_UP, 8, 510);
+        assertEquals(1.25f, fakeHost.heightScale, 1e-6f);
+        assertEquals("a straight-down drag leaves the width alone",
+            0.6f, fakeHost.widthScale, 1e-6f);
+
+        // Both ends of the height range are reachable and neither is passed.
+        dispatchToFrame(frame, MotionEvent.ACTION_DOWN, 8, 410);
+        dispatchToFrame(frame, MotionEvent.ACTION_UP, 8, 5000);
+        assertEquals(1.6f, fakeHost.heightScale, 1e-6f);
+        dispatchToFrame(frame, MotionEvent.ACTION_DOWN, 8, 410);
+        dispatchToFrame(frame, MotionEvent.ACTION_UP, 8, -5000);
+        assertEquals(0.6f, fakeHost.heightScale, 1e-6f);
+    }
+
+    @Test
+    public void draggingThePillMovesTheCardAndResizesNothing() {
+        floatAndLayout();
+        FloatingKeyboardFrame frame = controller.frame();
+
+        dispatch(frame, MotionEvent.ACTION_DOWN, 500, 1700);
+        dispatch(frame, MotionEvent.ACTION_MOVE, 400, 1500);
+        dispatch(frame, MotionEvent.ACTION_UP, 400, 1500);
+
+        assertEquals("the handle drag is untouched", 100, frame.positionXPx());
+        assertEquals(0, fakeHost.resizePreviews);
+        assertEquals(0, fakeHost.resizeCommits);
+        assertEquals(0.6f, fakeHost.widthScale, 1e-6f);
+        assertEquals(1f, fakeHost.heightScale, 1e-6f);
+        assertEquals(600, frame.getWidth());
+    }
+
     // ------------------------------------------------------------------- fixtures
 
     private void floatAndLayout() {
@@ -321,10 +466,31 @@ public class FloatingKeyboardFrameTest {
 
     private static void dispatch(@NonNull FloatingKeyboardFrame frame, int action,
                                  float rawX, float rawY) {
-        long now = SystemClock.uptimeMillis();
-        MotionEvent event = MotionEvent.obtain(now, now, action, rawX, rawY, 0);
+        MotionEvent event = motionEvent(action, rawX, rawY);
         frame.grabHandle().dispatchTouchEvent(event);
         event.recycle();
+    }
+
+    /** Straight at the card, which is where a touch on the grip lands. */
+    private static void dispatchToFrame(@NonNull FloatingKeyboardFrame frame, int action,
+                                        float x, float y) {
+        MotionEvent event = motionEvent(action, x, y);
+        frame.dispatchTouchEvent(event);
+        event.recycle();
+    }
+
+    private static boolean intercepts(@NonNull FloatingKeyboardFrame frame, int action,
+                                      float x, float y) {
+        MotionEvent event = motionEvent(action, x, y);
+        boolean intercepted = frame.onInterceptTouchEvent(event);
+        event.recycle();
+        return intercepted;
+    }
+
+    @NonNull
+    private static MotionEvent motionEvent(int action, float x, float y) {
+        long now = SystemClock.uptimeMillis();
+        return MotionEvent.obtain(now, now, action, x, y, 0);
     }
 
     /** A stand-in for the keyboard's container: a height the test owns. */
@@ -347,8 +513,13 @@ public class FloatingKeyboardFrameTest {
 
         boolean landscape = true;
         float widthScale = 0.6f;
+        float heightScale = 1f;
         int hostingChanges;
         int frameMoves;
+        int resizePreviews;
+        int resizeCommits;
+        float previewedHeightScale = Float.NaN;
+        float previewedWidthScale = Float.NaN;
 
         @Nullable @Override public View floatingHost() {
             return host;
@@ -360,6 +531,10 @@ public class FloatingKeyboardFrameTest {
 
         @Override public float floatingKeyboardWidthScale() {
             return widthScale;
+        }
+
+        @Override public float floatingKeyboardHeightScale() {
+            return heightScale;
         }
 
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() {
@@ -380,6 +555,20 @@ public class FloatingKeyboardFrameTest {
 
         @Override public void onFloatingFrameMoved(boolean committed) {
             frameMoves++;
+        }
+
+        /** Stands in for the two preferences: a committed drag is what the store would keep. */
+        @Override public void onFloatingFrameResized(float newWidthScale, float newHeightScale,
+                                                     boolean committed) {
+            previewedWidthScale = newWidthScale;
+            previewedHeightScale = newHeightScale;
+            if (committed) {
+                resizeCommits++;
+                widthScale = newWidthScale;
+                heightScale = newHeightScale;
+            } else {
+                resizePreviews++;
+            }
         }
     }
 }

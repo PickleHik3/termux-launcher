@@ -18,9 +18,10 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * The two global values a floating or split keyboard is measured from: how wide the float is and
- * how far a split parts. Both are kept per orientation with a default of their own, so a portrait
- * keyboard never inherits a fraction that only makes sense across a landscape screen.
+ * The three global values a floating or split keyboard is measured from: how wide the float is,
+ * how tall it is, and how far a split parts. All are kept per orientation with a default of their
+ * own, so a portrait keyboard never inherits a fraction that only makes sense across a landscape
+ * screen.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -124,6 +125,49 @@ public class TermuxInAppKeyboardShapePreferencesTest {
             preferences.getInAppKeyboardFloatingWidthScale(), 1e-4f);
     }
 
+    // ------------------------------------------------------- the floating row height
+
+    @Test
+    public void aFreshInstallLeavesTheFloatingHeightAtTheKeyboardsOwn() {
+        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            preferences.getInAppKeyboardFloatingHeightScale(), 1e-4f);
+        landscape();
+        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE,
+            preferences.getInAppKeyboardFloatingHeightScale(), 1e-4f);
+    }
+
+    @Test
+    public void theFloatingHeightIsRememberedForOneOrientationOnly() {
+        preferences.setInAppKeyboardFloatingHeightScale(1.3f);
+        assertEquals(1.3f, preferences.getInAppKeyboardFloatingHeightScale(), 1e-4f);
+        landscape();
+        assertEquals("landscape keeps its own, not portrait's",
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE,
+            preferences.getInAppKeyboardFloatingHeightScale(), 1e-4f);
+
+        preferences.setInAppKeyboardFloatingHeightScale(0.8f);
+        assertEquals(0.8f, preferences.getInAppKeyboardFloatingHeightScale(), 1e-4f);
+        assertEquals(0.8f, store.getFloat(
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE, 0f), 1e-4f);
+        assertEquals(1.3f, store.getFloat(
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE, 0f), 1e-4f);
+    }
+
+    @Test
+    public void theFloatingHeightIsHeldInsideItsRange() {
+        preferences.setInAppKeyboardFloatingHeightScale(9f);
+        assertEquals(TERMUX_APP.MAX_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            preferences.getInAppKeyboardFloatingHeightScale(), 1e-4f);
+        preferences.setInAppKeyboardFloatingHeightScale(0.01f);
+        assertEquals(TERMUX_APP.MIN_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            preferences.getInAppKeyboardFloatingHeightScale(), 1e-4f);
+
+        store.edit().putFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            Float.NaN).commit();
+        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            preferences.getInAppKeyboardFloatingHeightScale(), 1e-4f);
+    }
+
     /** The Keyboard page's sliders are whole percentages of the fraction the store holds. */
     @Test
     public void thePercentagesTheSlidersShowRoundTripThroughTheStore() {
@@ -131,6 +175,11 @@ public class TermuxInAppKeyboardShapePreferencesTest {
             preferences.setInAppKeyboardFloatingWidthScale(percent / 100f);
             assertEquals(percent,
                 Math.round(preferences.getInAppKeyboardFloatingWidthScale() * 100f));
+        }
+        for (int percent : new int[] {60, 80, 100, 125, 160}) {
+            preferences.setInAppKeyboardFloatingHeightScale(percent / 100f);
+            assertEquals(percent,
+                Math.round(preferences.getInAppKeyboardFloatingHeightScale() * 100f));
         }
         for (int percent : new int[] {0, 12, 25, 45}) {
             preferences.setInAppKeyboardSplitGapFraction(percent / 100f);

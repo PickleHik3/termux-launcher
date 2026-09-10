@@ -8329,6 +8329,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mPreferences == null ? 1f : mPreferences.getInAppKeyboardFloatingWidthScale();
         }
 
+        @Override public float floatingKeyboardHeightScale() {
+            return mPreferences == null ? 1f : mPreferences.getInAppKeyboardFloatingHeightScale();
+        }
+
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() {
             return TermuxActivity.this.placeLayoutStore();
         }
@@ -8353,6 +8357,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void onFloatingFrameMoved(boolean committed) {
             // Nothing to do: the card is a solid panel that travels with the frame, so a drag
             // crops no backdrop. The controller has already remembered where the frame landed.
+        }
+
+        @Override public void onFloatingFrameResized(float widthScale, float heightScale,
+                                                     boolean committed) {
+            // The card measures its own width from the scale it is being dragged to, so the width
+            // only has to be stored; the row height has to reach the keyboard for the drag to show
+            // anything at all.
+            if (mInAppKeyboard != null) {
+                if (committed) mInAppKeyboard.setFloatingHeightScale(heightScale);
+                else mInAppKeyboard.previewFloatingHeightScale(heightScale);
+            }
+            if (!committed || mPreferences == null) return;
+            mPreferences.setInAppKeyboardFloatingWidthScale(widthScale);
+            mPreferences.setInAppKeyboardFloatingHeightScale(heightScale);
+            mKeyboardGeometry.invalidateMeasurementAndForceLayout();
         }
     }
 

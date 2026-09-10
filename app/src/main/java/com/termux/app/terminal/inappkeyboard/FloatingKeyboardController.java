@@ -31,7 +31,7 @@ import com.termux.app.wall.PaneWallPage;
  */
 public final class FloatingKeyboardController {
 
-    /** What the frame needs from the activity: two slots, two settings and two notifications. */
+    /** What the frame needs from the activity: two slots, three settings and three notifications. */
     public interface Host {
 
         /** The full-content region the frame is placed in, or null before inflation. */
@@ -42,6 +42,9 @@ public final class FloatingKeyboardController {
 
         /** The user's floating width, as a share of the content width, for this orientation. */
         float floatingKeyboardWidthScale();
+
+        /** The user's floating row height, as a multiplier, for this orientation. */
+        float floatingKeyboardHeightScale();
 
         @Nullable PlaceLayoutStore placeLayoutStore();
 
@@ -54,6 +57,13 @@ public final class FloatingKeyboardController {
 
         /** The frame moved; the position itself is already stored by the controller. */
         void onFloatingFrameMoved(boolean committed);
+
+        /**
+         * The grip is being dragged. Uncommitted frames are a preview and must not be written —
+         * the card sizes itself from the width, and the host only has to push the row height at
+         * the keyboard. The committed one is where both scales are stored.
+         */
+        void onFloatingFrameResized(float widthScale, float heightScale, boolean committed);
     }
 
     @NonNull private final Host mHost;
@@ -181,7 +191,9 @@ public final class FloatingKeyboardController {
         if (frame == null) {
             frame = new FloatingKeyboardFrame(host.getContext());
             frame.setWidthScaleSource(mHost::floatingKeyboardWidthScale);
+            frame.setHeightScaleSource(mHost::floatingKeyboardHeightScale);
             frame.setOnFrameMovedListener(this::onFrameMoved);
+            frame.setOnFrameResizedListener(this::onFrameResized);
             mFrame = frame;
             // Content bounds moved: a rotation, a window inset, a font scale. The frame re-measures
             // itself out of that same pass, so all that is left here is where it sits in the new
@@ -192,7 +204,7 @@ public final class FloatingKeyboardController {
             // The frame's own height is the keyboard's, which the height slider, a rotation and a
             // layout change all move. Its travel follows.
             frame.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-                if (b - t != ob - ot) applyTravelAndPosition();
+                if (b - t != ob - ot || r - l != or - ol) applyTravelAndPosition();
             });
         }
         if (frame.getParent() != host) {
@@ -274,6 +286,25 @@ public final class FloatingKeyboardController {
             }
         }
         mHost.onFloatingFrameMoved(committed);
+    }
+
+    /**
+     * The grip drag. The card has already taken its new width and moved its left edge to keep its
+     * right one still, so what is left is to remember where that put it and to hand the two scales
+     * on — a preview while the finger is down, a write when it lifts.
+     */
+    private void onFrameResized(float widthScale, float heightScale, int xPx, boolean committed) {
+        FloatingKeyboardFrame frame = mFrame;
+        if (frame == null) return;
+        mXFraction = FloatingKeyboardGeometry.fractionFor(xPx, frame.travelXPx());
+        if (committed) {
+            PlaceLayoutStore store = mHost.placeLayoutStore();
+            if (store != null) {
+                store.setFloatingKeyboardPosition(mHost.place(), mHost.orientation(),
+                    mXFraction, mYFraction);
+            }
+        }
+        mHost.onFloatingFrameResized(widthScale, heightScale, committed);
     }
 
     /** The frame, for tests. Null until the keyboard has floated once. */

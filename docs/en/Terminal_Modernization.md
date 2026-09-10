@@ -478,7 +478,9 @@ beside it: **Floating**, a narrower keyboard over the content that you place whe
 and **Split**, the same bottom keyboard with every row parted in the middle for two thumbs. The
 choice belongs to the place and the orientation — the terminal in landscape can float while Home
 in portrait stays docked — and Settings ▸ Layout ▸ **Keyboard type** is where it is picked. How
-wide a float is and how far a split parts are on Settings ▸ Keyboard, one value per orientation.
+wide a float is, how tall it is, and how far a split parts are on Settings ▸ Keyboard, one value
+per orientation. Dragging the bottom-left corner of a floating keyboard resizes it in place — it
+grows toward your finger, keeping its right edge still — and writes the same two values.
 A floating keyboard is a solid panel in the theme's own colour rather than glass, so it reads as
 a card over whatever it is parked on.
 

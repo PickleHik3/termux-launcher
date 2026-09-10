@@ -68,6 +68,60 @@ public final class FloatingKeyboardGeometry {
     }
 
     /**
+     * The width share a drag on the card's bottom-left grip lands on. The card's right edge is
+     * fixed, so the width the finger asks for is the width it started at less however far left the
+     * finger went — pulling outward widens, pushing inward narrows. Held between the width there is
+     * still a keyboard on and the room the card floats in, then between the two ends the stored
+     * share itself allows, so neither floor can be dragged through.
+     */
+    public static float widthScaleForResize(float startScale, int deltaXPx, int contentWidthPx,
+                                            int minWidthPx, float minScale, float maxScale) {
+        int content = Math.max(0, contentWidthPx);
+        if (content == 0) return clampScale(startScale, minScale, maxScale);
+        int startWidthPx = frameWidthPx(content, startScale, minWidthPx);
+        int floor = Math.min(Math.max(0, minWidthPx), content);
+        int wanted = Math.max(floor, Math.min(content, startWidthPx - deltaXPx));
+        return clampScale(wanted / (float) content, minScale, maxScale);
+    }
+
+    /**
+     * Where the card's leading edge goes once a resize gave it a new width. The right edge stays
+     * where it was, so every pixel the card gained is a pixel its left edge moved out by — and the
+     * result is held inside the content, which is what stops a card grown against the left edge
+     * from walking off it.
+     */
+    public static int resizeXPx(int startXPx, int startWidthPx, int newWidthPx,
+                                int contentWidthPx) {
+        return clampPx(startXPx + (startWidthPx - newWidthPx),
+            travelPx(contentWidthPx, newWidthPx));
+    }
+
+    /**
+     * The row-height multiplier the same drag lands on. Vertical movement is read as a share of the
+     * keyboard's own height at the moment the drag began — a finger that drags down by half the
+     * keyboard makes it half again as tall, whatever height the user had already chosen — and every
+     * frame of the drag is measured from that same start, so the answer never accumulates drift.
+     */
+    public static float heightScaleForResize(float startScale, int deltaYPx,
+                                             int startKeyboardHeightPx, float minScale,
+                                             float maxScale) {
+        if (startKeyboardHeightPx <= 0 || Float.isNaN(startScale))
+            return clampScale(startScale, minScale, maxScale);
+        float grown = (startKeyboardHeightPx + deltaYPx) / (float) startKeyboardHeightPx;
+        return clampScale(startScale * Math.max(0f, grown), minScale, maxScale);
+    }
+
+    /**
+     * A scale held between the two ends its preference allows. A non-finite scale has no place on
+     * that range at all and falls to its bottom; the preference's own clamp, which the caller
+     * writes through, is what turns nonsense back into the default.
+     */
+    public static float clampScale(float scale, float minScale, float maxScale) {
+        if (Float.isNaN(scale) || Float.isInfinite(scale)) return minScale;
+        return Math.max(minScale, Math.min(maxScale, scale));
+    }
+
+    /**
      * What a pixel offset is worth as memory. A frame with no travel is against both edges at once,
      * so it remembers the edge it starts from rather than a meaningless fraction.
      */

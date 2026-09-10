@@ -1,6 +1,8 @@
 package com.termux.app.terminal.inappkeyboard;
 
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -11,8 +13,13 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
+
+import com.google.android.material.color.MaterialColors;
 
 import com.termux.R;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
  * The card a floating keyboard rides in: a grab handle along the top and the keyboard host under
@@ -23,7 +30,9 @@ import com.termux.R;
  * and its height controls, and is measured by the normal layout pass against the width this frame
  * was given. What the frame owns is the handle and the drag: it clamps the offset it is dragged to
  * against the travel it was handed and reports where it ended up, so the arithmetic stays in
- * {@link FloatingKeyboardGeometry} and the memory stays in the store.</p>
+ * {@link FloatingKeyboardGeometry} and the memory stays in the store. The bottom-left corner is
+ * the other half of that: a grip the card is resized from, which scales its width and the
+ * keyboard's row height at once and reports both the same way.</p>
  *
  * <p>It lives in {@code floating_keyboard_host}, which covers the whole content region. That is
  * what makes a keyboard parked halfway up the screen touchable: a view translated outside its
@@ -36,6 +45,20 @@ public final class FloatingKeyboardFrame extends LinearLayout {
 
     /** The strip above the keys the card is dragged by. */
     static final float HANDLE_ROW_DP = 18f;
+
+    /**
+     * The corner the card is resized from, mirrored across from the floating terminal pane's,
+     * which grips at bottom-right. Same size, so a thumb that has learnt one has learnt the other.
+     */
+    static final float GRIP_DP = 28f;
+
+    /** The chevrons drawn in it: two short strokes, the pane's weight and inset. */
+    private static final float GRIP_STROKE_DP = 1.5f;
+    private static final float GRIP_INSET_DP = 4f;
+
+    /** Dim enough to stay out of the way at rest, unmistakable under a finger. */
+    private static final int GRIP_ALPHA_REST = 90;
+    private static final int GRIP_ALPHA_ACTIVE = 200;
 
     /** The pill drawn in the middle of that strip. */
     static final float PILL_WIDTH_DP = 52f;
@@ -52,6 +75,11 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         float widthScale();
     }
 
+    /** The user's floating row height, read the same pull-style way, to start a resize from. */
+    public interface HeightScaleSource {
+        float heightScale();
+    }
+
     /** Where the frame ended up, in pixels from the content's top-left corner. */
     public interface OnFrameMovedListener {
         /**
@@ -61,12 +89,24 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         void onFrameMoved(int xPx, int yPx, boolean committed);
     }
 
+    /** Where the grip drag has taken the card's two scales. */
+    public interface OnFrameResizedListener {
+        /**
+         * @param xPx the card's left edge, which moves as it widens because its right edge does not
+         * @param committed true once the finger has left the grip, which is when the two scales are
+         *     worth writing; false for the frames in between, which only preview them.
+         */
+        void onFrameResized(float widthScale, float heightScale, int xPx, boolean committed);
+    }
+
     private final FrameLayout mHandle;
     private final FrameLayout mContentHost;
 
     @Nullable private OnFrameMovedListener mListener;
+    @Nullable private OnFrameResizedListener mResizeListener;
 
     @Nullable private WidthScaleSource mWidthScale;
+    @Nullable private HeightScaleSource mHeightScale;
     private int mTravelXPx;
     private int mTravelYPx;
     private int mPositionXPx;
@@ -77,6 +117,22 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     private int mDragStartXPx;
     private int mDragStartYPx;
     private boolean mDragging;
+
+    private final Paint mGripPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    /**
+     * The width the card is being resized to. NaN at rest, which is what sends {@link #onMeasure}
+     * back to the stored share; a number only for as long as a finger is on the grip, so the live
+     * preview never needs anything written to the store to be seen.
+     */
+    private float mResizeWidthScale = Float.NaN;
+    private float mResizeHeightScale = Float.NaN;
+    private boolean mResizing;
+    private int mResizeStartContentWidthPx;
+    private int mResizeStartWidthPx;
+    private int mResizeStartKeyboardHeightPx;
+    private float mResizeStartWidthScale = 1f;
+    private float mResizeStartHeightScale = 1f;
 
     public FloatingKeyboardFrame(@NonNull Context context) {
         super(context);
@@ -144,10 +200,29 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         mWidthScale = source;
     }
 
+    /** The same, for the row height a grip drag starts from. */
+    public void setHeightScaleSource(@Nullable HeightScaleSource source) {
+        mHeightScale = source;
+    }
+
+    public void setOnFrameResizedListener(@Nullable OnFrameResizedListener listener) {
+        mResizeListener = listener;
+    }
+
     /** The width the frame takes in a content region this wide. */
     public int frameWidthPx(int contentWidthPx) {
-        return frameWidthPx(getContext(), contentWidthPx,
-            mWidthScale == null ? 1f : mWidthScale.widthScale());
+        return frameWidthPx(getContext(), contentWidthPx, widthScale());
+    }
+
+    /** The share in force: the one under the finger while resizing, the stored one otherwise. */
+    private float widthScale() {
+        if (!Float.isNaN(mResizeWidthScale)) return mResizeWidthScale;
+        return mWidthScale == null ? 1f : mWidthScale.widthScale();
+    }
+
+    /** The room the frame has left to move sideways, which a resize changes as it goes. */
+    int travelXPx() {
+        return mTravelXPx;
     }
 
     /** The room the frame may be dragged in, from the content bounds it floats over. */
@@ -181,6 +256,133 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         mPositionYPx = FloatingKeyboardGeometry.clampPx(yPx, mTravelYPx);
         setTranslationX(mPositionXPx);
         setTranslationY(mPositionYPx);
+    }
+
+    // --------------------------------------------------------------------- the grip
+
+    /**
+     * Whether a touch landed in the corner the card is resized from. The zone gives way to the
+     * handle row rather than growing into it, so a card squeezed down to almost nothing still has
+     * a pill to drag and never two gestures fighting over one pixel.
+     */
+    boolean isInGripZone(float x, float y) {
+        int height = getHeight();
+        if (height <= 0) return false;
+        float grip = dp(GRIP_DP);
+        float top = Math.max(dp(HANDLE_ROW_DP), height - grip);
+        return x >= 0f && x <= grip && y >= top && y <= height;
+    }
+
+    /** True for as long as a finger is on the grip. */
+    boolean isResizing() {
+        return mResizing;
+    }
+
+    /**
+     * The grip is a corner of the keyboard, so the keys under it would take the touch first. A
+     * down inside the zone is claimed here before it ever reaches them; everything else is the
+     * keyboard's, untouched.
+     */
+    @Override
+    public boolean onInterceptTouchEvent(@NonNull MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN
+            && isInGripZone(event.getX(), event.getY()))
+            return true;
+        return super.onInterceptTouchEvent(event);
+    }
+
+    @Override
+    public boolean onTouchEvent(@NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                if (!isInGripZone(event.getX(), event.getY())) break;
+                beginResize(event);
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (!mResizing) break;
+                resizeTo(event, false);
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (!mResizing) break;
+                resizeTo(event, true);
+                endResize();
+                return true;
+            default:
+                break;
+        }
+        return super.onTouchEvent(event);
+    }
+
+    private void beginResize(@NonNull MotionEvent event) {
+        mResizing = true;
+        mDragStartRawX = event.getRawX();
+        mDragStartRawY = event.getRawY();
+        mDragStartXPx = mPositionXPx;
+        mResizeStartWidthPx = getWidth();
+        // Travel is what the frame is not, so the two together are the room it floats in.
+        mResizeStartContentWidthPx = getWidth() + mTravelXPx;
+        mResizeStartKeyboardHeightPx = Math.max(1, mContentHost.getHeight());
+        mResizeStartWidthScale = mWidthScale == null ? 1f : mWidthScale.widthScale();
+        mResizeStartHeightScale = mHeightScale == null ? 1f : mHeightScale.heightScale();
+        mResizeWidthScale = mResizeStartWidthScale;
+        mResizeHeightScale = mResizeStartHeightScale;
+        invalidate();
+    }
+
+    private void resizeTo(@NonNull MotionEvent event, boolean committed) {
+        int deltaXPx = Math.round(event.getRawX() - mDragStartRawX);
+        int deltaYPx = Math.round(event.getRawY() - mDragStartRawY);
+        float widthScale = FloatingKeyboardGeometry.widthScaleForResize(mResizeStartWidthScale,
+            deltaXPx, mResizeStartContentWidthPx, minWidthPx(getContext()),
+            TERMUX_APP.MIN_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE);
+        float heightScale = FloatingKeyboardGeometry.heightScaleForResize(mResizeStartHeightScale,
+            deltaYPx, mResizeStartKeyboardHeightPx,
+            TERMUX_APP.MIN_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE);
+        mResizeWidthScale = widthScale;
+        mResizeHeightScale = heightScale;
+        int widthPx = frameWidthPx(getContext(), mResizeStartContentWidthPx, widthScale);
+        mTravelXPx = FloatingKeyboardGeometry.travelPx(mResizeStartContentWidthPx, widthPx);
+        applyPositionPx(FloatingKeyboardGeometry.resizeXPx(mDragStartXPx, mResizeStartWidthPx,
+            widthPx, mResizeStartContentWidthPx), mPositionYPx);
+        // A layout per frame, which the rest of the launcher never does — but only for as long as
+        // a finger is on the grip, and being the size it is dragged to is the whole gesture.
+        requestLayout();
+        if (mResizeListener != null)
+            mResizeListener.onFrameResized(widthScale, heightScale, mPositionXPx, committed);
+    }
+
+    /**
+     * Hands the card's width back to the stored share. The committed frame of the drag has already
+     * written that share, so the size on screen does not move; what stops is the per-frame layout.
+     */
+    private void endResize() {
+        mResizing = false;
+        mResizeWidthScale = Float.NaN;
+        mResizeHeightScale = Float.NaN;
+        requestLayout();
+        invalidate();
+    }
+
+    /** The two chevrons in the grip, the floating pane's own pair mirrored to the other corner. */
+    @Override
+    protected void dispatchDraw(@NonNull Canvas canvas) {
+        super.dispatchDraw(canvas);
+        if (getWidth() <= 0 || getHeight() <= 0) return;
+        int primary = MaterialColors.getColor(getContext(),
+            com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(getContext(), R.color.termux_primary));
+        mGripPaint.setStyle(Paint.Style.STROKE);
+        mGripPaint.setStrokeWidth(dp(GRIP_STROKE_DP));
+        mGripPaint.setStrokeCap(Paint.Cap.ROUND);
+        mGripPaint.setColor(ColorUtils.setAlphaComponent(primary,
+            mResizing ? GRIP_ALPHA_ACTIVE : GRIP_ALPHA_REST));
+        float left = dp(GRIP_INSET_DP);
+        float bottom = getHeight() - dp(GRIP_INSET_DP);
+        canvas.drawLine(left + dp(10f), bottom, left, bottom - dp(10f), mGripPaint);
+        canvas.drawLine(left + dp(5f), bottom, left, bottom - dp(5f), mGripPaint);
     }
 
     private boolean onHandleTouch(@NonNull MotionEvent event) {
@@ -236,8 +438,13 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     public static int frameWidthPx(@NonNull Context context, int contentWidthPx,
                                    float widthScale) {
         return FloatingKeyboardGeometry.frameWidthPx(contentWidthPx, widthScale,
-            Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, MIN_WIDTH_DP,
-                context.getResources().getDisplayMetrics())));
+            minWidthPx(context));
+    }
+
+    /** The narrowest a card can be dragged, whatever the share works out to. */
+    static int minWidthPx(@NonNull Context context) {
+        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, MIN_WIDTH_DP,
+            context.getResources().getDisplayMetrics()));
     }
 
     private float dp(float value) {

@@ -815,6 +815,29 @@ public final class TermuxPreferenceConstants {
         public static final float MAX_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE = 1.0f;
 
         /**
+         * Defines how tall a floating keyboard's rows are, as a multiplier on the height the
+         * keyboard would have docked. Per orientation for the same reason as the width: a float
+         * sized for a landscape thumb-reach is not the one a portrait float wants. Multiplies the
+         * height scale rather than replacing it, so the height the user set for the docked
+         * keyboard is still the starting point a float is grown or shrunk from.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE =
+            "in_app_keyboard_floating_height_scale";
+
+        public static final String KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE =
+            "in_app_keyboard_floating_height_scale_landscape";
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE = 1.0f;
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE = 1.0f;
+
+        // A float is the keyboard the user has already sized, nudged: far enough either way to
+        // matter, not far enough to make the keys untappable or to fill the screen.
+        public static final float MIN_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE = 0.6f;
+
+        public static final float MAX_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE = 1.6f;
+
+        /**
          * Defines the gap a split keyboard parts its rows by, as a fraction of the keyboard's
          * width. Per orientation for the same reason as the floating width: a landscape keyboard
          * is wide enough to give a quarter of itself away, a portrait one is not.
