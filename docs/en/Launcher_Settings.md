@@ -175,9 +175,11 @@ Open-Meteo attribution.
   and nudges presses near a boundary toward the key you usually mean. Only letters, digits and
   punctuation are ever moved; Enter, Backspace, Ctrl and the other action keys are not. **Forget
   learned taps** clears what it has learned. It stores per-key averages only, never what you typed.
-- **Floating keyboard width** and **Split keyboard gap**: how much of the screen a floating
-  keyboard takes, and how far apart the halves of a split one sit. Both are set separately for
-  portrait and landscape; which type a place uses is chosen on the **Layout** page.
+- **Floating keyboard width**, **Floating keyboard height** and **Split keyboard gap**: how much
+  of the screen a floating keyboard takes, how tall it is, and how far apart the halves of a split
+  one sit. All three are set separately for portrait and landscape; which type a place uses is
+  chosen on the **Layout** page. A floating keyboard can also be resized in place by dragging its
+  bottom-left corner, which writes the same two values.
 - **Layout documentation** and **Supported key values**.
 - **Haptic feedback** and **Keypress sound**.
 

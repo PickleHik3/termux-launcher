@@ -65,6 +65,14 @@
             android:max="100"
             app:showSeekBarValue="true" />
         <SeekBarPreference
+            app:key="in_app_keyboard_floating_height"
+            app:title="@string/settings_keyboard_floating_height_title"
+            app:summary="@string/settings_keyboard_floating_height_summary"
+            android:defaultValue="100"
+            app:min="60"
+            android:max="160"
+            app:showSeekBarValue="true" />
+        <SeekBarPreference
             app:key="in_app_keyboard_split_gap"
             app:title="@string/settings_keyboard_split_gap_title"
             app:summary="@string/settings_keyboard_split_gap_summary"

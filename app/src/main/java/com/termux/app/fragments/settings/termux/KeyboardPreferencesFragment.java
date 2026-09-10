@@ -348,10 +348,13 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_bottom_padding":
                 mPreferences.setInAppKeyboardBottomPadding(value);
                 break;
-            // The two shape sliders are percentages on screen and fractions in the store, and
-            // each is remembered for the orientation the phone is being held in.
+            // The shape sliders are percentages on screen and fractions in the store, and each is
+            // remembered for the orientation the phone is being held in.
             case "in_app_keyboard_floating_width":
                 mPreferences.setInAppKeyboardFloatingWidthScale(value / 100f);
+                break;
+            case "in_app_keyboard_floating_height":
+                mPreferences.setInAppKeyboardFloatingHeightScale(value / 100f);
                 break;
             case "in_app_keyboard_split_gap":
                 mPreferences.setInAppKeyboardSplitGapFraction(value / 100f);
@@ -373,6 +376,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getInAppKeyboardBottomPadding();
             case "in_app_keyboard_floating_width":
                 return Math.round(mPreferences.getInAppKeyboardFloatingWidthScale() * 100f);
+            case "in_app_keyboard_floating_height":
+                return Math.round(mPreferences.getInAppKeyboardFloatingHeightScale() * 100f);
             case "in_app_keyboard_split_gap":
                 return Math.round(mPreferences.getInAppKeyboardSplitGapFraction() * 100f);
             default:

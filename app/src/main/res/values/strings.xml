@@ -1361,6 +1361,8 @@
     <string name="settings_keyboard_shapes_header">Floating and split</string>
     <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
     <string name="settings_keyboard_floating_width_summary">How much of the screen width a floating keyboard takes, set separately for portrait and landscape.</string>
+    <string name="settings_keyboard_floating_height_title">Floating keyboard height</string>
+    <string name="settings_keyboard_floating_height_summary">How tall a floating keyboard is, set separately for portrait and landscape, or dragged from the bottom-left corner of the keyboard.</string>
     <string name="settings_keyboard_split_gap_title">Split keyboard gap</string>
     <string name="settings_keyboard_split_gap_summary">How far apart the two halves of a split keyboard sit, set separately for portrait and landscape.</string>
     <string name="palette_category_terminal">Terminal</string>
