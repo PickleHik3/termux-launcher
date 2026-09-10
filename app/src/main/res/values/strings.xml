@@ -51,8 +51,6 @@
     <string name="settings_layout_keyboard_form_docked">Docked</string>
     <string name="settings_layout_keyboard_form_floating">Floating</string>
     <string name="settings_layout_keyboard_form_split">Split</string>
-    <string name="settings_layout_look_title">Look of this place</string>
-    <string name="settings_layout_look_summary">Open the surface editor for what\'s on screen here.</string>
     <string name="settings_layout_miniature_status">Status bar</string>
     <string name="settings_layout_miniature_apps">Pinned apps</string>
     <string name="settings_layout_miniature_alphabets">A–Z index</string>

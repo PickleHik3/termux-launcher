@@ -142,15 +142,15 @@ keys at 47dp with 26px margins (was 38dp with 96/63), and the surface editor ope
 ## Layout page v2 — the page is the editor (decided 2026-09-10)
 
 Supersedes "Layout page" above. Option B (draggable miniature) on option A's skeleton; the surface
-editor is untouched. Review page: `.lavish/layout-editor-redesign.html` (gitignored, in the
-`status-chevron` worktree at the time).
+editor is untouched. The lavish review page it was agreed on is gone with its worktree; this section is the record.
 
 **Page.** Place pill only — no caption, no orientation pill, no legend. Two `PlaceMiniatureView`s
 side by side, portrait and landscape, each live for its orientation. Below them one compact row per
 element — Status bar · Pinned apps · A–Z index · Extra keys · Keyboard (+ Widget grid on Home) —
 showing "portrait · landscape" values with a chevron; tap opens a chooser sheet holding the existing
 `SegmentedPillPreference` pills, one pill row per orientation (per-place settings such as keyboard on
-enter/type show one row). "Look of this place" stays last. Tapping a bar in a miniature opens its
+enter/type show one row). No "Look of this place" row (dropped 2026-09-10: the per-place look is edited from the
+long-press menu's Surface editor). Tapping a bar in a miniature opens its
 chooser. New custom rows go on the `SettingsLayoutUtils` exemption list.
 
 **Drag.** Every bar (status bar, apps row, A–Z, extra keys) carries a visible grip. Touch-down on the

@@ -1,14 +1,12 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
-import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.preference.Preference;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
@@ -39,7 +37,6 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     private static final String KEY_OVERVIEW = "layout_overview";
     /** The Widgets page's own cog deep-links to this row, so it names itself. */
     public static final String KEY_WIDGET_GRID = LayoutElement.WIDGET_GRID.key();
-    private static final String KEY_LOOK = "layout_look";
 
     private static final String STATE_PLACE = "layout_selected_place";
 
@@ -178,17 +175,6 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
             });
         }
 
-        Preference look = findPreference(KEY_LOOK);
-        if (look != null) look.setOnPreferenceClickListener(preference -> {
-            Context context = getContext();
-            if (context == null) return true;
-            Intent intent = new Intent(context, TermuxActivity.class);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_PLACE, mSelectedPlace.toolName());
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-            return true;
-        });
     }
 
     /** Re-reads both miniatures and every row for the selected place. */

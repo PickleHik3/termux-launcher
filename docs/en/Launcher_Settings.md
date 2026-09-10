@@ -41,7 +41,6 @@ underneath.
 - **Grid columns** and **Grid rows** (Home only): how many widgets fit across and down a page, set
   separately for portrait and landscape; widgets that no longer fit a smaller grid move to free
   space or a new page rather than being dropped.
-- **Look of this place**: opens the surface editor for what is on screen here.
 
 ## Look
 
@@ -50,7 +49,8 @@ Use this section for visible surfaces and colors:
 - **Surface editor:** tune the dock, keyboard, status panel, and terminal while looking at the real
   home screen. Tap the floating palette to style every surface at once, or tap a surface to style
   it on its own. This edits the shared look every place starts from; a look that differs between
-  Home, Terminal and Display is edited from the **Layout** page's **Look of this place** row instead.
+  Home, Terminal and Display is edited by opening **Surface editor** from the long-press menu while
+  on that place.
   The keyboard's **BG opacity** applies to the keyboard docked under the terminal — a floating,
   split, or overlaying keyboard is a solid panel and ignores it — while its **Edges** apply to
   every keyboard.
@@ -151,7 +151,7 @@ wrong — a clock that stops updating, a status reading that freezes, a rim that
 ## Status bar
 
 Use this section for the top row's clock and readouts. Its surface — blur, opacity, grain, and
-radius — is tuned per place from the **Layout** page's **Look of this place** row now.
+radius — is tuned per place in the surface editor, opened from the long-press menu on that place.
 
 - **Clock style**, **Clock alignment**, and **Use 12-hour time**.
 - **CPU usage**, **Memory usage**, and **Weather** status cards.
@@ -217,8 +217,8 @@ built-in one. Keyboard height is remembered separately for portrait and landscap
 - **Double tap A–Z Row to lock screen:** choose and configure the available lock backend.
 
 Where the pinned apps stand, the alphabets row, and the widget grid's size are all on the **Layout**
-page now, one place and orientation at a time, and its dock look is tuned from the same page's
-**Look of this place** row.
+page now, one place and orientation at a time, and its dock look is tuned in the surface editor,
+opened from the long-press menu on that place.
 
 ## Linux display
 

@@ -108,7 +108,7 @@ public class LayoutPreferencesFragmentTest {
     }
 
     @Test
-    public void thePageIsOneRowPerElementWithTheLookRowLast() {
+    public void thePageIsOneRowPerElementAndNothingElse() {
         LayoutPreferencesFragment fragment = launch();
         PreferenceScreen screen = fragment.getPreferenceScreen();
 
@@ -122,8 +122,8 @@ public class LayoutPreferencesFragmentTest {
             // The overview stands first, so the rows follow it in the enum's own order.
             assertEquals("row order for " + order[i], i + 1, indexOf(screen, order[i].key()));
         }
-        assertEquals("the Look row is last", screen.getPreferenceCount() - 1,
-            indexOf(screen, "layout_look"));
+        assertEquals("the overview and the rows are the whole page", order.length + 1,
+            screen.getPreferenceCount());
 
         // No captions anywhere: a row says its values, nothing else.
         for (LayoutElement element : order) {

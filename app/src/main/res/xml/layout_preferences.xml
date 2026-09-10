@@ -39,11 +39,5 @@
         app:persistent="false"
         app:title="@string/settings_layout_widget_grid_title" />
 
-    <Preference
-        app:key="layout_look"
-        app:icon="@drawable/ic_symbol_palette"
-        app:persistent="false"
-        app:title="@string/settings_layout_look_title"
-        app:summary="@string/settings_layout_look_summary" />
 
 </PreferenceScreen>
