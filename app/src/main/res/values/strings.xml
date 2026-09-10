@@ -1219,6 +1219,13 @@
                 <string name="termux_surface_editor_place_own_description">%1$s has its own. Tap to share it again.</string>
                 <string name="termux_surface_editor_place_title">%1$s · %2$s</string>
                 <string name="termux_surface_editor_place_shared_note">Presets and these sliders change every place.</string>
+                <!-- The arrangement of the place the editor is open on: where its bars stand, on
+                     the card of the surface each one belongs to. -->
+                <string name="termux_surface_editor_place_section">Place</string>
+                <string name="termux_surface_editor_place_keyboard_type">Type</string>
+                <string name="termux_surface_editor_place_keyboard_on_enter">On enter</string>
+                <string name="termux_surface_editor_arrange_tray">Drop here to hide</string>
+                <string name="termux_surface_editor_arrange_hint">Hold a bar to move it</string>
                 <string name="termux_surface_editor_place_overrides_one">%1$s has its own.</string>
                 <string name="termux_surface_editor_place_overrides_two">%1$s and %2$s have their own.</string>
                 <string name="termux_surface_editor_place_overrides_three">%1$s, %2$s and %3$s have their own.</string>

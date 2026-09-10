@@ -2288,6 +2288,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             look == null ? "" : look, false);
     }
 
+    /** Whether the editor has already said, once, that a bar can be held and moved. */
+    public boolean isSurfaceEditorArrangeHintShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_EDITOR_ARRANGE_HINT_SHOWN,
+            TERMUX_APP.DEFAULT_SURFACE_EDITOR_ARRANGE_HINT_SHOWN);
+    }
+
+    public void setSurfaceEditorArrangeHintShown(boolean shown) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_EDITOR_ARRANGE_HINT_SHOWN, shown, false);
+    }
+
     /**
      * The number a surface should actually use: its own override when detached, Base otherwise.
      * Callers still apply their own clamp, so a Base value outside one surface's range (the

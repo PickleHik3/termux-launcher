@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One arrangement row in a card's Place section: where this bar stands, for the orientation on
+     screen. Same shape as the look rows above — a label and one control — so the section reads as
+     part of the same card rather than a second page. Four segments are declared and the ones the
+     orientation does not offer are taken off, which is the same rule the look rows follow: a
+     control the state makes inert is dropped, not drawn dead. Generated per group in
+     PlaceArrangeModel. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingBottom="3dp">
+
+    <TextView
+        android:id="@+id/surface_editor_place_row_label"
+        android:layout_width="78dp"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?attr/termuxColorOnSurface"
+        android:textSize="12.5sp" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/surface_editor_place_row_pills"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/surface_editor_place_row_segment_0"
+            style="@style/Widget.Termux.SurfaceEditor.Segment" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/surface_editor_place_row_segment_1"
+            style="@style/Widget.Termux.SurfaceEditor.Segment" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/surface_editor_place_row_segment_2"
+            style="@style/Widget.Termux.SurfaceEditor.Segment" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/surface_editor_place_row_segment_3"
+            style="@style/Widget.Termux.SurfaceEditor.Segment" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+</LinearLayout>

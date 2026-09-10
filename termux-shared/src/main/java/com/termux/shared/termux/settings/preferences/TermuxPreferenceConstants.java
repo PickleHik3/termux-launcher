@@ -1158,6 +1158,15 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_SURFACE_CUSTOM_PRESET = "surface_custom_preset";
 
+        /**
+         * Set once the surface editor has said, one time, that a bar can be held and moved to
+         * another edge. The gesture has no glyph of its own to advertise it, so it gets a line the
+         * first time the editor opens and never again.
+         */
+        public static final String KEY_SURFACE_EDITOR_ARRANGE_HINT_SHOWN =
+            "surface_editor_arrange_hint_shown";
+        public static final boolean DEFAULT_SURFACE_EDITOR_ARRANGE_HINT_SHOWN = false;
+
         /** Prefix for the per-(surface, property) detach flags: {@code surface_inherit_dock_blur}. */
         public static final String KEY_SURFACE_INHERIT_PREFIX = "surface_inherit_";
         /** A surface follows Base until the user moves that one control. */

@@ -14,6 +14,7 @@ import android.text.TextUtils;
 import android.util.Pair;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -50,8 +51,13 @@ import com.termux.app.surfaces.SurfaceEditorProperties.Kind;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.place.PlaceArrangeModel;
+import com.termux.app.place.PlaceArrangePolicy;
+import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceLookPreferences;
+import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
@@ -105,6 +111,21 @@ public final class SurfaceEditorController {
          * arrangement actually has, and parks inside the room it leaves.
          */
         @NonNull PlaceLayout placeLayout();
+        /**
+         * Where every place keeps its arrangement, or null before the preferences exist. The
+         * editor's Place section and its hold-to-move write through this, exactly as the Layout
+         * page's pills do.
+         */
+        @Nullable PlaceLayoutStore places();
+        /** The place the chrome on screen belongs to, which the shared layer stands in for. */
+        @NonNull PaneWallPage placeOnScreen();
+        /** The orientation on screen: the only one an arrangement pick here writes for. */
+        @NonNull PlaceOrientation placeOrientation();
+        /**
+         * An arrangement value moved: re-lay every piece of chrome the arrangement decides, for
+         * the place on screen, without tearing the editor down.
+         */
+        void applyPlaceArrangement();
         @Nullable TermuxInAppKeyboard inAppKeyboard();
         @Nullable View attachedInAppKeyboardView();
         boolean isInAppKeyboardShown();
@@ -207,6 +228,17 @@ public final class SurfaceEditorController {
     @Nullable
     private PaneWallPage editPlace() {
         return mSurfaceEditorOpen ? mEditPlace : null;
+    }
+
+    /**
+     * The place whose arrangement the editor is moving: the one it was opened on, or — on the
+     * shared layer, where there is no place — the one the wall is standing on, which is what the
+     * user is looking at either way.
+     */
+    @NonNull
+    private PaneWallPage arrangedPlace() {
+        PaneWallPage place = editPlace();
+        return place == null ? mHost.placeOnScreen() : place;
     }
 
     /** Runs one action against the shared layer, whatever place the editor was opened on. */
@@ -519,6 +551,9 @@ public final class SurfaceEditorController {
             parkFloat();
             positionSelectionRings(false);
             syncGlow();
+            // Once the band has been measured, so the line lands in the free room rather than
+            // wherever the host was before the first pass.
+            if (freshEditorSession) showArrangeHintIfNew();
         });
         if (scopeMoved) syncEditorAfterBulkWrite();
     }
@@ -575,6 +610,11 @@ public final class SurfaceEditorController {
         // Every place's look, not just the one being edited: Reset held and a preset both clear
         // all of them, and ↺ has to be able to put those back too.
         final Map<String, Object> looks = look == null ? null : look.capture();
+        // And every place's arrangement, in both orientations: the editor can move a bar now, and
+        // a rotation mid-session moves which orientation the next pick lands in.
+        final PlaceLayoutStore places = mHost.places();
+        final PlaceArrangeSnapshot arrangement =
+            places == null ? null : PlaceArrangeSnapshot.capture(places);
         final Runnable[] shared = new Runnable[1];
         // Captured and restored with the scope lifted, so the shared layer is snapshotted as the
         // shared layer whichever place the editor was opened on.
@@ -584,6 +624,11 @@ public final class SurfaceEditorController {
                 return;
             runShared(shared[0]);
             if (look != null && looks != null) look.restore(looks);
+            if (places != null && arrangement != null) {
+                arrangement.restore(places);
+                // A bar that moved has to go back to its edge before the chrome is re-read below.
+                mHost.applyPlaceArrangement();
+            }
             mHost.refreshPaneLayout();
             mHost.applyTerminalSurfaceAppearance();
             // One place re-reads the clock's face, alignment, 12-hour and lazy mode — and restyles
@@ -984,7 +1029,12 @@ public final class SurfaceEditorController {
         long signature = mSelectedSlot == null ? -1 : mSelectedSlot.ordinal();
         for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot))
             signature = signature * 31 + (isAvailable(mSelectedSlot, control) ? 1 : 0);
-        return signature;
+        // The Place section leads the body, and every part of the question it asks can move under
+        // an open card: the place, the orientation a rotation hands it, and the arrangement itself,
+        // which decides which bars this surface carries and what each of them may be set to.
+        signature = signature * 31 + arrangedPlace().ordinal();
+        signature = signature * 31 + mHost.placeOrientation().ordinal();
+        return signature * 31 + mHost.placeLayout().hashCode();
     }
 
     /** Regenerates the card's body for the current target, dropping every inert row. */
@@ -1000,6 +1050,9 @@ public final class SurfaceEditorController {
         rows.removeAllViews();
         List<Runnable> syncs = new ArrayList<>();
         mRowSyncs = syncs;
+        // Where the place's bars stand comes first: it is what the surface *is*, and the look rows
+        // under it are what it is made of.
+        addPlaceSection(mHost.context(), rows, syncs);
         for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot)) {
             if (isAvailable(mSelectedSlot, control))
                 addControlRow(mHost.context(), rows, control, mSelectedSlot, syncs);
@@ -1174,6 +1227,232 @@ public final class SurfaceEditorController {
             mHost.openKeyboardColors();
     }
 
+    // ------------------------------------------------------------------------- the Place section
+    //
+    // Every card leads with where this surface's bars stand on the place being edited, for the
+    // orientation on screen and no other. The values, the labels and the writes are the Layout
+    // page's — PlaceArrangeModel holds them, and a pick lands in PlaceLayoutStore immediately, the
+    // way the page's pills do. What the card cannot say, the screen does: the chrome re-lays out
+    // under it.
+
+    /** The four segment slots the pill row declares; the ones a value set does not use are taken
+     *  off, so the group's own corners still fall at the ends of what is offered. */
+    private static final int[] PLACE_SEGMENT_IDS = {
+        R.id.surface_editor_place_row_segment_0, R.id.surface_editor_place_row_segment_1,
+        R.id.surface_editor_place_row_segment_2, R.id.surface_editor_place_row_segment_3};
+
+    private void addPlaceSection(@NonNull Context context, @NonNull ViewGroup into,
+                                 @NonNull List<Runnable> syncs) {
+        PlaceLayoutStore places = mHost.places();
+        if (places == null || mSelectedSlot == null)
+            return;
+        PaneWallPage place = arrangedPlace();
+        PlaceOrientation orientation = mHost.placeOrientation();
+        boolean titled = false;
+        for (PlaceArrangeModel.Element element : SurfaceEditorPlaceSection.elementsFor(
+                mSelectedSlot, place, mHost.placeLayout())) {
+            List<PlaceArrangeModel.Group> groups =
+                PlaceArrangeModel.groups(places, place, orientation, element);
+            for (int index = 0; index < groups.size(); index++) {
+                if (!titled) {
+                    into.addView(placeSectionTitle(context));
+                    titled = true;
+                }
+                PlaceArrangeModel.Group group = groups.get(index);
+                if (group instanceof PlaceArrangeModel.Pills)
+                    addPlacePillsRow(context, into, element, index,
+                        (PlaceArrangeModel.Pills) group, syncs);
+                else if (group instanceof PlaceArrangeModel.Counter)
+                    addPlaceCounterRow(context, into, element, index,
+                        (PlaceArrangeModel.Counter) group, syncs);
+            }
+        }
+    }
+
+    /** The one heading on the card: the look rows below it need none, being what the card is. */
+    @NonNull
+    private TextView placeSectionTitle(@NonNull Context context) {
+        TextView title = new TextView(context);
+        title.setText(R.string.termux_surface_editor_place_section);
+        title.setTextSize(11f);
+        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
+        title.setTextColor(mHost.themeColor(
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            R.color.termux_on_surface_variant));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = dp(2);
+        title.setLayoutParams(params);
+        return title;
+    }
+
+    /**
+     * One placement row. Both the pick and the restatement re-read the model rather than trusting
+     * the group they were built from: a rotation, or another row's pick, can move what this row is
+     * showing without the row itself being rebuilt yet.
+     */
+    private void addPlacePillsRow(@NonNull Context context, @NonNull ViewGroup into,
+                                  @NonNull PlaceArrangeModel.Element element, int index,
+                                  @NonNull PlaceArrangeModel.Pills pills,
+                                  @NonNull List<Runnable> syncs) {
+        View row = LayoutInflater.from(context)
+            .inflate(R.layout.surface_editor_place_row, into, false);
+        ((TextView) row.findViewById(R.id.surface_editor_place_row_label)).setText(pills.labelRes);
+        MaterialButtonToggleGroup group = row.findViewById(R.id.surface_editor_place_row_pills);
+        if (group == null)
+            return;
+        final int count = Math.min(pills.values.length, PLACE_SEGMENT_IDS.length);
+        for (int i = PLACE_SEGMENT_IDS.length - 1; i >= count; i--) {
+            View extra = row.findViewById(PLACE_SEGMENT_IDS[i]);
+            if (extra != null)
+                group.removeView(extra);
+        }
+        for (int i = 0; i < count; i++) {
+            Button segment = row.findViewById(PLACE_SEGMENT_IDS[i]);
+            if (segment != null)
+                segment.setText(pills.labelResIds[i]);
+        }
+        group.setContentDescription(getString(pills.labelRes));
+        group.addOnButtonCheckedListener((toggleGroup, checkedId, isChecked) -> {
+            if (!isChecked || mRestatingToggles)
+                return;
+            PlaceArrangeModel.Pills current = placePills(element, index);
+            int picked = indexOfSegment(checkedId);
+            if (current == null || picked < 0 || picked >= current.values.length)
+                return;
+            if (current.values[picked].equals(current.selected))
+                return;
+            current.writer.write(current.values[picked]);
+            afterPlaceArrangementWrite();
+        });
+        syncs.add(() -> {
+            PlaceArrangeModel.Pills current = placePills(element, index);
+            if (current == null)
+                return;
+            int selected = current.selectedIndex();
+            int wanted = selected < 0 || selected >= count ? View.NO_ID : PLACE_SEGMENT_IDS[selected];
+            if (group.getCheckedButtonId() == wanted)
+                return;
+            mRestatingToggles = true;
+            try {
+                if (wanted == View.NO_ID)
+                    group.clearChecked();
+                else
+                    group.check(wanted);
+            } finally {
+                mRestatingToggles = false;
+            }
+        });
+        into.addView(row);
+        syncs.get(syncs.size() - 1).run();
+    }
+
+    /** The widget grid's two counts, on the same slider row every look number uses. */
+    private void addPlaceCounterRow(@NonNull Context context, @NonNull ViewGroup into,
+                                    @NonNull PlaceArrangeModel.Element element, int index,
+                                    @NonNull PlaceArrangeModel.Counter counter,
+                                    @NonNull List<Runnable> syncs) {
+        View rowView = LayoutInflater.from(context)
+            .inflate(R.layout.surface_editor_row, into, false);
+        TextView label = rowView.findViewById(R.id.surface_editor_row_label);
+        SeekBar slider = rowView.findViewById(R.id.surface_editor_row_slider);
+        TextView value = rowView.findViewById(R.id.surface_editor_row_value);
+        View chip = rowView.findViewById(R.id.surface_editor_row_chip);
+        if (chip != null)
+            chip.setVisibility(View.INVISIBLE);
+        label.setText(counter.labelRes);
+        slider.setContentDescription(getString(counter.labelRes));
+        slider.setMax(Math.max(1, counter.max - counter.min));
+        Runnable sync = () -> {
+            PlaceArrangeModel.Counter current = placeCounter(element, index);
+            if (current == null)
+                return;
+            int progress = clamp(current.value - current.min, 0, slider.getMax());
+            if (slider.getProgress() != progress)
+                slider.setProgress(progress);
+            value.setText(Integer.toString(current.value));
+        };
+        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override void onSliderChanged(SeekBar bar, int progress, boolean fromUser) {
+                PlaceArrangeModel.Counter current = placeCounter(element, index);
+                if (current == null)
+                    return;
+                int picked = clamp(current.min + progress, current.min, current.max);
+                value.setText(Integer.toString(picked));
+                if (!fromUser || picked == current.value)
+                    return;
+                // A grid reflow per tick, and nothing else: the body is left standing while the
+                // thumb is down, so the row being dragged is not rebuilt out from under it.
+                current.writer.write(picked);
+                mHost.applyPlaceArrangement();
+                syncDirtyActions();
+            }
+        });
+        into.addView(rowView);
+        syncs.add(sync);
+        sync.run();
+    }
+
+    /** Which segment an id is, or -1 for anything that is not one of the four. */
+    private static int indexOfSegment(int viewId) {
+        for (int i = 0; i < PLACE_SEGMENT_IDS.length; i++) {
+            if (PLACE_SEGMENT_IDS[i] == viewId)
+                return i;
+        }
+        return -1;
+    }
+
+    /** The model's answer for one row, read fresh: the place and the orientation can both move. */
+    @Nullable
+    private PlaceArrangeModel.Group placeGroup(@NonNull PlaceArrangeModel.Element element,
+                                               int index) {
+        PlaceLayoutStore places = mHost.places();
+        if (places == null || !mSurfaceEditorOpen)
+            return null;
+        List<PlaceArrangeModel.Group> groups = PlaceArrangeModel.groups(places, arrangedPlace(),
+            mHost.placeOrientation(), element);
+        return index < groups.size() ? groups.get(index) : null;
+    }
+
+    @Nullable
+    private PlaceArrangeModel.Pills placePills(@NonNull PlaceArrangeModel.Element element,
+                                               int index) {
+        PlaceArrangeModel.Group group = placeGroup(element, index);
+        return group instanceof PlaceArrangeModel.Pills ? (PlaceArrangeModel.Pills) group : null;
+    }
+
+    @Nullable
+    private PlaceArrangeModel.Counter placeCounter(@NonNull PlaceArrangeModel.Element element,
+                                                   int index) {
+        PlaceArrangeModel.Group group = placeGroup(element, index);
+        return group instanceof PlaceArrangeModel.Counter
+            ? (PlaceArrangeModel.Counter) group : null;
+    }
+
+    /**
+     * An arrangement value has moved: the chrome is re-laid out at once, and the card catches up on
+     * the next frame. Not in this one — the pick came from a button the rebuild is about to
+     * replace, and a view may not be removed inside its own listener.
+     */
+    private void afterPlaceArrangementWrite() {
+        mHost.applyPlaceArrangement();
+        syncDirtyActions();
+        Panel panel = mPanel;
+        if (panel == null)
+            return;
+        panel.root.post(() -> {
+            if (!mSurfaceEditorOpen)
+                return;
+            positionSurfaceTuningGestureTargets();
+            if (!mCardShown)
+                return;
+            rebuildRows();
+            syncPanel();
+            applyRowsCap();
+            parkPanel(false);
+        });
+    }
+
     /**
      * Restates the whole card from preferences: heading, header actions, the two pills, and every
      * row. Called once per previewed frame, so each read-out skips a value that has not moved.
@@ -1183,8 +1462,10 @@ public final class SurfaceEditorController {
         if (panel == null || prefs() == null || !mSurfaceEditorOpen || !mCardShown)
             return;
 
-        // A structural change (dock style, terminal frame) can add or remove rows.
-        if (rowSignature() != mShownRowSignature)
+        // A structural change (dock style, terminal frame, a bar that moved) can add or remove
+        // rows. Never while a thumb is down, though: the row being dragged would be replaced
+        // mid-gesture, and the release settles the body anyway.
+        if (rowSignature() != mShownRowSignature && !mSliderDragActive)
             rebuildRows();
 
         // The heading names the surface, or — on the shared layer — wears the palette glyph that
@@ -2131,14 +2412,24 @@ public final class SurfaceEditorController {
                     mSurfaceTuningInsetDragStartY = event.getRawY();
                     mSurfaceTuningInsetDragStartDp = surfaceTuningInsetDp(slot);
                     mSurfaceTuningDragMoved = false;
+                    // Held rather than dragged, this is the arrangement gesture: the bar comes off
+                    // its edge. The margin drag below cancels it as soon as the finger travels.
+                    scheduleArrangeLift(slot, view.getLeft() + event.getX(),
+                        view.getTop() + event.getY());
                     view.getParent().requestDisallowInterceptTouchEvent(true);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
+                    if (mArrangeDrag != null) {
+                        moveArrangeDrag(view.getLeft() + event.getX(),
+                            view.getTop() + event.getY());
+                        return true;
+                    }
                     float travelX = event.getRawX() - mSurfaceTuningInsetDragStartX;
                     float travelY = event.getRawY() - mSurfaceTuningInsetDragStartY;
                     if (!mSurfaceTuningDragMoved
                         && Math.max(Math.abs(travelX), Math.abs(travelY)) > slop) {
                         mSurfaceTuningDragMoved = true;
+                        cancelPendingArrangeLift();
                         // A margin drag is the one gesture whose surface the card may be crowding.
                         if (canDragMargin(slot))
                             setPanelPeek(true);
@@ -2161,6 +2452,14 @@ public final class SurfaceEditorController {
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     view.getParent().requestDisallowInterceptTouchEvent(false);
+                    cancelPendingArrangeLift();
+                    if (mArrangeDrag != null) {
+                        // A lifted bar is dropped, never treated as a tap: the card the tap would
+                        // raise is the one the bar has just left.
+                        finishArrangeDrag(event.getActionMasked() == MotionEvent.ACTION_UP);
+                        mSurfaceTuningDragMoved = false;
+                        return true;
+                    }
                     setPanelPeek(false);
                     // Tapping the surface already selected does nothing, deliberately: the click
                     // listener is the one place that decides, so finger and TalkBack agree.
@@ -2173,6 +2472,310 @@ public final class SurfaceEditorController {
                     return false;
             }
         });
+    }
+
+    // ------------------------------------------------------------------------------ hold to move
+    //
+    // The one gesture that moves a bar rather than shaping it. Held on a bar's outline, the bar
+    // comes off its edge and follows the finger; every edge it may legally stand on is drawn as a
+    // slot, and a bar that may hide gets a tray. It rides the same capture layer as the tap and
+    // the margin drag, which is what keeps the bar's own gestures — the wall's pager on the status
+    // bar above all — from ever seeing the touch.
+
+    /** How far a slot band reaches in from its edge. Wide enough to aim at with a thumb. */
+    private static final float SURFACE_EDITOR_ARRANGE_SLOT_DP = 56f;
+    /** The tray strip: high enough to carry its caption, narrow enough to leave the sides clear. */
+    private static final float SURFACE_EDITOR_ARRANGE_TRAY_DP = 52f;
+    private static final float SURFACE_EDITOR_ARRANGE_TRAY_WIDTH_FRACTION = 0.56f;
+    /** How long the one-time line stays up before it fades on its own. */
+    private static final long SURFACE_EDITOR_ARRANGE_HINT_MS = 3600L;
+
+    /** The dock band's rows, top to bottom, and the bar each of them is. */
+    private static final int[] DOCK_ROW_IDS = {
+        R.id.apps_bar_viewpager, R.id.apps_bar_az_row, R.id.terminal_toolbar_view_pager};
+    private static final PlaceArrangePolicy.Bar[] DOCK_ROW_BARS = {
+        PlaceArrangePolicy.Bar.APPS_ROW, PlaceArrangePolicy.Bar.AZ_INDEX,
+        PlaceArrangePolicy.Bar.EXTRA_KEYS};
+
+    /** One lifted bar: what it is, where it came from, and everywhere it may land. */
+    private static final class ArrangeDrag {
+        @NonNull final PlaceArrangePolicy.Bar bar;
+        @NonNull final PaneWallPage place;
+        @NonNull final PlaceOrientation orientation;
+        @NonNull final List<PlaceArrangePolicy.Slot> slots;
+        final float startX;
+        final float startY;
+        @Nullable PlaceArrangePolicy.Slot target;
+
+        ArrangeDrag(@NonNull PlaceArrangePolicy.Bar bar, @NonNull PaneWallPage place,
+                    @NonNull PlaceOrientation orientation,
+                    @NonNull List<PlaceArrangePolicy.Slot> slots, float startX, float startY) {
+            this.bar = bar;
+            this.place = place;
+            this.orientation = orientation;
+            this.slots = slots;
+            this.startX = startX;
+            this.startY = startY;
+        }
+    }
+
+    @Nullable private ArrangeDrag mArrangeDrag;
+    /** The lift waiting for the press to be held long enough; cancelled by travel or release. */
+    @Nullable private Runnable mPendingArrangeLift;
+
+    @Nullable
+    private PlaceArrangeOverlayView arrangeOverlay() {
+        return mHost.findView(R.id.surface_editor_arrange_overlay);
+    }
+
+    private void scheduleArrangeLift(@NonNull SurfaceSlot slot, float x, float y) {
+        cancelPendingArrangeLift();
+        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+        if (overlay == null || !mSurfaceEditorOpen)
+            return;
+        Runnable lift = () -> {
+            mPendingArrangeLift = null;
+            beginArrangeDrag(slot, x, y);
+        };
+        mPendingArrangeLift = lift;
+        overlay.postDelayed(lift, ViewConfiguration.getLongPressTimeout());
+    }
+
+    private void cancelPendingArrangeLift() {
+        Runnable lift = mPendingArrangeLift;
+        if (lift == null)
+            return;
+        mPendingArrangeLift = null;
+        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+        if (overlay != null)
+            overlay.removeCallbacks(lift);
+    }
+
+    /**
+     * Lifts the bar the finger went down on, or does nothing at all where there is none to lift —
+     * the keyboard and the terminal are not bars, and a bar the arrangement leaves nowhere to go
+     * stays where it is rather than rising to no slots.
+     */
+    private void beginArrangeDrag(@NonNull SurfaceSlot slot, float x, float y) {
+        PlaceLayoutStore places = mHost.places();
+        PlaceArrangeOverlayView overlay = arrangeOverlay();
+        View host = mHost.findView(R.id.surface_tuning_gesture_overlay);
+        if (!mSurfaceEditorOpen || places == null || overlay == null || host == null
+            || host.getWidth() <= 0 || host.getHeight() <= 0)
+            return;
+        PlaceArrangePolicy.Bar bar = barUnderPoint(slot, y);
+        if (bar == null)
+            return;
+        PaneWallPage place = arrangedPlace();
+        PlaceOrientation orientation = mHost.placeOrientation();
+        PlaceArrangePolicy.Targets targets = PlaceArrangePolicy.targets(place, orientation,
+            mHost.placeLayout(), bar);
+        int[] ghost = barRectInOverlay(bar);
+        if (targets.isEmpty() || ghost == null)
+            return;
+        List<PlaceArrangePolicy.Slot> slots = buildArrangeSlots(targets, host.getWidth(),
+            host.getHeight());
+        if (slots.isEmpty())
+            return;
+        mArrangeDrag = new ArrangeDrag(bar, place, orientation, slots, x, y);
+        hideArrangeHint();
+        overlay.setAccent(
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary),
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorOnAccentContainer,
+                R.color.termux_on_accent_container));
+        overlay.setGhost(ghost[0], ghost[1], ghost[2], ghost[3], dpToPx(ringRadiusDp(slot)));
+        overlay.showSlots(slots, targets.tray
+            ? getString(R.string.termux_surface_editor_arrange_tray) : null);
+        overlay.setHighlighted(null);
+        overlay.bringToFront();
+        // The card would otherwise stand between the bar and half the slots it is aiming for.
+        setPanelPeek(true);
+        View pressed = mHost.findView(R.id.surface_tuning_gesture_overlay);
+        if (pressed != null)
+            pressed.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+    }
+
+    private void moveArrangeDrag(float x, float y) {
+        ArrangeDrag drag = mArrangeDrag;
+        PlaceArrangeOverlayView overlay = arrangeOverlay();
+        if (drag == null || overlay == null)
+            return;
+        drag.target = PlaceArrangePolicy.slotUnder(drag.slots, x, y);
+        overlay.moveGhost(x - drag.startX, y - drag.startY);
+        overlay.setHighlighted(drag.target);
+    }
+
+    /**
+     * The release. Over a slot or the tray it writes, exactly as a pick on the card does; over
+     * anything else the bar springs back to the edge it came from and nothing is written.
+     */
+    private void finishArrangeDrag(boolean released) {
+        ArrangeDrag drag = mArrangeDrag;
+        if (drag == null)
+            return;
+        mArrangeDrag = null;
+        PlaceLayoutStore places = mHost.places();
+        PlaceArrangeOverlayView overlay = arrangeOverlay();
+        boolean written = released && places != null && PlaceArrangePolicy.dropOn(places,
+            drag.place, drag.orientation, drag.bar, drag.target);
+        setPanelPeek(false);
+        if (overlay != null) {
+            if (written)
+                overlay.clear();
+            else
+                overlay.springBack(prefs() == null || !prefs().isLazyModeEnabled(), null);
+        }
+        if (written)
+            afterPlaceArrangementWrite();
+    }
+
+    /**
+     * Which bar a press on an outline grabbed. The status bar is one bar and its whole outline is
+     * it; the dock band is a stack of up to three, so the row the finger actually went down on is
+     * the one that lifts. The keyboard and the terminal have no placement to move.
+     */
+    @Nullable
+    private PlaceArrangePolicy.Bar barUnderPoint(@NonNull SurfaceSlot slot, float y) {
+        if (slot == SurfaceSlot.STATUS)
+            return PlaceArrangePolicy.Bar.STATUS_BAR;
+        if (slot != SurfaceSlot.DOCK)
+            return null;
+        PlaceArrangePolicy.Bar nearest = null;
+        float nearestDistance = Float.MAX_VALUE;
+        for (int i = 0; i < DOCK_ROW_IDS.length; i++) {
+            int[] rect = rectInOverlay(mHost.findView(DOCK_ROW_IDS[i]));
+            if (rect == null)
+                continue;
+            if (y >= rect[1] && y <= rect[3])
+                return DOCK_ROW_BARS[i];
+            float distance = Math.min(Math.abs(y - rect[1]), Math.abs(y - rect[3]));
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = DOCK_ROW_BARS[i];
+            }
+        }
+        return nearest;
+    }
+
+    /** The rect a lifted bar rises from: its own row's, or the dock surface where it has none. */
+    @Nullable
+    private int[] barRectInOverlay(@NonNull PlaceArrangePolicy.Bar bar) {
+        if (bar == PlaceArrangePolicy.Bar.STATUS_BAR)
+            return rectInOverlay(mHost.findView(R.id.terminal_window_bar_host));
+        for (int i = 0; i < DOCK_ROW_BARS.length; i++) {
+            if (DOCK_ROW_BARS[i] != bar)
+                continue;
+            int[] rect = rectInOverlay(mHost.findView(DOCK_ROW_IDS[i]));
+            if (rect != null)
+                return rect;
+        }
+        return rectInOverlay(mHost.findView(R.id.accessory_surface_host));
+    }
+
+    /** A view's rect in the gesture overlay's own space, or null while it is not on screen. */
+    @Nullable
+    private int[] rectInOverlay(@Nullable View view) {
+        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+        if (overlay == null || view == null || view.getVisibility() != View.VISIBLE
+            || view.getWidth() <= 0 || view.getHeight() <= 0)
+            return null;
+        overlay.getLocationInWindow(mTmpAnchorLocation);
+        int overlayLeft = mTmpAnchorLocation[0];
+        int overlayTop = mTmpAnchorLocation[1];
+        view.getLocationInWindow(mTmpAnchorLocation);
+        return new int[] {
+            mTmpAnchorLocation[0] - overlayLeft,
+            mTmpAnchorLocation[1] - overlayTop,
+            mTmpAnchorLocation[0] - overlayLeft + view.getWidth(),
+            mTmpAnchorLocation[1] - overlayTop + view.getHeight()};
+    }
+
+    /**
+     * The slots a lifted bar may land on: a band along every legal edge, and the tray in the free
+     * room. The tray is placed in the band the card and the pill live in, which is by definition
+     * clear of the status bar, the dock and the keyboard — the bar being moved is one of those, so
+     * the strip can never land on top of it.
+     */
+    @NonNull
+    private List<PlaceArrangePolicy.Slot> buildArrangeSlots(
+            @NonNull PlaceArrangePolicy.Targets targets, int width, int height) {
+        List<PlaceArrangePolicy.Slot> slots = new ArrayList<>(5);
+        float band = dpToPx(SURFACE_EDITOR_ARRANGE_SLOT_DP);
+        for (PlaceLayout.Edge edge : targets.edges) {
+            switch (edge) {
+                case TOP:
+                    slots.add(new PlaceArrangePolicy.Slot(edge, 0, 0, width, band));
+                    break;
+                case BOTTOM:
+                    slots.add(new PlaceArrangePolicy.Slot(edge, 0, height - band, width, height));
+                    break;
+                case LEFT:
+                    slots.add(new PlaceArrangePolicy.Slot(edge, 0, 0, band, height));
+                    break;
+                case RIGHT:
+                default:
+                    slots.add(new PlaceArrangePolicy.Slot(edge, width - band, 0, width, height));
+                    break;
+            }
+        }
+        if (!targets.tray)
+            return slots;
+        int[] region = pillRegion();
+        float trayHeight = Math.min(dpToPx(SURFACE_EDITOR_ARRANGE_TRAY_DP),
+            Math.max(1f, region[1] - region[0]));
+        float top = ((region[0] + region[1]) / 2f) - (trayHeight / 2f);
+        float trayWidth = width * SURFACE_EDITOR_ARRANGE_TRAY_WIDTH_FRACTION;
+        float left = (width - trayWidth) / 2f;
+        slots.add(new PlaceArrangePolicy.Slot(null, left, top, left + trayWidth, top + trayHeight));
+        return slots;
+    }
+
+    /** Clears whatever the arrange layer is showing, on the way out or after a rotation. */
+    private void clearArrangeDrag() {
+        cancelPendingArrangeLift();
+        mArrangeDrag = null;
+        PlaceArrangeOverlayView overlay = arrangeOverlay();
+        if (overlay != null)
+            overlay.clear();
+    }
+
+    /**
+     * The one line that says the gesture exists, the first time the editor opens after it shipped.
+     * Nothing on screen can advertise a hold, and the arrangement is the editor's newest half.
+     */
+    private void showArrangeHintIfNew() {
+        if (prefs() == null || prefs().isSurfaceEditorArrangeHintShown())
+            return;
+        TextView hint = mHost.findView(R.id.surface_editor_arrange_hint);
+        if (hint == null)
+            return;
+        prefs().setSurfaceEditorArrangeHintShown(true);
+        int[] region = pillRegion();
+        ViewGroup.LayoutParams params = hint.getLayoutParams();
+        if (params instanceof ViewGroup.MarginLayoutParams) {
+            ((ViewGroup.MarginLayoutParams) params).topMargin =
+                region[0] + Math.max(0, (region[1] - region[0]) / 3);
+            hint.setLayoutParams(params);
+        }
+        hint.animate().cancel();
+        hint.setAlpha(0f);
+        hint.setVisibility(View.VISIBLE);
+        hint.animate().alpha(1f).setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+            .setInterpolator(Motion.settle()).start();
+        hint.postDelayed(this::hideArrangeHint, SURFACE_EDITOR_ARRANGE_HINT_MS);
+    }
+
+    private void hideArrangeHint() {
+        TextView hint = mHost.findView(R.id.surface_editor_arrange_hint);
+        if (hint == null || hint.getVisibility() != View.VISIBLE)
+            return;
+        hint.animate().cancel();
+        hint.animate().alpha(0f).setDuration(SURFACE_TUNING_FADE_DURATION_MS)
+            .setInterpolator(surfaceTuningFadeInterpolator())
+            .withEndAction(() -> {
+                hint.setVisibility(View.GONE);
+                hint.setAlpha(1f);
+            }).start();
     }
 
     /** Vertical drag on the keyboard's top-border pill, on the same 1:1 mapping as the old handle. */
@@ -3502,7 +4105,11 @@ public final class SurfaceEditorController {
             .append(prefs().getSurfaceBaseValue(SurfaceProperty.SIDE_GAP)).append('|')
             .append(prefs().getSurfaceMaterial()).append('|')
             .append(prefs().getSurfaceMaterialIntensity()).append('|')
-            .append(look() == null ? "" : look().signature())
+            .append(look() == null ? "" : look().signature()).append('|')
+            // Where every place's bars stand. The editor can move one now, and a moved bar is
+            // exactly as unsaved as a moved slider.
+            .append(mHost.places() == null
+                ? "" : PlaceArrangeSnapshot.capture(mHost.places()).signature())
             .toString();
     }
 
@@ -3591,6 +4198,8 @@ public final class SurfaceEditorController {
         }
         dismissClockDropdown();
         hideSurfaceTuningPeekReadout();
+        clearArrangeDrag();
+        hideArrangeHint();
         mPanelPeeking = false;
         mSurfaceEditorEntrySignature = null;
         mSurfaceEditorRevert = null;

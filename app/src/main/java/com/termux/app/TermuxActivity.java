@@ -8027,6 +8027,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentPlaceLayout();
         }
 
+        @Nullable @Override public PlaceLayoutStore places() {
+            return placeLayoutStore();
+        }
+
+        @NonNull @Override public com.termux.app.wall.PaneWallPage placeOnScreen() {
+            return currentWallPlace();
+        }
+
+        @NonNull @Override public PlaceOrientation placeOrientation() {
+            return currentPlaceOrientation();
+        }
+
+        @Override public void applyPlaceArrangement() {
+            // The same pass a Layout page write comes back through: the layout is resolved once
+            // and every surface re-reads its part of it. Nothing here recreates the activity, so
+            // the editor stays open over the chrome it has just moved.
+            syncPlaceLayout();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        }
+
         @Nullable @Override public com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() {
             return mInAppKeyboard;
         }

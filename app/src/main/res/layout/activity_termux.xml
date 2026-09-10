@@ -1065,6 +1065,37 @@
                 android:importantForAccessibility="no"
                 android:visibility="gone" />
 
+            <!-- A bar in the air: the edges it may be dropped on, the tray that puts it away, and
+                 the bar's own outline under the finger. Drawn only while a bar is lifted, and never
+                 touchable — the capture group that lifted it keeps the whole gesture, and every
+                 touch offered here falls through to the groups above. -->
+            <com.termux.app.surfaces.PlaceArrangeOverlayView
+                android:id="@+id/surface_editor_arrange_overlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no"
+                android:visibility="gone" />
+
+            <!-- Said once, the first time the editor opens after the gesture shipped: holding a bar
+                 is the only way to find it, and nothing on screen advertises it. -->
+            <TextView
+                android:id="@+id/surface_editor_arrange_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal|top"
+                android:background="@drawable/dock_tuning_done_pill"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="7dp"
+                android:text="@string/termux_surface_editor_arrange_hint"
+                android:textColor="?attr/termuxColorOnAccentContainer"
+                android:textSize="12.5sp"
+                android:visibility="gone" />
+
             <!-- Value echo for peeking controls. The pill fades while a control whose surface sits
                  under it is dragged, so the number it is changing has to appear somewhere the user
                  is already looking. Not clickable: it is a read-out over the live surface. -->
