@@ -68,7 +68,12 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private static final float HINT_CHEVRON_WIDTH_DP = 10f;
     private static final float HINT_CHEVRON_HEIGHT_DP = 4f;
     private static final float HINT_STROKE_DP = 1.5f;
-    private static final float HINT_INSET_DP = 3f;
+    /**
+     * Distance from the bar's inner edge to where the chevron starts. Generous, so that the whole
+     * glyph sits inside the compact bar and its drift ends before the edge: it must never look as
+     * if it is sinking into the border.
+     */
+    private static final float HINT_INSET_DP = 10f;
     private static final float HINT_TRAVEL_DP = 5f;
     @Nullable private ValueAnimator mHintAnimator;
     private float mHintProgress;
