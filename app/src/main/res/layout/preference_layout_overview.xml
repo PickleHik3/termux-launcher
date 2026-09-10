@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The Layout page's header: which place the rows below describe, and that place drawn twice —
+     portrait on the left, landscape on the right, each live for its own orientation. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -6,16 +8,7 @@
     android:paddingStart="24dp"
     android:paddingTop="6dp"
     android:paddingEnd="24dp"
-    android:paddingBottom="10dp">
-
-    <TextView
-        android:id="@+id/layout_overview_caption"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:text="@string/settings_layout_overview_caption"
-        android:textColor="?attr/termuxColorOnSurfaceVariant"
-        android:textSize="13sp" />
+    android:paddingBottom="12dp">
 
     <FrameLayout
         android:id="@+id/layout_overview_places_track"
@@ -43,6 +36,8 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
+                android:minWidth="0dp"
+                android:singleLine="true"
                 android:text="@string/settings_layout_tab_home"
                 android:textSize="13sp"
                 android:textStyle="bold" />
@@ -55,6 +50,8 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
+                android:minWidth="0dp"
+                android:singleLine="true"
                 android:text="@string/settings_layout_tab_terminal"
                 android:textSize="13sp"
                 android:textStyle="bold" />
@@ -67,72 +64,67 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
+                android:minWidth="0dp"
+                android:singleLine="true"
                 android:text="@string/settings_layout_tab_display"
                 android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </FrameLayout>
 
-    <FrameLayout
-        android:id="@+id/layout_overview_orientation_track"
-        android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/settings_segmented_pill_track"
-        android:padding="3dp">
-
-        <View
-            android:id="@+id/layout_overview_orientation_indicator"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:background="@drawable/settings_segmented_pill_indicator" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/layout_overview_orientation_portrait"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:text="@string/settings_layout_orientation_portrait"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/layout_overview_orientation_landscape"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:text="@string/settings_layout_orientation_landscape"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-    </FrameLayout>
-
-    <TextView
-        android:id="@+id/layout_overview_editing"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:fontFamily="sans-serif-medium"
-        android:textColor="?attr/termuxColorOnSurface"
-        android:textSize="14sp" />
+        android:layout_marginTop="14dp"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
 
-    <com.termux.app.fragments.settings.PlaceMiniatureView
-        android:id="@+id/layout_overview_miniature"
-        android:layout_width="match_parent"
-        android:layout_height="188dp"
-        android:layout_marginTop="6dp"
-        android:clickable="true"
-        android:focusable="true" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <com.termux.app.fragments.settings.PlaceMiniatureView
+                android:id="@+id/layout_overview_miniature_portrait"
+                android:layout_width="match_parent"
+                android:layout_height="152dp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:text="@string/settings_layout_orientation_portrait"
+                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <com.termux.app.fragments.settings.PlaceMiniatureView
+                android:id="@+id/layout_overview_miniature_landscape"
+                android:layout_width="match_parent"
+                android:layout_height="152dp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:text="@string/settings_layout_orientation_landscape"
+                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
 
 </LinearLayout>

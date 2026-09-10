@@ -100,6 +100,7 @@ public final class PlaceMiniatureView extends View {
     @NonNull private PlaceOrientation mOrientation = PlaceOrientation.PORTRAIT;
     @NonNull private PaneWallPage mPlace = PaneWallPage.TERMINAL;
     @Nullable private OnBlockTappedListener mListener;
+    private boolean mLegendVisible = true;
 
     private final Paint mFramePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -225,6 +226,25 @@ public final class PlaceMiniatureView extends View {
         mListener = listener;
     }
 
+    /**
+     * Whether the legend stands beside the phone. Off, the phone takes the whole view and the
+     * bands are the only tap targets — the Layout page names every element in its own rows, so a
+     * second list beside two miniatures would say everything twice.
+     */
+    public void setLegendVisible(boolean visible) {
+        if (mLegendVisible == visible) return;
+        mLegendVisible = visible;
+        if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
+        requestLayout();
+        invalidate();
+    }
+
+    /** Whether a legend is drawn beside the phone. */
+    @VisibleForTesting
+    public boolean isLegendVisible() {
+        return mLegendVisible;
+    }
+
     /** What the canvas band is currently drawing, driven by the selected place. */
     @VisibleForTesting
     @NonNull
@@ -286,10 +306,11 @@ public final class PlaceMiniatureView extends View {
             String label = legendLabel(block);
             if (label != null) longest = Math.max(longest, mLegendPaint.measureText(label));
         }
-        float legendWidth = Math.min(swatch + swatchGap + longest,
-            availableWidth * LEGEND_MAX_WIDTH_FRACTION);
+        float legendWidth = mLegendVisible
+            ? Math.min(swatch + swatchGap + longest, availableWidth * LEGEND_MAX_WIDTH_FRACTION)
+            : 0f;
         mLegendLabelWidth = Math.max(0f, legendWidth - swatch - swatchGap);
-        float legendGap = dp(LEGEND_TO_FRAME_GAP_DP);
+        float legendGap = mLegendVisible ? dp(LEGEND_TO_FRAME_GAP_DP) : 0f;
 
         float frameAreaWidth = Math.max(0f, availableWidth - legendWidth - legendGap);
         float aspect = mOrientation == PlaceOrientation.LANDSCAPE
@@ -321,7 +342,7 @@ public final class PlaceMiniatureView extends View {
 
     private void layoutLegend(float left, float width, int viewHeight, float swatch) {
         mLegendRects.clear();
-        if (mLayout == null) return;
+        if (mLayout == null || !mLegendVisible) return;
         float textHeight = mLegendPaint.getFontMetrics(null);
         float rowHeight = Math.max(swatch, textHeight) + dp(LEGEND_ROW_GAP_DP);
         float total = rowHeight * LEGEND_ORDER.length;
@@ -485,22 +506,38 @@ public final class PlaceMiniatureView extends View {
     /** The band's fill; the legend swatch uses the same one so the two are read as one thing. */
     @ColorInt
     private int bandFill(@NonNull Block block) {
+        return blockColor(getContext(), block);
+    }
+
+    /**
+     * The colour a block is drawn in, for anything outside the miniature that has to point at the
+     * same band — the Layout page's rows carry a swatch of it beside the element's name.
+     */
+    @ColorInt
+    public static int blockColor(@NonNull Context host, @NonNull Block block) {
         switch (block) {
             case STATUS_BAR:
-                return themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
+                return hostColor(host, com.termux.shared.R.attr.termuxColorPrimary,
+                    R.color.termux_primary);
             case APPS_ROW:
-                return themeColor(com.termux.shared.R.attr.termuxColorSecondary, R.color.termux_secondary);
+                return hostColor(host, com.termux.shared.R.attr.termuxColorSecondary,
+                    R.color.termux_secondary);
             case ALPHABETS_ROW:
-                return themeColor(com.termux.shared.R.attr.termuxColorAccentContainer,
+                return hostColor(host, com.termux.shared.R.attr.termuxColorAccentContainer,
                     R.color.termux_accent_container);
             case EXTRA_KEYS:
-                return themeColor(com.termux.shared.R.attr.termuxColorTertiaryContainer,
+                return hostColor(host, com.termux.shared.R.attr.termuxColorTertiaryContainer,
                     R.color.termux_tertiary_container);
             case CANVAS:
             default:
-                return themeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                return hostColor(host, com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
                     R.color.termux_surface_panel_high);
         }
+    }
+
+    @ColorInt
+    private static int hostColor(@NonNull Context host, @AttrRes int attr, int fallbackColorRes) {
+        return MaterialColors.getColor(host, attr, ContextCompat.getColor(host, fallbackColorRes));
     }
 
     @ColorInt
@@ -824,7 +861,7 @@ public final class PlaceMiniatureView extends View {
      * hidden, so a reader can tell "hidden" from "not shown here" at a glance.
      */
     private void drawLegend(@NonNull Canvas canvas) {
-        if (mLayout == null) return;
+        if (mLayout == null || !mLegendVisible) return;
         float swatch = dp(LEGEND_SWATCH_DP);
         float swatchGap = dp(LEGEND_SWATCH_GAP_DP);
         float swatchRadius = dp(5);

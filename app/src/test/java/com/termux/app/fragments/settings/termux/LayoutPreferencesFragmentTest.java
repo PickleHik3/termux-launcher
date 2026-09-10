@@ -18,14 +18,14 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceScreen;
-import androidx.preference.SeekBarPreference;
-import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
+import com.termux.app.fragments.settings.LayoutChooserModel;
+import com.termux.app.fragments.settings.LayoutElement;
+import com.termux.app.fragments.settings.LayoutElementRowPreference;
 import com.termux.app.fragments.settings.LayoutOverviewPreference;
-import com.termux.app.fragments.settings.SegmentedPillPreference;
-import com.termux.app.place.PlaceLayout.RowPlacement;
+import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
@@ -42,13 +42,16 @@ import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The Layout page: every row is exposed, the Display tab only appears once the Linux display is
- * on, and the one row phase 5 has not built rendering for yet stays invisible even though it is
- * fully wired to the store.
+ * The Layout page after the v2 restructure: one compact row per element with its portrait and
+ * landscape values, a chooser behind each of them writing the scoped key for the orientation it
+ * was picked under, the Widget grid row on Home alone, and the Display place offered only once the
+ * Linux display is on.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -71,180 +74,88 @@ public class LayoutPreferencesFragmentTest {
         return (LayoutPreferencesFragment) fragment;
     }
 
+    private static String summary(LayoutPreferencesFragment fragment, LayoutElement element) {
+        Preference row = fragment.getPreferenceScreen().findPreference(element.key());
+        assertNotNull("row for " + element, row);
+        return String.valueOf(row.getSummary());
+    }
+
+    private static List<LayoutChooserModel.Pills> pills(Context context, PlaceLayoutStore places,
+                                                        PaneWallPage place,
+                                                        LayoutElement element) {
+        List<LayoutChooserModel.Pills> found = new ArrayList<>();
+        for (LayoutChooserModel.Group group
+            : LayoutChooserModel.groups(context, places, place, element)) {
+            if (group instanceof LayoutChooserModel.Pills) {
+                found.add((LayoutChooserModel.Pills) group);
+            }
+        }
+        return found;
+    }
+
+    private static List<LayoutChooserModel.Counter> counters(Context context,
+                                                             PlaceLayoutStore places,
+                                                             PaneWallPage place,
+                                                             LayoutElement element) {
+        List<LayoutChooserModel.Counter> found = new ArrayList<>();
+        for (LayoutChooserModel.Group group
+            : LayoutChooserModel.groups(context, places, place, element)) {
+            if (group instanceof LayoutChooserModel.Counter) {
+                found.add((LayoutChooserModel.Counter) group);
+            }
+        }
+        return found;
+    }
+
     @Test
-    public void everyRowIsExposedAndTheHiddenRowsStayInvisible() {
+    public void thePageIsOneRowPerElementWithTheLookRowLast() {
         LayoutPreferencesFragment fragment = launch();
         PreferenceScreen screen = fragment.getPreferenceScreen();
 
-        Preference overview = screen.findPreference("layout_overview");
-        assertTrue(overview instanceof LayoutOverviewPreference);
+        assertTrue(screen.findPreference("layout_overview") instanceof LayoutOverviewPreference);
+        LayoutElement[] order = LayoutElement.values();
+        assertEquals("Status bar, pinned apps, A–Z, extra keys, keyboard, widget grid",
+            6, order.length);
+        for (int i = 0; i < order.length; i++) {
+            Preference row = screen.findPreference(order[i].key());
+            assertTrue("row " + order[i], row instanceof LayoutElementRowPreference);
+            // The overview stands first, so the rows follow it in the enum's own order.
+            assertEquals("row order for " + order[i], i + 1, indexOf(screen, order[i].key()));
+        }
+        assertEquals("the Look row is last", screen.getPreferenceCount() - 1,
+            indexOf(screen, "layout_look"));
 
-        assertTrue(screen.findPreference("layout_status_bar") instanceof SegmentedPillPreference);
-        assertTrue(screen.findPreference("layout_apps_row") instanceof SegmentedPillPreference);
-        assertTrue(screen.findPreference("layout_alphabets_row") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("layout_alphabets_row_edge")
-            instanceof SegmentedPillPreference);
-        assertTrue(screen.findPreference("layout_extra_keys") instanceof SegmentedPillPreference);
-        assertTrue(screen.findPreference("layout_keyboard_on_enter") instanceof SegmentedPillPreference);
-        assertTrue(screen.findPreference("layout_keyboard_mode") instanceof SegmentedPillPreference);
-        assertTrue(screen.findPreference("layout_keyboard_form") instanceof SegmentedPillPreference);
-        assertTrue(screen.findPreference("layout_grid_columns") instanceof SeekBarPreference);
-        assertTrue(screen.findPreference("layout_grid_rows") instanceof SeekBarPreference);
-        assertNotNull(screen.findPreference("layout_look"));
+        // No captions anywhere: a row says its values, nothing else.
+        for (LayoutElement element : order) {
+            if (!element.isOn(PaneWallPage.TERMINAL)) continue;
+            assertTrue("row " + element + " summarises its values",
+                summary(fragment, element).contains("·"));
+        }
+    }
 
-        // The bar now stands on any of the four edges, so its row is live.
-        assertTrue("status bar row", screen.findPreference("layout_status_bar").isVisible());
-        // Phase 5 has not built the overlay keyboard yet, so that row stays invisible even though
-        // it is wired all the way through the store.
-        assertFalse("keyboard mode row", screen.findPreference("layout_keyboard_mode").isVisible());
-
-        // The keyboard type is a choice on every place, the terminal included.
-        assertTrue("keyboard type row", screen.findPreference("layout_keyboard_form").isVisible());
-
-        // The default selection is Terminal, not Home, so the widget grid has nothing to show yet.
-        assertFalse("grid columns row", screen.findPreference("layout_grid_columns").isVisible());
-        assertFalse("grid rows row", screen.findPreference("layout_grid_rows").isVisible());
-
-        // The apps row is at the bottom by default, so the bar rides under it and its own
-        // placement pill has nothing to offer.
-        assertFalse("alphabets bar edge pill",
-            screen.findPreference("layout_alphabets_row_edge").isVisible());
+    private static int indexOf(PreferenceScreen screen, String key) {
+        for (int i = 0; i < screen.getPreferenceCount(); i++) {
+            if (key.equals(screen.getPreference(i).getKey())) return i;
+        }
+        return -1;
     }
 
     @Test
-    public void theAlphabetsRowEdgePillShowsOnlyWhileTheBarStandsAlone() {
-        Application app = RuntimeEnvironment.getApplication();
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
-        PlaceLayoutStore places = new PlaceLayoutStore(preferences);
+    public void theWidgetGridRowIsOnHomeAndNotOnTheTerminal() {
+        LayoutPreferencesFragment fragment = launch();
+        Preference grid = fragment.getPreferenceScreen()
+            .findPreference(LayoutElement.WIDGET_GRID.key());
+        assertNotNull(grid);
+        assertFalse("the terminal has no widget grid", grid.isVisible());
 
-        // Apps row at the bottom (the default): the bar rides under it, pill hidden.
-        LayoutPreferencesFragment bottomFragment = launch();
-        assertFalse("bottom apps row hides the pill", bottomFragment.getPreferenceScreen()
-            .findPreference("layout_alphabets_row_edge").isVisible());
-
-        // Apps row hidden entirely: the bar stands alone, pill shown.
-        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
-        LayoutPreferencesFragment hiddenFragment = launch();
-        assertTrue("hidden apps row shows the pill", hiddenFragment.getPreferenceScreen()
-            .findPreference("layout_alphabets_row_edge").isVisible());
-    }
-
-    @Test
-    public void theAlphabetsRowEdgePillShowsWithARailAppsRowInLandscape() {
-        // A side apps row has no width to stand in portrait — the store reads it back as bottom —
-        // so the rail case that leaves the bar standing alone only exists in landscape.
-        Application app = RuntimeEnvironment.getApplication();
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
-        PlaceLayoutStore places = new PlaceLayoutStore(preferences);
-        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, RowPlacement.LEFT);
-
-        RuntimeEnvironment.setQualifiers("+land");
-        LayoutPreferencesFragment railFragment = launch();
-        assertTrue("rail apps row shows the pill", railFragment.getPreferenceScreen()
-            .findPreference("layout_alphabets_row_edge").isVisible());
-    }
-
-    @Test
-    public void theAlphabetsRowEdgeOffersTwoSegmentsInPortraitAndFourInLandscape() {
-        LayoutPreferencesFragment portraitFragment = launch();
-        SegmentedPillPreference portraitPill = portraitFragment.getPreferenceScreen()
-            .findPreference("layout_alphabets_row_edge");
-        assertNotNull(portraitPill);
-        assertEquals("portrait has no width for a side column", 2, portraitPill.segmentCount());
-
-        RuntimeEnvironment.setQualifiers("+land");
-        LayoutPreferencesFragment landscapeFragment = launch();
-        SegmentedPillPreference landscapePill = landscapeFragment.getPreferenceScreen()
-            .findPreference("layout_alphabets_row_edge");
-        assertNotNull(landscapePill);
-        assertEquals("landscape offers every edge", 4, landscapePill.segmentCount());
-    }
-
-    @Test
-    public void aWriteToTheAlphabetsRowEdgeLandsInTheScopedKey() {
-        Application app = RuntimeEnvironment.getApplication();
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
-        LayoutPreferencesFragment.LayoutPreferencesDataStore store =
-            new LayoutPreferencesFragment.LayoutPreferencesDataStore(app, preferences);
-        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
-
-        store.putString("layout_alphabets_row_edge", "right");
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
-
-        SharedPreferences prefs = preferences.getSharedPreferences();
-        assertEquals("right", prefs.getString("place.terminal.landscape.az_bar", null));
-        assertEquals("right", store.getString("layout_alphabets_row_edge", "bottom"));
-        // A different orientation on the same place is untouched.
-        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
-        assertEquals("bottom", store.getString("layout_alphabets_row_edge", "bottom"));
-    }
-
-    @Test
-    public void theAlphabetsRowSwitchIsAlwaysEnabled() {
-        Application app = RuntimeEnvironment.getApplication();
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
-        PlaceLayoutStore places = new PlaceLayoutStore(preferences);
-
-        // The default: apps row along the bottom.
-        LayoutPreferencesFragment bottomFragment = launch();
-        Preference bottomSwitch = bottomFragment.getPreferenceScreen()
-            .findPreference("layout_alphabets_row");
-        assertNotNull(bottomSwitch);
-        assertTrue("enabled with the apps row at the bottom", bottomSwitch.isEnabled());
-
-        // Apps row hidden entirely.
-        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
-        LayoutPreferencesFragment hiddenFragment = launch();
-        Preference hiddenSwitch = hiddenFragment.getPreferenceScreen()
-            .findPreference("layout_alphabets_row");
-        assertNotNull(hiddenSwitch);
-        assertTrue("enabled with the apps row hidden", hiddenSwitch.isEnabled());
-
-        // Apps row on a side rail — the fragment opens on portrait/Terminal by default, and the
-        // store does not itself refuse a side placement there, so this exercises the same
-        // enablement check without driving the overview's orientation tab.
-        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.LEFT);
-        LayoutPreferencesFragment railFragment = launch();
-        Preference railSwitch = railFragment.getPreferenceScreen()
-            .findPreference("layout_alphabets_row");
-        assertNotNull(railSwitch);
-        assertTrue("enabled with the apps row on a rail", railSwitch.isEnabled());
-    }
-
-    @Test
-    public void theKeyboardTypeRowOffersAllThreeTypesInEitherOrientation() {
-        LayoutPreferencesFragment portraitFragment = launch();
-        SegmentedPillPreference portraitPill = portraitFragment.getPreferenceScreen()
-            .findPreference("layout_keyboard_form");
-        assertNotNull(portraitPill);
-        assertEquals(3, portraitPill.segmentCount());
-
-        RuntimeEnvironment.setQualifiers("+land");
-        LayoutPreferencesFragment landscapeFragment = launch();
-        SegmentedPillPreference landscapePill = landscapeFragment.getPreferenceScreen()
-            .findPreference("layout_keyboard_form");
-        assertNotNull(landscapePill);
-        assertEquals(3, landscapePill.segmentCount());
-    }
-
-    @Test
-    public void aWriteToTheKeyboardTypeLandsInTheScopedKey() {
-        Application app = RuntimeEnvironment.getApplication();
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
-        LayoutPreferencesFragment.LayoutPreferencesDataStore store =
-            new LayoutPreferencesFragment.LayoutPreferencesDataStore(app, preferences);
-        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
-
-        store.putString("layout_keyboard_form", "floating");
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
-
-        SharedPreferences prefs = preferences.getSharedPreferences();
-        assertEquals("floating",
-            prefs.getString("place.terminal.landscape.keyboard_form", null));
-        assertEquals("floating", store.getString("layout_keyboard_form", "docked"));
-        // A different orientation on the same place keeps the keyboard it had.
-        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
-        assertEquals("docked", store.getString("layout_keyboard_form", "docked"));
+        fragment.selectPlace(PaneWallPage.WIDGETS);
+        assertTrue("home has one", grid.isVisible());
+        // Every other row is on every place.
+        for (LayoutElement element : LayoutElement.values()) {
+            if (element == LayoutElement.WIDGET_GRID) continue;
+            assertTrue("row " + element + " on home",
+                fragment.getPreferenceScreen().findPreference(element.key()).isVisible());
+        }
     }
 
     @Test
@@ -268,23 +179,184 @@ public class LayoutPreferencesFragmentTest {
     }
 
     @Test
-    public void aWriteOnTheTerminalLandscapeSelectionLandsScopedAndRestylesWithoutRecreate() {
+    public void aStatusBarPickLandsOnTheOrientationItWasPickedUnderAndTheRowRereadsIt() {
         Application app = RuntimeEnvironment.getApplication();
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
-        LayoutPreferencesFragment.LayoutPreferencesDataStore store =
-            new LayoutPreferencesFragment.LayoutPreferencesDataStore(app, preferences);
-        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
+        LayoutPreferencesFragment fragment = launch();
+        PlaceLayoutStore places = fragment.places();
+        assertNotNull(places);
 
-        int before = Shadows.shadowOf(app).getBroadcastIntents().size();
-        store.putString("layout_apps_row", "right");
+        List<LayoutChooserModel.Pills> groups =
+            pills(app, places, PaneWallPage.TERMINAL, LayoutElement.STATUS_BAR);
+        assertEquals("one pill row per orientation", 2, groups.size());
+        assertEquals("portrait has no width for a side column", 2, groups.get(0).values.length);
+        assertEquals("landscape offers every edge", 4, groups.get(1).values.length);
+
+        groups.get(1).writer.write("right");
+        fragment.onLayoutWritten();
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
 
-        SharedPreferences prefs = preferences.getSharedPreferences();
-        assertEquals("right", prefs.getString("place.terminal.landscape.apps_row", null));
-        assertEquals("right", store.getString("layout_apps_row", "bottom"));
-        // A different orientation on the same place is untouched.
-        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
-        assertEquals("bottom", store.getString("layout_apps_row", "bottom"));
+        SharedPreferences prefs =
+            TermuxAppSharedPreferences.build(app, true).getSharedPreferences();
+        assertEquals("right", prefs.getString("place.terminal.landscape.status_bar", null));
+        assertNull("portrait untouched",
+            prefs.getString("place.terminal.portrait.status_bar", null));
+        assertEquals("Top · Right", summary(fragment, LayoutElement.STATUS_BAR));
+    }
+
+    @Test
+    public void aPinnedAppsPickAndAnExtraKeysPickLandOnTheirOwnScopedKeys() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch();
+        PlaceLayoutStore places = fragment.places();
+        assertNotNull(places);
+
+        pills(app, places, PaneWallPage.TERMINAL, LayoutElement.PINNED_APPS).get(0)
+            .writer.write("hidden");
+        pills(app, places, PaneWallPage.TERMINAL, LayoutElement.EXTRA_KEYS).get(1)
+            .writer.write("left");
+        fragment.onLayoutWritten();
+
+        SharedPreferences prefs =
+            TermuxAppSharedPreferences.build(app, true).getSharedPreferences();
+        assertEquals("hidden", prefs.getString("place.terminal.portrait.apps_row", null));
+        assertEquals("left", prefs.getString("place.terminal.landscape.extra_keys", null));
+        assertEquals("Hidden · Left", summary(fragment, LayoutElement.PINNED_APPS));
+        assertEquals("Bottom · Left", summary(fragment, LayoutElement.EXTRA_KEYS));
+    }
+
+    @Test
+    public void theAzChooserGainsItsOwnEdgeOnlyWhileTheBarStandsAlone() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch();
+        PlaceLayoutStore places = fragment.places();
+        assertNotNull(places);
+
+        // Portrait pins the apps along the bottom and the bar rides under them, so portrait gets
+        // one shown/hidden pill; landscape's pinned apps are a rail, so there the bar stands alone
+        // and picks an edge of its own.
+        assertEquals(3, pills(app, places, PaneWallPage.TERMINAL, LayoutElement.AZ_INDEX).size());
+        assertEquals("Shown · Bottom", summary(fragment, LayoutElement.AZ_INDEX));
+
+        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT,
+            com.termux.app.place.PlaceLayout.RowPlacement.HIDDEN);
+        List<LayoutChooserModel.Pills> standingAlone =
+            pills(app, places, PaneWallPage.TERMINAL, LayoutElement.AZ_INDEX);
+        assertEquals("portrait gains an edge pill too", 4, standingAlone.size());
+
+        standingAlone.get(1).writer.write("top");
+        fragment.onLayoutWritten();
+        SharedPreferences prefs =
+            TermuxAppSharedPreferences.build(app, true).getSharedPreferences();
+        assertEquals("top", prefs.getString("place.terminal.portrait.az_bar", null));
+        assertEquals("Top · Bottom", summary(fragment, LayoutElement.AZ_INDEX));
+
+        // Hiding it is the same stored switch as before, per orientation.
+        standingAlone.get(0).writer.write("hidden");
+        fragment.onLayoutWritten();
+        assertFalse(prefs.getBoolean("place.terminal.portrait.az_row", true));
+        assertEquals("Hidden · Bottom", summary(fragment, LayoutElement.AZ_INDEX));
+    }
+
+    @Test
+    public void theKeyboardChooserWritesTypePerOrientationOnEnterOncePerPlace() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch();
+        PlaceLayoutStore places = fragment.places();
+        assertNotNull(places);
+
+        List<LayoutChooserModel.Pills> groups =
+            pills(app, places, PaneWallPage.TERMINAL, LayoutElement.KEYBOARD);
+        assertEquals("a type pill per orientation plus one on enter", 3, groups.size());
+
+        groups.get(1).writer.write("floating");
+        groups.get(2).writer.write("open");
+        fragment.onLayoutWritten();
+
+        SharedPreferences prefs =
+            TermuxAppSharedPreferences.build(app, true).getSharedPreferences();
+        assertEquals("floating", prefs.getString("place.terminal.landscape.keyboard_form", null));
+        assertNull("portrait keeps the keyboard it had",
+            prefs.getString("place.terminal.portrait.keyboard_form", null));
+        assertEquals("open", prefs.getString("place.terminal.keyboard_on_enter", null));
+        assertEquals("Docked · Floating", summary(fragment, LayoutElement.KEYBOARD));
+    }
+
+    @Test
+    public void theKeyboardModePillsAreTheDisplaysAlone() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch();
+        PlaceLayoutStore places = fragment.places();
+        assertNotNull(places);
+
+        assertEquals("terminal: type per orientation plus on enter",
+            3, pills(app, places, PaneWallPage.TERMINAL, LayoutElement.KEYBOARD).size());
+        List<LayoutChooserModel.Pills> display =
+            pills(app, places, PaneWallPage.DISPLAY, LayoutElement.KEYBOARD);
+        assertEquals("display adds a mode pill per orientation", 5, display.size());
+
+        display.get(3).writer.write("overlay");
+        fragment.onLayoutWritten();
+        SharedPreferences prefs =
+            TermuxAppSharedPreferences.build(app, true).getSharedPreferences();
+        assertEquals("overlay", prefs.getString("place.display.portrait.keyboard_mode", null));
+    }
+
+    @Test
+    public void theWidgetGridChooserWritesColumnsAndRowsPerOrientation() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch();
+        PlaceLayoutStore places = fragment.places();
+        assertNotNull(places);
+        fragment.selectPlace(PaneWallPage.WIDGETS);
+
+        List<LayoutChooserModel.Counter> groups =
+            counters(app, places, PaneWallPage.WIDGETS, LayoutElement.WIDGET_GRID);
+        assertEquals("columns and rows, per orientation", 4, groups.size());
+
+        groups.get(0).writer.write(6);
+        groups.get(3).writer.write(3);
+        fragment.onLayoutWritten();
+
+        SharedPreferences prefs =
+            TermuxAppSharedPreferences.build(app, true).getSharedPreferences();
+        assertEquals(6, prefs.getInt("place.home.portrait.widget_columns", -1));
+        assertEquals(3, prefs.getInt("place.home.landscape.widget_rows", -1));
+        assertEquals("6×5 · 4×3", summary(fragment, LayoutElement.WIDGET_GRID));
+    }
+
+    @Test
+    public void tappingAMiniatureBandOpensThatBandsChooser() {
+        LayoutPreferencesFragment fragment = launch();
+        List<LayoutElement> opened = new ArrayList<>();
+        fragment.setChooserOpener(opened::add);
+
+        fragment.tapMiniatureBlock(PlaceMiniatureView.Block.STATUS_BAR);
+        fragment.tapMiniatureBlock(PlaceMiniatureView.Block.APPS_ROW);
+        fragment.tapMiniatureBlock(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        fragment.tapMiniatureBlock(PlaceMiniatureView.Block.EXTRA_KEYS);
+        // On the terminal the canvas is the terminal itself, and the keyboard is what stands over
+        // it; on home it is the widget grid.
+        fragment.tapMiniatureBlock(PlaceMiniatureView.Block.CANVAS);
+        fragment.selectPlace(PaneWallPage.WIDGETS);
+        fragment.tapMiniatureBlock(PlaceMiniatureView.Block.CANVAS);
+
+        assertEquals(Arrays.asList(LayoutElement.STATUS_BAR, LayoutElement.PINNED_APPS,
+            LayoutElement.AZ_INDEX, LayoutElement.EXTRA_KEYS, LayoutElement.KEYBOARD,
+            LayoutElement.WIDGET_GRID), opened);
+    }
+
+    @Test
+    public void aChooserWriteRestylesWithoutRecreate() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch();
+        PlaceLayoutStore places = fragment.places();
+        assertNotNull(places);
+
+        int before = Shadows.shadowOf(app).getBroadcastIntents().size();
+        pills(app, places, PaneWallPage.TERMINAL, LayoutElement.PINNED_APPS).get(1)
+            .writer.write("right");
+        fragment.onLayoutWritten();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
 
         List<Intent> broadcasts = Shadows.shadowOf(app).getBroadcastIntents();
         assertTrue("a restyle broadcast was sent", broadcasts.size() > before);
@@ -297,37 +369,20 @@ public class LayoutPreferencesFragmentTest {
     }
 
     @Test
-    public void writingTheSameValueBackDoesNotQueueASpuriousRestyle() {
-        Application app = RuntimeEnvironment.getApplication();
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, true);
-        LayoutPreferencesFragment.LayoutPreferencesDataStore store =
-            new LayoutPreferencesFragment.LayoutPreferencesDataStore(app, preferences);
-        store.setSelection(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
-
-        int before = Shadows.shadowOf(app).getBroadcastIntents().size();
-        // The shipped default for Terminal/portrait is already "bottom".
-        store.putString("layout_apps_row", "bottom");
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
-
-        assertEquals(before, Shadows.shadowOf(app).getBroadcastIntents().size());
-    }
-
-    @Test
     public void aDeepLinkOpensThePageOnTheNamedPlaceAndPointsAtItsRow() {
         Application app = RuntimeEnvironment.getApplication();
         LayoutPreferencesFragment fragment = launch(new Intent(app, SettingsActivity.class)
             .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT,
                 LayoutPreferencesFragment.class.getName())
             .putExtra(SettingsActivity.EXTRA_INITIAL_PLACE, PaneWallPage.WIDGETS.toolName())
-            .putExtra(SettingsActivity.EXTRA_SCROLL_TO_KEY, "layout_grid_columns"));
+            .putExtra(SettingsActivity.EXTRA_SCROLL_TO_KEY,
+                LayoutPreferencesFragment.KEY_WIDGET_GRID));
 
         PreferenceScreen screen = fragment.getPreferenceScreen();
-        // The grid rows exist only on Home, so their visibility is the page's own answer to
+        // The Widget grid row exists only on Home, so its visibility is the page's own answer to
         // which place the deep link selected.
-        assertTrue("grid columns row", screen.findPreference("layout_grid_columns").isVisible());
-        assertTrue("grid rows row", screen.findPreference("layout_grid_rows").isVisible());
-        // The keyboard-mode row belongs to the Display place, so Home must not be showing it.
-        assertFalse("keyboard mode row", screen.findPreference("layout_keyboard_mode").isVisible());
+        assertTrue("widget grid row",
+            screen.findPreference(LayoutPreferencesFragment.KEY_WIDGET_GRID).isVisible());
     }
 
     @Test
@@ -383,11 +438,11 @@ public class LayoutPreferencesFragmentTest {
         Application app = RuntimeEnvironment.getApplication();
         Intent intent = SettingsActivity.createFragmentIntent(app,
             LayoutPreferencesFragment.class, R.string.settings_destination_layout,
-            PaneWallPage.WIDGETS.toolName(), "layout_grid_columns");
+            PaneWallPage.WIDGETS.toolName(), LayoutPreferencesFragment.KEY_WIDGET_GRID);
         assertEquals(LayoutPreferencesFragment.class.getName(),
             intent.getStringExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT));
         assertEquals("widgets", intent.getStringExtra(SettingsActivity.EXTRA_INITIAL_PLACE));
-        assertEquals("layout_grid_columns",
+        assertEquals(LayoutPreferencesFragment.KEY_WIDGET_GRID,
             intent.getStringExtra(SettingsActivity.EXTRA_SCROLL_TO_KEY));
     }
 }

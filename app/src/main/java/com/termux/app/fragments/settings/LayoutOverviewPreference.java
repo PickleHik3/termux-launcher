@@ -20,30 +20,29 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 
 /**
- * The Layout page's header: which place and which orientation the rows below describe, plus a
- * miniature of the arrangement that results. Kept as one preference — rather than a
- * {@link SegmentedPillPreference} pair — because the selection here is not a stored value; it is
- * the fragment's own state, restored across rotation from saved instance state, the way a tab host
- * would be.
+ * The Layout page's header: which place the rows below describe, and that place drawn twice —
+ * portrait beside landscape, each miniature live for its own orientation. Kept as one preference
+ * — rather than a {@link SegmentedPillPreference} — because the place here is not a stored value;
+ * it is the fragment's own state, restored across rotation from saved instance state, the way a
+ * tab host would be. The miniatures carry no legend: every element is named in its own row below.
  */
 @Keep
 public final class LayoutOverviewPreference extends Preference {
 
-    /** Reports a new place/orientation selection, or a tap on one of the miniature's blocks. */
+    /** Reports a new place, or a tap on one of the miniatures' bands. */
     public interface Listener {
-        void onSelectionChanged(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation);
+        void onPlaceChanged(@NonNull PaneWallPage place);
+
         void onBlockTapped(@NonNull PlaceMiniatureView.Block block);
     }
 
     private static final long SLIDE_DURATION_MS = 190L;
 
     @NonNull private PaneWallPage mSelectedPlace = PaneWallPage.TERMINAL;
-    @NonNull private PlaceOrientation mSelectedOrientation = PlaceOrientation.PORTRAIT;
     private boolean mDisplayTabVisible = false;
-    @Nullable private PlaceLayout mLayout;
+    @Nullable private PlaceLayout mPortrait;
+    @Nullable private PlaceLayout mLandscape;
     @Nullable private Listener mListener;
-    /** The bound "Editing … in …" line; refreshed in place when a pill changes the selection. */
-    @Nullable private TextView mEditingLine;
 
     public LayoutOverviewPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -68,10 +67,9 @@ public final class LayoutOverviewPreference extends Preference {
         notifyChanged();
     }
 
-    /** Sets the selection without notifying the listener — for restoring saved state. */
-    public void setSelection(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
+    /** Sets the place without notifying the listener — for restoring saved state. */
+    public void setSelection(@NonNull PaneWallPage place) {
         mSelectedPlace = place;
-        mSelectedOrientation = orientation;
         notifyChanged();
     }
 
@@ -80,18 +78,14 @@ public final class LayoutOverviewPreference extends Preference {
         return mSelectedPlace;
     }
 
-    @NonNull
-    public PlaceOrientation getSelectedOrientation() {
-        return mSelectedOrientation;
-    }
-
     public boolean isDisplayTabVisible() {
         return mDisplayTabVisible;
     }
 
-    /** What the miniature draws; redrawn whenever a row elsewhere on the page changes. */
-    public void setLayout(@NonNull PlaceLayout layout) {
-        mLayout = layout;
+    /** What the two miniatures draw; redrawn whenever a chooser writes. */
+    public void setLayouts(@NonNull PlaceLayout portrait, @NonNull PlaceLayout landscape) {
+        mPortrait = portrait;
+        mLandscape = landscape;
         notifyChanged();
     }
 
@@ -114,62 +108,26 @@ public final class LayoutOverviewPreference extends Preference {
                 ? new TextView[]{home, terminal, display} : new TextView[]{home, terminal};
             bindTrack(placesTrack, placesIndicator, tabs, indexOf(places, mSelectedPlace), index -> {
                 mSelectedPlace = places[index];
-                notifySelectionChanged();
+                if (mListener != null) mListener.onPlaceChanged(mSelectedPlace);
             });
         }
 
-        FrameLayout orientationTrack =
-            (FrameLayout) holder.findViewById(R.id.layout_overview_orientation_track);
-        View orientationIndicator = holder.findViewById(R.id.layout_overview_orientation_indicator);
-        TextView portrait = (TextView) holder.findViewById(R.id.layout_overview_orientation_portrait);
-        TextView landscape = (TextView) holder.findViewById(R.id.layout_overview_orientation_landscape);
-        if (orientationTrack != null && orientationIndicator != null
-            && portrait != null && landscape != null) {
-            PlaceOrientation[] orientations =
-                {PlaceOrientation.PORTRAIT, PlaceOrientation.LANDSCAPE};
-            TextView[] segments = {portrait, landscape};
-            bindTrack(orientationTrack, orientationIndicator, segments,
-                mSelectedOrientation == PlaceOrientation.LANDSCAPE ? 1 : 0, index -> {
-                    mSelectedOrientation = orientations[index];
-                    notifySelectionChanged();
-                });
-        }
-
-        mEditingLine = (TextView) holder.findViewById(R.id.layout_overview_editing);
-        updateEditingLine();
-
-        PlaceMiniatureView miniature =
-            (PlaceMiniatureView) holder.findViewById(R.id.layout_overview_miniature);
-        if (miniature != null) {
-            if (mLayout != null) miniature.setLayout(mLayout, mSelectedOrientation, mSelectedPlace);
-            miniature.setOnBlockTappedListener(block -> {
-                if (mListener != null) mListener.onBlockTapped(block);
-            });
-        }
+        bindMiniature(holder, R.id.layout_overview_miniature_portrait, PlaceOrientation.PORTRAIT,
+            mPortrait);
+        bindMiniature(holder, R.id.layout_overview_miniature_landscape, PlaceOrientation.LANDSCAPE,
+            mLandscape);
     }
 
-    private void notifySelectionChanged() {
-        updateEditingLine();
-        if (mListener != null) mListener.onSelectionChanged(mSelectedPlace, mSelectedOrientation);
-    }
-
-    /** Says which place and orientation the rows below now describe. */
-    private void updateEditingLine() {
-        if (mEditingLine == null) return;
-        mEditingLine.setText(getContext().getString(R.string.settings_layout_editing_format,
-            getContext().getString(placeLabel(mSelectedPlace)),
-            getContext().getString(mSelectedOrientation == PlaceOrientation.LANDSCAPE
-                ? R.string.settings_layout_orientation_landscape_lower
-                : R.string.settings_layout_orientation_portrait_lower)));
-    }
-
-    private static int placeLabel(@NonNull PaneWallPage place) {
-        switch (place) {
-            case WIDGETS: return R.string.settings_layout_tab_home;
-            case DISPLAY: return R.string.settings_layout_tab_display;
-            case TERMINAL:
-            default: return R.string.settings_layout_tab_terminal;
-        }
+    private void bindMiniature(@NonNull PreferenceViewHolder holder, int viewId,
+                               @NonNull PlaceOrientation orientation,
+                               @Nullable PlaceLayout layout) {
+        PlaceMiniatureView miniature = (PlaceMiniatureView) holder.findViewById(viewId);
+        if (miniature == null) return;
+        miniature.setLegendVisible(false);
+        if (layout != null) miniature.setLayout(layout, orientation, mSelectedPlace);
+        miniature.setOnBlockTappedListener(block -> {
+            if (mListener != null) mListener.onBlockTapped(block);
+        });
     }
 
     private interface IndexSelected {

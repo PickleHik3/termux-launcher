@@ -13201,7 +13201,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         R.string.settings_destination_layout,
                         com.termux.app.wall.PaneWallPage.WIDGETS.toolName(),
                         com.termux.app.fragments.settings.termux.LayoutPreferencesFragment
-                            .KEY_GRID_COLUMNS));
+                            .KEY_WIDGET_GRID));
             }
             @Override public void editWidgets() {
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();

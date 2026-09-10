@@ -177,6 +177,24 @@ public class PlaceMiniatureViewTest {
     }
 
     @Test
+    public void withoutALegendThePhoneTakesTheWholeView() {
+        // Narrow enough that the width, not the height, is what the phone has to fit inside.
+        PlaceMiniatureView view = sized(200, 400);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF withLegend = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        assertNotNull(withLegend);
+        assertNotNull(view.legendRect(PlaceMiniatureView.Block.STATUS_BAR));
+
+        view.setLegendVisible(false);
+        RectF alone = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        assertNotNull(alone);
+        assertNull("no legend row is laid out",
+            view.legendRect(PlaceMiniatureView.Block.STATUS_BAR));
+        assertTrue("the phone grew into the legend's width", alone.width() > withLegend.width());
+    }
+
+    @Test
     public void theAlphabetsRowIsIndependentOfTheAppsRow() {
         PlaceMiniatureView view = sized();
 
