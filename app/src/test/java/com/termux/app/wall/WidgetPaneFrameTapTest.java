@@ -50,11 +50,20 @@ public class WidgetPaneFrameTapTest {
     /** Where the pair is split: the middle of the gap between the two buttons. */
     private static final float TAB_SPLIT_DP = 39f;
 
-    /** What the page asked the launcher for, in order. */
+    /** What the page asked the launcher for, in order, over a 4 x 5 grid. */
     private static final class Calls implements WidgetPaneFrame.Host {
         final List<String> log = new ArrayList<>();
+        int columns = 4;
+        int rows = 5;
         @Override public void openWidgetGridSettings() { log.add("settings"); }
         @Override public void editWidgets() { log.add("edit"); }
+        @Override public int widgetGridColumns() { return columns; }
+        @Override public int widgetGridRows() { return rows; }
+        @Override public void setWidgetGrid(int newColumns, int newRows) {
+            columns = newColumns;
+            rows = newRows;
+            log.add("grid " + newColumns + "x" + newRows);
+        }
     }
 
     private static WidgetPaneFrame page(Activity activity) {
@@ -171,6 +180,32 @@ public class WidgetPaneFrameTapTest {
         tap(page, pencilX(activity), tabCentreY(activity));
 
         assertEquals(Arrays.asList("settings", "edit"), calls.log);
+    }
+
+    @Test
+    public void theEditingTabTakesTheCornerFromTheSettingsAndThePencil() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        Calls calls = new Calls();
+        page.setHost(calls);
+
+        // Editing brings the tab out on its own, and it is the grid's size that is in it now.
+        page.applyWidgetEditing(true);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
+        tap(page, cogX(activity), tabCentreY(activity));
+        tap(page, pencilX(activity), tabCentreY(activity));
+        assertEquals("neither the cog nor the pencil is on the editing tab",
+            Collections.emptyList(), calls.log);
+
+        // Leaving editing puts it away and gives the pair back.
+        page.applyWidgetEditing(false);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
+        tap(page, cogX(activity), tabCentreY(activity));
+        assertEquals("the editing tab retracted", Collections.emptyList(), calls.log);
+
+        tapBorder(page);
+        tap(page, cogX(activity), tabCentreY(activity));
+        assertEquals(Collections.singletonList("settings"), calls.log);
     }
 
     @Test

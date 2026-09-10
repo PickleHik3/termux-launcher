@@ -15,6 +15,11 @@
     <string name="widget_menu_remove_page">Remove page</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
+    <!-- The grid-size tab on the Widgets page while a widget is being edited: columns by rows. -->
+    <string name="widget_grid_size_tab">%1$d \u00d7 %2$d</string>
+    <string name="widget_grid_size_separator">\u00d7</string>
+    <string name="widget_grid_size_columns">Columns</string>
+    <string name="widget_grid_size_rows">Rows</string>
     <string name="launcher_widget_error">Widget couldn\'t load</string>
     <string name="settings_search_hint">Search settings</string>
     <string name="settings_search_contains">Contains: %1$s</string>

@@ -27,7 +27,9 @@ import com.termux.app.terminal.PaneSurfaceStyle;
  * keeps its app-widget host views across the move.
  *
  * <p>A tap on the page's border drops the same tab the Display page's border drops, with the
- * page's own two buttons: its settings, and the pencil that starts editing the widgets.
+ * page's own two buttons: its settings, and the pencil that starts editing the widgets. While a
+ * widget is being edited that pair is replaced by the grid's size, which opens the wheels that
+ * change it.
  */
 public final class WidgetPaneFrame extends PaneContentFrame {
 
@@ -37,6 +39,12 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         void openWidgetGridSettings();
         /** The pencil: start editing the widgets, exactly as the long-press menu does. */
         void editWidgets();
+        /** The columns the grid is showing now. */
+        int widgetGridColumns();
+        /** The rows the grid is showing now. */
+        int widgetGridRows();
+        /** A wheel moved: keep the grid this size, and reflow the page onto it. */
+        void setWidgetGrid(int columns, int rows);
     }
 
     /** A tap this close to the frame's edge, inside it, is for the page rather than for a widget. */
@@ -45,6 +53,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     /** The buttons the page's border tab carries. */
     private static final int ACTION_SETTINGS = 0;
     private static final int ACTION_EDIT = 1;
+    private static final int ACTION_GRID_SIZE = 2;
 
     /** nf-fa-cog and nf-fa-pencil. */
     private static final String GLYPH_SETTINGS = "";
@@ -56,6 +65,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     @Nullable private PaneSurfaceStyle mStyle;
     @Nullable private PaneControlsView mControls;
     @Nullable private Host mHost;
+    @Nullable private com.termux.app.launcher.widget.WidgetGridSizePopup mGridSizePopup;
+    private boolean mEditing;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
     private boolean mBorderPressed;
     private boolean mTouchMoved;
@@ -80,13 +91,13 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         // taps, so the view never stands between a finger and a widget.
         mControls = new PaneControlsView(getContext());
         mControls.setListener(this::runControl);
-        mControls.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
-            PaneControlsView.Action.glyph(ACTION_EDIT, GLYPH_EDIT));
         addView(mControls, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        applyRestingActions();
     }
 
     public void setHost(@Nullable Host host) {
         mHost = host;
+        refreshGridSizeAction();
     }
 
     @Nullable
@@ -94,15 +105,73 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         return mGrid;
     }
 
+    /**
+     * The widget edit session opened or closed. Editing, the corner reads out the grid's size
+     * instead of offering the settings and the pencil, and the tab comes out on its own — the
+     * user is already in the mode it belongs to. Leaving editing puts it away.
+     */
+    public void applyWidgetEditing(boolean editing) {
+        if (mEditing == editing) return;
+        mEditing = editing;
+        dismissGridSizePopup();
+        if (mControls == null) return;
+        if (editing) {
+            refreshGridSizeAction();
+            mControls.show();
+        } else {
+            applyRestingActions();
+            mControls.dismiss();
+        }
+    }
+
     /** Put the controls away, for a host that moved the wall on. */
     public void dismissControls() {
+        dismissGridSizePopup();
         if (mControls != null) mControls.dismiss();
     }
 
+    private void applyRestingActions() {
+        if (mControls == null) return;
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
+            PaneControlsView.Action.glyph(ACTION_EDIT, GLYPH_EDIT));
+    }
+
+    /** The read-out on the editing tab: the columns and rows the grid is showing. */
+    private void refreshGridSizeAction() {
+        if (mControls == null || !mEditing || mHost == null) return;
+        mControls.setActions(PaneControlsView.Action.label(ACTION_GRID_SIZE,
+            getContext().getString(R.string.widget_grid_size_tab,
+                mHost.widgetGridColumns(), mHost.widgetGridRows())));
+    }
+
     private void runControl(int id) {
+        if (id == ACTION_GRID_SIZE) {
+            openGridSizePopup();
+            return;
+        }
         if (mHost == null) return;
         if (id == ACTION_SETTINGS) mHost.openWidgetGridSettings();
         else if (id == ACTION_EDIT) mHost.editWidgets();
+    }
+
+    /** The wheels, hanging off the tab that opened them. */
+    private void openGridSizePopup() {
+        if (mHost == null || mControls == null) return;
+        dismissGridSizePopup();
+        android.graphics.RectF tab = new android.graphics.RectF();
+        mControls.tabBounds(tab);
+        mGridSizePopup = com.termux.app.launcher.widget.WidgetGridSizePopup.show(this, tab,
+            mHost.widgetGridColumns(), mHost.widgetGridRows(), (columns, rows) -> {
+                if (mHost != null) mHost.setWidgetGrid(columns, rows);
+                refreshGridSizeAction();
+            });
+    }
+
+    private void dismissGridSizePopup() {
+        if (mGridSizePopup != null) {
+            mGridSizePopup.dismiss();
+            mGridSizePopup = null;
+        }
     }
 
     /**
@@ -127,7 +196,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                 mPressedAction = action;
                 return true;
             }
-            mControls.dismiss();
+            // The editing tab is the mode's own chrome, so only leaving the mode puts it away.
+            if (!mEditing) mControls.dismiss();
         }
         if (isNearBorder(mDownX, mDownY)) {
             mBorderPressed = true;
@@ -151,12 +221,13 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                     if (mPressedAction != PaneControlsView.ACTION_NONE) {
                         if (mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
                             performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                            mControls.dismiss();
+                            // The wheels hang off the tab, so that one leaves it out.
+                            if (mPressedAction != ACTION_GRID_SIZE) mControls.dismiss();
                             mControls.activate(mPressedAction);
                         }
                     } else if (mBorderPressed) {
                         performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                        if (mControls.isControlsShown()) mControls.dismiss();
+                        if (mControls.isControlsShown()) dismissControls();
                         else mControls.show();
                     }
                 }
@@ -200,6 +271,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        dismissGridSizePopup();
         mRim.cancel();
     }
 }

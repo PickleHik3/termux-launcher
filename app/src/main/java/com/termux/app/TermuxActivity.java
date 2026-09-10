@@ -13124,6 +13124,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void editWidgets() {
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
             }
+            @Override public int widgetGridColumns() {
+                return placeLayout(com.termux.app.wall.PaneWallPage.WIDGETS,
+                    currentPlaceOrientation()).widgetColumns;
+            }
+            @Override public int widgetGridRows() {
+                return placeLayout(com.termux.app.wall.PaneWallPage.WIDGETS,
+                    currentPlaceOrientation()).widgetRows;
+            }
+            @Override public void setWidgetGrid(int columns, int rows) {
+                PlaceLayoutStore store = placeLayoutStore();
+                if (store == null) return;
+                PlaceOrientation orientation = currentPlaceOrientation();
+                store.setWidgetColumns(com.termux.app.wall.PaneWallPage.WIDGETS, orientation,
+                    columns);
+                store.setWidgetRows(com.termux.app.wall.PaneWallPage.WIDGETS, orientation, rows);
+                // The grid is drawn from the place's layout, so the same re-read the Layout
+                // page's sliders trigger is what reflows it here - no second path to applyGrid.
+                syncPlaceLayout();
+            }
         });
     }
 
@@ -13608,6 +13627,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void restoreWidgetSurfaceOrigin() {
                     if (mPaneWallController != null) {
                         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, false);
+                    }
+                }
+                @Override public void onWidgetEditSessionChanged(boolean editing) {
+                    // The page's border tab belongs to the mode: the grid's size while a widget
+                    // is being edited, the settings and the pencil otherwise.
+                    if (mPaneWallController != null && mPaneWallController.widgetsPage() != null) {
+                        mPaneWallController.widgetsPage().applyWidgetEditing(editing);
                     }
                 }
                 @Override public void onWidgetPageRendered() {
