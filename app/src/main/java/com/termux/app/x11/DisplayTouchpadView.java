@@ -95,7 +95,7 @@ public final class DisplayTouchpadView extends View {
     private int mMaxFingers;
     private boolean mOnBack;
     /** The last tap's time, for a touch soon after it that turns into a drag. */
-    private long mLastTapTime = Long.MIN_VALUE;
+    private long mLastTapTime = TouchpadGesturePolicy.NO_TAP;
     private boolean mTapDragArmed;
     private TouchpadGesturePolicy.TwoFingerMode mTwoFingerMode = TouchpadGesturePolicy.TwoFingerMode.UNDECIDED;
     /** The fingers' midpoint last seen, and where it was when the current count began. */
@@ -232,7 +232,8 @@ public final class DisplayTouchpadView extends View {
                 mSwipeFired = false;
                 mTwoFingerMode = TouchpadGesturePolicy.TwoFingerMode.UNDECIDED;
                 mOnBack = mBack.contains(mDownX, mDownY);
-                mTapDragArmed = !mOnBack && mDownTime - mLastTapTime <= TAP_DRAG_MS;
+                mTapDragArmed = !mOnBack
+                    && TouchpadGesturePolicy.tapDragArmed(mDownTime, mLastTapTime, TAP_DRAG_MS);
                 if (mVelocity == null) mVelocity = android.view.VelocityTracker.obtain();
                 else mVelocity.clear();
                 mVelocity.addMovement(event);
@@ -484,6 +485,12 @@ public final class DisplayTouchpadView extends View {
     @Override
     protected void onDetachedFromWindow() {
         removeCallbacks(mHold);
+        // A pad taken away mid-drag must not leave X holding the button.
+        if (mDragging) {
+            LorieView display = mSink.display();
+            if (display != null) display.sendMouseEvent(0f, 0f, InputStub.BUTTON_LEFT, false, true);
+            mDragging = false;
+        }
         stopFling();
         recycleVelocity();
         super.onDetachedFromWindow();

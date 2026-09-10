@@ -17,6 +17,20 @@ final class TouchpadGesturePolicy {
     /** Where three fingers went, once they have gone far enough to count. */
     enum Swipe { NONE, LEFT, RIGHT, UP, DOWN }
 
+    /** The value of "last tap" before any tap has landed. */
+    static final long NO_TAP = Long.MIN_VALUE;
+
+    /**
+     * Whether a finger landing at {@code downTime} came soon enough after the last left tap, at
+     * {@code lastTapTime}, to turn its travel into a drag. A pad that has never been tapped arms
+     * nothing: {@link #NO_TAP} is a marker, not a time, and subtracting it would wrap.
+     */
+    static boolean tapDragArmed(long downTime, long lastTapTime, long windowMs) {
+        if (lastTapTime == NO_TAP) return false;
+        long since = downTime - lastTapTime;
+        return since >= 0 && since <= windowMs;
+    }
+
     /** A tap's button by how many fingers made it: one left, two right, three or more middle. */
     static int tapButton(int fingers) {
         if (fingers >= 3) return InputStub.BUTTON_MIDDLE;

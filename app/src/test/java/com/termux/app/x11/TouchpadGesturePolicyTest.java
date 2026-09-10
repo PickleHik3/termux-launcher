@@ -1,6 +1,8 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.termux.app.x11.TouchpadGesturePolicy.Swipe;
 import com.termux.app.x11.TouchpadGesturePolicy.TwoFingerMode;
@@ -34,6 +36,16 @@ public class TouchpadGesturePolicyTest {
         assertEquals(Swipe.RIGHT, TouchpadGesturePolicy.swipe(45f, -44f, 40f));
         assertEquals(Swipe.UP, TouchpadGesturePolicy.swipe(5f, -60f, 40f));
         assertEquals(Swipe.DOWN, TouchpadGesturePolicy.swipe(0f, 41f, 40f));
+    }
+
+    @Test
+    public void tapDrag_armsOnlySoonAfterARealTap() {
+        // A pad nobody has tapped yet arms nothing: the marker is not a time to count from.
+        assertFalse(TouchpadGesturePolicy.tapDragArmed(123_456_789L, TouchpadGesturePolicy.NO_TAP, 280L));
+        assertTrue(TouchpadGesturePolicy.tapDragArmed(1_000L, 900L, 280L));
+        assertTrue(TouchpadGesturePolicy.tapDragArmed(1_280L, 1_000L, 280L));
+        assertFalse(TouchpadGesturePolicy.tapDragArmed(1_281L, 1_000L, 280L));
+        assertFalse(TouchpadGesturePolicy.tapDragArmed(900L, 1_000L, 280L));
     }
 
     @Test
