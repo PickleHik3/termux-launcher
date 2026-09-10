@@ -19,12 +19,18 @@ import com.termux.x11.LorieView;
  * The wall's Display page: the embedded X server's surface, wearing a terminal pane's rim, radius
  * and gap.
  *
- * <p>No glass slab — an X screen is opaque, so there is nothing to see through it. The rounded
- * corners are painted rather than clipped: a {@code SurfaceView}'s surface is composited outside
- * the view hierarchy, so no parent outline reaches it, and there is no public
+ * <p>It carries the same glass slab the panes and the Widgets page do, taken from the same
+ * {@link PaneSurfaceStyle}, so the Display place follows the Canvas surface with the rest of the
+ * wall. The slab sits behind the display: a {@code SurfaceView} punches its own rect out of the
+ * window while its surface is on screen, so the glass reads through the empty state and in the
+ * band the corners leave, and a running display covers it.
+ *
+ * <p>The rounded corners are painted rather than clipped: a {@code SurfaceView}'s surface is
+ * composited outside the view hierarchy, so no parent outline reaches it, and there is no public
  * {@code SurfaceView} corner radius at compileSdk 36 (checked, not assumed). The mask paints what
- * sits behind the page over the four arcs instead, and the surface fills the frame flush to its
- * rim so a maximised X window meets the same corners the panes have.
+ * sits behind the page over the four arcs instead — which is also what rounds the slab, since
+ * this frame cannot clip — and the surface fills the frame flush to its rim so a maximised X
+ * window meets the same corners the panes have.
  *
  * <p>While no server is running the page shows its empty state, which is where a home screen
  * rests: the launcher never starts a display on its own. A tap on the page's border drops the
@@ -65,6 +71,7 @@ public final class X11PaneFrame extends PaneContentFrame {
     private boolean mTouchMoved;
     private float mDownX, mDownY;
     @Nullable private LorieView mDisplay;
+    @Nullable private PaneGlassBackdropView mGlass;
     @Nullable private PaneGlassBackdropView mCornerMask;
     @Nullable private View mEmptyState;
     @Nullable private Host mHost;
@@ -97,12 +104,14 @@ public final class X11PaneFrame extends PaneContentFrame {
         // page is measured whether or not a display can run on it.
         com.termux.x11.LorieHost.primePrefs(getContext());
         mDisplay = findViewById(R.id.x11_display_view);
+        mGlass = findViewById(R.id.x11_pane_glass);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
         // The display is not registered as the pane's content on purpose: that clearance keeps a
         // terminal's text out of the arcs, but an X screen wants to fill the frame to its rim,
         // with the corner mask painting the arcs over it - not sit as a square inside a rounded
         // one.
+        PaneGlass.followLayout(mGlass);
         PaneGlass.followLayout(mCornerMask);
         View start = findViewById(R.id.x11_pane_start);
         if (start != null) start.setOnClickListener(v -> {
@@ -285,7 +294,6 @@ public final class X11PaneFrame extends PaneContentFrame {
         mRunning = running;
         if (mControls != null) mControls.setRunning(running);
         applyDisplaySurfaceVisibility();
-        if (mCornerMask != null) mCornerMask.setVisibility(running ? VISIBLE : GONE);
         if (mEmptyState != null) mEmptyState.setVisibility(running ? GONE : VISIBLE);
         if (running) return;
         // A server cannot start at all without the keyboard layouts, so say that here rather
@@ -411,16 +419,25 @@ public final class X11PaneFrame extends PaneContentFrame {
         boolean glass = PaneGlass.isActive(style);
         float radiusPx = glass
             ? PaneGlass.radiusPx(style, getResources().getDisplayMetrics().density) : 0f;
+        // The page's own slab, fed exactly as a pane's and the Widgets page's are. It stays
+        // dressed while a display runs — the surface simply covers it — so the page has the glass
+        // it should the moment the display stops, without a pass of its own to run then.
+        PaneGlass.apply(style, this, mGlass, radiusPx);
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
         // rounded outline, so a clipping frame cut away the very paint that rounds the surface,
-        // which no clip reaches. The page has no slab of its own to keep square, and the rim
-        // draws the rounded edge whichever way the frame is set.
+        // which no clip reaches. The slab is square for the same reason and the mask rounds it,
+        // and the rim draws the rounded edge whichever way the frame is set.
         setPaneShape(radiusPx, false);
         // Nothing keeps X windows out of the arcs: like any rounded desktop, the display clips
         // and a terminal that minds its corners pads its own window (kitty's
         // window_padding_width). Reserving the clearance in the window manager instead cost
         // every GUI app its flush edges for the sake of an unpadded terminal's corner glyphs.
         if (mCornerMask != null) {
+            // The arcs are the page's corners in both states — over the display's surface and
+            // over the slab behind its empty state — so the mask follows the radius, not the
+            // server. With no radius there is no arc to paint and a mask left showing would
+            // paint the wall over the whole page.
+            mCornerMask.setVisibility(radiusPx > 0f ? VISIBLE : GONE);
             mCornerMask.setCornerMaskRadius(radiusPx);
             // Behind the page is the wallpaper (or the surface base colour), never a pane's own
             // frost, so the mask is fed the frame and nothing else.

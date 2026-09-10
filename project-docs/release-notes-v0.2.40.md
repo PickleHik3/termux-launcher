@@ -17,6 +17,7 @@
 - Linux apps you install (`pkg install firefox`, say) appear in the app drawer with their icons and a small prompt badge. Tapping one starts the display if needed, opens the app full size and takes you there; they can be pinned and searched like Android apps. Switch the listing off in Display options.
 - While you are on the Display place the status bar lists the apps open on the display; tap one to bring it to the front.
 - Hold the display for a short menu at the bottom edge with Start or Stop and Display settings.
+- The Display place wears the same wallpaper blur, tint and grain as your terminal, so it matches the rest of the home screen while no display is running.
 - On the Display place the keyboard is the display's: every key and every chord, from the in-app keyboard or a hardware one, reaches the Linux program. Leave the display by swiping the status bar, tapping a place icon or pressing Home.
 - The Display place remembers whether the keyboard was up when you left it, and comes back that way.
 - Alt+Tab switches between windows on the display with the default window manager.
