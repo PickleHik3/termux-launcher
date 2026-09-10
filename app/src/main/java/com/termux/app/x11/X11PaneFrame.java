@@ -168,7 +168,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         mTouchMoved = false;
         mDownX = event.getX();
         mDownY = event.getY();
-        mShownAtDown = mControls != null && mControls.isControlsShown();
+        // The rail counts as out too: a tap anywhere else puts it away with the tab, and a tap
+        // on the tab alone must not leave it standing.
+        mShownAtDown = (mControls != null && mControls.isControlsShown())
+            || (mRail != null && mRail.isRailShown());
         if (mRail != null && mRail.hits(mDownX, mDownY)) {
             mRailPressed = true;
             mRail.beginDrag(mDownY);
@@ -205,7 +208,7 @@ public final class X11PaneFrame extends PaneContentFrame {
                     if (mPressedAction != PaneControlsView.ACTION_NONE) {
                         if (mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
                             performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
-                            mControls.dismiss();
+                            dismissControls();
                             mControls.activate(mPressedAction);
                         }
                     } else if (mBorderPressed) {
@@ -242,6 +245,8 @@ public final class X11PaneFrame extends PaneContentFrame {
                 mRailPressed = false;
                 mRail.dragTo(event.getY());
                 applyScaleStep(mRail.endDrag());
+                // Used, the rail goes away with the tab, as a tapped button does.
+                dismissControls();
                 return true;
             case android.view.MotionEvent.ACTION_CANCEL:
                 mRailPressed = false;
@@ -296,6 +301,32 @@ public final class X11PaneFrame extends PaneContentFrame {
         float band = BORDER_BAND_DP * getResources().getDisplayMetrics().density;
         if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) return false;
         return Math.min(Math.min(x, getWidth() - x), Math.min(y, getHeight() - y)) <= band;
+    }
+
+    /** Whether the border tab is out (or coming out). */
+    @androidx.annotation.VisibleForTesting
+    boolean isControlsTabShown() {
+        return mControls != null && mControls.isControlsShown();
+    }
+
+    /** Whether the scale rail is out (or coming out). */
+    @androidx.annotation.VisibleForTesting
+    boolean isScaleRailShown() {
+        return mRail != null && mRail.isRailShown();
+    }
+
+    /** The tab's buttons, for a test that has to find one to tap. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable
+    PaneControlsView controlsTab() {
+        return mControls;
+    }
+
+    /** The rail, for a test that has to find its track. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable
+    DisplayScaleRailView scaleRail() {
+        return mRail;
     }
 
     /** Put the controls away, for a host that moved the wall on. */
