@@ -13,6 +13,7 @@ import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
+import com.termux.app.wall.PaneControlsView;
 import com.termux.x11.LorieView;
 
 /**
@@ -58,9 +59,17 @@ public final class X11PaneFrame extends PaneContentFrame {
     /** A tap this close to the frame's edge, inside it, is for the page rather than for X. */
     private static final float BORDER_BAND_DP = 12f;
 
+    /** The buttons the page's border tab carries: power, and the display's settings. */
+    private static final int ACTION_POWER = 0;
+    private static final int ACTION_SETTINGS = 1;
+
+    /** nf-fa-power_off and nf-fa-cog. */
+    private static final String GLYPH_POWER = "\uf011";
+    private static final String GLYPH_SETTINGS = "\uf013";
+
     private final PaneRim mRim = new PaneRim();
-    @Nullable private DisplayControlsView mControls;
-    private int mPressedAction = DisplayControlsView.ACTION_NONE;
+    @Nullable private PaneControlsView mControls;
+    private int mPressedAction = PaneControlsView.ACTION_NONE;
     private boolean mBorderPressed;
     private boolean mTouchMoved;
     private float mDownX, mDownY;
@@ -112,10 +121,13 @@ public final class X11PaneFrame extends PaneContentFrame {
         });
         // The controls tab sits above everything, drawn only while shown; the frame itself
         // answers the taps, so the view never stands between a finger and X.
-        mControls = new DisplayControlsView(getContext());
-        mControls.setListener(new DisplayControlsView.Listener() {
-            @Override public void onPower() { if (mHost != null) mHost.toggleDisplayPower(); }
-            @Override public void onSettings() { if (mHost != null) mHost.openDisplaySettings(); }
+        mControls = new PaneControlsView(getContext());
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, GLYPH_POWER),
+            PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS));
+        mControls.setListener(id -> {
+            if (mHost == null) return;
+            if (id == ACTION_POWER) mHost.toggleDisplayPower();
+            else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });
         addView(mControls, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         applyRunning(false);
@@ -130,16 +142,16 @@ public final class X11PaneFrame extends PaneContentFrame {
     @Override
     public boolean onInterceptTouchEvent(@NonNull android.view.MotionEvent event) {
         if (event.getActionMasked() != android.view.MotionEvent.ACTION_DOWN) {
-            return mPressedAction != DisplayControlsView.ACTION_NONE || mBorderPressed;
+            return mPressedAction != PaneControlsView.ACTION_NONE || mBorderPressed;
         }
-        mPressedAction = DisplayControlsView.ACTION_NONE;
+        mPressedAction = PaneControlsView.ACTION_NONE;
         mBorderPressed = false;
         mTouchMoved = false;
         mDownX = event.getX();
         mDownY = event.getY();
         if (mControls != null && mControls.isControlsShown()) {
             int action = mControls.actionAt(mDownX, mDownY);
-            if (action != DisplayControlsView.ACTION_NONE) {
+            if (action != PaneControlsView.ACTION_NONE) {
                 mPressedAction = action;
                 return true;
             }
@@ -154,7 +166,7 @@ public final class X11PaneFrame extends PaneContentFrame {
 
     @Override
     public boolean onTouchEvent(@NonNull android.view.MotionEvent event) {
-        if (mPressedAction == DisplayControlsView.ACTION_NONE && !mBorderPressed) {
+        if (mPressedAction == PaneControlsView.ACTION_NONE && !mBorderPressed) {
             return super.onTouchEvent(event);
         }
         float slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
@@ -164,7 +176,7 @@ public final class X11PaneFrame extends PaneContentFrame {
                 return true;
             case android.view.MotionEvent.ACTION_UP:
                 if (mControls != null && !mTouchMoved) {
-                    if (mPressedAction != DisplayControlsView.ACTION_NONE) {
+                    if (mPressedAction != PaneControlsView.ACTION_NONE) {
                         if (mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
                             performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
                             mControls.dismiss();
@@ -176,11 +188,11 @@ public final class X11PaneFrame extends PaneContentFrame {
                         else mControls.show();
                     }
                 }
-                mPressedAction = DisplayControlsView.ACTION_NONE;
+                mPressedAction = PaneControlsView.ACTION_NONE;
                 mBorderPressed = false;
                 return true;
             case android.view.MotionEvent.ACTION_CANCEL:
-                mPressedAction = DisplayControlsView.ACTION_NONE;
+                mPressedAction = PaneControlsView.ACTION_NONE;
                 mBorderPressed = false;
                 return true;
             default:
@@ -234,7 +246,7 @@ public final class X11PaneFrame extends PaneContentFrame {
                 mWatchDownY = event.getY();
                 mWatchMoved = false;
                 boolean onControl = mControls != null && mControls.isControlsShown()
-                    && mControls.actionAt(mWatchDownX, mWatchDownY) != DisplayControlsView.ACTION_NONE;
+                    && mControls.actionAt(mWatchDownX, mWatchDownY) != PaneControlsView.ACTION_NONE;
                 mWatchIsDisplays = mRunning && !onControl
                     && !isNearBorder(mWatchDownX, mWatchDownY);
                 break;
@@ -283,7 +295,8 @@ public final class X11PaneFrame extends PaneContentFrame {
      */
     public void applyRunning(boolean running) {
         mRunning = running;
-        if (mControls != null) mControls.setRunning(running);
+        // The power glyph turns to the error colour while a display is running, as a close does.
+        if (mControls != null) mControls.setActionAlert(ACTION_POWER, running);
         applyDisplaySurfaceVisibility();
         if (mCornerMask != null) mCornerMask.setVisibility(running ? VISIBLE : GONE);
         if (mEmptyState != null) mEmptyState.setVisibility(running ? GONE : VISIBLE);
