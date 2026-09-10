@@ -35,7 +35,8 @@ import com.termux.x11.LorieView;
  *
  * <p>While no server is running the page shows its empty state, which is where a home screen
  * rests: the launcher never starts a display on its own. A tap on the page's border drops the
- * same two-button tab a pane's border does: power, and the display's settings.
+ * same two-button tab a pane's border does: power, and the display's settings — and, while a
+ * display runs, the scale rail along the page's leading edge.
  */
 public final class X11PaneFrame extends PaneContentFrame {
 
@@ -75,7 +76,10 @@ public final class X11PaneFrame extends PaneContentFrame {
 
     private final PaneRim mRim = new PaneRim();
     @Nullable private PaneControlsView mControls;
+    @Nullable private DisplayScaleRailView mRail;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
+    /** A finger on the rail's thumb, from its landing to its lift. */
+    private boolean mRailPressed;
     private boolean mBorderPressed;
     /** Whether the tab was out when the finger landed: a border tap puts it away, or brings it out. */
     private boolean mShownAtDown;
@@ -140,6 +144,9 @@ public final class X11PaneFrame extends PaneContentFrame {
             if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });
+        // The scale rail comes out with the tab, along the leading edge, while a display runs.
+        mRail = new DisplayScaleRailView(getContext());
+        addView(mRail, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(mControls, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         applyRunning(false);
     }
@@ -153,21 +160,27 @@ public final class X11PaneFrame extends PaneContentFrame {
     @Override
     public boolean onInterceptTouchEvent(@NonNull android.view.MotionEvent event) {
         if (event.getActionMasked() != android.view.MotionEvent.ACTION_DOWN) {
-            return mPressedAction != PaneControlsView.ACTION_NONE || mBorderPressed;
+            return mPressedAction != PaneControlsView.ACTION_NONE || mBorderPressed || mRailPressed;
         }
         mPressedAction = PaneControlsView.ACTION_NONE;
         mBorderPressed = false;
+        mRailPressed = false;
         mTouchMoved = false;
         mDownX = event.getX();
         mDownY = event.getY();
         mShownAtDown = mControls != null && mControls.isControlsShown();
+        if (mRail != null && mRail.hits(mDownX, mDownY)) {
+            mRailPressed = true;
+            mRail.beginDrag(mDownY);
+            return true;
+        }
         if (mShownAtDown) {
             int action = mControls.actionAt(mDownX, mDownY);
             if (action != PaneControlsView.ACTION_NONE) {
                 mPressedAction = action;
                 return true;
             }
-            mControls.dismiss();
+            dismissControls();
         }
         if (isNearBorder(mDownX, mDownY)) {
             mBorderPressed = true;
@@ -178,6 +191,7 @@ public final class X11PaneFrame extends PaneContentFrame {
 
     @Override
     public boolean onTouchEvent(@NonNull android.view.MotionEvent event) {
+        if (mRailPressed) return onRailTouch(event);
         if (mPressedAction == PaneControlsView.ACTION_NONE && !mBorderPressed) {
             return super.onTouchEvent(event);
         }
@@ -196,8 +210,8 @@ public final class X11PaneFrame extends PaneContentFrame {
                         }
                     } else if (mBorderPressed) {
                         performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
-                        if (mShownAtDown) mControls.dismiss();
-                        else mControls.show();
+                        if (mShownAtDown) dismissControls();
+                        else showControls();
                     }
                 }
                 mPressedAction = PaneControlsView.ACTION_NONE;
@@ -212,6 +226,72 @@ public final class X11PaneFrame extends PaneContentFrame {
         }
     }
 
+    /** The thumb follows the finger stop by stop, with a tick at each; the lift applies the stop. */
+    private boolean onRailTouch(@NonNull android.view.MotionEvent event) {
+        if (mRail == null) {
+            mRailPressed = false;
+            return true;
+        }
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (mRail.dragTo(event.getY())) {
+                    performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+                }
+                return true;
+            case android.view.MotionEvent.ACTION_UP:
+                mRailPressed = false;
+                mRail.dragTo(event.getY());
+                applyScaleStep(mRail.endDrag());
+                return true;
+            case android.view.MotionEvent.ACTION_CANCEL:
+                mRailPressed = false;
+                mRail.cancelDrag();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /**
+     * Write the stop into the display's own store — the one its settings page and
+     * {@code termux-x11-preference} write — and tell the running display, which re-lays its
+     * screen at the new size at once. 100 is the screen's own pixels; the rest is the scaled mode.
+     */
+    private void applyScaleStep(int step) {
+        com.termux.x11.Prefs prefs = prefsOrNull();
+        if (prefs == null) return;
+        String mode = DisplayScaleSteps.modeFor(step);
+        if (DisplayScaleSteps.MODE_SCALED.equals(mode)) prefs.displayScale.put(step);
+        prefs.displayResolutionMode.put(mode);
+        android.content.Intent intent =
+            new android.content.Intent(com.termux.x11.LoriePreferences.ACTION_PREFERENCES_CHANGED);
+        intent.putExtra("key", "displayResolutionMode");
+        intent.setPackage(getContext().getPackageName());
+        getContext().sendBroadcast(intent);
+    }
+
+    /** The tab, and the rail with it while a display runs, reading the stop the store holds. */
+    private void showControls() {
+        if (mControls != null) mControls.show();
+        if (mRail == null || !mRunning) return;
+        com.termux.x11.Prefs prefs = prefsOrNull();
+        if (prefs != null) {
+            mRail.setStep(DisplayScaleSteps.fromPreferences(
+                prefs.displayResolutionMode.get(), prefs.displayScale.get()));
+        }
+        mRail.show();
+    }
+
+    /** The display's store, or null on a page no host has attached to yet. */
+    @Nullable
+    private static com.termux.x11.Prefs prefsOrNull() {
+        try {
+            return com.termux.x11.LorieHost.getPrefs();
+        } catch (IllegalStateException e) {
+            return null;
+        }
+    }
+
     private boolean isNearBorder(float x, float y) {
         float band = BORDER_BAND_DP * getResources().getDisplayMetrics().density;
         if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) return false;
@@ -221,6 +301,7 @@ public final class X11PaneFrame extends PaneContentFrame {
     /** Put the controls away, for a host that moved the wall on. */
     public void dismissControls() {
         if (mControls != null) mControls.dismiss();
+        if (mRail != null) mRail.dismiss();
     }
 
     public void setHost(@Nullable Host host) {
@@ -259,6 +340,7 @@ public final class X11PaneFrame extends PaneContentFrame {
                 mWatchMoved = false;
                 boolean onControl = mControls != null && mControls.isControlsShown()
                     && mControls.actionAt(mWatchDownX, mWatchDownY) != PaneControlsView.ACTION_NONE;
+                onControl |= mRail != null && mRail.hits(mWatchDownX, mWatchDownY);
                 mWatchIsDisplays = mRunning && !onControl
                     && !isNearBorder(mWatchDownX, mWatchDownY);
                 break;
@@ -312,6 +394,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         applyDisplaySurfaceVisibility();
         if (mEmptyState != null) mEmptyState.setVisibility(running ? GONE : VISIBLE);
         if (running) return;
+        // Nothing to scale once the display is gone.
+        if (mRail != null) mRail.dismiss();
         // A server cannot start at all without the keyboard layouts, so say that here rather
         // than letting the user find an Xorg error in their shell.
         boolean ready = X11CliInstaller.hasKeyboardData();
