@@ -241,6 +241,7 @@
     <string name="settings_x11_keyboard_follows_text_unavailable">Available in Touchscreen touch mode.</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
     <string name="settings_x11_scale_title">Scale</string>
+    <string name="settings_x11_filtering_title">Scaling</string>
     <string name="settings_x11_resolution_exact_title">Fixed size</string>
     <string name="settings_x11_resolution_custom_title">Custom size</string>
     <string name="settings_x11_resolution_custom_summary">Width by height, such as 1280x720.</string>

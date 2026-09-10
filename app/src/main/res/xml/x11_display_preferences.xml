@@ -40,6 +40,13 @@
             app:seekBarIncrement="10"
             app:showSeekBarValue="true" />
         <ListPreference
+            app:key="displayFilteringMode"
+            app:title="@string/settings_x11_filtering_title"
+            android:defaultValue="bilinear"
+            app:entries="@array/x11_filtering_entries"
+            app:entryValues="@array/x11_filtering_values"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
             app:key="displayResolutionExact"
             app:title="@string/settings_x11_resolution_exact_title"
             android:defaultValue="1280x1024"

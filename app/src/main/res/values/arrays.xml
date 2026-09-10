@@ -192,6 +192,14 @@
         <item>2</item>
         <item>3</item>
     </string-array>
+    <string-array name="x11_filtering_entries">
+        <item>Smooth</item>
+        <item>Sharp</item>
+    </string-array>
+    <string-array name="x11_filtering_values">
+        <item>bilinear</item>
+        <item>nearest</item>
+    </string-array>
     <string-array name="x11_resolution_mode_entries">
         <item>Same as the screen</item>
         <item>Scaled</item>
