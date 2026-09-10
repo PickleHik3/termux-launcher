@@ -97,7 +97,9 @@ A swipe that starts on the window pills scrolls those, and only those. When the 
 or the strip already rests at the end you pull past, the swipe moves the wall instead.
 
 The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
-a widget to move or resize it, and swipe inside the grid to reach its other pages. The in-app
+a widget to move or resize it, and swipe inside the grid to reach its other pages. Drop a widget on
+top of others and they slide aside into free space on the page; when there is no room for them the
+widget takes the nearest free spot instead, as before. The in-app
 keyboard goes away while you are on Widgets — nothing there takes typing — and comes back with the
 terminal.
 

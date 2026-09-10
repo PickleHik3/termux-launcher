@@ -9,6 +9,7 @@
 - Go to Widgets, Go to Terminal and Go to Display are actions you can put on the extra-keys row, on the in-app keyboard or on a key chord.
 - The terminal never changes size when you move between places, and the other two places sit inside the same frame as the terminal.
 - Widgets are laid out for the room they really have, so wide widgets no longer lose their edges.
+- Drag a widget onto others and they move aside to make room, so rearranging a page no longer means clearing a spot first.
 
 ### Linux display
 
