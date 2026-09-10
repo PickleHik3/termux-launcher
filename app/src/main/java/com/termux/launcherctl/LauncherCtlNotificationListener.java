@@ -476,17 +476,29 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         }
         if (active != null) {
             List<StatusBarNotification> sorted = new ArrayList<>();
+            Set<String> groupsWithChildren = new HashSet<>();
             for (StatusBarNotification sbn : active) {
                 if (sbn == null || sbn.getNotification() == null) continue;
                 activeKeys.add(sbn.getKey());
                 sorted.add(sbn);
+                if (!isGroupSummary(sbn) && sbn.getGroupKey() != null) {
+                    groupsWithChildren.add(sbn.getGroupKey());
+                }
             }
             if (!rules.isEmpty()) {
                 sorted.sort(Comparator.comparingLong(StatusBarNotification::getPostTime));
+                Set<String> seenContent = new HashSet<>();
                 for (StatusBarNotification sbn : sorted) {
                     if (mUnpinned.contains(sbn.getKey())) continue;
+                    // A group summary repeats what its children already say: chat apps post one
+                    // beside every message, which would pin the same message twice.
+                    if (isGroupSummary(sbn) && groupsWithChildren.contains(sbn.getGroupKey())) {
+                        continue;
+                    }
                     PinnedNotification pin = toPinnedNotification(sbn, rules);
-                    if (pin != null) matched.put(pin.key, pin);
+                    if (pin == null) continue;
+                    if (!seenContent.add(contentSignature(pin))) continue;
+                    matched.put(pin.key, pin);
                 }
             }
         }
@@ -504,6 +516,16 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         mPinned.clear();
         for (PinnedNotification pin : ordered) mPinned.put(pin.key, pin);
         TopPaneFeed.setPinned(ordered);
+    }
+
+    private static boolean isGroupSummary(@NonNull StatusBarNotification sbn) {
+        return (sbn.getNotification().flags & Notification.FLAG_GROUP_SUMMARY) != 0;
+    }
+
+    /** Two pins reading exactly the same are one message seen twice, whatever their keys. */
+    @NonNull
+    private static String contentSignature(@NonNull PinnedNotification pin) {
+        return pin.packageName + '\n' + pin.sender + '\n' + pin.body;
     }
 
     @Nullable
