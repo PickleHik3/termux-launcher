@@ -11,10 +11,16 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
- * Launcher-owned widget edit chrome drawn over the whole pane: selection frame, per-axis resize
- * handles, a remove chip, and the snap-target ghost shown while a move drag is live. All input
- * on this overlay is consumed; a press outside the frame dismisses edit mode.
+ * Launcher-owned widget edit chrome drawn over the whole pane: the selected widget's frame with
+ * per-axis resize handles and a remove chip, a thin outline around every other widget on the page
+ * so the whole page reads as editable, and the snap-target ghost shown while a move drag is live.
+ * All input on this overlay is consumed; a press on an outlined widget moves the selection there,
+ * a press on empty space dismisses edit mode.
  */
 public final class WidgetEditOverlayView extends View {
     public interface Listener {
@@ -24,12 +30,29 @@ public final class WidgetEditOverlayView extends View {
         void onResizeDrag(@NonNull WidgetEditPolicy.Handle handle, int desiredEdgePx);
         void onResizeDragEnd();
         void onRemove();
+        /**
+         * A press landed on one of the outlined widgets. The selection moves there and this same
+         * finger carries on as its move drag, exactly as a long-press on it would have.
+         */
+        void onSelectWidget(int appWidgetId, float rawX, float rawY);
         void onDismiss();
+    }
+
+    /** One editable widget other than the selected one: what to outline, and what it belongs to. */
+    public static final class Outline {
+        public final int appWidgetId;
+        @NonNull public final Rect bounds;
+
+        public Outline(int appWidgetId, @NonNull Rect bounds) {
+            this.appWidgetId = appWidgetId;
+            this.bounds = new Rect(bounds);
+        }
     }
 
     private enum Mode { NONE, MOVE, RESIZE, CHIP }
 
     private final Paint framePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint outlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint handlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint handleRingPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ghostStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -38,6 +61,7 @@ public final class WidgetEditOverlayView extends View {
     private final Paint chipCrossPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private final Rect frame = new Rect();
+    @NonNull private List<Outline> outlines = Collections.emptyList();
     @Nullable private Rect ghost;
     private boolean frameVisible;
     private boolean dragging;
@@ -56,6 +80,10 @@ public final class WidgetEditOverlayView extends View {
         framePaint.setStyle(Paint.Style.STROKE);
         framePaint.setStrokeWidth(dp(2f));
         framePaint.setColor(0xE6FFFFFF);
+        // The same stroke family as the frame, thinner and dimmer: editable, not selected.
+        outlinePaint.setStyle(Paint.Style.STROKE);
+        outlinePaint.setStrokeWidth(dp(1.5f));
+        outlinePaint.setColor(0x59FFFFFF);
         handlePaint.setStyle(Paint.Style.FILL);
         handlePaint.setColor(0xFFFFFFFF);
         handleRingPaint.setStyle(Paint.Style.STROKE);
@@ -77,6 +105,17 @@ public final class WidgetEditOverlayView extends View {
     public void setListener(@Nullable Listener value) { listener = value; }
 
     public void show(@NonNull Rect frameBounds, boolean horizontal, boolean vertical) {
+        show(frameBounds, horizontal, vertical, Collections.emptyList());
+    }
+
+    /**
+     * The selected widget's frame plus the other widgets on the page, which are outlined and can
+     * take the selection with one press. Every session hands over the whole set, so an outline can
+     * never outlive the layout it was measured from.
+     */
+    public void show(@NonNull Rect frameBounds, boolean horizontal, boolean vertical,
+                     @NonNull List<Outline> others) {
+        outlines = others.isEmpty() ? Collections.emptyList() : new ArrayList<>(others);
         frame.set(frameBounds);
         horizontalResizable = horizontal;
         verticalResizable = vertical;
@@ -91,6 +130,7 @@ public final class WidgetEditOverlayView extends View {
         frameVisible = false;
         dragging = false;
         ghost = null;
+        outlines = Collections.emptyList();
         mode = Mode.NONE;
         setVisibility(GONE);
     }
@@ -108,6 +148,9 @@ public final class WidgetEditOverlayView extends View {
 
     @NonNull public Rect frameBounds() { return new Rect(frame); }
 
+    /** The widgets drawn as editable-but-unselected, in the order the page holds them. */
+    @NonNull public List<Outline> outlines() { return Collections.unmodifiableList(outlines); }
+
     public void setGhostBounds(@Nullable Rect bounds) {
         ghost = bounds == null ? null : new Rect(bounds);
         invalidate();
@@ -122,8 +165,11 @@ public final class WidgetEditOverlayView extends View {
             canvas.drawRoundRect(ghostRect, radius, radius, ghostStrokePaint);
         }
         if (dragging) return;
-        RectF frameRect = new RectF(frame);
         float radius = dp(14f);
+        for (Outline outline : outlines) {
+            canvas.drawRoundRect(new RectF(outline.bounds), radius, radius, outlinePaint);
+        }
+        RectF frameRect = new RectF(frame);
         canvas.drawRoundRect(frameRect, radius, radius, framePaint);
         float handleRadius = dp(5f);
         if (horizontalResizable) {
@@ -181,8 +227,20 @@ public final class WidgetEditOverlayView extends View {
                     mode = Mode.MOVE;
                     if (listener != null) listener.onMoveDragStart(event.getRawX(), event.getRawY());
                 } else {
-                    mode = Mode.NONE;
-                    if (listener != null) listener.onDismiss();
+                    Outline pressed = hitOutline(x, y);
+                    if (pressed == null) {
+                        mode = Mode.NONE;
+                        if (listener != null) listener.onDismiss();
+                    } else {
+                        // The selection moves under the finger and the stream stays a move drag,
+                        // so a press that travels drags the newly selected widget and a press
+                        // that does not simply leaves it selected.
+                        mode = Mode.MOVE;
+                        if (listener != null) {
+                            listener.onSelectWidget(pressed.appWidgetId,
+                                event.getRawX(), event.getRawY());
+                        }
+                    }
                 }
                 return true;
             case MotionEvent.ACTION_MOVE:
@@ -208,6 +266,14 @@ public final class WidgetEditOverlayView extends View {
             default:
                 return true;
         }
+    }
+
+    @Nullable private Outline hitOutline(float x, float y) {
+        int px = Math.round(x), py = Math.round(y);
+        for (Outline outline : outlines) {
+            if (outline.bounds.contains(px, py)) return outline;
+        }
+        return null;
     }
 
     private boolean hitChip(float x, float y) {

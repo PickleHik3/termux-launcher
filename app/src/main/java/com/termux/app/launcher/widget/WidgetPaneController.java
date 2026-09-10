@@ -345,12 +345,22 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 exitEditMode();
                 widgets.removeWidget(appWidgetId);
             }
+            @Override public void onSelectWidget(int appWidgetId, float rawX, float rawY) {
+                if (edit != null && edit.appWidgetId == appWidgetId) return;
+                enterEditMode(appWidgetId, rawX, rawY);
+            }
             @Override public void onDismiss() { exitEditMode(); }
         };
 
+    /**
+     * Selects a widget with the finger already down on it: a long-press on a widget outside edit
+     * mode, or a press on one of the outlined widgets while a session is open.
+     */
     private void enterEditMode(int appWidgetId, float rawX, float rawY) {
+        // Anything the outgoing selection was previewing belongs to a plan that is now over.
+        clearDisplacementPreview(false);
         if (!beginEditSession(appWidgetId)) return;
-        // The long-press finger is still down: this same gesture continues as a move drag.
+        // The finger is still down: this same gesture continues as a move drag.
         beginMoveDrag(rawX, rawY);
         pane.widgetEditOverlay().setDragging(true);
     }
@@ -379,9 +389,24 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit = new EditState(appWidgetId, minColumns, minRows, horizontal, vertical);
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         overlay.setListener(overlayListener);
-        overlay.show(paneBounds(record.cell), horizontal, vertical);
+        overlay.show(paneBounds(record.cell), horizontal, vertical, editableOutlines(appWidgetId));
         syncEditSession();
         return true;
+    }
+
+    /**
+     * The rest of the page, outlined so edit mode reads as page-wide and one press can take the
+     * selection anywhere. Measured here because every session — a pencil, a long-press, the chrome
+     * restored after a render — comes through this method, so the outlines can never lag the grid.
+     */
+    @NonNull private List<WidgetEditOverlayView.Outline> editableOutlines(int selectedId) {
+        List<WidgetEditOverlayView.Outline> outlines = new ArrayList<>();
+        for (LauncherWidgetRecord other : widgets.repository().recordsOnPage(currentPage)) {
+            if (other.appWidgetId == selectedId) continue;
+            outlines.add(new WidgetEditOverlayView.Outline(other.appWidgetId,
+                paneBounds(other.cell)));
+        }
+        return outlines;
     }
 
     private void exitEditMode() {
