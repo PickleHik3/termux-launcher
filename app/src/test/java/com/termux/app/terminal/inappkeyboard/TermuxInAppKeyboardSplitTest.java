@@ -1,6 +1,7 @@
 package com.termux.app.terminal.inappkeyboard;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -8,6 +9,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Rect;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -143,6 +145,59 @@ public class TermuxInAppKeyboardSplitTest {
             + portrait + " -> " + landscape, landscape > portrait);
         assertEquals(mPreferences.getInAppKeyboardSplitGapFraction()
             * (viewKeyboard().keysWidth - landscape), landscape, EPS);
+    }
+
+    @Test
+    public void aMinimumPartingWidensTheHalvesAndGivesTheUsersGapBack() {
+        mController.onKeyboardFormChanged(PlaceLayout.KeyboardForm.SPLIT);
+        measureKeyboard();
+        float own = keyboardView().getSplitGapUnits();
+        Rect ownGap = gapBounds();
+
+        assertTrue("the halves move for it", mController.setMinimumSplitGapPx(400));
+        measureKeyboard();
+
+        float wide = keyboardView().getSplitGapUnits();
+        assertTrue("a minimum parts further than the user's gap: " + own + " -> " + wide,
+            wide > own);
+        Rect wideGap = gapBounds();
+        assertTrue("the parting measures the minimum across: " + wideGap.width(),
+            wideGap.width() >= 399);
+        assertTrue("both halves shrink toward the edges", wideGap.left < ownGap.left);
+
+        assertFalse("asking for the same minimum again moves nothing",
+            mController.setMinimumSplitGapPx(400));
+
+        assertTrue("releasing it moves the halves back",
+            mController.setMinimumSplitGapPx(0));
+        measureKeyboard();
+        assertEquals(own, keyboardView().getSplitGapUnits(), EPS);
+        assertEquals(ownGap.width(), gapBounds().width());
+    }
+
+    @Test
+    public void aMinimumPartingIsIgnoredByEveryTypeButSplit() {
+        measureKeyboard();
+        KeyboardData docked = viewKeyboard();
+
+        assertFalse(mController.setMinimumSplitGapPx(400));
+
+        assertSame(docked, viewKeyboard());
+        assertEquals(0f, keyboardView().getSplitGapUnits(), EPS);
+    }
+
+    /** The keyboard laid out 1200px wide: the parting is asked for in the view's own pixels. */
+    private void measureKeyboard() {
+        Keyboard2View view = keyboardView();
+        view.measure(View.MeasureSpec.makeMeasureSpec(1200, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.AT_MOST));
+        view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
+    }
+
+    private Rect gapBounds() {
+        Rect gap = new Rect();
+        assertTrue("the keyboard reports a parting", keyboardView().getSplitGapBounds(gap));
+        return gap;
     }
 
     private Keyboard2View keyboardView() {

@@ -135,6 +135,20 @@ fails when the catalogue has gone stale.
   (`onTouch` returns false) a press that starts in the parting, so the press
   reaches whatever the keyboard is over. Both are inert at gap zero, which is
   the docked keyboard.
+- Parting asked for in pixels (local addition):
+  `SplitLayout.gapUnitsForPx`/`commonGapUnitsForPx` with `MAX_GAP_FRACTION`, the
+  `LayoutModifier.commonGapUnitsForPx` delegate, and
+  `Keyboard2View.getKeyContentWidthPx`/`splitSlabRadiusPx`. The launcher stands
+  its mouse-mode touchpad in the parting and needs a floor on it in dp, but the
+  parting is stored in key-width units and parting widens the keyboard, so the
+  units that buy a pixel shrink as the gap grows; `gapUnitsForPx` inverts that,
+  and `commonGapUnitsForPx` adds back what the common band loses to rows parting
+  at different key boundaries (a fixed offset, so one correction is exact). The
+  ask is capped at half the width so both halves keep their keys.
+  `getKeyContentWidthPx` is the width the keys are laid out across, which is what
+  the conversion is measured against; `splitSlabRadiusPx` is the corner radius
+  `drawSplitBackground` gives the run slabs, so a host panel standing in the
+  parting takes the same shape.
 - Stateful suggestion labels have no global provider and render empty.
 - Tap correction hook (local addition): `Keyboard2View.TapResolver` plus
   `setTapResolver`, and the new file `TapGeometry.java`. At `ACTION_DOWN` the

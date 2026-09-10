@@ -60,6 +60,8 @@ public class Keyboard2View extends View
   private int _heightCapReferencePx;
 
   private float _keyWidth;
+  /** The width the keys are laid out across: the measured view less its own side margins. */
+  private float _keyContentWidth;
   private float _mainLabelSize;
   private float _subLabelSize;
   private float _marginRight;
@@ -629,6 +631,27 @@ public class Keyboard2View extends View
       return false;
     out.set(left, 0, right, height);
     return true;
+  }
+
+  /**
+   * The width the keys are laid out across, in px: the measured view less its own side margins.
+   * Zero until the view has been measured once. A host converting a parting between pixels and
+   * key-width units measures it against this, not against the view's width.
+   */
+  public float getKeyContentWidthPx()
+  {
+    return _keyContentWidth;
+  }
+
+  /**
+   * The corner radius of the slabs {@link #drawSplitBackground} paints under the key runs, in
+   * px. Square: the slabs reach the view's edges and meet each other vertically, so a radius
+   * would only round the parting's inner edges. A host standing a panel in the parting reads
+   * it from here, so the three surfaces stay one shape.
+   */
+  public static float splitSlabRadiusPx()
+  {
+    return SPLIT_SLAB_RADIUS_PX;
   }
 
   /** Scales both horizontal and vertical gaps without replacing immutable Config. */
@@ -1220,6 +1243,7 @@ public class Keyboard2View extends View
     _marginRight = getPaddingRight() + _config.horizontalMarginPx;
     _marginBottom = getPaddingBottom() + _config.bottomMarginPx;
     float contentWidth = Math.max(0f, width - _marginLeft - _marginRight);
+    _keyContentWidth = contentWidth;
     _keyWidth = contentWidth / _keyboard.keysWidth;
 
     float fixedHeight = getPaddingTop() + _config.marginTopPx + _marginBottom;
@@ -1277,6 +1301,9 @@ public class Keyboard2View extends View
     Vertical.BOTTOM
   };
 
+  /** The radius the run slabs are drawn with; {@link #splitSlabRadiusPx} is how a host reads it. */
+  private static final float SPLIT_SLAB_RADIUS_PX = 0f;
+
   /**
    * The keyboard background of a split keyboard: one slab under each run of keys, so the parting
    * between the halves is left clear. Slabs meet vertically and reach both view edges, so the
@@ -1302,14 +1329,16 @@ public class Keyboard2View extends View
         float keyLeft = x + key.shift * _keyWidth;
         if (keyIndex > 0 && SplitLayout.startsRun(key, _splitGapUnits))
         {
-          canvas.drawRect(runLeft, top, runRight, bottom, _splitBackgroundPaint);
+          canvas.drawRoundRect(runLeft, top, runRight, bottom,
+              SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
           runLeft = keyLeft;
         }
         x = keyLeft + key.width * _keyWidth;
         runRight = x;
       }
       if (runRight > runLeft)
-        canvas.drawRect(runLeft, top, getWidth(), bottom, _splitBackgroundPaint);
+        canvas.drawRoundRect(runLeft, top, getWidth(), bottom,
+            SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
     }
   }
 

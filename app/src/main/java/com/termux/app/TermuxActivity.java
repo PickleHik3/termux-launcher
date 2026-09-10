@@ -8409,6 +8409,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A fresh keyboard view drops the touchpad that was over the old one; put it back.
             if (mDisplayTouchpad != null) {
                 mDisplayTouchpad = null;
+                releaseDisplayTouchpadWait();
+                mDisplayTouchpadWaitRound = 0;
                 host.post(TermuxActivity.this::syncDisplayTouchpad);
             }
         }
@@ -8420,6 +8422,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 host.removeAllViews();
             mAttachedInAppKeyboardView = null;
             mDisplayTouchpad = null;
+            releaseDisplayTouchpadWait();
+            mDisplayTouchpadWaitRound = 0;
             mKeyboardGeometry.discardMeasuredHeight();
         }
 
@@ -13399,6 +13403,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean mMouseMode;
     @Nullable private com.termux.app.x11.DisplayTouchpadView mDisplayTouchpad;
+    /** The keyboard layout the pad follows, held so a second attach does not stack another. */
+    @Nullable private View.OnLayoutChangeListener mDisplayTouchpadFollower;
+    /** Set while the pad is waiting out a keyboard layout before it is attached. */
+    @Nullable private DisplayTouchpadWait mDisplayTouchpadWait;
+    /** Layouts waited out in a row; the pad is attached anyway once it reaches the cap. */
+    private int mDisplayTouchpadWaitRound;
 
     /** Flip mouse mode; returns the new state. The mark at the end of the stats is the announcement. */
     boolean toggleMouseMode() {
@@ -13456,11 +13466,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         FrameLayout host = findViewById(R.id.inapp_keyboard_view_host);
         boolean wanted = mMouseMode && isDisplayPageShowing() && isEmbeddedDisplayRunning()
             && mInAppKeyboard != null && host != null;
+        float density = getResources().getDisplayMetrics().density;
+        // The pad stands in a split keyboard's parting, so while it is wanted the keyboard parts
+        // wide enough to point in and both halves shrink toward the edges; mouse mode off gives
+        // the user's own parting back. A parting that moved is a relayout the pad has to wait
+        // for before it can be sized to it.
+        boolean parting = mInAppKeyboard != null && mInAppKeyboard.setMinimumSplitGapPx(
+            wanted ? com.termux.app.x11.DisplayTouchpadPlacement.minimumGapPx(density) : 0);
         com.termux.app.x11.DisplayTouchpadView pad = mDisplayTouchpad;
         long duration = com.termux.app.terminal.Motion.FLOAT_DEPTH_MS;
         android.view.animation.Interpolator settle = com.termux.app.terminal.Motion.settle();
         boolean reduced = isReducedMotionEnabled();
         if (!wanted) {
+            releaseDisplayTouchpadWait();
+            mDisplayTouchpadWaitRound = 0;
             if (pad == null) return;
             final com.termux.app.x11.DisplayTouchpadView leaving = pad;
             mDisplayTouchpad = null;
@@ -13510,25 +13529,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             pad.setListener(() -> setMouseMode(false));
             mDisplayTouchpad = pad;
         }
-        if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
         // The keyboard's frame is the pad's: the host wraps its content, so a match-parent pad
         // would take every pixel above the keyboard instead of the keyboard's own room. Over a
         // split keyboard that frame is the parting between the two halves.
         View keyboardView = mAttachedInAppKeyboardView;
+        // A keyboard that has not been laid out has no parting to report, and one that has just
+        // been asked to part wider has not reported the new one yet. Wait that layout out rather
+        // than standing the pad over the whole frame, and putting the keys out, for a frame.
+        if (keyboardView != null && (parting || !keyboardView.isLaidOut())
+            && mDisplayTouchpadWaitRound < MAX_DISPLAY_TOUCHPAD_WAITS) {
+            if (mDisplayTouchpadWait == null || !mDisplayTouchpadWait.follows(keyboardView)) {
+                releaseDisplayTouchpadWait();
+                mDisplayTouchpadWaitRound++;
+                mDisplayTouchpadWait = new DisplayTouchpadWait(keyboardView);
+            }
+            return;
+        }
+        releaseDisplayTouchpadWait();
+        mDisplayTouchpadWaitRound = 0;
+        if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
         Rect gap = splitKeyboardTouchpadGap(keyboardView);
+        // In the parting the pad is flush with the halves either side of it, not a card over them.
+        pad.setInSplitGap(com.termux.app.x11.DisplayTouchpadPlacement.fitsGap(gap, density),
+            Keyboard2View.splitSlabRadiusPx());
         host.addView(pad, com.termux.app.x11.DisplayTouchpadPlacement.padParams(gap,
-            keyboardView == null ? 0 : keyboardView.getHeight(),
-            getResources().getDisplayMetrics().density));
+            keyboardView == null ? 0 : keyboardView.getHeight(), density));
         if (keyboardView != null) {
             final com.termux.app.x11.DisplayTouchpadView following = pad;
-            keyboardView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (mDisplayTouchpadFollower != null)
+                keyboardView.removeOnLayoutChangeListener(mDisplayTouchpadFollower);
+            mDisplayTouchpadFollower = (v, l, t, r, b, ol, ot, or, ob) -> {
                 if (following.getParent() != host) return;
                 applyDisplayTouchpadFrame(following, v);
-            });
+            };
+            keyboardView.addOnLayoutChangeListener(mDisplayTouchpadFollower);
         }
         View keys = mAttachedInAppKeyboardView;
-        // A pad standing in the parting leaves both halves typing, so the keys stay lit.
-        if (keys != null && gap == null) {
+        // A pad standing in the parting leaves both halves typing, so the keys stay lit. Only a
+        // measured keyboard that has no parting to stand in is put out under a whole-frame pad.
+        if (keys != null && gap == null && keys.getHeight() > 0) {
             keys.animate().cancel();
             if (reduced) keys.setAlpha(0f);
             else keys.animate().alpha(0f).setDuration(duration).setInterpolator(settle).start();
@@ -13551,9 +13590,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyDisplayTouchpadFrame(@NonNull View pad, @Nullable View keyboardView) {
         Rect gap = splitKeyboardTouchpadGap(keyboardView);
+        float density = getResources().getDisplayMetrics().density;
         FrameLayout.LayoutParams params = com.termux.app.x11.DisplayTouchpadPlacement.padParams(
-            gap, keyboardView == null ? 0 : keyboardView.getHeight(),
-            getResources().getDisplayMetrics().density);
+            gap, keyboardView == null ? 0 : keyboardView.getHeight(), density);
+        if (pad instanceof com.termux.app.x11.DisplayTouchpadView) {
+            ((com.termux.app.x11.DisplayTouchpadView) pad).setInSplitGap(
+                com.termux.app.x11.DisplayTouchpadPlacement.fitsGap(gap, density),
+                Keyboard2View.splitSlabRadiusPx());
+        }
         if (!com.termux.app.x11.DisplayTouchpadPlacement.describes(pad.getLayoutParams(), params)) {
             pad.setLayoutParams(params);
         }
@@ -13561,6 +13605,57 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             keyboardView.animate().cancel();
             keyboardView.setAlpha(1f);
         }
+    }
+
+    /**
+     * How many keyboard layouts the pad waits out before it is attached anyway. The wait exists
+     * so the pad is never sized to a frame the keyboard is about to leave; a wait that never
+     * ends would be mouse mode with nothing to point on, which is worse than one wrong frame.
+     */
+    private static final int MAX_DISPLAY_TOUCHPAD_WAITS = 3;
+
+    /**
+     * One keyboard layout waited out before the touchpad is attached: the keyboard's first, or
+     * the one a widened parting has just asked for. The 160 ms backstop is the keyboard reveal
+     * gate's, for the same reason — a layout that never comes must not swallow the pad.
+     */
+    private final class DisplayTouchpadWait implements View.OnLayoutChangeListener, Runnable {
+
+        @NonNull private final View mKeyboardView;
+
+        DisplayTouchpadWait(@NonNull View keyboardView) {
+            mKeyboardView = keyboardView;
+            keyboardView.addOnLayoutChangeListener(this);
+            keyboardView.postDelayed(this, 160L);
+        }
+
+        boolean follows(@NonNull View keyboardView) {
+            return mKeyboardView == keyboardView;
+        }
+
+        @Override
+        public void onLayoutChange(View v, int l, int t, int r, int b,
+                                   int ol, int ot, int or, int ob) {
+            // The resume adds a view, which a layout pass is no place to do.
+            v.post(this);
+        }
+
+        @Override
+        public void run() {
+            if (mDisplayTouchpadWait != this) return;
+            release();
+            syncDisplayTouchpad();
+        }
+
+        void release() {
+            if (mDisplayTouchpadWait == this) mDisplayTouchpadWait = null;
+            mKeyboardView.removeOnLayoutChangeListener(this);
+            mKeyboardView.removeCallbacks(this);
+        }
+    }
+
+    private void releaseDisplayTouchpadWait() {
+        if (mDisplayTouchpadWait != null) mDisplayTouchpadWait.release();
     }
 
     /** The parting of a split keyboard in the keyboard view's pixels; null when it has none. */

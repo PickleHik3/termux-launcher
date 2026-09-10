@@ -275,6 +275,67 @@ public class LayoutModifierSplitTest
           composed.rows.get(i).keys.size(), split.rows.get(i).keys.size());
   }
 
+  @Test
+  public void aPartingAskedForInPixelsMeasuresThatManyOnce()
+      throws Exception
+  {
+    // Four unit keys over 500px of content: a gap of g units widens the keyboard to 4+g, so
+    // 100px of parting wants 4*100/(500-100) = 1 unit, and one unit is then 100px.
+    KeyboardData four = keyboard("<row><key c='a'/><key c='b'/><key c='c'/><key c='d'/></row>");
+
+    float units = SplitLayout.gapUnitsForPx(four, 500f, 100f);
+
+    assertEquals(1f, units, 1e-3f);
+    KeyboardData split = LayoutModifier.split(four, units);
+    assertEquals(500f * units / split.keysWidth, 100f, 1e-3f);
+  }
+
+  @Test
+  public void aPartingWiderThanTheHalvesCanSpareIsCappedAtHalfTheWidth()
+      throws Exception
+  {
+    KeyboardData four = keyboard("<row><key c='a'/><key c='b'/><key c='c'/><key c='d'/></row>");
+
+    // 400 of 500px would leave 20px a side; the cap gives the parting half the width instead.
+    float units = SplitLayout.gapUnitsForPx(four, 500f, 400f);
+
+    assertEquals(4f, units, 1e-3f);
+    assertEquals(500f * units / LayoutModifier.split(four, units).keysWidth, 250f, 1e-3f);
+  }
+
+  @Test
+  public void aPartingNothingCanBeAskedOfIsNoParting() throws Exception
+  {
+    KeyboardData four = keyboard("<row><key c='a'/><key c='b'/><key c='c'/><key c='d'/></row>");
+
+    assertEquals(0f, SplitLayout.gapUnitsForPx(four, 0f, 100f), EPS);
+    assertEquals(0f, SplitLayout.gapUnitsForPx(four, 500f, 0f), EPS);
+    assertEquals(0f, SplitLayout.gapUnitsForPx(four, 500f, Float.NaN), EPS);
+    assertEquals(0f, LayoutModifier.commonGapUnitsForPx(four, 500f, 0f), EPS);
+  }
+
+  @Test
+  public void aPartingAskedForInPixelsMakesItsCommonBandThatWide() throws Exception
+  {
+    // The two rows part half a key apart — the first at 2 units, the second at 1.5 — so their
+    // bands overlap by that much less than the parting. The overlap is what a host can stand
+    // something in, so it is the overlap the ask has to be measured against.
+    KeyboardData keyboard = keyboard(
+        "<row><key c='a'/><key c='b'/><key c='c'/><key c='d'/></row>"
+        + "<row><key width='1.5' c='e'/><key c='f'/><key c='g'/></row>");
+
+    float units = LayoutModifier.commonGapUnitsForPx(keyboard, 1000f, 200f);
+
+    KeyboardData split = LayoutModifier.split(keyboard, units);
+    float[] band = SplitLayout.commonGap(split, units);
+    assertNotNull("the rows share a band", band);
+    float keyWidth = 1000f / split.keysWidth;
+    assertEquals("the band measures what was asked for",
+        200f, (band[1] - band[0]) * keyWidth, 0.5f);
+    assertTrue("which costs more parting than the band is wide",
+        units * keyWidth > 200f);
+  }
+
   private static KeyboardData keyboard(String rows) throws Exception
   {
     return KeyboardData.load_string_exn(

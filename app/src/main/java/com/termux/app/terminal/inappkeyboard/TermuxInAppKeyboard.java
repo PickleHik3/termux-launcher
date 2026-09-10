@@ -104,6 +104,13 @@ public final class TermuxInAppKeyboard {
     @Nullable private KeyboardData mPartedSource;
     @Nullable private KeyboardData mPartedResult;
     private float mPartedGapUnits;
+    /**
+     * A floor under the parting while something stands in it — the mouse-mode touchpad — in the
+     * view's own pixels. Zero is the user's own gap, which is what every other type gets.
+     */
+    private int mMinSplitGapPx;
+    /** The smallest change in the parting worth relaying the halves out for, in key-width units. */
+    private static final float MIN_SPLIT_GAP_STEP_UNITS = 0.01f;
     private View.OnFocusChangeListener mSystemImeFocusListener;
     private TerminalKeyEventHandler.KeyValueInterceptor mKeyValueInterceptor;
 
@@ -1310,11 +1317,40 @@ public final class TermuxInAppKeyboard {
         return mPartedResult;
     }
 
-    /** The parting [data] asks for, in key-width units; zero for any type but split. */
+    /**
+     * The parting [data] asks for, in key-width units; zero for any type but split. Never
+     * narrower than {@link #setMinimumSplitGapPx}'s floor once the view has been measured: the
+     * floor is pixels, and the units that buy them depend on how wide the keys are drawn.
+     */
     private float splitGapUnits(@Nullable KeyboardData data) {
         if (data == null || mForm != PlaceLayout.KeyboardForm.SPLIT)
             return 0f;
-        return LayoutModifier.gapUnits(data, mPreferences.getInAppKeyboardSplitGapFraction());
+        float units = LayoutModifier.gapUnits(data,
+            mPreferences.getInAppKeyboardSplitGapFraction());
+        if (mMinSplitGapPx <= 0 || mKeyboardView == null)
+            return units;
+        return Math.max(units, LayoutModifier.commonGapUnitsForPx(data,
+            mKeyboardView.getKeyContentWidthPx(), mMinSplitGapPx));
+    }
+
+    /**
+     * Asks the split keyboard to part at least [px] wide, so a host can stand something in the
+     * gap; zero gives the user's own parting back. Idempotent, and re-read on every call: the
+     * floor is in pixels, so the same floor asks for different units once the view has been
+     * measured. Returns whether the halves moved, which is a relayout the caller can wait for.
+     */
+    public boolean setMinimumSplitGapPx(int px) {
+        mMinSplitGapPx = Math.max(0, px);
+        if (mDestroyed || mKeyboardView == null || mForm != PlaceLayout.KeyboardForm.SPLIT)
+            return false;
+        float applied = mKeyboardView.getSplitGapUnits();
+        float wanted = appliedSplitGapUnits();
+        // A parting that moved by less than this is not worth re-parting the whole layout for,
+        // and stops a measure that feeds back into the ask from oscillating.
+        if (Math.abs(applied - wanted) < MIN_SPLIT_GAP_STEP_UNITS)
+            return false;
+        applyKeyboardForm();
+        return true;
     }
 
     /** The parting for the layout on screen, read fresh: the gap is stored per orientation. */

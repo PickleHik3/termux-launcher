@@ -13,7 +13,9 @@ import androidx.annotation.Nullable;
  *
  * <p>It takes the whole frame, as it always has, except over a split keyboard: there the parting
  * between the two halves is the touchpad and both halves keep typing. A parting too narrow to
- * point in is no use, so under {@link #MIN_GAP_DP} the pad takes the whole frame again.
+ * point in is no use, so under {@link #MIN_GAP_DP} the pad takes the whole frame again — which
+ * a keyboard wide enough to part never reaches, because it is asked for
+ * {@link #minimumGapPx} while the pad is up.
  */
 public final class DisplayTouchpadPlacement {
 
@@ -22,10 +24,18 @@ public final class DisplayTouchpadPlacement {
 
     private DisplayTouchpadPlacement() {}
 
+    /**
+     * The parting the pad asks a split keyboard to widen to, in the frame's own pixels. Zero
+     * for a screen whose density is not known yet, which asks for nothing.
+     */
+    public static int minimumGapPx(float density) {
+        return density > 0f ? Math.round(MIN_GAP_DP * density) : 0;
+    }
+
     /** Whether [gapPx], the parting in the frame's own pixels, is wide enough to point in. */
     public static boolean fitsGap(@Nullable Rect gapPx, float density) {
-        return gapPx != null && density > 0f
-            && gapPx.width() >= Math.round(MIN_GAP_DP * density);
+        int minimum = minimumGapPx(density);
+        return gapPx != null && minimum > 0 && gapPx.width() >= minimum;
     }
 
     /**

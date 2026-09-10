@@ -29,6 +29,8 @@ import com.termux.x11.input.InputStub;
  * <p>It lies over the place, so it is drawn solid: one opaque rounded panel in the overlay
  * surface colour, square-cornered against the dock or rounded as a card with the surfaces, and
  * with no rim at rest. The only stroke it draws is the ring that appears while a drag is held.
+ * Standing in a split keyboard's parting it is flush instead — no inset, and the halves' own
+ * radius — so the parting reads as a piece cut out of one surface.
  */
 public final class DisplayTouchpadView extends View {
 
@@ -73,6 +75,13 @@ public final class DisplayTouchpadView extends View {
     private final RectF mBack = new RectF();
     private final int mTouchSlop;
     private final boolean mCard;
+    /**
+     * The pad stands in a split keyboard's parting rather than over the whole keyboard: it is
+     * then flush with the halves either side of it, so it drops the card's inset and takes
+     * their radius instead of its own.
+     */
+    private boolean mInGap;
+    private float mGapRadiusPx;
 
     @NonNull private final PointerSink mSink;
     @Nullable private Listener mListener;
@@ -155,10 +164,26 @@ public final class DisplayTouchpadView extends View {
         mListener = listener;
     }
 
-    @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        float inset = mCard ? dp(1f) : 0f;
+    /**
+     * Whether the pad is standing in a split keyboard's parting, and the radius the halves'
+     * slabs are drawn with. Flush in the gap: no inset, and the halves' shape, so the three
+     * read as one surface with the parting cut out of it.
+     */
+    public void setInSplitGap(boolean inGap, float slabRadiusPx) {
+        if (mInGap == inGap && Float.compare(mGapRadiusPx, slabRadiusPx) == 0) return;
+        mInGap = inGap;
+        mGapRadiusPx = slabRadiusPx;
+        layOutPanel(getWidth(), getHeight());
+        invalidate();
+    }
+
+    /** The panel's own radius: the halves' in the parting, its card corner over the keyboard. */
+    private float panelRadius() {
+        return mInGap ? mGapRadiusPx : dp(RADIUS_DP);
+    }
+
+    private void layOutPanel(int w, int h) {
+        float inset = mCard && !mInGap ? dp(1f) : 0f;
         mBounds.set(inset, inset, w - inset, h - inset);
         float size = dp(BACK_SIZE_DP);
         float margin = dp(BACK_INSET_DP);
@@ -166,9 +191,15 @@ public final class DisplayTouchpadView extends View {
     }
 
     @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        layOutPanel(w, h);
+    }
+
+    @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
-        float radius = dp(RADIUS_DP);
+        float radius = panelRadius();
         canvas.drawRoundRect(mBounds, radius, radius, mFillPaint);
         // A faint grid of dots says "this is a surface you move across", nothing more.
         float step = dp(28f);

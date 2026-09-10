@@ -107,6 +107,18 @@ public final class LayoutModifier
   }
 
   /**
+   * The parting, in key-width units, whose common band measures [gapPx] across once the
+   * keyboard is parted and laid out over [contentWidthPx] — what a host standing something in
+   * the gap asks for, because the band is the only part of the parting every row leaves clear.
+   * Read from the layout as parsed, never from one already parted. See {@link SplitLayout}.
+   */
+  public static float commonGapUnitsForPx(KeyboardData keyboard, float contentWidthPx,
+      float gapPx)
+  {
+    return SplitLayout.commonGapUnitsForPx(keyboard, contentWidthPx, gapPx);
+  }
+
+  /**
    * The split keyboard type: every row of the composed layout parted at its midpoint by
    * [gapUnits]. A step of its own, applied after {@link #modify}, so the bottom row and the
    * extra keys part with the rest. See {@link SplitLayout}.

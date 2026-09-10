@@ -77,6 +77,28 @@ public class DisplayTouchpadPlacementTest {
     }
 
     @Test
+    public void theMinimumIsWhatASplitKeyboardIsAskedToPartBy() {
+        assertEquals(MIN_GAP_PX, DisplayTouchpadPlacement.minimumGapPx(2f));
+        assertEquals(480, DisplayTouchpadPlacement.minimumGapPx(3f));
+        assertEquals("an unmeasured screen asks for nothing",
+            0, DisplayTouchpadPlacement.minimumGapPx(0f));
+    }
+
+    @Test
+    public void aPartingWidenedToTheMinimumIsExactlyThePadsFrame() {
+        int minimum = DisplayTouchpadPlacement.minimumGapPx(3f);
+        Rect widened = new Rect(300, 0, 300 + minimum, 700);
+
+        FrameLayout.LayoutParams params =
+            DisplayTouchpadPlacement.padParams(widened, 700, 3f);
+
+        assertTrue(DisplayTouchpadPlacement.fitsGap(widened, 3f));
+        assertEquals(minimum, params.width);
+        assertEquals(300, params.leftMargin);
+        assertEquals(Gravity.TOP | Gravity.START, params.gravity);
+    }
+
+    @Test
     public void anUnmeasuredScreenDensityIsNoGap() {
         assertFalse(DisplayTouchpadPlacement.fitsGap(new Rect(0, 0, MIN_GAP_PX, 500), 0f));
     }

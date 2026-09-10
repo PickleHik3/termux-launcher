@@ -22,6 +22,12 @@ public final class SplitLayout
   /** A half thinner than this is not cut off even a bar; the parting takes its edge. */
   private static final float MIN_HALF_UNITS = 0.25f;
 
+  /**
+   * The parting never takes more than this much of the width a host asks it to fill: both
+   * halves have to stay wide enough to type on, whatever is standing in the gap.
+   */
+  public static final float MAX_GAP_FRACTION = 0.5f;
+
   private static final float EPS = 1e-3f;
 
   private SplitLayout() {}
@@ -33,6 +39,57 @@ public final class SplitLayout
     if (Float.isNaN(fraction) || Float.isInfinite(fraction) || fraction <= 0f)
       return 0f;
     return keyboard.keysWidth * fraction;
+  }
+
+  /**
+   * The parting, in key-width units, that measures [gapPx] across once [keyboard] has been
+   * parted by it and laid out over [contentWidthPx] — what a host standing something in the
+   * gap has to ask for.
+   *
+   * <p>Parting widens the keyboard by the gap, so the key width the gap is counted in shrinks
+   * as the gap grows: over a content width <i>W</i> a parting of <i>g</i> units on a keyboard
+   * of <i>K</i> units measures <i>W·g/(K+g)</i>, which inverts to <i>g = K·gapPx/(W−gapPx)</i>.
+   * The ask is capped at {@link #MAX_GAP_FRACTION} of the width, so a keyboard too narrow to
+   * give that many pixels returns the widest parting it can rather than swallowing its halves.
+   * Zero when nothing can be parted. [keyboard] is the layout as parsed, never one already
+   * parted, as with {@link #gapUnits}.
+   */
+  public static float gapUnitsForPx(KeyboardData keyboard, float contentWidthPx, float gapPx)
+  {
+    Objects.requireNonNull(keyboard, "keyboard");
+    if (Float.isNaN(gapPx) || Float.isNaN(contentWidthPx)
+        || Float.isInfinite(gapPx) || Float.isInfinite(contentWidthPx)
+        || gapPx <= 0f || contentWidthPx <= 0f)
+      return 0f;
+    float wanted = Math.min(gapPx, contentWidthPx * MAX_GAP_FRACTION);
+    return keyboard.keysWidth * wanted / (contentWidthPx - wanted);
+  }
+
+  /**
+   * The parting, in key-width units, whose <em>common band</em> — the strip
+   * {@link #commonGap} reports, which is all of the parting every row leaves clear — measures
+   * [gapPx] across. Rows part at a key boundary, so their partings are offset from one another
+   * and the band is that much narrower than the parting; the offsets do not move with the gap,
+   * so measuring them once and adding them back is exact. Falls back to {@link #gapUnitsForPx}
+   * when the rows share no band at all, which the caller finds out for itself.
+   */
+  public static float commonGapUnitsForPx(KeyboardData keyboard, float contentWidthPx,
+      float gapPx)
+  {
+    float base = gapUnitsForPx(keyboard, contentWidthPx, gapPx);
+    if (base <= 0f)
+      return 0f;
+    float[] band = commonGap(split(keyboard, base), base);
+    if (band == null)
+      return base;
+    float lost = base - (band[1] - band[0]);
+    if (lost <= 0f)
+      return base;
+    // contentWidth * (g - lost) / (K + g) = gapPx, with K the unparted width, inverts to
+    // g = (f·K + lost) / (1 − f). Capped as gapUnitsForPx is, so the halves keep their keys.
+    float f = Math.min(gapPx, contentWidthPx * MAX_GAP_FRACTION) / contentWidthPx;
+    float wanted = (f * keyboard.keysWidth + lost) / (1f - f);
+    return Math.min(wanted, keyboard.keysWidth * MAX_GAP_FRACTION / (1f - MAX_GAP_FRACTION));
   }
 
   /**

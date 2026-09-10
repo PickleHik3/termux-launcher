@@ -131,6 +131,25 @@ public class Keyboard2ViewSplitTest
     assertEquals(keyboardColor, backgroundColor());
   }
 
+  @Test
+  public void theContentWidthIsWhatTheKeysAreLaidOutAcross() throws Exception
+  {
+    assertEquals("nothing is known before the first measure",
+        0f, view.getKeyContentWidthPx(), 1e-4f);
+
+    split(1f);
+
+    assertEquals(500f, view.getKeyContentWidthPx(), 1e-4f);
+    // It is the parting's own denominator: the gap is a fraction of it, not of the key width.
+    assertEquals(500f / 5f, view.getKeyContentWidthPx() / 5f, 1e-4f);
+  }
+
+  @Test
+  public void theSlabRadiusIsTheShapeAPanelInThePartingTakes()
+  {
+    assertEquals(0f, Keyboard2View.splitSlabRadiusPx(), 1e-4f);
+  }
+
   private void dock() throws Exception
   {
     view.setKeyboard(KeyboardData.load_string_exn(ROW));

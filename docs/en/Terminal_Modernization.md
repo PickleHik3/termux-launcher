@@ -501,8 +501,9 @@ asked; both need the launcher on screen.
 The parting of a split keyboard is not part of the keyboard: what is behind the keyboard shows
 through it and takes taps, so on Home and on the display you can reach the wall between your
 thumbs. On the terminal the keyboard makes room for itself rather than lying over it, so there is
-nothing behind the parting to reach. In mouse mode the touchpad moves into the parting and both
-halves keep typing; a parting too narrow for that keeps the touchpad over the whole keyboard.
+nothing behind the parting to reach. In mouse mode the parting widens to make room for the
+touchpad and both halves keep typing, narrowing back to your own setting when mouse mode goes
+off; a keyboard too narrow to part that far keeps the touchpad over the whole of it.
 
 ### Modal keymaps
 

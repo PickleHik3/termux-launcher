@@ -69,7 +69,8 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   settings. Tap anywhere else to put them away.
 - **Mouse mode.** The **Mouse mode** action — put it on the extra-keys row, the in-app keyboard
   as a `tool:mouse.toggle` key, or a chord — swaps the keyboard for a touchpad of the same size
-  while the display is showing. Its gestures are a laptop's: a finger moves the pointer and a tap
+  while the display is showing. Over a split keyboard the parting widens instead and the touchpad
+  stands in it, so both halves keep typing. Its gestures are a laptop's: a finger moves the pointer and a tap
   clicks; hold, or tap and touch again, then move, to drag. Two fingers scroll, keep going after a
   fast lift, and pinch to zoom; two fingers tapping together click the right button. Three fingers
   tapping click the middle button, swiping left or right switch windows, and swiping down bring
