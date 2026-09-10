@@ -14,10 +14,13 @@ import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 
 import com.termux.R;
+import com.termux.app.chrome.KeyboardMaterialPolicy;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayout;
+import com.termux.shared.theme.ThemeUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.view.KeyboardUtils;
@@ -1233,6 +1236,7 @@ public final class TermuxInAppKeyboard {
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
         mKeyboardView.setKeyColorOverrides(scheme.resolvedOverrides());
+        applySplitSlabColor();
     }
 
     /**
@@ -1367,8 +1371,33 @@ public final class TermuxInAppKeyboard {
         if (mKeyboardView == null)
             return;
         mKeyboardView.setSplitGapUnits(appliedSplitGapUnits());
+        applySplitSlabColor();
         if (data != null)
             mKeyboardView.setKeyboard(data);
+    }
+
+    /**
+     * The colour the split halves' slabs are painted in: the launcher's overlay surface role,
+     * {@code colorSurfaceContainerHigh}, resolved here because the keyboard module knows no
+     * launcher attributes.
+     *
+     * <p>A parted keyboard lies over the content on every place — the halves are the panel, not
+     * a fill inside one of the host's surfaces — so per the keyboard-overlays spec (D1, D2) they
+     * are opaque in that one role and ignore the Keyboard surface's opacity. Pushed from the two
+     * places the view's appearance is settled: with the layout, and with every palette refresh,
+     * so a theme or wallpaper change repaints the slabs with the keys.
+     */
+    private void applySplitSlabColor() {
+        if (mKeyboardView == null)
+            return;
+        if (!KeyboardMaterialPolicy.paintsOwnSolidSlabs(mForm)) {
+            mKeyboardView.setSplitBackgroundColor(null);
+            return;
+        }
+        Context context = requireContainer().getContext();
+        mKeyboardView.setSplitBackgroundColor(ThemeUtils.getSystemAttrColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_high)));
     }
 
     /** Re-parts, or un-parts, what is on screen after the keyboard type or the gap moved. */

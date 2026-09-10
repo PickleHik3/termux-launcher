@@ -150,6 +150,51 @@ public class Keyboard2ViewSplitTest
     assertEquals(0f, Keyboard2View.splitSlabRadiusPx(), 1e-4f);
   }
 
+  @Test
+  public void theSlabsAreThePanelColourTheHostSet() throws Exception
+  {
+    split(1f);
+    view.setSplitBackgroundColor(Color.MAGENTA);
+
+    assertEquals(Color.MAGENTA, view.getSplitBackgroundColor());
+    // The host's colour is the slabs' alone: the parting stays clear of it, so the view keeps
+    // no background of its own and whatever the keyboard lies over still shows there.
+    assertEquals(Color.TRANSPARENT, backgroundColor());
+    Rect gap = new Rect();
+    assertTrue(view.getSplitGapBounds(gap));
+    assertEquals(200, gap.left);
+    assertEquals(300, gap.right);
+  }
+
+  @Test
+  public void withoutAHostColourTheSlabsKeepTheKeyboardsOwnBackground() throws Exception
+  {
+    split(1f);
+
+    assertEquals(keyboardColor, view.getSplitBackgroundColor());
+  }
+
+  @Test
+  public void clearingTheHostColourRestoresTheKeyboardsOwnBackground() throws Exception
+  {
+    split(1f);
+    view.setSplitBackgroundColor(Color.MAGENTA);
+    view.setSplitBackgroundColor(null);
+
+    assertEquals(keyboardColor, view.getSplitBackgroundColor());
+  }
+
+  @Test
+  public void theDockedKeyboardIgnoresTheHostColourEntirely() throws Exception
+  {
+    view.setSplitBackgroundColor(Color.MAGENTA);
+    dock();
+
+    // Nothing paints slabs at gap zero, and the view's own background is untouched by the
+    // colour the host left set for the split it is not in.
+    assertEquals(keyboardColor, backgroundColor());
+  }
+
   private void dock() throws Exception
   {
     view.setKeyboard(KeyboardData.load_string_exn(ROW));

@@ -91,6 +91,7 @@ import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.ChromeSpec;
+import com.termux.app.chrome.KeyboardMaterialPolicy;
 import com.termux.app.chrome.SurfaceDirtyLedger;
 import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperBackdropView;
@@ -3660,24 +3661,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean shouldUseUnifiedDefaultKeyboardGlassSurface(@NonNull ChromeSpec state) {
         // A scheme background color or a non-default background opacity must repaint only the
         // keyboard, not the material it would share with the dock, so either drops the keyboard
-        // to its own local surface path. A split keyboard drops out of it too: one material
-        // spanning the dock and the keyboard would also span the parting between the halves. So
-        // does a floating keyboard: it shares no material with the dock, and a dock crop is not
-        // behind it to be exposed.
+        // to its own local surface path. Every arrangement that is not the glass drops out of it
+        // too, and for one reason: it shares no material with the dock. One material spanning the
+        // dock and a split keyboard would span the parting between the halves; a floating card
+        // and an overlaying keyboard lie over the content, and the dock underneath keeps the
+        // glass it has.
         return ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
             state.keyboardShown, isRoundedDockStyle(), isInAppKeyboardGlassSurface())
-            && !hasInAppKeyboardBackgroundOverride() && !isInAppKeyboardSplit()
-            && !isKeyboardFloating();
+            && !hasInAppKeyboardBackgroundOverride()
+            && inAppKeyboardMaterial() == KeyboardMaterialPolicy.Material.GLASS;
     }
 
+    /** The form the keyboard on screen is actually in, floating included. */
+    @NonNull
+    private PlaceLayout.KeyboardForm inAppKeyboardForm() {
+        if (isKeyboardFloating()) return PlaceLayout.KeyboardForm.FLOATING;
+        if (isInAppKeyboardSplit()) return PlaceLayout.KeyboardForm.SPLIT;
+        return PlaceLayout.KeyboardForm.DOCKED;
+    }
+
+    /** Whether the keyboard lies over this place's content instead of shrinking it. */
+    private boolean inAppKeyboardOverlays() {
+        return KeyboardOverlayPolicy.overlays(currentWallPlace(), currentPlaceLayout());
+    }
+
+    /** Glass, one opaque panel, or nothing at all — see {@link KeyboardMaterialPolicy}. */
+    @NonNull
+    private KeyboardMaterialPolicy.Material inAppKeyboardMaterial() {
+        return KeyboardMaterialPolicy.hostMaterial(inAppKeyboardForm(), inAppKeyboardOverlays());
+    }
 
     /**
-     * True for the keyboard forms whose host paints no launcher surface at all: the split
-     * keyboard, whose halves paint their own, and the floating one, whose card is a solid panel.
-     * Nothing crops a backdrop for either, so nothing may wait on one.
+     * True for every arrangement whose host crops no wallpaper: the split keyboard, whose halves
+     * paint their own slabs, the floating one, whose card is a solid panel, and the docked
+     * keyboard on a place it overlays, which paints one opaque fill. Nothing produces a backdrop
+     * for any of them, so nothing may wait on one.
      */
     private boolean paintsNoInAppKeyboardBackdrop() {
-        return isInAppKeyboardSplit() || isKeyboardFloating();
+        return inAppKeyboardMaterial() != KeyboardMaterialPolicy.Material.GLASS;
     }
 
     /** Readiness of the keyboard-local (non-unified) blurred backdrop for the current target. */
@@ -3840,6 +3861,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float foot = defaultDockGlassFootFraction();
         if (!state.keyboardShown)
             return mChrome.glass().dockSurface(state.barAlpha, foot, 1f, false);
+        // A keyboard overlaying its place is an opaque panel that answers to neither the slider
+        // nor the scheme colour, so the strip takes the same fill: at the glass alpha it would
+        // leave the material stopping at the keyboard's bottom edge, which is the very seam
+        // this method exists to close.
+        if (inAppKeyboardMaterial() == KeyboardMaterialPolicy.Material.SOLID)
+            return buildInAppKeyboardSolidSurface(0f);
         // Same three values buildInAppKeyboardSurfaceBackground resolves, so the strip cannot
         // disagree with the keyboard about its own material.
         boolean normalized = isInAppKeyboardOpacityLinked();
@@ -4130,8 +4157,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // and insets applied above. A floating keyboard drops it for the opposite reason: its
         // card is already one solid panel in the same surface role, and a glass slice inside it
         // would draw a second material over the first.
-        if (paintsNoInAppKeyboardBackdrop()) {
+        PlaceLayout.KeyboardForm form = inAppKeyboardForm();
+        boolean overlays = inAppKeyboardOverlays();
+        KeyboardMaterialPolicy.Material material =
+            KeyboardMaterialPolicy.hostMaterial(form, overlays);
+        if (material == KeyboardMaterialPolicy.Material.NONE) {
             surfaceHost.setBackground(null);
+            clearInAppKeyboardBackdrop();
+            return;
+        }
+        // A keyboard that overlays its place is one opaque panel in the overlay surface role: no
+        // wallpaper crop, no frost, no glass slice, no rim, and the Keyboard surface's opacity
+        // and scheme background colour are ignored, because both say how much of the wallpaper
+        // shows through a material that is no longer there. The dock underneath keeps its glass.
+        if (material == KeyboardMaterialPolicy.Material.SOLID) {
+            surfaceHost.setBackground(buildInAppKeyboardSolidSurface(
+                KeyboardMaterialPolicy.solidFillIsRounded(form, overlays, capsule)
+                    ? cornerRadiusPx : 0f));
             clearInAppKeyboardBackdrop();
             return;
         }
@@ -4177,6 +4219,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         surfaceHost.setClipToOutline(true);
     }
 
+    /**
+     * The overlay keyboard's panel: one opaque fill in {@code colorSurfacePanelHigh}, the role
+     * the drawer and the popups use, so it resolves per theme and per scheme. Rounded to the
+     * capsule's cap or square, whichever the surface shape already clipped the host to.
+     */
+    @NonNull
+    private Drawable buildInAppKeyboardSolidSurface(float cornerRadiusPx) {
+        GradientDrawable fill = new GradientDrawable();
+        fill.setColor(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            R.color.termux_surface_panel_high));
+        fill.setCornerRadius(cornerRadiusPx);
+        return fill;
+    }
+
     @Nullable
     private Drawable buildInAppKeyboardSurfaceBackground(@NonNull ChromeSpec state,
                                                          @NonNull View surfaceHost,
@@ -4184,8 +4240,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                          float cornerRadiusPx) {
         java.util.List<Drawable> layers = new java.util.ArrayList<>();
         // While the keyboard's opacity still follows Base it renders the shared material, so its
-        // own background colour and opacity are ignored here exactly as in the unified path.
-        boolean normalized = isInAppKeyboardOpacityLinked();
+        // own background colour and opacity are ignored here exactly as in the unified path. An
+        // overlaying keyboard ignores them for the other reason (D3): it is opaque, and both say
+        // how much of the wallpaper shows through.
+        boolean normalized = isInAppKeyboardOpacityLinked()
+            || !KeyboardMaterialPolicy.opacityApplies(inAppKeyboardForm(), inAppKeyboardOverlays());
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
         int backgroundAlpha = normalized ? 255 : Math.round(
             255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);

@@ -71,6 +71,13 @@ public class Keyboard2View extends View
   private Theme _theme;
   private Theme.Computed _tc;
   private final Paint _splitBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  /**
+   * Host-set colour for the split slabs, or null to paint them in the keyboard's own background.
+   * The host owns this because a parted keyboard lies over the content rather than inside a
+   * surface of the host's, so the slabs are the panel and only the host knows which role that
+   * is. Local addition, see UPSTREAM.md.
+   */
+  private Integer _splitBackgroundColor;
   private final Paint _overrideBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _overrideBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private SparseArray<KeyColorOverride> _keyColorOverrides = new SparseArray<>();
@@ -561,6 +568,26 @@ public class Keyboard2View extends View
   public int getKeyboardBackgroundColor()
   {
     return withOpacity(_theme.colorKeyboard, _theme.opacity);
+  }
+
+  /**
+   * The colour the split slabs are painted in. Null restores the keyboard's own background, so
+   * a host that says nothing gets what upstream draws. Local addition, see UPSTREAM.md.
+   */
+  public void setSplitBackgroundColor(Integer color)
+  {
+    requireMainThread();
+    if (Objects.equals(_splitBackgroundColor, color))
+      return;
+    _splitBackgroundColor = color;
+    invalidate();
+  }
+
+  /** The resolved slab colour: the host's when it set one, the keyboard's background otherwise. */
+  public int getSplitBackgroundColor()
+  {
+    return _splitBackgroundColor != null ? _splitBackgroundColor
+        : withOpacity(_theme.colorKeyboard, _theme.opacity);
   }
 
   /** Label color used by transient host controls drawn against the keyboard palette. */
@@ -1311,7 +1338,7 @@ public class Keyboard2View extends View
    */
   private void drawSplitBackground(Canvas canvas)
   {
-    _splitBackgroundPaint.setColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
+    _splitBackgroundPaint.setColor(getSplitBackgroundColor());
     float y = getPaddingTop() + _tc.margin_top;
     int lastRow = _keyboard.rows.size() - 1;
     for (int rowIndex = 0; rowIndex <= lastRow; rowIndex++)

@@ -149,6 +149,13 @@ fails when the catalogue has gone stale.
   the conversion is measured against; `splitSlabRadiusPx` is the corner radius
   `drawSplitBackground` gives the run slabs, so a host panel standing in the
   parting takes the same shape.
+- Split slab colour (local addition): `Keyboard2View.setSplitBackgroundColor`
+  and `getSplitBackgroundColor`. The slabs are the panel a parted keyboard lies
+  on rather than a fill inside one of the host's surfaces, so the host picks
+  their colour — the launcher hands in its own overlay surface role, which no
+  module-side theme attribute could name. Null, the default, paints them in the
+  keyboard's own background exactly as before, so nothing changes for a host
+  that says nothing.
 - Stateful suggestion labels have no global provider and render empty.
 - Tap correction hook (local addition): `Keyboard2View.TapResolver` plus
   `setTapResolver`, and the new file `TapGeometry.java`. At `ACTION_DOWN` the
