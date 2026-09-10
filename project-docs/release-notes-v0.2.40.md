@@ -39,7 +39,8 @@
 
 - The in-app keyboard comes in three types: docked, floating and split. Swipe up on the keyboard key of the extra-keys row to switch, and each place remembers its own type for portrait and for landscape.
 - A floating keyboard is one solid panel in the theme's colour, dragged by the bar along its top, and it remembers where you left it on each place.
-- Drag the floating keyboard's bottom-left corner to make it wider or taller. A height slider sits beside the width one in Settings ▸ Keyboard.
+- Drag the handle in the floating keyboard's bottom-left corner: left for wider, up for taller. A height slider sits beside the width one in Settings ▸ Keyboard.
+- Settings ▸ Keyboard has a Keyboard type row that sets docked, floating or split on every place at once; the Layout page still sets one place on its own.
 - The split keyboard parts every row down the middle and lets taps in the gap through to what is behind it. The gap's width and the floating keyboard's width are sliders in Settings ▸ Keyboard.
 - On the Display place, tapping a text field brings the keyboard up and tapping elsewhere puts it away. Turn it off in Display options if you would rather not.
 
