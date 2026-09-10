@@ -31,11 +31,13 @@
 - Mouse mode is an action for the extra-keys row, the in-app keyboard or a chord; the shipped row has it on the keyboard key's swipe-up. In the terminal every touch becomes the mouse for programs that take one: a finger is the left button, two fingers turn the wheel, and a fast lift keeps it turning. A program that does not track the mouse gets nothing typed at it.
 - On the Display place, mouse mode swaps the keyboard for a touchpad of the same size with a laptop's gestures: one finger points and taps, two fingers scroll, pinch to zoom and tap for the right button, three fingers tap for the middle button, swipe sideways to switch windows and swipe down to bring the keyboard back.
 - A small mouse at the end of the status bar shows the mode is on.
+- With a split keyboard on the Display place, mouse mode parts the halves wide enough for the touchpad to stand between them, and both halves keep typing.
 
 ### Keyboard
 
 - The in-app keyboard comes in three types: docked, floating and split. Swipe up on the keyboard key of the extra-keys row to switch, and each place remembers its own type for portrait and for landscape.
 - A floating keyboard is one solid panel in the theme's colour, dragged by the bar along its top, and it remembers where you left it on each place.
+- Drag the floating keyboard's bottom-left corner to make it wider or taller. A height slider sits beside the width one in Settings ▸ Keyboard.
 - The split keyboard parts every row down the middle and lets taps in the gap through to what is behind it. The gap's width and the floating keyboard's width are sliders in Settings ▸ Keyboard.
 - On the Display place, tapping a text field brings the keyboard up and tapping elsewhere puts it away. Turn it off in Display options if you would rather not.
 
