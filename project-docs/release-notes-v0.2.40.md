@@ -11,6 +11,7 @@
 - Widgets are laid out for the room they really have, so wide widgets no longer lose their edges.
 - Drag a widget onto others and they move aside to make room, so rearranging a page no longer means clearing a spot first.
 - Tap the edge of the Widgets page for a small tab with its settings and an edit button, the way the Display place already works.
+- While you are editing, every widget on the page is outlined: tap any one of them to move or resize it, without leaving and coming back.
 - While you are moving widgets about, the same tab reads out the grid's size; tap it and drag the two numbers to change how many columns and rows the page has, with the widgets rearranging as you drag.
 
 ### Linux display
