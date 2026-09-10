@@ -2814,17 +2814,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return (Math.max(0, Math.min(255, alpha)) << 24) | (color & 0x00FFFFFF);
     }
 
+    /**
+     * Whether the terminal paints its own surface. Fullscreen is deliberately not consulted: see
+     * {@link com.termux.app.terminal.TerminalSurfacePolicy}.
+     */
     private boolean shouldShowTerminalOverlaySurface() {
-        if (mProperties == null || mProperties.isUsingFullScreen()) {
-            return false;
-        }
         if (mPreferences == null) {
             return false;
         }
-        if (!shouldUseWallpaperPassthroughMode()) {
-            return true;
-        }
-        return mPreferences.getTerminalBackgroundOpacity() > 0;
+        return com.termux.app.terminal.TerminalSurfacePolicy.showsTerminalSurface(
+            shouldUseWallpaperPassthroughMode(), mPreferences.getTerminalBackgroundOpacity());
     }
 
     private void applyAccessoryLayerBounds(int viewId, @Nullable Rect bounds) {
