@@ -138,3 +138,35 @@ emulator, and all four verified on **pong** (Nothing A065, landscape and portrai
 unlocked: column surface 0..1080 against a 141..969 before, all column content on one centre line
 (dots included), the bar's inner edge flush with the terminal (was a 145px cutout-wide gap), extra
 keys at 47dp with 26px margins (was 38dp with 96/63), and the surface editor opening in portrait.
+
+## Layout page v2 — the page is the editor (decided 2026-09-10)
+
+Supersedes "Layout page" above. Option B (draggable miniature) on option A's skeleton; the surface
+editor is untouched. Review page: `.lavish/layout-editor-redesign.html` (gitignored, in the
+`status-chevron` worktree at the time).
+
+**Page.** Place pill only — no caption, no orientation pill, no legend. Two `PlaceMiniatureView`s
+side by side, portrait and landscape, each live for its orientation. Below them one compact row per
+element — Status bar · Pinned apps · A–Z index · Extra keys · Keyboard (+ Widget grid on Home) —
+showing "portrait · landscape" values with a chevron; tap opens a chooser sheet holding the existing
+`SegmentedPillPreference` pills, one pill row per orientation (per-place settings such as keyboard on
+enter/type show one row). "Look of this place" stays last. Tapping a bar in a miniature opens its
+chooser. New custom rows go on the `SettingsLayoutUtils` exemption list.
+
+**Drag.** Every bar (status bar, apps row, A–Z, extra keys) carries a visible grip. Touch-down on the
+grip lifts the bar at once (no long-press) and the miniature asks its scroll parent not to
+intercept. Legal slots for that bar and orientation appear as dashed outlines at the edges (model
+table above: status bar top/bottom, + left/right in landscape; apps row and extra keys bottom or
+hidden, + left/right in landscape; A–Z only hides while it rides the apps row, gets edges when the
+apps row is hidden). A tray under the phone appears for bars that may hide; the status bar never
+hides and gets none. Release over a slot or the tray writes `PlaceLayoutStore` for (place,
+orientation) immediately, like today's pills — no Done; release elsewhere springs back. Both
+miniatures and the rows redraw from the store. A pure `MiniatureDragPolicy` owns legal slots and
+hit-testing, unit-tested like `DockLayoutPolicy`.
+
+| # | Branch | Delivers | Depends on | Gate |
+|---|---|---|---|---|
+| 1 | `feat/layout-restructure` | twin miniatures in `LayoutOverviewPreference`; caption, orientation pill and legend removed; compact rows + chooser sheets (Home grid, Display keyboard-mode folded in); tap on a bar opens its chooser | — | Robolectric: each chooser writes the right scoped key and rows re-read it; Display tab still hidden without X11; emulator screenshots at default and narrow width |
+| 2 | `feat/layout-drag` | grips, slots, trays, spring-back; `MiniatureDragPolicy` + tests; scroll interception; content descriptions so TalkBack reaches every value via the rows | 1 | policy tests; on pong drag every bar in both phones, hide/unhide; the list never scrolls during a drag; judge motion on pong |
+
+Out of scope: the surface editor, `PlaceLayoutStore` keys, launcher behaviour.
