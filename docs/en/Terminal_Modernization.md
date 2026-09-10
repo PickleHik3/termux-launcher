@@ -482,7 +482,9 @@ wide a float is, how tall it is, and how far a split parts are on Settings ▸ K
 per orientation. Dragging the bottom-left corner of a floating keyboard resizes it in place — it
 grows toward your finger, keeping its right edge still — and writes the same two values.
 A floating keyboard is a solid panel in the theme's own colour rather than glass, so it reads as
-a card over whatever it is parked on.
+a card over whatever it is parked on. So are the split halves, and a docked keyboard on a place it
+lies over rather than shrinks — Home, and the Linux display in overlay mode — while the keyboard
+docked under the terminal keeps the dock's glass.
 
 ```text
 map ctrl+alt+f keyboard.cycle_form                      # docked, floating, split, round again

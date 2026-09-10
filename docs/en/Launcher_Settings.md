@@ -51,6 +51,9 @@ Use this section for visible surfaces and colors:
   home screen. Tap the floating palette to style every surface at once, or tap a surface to style
   it on its own. This edits the shared look every place starts from; a look that differs between
   Home, Terminal and Display is edited from the **Layout** page's **Look of this place** row instead.
+  The keyboard's **BG opacity** applies to the keyboard docked under the terminal — a floating,
+  split, or overlaying keyboard is a solid panel and ignores it — while its **Edges** apply to
+  every keyboard.
 - **Terminal fonts:** install one of fourteen curated multi-face families with pinned SHA-256
   verification and visible license information, enable Nerd Font icons, choose ligature behavior,
   and adjust weight where supported.
