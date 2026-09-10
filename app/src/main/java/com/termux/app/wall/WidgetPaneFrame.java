@@ -258,6 +258,9 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         float requestedRadiusPx = PaneGlass.radiusPx(style,
             getResources().getDisplayMetrics().density);
         boolean glass = PaneGlass.apply(style, this, mGlass, requestedRadiusPx);
+        // The frame clips to its shape once the glass is on, so the tab is moved in past the
+        // corner arc - it starts where the top edge goes straight, rather than being cut by it.
+        if (mControls != null) mControls.setTrailingInsetPx(glass ? requestedRadiusPx : 0f);
         // A page is never a divided pane, so its radius is the surface's own; only the glass
         // shape clips, exactly as on a full-height terminal pane.
         setPaneShape(glass ? requestedRadiusPx : 0f, glass);

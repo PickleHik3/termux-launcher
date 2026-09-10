@@ -84,6 +84,8 @@ public final class PaneControlsView extends View {
     /** The ids drawn in the error colour rather than the primary one. */
     private final List<Integer> mAlerted = new ArrayList<>();
     @Nullable private ValueAnimator mAnimator;
+    /** How far in from the trailing edge the tab starts; negative until a page says. */
+    private float mTrailingInsetPx = -1f;
     private float mProgress;
     private boolean mShown;
     @Nullable private Listener mListener;
@@ -104,6 +106,17 @@ public final class PaneControlsView extends View {
 
     public void setListener(@Nullable Listener listener) {
         mListener = listener;
+    }
+
+    /**
+     * How far in from the page's trailing edge the tab sits. A page that clips to its own rounded
+     * shape has to keep the tab clear of the corner arc, or the arc cuts the tab's own corner
+     * off; a page that paints its corners instead leaves this alone.
+     */
+    public void setTrailingInsetPx(float insetPx) {
+        if (mTrailingInsetPx == insetPx) return;
+        mTrailingInsetPx = insetPx;
+        invalidate();
     }
 
     /**
@@ -219,7 +232,7 @@ public final class PaneControlsView extends View {
         float pad = dp(5);
         float width = pad + pad + gap * (mActions.size() - 1);
         for (Action action : mActions) width += buttonWidth(action);
-        float right = getWidth() - dp(3);
+        float right = getWidth() - Math.max(dp(3), mTrailingInsetPx);
         float left = Math.max(dp(3), right - width);
         float height = dp(32);
         float top = -height * (1f - mProgress);
