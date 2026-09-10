@@ -170,3 +170,57 @@ hit-testing, unit-tested like `DockLayoutPolicy`.
 | 2 | `feat/layout-drag` | grips, slots, trays, spring-back; `MiniatureDragPolicy` + tests; scroll interception; content descriptions so TalkBack reaches every value via the rows | 1 | policy tests; on pong drag every bar in both phones, hide/unhide; the list never scrolls during a drag; judge motion on pong |
 
 Out of scope: the surface editor, `PlaceLayoutStore` keys, launcher behaviour.
+
+## Arranging inside the surface editor (phase 3, decided 2026-09-10)
+
+The Layout page arranges a place from a picture of it; the surface editor arranges it on the real
+screen. Same keys, same writes, no Done: a pick lands in `PlaceLayoutStore` for the edited place and
+the orientation on screen, and the chrome re-lays out under the open editor.
+
+**The Place section.** Every surface's card leads with a section titled "Place", above the look
+rows, holding that surface's placement controls for the current orientation only — the value sets
+and labels the Layout page's chooser uses (`LayoutChooserModel`'s rules, mirrored in
+`PlaceArrangeModel`, held against it by a test). Which surface carries which element:
+
+| Card | Place section |
+|---|---|
+| Status bar | its edge — Top/Bottom, plus Left/Right in landscape; never hidden |
+| Dock | the bars standing on the dock band: pinned apps, A–Z index, extra keys |
+| Terminal / canvas | the bars that are *not* on the dock band — a rail, a column, an edge of their own, or away — plus the widget grid's columns and rows on Home |
+| Keyboard | Type (Docked/Floating/Split), On enter (As left/Open/Closed), and Keyboard mode (Resizes/Floats over) on the Display place |
+
+A bar off the dock band has no glass surface and therefore no card of its own, so the canvas — the
+one surface every place always has — is where it is reachable. That is the way back for a hidden
+bar, and the reason no arrangement is a one-way door. The row-order rule holds: a row the state
+makes inert is dropped, not drawn dead.
+
+**Hold to move.** At rest (outlines plus the pill), a long press on a bar's outline lifts it: the
+outline follows the finger as a ghost, every edge that bar may legally stand on in this orientation
+is drawn as a dashed slot, and a bar that may hide gets a tray captioned "Drop here to hide" in the
+free room. The dock's outline lifts whichever of its rows the finger went down on. Release over a
+slot or the tray writes as a pick does; release anywhere else springs the ghost back and writes
+nothing. A tap still opens the card. The status bar never hides, so lifting it shows no tray; the
+editor's own capture layer already claims the touch, so the bar's paging gesture never sees it.
+First entry after this ships shows "Hold a bar to move it" once.
+
+**Commit semantics are unchanged.** Only ✓ commits, ✕ puts the card away, Back from the resting
+state routes through the unsaved-changes dialog. The entry snapshot now carries every place's
+arrangement (both orientations) as well as its look, so Back → Discard and the ↺ tap put the
+arrangement back too, and dirtiness notices a moved bar. Restoring writes the values back through
+the store's setters, so a key that was resolving from the shared layer is materialised at the value
+it was resolving to — the same answer, spelled out.
+
+**Rules.** A pure `PlaceArrangePolicy` (`com.termux.app.place`) owns them, the way
+`MiniatureDragPolicy` owns the page's: status bar top or bottom, plus left/right in landscape, never
+hidden; pinned apps and extra keys bottom or away, plus left/right in landscape; the A–Z index can
+always be put away, and picks an edge of its own only while the pinned apps are off the dock band
+(`PlaceChromePolicy.azIndexStandsAlone`). It also hit-tests a point against the slot rectangles,
+nearest centre first, so the two slots that meet at a corner resolve.
+
+**Rotation.** The activity handles `orientation` itself, so the editor is not torn down mid-edit:
+the open card, the entry snapshot and dirtiness carry across, and the Place section re-reads for the
+new orientation on the layout pass that follows.
+
+| # | Branch | Delivers | Depends on | Gate |
+|---|---|---|---|---|
+| 3 | `feat/editor-arrange` | Place section on every card; live write-through and re-layout; hold-to-move with slots, tray and spring-back; `PlaceArrangePolicy` + `PlaceArrangeModel` + arrangement in the entry snapshot | Layout page v2 phase 1 | `PlaceArrangePolicyTest` and the editor's place tests green in `:app:testDebugUnitTest`; `:app:assembleDebug`; on pong: change an edge from the card, hold-and-move the extra keys, hide via the tray, rotate with a card open, Back → revert, then ✓ |
