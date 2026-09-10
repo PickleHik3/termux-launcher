@@ -284,8 +284,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     @Override public void onWidgetRepositoryChanged(@NonNull LauncherWidgetHostController.AddResult result) {
         render();
-        // render() hides the edit chrome; drop the session too so no stale state lingers.
-        if (edit != null && !pane.widgetEditActive()) edit = null;
         if (result == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
             pane.showNotice(pane.getContext().getString(R.string.widget_remove_failed));
         }
@@ -511,7 +509,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         if (committed) {
             render();
-            reenterEditChrome();
         } else {
             WidgetEditOverlayView overlay = pane.widgetEditOverlay();
             overlay.setDragging(false);
@@ -555,20 +552,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (record != null && rect != null && !rect.equals(record.cell)
             && widgets.repository().putRecord(record.withCell(rect))) {
             render();
-            reenterEditChrome();
         } else if (record != null) {
             pane.widgetEditOverlay().setFrameBounds(paneBounds(record.cell));
         }
-    }
-
-    /** render() hides the chrome; after a commit the frame returns at the new bounds. */
-    private void reenterEditChrome() {
-        if (edit == null) return;
-        LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
-        if (record == null) { exitEditMode(); return; }
-        WidgetEditOverlayView overlay = pane.widgetEditOverlay();
-        overlay.setListener(overlayListener);
-        overlay.show(paneBounds(record.cell), edit.horizontalResizable, edit.verticalResizable);
     }
 
     @NonNull private Rect paneBounds(@NonNull WidgetCellRect rect) {
@@ -587,9 +573,19 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
         pane.setReducedMotion(host.reducedMotion());
         pane.render(widgets.repository(), widgets.capability(), currentPage);
-        // A render hides the edit chrome, so the session can end here without anyone asking.
+        // A render hides the edit chrome. While a session is open and its widget is still on the
+        // page - after a commit, a grid resize from the page's own tab, another widget arriving -
+        // the chrome comes straight back at the widget's new bounds, and the host never hears the
+        // session end. Only a widget that is gone ends it here.
+        restoreEditChrome();
         syncEditSession();
         host.onWidgetPageRendered();
+    }
+
+    /** The open session again, sized for the grid the render just laid out. */
+    private void restoreEditChrome() {
+        if (edit == null) return;
+        if (!beginEditSession(edit.appWidgetId)) edit = null;
     }
 
     @NonNull private String messageFor(LauncherWidgetHostController.AddResult result) {
