@@ -336,6 +336,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
         java.util.Collections.emptyList();
     private int mDisplayActiveWindow = -1;
+    /** Turns a display window's {@code WM_CLASS} into the app icon its chip wears. */
+    @Nullable private com.termux.app.x11.X11WindowIconResolver mDisplayWindowIcons;
     /** Closes the display's apps before the server is killed; built the first time Stop is used. */
     @Nullable private com.termux.app.x11.DisplayStopSequence mDisplayStop;
     /** The place the wall last rested on, so leaving one can record what it leaves behind. */
@@ -5803,6 +5805,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mX11Windows != null) {
             mX11Windows.stop();
             mX11Windows = null;
+        }
+        if (mDisplayWindowIcons != null) {
+            mDisplayWindowIcons.shutdown();
+            mDisplayWindowIcons = null;
         }
         if (mDisplayStop != null) {
             mDisplayStop.abandon();
@@ -13333,6 +13339,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.x11.LinuxAppCatalog.applicationDirs());
         if (!force && signature == mLinuxAppsSignature) return;
         mLinuxAppsSignature = signature;
+        // Apps came or went, so a class that resolved to nothing may resolve now.
+        if (mDisplayWindowIcons != null) mDisplayWindowIcons.clear();
         com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this).refreshAsync(null, null);
     }
 
@@ -13493,6 +13501,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             onDisplayWindowsChanged(java.util.Collections.emptyList(), -1);
         }
+    }
+
+    /**
+     * The icon resolver, built the first time the Display place needs it. It outlives a display
+     * stopping and starting, since what an app's icon looks like does not depend on the server.
+     */
+    @Nullable
+    private com.termux.app.x11.X11WindowIconResolver displayWindowIcons() {
+        if (!com.termux.BuildConfig.X11_SERVER) return null;
+        if (mDisplayWindowIcons == null) {
+            mDisplayWindowIcons = new com.termux.app.x11.X11WindowIconResolver(getResources(),
+                (wmClass, icon) -> {
+                    if (icon == null || !isDisplayPageShowing() || !isSplitPanesEnabled()) return;
+                    com.termux.app.terminal.TerminalWindowBar bar =
+                        findViewById(R.id.terminal_window_bar);
+                    if (bar != null) syncWindowBarItems(bar);
+                });
+        }
+        return mDisplayWindowIcons;
     }
 
     private void onDisplayWindowsChanged(
@@ -14430,10 +14457,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isDisplayPageShowing()) {
             // The display's apps, front one selected; the terminal's marks (busy, attention,
             // done) have no meaning for them.
+            com.termux.app.x11.X11WindowIconResolver icons = displayWindowIcons();
             for (com.termux.app.x11.X11WindowList.Window window : mDisplayWindows) {
                 String label = window.label.isEmpty()
                     ? getString(R.string.termux_x11_window_unnamed) : window.label;
-                items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label));
+                // No icon yet, or none at all: the chip draws its generic app glyph, and a
+                // resolution that lands later syncs the bar again with the icon attached.
+                items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label)
+                    .withIcon(icons == null ? null : icons.iconFor(window.wmClass)));
             }
             selected = mDisplayActiveWindow;
         } else if (isWidgetsPageShowing()) {

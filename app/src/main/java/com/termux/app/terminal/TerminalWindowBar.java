@@ -130,6 +130,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
          * of every other mark, since an agent can be working in one pane while another rings.
          */
         @Nullable public final AgentStatus.State agentState;
+        /**
+         * The app's own mark for a Display-place window: its desktop icon reduced to a
+         * single-colour silhouette, which the chip tints like the process glyph. Null everywhere
+         * else, and for a window whose {@code WM_CLASS} matches no installed app — the chip then
+         * draws its generic glyph.
+         */
+        @Nullable public final android.graphics.Bitmap icon;
 
         public static final int NO_PERCENTAGE = -1;
 
@@ -166,6 +173,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
                           boolean attention, int progress, boolean progressError, boolean done,
                           boolean doneFailed, @Nullable AgentStatus.State agentState) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                agentState, null);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState,
+                          @Nullable android.graphics.Bitmap icon) {
             this.label = label;
             this.spokenLabel = spokenLabel;
             this.busy = busy;
@@ -175,6 +190,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             this.done = done;
             this.doneFailed = doneFailed;
             this.agentState = agentState;
+            this.icon = icon;
         }
 
         /**
@@ -186,14 +202,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState);
+                    doneFailed, agentState, icon);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState);
+                    doneFailed, agentState, icon);
         }
 
         @NonNull
@@ -206,7 +222,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withDone(boolean done, boolean failed) {
             return done == this.done && failed == this.doneFailed ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    failed, agentState);
+                    failed, agentState, icon);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
@@ -214,7 +230,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState);
+                    doneFailed, agentState, icon);
         }
 
         /** The rolled-up agent reading for this window's panes; null removes the dot. */
@@ -222,7 +238,19 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
             return agentState == this.agentState ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState);
+                    doneFailed, agentState, icon);
+        }
+
+        /**
+         * The app icon a Display window's chip wears; null draws the generic glyph. A copy rather
+         * than another constructor argument, so the item can be built from the window list before
+         * the icon has been resolved off the main thread and re-attached when it arrives.
+         */
+        @NonNull
+        public WindowItem withIcon(@Nullable android.graphics.Bitmap icon) {
+            return icon == this.icon ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon);
         }
 
         /** Whether the two would draw the same marks. Labels are compared separately. */
@@ -230,7 +258,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             return busy == other.busy && attention == other.attention && done == other.done
                 && doneFailed == other.doneFailed
                 && progress == other.progress && progressError == other.progressError
-                && agentState == other.agentState;
+                && agentState == other.agentState && icon == other.icon;
         }
     }
 
