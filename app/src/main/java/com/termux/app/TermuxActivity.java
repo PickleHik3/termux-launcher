@@ -13866,7 +13866,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setListener(this::selectWindowFromStatusBar);
         bar.setOnWindowSelectedListener(this::selectWindowFromStatusBar);
-        bar.setOnCreateWindowListener(this::createNewWindow);
+        bar.setOnCreateWindowListener(() -> {
+            // On the Display place the chips are the display's apps, and the plus meant
+            // "open another app"; the app drawer has no programmatic open yet, so the plus
+            // rests there instead of raising a terminal window under the display.
+            if (!isDisplayPageShowing()) createNewWindow();
+        });
         // A strip with nothing to scroll, or one pulled past the edge it already rests at, hands
         // the finger to the pane wall; a finger that scrolled the chips keeps them to the end.
         bar.setOnEdgeOverswipeListener(
