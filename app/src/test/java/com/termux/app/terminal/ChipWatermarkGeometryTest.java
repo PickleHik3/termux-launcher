@@ -15,12 +15,12 @@ public class ChipWatermarkGeometryTest {
         assertEquals(38, ChipWatermarkGeometry.glyphAlpha(0f));
         assertEquals(66, ChipWatermarkGeometry.glyphAlpha(1f));
         // A selection slide brightens it on the way rather than switching at the end.
-        assertEquals(105, ChipWatermarkGeometry.glyphAlpha(0.5f), 2);
+        assertEquals(52, ChipWatermarkGeometry.glyphAlpha(0.5f), 2);
         // Out of range is not a brighter watermark.
         assertEquals(38, ChipWatermarkGeometry.glyphAlpha(-3f));
         assertEquals(66, ChipWatermarkGeometry.glyphAlpha(4f));
-        assertEquals(Math.round(255 * .30f), ChipWatermarkGeometry.GLYPH_ALPHA);
-        assertEquals(Math.round(255 * .52f), ChipWatermarkGeometry.SELECTED_GLYPH_ALPHA);
+        assertEquals(Math.round(255 * .15f), ChipWatermarkGeometry.GLYPH_ALPHA);
+        assertEquals(Math.round(255 * .26f), ChipWatermarkGeometry.SELECTED_GLYPH_ALPHA);
     }
 
     /**
