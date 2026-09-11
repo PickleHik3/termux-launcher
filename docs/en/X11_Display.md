@@ -86,8 +86,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   says the mode is on; tap it, or the action again, to switch it off.
 - **Back** is the display's: it toggles the keyboard, as in Termux:X11. Change that with
   `termux-x11-preference`.
-- **Stop** from the long-press menu on the display, or with `pkill termux-x11`. Everything running on the display closes with it. The
-  display never starts on its own unless you turn on **Start with the launcher**.
+- **Stop** from the long-press menu on the display. Every app on it is asked to close itself first,
+  the way it would when you close its window, and the display goes once they have. `pkill
+  termux-x11` stops it outright instead, without giving apps that chance. The display never starts
+  on its own unless you turn on **Start with the launcher**.
 - **The display survives switching away.** Your X apps keep running while you are on the
   terminal or the widget grid; only the picture is put away.
 - **Options.** Settings → **Display** holds the switch, touch mode, resolution,
