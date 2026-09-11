@@ -45,9 +45,13 @@ public class TerminalWindowBarTest {
         assertFalse(tabs.getChildAt(0).isSelected());
         assertTrue(tabs.getChildAt(1).isSelected());
         assertEquals("ssh-icon zbook", ((TextView) tabs.getChildAt(1)).getText().toString());
-        assertEquals(Math.round(3.5f * bar.getResources().getDisplayMetrics().density),
+        float density = bar.getResources().getDisplayMetrics().density;
+        // The title starts past the watermark: the trailing side keeps the row's own 3.5dp, the
+        // leading one carries the nudge that clears the glyph as well.
+        assertEquals(Math.round(3.5f * density)
+                + Math.round(ChipWatermarkGeometry.TITLE_NUDGE_DP * density),
             tabs.getChildAt(1).getPaddingLeft());
-        assertEquals(tabs.getChildAt(1).getPaddingLeft(), tabs.getChildAt(1).getPaddingRight());
+        assertEquals(Math.round(3.5f * density), tabs.getChildAt(1).getPaddingRight());
         assertFalse(((TextView) tabs.getChildAt(1)).getIncludeFontPadding());
 
         tabs.getChildAt(0).performClick();
@@ -525,6 +529,52 @@ public class TerminalWindowBarTest {
      * A bar inside a real attached window, because the busy animator refuses to run while detached
      * or in an invisible window — the whole point of those guards.
      */
+    /**
+     * The watermark is the place's own colour, not the title's — sharing the text colour is what
+     * buried the glyph under it — and the title's halo is the fill of the chip it stands on, so
+     * both move when the place accent does.
+     */
+    @Test
+    public void theWatermarkTakesThePlaceAccentAndTheHaloTakesTheChipsFill() {
+        int accent = 0xFF12AB34;
+        TerminalWindowBar bar = attachedBar();
+        bar.setPlaceAccent(accent);
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("\uE795 home", "fish in home"),
+            new TerminalWindowBar.WindowItem("\uE795 zbook", "ssh in zbook")), 1);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+
+        // The accent's hue on both chips; only the strength says which one is selected.
+        assertEquals(accent & 0x00FFFFFF,
+            bar.chipWatermarkAt(0).watermarkColor() & 0x00FFFFFF);
+        assertEquals(accent & 0x00FFFFFF,
+            bar.chipWatermarkAt(1).watermarkColor() & 0x00FFFFFF);
+        assertEquals(ChipWatermarkGeometry.GLYPH_ALPHA,
+            android.graphics.Color.alpha(bar.chipWatermarkAt(0).watermarkColor()));
+        assertEquals(ChipWatermarkGeometry.SELECTED_GLYPH_ALPHA,
+            android.graphics.Color.alpha(bar.chipWatermarkAt(1).watermarkColor()));
+
+        // The halo is near-opaque whichever chip it is on, and the selected chip's fill is the
+        // accent's, so its halo carries that hue while the resting chip's does not.
+        TextView resting = (TextView) tabs.getChildAt(0);
+        TextView selected = (TextView) tabs.getChildAt(1);
+        assertEquals(ChipWatermarkGeometry.TITLE_HALO_ALPHA,
+            android.graphics.Color.alpha(resting.getShadowColor()));
+        assertEquals(ChipWatermarkGeometry.TITLE_HALO_ALPHA,
+            android.graphics.Color.alpha(selected.getShadowColor()));
+        assertEquals(accent & 0x00FFFFFF, selected.getShadowColor() & 0x00FFFFFF);
+        assertFalse("the two fills differ, so the two halos must too",
+            resting.getShadowColor() == selected.getShadowColor());
+        assertEquals(ChipWatermarkGeometry.TITLE_HALO_DP
+                * bar.getResources().getDisplayMetrics().density,
+            selected.getShadowRadius(), .001f);
+
+        // A new place repaints both: the watermark and the halo follow the accent, not the theme.
+        bar.setPlaceAccent(0xFF884400);
+        assertEquals(0x884400, bar.chipWatermarkAt(1).watermarkColor() & 0x00FFFFFF);
+        assertEquals(0x884400, ((TextView) tabs.getChildAt(1)).getShadowColor() & 0x00FFFFFF);
+    }
+
     private static TerminalWindowBar attachedBar() {
         return (TerminalWindowBar) attachedHost().getChildAt(0);
     }

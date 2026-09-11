@@ -11,16 +11,47 @@ import org.junit.Test;
 public class ChipWatermarkGeometryTest {
 
     @Test
-    public void theWatermarkIsThirtyPercentAtRestAndFortySelected() {
+    public void theWatermarkIsThirtyPercentAtRestAndFiftyTwoSelected() {
         assertEquals(77, ChipWatermarkGeometry.glyphAlpha(0f));
-        assertEquals(102, ChipWatermarkGeometry.glyphAlpha(1f));
+        assertEquals(133, ChipWatermarkGeometry.glyphAlpha(1f));
         // A selection slide brightens it on the way rather than switching at the end.
-        assertEquals(90, ChipWatermarkGeometry.glyphAlpha(0.5f), 2);
+        assertEquals(105, ChipWatermarkGeometry.glyphAlpha(0.5f), 2);
         // Out of range is not a brighter watermark.
         assertEquals(77, ChipWatermarkGeometry.glyphAlpha(-3f));
-        assertEquals(102, ChipWatermarkGeometry.glyphAlpha(4f));
+        assertEquals(133, ChipWatermarkGeometry.glyphAlpha(4f));
         assertEquals(Math.round(255 * .30f), ChipWatermarkGeometry.GLYPH_ALPHA);
-        assertEquals(Math.round(255 * .40f), ChipWatermarkGeometry.SELECTED_GLYPH_ALPHA);
+        assertEquals(Math.round(255 * .52f), ChipWatermarkGeometry.SELECTED_GLYPH_ALPHA);
+    }
+
+    /**
+     * The glyph is taller than the chip and hugs its leading edge, so it is cropped by the outline
+     * rather than floating inside it, and the title is pushed clear of it.
+     */
+    @Test
+    public void theGlyphHugsTheLeadingEdgeAndOutgrowsTheChip() {
+        assertEquals(21f, ChipWatermarkGeometry.GLYPH_SIZE_DP, .0001f);
+        assertEquals(2f, ChipWatermarkGeometry.GLYPH_LEADING_INSET_DP, .0001f);
+        assertEquals(5f, ChipWatermarkGeometry.TITLE_NUDGE_DP, .0001f);
+        // Taller than the 20dp chip: the rounded outline is what crops it.
+        assertTrue(ChipWatermarkGeometry.GLYPH_SIZE_DP > 20f);
+
+        // Reading left to right, the box starts 2px in and the glyph is centred in it.
+        assertEquals(12.5f,
+            ChipWatermarkGeometry.glyphCentreOnAxis(0f, 60f, 2f, 21f), .0001f);
+        // Reading right to left, the same inset from the other edge.
+        assertEquals(47.5f,
+            ChipWatermarkGeometry.glyphCentreOnAxis(60f, 0f, 2f, 21f), .0001f);
+    }
+
+    /** The halo is the chip's own fill with an alpha that can actually hide the glyph. */
+    @Test
+    public void theHaloKeepsTheFillsHueAndNothingOfItsAlpha() {
+        assertEquals(1.5f, ChipWatermarkGeometry.TITLE_HALO_DP, .0001f);
+        assertEquals(200, ChipWatermarkGeometry.TITLE_HALO_ALPHA);
+        // A fill at alpha 16 becomes the same colour at 200.
+        assertEquals(0xC8336699, ChipWatermarkGeometry.haloColor(0x10336699));
+        assertEquals(0xC8336699, ChipWatermarkGeometry.haloColor(0xFF336699));
+        assertEquals(0xC8000000, ChipWatermarkGeometry.haloColor(0x00000000));
     }
 
     /**
