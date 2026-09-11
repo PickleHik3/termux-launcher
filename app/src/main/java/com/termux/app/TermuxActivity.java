@@ -14040,6 +14040,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         showWindowFromBar(index);
     }
 
+    /**
+     * The × on a window chip was tapped. The chips stand for whatever the place in front of the
+     * user is showing, so the close goes the same way {@link #syncWindowBarItems} filled them: an
+     * app on the display asks that app to close itself, a terminal window takes its panes with it.
+     */
+    private void closeWindowFromStatusBar(int index) {
+        if (!isSplitPanesEnabled()) return;
+        if (isDisplayPageShowing()) {
+            // The app shows its own "save before closing?" when it has something to ask.
+            closeDisplayWindow(index);
+            return;
+        }
+        if (mPaneController == null || mCurrentWSession == null
+            || index < 0 || index >= mCurrentWSession.windows.size()) return;
+        if (windowHasForegroundJob(index)) confirmCloseWindow(index);
+        else closeWindow(index);
+    }
+
+    /** True when any pane of the current session's window at {@code index} is running something. */
+    private boolean windowHasForegroundJob(int index) {
+        if (mPaneController == null || mWindowForegroundResolver == null || mCurrentWSession == null
+            || index < 0 || index >= mCurrentWSession.windows.size()) return false;
+        for (TerminalSession shell :
+                mPaneController.shellsOf(mCurrentWSession.windows.get(index))) {
+            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                mWindowForegroundResolver.get(shell.getPid());
+            if (info != null && !info.idle) return true;
+        }
+        return false;
+    }
+
+    /** Closing a window that is still working asks first; mirrors the sessions panel's wording. */
+    private void confirmCloseWindow(int index) {
+        if (mCurrentWSession == null || index < 0 || index >= mCurrentWSession.windows.size()) return;
+        String name = mPaneController == null ? null
+            : mPaneController.windowName(mCurrentWSession.windows.get(index));
+        String title = name == null || name.isEmpty()
+            ? getString(R.string.session_browser_window, index + 1) : name;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.session_browser_close_title, title))
+            .setMessage(R.string.termux_window_close_running_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.session_browser_close, (dialog, which) -> closeWindow(index))
+            .show();
+    }
+
     private void setTerminalWindowBar() {
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar == null) return;
@@ -14049,6 +14095,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setListener(this::selectWindowFromStatusBar);
         bar.setOnWindowSelectedListener(this::selectWindowFromStatusBar);
+        bar.setOnWindowCloseRequestedListener(this::closeWindowFromStatusBar);
         bar.setOnCreateWindowListener(() -> {
             // The Display place opens another app from the drawer rather than a terminal window.
             if (isDisplayPageShowing()) getDrawer().openDrawer(android.view.Gravity.LEFT);

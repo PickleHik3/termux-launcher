@@ -732,6 +732,7 @@
                 <string name="termux_window_tab_progress_content_description">%1$d%% done</string>
                 <string name="termux_window_tab_done_content_description">finished</string>
                 <string name="termux_window_tab_failed_content_description">failed</string>
+                <string name="termux_window_tab_close_content_description">Close %1$s</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
                 <string name="termux_top_pane_media_content_description">Media playback controls</string>
@@ -1646,6 +1647,7 @@
         <item quantity="one">This terminates the pane in the session.</item>
         <item quantity="other">This terminates all %1$d panes in the session.</item>
     </plurals>
+    <string name="termux_window_close_running_message">Something is still running in this window.</string>
     <string name="session_browser_workspace_name">Workspace name</string>
     <string name="session_browser_save_workspace_title">Save Workspace</string>
     <string name="workspace_save_capture_commands">Also save what is running</string>
