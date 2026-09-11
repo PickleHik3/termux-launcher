@@ -9,8 +9,8 @@ import androidx.annotation.Nullable;
  * <p>Catalog entries carry a conservative {@code endpointContextWindow} (the floor, safe on any
  * supported phone) and the model's real {@code sourceContextWindow}. The endpoint window sizes the
  * LiteRT-LM engine budget and MNN's {@code max_all_tokens}, and it is what {@code /v1/models}
- * advertises, so it should grow with device memory instead of staying at the floor forever. An
- * explicit user setting always wins; otherwise the window is raised to the RAM tier's cap, never
+ * advertises, so it should grow with device memory instead of staying at the floor forever. A
+ * user setting selects a budget within the supported limit; otherwise the window is raised to the RAM tier's cap, never
  * above what the model supports and never below the catalog floor.
  */
 public final class TaiContextWindowPolicy {
@@ -38,11 +38,25 @@ public final class TaiContextWindowPolicy {
         long memoryBytes,
         @Nullable Integer userOverride
     ) {
-        if (userOverride != null && userOverride > 0) return Math.max(1024, userOverride);
+        int limit = Math.max(1, spec.sourceContextWindow);
+        int profileLimit = TaiModelProfile.forModel(spec).maxContextTokens;
+        if (profileLimit > 0) limit = Math.min(limit, profileLimit);
+        int artifactLimit = artifactContextLimit(spec.localPath);
+        if (TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend) && artifactLimit > 0)
+            limit = Math.min(limit, artifactLimit);
+        if (userOverride != null && userOverride > 0) return Math.min(limit, Math.max(1024, userOverride));
         int cap = tierCap(memoryBytes);
-        if (cap <= 0) return spec.endpointContextWindow;
-        int raised = Math.min(cap, Math.max(spec.sourceContextWindow, spec.endpointContextWindow));
-        return Math.max(spec.endpointContextWindow, raised);
+        int requested = cap <= 0 ? spec.endpointContextWindow : Math.max(spec.endpointContextWindow, cap);
+        return Math.min(limit, requested);
+    }
+
+    /** Published fixed-cache MedGemma exports. Do not infer hard limits from arbitrary filenames. */
+    public static int artifactContextLimit(String path) {
+        if (path == null) return 0;
+        String name = path.substring(path.lastIndexOf('/') + 1).split("[?#]", 2)[0];
+        if (name.equals("medgemma-1.5-4b-it_q4_block32_ekv2048.litertlm")
+            || name.equals("medgemma-1.5-4b-it_q4_block32_vision_ekv2048.litertlm")) return 2048;
+        return 0;
     }
 
     @NonNull

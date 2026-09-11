@@ -308,9 +308,10 @@ public final class TaiManager {
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
         if (url.isEmpty()) return error(400, "bad_request", "Missing download URL");
         String token = request.optString("huggingFaceToken", settings.getHuggingFaceToken());
+        JSONObject selectedArtifact = null;
         // Accept a bare repo URL: auto-detect the backend and resolve to the package entry file
         // (config.json / .litertlm) so the user never picks a backend or hunts the HF file list.
-        if (!url.contains("/resolve/")) {
+        if (TaiHuggingFace.parse(url) != null) {
             TaiModelDownloader.HfResolve resolved = modelDownloader.resolveHuggingFaceEntry(url, token);
             if (resolved.authRequired) {
                 JSONObject gated = error(403, "gated_model_requires_auth",
@@ -319,11 +320,24 @@ public final class TaiManager {
                 gated.put("huggingFaceTokenBundled", false);
                 return gated;
             }
+            if (resolved.candidates.length() > 1 || request.optBoolean("previewOnly", false)
+                && resolved.candidates.length() > 0) {
+                JSONObject choices = error(409, "artifact_selection_required", "Choose a model file to download.");
+                choices.put("candidates", resolved.candidates);
+                return choices;
+            }
             if (resolved.url.isEmpty()) {
                 return error(400, "hf_resolve_failed", "Could not find a downloadable model file in that Hugging Face repo. "
                     + "Paste the repo URL (e.g. https://huggingface.co/taobao-mnn/Qwen2.5-VL-3B-Instruct-MNN) or a direct .../resolve/main/<file> URL.");
             }
             url = resolved.url;
+            selectedArtifact = resolved.candidates.optJSONObject(0);
+        }
+        if (selectedArtifact != null) {
+            String required = selectedArtifact.optString("minimumRuntimeVersion", "");
+            if (!required.isEmpty() && !TaiArtifactCompatibility.versionAtLeast(com.termux.BuildConfig.LITERT_LM_VERSION, required))
+                return error(400, "runtime_update_required", "This model file needs LiteRT-LM " + required
+                    + " or later. This app includes " + com.termux.BuildConfig.LITERT_LM_VERSION + ".");
         }
         LinkedHashSet<String> capabilities = capabilitiesFromRequest(request, modelId, url);
         TaiModelProfile runtimeProfile = null;
@@ -341,7 +355,8 @@ public final class TaiManager {
             request.optString("license", "User accepted provider terms externally"),
             capabilities,
             token,
-            runtimeProfile
+            runtimeProfile,
+            selectedArtifact
         );
         data.put("downloadsRequireExplicitUserAction", true);
         data.put("huggingFaceTokenBundled", false);
@@ -994,6 +1009,8 @@ public final class TaiManager {
             item.put("_capabilities_verified", capabilitiesVerified);
             item.put("_capability_source", capabilitiesVerified ? "catalog"
                 : model.optString("capabilitySource", "import_or_user_metadata"));
+            // Declared by the publisher/importer until a device probe exists; never implied by provenance.
+            item.put("_capability_verification", model.optString("capabilityVerification", "declared"));
             JSONArray sourceCapabilities = model.optJSONArray("sourceCapabilities");
             JSONArray declaredEndpointCapabilities = model.optJSONArray("endpointCapabilities");
             JSONArray capabilities = declaredEndpointCapabilities == null ? model.optJSONArray("capabilities") : declaredEndpointCapabilities;
