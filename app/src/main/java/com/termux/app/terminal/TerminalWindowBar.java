@@ -1836,41 +1836,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return base.substring(0, head) + "…" + ext;
     }
 
+    /** The chip glyph for {@code process}; the table lives in {@link ProcessGlyphs}. */
     @NonNull
     private static String processGlyph(@Nullable String process) {
-        if (process == null) return glyph(0xE795);               // dev-terminal
-        switch (process) {
-            case "fish": return glyph(0xF023A);                // md-fish
-            case "pacman": return glyph(0xF0BAF);              // md-pac-man
-            case "ssh": return glyph(0xF08C0);                 // md-ssh
-            case "tmux": return glyph(0xEBC8);                 // cod-terminal-tmux
-            case "bash":
-            case "sh":
-            case "zsh": return glyph(0xF1183);                 // md-bash
-            case "python":
-            case "python3": return glyph(0xE73C);              // dev-python
-            case "node":
-            case "nodejs": return glyph(0xE719);               // dev-nodejs
-            case "docker": return glyph(0xE7B0);               // dev-docker
-            case "vim":
-            case "vi": return glyph(0xE7C5);                   // dev-vim
-            case "nvim":
-            case "neovim": return glyph(0xE6AE);               // custom-neovim
-            case "nano":
-            case "micro":
-            case "ne":
-            case "joe":
-            case "vis":
-            case "ed": return glyph(0xF0F6);                   // md-file-document-edit
-            case "emacs":
-            case "emacsclient": return glyph(0xE632);          // custom-emacs
-            case "hx":
-            case "helix":
-            case "kak":
-            case "kakoune": return glyph(0xEB0E);              // cod-edit
-            case "git": return glyph(0xE702);                  // dev-git
-            default: return glyph(0xE795);                       // dev-terminal
-        }
+        return ProcessGlyphs.forProcess(process);
     }
 
     /** Public so a named tab can keep the process glyph the derived label would have picked. */

@@ -381,6 +381,20 @@ public class TerminalWindowBarTest {
         assertEquals("nvim editing app.js", item.spokenLabel);
     }
 
+    /** A coding agent's chip wears the agent's own glyph, not the generic terminal. */
+    @Test
+    public void anAgentPaneWearsTheAgentsGlyph() {
+        TerminalWindowBar.WindowItem claude =
+            TerminalWindowBar.itemForForegroundProcess("claude", null);
+        assertEquals(new String(Character.toChars(0xEC82)), TerminalWindowBar.glyphOf(claude.label));
+        assertEquals("claude", claude.label.substring(TerminalWindowBar.leadingGlyphEnd(claude.label)).trim());
+        TerminalWindowBar.WindowItem codex = TerminalWindowBar.itemForNamed("build", "codex");
+        assertEquals(new String(Character.toChars(0xEC81)), TerminalWindowBar.glyphOf(codex.label));
+        TerminalWindowBar.WindowItem unknown =
+            TerminalWindowBar.itemForForegroundProcess("mystery", null);
+        assertEquals(ProcessGlyphs.DEFAULT, TerminalWindowBar.glyphOf(unknown.label));
+    }
+
     /**
      * A shell that reports a percentage gets a filling ring rather than a turning one, so nothing
      * needs frames — and the number is spoken, since the ring cannot be.
