@@ -33,14 +33,26 @@ public final class LinuxAppCatalog {
         /** The Icon key: a theme icon name or an absolute path, or empty. */
         @NonNull public final String icon;
         @NonNull public final String comment;
+        /**
+         * The {@code StartupWMClass} key: what this app sets as the class part of its windows'
+         * {@code WM_CLASS} when that is not simply its desktop-file name. Empty when unset. This
+         * is how a window on the display is traced back to the app that opened it.
+         */
+        @NonNull public final String startupWmClass;
 
         LinuxApp(@NonNull String id, @NonNull String name, @NonNull String exec,
                  @NonNull String icon, @NonNull String comment) {
+            this(id, name, exec, icon, comment, "");
+        }
+
+        LinuxApp(@NonNull String id, @NonNull String name, @NonNull String exec,
+                 @NonNull String icon, @NonNull String comment, @NonNull String startupWmClass) {
             this.id = id;
             this.name = name;
             this.exec = exec;
             this.icon = icon;
             this.comment = comment;
+            this.startupWmClass = startupWmClass;
         }
     }
 
@@ -99,6 +111,7 @@ public final class LinuxAppCatalog {
     @Nullable
     static LinuxApp parse(@NonNull String id, @NonNull File file) {
         String type = "", name = "", exec = "", icon = "", comment = "", tryExec = "";
+        String startupWmClass = "";
         boolean noDisplay = false, hidden = false, terminal = false, inEntry = false;
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
@@ -121,6 +134,7 @@ public final class LinuxAppCatalog {
                     case "TryExec": tryExec = value; break;
                     case "Icon": icon = value; break;
                     case "Comment": comment = value; break;
+                    case "StartupWMClass": startupWmClass = value; break;
                     case "NoDisplay": noDisplay = "true".equalsIgnoreCase(value); break;
                     case "Hidden": hidden = "true".equalsIgnoreCase(value); break;
                     case "Terminal": terminal = "true".equalsIgnoreCase(value); break;
@@ -133,7 +147,7 @@ public final class LinuxAppCatalog {
         if (!"Application".equals(type) || name.isEmpty() || exec.isEmpty()) return null;
         if (noDisplay || hidden || terminal) return null;
         if (!tryExec.isEmpty() && !executableExists(tryExec, file)) return null;
-        return new LinuxApp(id, name, stripFieldCodes(exec), icon, comment);
+        return new LinuxApp(id, name, stripFieldCodes(exec), icon, comment, startupWmClass);
     }
 
     private static boolean executableExists(@NonNull String tryExec, @NonNull File desktopFile) {

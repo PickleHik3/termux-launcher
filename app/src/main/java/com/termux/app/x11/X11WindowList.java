@@ -36,18 +36,30 @@ public final class X11WindowList {
     public static final class Window {
         public final int id;
         @NonNull public final String label;
+        /**
+         * The class part of the window's {@code WM_CLASS}, raw — not capitalised the way
+         * {@link #label} is. This is the key an installed app is looked up by, so it is kept
+         * exactly as the app set it; empty when the window sets no class.
+         */
+        @NonNull public final String wmClass;
 
         Window(int id, @NonNull String label) {
+            this(id, label, "");
+        }
+
+        Window(int id, @NonNull String label, @NonNull String wmClass) {
             this.id = id;
             this.label = label;
+            this.wmClass = wmClass;
         }
 
         @Override public boolean equals(Object o) {
-            return o instanceof Window && ((Window) o).id == id && ((Window) o).label.equals(label);
+            return o instanceof Window && ((Window) o).id == id && ((Window) o).label.equals(label)
+                && ((Window) o).wmClass.equals(wmClass);
         }
 
         @Override public int hashCode() {
-            return id * 31 + label.hashCode();
+            return (id * 31 + label.hashCode()) * 31 + wmClass.hashCode();
         }
     }
 
@@ -219,7 +231,8 @@ public final class X11WindowList {
                 if (isHiddenFromSwitcher(id)) continue;
                 selectPropertyChanges(id);
                 if (id == activeId) activeIndex = windows.size();
-                windows.add(new Window(id, labelOf(id)));
+                String wmClass = classOf(id);
+                windows.add(new Window(id, labelOf(id, wmClass), wmClass));
             }
             publish(windows, activeIndex);
         } while (dirty && ++guard < 8);
@@ -240,14 +253,8 @@ public final class X11WindowList {
      * title is what the app is doing, which is too long for a chip and changes as it works.
      */
     @NonNull
-    private String labelOf(int window) throws IOException {
-        Property wmClass = getProperty(window, ATOM_WM_CLASS, ATOM_STRING);
-        if (wmClass != null && wmClass.format == 8) {
-            // Two NUL-terminated strings: the instance, then the class; the class is the app.
-            String[] parts = new String(wmClass.data, StandardCharsets.ISO_8859_1).split("\0");
-            String name = parts.length > 1 ? parts[1] : parts.length > 0 ? parts[0] : "";
-            if (!name.trim().isEmpty()) return capitalise(name.trim());
-        }
+    private String labelOf(int window, @NonNull String wmClass) throws IOException {
+        if (!wmClass.isEmpty()) return capitalise(wmClass);
         Property title = getProperty(window, atomNetWmName, atomUtf8String);
         if (title != null && title.format == 8 && title.data.length > 0) {
             return new String(title.data, StandardCharsets.UTF_8).trim();
@@ -257,6 +264,20 @@ public final class X11WindowList {
             return new String(title.data, StandardCharsets.ISO_8859_1).trim();
         }
         return "";
+    }
+
+    /**
+     * The class part of the window's {@code WM_CLASS}, trimmed, or empty. Read on its own because
+     * it is both what the chip is labelled with and what its app icon is looked up by.
+     */
+    @NonNull
+    private String classOf(int window) throws IOException {
+        Property wmClass = getProperty(window, ATOM_WM_CLASS, ATOM_STRING);
+        if (wmClass == null || wmClass.format != 8) return "";
+        // Two NUL-terminated strings: the instance, then the class; the class is the app.
+        String[] parts = new String(wmClass.data, StandardCharsets.ISO_8859_1).split("\0");
+        String name = parts.length > 1 ? parts[1] : parts.length > 0 ? parts[0] : "";
+        return name.trim();
     }
 
     @NonNull
