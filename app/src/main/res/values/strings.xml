@@ -1200,6 +1200,7 @@
                      wears the palette glyph again for all of them; ✕ only puts the card away. -->
                 <string name="termux_surface_editor_open_look">Style all surfaces</string>
                 <string name="termux_surface_editor_all_surfaces">All surfaces</string>
+                <string name="surface_editor_global_heading">Global</string>
                 <string name="termux_surface_editor_hide_panel">Hide panel</string>
                 <string name="termux_surface_editor_action_chevron">›</string>
                 <string name="termux_surface_editor_select_description">Edit %1$s</string>
@@ -1221,7 +1222,6 @@
                 <string name="termux_surface_editor_place_shared_description">Shared with every place.</string>
                 <string name="termux_surface_editor_place_own_description">%1$s has its own. Tap to share it again.</string>
                 <string name="termux_surface_editor_place_title">%1$s · %2$s</string>
-                <string name="termux_surface_editor_place_shared_note">Presets and these sliders change every place.</string>
                 <!-- The arrangement of the place the editor is open on: where its bars stand, on
                      the card of the surface each one belongs to. -->
                 <string name="termux_surface_editor_place_section">Place</string>
