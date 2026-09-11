@@ -343,6 +343,12 @@ public final class TerminalRenderer {
     private int mImageRowsRecordedLastFrame;
     private boolean mRowCacheBypassed;
 
+    /** Colour of the curly underline under a detected URL; 0 leaves URLs unmarked. */
+    private int mUrlUnderlineColor;
+
+    /** The URL cells of the visible rows, refreshed each frame from the screen text. */
+    private final UrlUnderlines mUrlUnderlines = new UrlUnderlines();
+
     private final Paint mTextPaint = new Paint();
     /** Fills for the find overlay, kept off the text paint's per-run state. */
     private final Paint mOverlayPaint = new Paint();
@@ -781,6 +787,20 @@ public final class TerminalRenderer {
         mRowCacheBypassed = bypassed;
     }
 
+    /**
+     * Mark every plain-text URL on screen with a curly underline in {@code color}, so a tap target
+     * is visible before it is tapped — touch has no hover. Zero turns the marks off.
+     */
+    public void setUrlUnderlineColor(int color) {
+        if (mUrlUnderlineColor == color) return;
+        mUrlUnderlineColor = color;
+        mRowCache.invalidate();
+    }
+
+    public int getUrlUnderlineColor() {
+        return mUrlUnderlineColor;
+    }
+
     /** The ASCII advance table, for tests that check when a rebuild shares it. */
     float[][] asciiMeasures() {
         return mAsciiMeasures;
@@ -834,6 +854,7 @@ public final class TerminalRenderer {
         final int[] palette = mEmulator.mColors.mCurrentColors;
         final int cursorShape = mEmulator.getCursorStyle();
         mEmulator.setCellSize((int) mFontWidth, (int) mFontLineSpacing);
+        mUrlUnderlines.prepare(screen, topRow, endRow, columns, mEmulator.mRows, mUrlUnderlineColor != 0);
         if (reverseVideo) {
             canvas.drawColor(palette[TextStyle.COLOR_INDEX_FOREGROUND], PorterDuff.Mode.SRC);
         } else if (transparentBackground) {
@@ -881,7 +902,7 @@ public final class TerminalRenderer {
             TerminalRow lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
             drawRowGlyphs(mEmulator, canvas, lineObject, palette, heightOffset, columns, cursorX,
                 cursorVisible, cursorShape, selx1, selx2, boldWithBright, reverseVideo,
-                horizontalOffset, false);
+                horizontalOffset, false, mUrlUnderlines.segmentsFor(row - topRow));
         }
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
     }
@@ -964,7 +985,7 @@ public final class TerminalRenderer {
             final TerminalRow lineObject =
                 screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
             final boolean changed = mRowCache.rowChanged(index, lineObject, columns, cursorX,
-                cursorShape, cursorColor, selx1, selx2);
+                cursorShape, cursorColor, selx1, selx2, mUrlUnderlines.keyFor(index));
             final boolean carriesAnImage = mRowCache.rowCarriesAnImage(index);
             final android.graphics.RenderNode background = nodes.background(index);
             final android.graphics.RenderNode glyphs = nodes.glyphs(index);
@@ -1016,7 +1037,7 @@ public final class TerminalRenderer {
             try {
                 drawRowGlyphs(mEmulator, into, lineObject, palette, heightOffset, columns, cursorX,
                     cursorVisible, cursorShape, selx1, selx2, boldWithBright, reverseVideo,
-                    horizontalOffset, true);
+                    horizontalOffset, true, mUrlUnderlines.segmentsFor(index));
             } finally {
                 glyphs.endRecording();
             }
@@ -1051,7 +1072,8 @@ public final class TerminalRenderer {
                                int[] palette, float heightOffset, int columns, int cursorX,
                                boolean cursorVisible, int cursorShape, int selx1, int selx2,
                                boolean boldWithBright, boolean reverseVideo,
-                               float horizontalOffset, boolean imagesRecordedSeparately) {
+                               float horizontalOffset, boolean imagesRecordedSeparately,
+                               @Nullable int[] urlSegments) {
         final char[] line = lineObject.mText;
         final int charsUsedInLine = lineObject.getSpaceUsed();
         long lastRunStyle = 0;
@@ -1382,6 +1404,27 @@ public final class TerminalRenderer {
                 horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0,
                 lastRunSymbolTypeface, lastRunFallbackTypeface, lastRunSymbolFeatures,
                 lastRunSymbolVariations, false);
+        }
+        if (urlSegments != null)
+            drawUrlUnderlines(canvas, lineObject, urlSegments, heightOffset, horizontalOffset);
+    }
+
+    /**
+     * The curly underline under each detected URL of a row, drawn after its glyphs so it sits on
+     * top of them like any other decoration. Cells that already carry an OSC 8 hyperlink keep
+     * their single underline instead: one mark per link.
+     */
+    private void drawUrlUnderlines(Canvas canvas, TerminalRow lineObject, int[] segments,
+                                   float heightOffset, float horizontalOffset) {
+        final boolean rowHasHyperlinks = lineObject.hasHyperlinks();
+        for (int i = 0; i + 1 < segments.length; i += 2) {
+            final int start = segments[i];
+            final int end = segments[i + 1];
+            if (rowHasHyperlinks && lineObject.getHyperlinkId(start) != 0) continue;
+            final float left = horizontalOffset + start * mFontWidth;
+            final float right = horizontalOffset + end * mFontWidth;
+            drawUnderline(canvas, left, right, heightOffset, mFontBaselineDescent,
+                TextStyle.UNDERLINE_STYLE_CURLY, mUrlUnderlineColor);
         }
     }
 

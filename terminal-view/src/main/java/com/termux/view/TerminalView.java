@@ -863,6 +863,7 @@ public final class TerminalView extends View {
                 replaced.mLigaturePolicy, replaced.mFontFeatures, replaced.mFontVariations,
                 replaced.mFontMetricsAdjustments, replaced.mBoxDrawingPolicy,
                 replaced.mFallbackTypefaces, replaced.mSymbolExpansion, replaced);
+        mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
         // The new renderer has taken everything worth inheriting; the old one's per-row recordings
         // are the size of the screen and will never be replayed again.
         if (replaced != null) replaced.release();
@@ -888,6 +889,16 @@ public final class TerminalView extends View {
     /** See {@link TerminalRenderer#setRowCacheBypassed}: for a frozen copy of this view. */
     public void setRowCacheBypassed(boolean bypassed) {
         if (mRenderer != null) mRenderer.setRowCacheBypassed(bypassed);
+    }
+
+    private int mUrlUnderlineColor;
+
+    /** See {@link TerminalRenderer#setUrlUnderlineColor}; survives a renderer rebuild. */
+    public void setUrlUnderlineColor(int color) {
+        if (mUrlUnderlineColor == color) return;
+        mUrlUnderlineColor = color;
+        if (mRenderer != null) mRenderer.setUrlUnderlineColor(color);
+        invalidate();
     }
 
     public void setTypeface(Typeface newTypeface, Typeface newItalicTypeface) {
@@ -994,6 +1005,7 @@ public final class TerminalView extends View {
         mRenderer = new TerminalRenderer(replaced.mTextSize, regular, bold, italic, boldItalic,
             symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
             boxDrawingPolicy, fallbackTypefaces, symbolExpansion, replaced);
+        mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
         replaced.release();
         updateSize();
         invalidate();

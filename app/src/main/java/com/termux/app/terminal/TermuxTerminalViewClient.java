@@ -46,12 +46,12 @@ import org.json.JSONObject;
 import juloo.keyboard2.KeyValue;
 import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.termux.TermuxUtils;
-import com.termux.shared.termux.data.TermuxUrlUtils;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
+import com.termux.terminal.UrlDetector;
 import com.termux.view.TerminalView;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -155,6 +155,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (view != null) {
             view.setKeepScreenOn(mHost.preferences().shouldKeepScreenOn());
             applyCursorTrailPolicy(view);
+            applyUrlUnderlinePolicy(view);
         }
     }
 
@@ -176,6 +177,22 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
+     * Mark the URLs a tap would open. Touch has no hover, so the mark is the tap target's only
+     * affordance; it follows the same preference as the tap, and takes the theme's accent so it
+     * reads as interactive against any text colour.
+     */
+    public void applyUrlUnderlinePolicy(TerminalView view) {
+        if (view == null)
+            return;
+        int color = 0;
+        if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
+            color = com.google.android.material.color.MaterialColors.getColor(mContext,
+                com.google.android.material.R.attr.colorPrimary, 0);
+        }
+        view.setUrlUnderlineColor(color);
+    }
+
+    /**
      * Should be called when the activity's onStart() is called
      */
     public void onStart() {
@@ -194,6 +211,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public void onResume() {
         setSoftKeyboardState(true, mHost.isActivityRecreated());
         applyCursorTrailPolicy(mHost.focusedView());
+        applyUrlUnderlinePolicy(mHost.focusedView());
         mTerminalCursorBlinkerStateAlreadySet = false;
         if (mHost.focusedView().mEmulator != null) {
             // Start terminal cursor blinking if enabled
@@ -1244,38 +1262,26 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
-     * The URL under a tap, or null. The word at the tap is the usual answer; but a URL wrapped by a
-     * multiplexer pane is two words on two rows, so the rows around the tap are read together and a
-     * whole address that contains the tapped word wins over the fragment — from either half.
+     * The URL under a tap, or null: the address whose underlined cells include the tapped one, so
+     * what opens is exactly what the screen marked as openable.
      */
     @Nullable
-    private static String urlAtTap(@NonNull com.termux.terminal.TerminalEmulator term,
-                                   int column, int row) {
-        com.termux.terminal.TerminalBuffer screen = term.getScreen();
-        String word = screen.getWordAtLocation(column, row);
-        String cleaned = word.replaceAll("^[|\u2502\u2503\u2551\u258c\u2590\u258f\u2595\u2591\u2592\u2593\u2588]+|[|\u2502\u2503\u2551\u258c\u2590\u258f\u2595\u2591\u2592\u2593\u2588]+$", "");
-        if (cleaned.length() >= 3) {
-            int first = Math.max(-screen.getActiveTranscriptRows(), row - 2);
-            int last = Math.min(term.mRows - 1, row + 2);
-            String rows = screen.getSelectedText(0, first, term.mColumns, last, true, true);
-            for (CharSequence candidate : TermuxUrlUtils.extractUrls(rows)) {
-                String url = candidate.toString();
-                if (url.contains(cleaned) && url.indexOf('\n') < 0) {
-                    // Prefer a joined address over the fragment a single row holds.
-                    if (!url.equals(cleaned) || TermuxUrlUtils.extractUrls(cleaned).isEmpty()) return url;
-                }
-            }
-        }
-        LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(word);
-        return urlSet.isEmpty() ? null : urlSet.iterator().next().toString();
+    private static String urlAtTap(@NonNull TerminalEmulator term, int column, int row) {
+        UrlDetector.UrlSpan span = UrlDetector.at(term.getScreen(), column, row);
+        return span == null ? null : span.url;
     }
 
     public void showUrlSelection() {
         TerminalSession session = mHost.currentSession();
         if (session == null)
             return;
-        String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
-        LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(text);
+        TerminalEmulator emulator = session.getEmulator();
+        if (emulator == null)
+            return;
+        com.termux.terminal.TerminalBuffer screen = emulator.getScreen();
+        LinkedHashSet<CharSequence> urlSet = new LinkedHashSet<>();
+        for (UrlDetector.UrlSpan span : UrlDetector.find(screen, -screen.getActiveTranscriptRows(), emulator.mRows - 1))
+            urlSet.add(span.url);
         TerminalSheetController sheet = mHost.sheetController();
         String title = mContext.getString(R.string.action_select_url);
         if (urlSet.isEmpty()) {
