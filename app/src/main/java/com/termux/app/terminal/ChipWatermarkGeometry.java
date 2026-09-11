@@ -38,11 +38,11 @@ public final class ChipWatermarkGeometry {
     public static final float OUTLINE_WIDTH_DP = 1f;
 
     /**
-     * The watermark's strength, as alpha: 30% at rest, 52% selected. It is drawn in the place
+     * The watermark's strength, as alpha: 15% at rest, 26% selected. It is drawn in the place
      * accent rather than the title's colour — sharing the text's colour is exactly what buried it.
      */
-    public static final int GLYPH_ALPHA = 77;
-    public static final int SELECTED_GLYPH_ALPHA = 133;
+    public static final int GLYPH_ALPHA = 38;
+    public static final int SELECTED_GLYPH_ALPHA = 66;
 
     /** The faint full outline a reported percentage fills over. */
     public static final int RING_TRACK_ALPHA = 56;

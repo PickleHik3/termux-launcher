@@ -17,13 +17,13 @@ done and failed marks take the same slot. Up to four of thirteen cells go to ind
 | C1 | **Glyph behind the title.** The chip outline wraps the text alone; the process glyph is drawn 16 dp, centred behind the title, clipped by the chip. Busy becomes the chip's own outline as ring. Marks and the agent dot become corner dots. |
 | C2 | **× as a segment of the chip.** The selected chip grows 24 dp on its trailing side behind a hairline divider; the × shares the selected fill. Neighbours are pushed, never covered. |
 | C3 | **Display chips get the app icon**, mapped from `WM_CLASS` to the drawer catalogue's desktop-file icon, drawn as a single-colour silhouette. No match → generic app glyph. |
-| C4 | ~~Glyph strength 30 % of the text colour, +10 when selected~~ **Amended 2026-09-11 evening after the first pong look (glyph buried under the title):** glyph in the **place accent** at 30 %, 52 % when selected; **21 dp, filled**, anchored at the **leading edge** with the title nudged 5 dp; the title gets a **soft halo** in the chip fill so letters separate from the glyph. |
+| C4 | ~~Glyph strength 30 % of the text colour, +10 when selected~~ **Amended 2026-09-11 evening after the first pong look (glyph buried under the title):** glyph in the **place accent** at 15 %, 26 % when selected (halved again 2026-09-11 night at the user's request); **21 dp, filled**, anchored at the **leading edge** with the title nudged 5 dp; the title gets a **soft halo** in the chip fill so letters separate from the glyph. |
 
 ## Behaviour
 
 - **Label** is the title only. Named window ≤ 14 code points; process labels keep `LABEL_MAX_CHARS`.
 - **Glyph** = today's `processGlyph` map rendered from the Nerd Font face into a per-chip layered
-  drawable under the text: 21 dp filled, place accent (primary when none) at 30 % (52 % selected),
+  drawable under the text: 21 dp filled, place accent (primary when none) at 15 % (26 % selected),
   anchored 2 dp from the leading edge and clipped to the chip; the title starts 5 dp further in
   and carries a soft halo (1.5 dp shadow layer) in the chip fill colour. Constants, not settings.
 - **Busy** = the chip's 1 dp outline: indeterminate travels a 270° arc around the rounded rect on the
