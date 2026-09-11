@@ -116,9 +116,14 @@ public final class MiniatureDragPolicy {
                 return new Targets(edges(landscape, false), true);
             case AZ_INDEX:
                 // Riding under the pinned apps the index goes wherever they go, so the only thing
-                // a drag can do with it there is put it away.
+                // a drag can do with it there is put it away — and, once it is away, bring it back
+                // to the one place it can ride: the bottom. Without that slot a chip in the tray
+                // would lift with nowhere to go but the tray it came from.
                 boolean standsAlone = !PlaceChromePolicy.appsRowShown(layout);
-                return new Targets(standsAlone ? edges(landscape, true) : new ArrayList<>(), true);
+                if (standsAlone) return new Targets(edges(landscape, true), true);
+                List<Edge> riding = new ArrayList<>(1);
+                if (!PlaceChromePolicy.azRowShown(layout)) riding.add(Edge.BOTTOM);
+                return new Targets(riding, true);
             default:
                 return NOTHING;
         }

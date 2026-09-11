@@ -209,8 +209,16 @@ public final class PlaceLayoutStore {
             RowPlacement.BOTTOM), orientation);
     }
 
+    /**
+     * Placing the extra keys somewhere is also asking to see them: the terminal's own toolbar
+     * toggle can have hidden them everywhere, and a placement that toggle still vetoes would read
+     * back as hidden the moment it was written.
+     */
     public void setExtraKeys(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
                              @NonNull RowPlacement placement) {
+        if (placement != RowPlacement.HIDDEN && !mPreferences.shouldShowTerminalToolbar()) {
+            mPreferences.setShowTerminalToolbar(true);
+        }
         writeString(place, orientation, KEY_EXTRA_KEYS, placement.storageValue());
     }
 

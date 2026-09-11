@@ -155,7 +155,9 @@ public final class LayoutChooserModel {
             case AZ_INDEX:
                 return azValue(context, places, place, orientation);
             case EXTRA_KEYS:
-                return context.getString(rowLabel(places.extraKeys(place, orientation)));
+                // The effective placement: the terminal's toolbar toggle can hide the keys
+                // everywhere, and the row must say what the miniature shows.
+                return context.getString(rowLabel(places.resolve(place, orientation).extraKeys));
             case KEYBOARD:
                 return context.getString(formLabel(places.keyboardForm(place, orientation)));
             case WIDGET_GRID:
@@ -210,7 +212,7 @@ public final class LayoutChooserModel {
             case EXTRA_KEYS:
                 for (PlaceOrientation orientation : BOTH) {
                     groups.add(rowPills(context, orientation, orientation(context, orientation),
-                        places.extraKeys(place, orientation),
+                        places.resolve(place, orientation).extraKeys,
                         value -> places.setExtraKeys(place, orientation,
                             RowPlacement.parse(value, RowPlacement.BOTTOM))));
                 }

@@ -95,6 +95,17 @@ public class MiniatureDragPolicyTest {
     }
 
     @Test
+    public void aHiddenAzIndexUnderThePinnedAppsComesBackToTheBottomOnly() {
+        // Its chip in the tray must have somewhere to go; the bottom is where it rides.
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            Targets hidden = targets(Bar.AZ_INDEX, orientation, layout(RowPlacement.BOTTOM, false));
+            assertEquals(orientation + ": back under the pinned apps",
+                Arrays.asList(Edge.BOTTOM), edges(hidden));
+            assertTrue(hidden.tray);
+        }
+    }
+
+    @Test
     public void theAzIndexGetsEdgesOfItsOwnOnceThePinnedAppsAreOffTheBottom() {
         for (RowPlacement standingAlone
             : new RowPlacement[]{RowPlacement.HIDDEN, RowPlacement.LEFT, RowPlacement.RIGHT}) {
