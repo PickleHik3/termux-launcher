@@ -49,6 +49,19 @@ public class LinuxAppCatalogTest {
         assertEquals("/usr/share/feh.png", apps.get(0).icon);
     }
 
+    @Test public void startupWmClassIsReadWhereTheAppDeclaresOne() throws IOException {
+        File dir = temp.newFolder("applications");
+        write(dir, "code-oss.desktop", "[Desktop Entry]\nType=Application\nName=Code\n"
+            + "Exec=code-oss %F\nIcon=code\nStartupWMClass=Code\n");
+        write(dir, "firefox.desktop", "[Desktop Entry]\nType=Application\nName=Firefox\n"
+            + "Exec=firefox %u\nIcon=firefox\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(Collections.singletonList(dir));
+
+        assertEquals("Code", LinuxAppCatalog.find(apps, "code-oss").startupWmClass);
+        assertEquals("", LinuxAppCatalog.find(apps, "firefox").startupWmClass);
+    }
+
     @Test public void hiddenTerminalAndNonApplicationEntriesAreSkipped() throws IOException {
         File dir = temp.newFolder("applications");
         write(dir, "hidden.desktop", "[Desktop Entry]\nType=Application\nName=H\nExec=h\nNoDisplay=true\n");
