@@ -127,17 +127,12 @@ public class ChipWatermarkGeometryTest {
     }
 
     @Test
-    public void theAgentDotBreathesOnceATurn() {
-        assertEquals(ChipWatermarkGeometry.AGENT_PULSE_MIN_ALPHA,
-            ChipWatermarkGeometry.breathAlpha(0f));
-        assertEquals(ChipWatermarkGeometry.AGENT_PULSE_MAX_ALPHA,
-            ChipWatermarkGeometry.breathAlpha(.5f));
-        assertEquals(ChipWatermarkGeometry.AGENT_PULSE_MIN_ALPHA,
-            ChipWatermarkGeometry.breathAlpha(.9999f), 1);
-        // Up then down, and symmetric about the middle of the turn.
-        assertEquals(ChipWatermarkGeometry.breathAlpha(.25f), ChipWatermarkGeometry.breathAlpha(.75f));
-        assertTrue(ChipWatermarkGeometry.breathAlpha(.25f)
-            > ChipWatermarkGeometry.breathAlpha(.1f));
+    public void aHollowMarkStaysTheSizeOfAFilledOne() {
+        // Failed and attention share the corner and the colour; only the stroke tells them apart,
+        // so the ring must not be drawn at some other size and read as a different mark.
+        assertTrue(ChipWatermarkGeometry.DOT_RING_WIDTH_DP > 0f);
+        assertTrue("the ring has to fit inside the dot it replaces",
+            ChipWatermarkGeometry.DOT_RING_WIDTH_DP < ChipWatermarkGeometry.DOT_DIAMETER_DP / 2f);
     }
 
     @Test

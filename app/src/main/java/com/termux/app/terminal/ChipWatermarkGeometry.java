@@ -34,6 +34,8 @@ public final class ChipWatermarkGeometry {
     public static final float DOT_GAP_DP = 2f;
     /** The ring of ground colour around a corner dot, so it reads against the glyph underneath. */
     public static final float DOT_HALO_DP = 1f;
+    /** The stroke of a hollow mark — a failure — so it reads as a ring, not a dot. */
+    public static final float DOT_RING_WIDTH_DP = 1.5f;
     /** The chip's outline, which is also the ring a working window draws. */
     public static final float OUTLINE_WIDTH_DP = 1f;
 
@@ -50,11 +52,6 @@ public final class ChipWatermarkGeometry {
     /** How much of the outline the indeterminate arc covers: the ring's 270°, as a fraction. */
     public static final float RING_SWEEP_FRACTION =
         WindowActivityRing.INDETERMINATE_SWEEP_DEG / 360f;
-
-    /** How faint an idle agent's dot sits, and the ends of a working one's breath. */
-    public static final int AGENT_IDLE_ALPHA = 110;
-    public static final int AGENT_PULSE_MIN_ALPHA = 96;
-    public static final int AGENT_PULSE_MAX_ALPHA = 255;
 
     /** The × the selected chip grows on its trailing side, and how long it takes to open. */
     public static final float CLOSE_SEGMENT_DP = 24f;
@@ -153,14 +150,6 @@ public final class ChipWatermarkGeometry {
         if (lengthPx <= 0f) return 0f;
         float overrun = startPx + sweepPx - lengthPx;
         return overrun <= 0f ? 0f : Math.min(overrun, lengthPx);
-    }
-
-    /** One breath per turn of the shared clock: up for the first half, down for the second. */
-    public static int breathAlpha(float phase) {
-        float wrapped = clamp01(phase - (float) Math.floor(phase));
-        float triangle = wrapped < 0.5f ? wrapped * 2f : (1f - wrapped) * 2f;
-        return Math.round(
-            AGENT_PULSE_MIN_ALPHA + (AGENT_PULSE_MAX_ALPHA - AGENT_PULSE_MIN_ALPHA) * triangle);
     }
 
     /** How wide the × segment stands at {@code fraction} of its opening. */

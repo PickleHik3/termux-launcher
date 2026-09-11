@@ -344,6 +344,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mGroundColor;
     private int mBusyColor;
     private int mAttentionColor;
+    private int mDoneColor;
     @Nullable private Integer mPlaceAccent;
     /** Whether the strip ends with the plus that opens a new window. */
     private boolean mCreateButtonShown = true;
@@ -885,12 +886,31 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * The dot the chip's top-trailing corner carries. A bell outranks the tick or the cross, as it
-     * always has: a window that is asking is the news, not that its last command ended.
+     * The one dot the chip carries, on its top-trailing corner.
+     *
+     * <p>A pane running an agent is read from the agent, because the agent is the better witness.
+     * The generic layer underneath cannot tell a Codex that has finished its turn from one that is
+     * asking a question — both ring the bell — so on those panes its bell means the turn ended and
+     * the mark is a tick, while only {@code BLOCKED} is allowed to say the window wants the user.
+     * Working says nothing here at all: the ring is already saying it.
+     *
+     * <p>An ordinary shell keeps the rules it always had, where a bell is the news and outranks a
+     * command that merely ended.
      */
     @NonNull
     static ChipWatermarkDrawable.Mark markFor(@NonNull WindowItem item) {
-        if (item.attention) return ChipWatermarkDrawable.Mark.BELL;
+        if (item.agentState != null) {
+            if (item.agentState == AgentStatus.State.BLOCKED) {
+                return ChipWatermarkDrawable.Mark.ATTENTION;
+            }
+            if (item.agentState == AgentStatus.State.WORKING) {
+                return ChipWatermarkDrawable.Mark.NONE;
+            }
+            if (!item.attention && !item.done) return ChipWatermarkDrawable.Mark.NONE;
+            return item.doneFailed ? ChipWatermarkDrawable.Mark.FAILED
+                : ChipWatermarkDrawable.Mark.DONE;
+        }
+        if (item.attention) return ChipWatermarkDrawable.Mark.ATTENTION;
         if (item.done) {
             return item.doneFailed ? ChipWatermarkDrawable.Mark.FAILED
                 : ChipWatermarkDrawable.Mark.DONE;
@@ -899,36 +919,24 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * Whether the chip's outline is drawing the ring. The mark no longer takes the ring's place —
-     * they are different corners now — so a window that is working and asking says both.
+     * Whether the chip's outline is drawing the ring — the one thing that says work is happening.
+     *
+     * <p>On a pane running an agent the agent's own report drives it, not the CPU heuristic: the
+     * two were reporting the same fact in two places, and the agent is right more often — it still
+     * says it is working through a pause the heuristic would read as finished.
      */
     private static boolean showsRing(@NonNull WindowItem item) {
+        if (item.agentState != null) return item.agentState == AgentStatus.State.WORKING;
         return item.busy;
     }
 
     /**
-     * The dot's colour per state: the row's working accent while the agent works, the same warm
-     * "this one wants you" colour the bell uses when it is waiting, and the pill's own muted label
-     * colour when it is sitting at its prompt.
+     * Finished in the done colour, everything else in the attention colour. A failure shares that
+     * colour with a window asking for the user and is told apart by being drawn hollow: both are
+     * news you have to act on, and neither should be mistaken for the other.
      */
-    private int agentDotColor(@Nullable AgentStatus.State state) {
-        if (state == AgentStatus.State.BLOCKED) return mAttentionColor;
-        if (state == AgentStatus.State.WORKING) return mBusyColor;
-        return mUnselectedTextColor;
-    }
-
-    /** How the bottom-leading dot is drawn for a reading, or that there is no agent to draw. */
-    @NonNull
-    private static ChipWatermarkDrawable.Agent agentFor(@Nullable AgentStatus.State state) {
-        if (state == AgentStatus.State.WORKING) return ChipWatermarkDrawable.Agent.WORKING;
-        if (state == AgentStatus.State.BLOCKED) return ChipWatermarkDrawable.Agent.WAITING;
-        if (state == AgentStatus.State.IDLE) return ChipWatermarkDrawable.Agent.IDLE;
-        return ChipWatermarkDrawable.Agent.NONE;
-    }
-
-    /** Bell and a failed command in the attention colour, a finished one in the working accent. */
     private int markColor(@NonNull ChipWatermarkDrawable.Mark mark) {
-        return mark == ChipWatermarkDrawable.Mark.DONE ? mBusyColor : mAttentionColor;
+        return mark == ChipWatermarkDrawable.Mark.DONE ? mDoneColor : mAttentionColor;
     }
 
     /**
@@ -953,7 +961,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             item.progressError ? mAttentionColor : mBusyColor, mLazyMode);
         ChipWatermarkDrawable.Mark mark = markFor(item);
         chip.setMark(mark, markColor(mark), mGroundColor);
-        chip.setAgent(agentFor(item.agentState), agentDotColor(item.agentState));
     }
 
     /**
@@ -1037,12 +1044,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * The turning arc and the breathing agent dot are the only marks that need frames; a percentage
-     * ring, a bell, and a dot that is waiting or idle are as static as the label.
+     * The turning arc is the only mark that needs frames; a percentage ring and every status dot
+     * are as static as the label.
      */
     private static boolean needsClock(@NonNull WindowItem item) {
-        return (showsRing(item) && item.progress == WindowItem.NO_PERCENTAGE)
-            || item.agentState == AgentStatus.State.WORKING;
+        return showsRing(item) && item.progress == WindowItem.NO_PERCENTAGE;
     }
 
     /**
@@ -1421,6 +1427,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mAttentionColor = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorError,
             ContextCompat.getColor(context, R.color.termux_error));
+        // Material has no success role, and the busy accent cannot stand in for one: a chip that
+        // has finished must not be the colour of a chip that is still going.
+        mDoneColor = ContextCompat.getColor(context, R.color.termux_chip_done);
         applyChipWatermarks();
     }
 

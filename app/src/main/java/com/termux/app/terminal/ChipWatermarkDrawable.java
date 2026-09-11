@@ -34,11 +34,12 @@ import com.termux.app.statusbar.WindowActivityRing;
  */
 final class ChipWatermarkDrawable extends Drawable {
 
-    /** Which mark, if any, the top-trailing dot is carrying. */
-    enum Mark { NONE, BELL, DONE, FAILED }
-
-    /** How the agent dot on the bottom-leading corner is drawn, or that there is none. */
-    enum Agent { NONE, IDLE, WAITING, WORKING }
+    /**
+     * Which mark, if any, the chip's one status dot carries: this window wants the user, has just
+     * finished, or has just failed. One dot on one corner — a chip can no longer contradict itself
+     * by saying two things about the same window in two places.
+     */
+    enum Mark { NONE, ATTENTION, DONE, FAILED }
 
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -77,8 +78,6 @@ final class ChipWatermarkDrawable extends Drawable {
     private int mMarkColor;
     private int mGroundColor;
 
-    @NonNull private Agent mAgent = Agent.NONE;
-    private int mAgentColor;
 
     private boolean mRtl;
     /** Invalidated with the bounds; the travelling arc needs the outline's length, not its shape. */
@@ -163,13 +162,6 @@ final class ChipWatermarkDrawable extends Drawable {
         invalidateSelf();
     }
 
-    void setAgent(@NonNull Agent agent, int color) {
-        if (mAgent == agent && mAgentColor == color) return;
-        mAgent = agent;
-        mAgentColor = color;
-        invalidateSelf();
-    }
-
     void setRtl(boolean rtl) {
         if (mRtl == rtl) return;
         mRtl = rtl;
@@ -200,11 +192,6 @@ final class ChipWatermarkDrawable extends Drawable {
     @NonNull
     Mark mark() {
         return mMark;
-    }
-
-    @NonNull
-    Agent agent() {
-        return mAgent;
     }
 
     boolean busy() {
@@ -388,27 +375,19 @@ final class ChipWatermarkDrawable extends Drawable {
         canvas.drawPath(mArc, mStrokePaint);
     }
 
-    /** The mark on the top-trailing corner and the agent reading on the bottom-leading one. */
+    /** The chip's one status dot, on the top-trailing corner. */
     private void drawCornerDots(@NonNull Canvas canvas) {
-        if (mMark != Mark.NONE) {
-            drawDot(canvas, !mRtl, true, mMarkColor, 255);
-        }
-        if (mAgent != Agent.NONE) {
-            drawDot(canvas, mRtl, false, mAgentColor, agentAlpha());
-        }
+        if (mMark == Mark.NONE) return;
+        drawDot(canvas, !mRtl, true, mMarkColor, mMark == Mark.FAILED);
     }
 
-    private int agentAlpha() {
-        switch (mAgent) {
-            case IDLE: return ChipWatermarkGeometry.AGENT_IDLE_ALPHA;
-            case WORKING: return ChipWatermarkGeometry.breathAlpha(
-                ChipWatermarkGeometry.ringStartFraction(
-                    WindowActivityRing.phase(SystemClock.uptimeMillis()), mStepped));
-            default: return 255;
-        }
-    }
-
-    private void drawDot(@NonNull Canvas canvas, boolean right, boolean top, int color, int alpha) {
+    /**
+     * A filled dot, or — for a failure — a ring of the same size. Failed and attention are both
+     * the error colour, because both are bad news; the shape is what separates "this went wrong"
+     * from "this wants you", so the two are never the same mark in the same place.
+     */
+    private void drawDot(@NonNull Canvas canvas, boolean right, boolean top, int color,
+                         boolean hollow) {
         float radius = ChipWatermarkGeometry.DOT_DIAMETER_DP * mDensity / 2f;
         float gap = ChipWatermarkGeometry.DOT_GAP_DP * mDensity;
         float halo = ChipWatermarkGeometry.DOT_HALO_DP * mDensity;
@@ -416,10 +395,19 @@ final class ChipWatermarkDrawable extends Drawable {
             right ? mRect.left : mRect.right, mCornerRadiusPx, gap, radius, halo);
         float cy = ChipWatermarkGeometry.dotCentreOnAxis(top ? mRect.top : mRect.bottom,
             top ? mRect.bottom : mRect.top, mCornerRadiusPx, gap, radius, halo);
+        mDotPaint.setStyle(Paint.Style.FILL);
         mDotPaint.setColor(mGroundColor);
         canvas.drawCircle(cx, cy, radius + halo, mDotPaint);
-        mDotPaint.setColor(ColorUtils.setAlphaComponent(color, alpha));
-        canvas.drawCircle(cx, cy, radius, mDotPaint);
+        mDotPaint.setColor(color);
+        if (!hollow) {
+            canvas.drawCircle(cx, cy, radius, mDotPaint);
+            return;
+        }
+        float stroke = ChipWatermarkGeometry.DOT_RING_WIDTH_DP * mDensity;
+        mDotPaint.setStyle(Paint.Style.STROKE);
+        mDotPaint.setStrokeWidth(stroke);
+        canvas.drawCircle(cx, cy, radius - stroke / 2f, mDotPaint);
+        mDotPaint.setStyle(Paint.Style.FILL);
     }
 
     @Override public void setAlpha(int alpha) {

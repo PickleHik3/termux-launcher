@@ -29,9 +29,9 @@ done and failed marks take the same slot. Up to four of thirteen cells go to ind
 - **Busy** = the chip's 1 dp outline: indeterminate travels a 270° arc around the rounded rect on the
   1280 ms turn, lazy mode keeps its 8 stops/160 ms; determinate fills clockwise from top-leading over
   a track at alpha 56. Colour `colorTertiary` as today. Text does not move.
-- **Marks** = 5 dp dot on the top-trailing corner, 2 dp outside the outline, haloed 1 dp in the bar's
-  ground: bell and failed in `colorError`, done in the busy colour; precedence bell > done/failed as
-  today. **Agent dot** = same dot on the bottom-leading corner in the accent, breathing as today.
+- **Marks** = one 5 dp dot on the top-trailing corner, 2 dp outside the outline, haloed 1 dp in the
+  bar's ground. **Amended 2026-09-11 night** — see "One dot" below; the bottom-leading agent dot is
+  gone and there is no second corner.
 - **×** = measured child of `SelectionStrip`, width animated 0 → 24 dp over 180 ms with the bar's
   settle curve, inside the selected chip after a 1 dp divider in the selected stroke colour; the
   selection highlight follows the wider chip. Touch target 24 × 24 dp through a `TouchDelegate` on
@@ -41,6 +41,33 @@ done and failed marks take the same slot. Up to four of thirteen cells go to ind
   or the `Exec` basename, loads through `LinuxAppIcons.load`, and converts to a silhouette
   (luminance → alpha, tinted like the glyph). Cached per class.
 - **Column chips** (`StatusBarWindowColumn`, 26 dp) unchanged.
+
+## One dot
+
+Amended 2026-09-11 night, agreed on a review page (`.lavish/chip-indicators.html`), after the user
+reported the two dots colliding, chips reading busy for an agent working in an unfocused pane, and a
+Codex that had finished showing red. Four faults, one cause each:
+
+- Two question detectors — `ShellAttentionCues` (generic) and `AgentScreenRules` (per agent) — fired
+  on the same event into two different corners, with nothing suppressing either.
+- `item.attention` is set by the terminal bell, and an agent rings on finishing a turn; `BELL`
+  outranked `DONE` and was painted in `colorError`, so a chip went red for *finishing* while the
+  agent dot beside it correctly read idle.
+- A working agent breathed the dot *and* swept the ring, because the generic CPU heuristic
+  re-detected what the agent had already reported.
+- `DONE` used the busy colour, so finished and running were the same hue; failed and bell were both
+  plain red circles.
+
+| # | Decision |
+|---|---|
+| A1 | **One status dot, on the top-trailing corner.** The bottom-leading agent dot goes. A pane running an agent already wears that agent's glyph as its watermark, so the dot carried nothing the chip did not already say. |
+| A2 | **Working is the outline ring, and only the ring.** One source per pane: on an agent pane `AgentStatus.WORKING` drives it, elsewhere the existing progress/CPU heuristic. Never both. |
+| A3 | **Colour says the state.** Needs you = `colorError`. Finished = a new `termux_chip_done` green — Material has no success role and the busy accent cannot be one. Failed = the error colour drawn **hollow**, so it is not the same mark as needs-you. Working = no dot. |
+| A4 | **On a pane with a known agent, `AgentStatus` wins.** A bell arriving while the agent reports idle is *finished*, not attention; only `BLOCKED` says the window wants the user. Ordinary shells keep today's rules untouched. |
+
+All of it lives in `TerminalWindowBar.markFor` / `showsRing` / `markColor` and
+`ChipWatermarkDrawable`; the generic detectors still run and are reinterpreted rather than disabled,
+so there is one place to read the policy.
 
 ## Build plan
 

@@ -154,7 +154,7 @@ public class TerminalWindowBarTest {
 
         assertSame(second, tabs.getChildAt(1));
         assertFalse(bar.isBusyAnimationRunning());
-        assertEquals(ChipWatermarkDrawable.Mark.BELL, bar.chipWatermarkAt(1).mark());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(1).mark());
         assertEquals("work", ((TextView) tabs.getChildAt(1)).getText().toString());
         assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
         assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
@@ -182,7 +182,7 @@ public class TerminalWindowBarTest {
         // The label is the title alone either way; the bell has the corner and the ring has the
         // outline, so a window that is working and asking now says both at once.
         assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
-        assertEquals(ChipWatermarkDrawable.Mark.BELL, bar.chipWatermarkAt(0).mark());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
         assertTrue(bar.chipWatermarkAt(0).busy());
         assertTrue(bar.isBusyAnimationRunning());
 
@@ -194,12 +194,12 @@ public class TerminalWindowBarTest {
     }
 
     /**
-     * An agent's state is a dot on the chip's bottom-leading corner and one sentence for a screen
-     * reader — never a character of the title. It rides on the same clock as the ring while it is
-     * working, and the pill view is reused, not re-inflated, when only the state moves.
+     * An agent's state is the chip's one dot and one sentence for a screen reader — never a
+     * character of the title. Working says nothing in the dot, because the ring is already saying
+     * it; the pill view is reused, not re-inflated, when only the state moves.
      */
     @Test
-    public void agentStateAddsACornerDotAndASpokenSentence() {
+    public void anAgentsStateIsTheChipsOneDotAndOneSpokenSentence() {
         TerminalWindowBar bar = attachedBar();
         TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("repo", "repo");
         bar.setWindows(Arrays.asList(item), 0);
@@ -211,38 +211,65 @@ public class TerminalWindowBarTest {
         bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.BLOCKED)), 0);
         assertSame(pill, tabs.getChildAt(0));
         assertEquals("repo", ((TextView) pill).getText().toString());
-        assertEquals(ChipWatermarkDrawable.Agent.WAITING, bar.chipWatermarkAt(0).agent());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
         assertTrue(pill.getContentDescription().toString().contains("Needs you."));
         // Waiting is a solid dot: nothing about it needs frames.
         assertFalse(bar.isBusyAnimationRunning());
 
+        // Working is the ring and only the ring — the dot slot is left for news.
         bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.WORKING)), 0);
-        assertEquals(ChipWatermarkDrawable.Agent.WORKING, bar.chipWatermarkAt(0).agent());
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+        assertTrue(bar.chipWatermarkAt(0).busy());
         assertTrue(pill.getContentDescription().toString().contains("Working."));
         assertTrue(bar.isBusyAnimationRunning());
 
+        // Idle with nothing to report is a chip with nothing on it.
         bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.IDLE)), 0);
-        assertEquals(ChipWatermarkDrawable.Agent.IDLE, bar.chipWatermarkAt(0).agent());
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+        assertFalse(bar.chipWatermarkAt(0).busy());
         assertTrue(pill.getContentDescription().toString().contains("Idle."));
         assertFalse(bar.isBusyAnimationRunning());
 
-        // The way out: no agent, no dot, and the chip carries nothing but its title.
         bar.setWindows(Arrays.asList(item), 0);
-        assertEquals(ChipWatermarkDrawable.Agent.NONE, bar.chipWatermarkAt(0).agent());
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
         assertEquals("repo", ((TextView) tabs.getChildAt(0)).getText().toString());
     }
 
     /**
-     * The agent dot has a corner of its own, so it says what it says whatever the mark on the
-     * opposite corner is doing, and it survives every other copy helper.
+     * The bell an agent rings when it hands its turn back is not a cry for help. On a pane running
+     * an agent the agent is the witness: while it reports idle, a bell means the turn finished and
+     * the chip shows the done dot, and only a blocked agent is allowed to say the window wants the
+     * user. This is the Codex case — it rings on finishing, and the chip used to go red for it.
      */
     @Test
-    public void agentStateKeepsItsOwnCornerAndSurvivesTheOtherCopies() {
+    public void anAgentsBellMeansFinishedNotHelpWanted() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem codex = new TerminalWindowBar.WindowItem("codex", "codex")
+            .withAgentState(AgentStatus.State.IDLE).withAttention(true);
+        bar.setWindows(Arrays.asList(codex), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.DONE, bar.chipWatermarkAt(0).mark());
+
+        // Actually asking, though, is the attention dot.
+        bar.setWindows(Arrays.asList(codex.withAgentState(AgentStatus.State.BLOCKED)), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
+
+        // And an ordinary shell is untouched: its bell still means what it always meant.
+        TerminalWindowBar.WindowItem shell = new TerminalWindowBar.WindowItem("build", "build")
+            .withAttention(true);
+        bar.setWindows(Arrays.asList(shell), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
+    }
+
+    /**
+     * One fact, one place. A working agent used to light the dot and the ring at once, because the
+     * generic CPU heuristic re-detected what the agent had already reported; now the agent's own
+     * reading drives the ring and nothing else competes with it.
+     */
+    @Test
+    public void aWorkingAgentLightsTheRingAndNothingElse() {
         TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("repo", "repo")
             .withAgentState(AgentStatus.State.WORKING).withBusy(true).withAttention(true);
         assertEquals(AgentStatus.State.WORKING, item.agentState);
-        assertTrue(item.busy);
-        assertTrue(item.attention);
         assertSame(item, item.withAgentState(AgentStatus.State.WORKING));
         assertEquals(AgentStatus.State.WORKING, item.withDone(true).agentState);
         assertEquals(AgentStatus.State.WORKING, item.withProgress(40, false).agentState);
@@ -250,16 +277,14 @@ public class TerminalWindowBarTest {
         TerminalWindowBar bar = attachedBar();
         bar.setWindows(Arrays.asList(item), 0);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
-        // A bell on one corner, the agent on the other, the ring on the outline, and the title
-        // untouched by any of it.
         assertEquals("repo", ((TextView) tabs.getChildAt(0)).getText().toString());
-        assertEquals(ChipWatermarkDrawable.Mark.BELL, bar.chipWatermarkAt(0).mark());
-        assertEquals(ChipWatermarkDrawable.Agent.WORKING, bar.chipWatermarkAt(0).agent());
+        assertEquals("a working agent has no dot, whatever the generic layer thinks",
+            ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
         assertTrue(bar.chipWatermarkAt(0).busy());
 
-        bar.setWindows(Arrays.asList(item.withAttention(false)), 0);
-        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
-        assertEquals(ChipWatermarkDrawable.Agent.WORKING, bar.chipWatermarkAt(0).agent());
+        // The agent stopping stops the ring even while the CPU heuristic still calls it busy.
+        bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.IDLE)), 0);
+        assertFalse("the agent is the witness on its own pane", bar.chipWatermarkAt(0).busy());
     }
 
     /** The mark is a corner dot, so the process glyph keeps the watermark it was evicted from. */
@@ -279,7 +304,7 @@ public class TerminalWindowBarTest {
             .withAttention(true)), 0);
         assertEquals("", ((TextView) tabs.getChildAt(0)).getText().toString());
         assertEquals(glyph, bar.chipWatermarkAt(0).glyph());
-        assertEquals(ChipWatermarkDrawable.Mark.BELL, bar.chipWatermarkAt(0).mark());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
     }
 
     /** A command that finished unseen leaves a tick; a bell outranks it, and a visit clears it. */
@@ -295,7 +320,7 @@ public class TerminalWindowBarTest {
         assertFalse(bar.isBusyAnimationRunning());
 
         bar.setWindows(Arrays.asList(item.withDone(true).withAttention(true)), 0);
-        assertEquals(ChipWatermarkDrawable.Mark.BELL, bar.chipWatermarkAt(0).mark());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
 
         bar.setWindows(Arrays.asList(item), 0);
         assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());

@@ -19,6 +19,7 @@
     <color name="termux_accent_container">#29477A</color>
     <color name="termux_on_accent_container">#D9E2FF</color>
     <color name="termux_error">#FFB4AB</color>
+    <color name="termux_chip_done">#7FD69B</color>
     <color name="termux_error_container">#93000A</color>
     <color name="termux_on_error_container">#FFDAD6</color>
     <color name="termux_scrollbar">#66FFFFFF</color>
