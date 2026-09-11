@@ -67,6 +67,15 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 - **The controls.** Tap the display's edge and two buttons drop from its top corner, as they do
   on a terminal pane: power starts, stops or turns on the display, and the cog opens its
   settings. Tap anywhere else to put them away.
+- **Touch.** Settings → **Display** → **Touch** says what a finger on the display does.
+  **Touchscreen** is the tablet: fingers are touches, so a page scrolls, pinches, drags and
+  long-presses where you put them, and an app written for a touchscreen behaves as it would on
+  one. Apps that only understand a mouse still get taps and drags as clicks. The keyboard follows
+  text fields in this mode, and pinching zooms what is on the display rather than the picture of
+  it — use the scale rail for that. **Trackpad** turns the whole display into a laptop touchpad
+  for apps that want a pointer and nothing else. **Direct touch** sends the same touches as
+  Touchscreen, without the launcher's keyboard and pinch behaviour on top. Apps started from the
+  drawer are told to take touch, so Firefox needs no setup.
 - **Mouse mode.** The **Mouse mode** action — put it on the extra-keys row, the in-app keyboard
   as a `tool:mouse.toggle` key, or a chord — swaps the keyboard for a touchpad of the same size
   while the display is showing. Over a split keyboard the parting widens instead and the touchpad
@@ -84,8 +93,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   lift keeps it turning. A program that has not asked for the mouse gets nothing typed at it;
   two fingers scroll the transcript there instead. A small mouse at the end of the status bar
   says the mode is on; tap it, or the action again, to switch it off.
-- **Back** is the display's: it toggles the keyboard, as in Termux:X11. Change that with
-  `termux-x11-preference`.
+- **Back** puts the keyboard down when the display was the one that raised it — for a text field,
+  or in front of mouse mode's touchpad. With no such keyboard up it goes back inside the app on
+  the display instead, the way the button does everywhere else on the phone. A keyboard you opened
+  yourself stays where it is.
 - **Stop** from the long-press menu on the display, or with `pkill termux-x11`. Everything running on the display closes with it. The
   display never starts on its own unless you turn on **Start with the launcher**.
 - **The display survives switching away.** Your X apps keep running while you are on the
@@ -107,8 +118,8 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 
 Tap a text field on the display and the keyboard comes up; tap anywhere else and it goes away
 again. It is on by default — Settings → **Display** → **Keyboard follows text fields** — and it
-only applies in **Touchscreen** touch mode, where a tap means "here". Trackpad and Direct touch
-are unchanged.
+only applies in **Touchscreen** touch mode, where a tap lands where you put it. Trackpad and
+Direct touch are unchanged.
 
 A keyboard you opened yourself is yours: it stays until you close it, and taps on the desktop
 never take it away. Only a keyboard that came up for a text field is put away for one.
