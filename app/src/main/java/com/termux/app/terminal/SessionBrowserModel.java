@@ -14,10 +14,18 @@ public final class SessionBrowserModel {
     public static final class Pane {
         @Nullable public final String cwd;
         @Nullable public final String foreground;
+        /** What the AI coding agent in this pane is doing, or null when it is not running one. */
+        @Nullable public final AgentStatus.State agentState;
 
         public Pane(@Nullable String cwd, @Nullable String foreground) {
+            this(cwd, foreground, null);
+        }
+
+        public Pane(@Nullable String cwd, @Nullable String foreground,
+                    @Nullable AgentStatus.State agentState) {
             this.cwd = emptyToNull(cwd);
             this.foreground = emptyToNull(foreground);
+            this.agentState = agentState;
         }
     }
 
@@ -65,6 +73,12 @@ public final class SessionBrowserModel {
         public final boolean current;
         @Nullable public final String name;
         @NonNull public final List<Window> windows;
+        /**
+         * The rolled-up agent reading over every pane of every window: blocked outranks working
+         * outranks idle, and null means no pane here is running an agent. Derived, never passed in,
+         * so the header row can never disagree with the pane lines under it.
+         */
+        @Nullable public final AgentStatus.State agentState;
 
         public Session(int index, boolean current, @Nullable String name,
                        @NonNull List<Window> windows) {
@@ -78,6 +92,11 @@ public final class SessionBrowserModel {
             this.current = current;
             this.name = emptyToNull(name);
             this.windows = Collections.unmodifiableList(new ArrayList<>(windows));
+            AgentStatus.State folded = null;
+            for (Window window : this.windows) {
+                for (Pane pane : window.panes) folded = AgentStatus.rollUp(folded, pane.agentState);
+            }
+            this.agentState = folded;
         }
 
         public int paneCount() {

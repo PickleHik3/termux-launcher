@@ -310,6 +310,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
         return null;
     }
 
+    /**
+     * An AI coding agent's own report about the pane it runs in, from {@code launcherctl agent}.
+     * {@code state} null clears the pane and hands it back to the screen rules.
+     */
+    default void reportAgentStatus(@NonNull TerminalSession pane, @Nullable String agent,
+                                   @Nullable AgentStatus.State state) {}
+
     // --- Shells ---
 
     /** The service holding every live shell, or null while it is not bound. */

@@ -733,6 +733,11 @@
                 <string name="termux_window_tab_done_content_description">finished</string>
                 <string name="termux_window_tab_failed_content_description">failed</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
+                <!-- What an AI coding agent in a pane is doing. Shown on the window chips and in
+                     the sessions browser; also spoken after the window's name. -->
+                <string name="termux_agent_state_working">Working</string>
+                <string name="termux_agent_state_blocked">Needs you</string>
+                <string name="termux_agent_state_idle">Idle</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
                 <string name="termux_top_pane_media_content_description">Media playback controls</string>
                 <string name="termux_top_pane_pinned_notifications_content_description">Pinned notifications</string>

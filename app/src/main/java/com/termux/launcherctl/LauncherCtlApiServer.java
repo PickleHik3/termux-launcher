@@ -543,6 +543,8 @@ public class LauncherCtlApiServer {
                     "Ollama registry operations do not map to LiteRT-LM/MNN packages; use the model import flow in settings."));
             } else if ("POST".equals(request.method) && "/v1/apps/launch".equals(request.path)) {
                 return jsonResponse(runAppLaunch(context, request.body));
+            } else if ("POST".equals(request.method) && "/v1/agents/hooks".equals(request.path)) {
+                return jsonResponse(installAgentHooks());
             } else if (request.path.startsWith("/v1/panes")) {
                 if (!TermuxAppSharedPreferences.build(context).isAgentPanesEnabled()) {
                     JSONObject error = jsonError("panes_api_disabled",
@@ -743,6 +745,35 @@ public class LauncherCtlApiServer {
     }
 
     /**
+     * Merge the Claude Code hooks that report a pane's agent status into {@code ~/.claude/settings.json}.
+     * Only ever reached from {@code launcherctl agent install-hooks} — nothing installs hooks on its
+     * own, since the file is the user's.
+     */
+    private JSONObject installAgentHooks() throws JSONException {
+        String launcherctl = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
+        java.io.File settings = new java.io.File(
+            TermuxConstants.TERMUX_HOME_DIR_PATH + "/.claude/settings.json");
+        try {
+            boolean changed = ClaudeHooksInstaller.install(settings, launcherctl);
+            return new JSONObject()
+                .put("ok", true)
+                .put("settings", settings.getAbsolutePath())
+                .put("changed", changed)
+                .put("events", new JSONArray(ClaudeHooksInstaller.events().keySet()));
+        } catch (JSONException e) {
+            JSONObject error = jsonError("settings_not_json",
+                "That settings file is not valid JSON, so it was left alone: " + settings.getAbsolutePath());
+            error.put("_statusCode", 409);
+            return error;
+        } catch (java.io.IOException e) {
+            JSONObject error = jsonError("settings_not_writable",
+                "Could not write " + settings.getAbsolutePath() + ": " + e.getMessage());
+            error.put("_statusCode", 500);
+            return error;
+        }
+    }
+
+    /**
      * The on-screen keyboard, for a script that knows when a text field took focus — an input
      * method on the Linux display, say; see {@code docs/en/X11_Display.md}. A {@code focus} source
      * is a signal the Display place's own policy reads and can ignore, a {@code manual} source is
@@ -817,6 +848,8 @@ public class LauncherCtlApiServer {
                 return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_WRITE : null;
             case "text":
                 return "GET".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_READ : null;
+            case "agent":
+                return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_AGENT_STATUS : null;
             default:
                 return null;
         }
@@ -1331,6 +1364,10 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/panes/*/close", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/panes/*/write", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("GET:/v1/panes/*/text", new SimpleRateLimiter(240, 60_000));
+        // Agent hooks fire on every prompt, tool approval and turn end, so the ceiling is high; the
+        // hooks installer is a one-off and stays low.
+        rateLimiters.put("POST:/v1/panes/*/agent", new SimpleRateLimiter(600, 60_000));
+        rateLimiters.put("POST:/v1/agents/hooks", new SimpleRateLimiter(10, 60_000));
         // A focus script calls these once per field the user touches.
         rateLimiters.put("POST:/v1/keyboard/show", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("POST:/v1/keyboard/hide", new SimpleRateLimiter(240, 60_000));
@@ -1723,6 +1760,8 @@ public class LauncherCtlApiServer {
             "  launcherctl pane write <id> [--enter] <text> | launcherctl pane write <id> [--enter] < file\n" +
             "  launcherctl pane read <id> [--lines N]\n" +
             "  launcherctl pane close <id>\n" +
+            "  launcherctl agent working|blocked|idle|clear [--agent NAME] [--pane ID]\n" +
+            "  launcherctl agent install-hooks\n" +
             "  launcherctl keyboard show|hide [--source manual|focus]\n" +
             "  launcherctl x11 gpu [--env]\n" +
             "\n" +
@@ -1735,6 +1774,12 @@ public class LauncherCtlApiServer {
             "\n" +
             "A pane opened here belongs to the opener: write, read and close only work on panes\n" +
             "opened through this command; list and focus work on every pane. Output is JSON.\n" +
+            "\n" +
+            "launcherctl agent tells the window chips and the sessions browser what the AI coding\n" +
+            "agent in this pane is doing, so a pane that needs an answer is visible from anywhere;\n" +
+            "it reports for $TERMUX_LAUNCHER_PANE unless --pane says otherwise, and\n" +
+            "`launcherctl agent install-hooks` wires the four Claude Code hooks that send it into\n" +
+            "~/.claude/settings.json, leaving every hook already there alone.\n" +
             "For local AI, use: tai --help\n" +
             "EOF\n" +
             "}\n" +
@@ -1770,6 +1815,34 @@ public class LauncherCtlApiServer {
             "  code=$(printf '%s\\n' \"$out\" | tail -n 1)\n" +
             "  printf '%s\\n' \"$out\" | sed '$d'\n" +
             "  [ \"$code\" -lt 400 ] 2>/dev/null\n" +
+            "}\n" +
+            "agent_cmd() {\n" +
+            "  sub=\"${1:-}\"\n" +
+            "  [ -n \"$sub\" ] && shift || { echo \"usage: launcherctl agent <working|blocked|idle|clear|install-hooks> [--agent NAME] [--pane ID]\" >&2; exit 2; }\n" +
+            "  if [ \"$sub\" = install-hooks ]; then\n" +
+            "    api POST /v1/agents/hooks '{}'\n" +
+            "    return\n" +
+            "  fi\n" +
+            "  case \"$sub\" in\n" +
+            "    working|blocked|idle|clear) ;;\n" +
+            "    *) echo \"launcherctl agent: unknown state: $sub\" >&2; exit 2 ;;\n" +
+            "  esac\n" +
+            "  name=\n" +
+            "  pane=\"${TERMUX_LAUNCHER_PANE:-}\"\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      --agent) name=\"${2:-}\"; shift 2 ;;\n" +
+            "      --pane) pane=\"${2:-}\"; shift 2 ;;\n" +
+            "      *) echo \"launcherctl agent: unknown option $1\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  if [ -z \"$pane\" ]; then\n" +
+            "    echo \"launcherctl agent: no pane to report for; TERMUX_LAUNCHER_PANE is unset, pass --pane\" >&2\n" +
+            "    exit 1\n" +
+            "  fi\n" +
+            "  body=\"{\\\"state\\\":$(printf '%s' \"$sub\" | json_str)\"\n" +
+            "  if [ -n \"$name\" ]; then body=\"$body,\\\"agent\\\":$(printf '%s' \"$name\" | json_str)\"; fi\n" +
+            "  api POST \"/v1/panes/$pane/agent\" \"$body}\"\n" +
             "}\n" +
             "pane_cmd() {\n" +
             "  sub=\"${1:-}\"\n" +
@@ -1848,6 +1921,10 @@ public class LauncherCtlApiServer {
             "    shift || true\n" +
             "    pane_cmd \"$@\"\n" +
             "    ;;\n" +
+            "  agent)\n" +
+            "    shift || true\n" +
+            "    agent_cmd \"$@\"\n" +
+            "    ;;\n" +
             "  keyboard)\n" +
             "    shift || true\n" +
             "    sub=\"${1:-}\"\n" +
@@ -1873,7 +1950,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, keyboard, x11. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, agent, keyboard, x11. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

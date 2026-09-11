@@ -103,7 +103,10 @@ public final class StatusBarWindowColumn extends ScrollView {
             chip.setMaxLines(1);
             chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
             chip.setTypeface(Typeface.DEFAULT_BOLD);
-            chip.setContentDescription(item.spokenLabel);
+            String agentWord = com.termux.app.terminal.TerminalWindowBar.agentStateWord(
+                getContext(), item.agentState);
+            chip.setContentDescription(agentWord == null ? item.spokenLabel
+                : item.spokenLabel + " · " + agentWord + ".");
             chip.setTextColor(selected
                 ? MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnAccentContainer,
                     ContextCompat.getColor(getContext(), R.color.termux_on_surface))
@@ -138,13 +141,18 @@ public final class StatusBarWindowColumn extends ScrollView {
         return String.valueOf(index + 1);
     }
 
-    /** Working, asking and finished are the rim's colour here, as they are the pill's on a row. */
+    /**
+     * Working, asking and finished are the rim's colour here, as they are the pill's on a row. A
+     * chip this small has no room for the row's agent dot, so an agent waiting for the user reads
+     * the same way a rung bell does, and one working the same way a running command does.
+     */
     private int markColor(@NonNull WindowItem item) {
-        if (item.attention) {
+        if (item.attention || item.agentState == com.termux.app.terminal.AgentStatus.State.BLOCKED) {
             return MaterialColors.getColor(this, com.google.android.material.R.attr.colorError,
                 ContextCompat.getColor(getContext(), R.color.termux_error));
         }
-        if (item.busy || item.done) return mAccent;
+        if (item.busy || item.done
+            || item.agentState == com.termux.app.terminal.AgentStatus.State.WORKING) return mAccent;
         return MaterialColors.getColor(this,
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
             ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));
@@ -163,7 +171,10 @@ public final class StatusBarWindowColumn extends ScrollView {
         } else {
             shape.setColor(ColorStateList.valueOf(Color.TRANSPARENT));
             shape.setStroke(Math.round(density()),
-                ColorUtils.setAlphaComponent(mark, item.busy || item.attention ? 170 : 70));
+                ColorUtils.setAlphaComponent(mark, item.busy || item.attention
+                    || item.agentState == com.termux.app.terminal.AgentStatus.State.BLOCKED
+                    || item.agentState == com.termux.app.terminal.AgentStatus.State.WORKING
+                    ? 170 : 70));
         }
         return shape;
     }

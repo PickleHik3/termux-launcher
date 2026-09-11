@@ -279,6 +279,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Session the switch indicator last fired for; compared by identity, never dereferenced. */
     /** Resolves per-pane foreground process / open file for the window pill labels. */
     @Nullable private com.termux.app.statusbar.WindowForegroundResolver mWindowForegroundResolver;
+    /** What the AI coding agent in each pane is doing, keyed by shell pid. */
+    private final com.termux.app.terminal.AgentStatusTracker mAgentStatuses =
+        new com.termux.app.terminal.AgentStatusTracker();
     @Nullable private Runnable mSessionBrowserRefreshCallback;
     private final Handler mWindowLabelHandler = new Handler(Looper.getMainLooper());
     private static final long WINDOW_LABEL_POLL_MS = 2000L;
@@ -12048,8 +12051,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         }
                     }
                     if (foreground == null) foreground = shell.getTitle();
+                    com.termux.app.terminal.AgentStatus agentStatus =
+                        mAgentStatuses.get(shell.getPid());
                     panes.add(new com.termux.app.terminal.SessionBrowserModel.Pane(
-                        shell.getCwd(), foreground));
+                        shell.getCwd(), foreground,
+                        agentStatus == null ? null : agentStatus.state));
                 }
                 String named = mPaneController.windowName(window);
                 String windowLabel = named != null ? named
@@ -14424,7 +14430,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             ? com.termux.app.terminal.TerminalWindowBar.WindowItem.NO_PERCENTAGE
                             : progress.getProgressValue(),
                         progress != null && progress.getProgressState()
-                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR));
+                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
+                    .withAgentState(observeWindowAgents(window, now)));
             }
         }
         bar.setWindows(items, selected);
@@ -14434,7 +14441,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncBackgroundProcessStack();
         scheduleShellPhaseJudgement();
         java.util.List<Integer> pids = collectAllPanePids();
-        mShellPhases.retain(new java.util.HashSet<>(pids));
+        java.util.HashSet<Integer> live = new java.util.HashSet<>(pids);
+        mShellPhases.retain(live);
+        mAgentStatuses.retain(live);
         return pids;
     }
 
@@ -14469,6 +14478,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         return marks;
+    }
+
+    /**
+     * An agent's own report about its pane, from {@code launcherctl agent}. Authoritative, so the
+     * chips and the browser are repainted straight away rather than at the next poll.
+     */
+    void reportAgentStatus(@NonNull TerminalSession pane, @Nullable String agent,
+                           @Nullable com.termux.app.terminal.AgentStatus.State state) {
+        int pid = pane.getPid();
+        if (pid <= 0) return;
+        if (!mAgentStatuses.report(pid, agent, state, android.os.SystemClock.uptimeMillis())) return;
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null) syncWindowBarItems(bar);
+        if (mSessionBrowserRefreshCallback != null) mSessionBrowserRefreshCallback.run();
+    }
+
+    /**
+     * The rolled-up agent reading for one window: what each of its panes says, folded blocked over
+     * working over idle. Null when no pane in it is running an agent, which is the ordinary case and
+     * costs one map lookup per pane.
+     *
+     * <p>The screen half only runs for a pane whose foreground procfs reading names an agent, and
+     * only the bottom rows are ever read — the tracker throttles and hashes the rest.
+     */
+    @Nullable
+    private com.termux.app.terminal.AgentStatus.State observeWindowAgents(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, long nowMs) {
+        if (mPaneController == null) return null;
+        com.termux.app.terminal.AgentStatus.State folded = null;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            folded = com.termux.app.terminal.AgentStatus.rollUp(folded, observePaneAgent(shell, nowMs));
+        }
+        return folded;
+    }
+
+    /** One pane's agent reading, refreshed from procfs and (when due) from its screen. */
+    @Nullable
+    private com.termux.app.terminal.AgentStatus.State observePaneAgent(
+            @NonNull TerminalSession shell, long nowMs) {
+        int pid = shell.getPid();
+        if (pid <= 0) return null;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
+        String agent = info == null || info.idle ? null
+            : com.termux.app.terminal.AgentStatus.kindFor(info.processName, info.command);
+        // A pane whose foreground cannot be read at all keeps whatever it had: a missing procfs
+        // reading is not evidence the agent exited, and dropping it would flicker the dot.
+        if (agent == null && info == null && mAgentStatuses.isHooked(pid)) {
+            com.termux.app.terminal.AgentStatus held = mAgentStatuses.get(pid);
+            return held == null ? null : held.state;
+        }
+        // isWorkingAsOf, not the raw flag: a reading that stopped being refreshed must not go on
+        // asserting that an agent with no rules of its own is still working.
+        mAgentStatuses.observe(pid, agent,
+            info != null && info.isWorkingAsOf(nowMs, shell.getLastWriteUptimeMs()),
+            () -> agentScreenTail(shell), nowMs);
+        com.termux.app.terminal.AgentStatus status = mAgentStatuses.get(pid);
+        return status == null ? null : status.state;
+    }
+
+    /** The bottom rows of a pane, which is all a screen rule ever looks at. */
+    @Nullable
+    private static String agentScreenTail(@NonNull TerminalSession shell) {
+        com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+        if (emulator == null) return null;
+        int top = Math.max(0, emulator.mRows - com.termux.app.terminal.AgentScreenRules.TAIL_ROWS);
+        return emulator.getScreen().getSelectedText(0, top, emulator.mColumns,
+            emulator.mRows - 1, true, false);
     }
 
     /**
@@ -16304,6 +16381,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mCurrentWSession == null
                 ? java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>emptyList()
                 : new java.util.ArrayList<>(mCurrentWSession.windows);
+        }
+
+        @Override public void reportAgentStatus(@NonNull TerminalSession pane,
+                                               @Nullable String agent,
+                                               @Nullable com.termux.app.terminal.AgentStatus.State state) {
+            TermuxActivity.this.reportAgentStatus(pane, agent, state);
         }
 
         @Override @Nullable public TerminalSession findPaneById(@NonNull String id) {
