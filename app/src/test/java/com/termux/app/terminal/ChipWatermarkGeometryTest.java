@@ -1,0 +1,122 @@
+package com.termux.app.terminal;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import com.termux.app.statusbar.WindowActivityRing;
+
+import org.junit.Test;
+
+/** The chip watermark's numbers: strength, corner dots, the travelling arc, the × as it opens. */
+public class ChipWatermarkGeometryTest {
+
+    @Test
+    public void theWatermarkIsThirtyPercentAtRestAndFortySelected() {
+        assertEquals(77, ChipWatermarkGeometry.glyphAlpha(0f));
+        assertEquals(102, ChipWatermarkGeometry.glyphAlpha(1f));
+        // A selection slide brightens it on the way rather than switching at the end.
+        assertEquals(90, ChipWatermarkGeometry.glyphAlpha(0.5f), 2);
+        // Out of range is not a brighter watermark.
+        assertEquals(77, ChipWatermarkGeometry.glyphAlpha(-3f));
+        assertEquals(102, ChipWatermarkGeometry.glyphAlpha(4f));
+        assertEquals(Math.round(255 * .30f), ChipWatermarkGeometry.GLYPH_ALPHA);
+        assertEquals(Math.round(255 * .40f), ChipWatermarkGeometry.SELECTED_GLYPH_ALPHA);
+    }
+
+    /**
+     * A rounded chip has room in its corners, and that is where the dot goes; a square one has
+     * none, so the dot is pulled back inside the edge rather than clipped off it.
+     */
+    @Test
+    public void aCornerDotLeavesTheOutlineAlongTheDiagonalButNeverTheChip() {
+        float dotRadius = 2.5f;
+        float gap = 2f;
+        float halo = 1f;
+
+        // Top-trailing on a 20-tall capsule chip: hard against the corner, halo still inside.
+        float cy = ChipWatermarkGeometry.dotCentreOnAxis(0f, 20f, 10f, gap, dotRadius, halo);
+        assertEquals(3.5f, cy, .001f);
+        float cx = ChipWatermarkGeometry.dotCentreOnAxis(60f, 0f, 10f, gap, dotRadius, halo);
+        assertEquals(56.5f, cx, .001f);
+
+        // Bottom-leading on the same chip: the other two edges, the same inset.
+        assertEquals(16.5f,
+            ChipWatermarkGeometry.dotCentreOnAxis(20f, 0f, 10f, gap, dotRadius, halo), .001f);
+        assertEquals(3.5f,
+            ChipWatermarkGeometry.dotCentreOnAxis(0f, 60f, 10f, gap, dotRadius, halo), .001f);
+
+        // A square chip: the diagonal buys nothing, and the clamp is what keeps the dot drawable.
+        assertEquals(3.5f,
+            ChipWatermarkGeometry.dotCentreOnAxis(0f, 20f, 0f, gap, dotRadius, halo), .001f);
+
+        // A radius larger than the chip is the capsule case, not a dot outside it.
+        float shallow = ChipWatermarkGeometry.dotCentreOnAxis(0f, 12f, 40f, gap, dotRadius, halo);
+        assertTrue(shallow >= dotRadius + halo);
+        assertTrue(shallow <= 12f - dotRadius - halo);
+    }
+
+    @Test
+    public void theArcCoversThreeQuartersOfTheOutlineAndStepsInLazyMode() {
+        assertEquals(.75f, ChipWatermarkGeometry.RING_SWEEP_FRACTION, .0001f);
+        assertEquals(.25f, ChipWatermarkGeometry.ringStartFraction(.25f, false), .0001f);
+        // Eight stops a turn, as the label's ring had: .3 of a turn is the second stop.
+        assertEquals(.25f, ChipWatermarkGeometry.ringStartFraction(.3f, true), .0001f);
+        assertEquals(8, WindowActivityRing.LAZY_STEPS);
+        assertEquals(160L, WindowActivityRing.LAZY_TICK_MS);
+        assertEquals(1280L, WindowActivityRing.SPIN_MS);
+        // A phase that has run past the turn starts again rather than running off the path.
+        assertEquals(.5f, ChipWatermarkGeometry.ringStartFraction(3.5f, false), .0001f);
+    }
+
+    @Test
+    public void aReportedPercentageFillsItsShareOfTheOutline() {
+        assertEquals(0f, ChipWatermarkGeometry.determinateFraction(0), .0001f);
+        assertEquals(.42f, ChipWatermarkGeometry.determinateFraction(42), .0001f);
+        assertEquals(1f, ChipWatermarkGeometry.determinateFraction(100), .0001f);
+        // A shell reporting 140% has a bug; the ring must not wrap and look nearly empty.
+        assertEquals(1f, ChipWatermarkGeometry.determinateFraction(140), .0001f);
+        assertEquals(0f, ChipWatermarkGeometry.determinateFraction(-8), .0001f);
+    }
+
+    @Test
+    public void aTravellingSegmentWrapsAtTheSeamRatherThanStoppingThere() {
+        float length = 200f;
+        float start = ChipWatermarkGeometry.segmentStartPx(length, .5f);
+        float sweep = ChipWatermarkGeometry.segmentSweepPx(length, .75f);
+        assertEquals(100f, start, .0001f);
+        assertEquals(150f, sweep, .0001f);
+        // Half way round plus three quarters runs 50px past the end and continues from the start.
+        assertEquals(50f, ChipWatermarkGeometry.segmentTailPx(length, start, sweep), .0001f);
+        // One that fits has no tail at all.
+        assertEquals(0f, ChipWatermarkGeometry.segmentTailPx(length, 0f, sweep), .0001f);
+        // A full turn never draws twice over itself.
+        assertEquals(length,
+            ChipWatermarkGeometry.segmentSweepPx(length, 2f), .0001f);
+        assertEquals(0f, ChipWatermarkGeometry.segmentStartPx(0f, .5f), .0001f);
+    }
+
+    @Test
+    public void theAgentDotBreathesOnceATurn() {
+        assertEquals(ChipWatermarkGeometry.AGENT_PULSE_MIN_ALPHA,
+            ChipWatermarkGeometry.breathAlpha(0f));
+        assertEquals(ChipWatermarkGeometry.AGENT_PULSE_MAX_ALPHA,
+            ChipWatermarkGeometry.breathAlpha(.5f));
+        assertEquals(ChipWatermarkGeometry.AGENT_PULSE_MIN_ALPHA,
+            ChipWatermarkGeometry.breathAlpha(.9999f), 1);
+        // Up then down, and symmetric about the middle of the turn.
+        assertEquals(ChipWatermarkGeometry.breathAlpha(.25f), ChipWatermarkGeometry.breathAlpha(.75f));
+        assertTrue(ChipWatermarkGeometry.breathAlpha(.25f)
+            > ChipWatermarkGeometry.breathAlpha(.1f));
+    }
+
+    @Test
+    public void theCloseSegmentOpensToTwentyFourDpAndNoFurther() {
+        assertEquals(24f, ChipWatermarkGeometry.CLOSE_SEGMENT_DP, .0001f);
+        assertEquals(180L, ChipWatermarkGeometry.CLOSE_REVEAL_MS);
+        assertEquals(0, ChipWatermarkGeometry.closeSegmentWidthPx(0f, 48f));
+        assertEquals(24, ChipWatermarkGeometry.closeSegmentWidthPx(.5f, 48f));
+        assertEquals(48, ChipWatermarkGeometry.closeSegmentWidthPx(1f, 48f));
+        assertEquals(48, ChipWatermarkGeometry.closeSegmentWidthPx(2f, 48f));
+        assertEquals(0, ChipWatermarkGeometry.closeSegmentWidthPx(-1f, 48f));
+    }
+}
