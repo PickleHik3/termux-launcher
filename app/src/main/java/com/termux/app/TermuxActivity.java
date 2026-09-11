@@ -1500,7 +1500,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalBorderAppearance();
         boolean wallpaperMode = shouldUseWallpaperPassthroughMode();
         int accessoryBaseColor = resolveAccessoryGlassBaseColor();
-        applyGlassSurfaceColor(R.id.extrakeys_background, accessoryBaseColor);
+        // The dock plank's tint is deliberately NOT painted here. This pass used to flat-colour it
+        // opaque and leave the re-glazing to the chrome apply every caller made straight
+        // afterwards — until the content view's insets listener stopped asking for one when the
+        // insets had not moved. Every relayout re-dispatches the same insets, so any of them now
+        // reaches this pass with no apply behind it: the plank is painted one solid colour over its
+        // own blurred backdrop and stays that way, while the keyboard below it — painted by
+        // applyInAppKeyboardSurfaceState — stays glass. doApplyChromeSpec owns extrakeys_background
+        // and builds it from the glass model; nothing else may write it.
         applyGlassSurfaceColor(R.id.activity_termux_bottom_space_background, accessoryBaseColor);
 
         if (wallpaperMode) {
