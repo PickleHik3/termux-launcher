@@ -540,6 +540,142 @@ public class TerminalWindowBarTest {
         return host;
     }
 
+    @Test
+    public void tappingTheSelectedChipAgainRevealsAClose() {
+        AtomicInteger selected = new AtomicInteger(-1);
+        TerminalWindowBar bar = laidOutBar(selected, null);
+
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+
+        android.view.View close = bar.revealedCloseView();
+        assertTrue(close != null);
+        // Nothing was selected: the second tap on the chip that is already selected is the ask.
+        assertEquals(-1, selected.get());
+        android.view.View chip = ((LinearLayout) bar.getChildAt(0)).getChildAt(1);
+        assertEquals(chip.getRight(), close.getRight());
+        assertTrue(close.isClickable());
+        assertTrue(close.isFocusable());
+        assertTrue(close.getContentDescription().toString().contains("ssh in zbook"));
+    }
+
+    @Test
+    public void tappingAnUnselectedChipStillOnlySelectsIt() {
+        AtomicInteger selected = new AtomicInteger(-1);
+        TerminalWindowBar bar = laidOutBar(selected, null);
+
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(0).performClick();
+        layOut(bar);
+
+        assertEquals(0, selected.get());
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void theCloseAsksTheHostToCloseTheChipItStandsOn() {
+        AtomicInteger closed = new AtomicInteger(-1);
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), closed);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+
+        bar.revealedCloseView().performClick();
+
+        assertEquals(1, closed.get());
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void aBusyRefreshKeepsTheCloseAndTheChipsItSitsOn() {
+        // The row is pushed again several times a second while a shell works; a × that did not
+        // survive that would be gone before a thumb reached it.
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+        android.view.View chip = ((LinearLayout) bar.getChildAt(0)).getChildAt(1);
+
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook", true)), 1);
+        layOut(bar);
+
+        assertSame(chip, ((LinearLayout) bar.getChildAt(0)).getChildAt(1));
+        assertTrue(bar.revealedCloseView() != null);
+    }
+
+    @Test
+    public void aDifferentWindowListOrSelectionPutsTheCloseAway() {
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+        assertTrue(bar.revealedCloseView() != null);
+
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook")), 0);
+        layOut(bar);
+
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void aChipScrollNeverRevealsAClose() {
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        int slop = android.view.ViewConfiguration.get(bar.getContext()).getScaledTouchSlop();
+
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 10, 10);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 10 + slop * 3, 10);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 10 + slop * 3, 10);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void aVerticalPullNeverRevealsAClose() {
+        // The status bar's own gesture: it starts on a chip and must not leave a × behind.
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        int slop = android.view.ViewConfiguration.get(bar.getContext()).getScaledTouchSlop();
+
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 10, 10);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 10, 10 + slop * 3);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 10, 10 + slop * 3);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void aTouchAnywhereElseOnTheRowPutsTheCloseAway() {
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+        assertTrue(bar.revealedCloseView() != null);
+
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 230, 10);
+
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    /** Two windows with the second selected, measured and laid out at a real row height. */
+    private static TerminalWindowBar laidOutBar(AtomicInteger selected, AtomicInteger closed) {
+        TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
+        bar.setOnWindowSelectedListener(selected::set);
+        if (closed != null) bar.setOnWindowCloseRequestedListener(closed::set);
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook")), 1);
+        layOut(bar);
+        return bar;
+    }
+
+    private static void layOut(TerminalWindowBar bar) {
+        int rowHeight = Math.round(24f * bar.getResources().getDisplayMetrics().density);
+        bar.measure(exact(240), exact(rowHeight));
+        bar.layout(0, 0, 240, rowHeight);
+    }
+
     private static int exact(int size) {
         return android.view.View.MeasureSpec.makeMeasureSpec(
             size, android.view.View.MeasureSpec.EXACTLY);

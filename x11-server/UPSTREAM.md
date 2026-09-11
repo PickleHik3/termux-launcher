@@ -144,3 +144,62 @@ Both were found by running it, not by reading it, and both are cheap to break ag
   `xkeyboard-config` package, and upstream only knows how to find it under `com.termux`'s own
   prefix, so the generated `termux-x11` points `XKB_CONFIG_ROOT` at this edition's. The Display
   page says what to install when it is missing.
+
+## Touchscreen mode is the launcher's tablet mode
+
+Upstream has three touch modes and the middle one, `touchMode` 2 ("Simulated touch"), is mouse
+emulation: one finger moves the pointer, a drag needs a long press first, and two fingers are the
+wheel. On a phone that is the wrong half of a tablet. The launcher's Touchscreen mode delivers the
+same real XI2 touches Direct touch (`touchMode` 3) does, and keeps the launcher's own behaviour
+around them — the keyboard that follows text fields reads its taps, and the picture's pinch-zoom
+stays off so the two fingers belong to the X client.
+
+- **`input/InputStrategyInterface.TabletTouchInputStrategy` (new)** is a `NullInputStrategy`
+  subclass with nothing added. `TouchInputHandler` already recognises `NullInputStrategy` as "the
+  handler sends the raw events itself", so every branch that moves a cursor, sends a mouse click
+  or offers the gesture to the zoom detector leaves mode 2 alone exactly as it leaves mode 3, and
+  no `instanceof` in that file had to change. The separate type is what keeps the two modes
+  distinguishable — in the log line below, and for anything the launcher later adds on top of
+  touch without adding it to Direct touch as well.
+- **`input/TouchInputHandler.setInputMode`** builds that strategy for `InputMode.SIMULATED_TOUCH`.
+  `InputMode` itself, the preference and its stored values are untouched: the mode a user picks is
+  still 2. `SimulatedTouchInputStrategy` is kept in `InputStrategyInterface`, unused, so the file
+  stays diffable against upstream.
+- **`input/TouchInputHandler.handleTouchEvent`** logs one line per `ACTION_DOWN` under the tag
+  `X11TouchMode` — the event's source, its tool type and the strategy about to read it. It is a
+  diagnostic for a reported landscape bug where the display behaves as if it were in Trackpad
+  mode, and can go once that is understood.
+
+The app side of the same feature is not in this module: Firefox is given `MOZ_USE_XINPUT2=1` by
+`X11LinuxAppRunner`, and Android's Back is answered by the launcher (`DisplayBackPolicy`) before
+`LorieHost.handleKey` ever sees it — the page's `consumeLauncherKey` takes `KEYCODE_BACK`, lowers
+a keyboard the place raised, and otherwise sends Linux `KEY_BACK` (evdev 158, `XF86Back`) as a
+scancode through `LorieView.sendKeyEvent`.
+
+## The server names core glyph cursors (2026-09-11)
+
+`ci/x11-patch/0003-name-core-glyph-cursors.patch` is the third native change, and it exists
+because 0002 was not enough on a real phone. The cursor name 0002 forwards is only ever set by
+libXcursor, on cursors it loads from a theme; a Termux prefix with no `share/icons/*/cursors`
+leaves GTK, Qt and Firefox on the core font cursors of `XCreateFontCursor`, which carry no name at
+all, so every tap on the Display page reported "(no name)" and the keyboard never followed a text
+field.
+
+- **What it names.** Glyph N of the core "cursor" font is the shape `XC_<name> == N` of
+  `X11/cursorfont.h` — the list libXcursor's theme names come from — so the server sets
+  `CursorRec.name` to that name: `left_ptr`, `xterm`, `hand2`, byte for byte what a themed client
+  would have set. Only even glyphs below `XC_num_glyphs` (the odd ones are those shapes' masks),
+  only when the source font's `FONT` property is the literal "cursor" (the one core font with no
+  XLFD name — the cheap test that the glyphs really are the standard shapes), and never over a
+  cursor that already has a valid name, so `XFixesSetCursorName` still wins.
+- **Where the hook is.** In lorie's own `InitOutput.c`, wrapping `ProcVector[X_CreateGlyphCursor]`
+  from `InitOutput` and naming the cursor after upstream's handler created it. Naming it in dix's
+  `AllocGlyphCursor` would be three lines, and a hunk there does apply — but `xserver` is one of
+  the sixteen pinned freedesktop submodules, which termux-x11's own CMake patches at configure
+  time (`patches/xserver.patch`, `patch -N`), so our edit would live in a tree that is re-fetched
+  on every submodule bump and tracked by nothing here. Byte-swapped clients reach the same entry,
+  and `ProcVector` is not rebuilt per server generation, hence the wrapper's idempotence check.
+- **No Java change.** The names ride the 0002 event, so `LorieView.onCursorNameChanged` and the
+  host's `CursorNameListener` are untouched; nothing new is resolved with `FindMethodOrDie`.
+- **Merging.** 0003 applies after 0002 and edits the same file, below the block 0002 adds. Carry
+  the two forward together, and rebuild the prebuilts from the same commit as always.

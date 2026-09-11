@@ -68,6 +68,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
+     * The × revealed on the selected chip was tapped. The bar has no idea what a window is — the
+     * host closes the one this index stands for, and asks first if it has to.
+     */
+    public interface OnWindowCloseRequestedListener {
+        void onWindowCloseRequested(int index);
+    }
+
+    /**
      * The chip strip has run out of scroll and the finger keeps going. The surplus distance is
      * streamed to the host so "scroll to the last chip, keep pulling, and the page beside the
      * terminal slides in" is one continuous gesture.
@@ -248,10 +256,23 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** nf-fa-times, the same mark for a command that finished unseen and failed. */
     static final String FAIL_GLYPH = "\uf00d";
 
+    /** The × a chip offers, in dp: the smallest target a thumb can take on a 24dp row. */
+    private static final float CLOSE_TARGET_DP = 32f;
+
     private final SelectionStrip mTabs;
     @Nullable private OnWindowSelectedListener mSelectionListener;
     @Nullable private OnCreateWindowListener mCreateListener;
+    @Nullable private OnWindowCloseRequestedListener mCloseListener;
     @Nullable private OnEdgeOverswipeListener mEdgeOverswipeListener;
+    /** Which chip is offering its ×, and for how much longer. */
+    private final ChipRevealPolicy mReveal = new ChipRevealPolicy();
+    /**
+     * The × itself. Built at the first reveal and kept from then on, hidden between reveals rather
+     * than added and removed: a chip row that gains and loses a child on every tap cannot be
+     * reused across a refresh, and a rebuilt row loses the selection slide.
+     */
+    @Nullable private AppCompatImageButton mCloseButton;
+    @Nullable private Runnable mRevealTimeout;
     private final int mTouchSlop;
     private boolean mGestureHorizontal;
     private boolean mGestureRejected;
@@ -336,12 +357,17 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mCreateListener = listener;
     }
 
+    public void setOnWindowCloseRequestedListener(@Nullable OnWindowCloseRequestedListener listener) {
+        mCloseListener = listener;
+    }
+
     /** Whether the strip offers the plus; a place with nothing to add leaves it out. */
     public void setCreateButtonShown(boolean shown) {
         if (mCreateButtonShown == shown) return;
         mCreateButtonShown = shown;
         for (int i = mTabs.getChildCount() - 1; i >= 0; i--) {
-            if (mTabs.getChildAt(i) instanceof AppCompatImageButton) mTabs.removeViewAt(i);
+            View child = mTabs.getChildAt(i);
+            if (child != mCloseButton && child instanceof AppCompatImageButton) mTabs.removeViewAt(i);
         }
         if (shown) addCreateButton(mItems.isEmpty());
     }
@@ -379,6 +405,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mOverswipeInterrupted = false;
         mScrollXAtDown = getScrollX();
         mStripScrolled = false;
+        mReveal.onTouchDown();
+        // A finger that lands anywhere but on the chip offering its × puts it away — including the
+        // one that is on its way to the plus, or to the bar's empty end. The × itself lives inside
+        // the chip's own bounds, so the tap that closes a window survives this.
+        if (!isInsideRevealedChip(event)) {
+            mReveal.onTouchElsewhere();
+            applyReveal();
+        }
         if (mOverswipeVelocity == null) {
             mOverswipeVelocity = android.view.VelocityTracker.obtain();
         }
@@ -402,9 +436,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             if (!mGestureHorizontal && !mGestureRejected) {
                 if (Math.abs(totalY) > mTouchSlop && Math.abs(totalY) >= Math.abs(totalX)) {
                     mGestureRejected = true;
+                    // The status bar's pull. Like a chip scroll it is a drag, not a tap, so it
+                    // neither reveals a × nor leaves one behind when the finger lifts.
+                    mReveal.onScrollStarted();
+                    applyReveal();
                 } else if (Math.abs(totalX) > mTouchSlop
                     && Math.abs(totalX) > Math.abs(totalY) * 1.2f) {
                     mGestureHorizontal = true;
+                    mReveal.onScrollStarted();
+                    applyReveal();
                 }
             }
             mLastTouchX = event.getX();
@@ -489,10 +529,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)
             && sameActivity(mItems, items)) return;
         int previousSelected = mSelectedIndex;
+        // A × belongs to one window of one list. A different list, or the same list with the
+        // selection somewhere else, is no longer the row it was revealed on.
+        if (!sameItems(mItems, items)) mReveal.onItemsChanged();
+        else if (selectedIndex != mSelectedIndex) mReveal.onSelectionChanged();
         // sameItems deliberately still compares labels only, so starting a command keeps
         // canReuseTabs true: re-inflating the pill row would also kill the selection slide.
         boolean canReuseTabs = !typefaceChanged && sameItems(mItems, items)
-            && mTabs.getChildCount() == items.size() + (mCreateButtonShown ? 1 : 0);
+            && mTabs.getChildCount()
+                == items.size() + (mCreateButtonShown ? 1 : 0) + closeButtonChildCount();
         mSelectedIndex = selectedIndex;
         mItems = new ArrayList<>(items);
         updatePalette();
@@ -506,6 +551,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 mTabs.snapSelection(selectedIndex);
                 applyStableTabSelection();
             }
+            applyReveal();
             scrollSelectedIntoView(selectedIndex);
             return;
         }
@@ -517,9 +563,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             WindowItem item = items.get(i);
             boolean selected = i == selectedIndex;
             TextView tab = createTab(item, selected);
-            tab.setOnClickListener(v -> {
-                if (mSelectionListener != null) mSelectionListener.onWindowSelected(index);
-            });
+            tab.setOnClickListener(v -> onChipTapped(index));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
             if (i > 0) params.setMarginStart(dp(3));
@@ -531,7 +575,118 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         applyTabContentDescriptions();
         mTabs.snapSelection(selectedIndex);
         applyStableTabSelection();
+        applyReveal();
         scrollSelectedIntoView(selectedIndex);
+    }
+
+    /**
+     * A chip was tapped. The first tap on any chip selects it, as it always has; a tap on the chip
+     * that is already selected asks for its × instead, and a second one takes it back.
+     */
+    private void onChipTapped(int index) {
+        boolean spentOnTheClose =
+            mReveal.onChipTap(index, mSelectedIndex, SystemClock.uptimeMillis());
+        applyReveal();
+        if (spentOnTheClose) return;
+        if (mSelectionListener != null) mSelectionListener.onWindowSelected(index);
+    }
+
+    /** Whether the × is currently a child of the strip, revealed or waiting hidden. */
+    private int closeButtonChildCount() {
+        return mCloseButton != null && mCloseButton.getParent() == mTabs ? 1 : 0;
+    }
+
+    /** Whether {@code event} landed on the chip that is offering its ×, the × included. */
+    private boolean isInsideRevealedChip(@NonNull MotionEvent event) {
+        int index = mReveal.revealedIndex();
+        if (index < 0 || index >= mItems.size() || index >= mTabs.getChildCount()) return false;
+        View chip = mTabs.getChildAt(index);
+        float x = event.getX() + getScrollX() - mTabs.getLeft();
+        return x >= chip.getLeft() && x < chip.getRight();
+    }
+
+    /** Put the × where the policy says it belongs, and arm the timer that takes it away again. */
+    private void applyReveal() {
+        if (mRevealTimeout != null) {
+            removeCallbacks(mRevealTimeout);
+            mRevealTimeout = null;
+        }
+        int index = mReveal.revealedIndex();
+        if (index < 0 || index >= mItems.size()) {
+            mTabs.setCloseTarget(ChipRevealPolicy.NONE);
+            if (mCloseButton != null && mCloseButton.getVisibility() != GONE) {
+                mCloseButton.setVisibility(GONE);
+                mTabs.requestLayout();
+            }
+            return;
+        }
+        AppCompatImageButton close = ensureCloseButton();
+        close.setContentDescription(getResources().getString(
+            R.string.termux_window_tab_close_content_description, mItems.get(index).spokenLabel));
+        close.setVisibility(VISIBLE);
+        mTabs.setCloseTarget(index);
+        mTabs.requestLayout();
+        mRevealTimeout = () -> {
+            mRevealTimeout = null;
+            if (mReveal.onTimeout(SystemClock.uptimeMillis())) applyReveal();
+        };
+        postDelayed(mRevealTimeout, Math.max(0L, mReveal.hideAt() - SystemClock.uptimeMillis()));
+    }
+
+    /**
+     * The × lies over the selected chip's trailing end rather than beside it: a control that took
+     * room of its own would widen the chip the moment it appeared, shoving the whole row sideways
+     * under the finger that asked for it. {@link SelectionStrip} places it there by hand, so the
+     * strip's own measure never sees it.
+     */
+    @NonNull
+    private AppCompatImageButton ensureCloseButton() {
+        AppCompatImageButton close = mCloseButton;
+        if (close == null) {
+            close = new AppCompatImageButton(getContext());
+            close.setImageResource(R.drawable.ic_status_bar_close_window);
+            close.setScaleType(ImageView.ScaleType.CENTER);
+            close.setPadding(0, 0, 0, 0);
+            // Clickable and focusable on purpose: the status bar's gesture treats a clickable
+            // descendant of this row as child-owned, so a finger on the × can never start an
+            // expand or a collapse instead of closing the window.
+            close.setClickable(true);
+            close.setFocusable(true);
+            close.setOnClickListener(v -> {
+                int target = mReveal.revealedIndex();
+                mReveal.hide();
+                applyReveal();
+                if (target >= 0 && mCloseListener != null) {
+                    mCloseListener.onWindowCloseRequested(target);
+                }
+            });
+            mCloseButton = close;
+        }
+        if (close.getParent() != mTabs) {
+            if (close.getParent() instanceof android.view.ViewGroup) {
+                ((android.view.ViewGroup) close.getParent()).removeView(close);
+            }
+            // Zero width in the strip's own flow; SelectionStrip gives it its real bounds after
+            // the row has been laid out.
+            mTabs.addView(close, new LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT));
+        }
+        mTabs.setCloseOverlay(close, dp(CLOSE_TARGET_DP));
+        applyCloseButtonStyle(close);
+        return close;
+    }
+
+    private void applyCloseButtonStyle(@NonNull AppCompatImageButton close) {
+        Context context = getContext();
+        int backing = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_high));
+        GradientDrawable pill = new GradientDrawable();
+        pill.setCornerRadius(mStatusBarRadiusPx);
+        // Opaque: the chip's own label runs underneath the trailing end the × stands on.
+        pill.setColor(ColorUtils.setAlphaComponent(backing, 255));
+        pill.setStroke(dp(1), mSelectedStrokeColor);
+        close.setBackground(pill);
+        ImageViewCompat.setImageTintList(close, ColorStateList.valueOf(mSelectedTextColor));
     }
 
     /**
@@ -788,6 +943,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mOverswipeOwned = false;
         mOverswipeInterrupted = false;
         mOverswipePx = 0f;
+        // A × is a four-second offer, not a state: a row that left the window comes back without it.
+        mReveal.hide();
+        applyReveal();
         super.onDetachedFromWindow();
     }
 
@@ -796,6 +954,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         super.onWindowVisibilityChanged(visibility);
         mWindowVisible = visibility == VISIBLE;
         updateBusyAnimator();
+    }
+
+    /** For tests: the × a chip is offering right now, or null while no chip is offering one. */
+    @Nullable
+    @androidx.annotation.VisibleForTesting
+    public View revealedCloseView() {
+        return mCloseButton != null && mCloseButton.getVisibility() == VISIBLE ? mCloseButton : null;
     }
 
     /** For tests: whether a working window's ring is turning right now, smoothly or in steps. */
@@ -975,7 +1140,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         updatePalette();
         for (int i = 0; i < mTabs.getChildCount(); i++) {
             View child = mTabs.getChildAt(i);
-            if (child instanceof TextView) {
+            if (child == mCloseButton) {
+                applyCloseButtonStyle(mCloseButton);
+            } else if (child instanceof TextView) {
                 child.setBackground(buildUnselectedChip());
                 ((TextView) child).setTextColor(child.isSelected()
                     ? mSelectedTextColor : mUnselectedTextColor);
@@ -1164,6 +1331,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
         applyActivityStates(true);
         applyStableTabSelection();
+        if (mCloseButton != null) applyCloseButtonStyle(mCloseButton);
         mTabs.invalidate();
     }
 
@@ -1194,12 +1362,44 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         private int mSelection = -1;
         private boolean mHasAnimatedHighlight;
         private float mCornerRadius;
+        /** The chip whose trailing end the × stands on, or {@link ChipRevealPolicy#NONE}. */
+        private int mCloseIndex = ChipRevealPolicy.NONE;
+        @Nullable private View mCloseOverlay;
+        private int mCloseSizePx;
 
         SelectionStrip(@NonNull Context context) {
             super(context);
             setWillNotDraw(false);
             mFillPaint.setStyle(Paint.Style.FILL);
             mStrokePaint.setStyle(Paint.Style.STROKE);
+        }
+
+        void setCloseOverlay(@Nullable View overlay, int sizePx) {
+            mCloseOverlay = overlay;
+            mCloseSizePx = sizePx;
+        }
+
+        void setCloseTarget(int index) {
+            mCloseIndex = index;
+        }
+
+        @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            super.onLayout(changed, l, t, r, b);
+            View overlay = mCloseOverlay;
+            if (overlay == null || overlay.getVisibility() == GONE || overlay.getParent() != this
+                || mCloseIndex < 0 || mCloseIndex >= mWindowCount
+                || mCloseIndex >= getChildCount()) return;
+            View chip = getChildAt(mCloseIndex);
+            if (chip.getWidth() <= 0) return;
+            // The row is 24dp tall, so the target is as wide as a thumb and as tall as the row
+            // allows; the strip's own clip is what caps the height, not this.
+            int height = b - t;
+            int width = Math.min(mCloseSizePx, chip.getWidth());
+            overlay.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            int left = rtl ? chip.getLeft() : chip.getRight() - width;
+            overlay.layout(left, 0, left + width, height);
         }
 
         void setWindowCount(int windowCount) {

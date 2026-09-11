@@ -305,6 +305,14 @@ public class TouchInputHandler {
         if (ignoreGamepadEvents && (event.isFromSource(InputDevice.SOURCE_GAMEPAD) || event.isFromSource(InputDevice.SOURCE_JOYSTICK)))
             return true;
 
+        // Which device a touch says it came from, and which strategy is about to read it. Every
+        // branch below turns on those two, and in landscape the display has been seen taking the
+        // trackpad's branch, so the first event of each gesture says what it looked like.
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
+            android.util.Log.d("X11TouchMode", "down source=0x" + Integer.toHexString(event.getSource())
+                    + " tool=" + event.getToolType(0)
+                    + " strategy=" + mInputStrategy.getClass().getSimpleName());
+
         if (event.getDeviceId() >= 0) {
             mInjector.releaseStuckModifiers(event.getMetaState());
             mInjector.syncLockKeysState(event.getMetaState());
@@ -360,8 +368,9 @@ public class TouchInputHandler {
             // Avoid short-circuit logic evaluation - ensure all gesture detectors see all events so
             // that they generate correct notifications.
             mScroller.onTouchEvent(event);
-            // Direct touch mode forwards raw touch events to the X11 client; pinch-zoom would
-            // fight over the same two fingers, so leave zooming to the extra-keys bar there.
+            // The touch modes - Direct touch and Touchscreen - forward raw touch events to the X11
+            // client; pinch-zoom would fight over the same two fingers, so leave zooming to the
+            // scale rail there.
             if (!(mInputStrategy instanceof InputStrategyInterface.NullInputStrategy))
                 mZoomer.onTouchEvent(event);
             mTapDetector.onTouchEvent(event);
@@ -420,7 +429,10 @@ public class TouchInputHandler {
         else if (inputMode == InputMode.TOUCH)
             mInputStrategy = new InputStrategyInterface.NullInputStrategy();
         else if (inputMode == InputMode.SIMULATED_TOUCH)
-            mInputStrategy = new InputStrategyInterface.SimulatedTouchInputStrategy(mRenderData, mInjector, mActivity);
+            // Upstream emulates a mouse here. The launcher's Touchscreen mode is a tablet instead:
+            // the fingers are the same XI2 touches Direct touch sends, and every cursor-moving
+            // branch below leaves this strategy alone exactly as it leaves that one.
+            mInputStrategy = new InputStrategyInterface.TabletTouchInputStrategy();
         else
             mInputStrategy = new InputStrategyInterface.TrackpadInputStrategy(mInjector);
     }

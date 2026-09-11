@@ -55,6 +55,16 @@ public interface InputStrategyInterface {
     }
 
     /**
+     * Touchscreen mode, the launcher's tablet mode. Every finger reaches the X client as a real
+     * XI2 touch, sent by the handler itself exactly as it is for Direct touch, so there is
+     * nothing left for a strategy to translate. It is a {@link NullInputStrategy} and not merely
+     * the same object so that the mode stays recognisable — in a log line, and to anything the
+     * launcher later wants to add on top of touch without changing Direct touch with it.
+     */
+    class TabletTouchInputStrategy extends NullInputStrategy {
+    }
+
+    /**
      * This class receives local touch events and translates them into the appropriate mouse based
      * events for the remote host.  The net result is that the local input method feels like a touch
      * interface but the remote host will be given mouse events to inject.
