@@ -29,11 +29,19 @@ import com.termux.app.wall.PaneWallPage;
 @Keep
 public final class LayoutOverviewPreference extends Preference {
 
-    /** Reports a new place, or a tap on one of the miniatures' bands. */
+    /** Reports a new place, a tap on one of the miniatures' bands, or a bar dragged to an edge. */
     public interface Listener {
         void onPlaceChanged(@NonNull PaneWallPage place);
 
         void onBlockTapped(@NonNull PlaceMiniatureView.Block block);
+
+        /**
+         * A bar was dropped on a legal target in the miniature for {@code orientation}: the edge
+         * it now stands on, or {@code null} for the tray, which hides it.
+         */
+        void onBarDropped(@NonNull PlaceOrientation orientation,
+                          @NonNull PlaceMiniatureView.Block bar,
+                          @Nullable PlaceLayout.Edge edge);
     }
 
     private static final long SLIDE_DURATION_MS = 190L;
@@ -127,6 +135,9 @@ public final class LayoutOverviewPreference extends Preference {
         if (layout != null) miniature.setLayout(layout, orientation, mSelectedPlace);
         miniature.setOnBlockTappedListener(block -> {
             if (mListener != null) mListener.onBlockTapped(block);
+        });
+        miniature.setOnBarDroppedListener((bar, edge) -> {
+            if (mListener != null) mListener.onBarDropped(orientation, bar, edge);
         });
     }
 

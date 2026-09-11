@@ -116,6 +116,25 @@ public class PlaceLayoutStoreTest {
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
     }
 
+    @Test
+    public void placingTheExtraKeysLiftsTheToolbarToggleThatHidThem() {
+        launcher.setShowTerminalToolbar(false);
+        PlaceLayoutStore store = store();
+        assertEquals(RowPlacement.HIDDEN,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).extraKeys);
+
+        store.setExtraKeys(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        assertTrue("a placement is a request to see them", launcher.shouldShowTerminalToolbar());
+        assertEquals(RowPlacement.BOTTOM,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).extraKeys);
+
+        // Hiding them again is a placement of its own and leaves the toggle alone.
+        store.setExtraKeys(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
+        assertTrue(launcher.shouldShowTerminalToolbar());
+        assertEquals(RowPlacement.HIDDEN,
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).extraKeys);
+    }
+
     // ------------------------------------------------------------------ scoped writes
 
     @Test

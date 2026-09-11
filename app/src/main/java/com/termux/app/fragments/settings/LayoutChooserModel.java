@@ -155,7 +155,9 @@ public final class LayoutChooserModel {
             case AZ_INDEX:
                 return azValue(context, places, place, orientation);
             case EXTRA_KEYS:
-                return context.getString(rowLabel(places.extraKeys(place, orientation)));
+                // The effective placement: the terminal's toolbar toggle can hide the keys
+                // everywhere, and the row must say what the miniature shows.
+                return context.getString(rowLabel(places.resolve(place, orientation).extraKeys));
             case KEYBOARD:
                 return context.getString(formLabel(places.keyboardForm(place, orientation)));
             case WIDGET_GRID:
@@ -210,7 +212,7 @@ public final class LayoutChooserModel {
             case EXTRA_KEYS:
                 for (PlaceOrientation orientation : BOTH) {
                     groups.add(rowPills(context, orientation, orientation(context, orientation),
-                        places.extraKeys(place, orientation),
+                        places.resolve(place, orientation).extraKeys,
                         value -> places.setExtraKeys(place, orientation,
                             RowPlacement.parse(value, RowPlacement.BOTTOM))));
                 }
@@ -278,6 +280,64 @@ public final class LayoutChooserModel {
         }
     }
 
+    // ---- Drops ---------------------------------------------------------------------------------
+
+    /**
+     * A bar dropped on the miniature, written through the same keys its chooser writes: the edge
+     * it landed on, or {@code null} for the tray, which is where a bar goes to be hidden.
+     *
+     * @return whether anything was written — a bar dropped somewhere it cannot stand writes
+     *     nothing, so the picture springs it back instead.
+     */
+    public static boolean applyDrop(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+                                    @NonNull PlaceOrientation orientation,
+                                    @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge) {
+        switch (bar) {
+            case STATUS_BAR:
+                // The status bar is never hidden, so the tray is not one of its targets.
+                if (edge == null) return false;
+                places.setStatusBarEdge(place, orientation, edge);
+                return true;
+            case APPS_ROW: {
+                RowPlacement placement = rowPlacement(edge);
+                if (placement == null) return false;
+                places.setAppsRow(place, orientation, placement);
+                return true;
+            }
+            case EXTRA_KEYS: {
+                RowPlacement placement = rowPlacement(edge);
+                if (placement == null) return false;
+                places.setExtraKeys(place, orientation, placement);
+                return true;
+            }
+            case AZ_INDEX:
+                if (edge == null) {
+                    places.setAzRowShown(place, orientation, false);
+                    return true;
+                }
+                // Brought back out of the tray onto an edge, the index is both shown again and
+                // standing where it was dropped.
+                places.setAzRowShown(place, orientation, true);
+                places.setAzBarEdge(place, orientation, edge);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** The row placement an edge means, or null for the tray; a row has no top position. */
+    @Nullable
+    private static RowPlacement rowPlacement(@Nullable Edge edge) {
+        if (edge == null) return RowPlacement.HIDDEN;
+        switch (edge) {
+            case BOTTOM: return RowPlacement.BOTTOM;
+            case LEFT: return RowPlacement.LEFT;
+            case RIGHT: return RowPlacement.RIGHT;
+            case TOP:
+            default: return null;
+        }
+    }
+
     /** Where a bar may stand: every edge in landscape, and only top or bottom in portrait. */
     @NonNull
     private static Pills edgePills(@NonNull Context context, @NonNull PlaceOrientation orientation,
@@ -313,8 +373,9 @@ public final class LayoutChooserModel {
             context.getString(titleRes), orientation(context, orientation));
     }
 
+    /** The word for an edge. Shared with the miniature, which names the same positions. */
     @StringRes
-    private static int edgeLabel(@NonNull Edge edge) {
+    static int edgeLabel(@NonNull Edge edge) {
         switch (edge) {
             case BOTTOM: return R.string.settings_x11_extra_keys_side_bottom;
             case LEFT: return R.string.settings_dock_rail_side_left;
@@ -324,8 +385,9 @@ public final class LayoutChooserModel {
         }
     }
 
+    /** The word for a row's placement, hidden included. Shared with the miniature. */
     @StringRes
-    private static int rowLabel(@NonNull RowPlacement placement) {
+    static int rowLabel(@NonNull RowPlacement placement) {
         switch (placement) {
             case LEFT: return R.string.settings_dock_rail_side_left;
             case RIGHT: return R.string.settings_dock_rail_side_right;

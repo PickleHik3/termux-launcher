@@ -26,6 +26,7 @@ import com.termux.app.fragments.settings.LayoutElement;
 import com.termux.app.fragments.settings.LayoutElementRowPreference;
 import com.termux.app.fragments.settings.LayoutOverviewPreference;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
+import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
@@ -343,6 +344,43 @@ public class LayoutPreferencesFragmentTest {
         assertEquals(Arrays.asList(LayoutElement.STATUS_BAR, LayoutElement.PINNED_APPS,
             LayoutElement.AZ_INDEX, LayoutElement.EXTRA_KEYS, LayoutElement.KEYBOARD,
             LayoutElement.WIDGET_GRID), opened);
+    }
+
+    @Test
+    public void aBarDraggedToAnEdgeWritesThatOrientationsKeyAndTheRowRereadsIt() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch();
+
+        // The landscape miniature's own drag: the pinned apps become a rail on the right.
+        fragment.dropBar(PlaceOrientation.LANDSCAPE, PlaceMiniatureView.Block.APPS_ROW,
+            PlaceLayout.Edge.RIGHT);
+        SharedPreferences prefs =
+            TermuxAppSharedPreferences.build(app, true).getSharedPreferences();
+        assertEquals("right", prefs.getString("place.terminal.landscape.apps_row", null));
+        assertNull("portrait untouched",
+            prefs.getString("place.terminal.portrait.apps_row", null));
+        assertEquals("Bottom · Right", summary(fragment, LayoutElement.PINNED_APPS));
+
+        // Dropped in the tray instead, the same bar is hidden for that orientation alone.
+        fragment.dropBar(PlaceOrientation.PORTRAIT, PlaceMiniatureView.Block.EXTRA_KEYS, null);
+        assertEquals("hidden", prefs.getString("place.terminal.portrait.extra_keys", null));
+        assertEquals("Hidden · Bottom", summary(fragment, LayoutElement.EXTRA_KEYS));
+    }
+
+    @Test
+    public void aBarDroppedWhereItCannotStandWritesNothing() {
+        Application app = RuntimeEnvironment.getApplication();
+        LayoutPreferencesFragment fragment = launch();
+
+        // A row has no top position and the status bar is never hidden; neither is offered as a
+        // slot, so neither can be written even if one is reported.
+        fragment.dropBar(PlaceOrientation.LANDSCAPE, PlaceMiniatureView.Block.APPS_ROW,
+            PlaceLayout.Edge.TOP);
+        fragment.dropBar(PlaceOrientation.LANDSCAPE, PlaceMiniatureView.Block.STATUS_BAR, null);
+        SharedPreferences prefs =
+            TermuxAppSharedPreferences.build(app, true).getSharedPreferences();
+        assertNull(prefs.getString("place.terminal.landscape.apps_row", null));
+        assertNull(prefs.getString("place.terminal.landscape.status_bar", null));
     }
 
     @Test

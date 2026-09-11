@@ -1,22 +1,31 @@
 package com.termux.app.fragments.settings;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.RectF;
 import android.os.Build;
+import android.view.MotionEvent;
 import android.view.View;
+import android.widget.FrameLayout;
+
+import androidx.annotation.NonNull;
 
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
+import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -28,6 +37,21 @@ import org.robolectric.annotation.Config;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PlaceMiniatureViewTest {
+
+    /** A parent that remembers being told to keep its hands off the rest of the gesture. */
+    private static final class ScrollingParent extends FrameLayout {
+        boolean disallowedIntercept;
+
+        ScrollingParent(@NonNull Context context) {
+            super(context);
+        }
+
+        @Override
+        public void requestDisallowInterceptTouchEvent(boolean disallow) {
+            if (disallow) disallowedIntercept = true;
+            super.requestDisallowInterceptTouchEvent(disallow);
+        }
+    }
 
     private static PlaceLayout layout(Edge statusBar, RowPlacement appsRow, RowPlacement extraKeys) {
         return new PlaceLayout(statusBar, appsRow, true, Edge.BOTTOM, extraKeys, KeyboardMode.RESIZE,
@@ -307,5 +331,258 @@ public class PlaceMiniatureViewTest {
         assertTrue("extra keys are outermost", keys.bottom >= az.bottom - 0.5f);
         assertTrue("A–Z sits above the extra keys", az.bottom <= keys.top + 0.5f);
         assertTrue("pinned apps are innermost", apps.bottom <= az.top + 0.5f);
+    }
+
+    // ---- Grips, slots and the drag -------------------------------------------------------------
+
+    private static PlaceMiniatureView inParent(ScrollingParent parent, int width, int height) {
+        PlaceMiniatureView view = new PlaceMiniatureView(parent.getContext());
+        parent.addView(view, new FrameLayout.LayoutParams(width, height));
+        parent.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        parent.layout(0, 0, width, height);
+        return view;
+    }
+
+    private static ScrollingParent parent() {
+        return new ScrollingParent(RuntimeEnvironment.getApplication());
+    }
+
+    private static void touch(PlaceMiniatureView view, int action, float x, float y) {
+        MotionEvent event = MotionEvent.obtain(0L, 0L, action, x, y, 0);
+        view.onTouchEvent(event);
+        event.recycle();
+    }
+
+    /** Writes a drop the way the Layout page's overview does, for one miniature's orientation. */
+    private static PlaceMiniatureView.OnBarDroppedListener writer(
+        PlaceLayoutStore places, PlaceOrientation orientation) {
+        return (bar, edge) -> {
+            MiniatureDragPolicy.Bar dragged = PlaceMiniatureView.barOf(bar);
+            assertNotNull(dragged);
+            LayoutChooserModel.applyDrop(places, PaneWallPage.TERMINAL, orientation, dragged, edge);
+        };
+    }
+
+    private static PlaceLayoutStore store() {
+        TermuxAppSharedPreferences preferences =
+            TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true);
+        assertNotNull(preferences);
+        return new PlaceLayoutStore(preferences);
+    }
+
+    private static SharedPreferences prefs() {
+        TermuxAppSharedPreferences preferences =
+            TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true);
+        assertNotNull(preferences);
+        return preferences.getSharedPreferences();
+    }
+
+    @Test
+    public void everyBarWithAPlacementCarriesAGripAndNothingElseDoes() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        for (PlaceMiniatureView.Block bar : new PlaceMiniatureView.Block[]{
+            PlaceMiniatureView.Block.STATUS_BAR, PlaceMiniatureView.Block.APPS_ROW,
+            PlaceMiniatureView.Block.ALPHABETS_ROW, PlaceMiniatureView.Block.EXTRA_KEYS}) {
+            RectF grip = view.gripRect(bar);
+            assertNotNull("grip for " + bar, grip);
+            RectF band = view.blockRect(bar);
+            assertNotNull(band);
+            assertTrue("the grip rides inside its own band",
+                band.contains(grip.centerX(), grip.centerY()));
+        }
+        assertNull("the terminal has no placement to drag",
+            view.gripRect(PlaceMiniatureView.Block.CANVAS));
+    }
+
+    @Test
+    public void aHiddenBarIsAChipInTheTrayWithAGripOfItsOwn() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertNull("nothing is drawn on the phone for it",
+            view.blockRect(PlaceMiniatureView.Block.APPS_ROW));
+        RectF chip = view.trayChipRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull("the hidden bar is listed in the tray", chip);
+        assertTrue("the tray stands under the phone", chip.top >= view.trayRect().top - 0.5f);
+        assertNotNull("and it can be lifted back out",
+            view.gripRect(PlaceMiniatureView.Block.APPS_ROW));
+        assertNull("a bar on the phone has no chip",
+            view.trayChipRect(PlaceMiniatureView.Block.EXTRA_KEYS));
+    }
+
+    @Test
+    public void aTouchOnAGripLiftsTheBarAtOnceAndStopsTheListScrolling() {
+        ScrollingParent parent = parent();
+        PlaceMiniatureView view = inParent(parent, 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        assertEquals("no long press: the bar is up on touch-down",
+            PlaceMiniatureView.Block.APPS_ROW, view.draggedBar());
+        assertTrue("the preference list is told to keep out", parent.disallowedIntercept);
+        assertNotNull("landscape offers a column down the left", view.slotFor(Edge.LEFT));
+        assertNotNull(view.slotFor(Edge.RIGHT));
+        assertNull("a row has no top position", view.slotFor(Edge.TOP));
+    }
+
+    @Test
+    public void aTouchOffTheGripsLiftsNothingAndLeavesTheListAlone() {
+        ScrollingParent parent = parent();
+        PlaceMiniatureView view = inParent(parent, 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+
+        RectF band = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(band);
+        touch(view, MotionEvent.ACTION_DOWN, band.left + 2f, band.centerY());
+        assertNull("a tap on the band is still a tap", view.draggedBar());
+        assertFalse("so the list keeps its own scroll", parent.disallowedIntercept);
+        assertTrue("and nothing is outlined", view.slots().isEmpty());
+    }
+
+    @Test
+    public void aDragOntoASideSlotWritesThatEdgeForTheOrientationItWasDoneIn() {
+        PlaceLayoutStore places = store();
+        PlaceMiniatureView landscape = inParent(parent(), 1000, 400);
+        landscape.setLegendVisible(false);
+        landscape.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        landscape.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
+
+        RectF grip = landscape.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(grip);
+        touch(landscape, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        MiniatureDragPolicy.Slot slot = landscape.slotFor(Edge.LEFT);
+        assertNotNull(slot);
+        touch(landscape, MotionEvent.ACTION_MOVE, slot.centerX(), slot.centerY());
+        touch(landscape, MotionEvent.ACTION_UP, slot.centerX(), slot.centerY());
+
+        assertNull("the gesture is over", landscape.draggedBar());
+        assertEquals("left", prefs().getString("place.terminal.landscape.apps_row", null));
+        assertNull("portrait was not touched",
+            prefs().getString("place.terminal.portrait.apps_row", null));
+
+        // The same drag on the portrait miniature writes portrait's own key.
+        PlaceMiniatureView portrait = inParent(parent(), 1000, 400);
+        portrait.setLegendVisible(false);
+        portrait.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        portrait.setOnBarDroppedListener(writer(places, PlaceOrientation.PORTRAIT));
+        RectF portraitGrip = portrait.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(portraitGrip);
+        touch(portrait, MotionEvent.ACTION_DOWN, portraitGrip.centerX(), portraitGrip.centerY());
+        assertNull("portrait has no room for a column", portrait.slotFor(Edge.LEFT));
+        RectF tray = portrait.trayRect();
+        touch(portrait, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
+        touch(portrait, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
+        assertEquals("hidden", prefs().getString("place.terminal.portrait.apps_row", null));
+        assertEquals("landscape kept the column it was given", "left",
+            prefs().getString("place.terminal.landscape.apps_row", null));
+    }
+
+    @Test
+    public void aReleaseOffEverySlotWritesNothing() {
+        PlaceLayoutStore places = store();
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
+
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        // The middle of the canvas is inside no slot at all.
+        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        assertNotNull(canvas);
+        touch(view, MotionEvent.ACTION_MOVE, canvas.centerX(), canvas.centerY());
+        touch(view, MotionEvent.ACTION_UP, canvas.centerX(), canvas.centerY());
+
+        assertNull("nothing was written for the extra keys",
+            prefs().getString("place.terminal.landscape.extra_keys", null));
+        assertNull("nor for anything else",
+            prefs().getString("place.terminal.landscape.apps_row", null));
+    }
+
+    @Test
+    public void theStatusBarIsNeverOfferedTheTray() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        for (MiniatureDragPolicy.Slot slot : view.slots()) {
+            assertFalse("the status bar has nowhere to hide", slot.isTray());
+        }
+        assertNotNull("but it may stand on any edge", view.slotFor(Edge.TOP));
+        assertNotNull(view.slotFor(Edge.LEFT));
+    }
+
+    @Test
+    public void aChipInTheTrayIsDraggedBackOntoAnEdge() {
+        PlaceLayoutStore places = store();
+        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        view.setOnBarDroppedListener(writer(places, PlaceOrientation.PORTRAIT));
+
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull("the chip carries the same grip", grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        MiniatureDragPolicy.Slot bottom = view.slotFor(Edge.BOTTOM);
+        assertNotNull(bottom);
+        touch(view, MotionEvent.ACTION_MOVE, bottom.centerX(), bottom.centerY());
+        touch(view, MotionEvent.ACTION_UP, bottom.centerX(), bottom.centerY());
+
+        assertEquals("bottom", prefs().getString("place.terminal.portrait.apps_row", null));
+    }
+
+    @Test
+    public void theAzIndexRidingThePinnedAppsCanOnlyBeDraggedIntoTheTray() {
+        PlaceLayoutStore places = store();
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
+
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        assertEquals("the tray is the only target", 1, view.slots().size());
+        assertTrue(view.slots().get(0).isTray());
+        RectF tray = view.trayRect();
+        touch(view, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
+        touch(view, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
+        assertFalse(prefs().getBoolean("place.terminal.landscape.az_row", true));
+    }
+
+    @Test
+    public void thePictureNamesEveryBarAndWhereItStands() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        String description = String.valueOf(view.getContentDescription());
+        assertTrue(description, description.contains("Status bar"));
+        assertTrue(description, description.contains("Top"));
+        assertTrue("a hidden bar is named as hidden", description.contains("Hidden"));
+        assertTrue(description, description.contains("Extra keys"));
+        assertTrue(description, description.contains("A–Z index"));
     }
 }

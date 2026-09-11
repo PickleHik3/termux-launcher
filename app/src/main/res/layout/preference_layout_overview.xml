@@ -88,7 +88,7 @@
             <com.termux.app.fragments.settings.PlaceMiniatureView
                 android:id="@+id/layout_overview_miniature_portrait"
                 android:layout_width="match_parent"
-                android:layout_height="152dp"
+                android:layout_height="192dp"
                 android:clickable="true"
                 android:focusable="true" />
 
@@ -112,7 +112,7 @@
             <com.termux.app.fragments.settings.PlaceMiniatureView
                 android:id="@+id/layout_overview_miniature_landscape"
                 android:layout_width="match_parent"
-                android:layout_height="152dp"
+                android:layout_height="192dp"
                 android:clickable="true"
                 android:focusable="true" />
 

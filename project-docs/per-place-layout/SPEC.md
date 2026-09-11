@@ -157,8 +157,9 @@ chooser. New custom rows go on the `SettingsLayoutUtils` exemption list.
 grip lifts the bar at once (no long-press) and the miniature asks its scroll parent not to
 intercept. Legal slots for that bar and orientation appear as dashed outlines at the edges (model
 table above: status bar top/bottom, + left/right in landscape; apps row and extra keys bottom or
-hidden, + left/right in landscape; A–Z only hides while it rides the apps row, gets edges when the
-apps row is hidden). A tray under the phone appears for bars that may hide; the status bar never
+hidden, + left/right in landscape; A–Z only hides while it rides the apps row — its tray chip then
+gets the bottom back, nothing else — and gets edges when the apps row is off the bottom). Placing the
+extra keys anywhere also lifts the terminal's toolbar toggle, which would otherwise veto the placement. A tray under the phone appears for bars that may hide; the status bar never
 hides and gets none. Release over a slot or the tray writes `PlaceLayoutStore` for (place,
 orientation) immediately, like today's pills — no Done; release elsewhere springs back. Both
 miniatures and the rows redraw from the store. A pure `MiniatureDragPolicy` owns legal slots and
