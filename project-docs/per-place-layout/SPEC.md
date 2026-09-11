@@ -197,7 +197,8 @@ makes inert is dropped, not drawn dead.
 
 **Hold to move.** At rest (outlines plus the pill), a long press on a bar's outline lifts it: the
 outline follows the finger as a ghost, every edge that bar may legally stand on in this orientation
-is drawn as a dashed slot, and a bar that may hide gets a tray captioned "Drop here to hide" in the
+is drawn as a dashed slot where the bar would actually stand (its own outline for the edge it is on,
+a band of its thickness along that edge of the free room for the others), and a bar that may hide gets a tray captioned "Drop here to hide" in the
 free room. The dock's outline lifts whichever of its rows the finger went down on. Release over a
 slot or the tray writes as a pick does; release anywhere else springs the ghost back and writes
 nothing. A tap still opens the card. The status bar never hides, so lifting it shows no tray; the

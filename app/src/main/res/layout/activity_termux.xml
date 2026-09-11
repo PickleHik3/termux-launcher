@@ -782,26 +782,6 @@
                 android:focusable="false"
                 android:visibility="gone">
 
-                <!-- Heights are placeholders: positionSurfaceTuningGestureGroup scales these to
-                     the pane so a collapsed compact bar gets a proportionally small arc. -->
-                <View
-                    android:id="@+id/surface_tuning_status_pill_left"
-                    android:layout_width="3dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="start|center_vertical"
-                    android:layout_marginStart="4dp"
-                    android:alpha="0.8"
-                    android:background="@drawable/surface_tuning_gesture_pill" />
-
-                <View
-                    android:id="@+id/surface_tuning_status_pill_right"
-                    android:layout_width="3dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="4dp"
-                    android:alpha="0.8"
-                    android:background="@drawable/surface_tuning_gesture_pill" />
-
                 <!-- The clock's own control: laid over the live clock in code while the status bar
                      is the surface being edited, with the ▾ drawn at its trailing edge. Clickable in
                      its own right: a child takes the touch before the group's select-and-drag
@@ -830,24 +810,6 @@
                 android:clickable="true"
                 android:focusable="false"
                 android:visibility="gone">
-
-                <View
-                    android:id="@+id/surface_tuning_dock_pill_left"
-                    android:layout_width="3dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="start|center_vertical"
-                    android:layout_marginStart="4dp"
-                    android:alpha="0.8"
-                    android:background="@drawable/surface_tuning_gesture_pill" />
-
-                <View
-                    android:id="@+id/surface_tuning_dock_pill_right"
-                    android:layout_width="3dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="4dp"
-                    android:alpha="0.8"
-                    android:background="@drawable/surface_tuning_gesture_pill" />
 
                 <!-- The dock's size, on its top border, exactly where the keyboard carries its own
                      height pill. Clickable in its own right, so it takes the touch before the
@@ -878,24 +840,6 @@
                 android:clickable="true"
                 android:focusable="false"
                 android:visibility="gone">
-
-                <View
-                    android:id="@+id/surface_tuning_keyboard_pill_left"
-                    android:layout_width="3dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="start|center_vertical"
-                    android:layout_marginStart="4dp"
-                    android:alpha="0.8"
-                    android:background="@drawable/surface_tuning_gesture_pill" />
-
-                <View
-                    android:id="@+id/surface_tuning_keyboard_pill_right"
-                    android:layout_width="3dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="4dp"
-                    android:alpha="0.8"
-                    android:background="@drawable/surface_tuning_gesture_pill" />
 
                 <FrameLayout
                     android:id="@+id/surface_tuning_keyboard_height_handle"

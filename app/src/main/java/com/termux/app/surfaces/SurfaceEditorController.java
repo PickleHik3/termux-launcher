@@ -54,6 +54,7 @@ import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.place.PlaceArrangeModel;
 import com.termux.app.place.PlaceArrangePolicy;
 import com.termux.app.place.PlaceArrangeSnapshot;
+import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceLookPreferences;
@@ -2478,7 +2479,8 @@ public final class SurfaceEditorController {
     // bar above all — from ever seeing the touch.
 
     /** How far a slot band reaches in from its edge. Wide enough to aim at with a thumb. */
-    private static final float SURFACE_EDITOR_ARRANGE_SLOT_DP = 56f;
+    /** A slot is as thick as the bar it is for, but never thinner than a comfortable target. */
+    private static final float SURFACE_EDITOR_ARRANGE_SLOT_MIN_DP = 40f;
     /** The tray strip: high enough to carry its caption, narrow enough to leave the sides clear. */
     private static final float SURFACE_EDITOR_ARRANGE_TRAY_DP = 52f;
     private static final float SURFACE_EDITOR_ARRANGE_TRAY_WIDTH_FRACTION = 0.56f;
@@ -2568,8 +2570,8 @@ public final class SurfaceEditorController {
         int[] ghost = barRectInOverlay(bar);
         if (targets.isEmpty() || ghost == null)
             return;
-        List<PlaceArrangePolicy.Slot> slots = buildArrangeSlots(targets, host.getWidth(),
-            host.getHeight());
+        List<PlaceArrangePolicy.Slot> slots = buildArrangeSlots(targets, bar, ghost,
+            host.getWidth(), host.getHeight());
         if (slots.isEmpty())
             return;
         mArrangeDrag = new ArrangeDrag(bar, place, orientation, slots, x, y);
@@ -2686,30 +2688,47 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * The slots a lifted bar may land on: a band along every legal edge, and the tray in the free
-     * room. The tray is placed in the band the card and the pill live in, which is by definition
-     * clear of the status bar, the dock and the keyboard — the bar being moved is one of those, so
-     * the strip can never land on top of it.
+     * The slots a lifted bar may land on, each drawn where the bar would actually stand: the
+     * bar's own rectangle for the edge it is on now, and for every other edge a band of the bar's
+     * thickness along that edge of the free room — the canvas between the status bar, the dock and
+     * the keyboard, less any column another bar already stands in down a side. A status bar
+     * dragged off the top therefore shows its slot just above the dock, not under the keyboard.
+     * The tray is placed in the band the card and the pill live in, which is by definition clear
+     * of every bar.
      */
     @NonNull
     private List<PlaceArrangePolicy.Slot> buildArrangeSlots(
-            @NonNull PlaceArrangePolicy.Targets targets, int width, int height) {
+            @NonNull PlaceArrangePolicy.Targets targets, @NonNull PlaceArrangePolicy.Bar bar,
+            @NonNull int[] own, int width, int height) {
         List<PlaceArrangePolicy.Slot> slots = new ArrayList<>(5);
-        float band = dpToPx(SURFACE_EDITOR_ARRANGE_SLOT_DP);
+        PlaceLayout layout = mHost.placeLayout();
+        PlaceLayout.Edge standing = standingEdge(layout, bar);
+        boolean vertical = standing != null && standing.isOnSide();
+        float thickness = Math.max(dpToPx(SURFACE_EDITOR_ARRANGE_SLOT_MIN_DP),
+            vertical ? own[2] - own[0] : own[3] - own[1]);
+        float[] free = freeRoomInOverlay(layout, bar, width, height);
         for (PlaceLayout.Edge edge : targets.edges) {
+            if (edge == standing) {
+                slots.add(new PlaceArrangePolicy.Slot(edge, own[0], own[1], own[2], own[3]));
+                continue;
+            }
             switch (edge) {
                 case TOP:
-                    slots.add(new PlaceArrangePolicy.Slot(edge, 0, 0, width, band));
+                    slots.add(new PlaceArrangePolicy.Slot(edge, free[0], free[1], free[2],
+                        Math.min(free[3], free[1] + thickness)));
                     break;
                 case BOTTOM:
-                    slots.add(new PlaceArrangePolicy.Slot(edge, 0, height - band, width, height));
+                    slots.add(new PlaceArrangePolicy.Slot(edge, free[0],
+                        Math.max(free[1], free[3] - thickness), free[2], free[3]));
                     break;
                 case LEFT:
-                    slots.add(new PlaceArrangePolicy.Slot(edge, 0, 0, band, height));
+                    slots.add(new PlaceArrangePolicy.Slot(edge, free[0], free[1],
+                        Math.min(free[2], free[0] + thickness), free[3]));
                     break;
                 case RIGHT:
                 default:
-                    slots.add(new PlaceArrangePolicy.Slot(edge, width - band, 0, width, height));
+                    slots.add(new PlaceArrangePolicy.Slot(edge,
+                        Math.max(free[0], free[2] - thickness), free[1], free[2], free[3]));
                     break;
             }
         }
@@ -2723,6 +2742,70 @@ public final class SurfaceEditorController {
         float left = (width - trayWidth) / 2f;
         slots.add(new PlaceArrangePolicy.Slot(null, left, top, left + trayWidth, top + trayHeight));
         return slots;
+    }
+
+    /** The edge a bar stands on right now, or null while it is hidden. */
+    @Nullable
+    private static PlaceLayout.Edge standingEdge(@NonNull PlaceLayout layout,
+                                                 @NonNull PlaceArrangePolicy.Bar bar) {
+        switch (bar) {
+            case STATUS_BAR:
+                return layout.statusBarEdge;
+            case APPS_ROW:
+                return rowEdge(layout.appsRow);
+            case AZ_INDEX:
+                return PlaceChromePolicy.azRowShown(layout)
+                    ? PlaceChromePolicy.azBarEdge(layout) : null;
+            case EXTRA_KEYS:
+            default:
+                return rowEdge(layout.extraKeys);
+        }
+    }
+
+    @Nullable
+    private static PlaceLayout.Edge rowEdge(@NonNull PlaceLayout.RowPlacement placement) {
+        switch (placement) {
+            case BOTTOM: return PlaceLayout.Edge.BOTTOM;
+            case LEFT: return PlaceLayout.Edge.LEFT;
+            case RIGHT: return PlaceLayout.Edge.RIGHT;
+            case HIDDEN:
+            default: return null;
+        }
+    }
+
+    /**
+     * The free room a moved bar would take an edge of, in overlay space: vertically the band
+     * between the status bar, the dock and the keyboard (where the card and the pill live), and
+     * horizontally the overlay less every column another bar already stands in down a side.
+     */
+    @NonNull
+    private float[] freeRoomInOverlay(@NonNull PlaceLayout layout,
+                                      @NonNull PlaceArrangePolicy.Bar lifted, int width,
+                                      int height) {
+        int[] region = pillRegion();
+        float top = region[1] > region[0] ? region[0] : 0f;
+        float bottom = region[1] > region[0] ? region[1] : height;
+        float left = 0f;
+        float right = width;
+        for (PlaceArrangePolicy.Bar other : PlaceArrangePolicy.Bar.values()) {
+            if (other == lifted)
+                continue;
+            PlaceLayout.Edge edge = standingEdge(layout, other);
+            if (edge == null || !edge.isOnSide())
+                continue;
+            int[] rect = barRectInOverlay(other);
+            if (rect == null)
+                continue;
+            if (edge == PlaceLayout.Edge.LEFT)
+                left = Math.max(left, rect[2]);
+            else
+                right = Math.min(right, rect[0]);
+        }
+        if (right - left < dpToPx(SURFACE_EDITOR_ARRANGE_SLOT_MIN_DP)) {
+            left = 0f;
+            right = width;
+        }
+        return new float[] {left, top, right, bottom};
     }
 
     /** Clears whatever the arrange layer is showing, on the way out or after a rotation. */
@@ -2984,7 +3067,6 @@ public final class SurfaceEditorController {
         View statusSurface = mHost.findView(R.id.terminal_window_bar_host);
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_status_gesture_group, overlay,
             statusSurface);
-        resizeStatusTuningPills(statusSurface);
         SurfaceEditorScene scene = scene();
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_dock_gesture_group, overlay,
             anchorViewFor(SurfaceSlot.DOCK));
@@ -2997,15 +3079,6 @@ public final class SurfaceEditorController {
             scene.offersHandle(SurfaceEditorScene.Handle.DOCK_HEIGHT));
         setSurfaceTuningHandleVisible(R.id.surface_tuning_keyboard_height_handle,
             scene.offersHandle(SurfaceEditorScene.Handle.KEYBOARD_HEIGHT));
-        // Docked surfaces are flush with the screen edges: the margin drag is inert there, so the
-        // side pills advertising it must not render either.
-        boolean sideDrag = mHost.isFloatingDock();
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_pill_left, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_pill_right, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_dock_pill_left, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_dock_pill_right, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_keyboard_pill_left, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_keyboard_pill_right, sideDrag);
         positionClockHandle(statusSurface);
         positionKeyboardChinHandle();
         positionSelectionRings(false);
@@ -3178,12 +3251,6 @@ public final class SurfaceEditorController {
         group.setVisibility(View.VISIBLE);
     }
 
-    private void setSurfaceTuningSidePillVisible(int pillId, boolean visible) {
-        View pill = mHost.findView(pillId);
-        if (pill != null)
-            pill.setVisibility(visible ? View.VISIBLE : View.GONE);
-    }
-
     /** A drag handle the arrangement leaves nothing for is taken off the surface, not drawn dead. */
     private void setSurfaceTuningHandleVisible(int handleId, boolean visible) {
         View handle = mHost.findView(handleId);
@@ -3246,25 +3313,6 @@ public final class SurfaceEditorController {
      * as oversized bars instead of edge handles. Scale them to a bit over half the pane height,
      * capped at the shared 28dp; the capsule drawable keeps proper arc ends at any height.
      */
-    private void resizeStatusTuningPills(@Nullable View statusSurface) {
-        if (statusSurface == null || statusSurface.getHeight() <= 0)
-            return;
-        int target = Math.round(Math.min(dpToPx(28),
-            Math.max(dpToPx(12), statusSurface.getHeight() * 0.55f)));
-        int[] pillIds = {R.id.surface_tuning_status_pill_left,
-            R.id.surface_tuning_status_pill_right};
-        for (int pillId : pillIds) {
-            View pill = mHost.findView(pillId);
-            if (pill == null)
-                continue;
-            ViewGroup.LayoutParams params = pill.getLayoutParams();
-            if (params != null && params.height != target) {
-                params.height = target;
-                pill.setLayoutParams(params);
-            }
-        }
-    }
-
     private void registerSurfaceEditorLayoutListener(@NonNull View host) {
         if (mSurfaceEditorLayoutListener != null)
             return;
