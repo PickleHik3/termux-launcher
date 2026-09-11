@@ -341,9 +341,17 @@ public final class X11DisplayHostController {
         if (textFocus.isOnPlace()) textFocus.onPlaceLeft();
     }
 
-    /** A tap landed on the display's own picture. */
+    /** A tap landed on the display's own picture, or on mouse mode's touchpad. */
     public void onDisplayTap() {
         textFocus.onDisplayTap();
+    }
+
+    /**
+     * Mouse mode's touchpad took the keyboard frame, or gave it back. While it is there its taps
+     * are the display's taps whatever the touch mode, so the policy reads them.
+     */
+    public void setPadUp(boolean up) {
+        textFocus.setPadUp(up);
     }
 
     /**

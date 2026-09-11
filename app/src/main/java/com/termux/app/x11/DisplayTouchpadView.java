@@ -117,6 +117,13 @@ public final class DisplayTouchpadView extends View {
 
     @NonNull private final PointerSink mSink;
     @Nullable private Listener mListener;
+    /**
+     * Told about the left click a single-finger tap sends. The Display place reads a tap as a tap
+     * on a widget — it is what opens the window a cursor name answers in — and a click from the
+     * pad is one wherever the pointer is standing, so it has to be reported like a tap on the
+     * display's own picture.
+     */
+    @Nullable private Runnable mTapListener;
 
     private float mLastX, mLastY;
     private float mDownX, mDownY;
@@ -203,6 +210,11 @@ public final class DisplayTouchpadView extends View {
 
     public void setListener(@Nullable Listener listener) {
         mListener = listener;
+    }
+
+    /** Run whenever a single-finger tap clicks the left button; pass null to stop. */
+    public void setTapListener(@Nullable Runnable listener) {
+        mTapListener = listener;
     }
 
     /**
@@ -411,7 +423,10 @@ public final class DisplayTouchpadView extends View {
                     int button = TouchpadGesturePolicy.tapButton(mMaxFingers);
                     display.sendMouseEvent(0f, 0f, button, true, true);
                     display.sendMouseEvent(0f, 0f, button, false, true);
-                    if (button == InputStub.BUTTON_LEFT) mLastTapTime = event.getEventTime();
+                    if (button == InputStub.BUTTON_LEFT) {
+                        mLastTapTime = event.getEventTime();
+                        if (mTapListener != null) mTapListener.run();
+                    }
                 }
                 recycleVelocity();
                 return true;

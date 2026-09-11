@@ -26,9 +26,11 @@ import androidx.annotation.Nullable;
  * asked for is theirs, and a tap on the desktop must not take it away. Asking for it pins it:
  * from then on focus is ignored until it is asked down again, or until the wall leaves the place.
  *
- * <p>Inert unless the Display place is on screen, the touch mode is Touchscreen and the setting
- * is on: in Trackpad and Direct touch a tap is not a tap on a widget, and the two modes are
- * meant to behave exactly as they always have.
+ * <p>Inert unless the Display place is on screen, the setting is on, and either the touch mode is
+ * Touchscreen or mouse mode's touchpad holds the keyboard frame: in Trackpad and Direct touch a
+ * tap on the display is not a tap on a widget, and the two modes are meant to behave exactly as
+ * they always have. A tap on the touchpad is a click wherever the pointer is standing, in every
+ * touch mode, so while the pad is up it counts as a tap on a widget like a Touchscreen tap.
  */
 public final class DisplayTextFocusPolicy {
 
@@ -85,6 +87,8 @@ public final class DisplayTextFocusPolicy {
     private boolean enabled = true;
     private int touchMode = TOUCH_MODE_TOUCHSCREEN;
     private boolean onPlace;
+    /** True while mouse mode's touchpad holds the keyboard frame; its taps are clicks. */
+    private boolean padUp;
     /** The name the pointer's cursor last reported, whether or not a finger was involved. */
     @NonNull private String cursorName = "";
     /** A name that arrived inside the open tap window, or null while none has. */
@@ -109,7 +113,7 @@ public final class DisplayTextFocusPolicy {
 
     /** True while the signals mean anything at all. */
     public boolean isActive() {
-        return enabled && onPlace && touchMode == TOUCH_MODE_TOUCHSCREEN;
+        return enabled && onPlace && (padUp || touchMode == TOUCH_MODE_TOUCHSCREEN);
     }
 
     /** True while the wall rests on the Display place. */
@@ -136,6 +140,22 @@ public final class DisplayTextFocusPolicy {
         if (touchMode == mode) return;
         touchMode = mode;
         if (!isActive()) standDown("touch mode " + mode);
+    }
+
+    /**
+     * Whether mouse mode's touchpad holds the keyboard frame. A tap on the pad is a click where
+     * the pointer stands, so it answers a cursor name exactly as a Touchscreen tap does — and
+     * the touch mode under it, whatever it is, decides nothing while the pad is there.
+     */
+    public void setPadUp(boolean value) {
+        if (padUp == value) return;
+        padUp = value;
+        if (!isActive()) standDown("the touchpad went down");
+    }
+
+    /** True while mouse mode's touchpad holds the keyboard frame. */
+    public boolean isPadUp() {
+        return padUp;
     }
 
     // ---- The wall ----------------------------------------------------------------------------

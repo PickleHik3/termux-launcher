@@ -7915,6 +7915,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // policy - the dock button, the keyboard's hide key, a tool, the wall paging, a
         // preference - is the user's doing to that policy, and reaches it from here alone.
         mInAppKeyboard.setVisibilityListener(shown -> {
+            // The keyboard mouse mode's touchpad stands in is the pad's frame, raised by the pad
+            // itself: nobody asked for a keyboard there, so it must not pin the policy off.
+            if (mRaisingDisplayFrameKeyboard) return;
             if (mX11Display != null) mX11Display.onUserKeyboardIntent(shown);
         });
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
@@ -8648,6 +8651,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void hideKeyboard() {
+            // The keyboard's own hide key: in mouse mode it puts the keyboard back behind the
+            // touchpad rather than taking the frame the two share away.
+            if (applyDisplayFrameKeyboard(false)) return;
             if (mInAppKeyboard != null)
                 mInAppKeyboard.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
         }
@@ -13416,6 +13422,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mX11Display = new com.termux.app.x11.X11DisplayHostController(this,
             new com.termux.x11.LorieHost.Callbacks() {
                 @Override public void toggleKeyboardVisibility() {
+                    if (toggleDisplayFrameKeyboard()) return;
                     if (mInAppKeyboard == null) return;
                     if (mInAppKeyboard.isVisible()) {
                         mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
@@ -13434,14 +13441,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         mX11Display.setTextFocusKeyboard(new com.termux.app.x11.DisplayTextFocusPolicy.Keyboard() {
             @Override public void showKeyboardForTextFocus() {
+                // While mouse mode owns the keyboard frame the keyboard is already up in it: the
+                // text field brings it in front of the touchpad instead of raising anything.
+                if (applyDisplayFrameTextFocus(true)) return;
                 if (mInAppKeyboard != null) mInAppKeyboard.show(com.termux.app.terminal
                     .inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS);
             }
             @Override public void hideKeyboardForTextFocus() {
+                if (applyDisplayFrameTextFocus(false)) return;
                 if (mInAppKeyboard != null) mInAppKeyboard.hide(com.termux.app.terminal
                     .inappkeyboard.TermuxInAppKeyboard.HideReason.FOCUS);
             }
             @Override public boolean isKeyboardUp() {
+                // In mouse mode the keyboard view is up either way, as the pad's frame; what the
+                // policy is asking is whether a keyboard is the thing on screen.
+                if (isDisplayTouchpadFrame()) return mFrameContent.isKeyboardContent();
                 return mInAppKeyboard != null && mInAppKeyboard.isVisible();
             }
         });
@@ -13526,8 +13540,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Mouse mode, flipped by the Mouse mode action. In the terminal every touch is the mouse; on
      * the Display place a touchpad takes the keyboard's place. It is a session choice, not a
      * setting: the app starts with it off.
+     *
+     * <p>On the Display place the pad and the keyboard share one frame, so what mouse mode is
+     * doing is also what that frame holds — the pad, or the keyboard parked in front of it. The
+     * decision table is {@link com.termux.app.x11.DisplayFrameContentPolicy}; mouse mode is on
+     * for as long as its content is not {@code NONE}.
      */
-    private boolean mMouseMode;
+    @NonNull private final com.termux.app.x11.DisplayFrameContentPolicy mFrameContent =
+        new com.termux.app.x11.DisplayFrameContentPolicy();
+    /** Set while {@link #syncDisplayTouchpad} is raising the frame the touchpad stands in. */
+    private boolean mRaisingDisplayFrameKeyboard;
     @Nullable private com.termux.app.x11.DisplayTouchpadView mDisplayTouchpad;
     /** The keyboard layout the pad follows, held so a second attach does not stack another. */
     @Nullable private View.OnLayoutChangeListener mDisplayTouchpadFollower;
@@ -13538,21 +13560,79 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Flip mouse mode; returns the new state. The mark at the end of the stats is the announcement. */
     boolean toggleMouseMode() {
-        setMouseMode(!mMouseMode);
-        return mMouseMode;
+        // The mouse key also brings the pad back from behind a keyboard that took the frame for
+        // a text field: there it is not mouse mode the user is turning off.
+        applyDisplayFrameDecision(mFrameContent.onMouseKey());
+        return mFrameContent.isMouseMode();
     }
 
     void setMouseMode(boolean enabled) {
-        if (mMouseMode == enabled) return;
-        mMouseMode = enabled;
-        // Mouse mode takes the keyboard's place, so turning it on is the user asking for that
-        // frame to be up; the text-focus policy must not pull it away under the touchpad. The
-        // keyboard's own listener cannot report this one: with the keyboard already up nothing
-        // about its visibility changes.
-        if (enabled && mX11Display != null) mX11Display.onUserKeyboardIntent(true);
-        if (mPaneController != null) mPaneController.setTouchMouseMode(enabled);
+        if (mFrameContent.isMouseMode() == enabled) return;
+        applyDisplayFrameDecision(enabled
+            ? mFrameContent.onMouseModeOn() : mFrameContent.onMouseModeOff());
+    }
+
+    /**
+     * True while mouse mode's touchpad owns the keyboard frame: the frame then holds the pad or a
+     * keyboard parked in front of it, and every request for the keyboard swaps the two instead of
+     * putting the frame away. Off the Display place, and with no display running, mouse mode is
+     * the terminal's alone and the keyboard is nobody's but the user's.
+     */
+    private boolean isDisplayTouchpadFrame() {
+        return mFrameContent.isMouseMode() && isDisplayPageShowing() && isEmbeddedDisplayRunning()
+            && mInAppKeyboard != null && findViewById(R.id.inapp_keyboard_view_host) != null;
+    }
+
+    /**
+     * The keyboard key, on the Display place with mouse mode on: the keyboard comes to the front
+     * of the frame, or goes back behind the pad. True when it was taken, and the caller should
+     * leave the keyboard itself alone.
+     */
+    boolean toggleDisplayFrameKeyboard() {
+        if (!isDisplayTouchpadFrame()) return false;
+        applyDisplayFrameDecision(mFrameContent.onKeyboardKey());
+        return true;
+    }
+
+    /** The same, for a request that names which way it wants the keyboard. */
+    private boolean applyDisplayFrameKeyboard(boolean show) {
+        if (!isDisplayTouchpadFrame()) return false;
+        applyDisplayFrameDecision(mFrameContent.onKeyboardIntent(show));
+        return true;
+    }
+
+    /** The text-focus policy's own show and hide, which swap the frame's content in mouse mode. */
+    private boolean applyDisplayFrameTextFocus(boolean focused) {
+        if (!isDisplayTouchpadFrame()) return false;
+        applyDisplayFrameDecision(mFrameContent.onTextFocus(focused));
+        return true;
+    }
+
+    /**
+     * Apply one of the content policy's decisions: the panes hear about mouse mode, the frame is
+     * re-synced to what it now holds, and only then is the text-focus policy told what the user
+     * meant — the sync itself raises and lowers keyboards, and none of that is the user's doing.
+     */
+    private void applyDisplayFrameDecision(
+            @NonNull com.termux.app.x11.DisplayFrameContentPolicy.Decision decision) {
+        if (!decision.taken) return;
+        if (mPaneController != null) mPaneController.setTouchMouseMode(decision.mouseMode());
         syncDisplayTouchpad();
         syncMouseModeMark();
+        if (mX11Display == null) return;
+        switch (decision.intent) {
+            case PIN:
+                // A keyboard the user asked for is theirs — but only if one is actually up: the
+                // pad's frame going away with it is nobody's keyboard.
+                if (mInAppKeyboard != null && mInAppKeyboard.isVisible())
+                    mX11Display.onUserKeyboardIntent(true);
+                break;
+            case UNPIN:
+                mX11Display.onUserKeyboardIntent(false);
+                break;
+            default:
+                break;
+        }
     }
 
     /** A small mouse at the end of the stats while mouse mode is on; gone the moment it is off. */
@@ -13560,7 +13640,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.StatusBarWidgetView mark = findViewById(R.id.terminal_status_widget_mouse);
         com.termux.app.statusbar.MaterialDotSeparatorView dot = findViewById(R.id.terminal_status_dot_mouse);
         if (mark == null || dot == null) return;
-        if (mMouseMode && mark.getTag() == null) {
+        if (mFrameContent.isMouseMode() && mark.getTag() == null) {
             mark.setTag("wired");
             mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
             mark.setIconGlyph("\uf245");
@@ -13569,13 +13649,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         boolean anyStatBefore = mPreferences != null && (mPreferences.isStatusWidgetCpuEnabled()
             || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetWeatherEnabled());
-        mark.setVisibility(mMouseMode ? View.VISIBLE : View.GONE);
-        dot.setVisibility(mMouseMode && anyStatBefore ? View.VISIBLE : View.GONE);
+        mark.setVisibility(mFrameContent.isMouseMode() ? View.VISIBLE : View.GONE);
+        dot.setVisibility(mFrameContent.isMouseMode() && anyStatBefore
+            ? View.VISIBLE : View.GONE);
         dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
     }
 
     public boolean isMouseMode() {
-        return mMouseMode;
+        return mFrameContent.isMouseMode();
     }
 
     /**
@@ -13590,8 +13671,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncDisplayTouchpad() {
         FrameLayout host = findViewById(R.id.inapp_keyboard_view_host);
-        boolean wanted = mMouseMode && isDisplayPageShowing() && isEmbeddedDisplayRunning()
-            && mInAppKeyboard != null && host != null;
+        boolean ours = isDisplayTouchpadFrame() && host != null;
+        // The frame stops being mouse mode's when the wall leaves the place or the display goes:
+        // mouse mode itself stays on, and comes back to the pad rather than to a parked keyboard.
+        if (!ours) mFrameContent.onFrameLost();
+        // A tap on the pad is a click where the pointer stands, so while the pad holds the frame
+        // the text-focus policy reads its taps whatever the touch mode is under it.
+        if (mX11Display != null) mX11Display.setPadUp(ours);
+        boolean wanted = ours
+            && mFrameContent.content() == com.termux.app.x11.DisplayFrameContentPolicy.Content.PAD;
         float density = getResources().getDisplayMetrics().density;
         // The pad stands in a split keyboard's parting, so while it is wanted the keyboard parts
         // wide enough to point in and both halves shrink toward the edges; mouse mode off gives
@@ -13603,6 +13691,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long duration = com.termux.app.terminal.Motion.FLOAT_DEPTH_MS;
         android.view.animation.Interpolator settle = com.termux.app.terminal.Motion.settle();
         boolean reduced = isReducedMotionEnabled();
+        // The keyboard is the frame both contents stand in: it has to be up for either to have a
+        // size, and it stays up across a swap so the X screen is never resized to make room.
+        if (ours && !mInAppKeyboard.isVisible()) raiseDisplayFrameKeyboard();
         if (!wanted) {
             releaseDisplayTouchpadWait();
             mDisplayTouchpadWaitRound = 0;
@@ -13626,11 +13717,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 .setInterpolator(settle).withEndAction(detach).start();
             return;
         }
-        // The keyboard is the touchpad's frame: it has to be up for the pad to have a size.
-        if (!mInAppKeyboard.isVisible()) {
-            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
-        }
         if (pad != null && pad.getParent() == host) {
             // The keyboard's type may have moved under a pad that is already up.
             applyDisplayTouchpadFrame(pad, mAttachedInAppKeyboardView);
@@ -13653,6 +13739,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.statusbar.StatusBarLensView.accentFor(this,
                     com.termux.app.wall.PaneWallPage.DISPLAY));
             pad.setListener(() -> setMouseMode(false));
+            // A tap on the pad is the display's tap: it opens the window a cursor name answers
+            // in, exactly as a tap on the picture does.
+            pad.setTapListener(() -> {
+                if (mX11Display != null) mX11Display.onDisplayTap();
+            });
             mDisplayTouchpad = pad;
         }
         // The keyboard's frame is the pad's: the host wraps its content, so a match-parent pad
@@ -13708,6 +13799,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         pad.setTranslationY(dpToPx(12));
         pad.animate().alpha(1f).translationY(0f).setDuration(duration).setInterpolator(settle)
             .start();
+    }
+
+    /**
+     * Put up the keyboard the touchpad borrows its frame from. Nobody asked for a keyboard here,
+     * so the visibility listener is held off: this must not read as the user pinning one.
+     */
+    private void raiseDisplayFrameKeyboard() {
+        if (mInAppKeyboard == null) return;
+        mRaisingDisplayFrameKeyboard = true;
+        try {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .ShowReason.KEYBOARD_ACTION);
+        } finally {
+            mRaisingDisplayFrameKeyboard = false;
+        }
     }
 
     /**
@@ -15998,6 +16104,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A focus source is a signal, not an order: on the Display place the policy decides
             // whether it means a keyboard, and it is the one that will close it again.
             if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(true)) return true;
+            // Asking for it by hand while mouse mode holds the frame brings the keyboard to the
+            // front of it instead of raising a second one.
+            if (!fromFocus && applyDisplayFrameKeyboard(true)) return true;
             mInAppKeyboard.show(fromFocus
                 ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS
                 : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
@@ -16007,6 +16116,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean hideInAppKeyboard(boolean fromFocus) {
             if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()) return false;
             if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(false)) return true;
+            if (!fromFocus && applyDisplayFrameKeyboard(false)) return true;
             mInAppKeyboard.hide(fromFocus
                 ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.FOCUS
                 : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
@@ -16434,6 +16544,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean toggleMouseMode() {
             return TermuxActivity.this.toggleMouseMode();
+        }
+
+        @Override public boolean toggleDisplayFrameKeyboard() {
+            return TermuxActivity.this.toggleDisplayFrameKeyboard();
         }
 
         @Override public void showExtraKeysRowEditor() {

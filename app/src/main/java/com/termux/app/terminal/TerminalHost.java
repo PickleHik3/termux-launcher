@@ -484,6 +484,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     boolean toggleMouseMode();
 
+    /**
+     * The keyboard key while mouse mode's touchpad holds the keyboard frame on the Display place:
+     * it swaps the frame's content — touchpad or keyboard — instead of putting the frame away.
+     * True when it was taken and the keyboard should be left alone.
+     */
+    boolean toggleDisplayFrameKeyboard();
+
     /** Toggles the key inspector, answering whether it is now open. */
     boolean toggleKeyInspector();
 
