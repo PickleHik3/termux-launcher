@@ -1236,8 +1236,9 @@
                      window pills. Content inside the bar, not a surface, so it has its own knob. -->
                 <string name="termux_surface_tuning_indicator_radius">Chip radius</string>
                 <string name="termux_surface_tuning_clock_chevron">▾</string>
-                <string name="termux_surface_tuning_clock_open">Change the clock face</string>
+                <string name="termux_surface_tuning_clock_open">Change the clock face or position</string>
                 <string name="termux_surface_tuning_clock_face_description">%1$s clock face</string>
+                <string name="termux_surface_tuning_clock_position_description">%1$s clock position</string>
                 <string name="termux_surface_tuning_clock_selected">✓</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
