@@ -9,6 +9,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Configuration;
 import android.content.pm.LauncherApps;
 import android.os.Build;
 import android.os.Bundle;
@@ -82,6 +83,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     private final Capability capability;
     private final Map<Integer, AppWidgetHostView> hostViews = new HashMap<>();
     private final Set<String> resumedPendingTokens = new HashSet<>();
+    /** The day or night the cached host views were built against. */
+    private int hostViewNightMode;
     private boolean listening;
     @Nullable private Listener listener;
 
@@ -104,6 +107,37 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             supported = false;
         }
         capability = supported ? Capability.AVAILABLE : Capability.UNSUPPORTED;
+        hostViewNightMode = nightMode();
+    }
+
+    private int nightMode() {
+        try {
+            return activity.getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK;
+        } catch (RuntimeException exception) {
+            return Configuration.UI_MODE_NIGHT_UNDEFINED;
+        }
+    }
+
+    /**
+     * Throws away host views built in the other day/night, so the next render makes them again.
+     *
+     * <p>A hosted widget's light or dark comes from the Configuration of the context its host view
+     * was built with, and {@code AppWidgetHostView} has no configuration hook of its own: once
+     * inflated it keeps whatever theme it was born in. Recreating the activity is what normally
+     * rebuilds these, since {@code uiMode} is not among its configChanges — but a launcher that is
+     * merely resumed after the mode changed, or one whose own night-mode setting moved without a
+     * recreate, would otherwise keep showing widgets in yesterday's theme.
+     *
+     * @return true when views were dropped and the pane needs to draw again.
+     */
+    private boolean discardHostViewsBuiltInAnotherMode() {
+        int night = nightMode();
+        if (night == hostViewNightMode) return false;
+        hostViewNightMode = night;
+        boolean held = !hostViews.isEmpty();
+        hostViews.clear();
+        return held;
     }
 
     @NonNull public Capability capability() { return capability; }
@@ -166,6 +200,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             // A partial framework/service initialization is retried on the next onStart.
         }
         reconcileProviders();
+        if (discardHostViewsBuiltInAnotherMode()) notifyChanged(AddResult.IGNORED);
     }
 
     public void onStop() {
@@ -434,6 +469,9 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     private AppWidgetHostView doCreateHostView(int appWidgetId) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return null;
+        // Every host view is asked for through here, so this is the one place a stale one can be
+        // caught whatever brought the render about.
+        discardHostViewsBuiltInAnotherMode();
         AppWidgetHostView existing = hostViews.get(appWidgetId);
         if (existing != null) return existing;
         try {
