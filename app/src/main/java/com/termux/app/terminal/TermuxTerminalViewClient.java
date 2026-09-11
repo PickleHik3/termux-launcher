@@ -965,6 +965,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * drawer or extra keys, or with ctrl+alt+k hardware keyboard shortcut.
      */
     public void onToggleSoftKeyboardRequest() {
+        // On the Display place with mouse mode on, the keyboard and the touchpad share one frame:
+        // this key swaps which of them holds it rather than taking the frame away.
+        if (mHost.toggleDisplayFrameKeyboard()) return;
         if (isInAppKeyboardEnabled()) {
             mInAppKeyboardController.toggle(ToggleReason.KEYBOARD_ACTION);
             suppressSystemImeForInAppKeyboard();

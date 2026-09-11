@@ -879,6 +879,11 @@ class FakeTerminalHost implements TerminalHost {
         return mouseMode;
     }
 
+    /** No Display place here, so the keyboard key is never the touchpad frame's. */
+    @Override public boolean toggleDisplayFrameKeyboard() {
+        return false;
+    }
+
     @Override public boolean toggleKeyInspector() {
         record("toggleKeyInspector");
         return keyInspectorOpen;

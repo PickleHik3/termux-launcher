@@ -72,6 +72,32 @@ Auto-hide only closes what auto-show opened. "Keyboard on enter" decides the sta
 - **Tap window.** A tap is an ACTION_UP in Touchscreen mode with no drag; the last cursor name
   within 150 ms after it decides. Cursor changes with no tap never toggle. Taps on the keyboard or
   launcher chrome are not display taps.
+### With the touchpad up
+
+Mouse mode and text focus want the same frame, so while mouse mode is on the frame keeps its size
+and swaps its *content*: the pad, or the keyboard parked in front of it. The table is
+`DisplayFrameContentPolicy` (`Content` NONE/PAD/KEYBOARD, `Intent` NONE/PIN/UNPIN); `TermuxActivity`
+holds one and `syncDisplayTouchpad` attaches or fades the pad from its content. Mouse mode on = any
+content but NONE, so `mMouseMode` is gone.
+
+| Event | PAD | KEYBOARD |
+|---|---|---|
+| Mouse key / `mouse.toggle` | mouse mode off, `onUserKeyboardIntent(true)` if a keyboard is left up | PAD, unpinned, still mouse mode |
+| Keyboard key, `keyboard.show/hide --source manual`, the keyboard's hide key, display Back | KEYBOARD, pinned | PAD, unpinned |
+| Text focus in / out (the policy's own `showKeyboardForTextFocus`/`hide`) | KEYBOARD (policy Auto-open) | PAD (policy Closed) |
+| Exit arrow, three-finger swipe down | mouse mode off, as today | mouse mode off |
+| Wall leaves the place, display stops | PAD (frame lost; mouse mode survives) | PAD |
+
+The keyboard view itself stays up for the whole of mouse mode — a swap never resizes the X screen —
+and the raise `syncDisplayTouchpad` does for it is held off the visibility listener, so the pad's
+own frame never reads as the user pinning a keyboard. Entering mouse mode unpins instead:
+`onUserKeyboardIntent(false)`. `isKeyboardUp()` means content == KEYBOARD while mouse mode owns the
+frame. The pad reports its single-finger left click through a `setTapListener` to
+`X11DisplayHostController.onDisplayTap()`, so the cursor-name window opens from the pad as from the
+picture, and `DisplayTextFocusPolicy.setPadUp` widens the gate to
+`enabled && onPlace && (padUp || touchMode == TOUCHSCREEN)` — a pad tap is a click where the pointer
+stands in every touch mode.
+
 - **Copy.** Display → Touch → *Keyboard follows text fields*: "Open the keyboard when you tap a
   text field and close it when you tap elsewhere." Disabled in other modes with "Available in
   Touchscreen touch mode." Keyboard & input → Layout → *Keyboard type*: "Docked, floating or

@@ -74,7 +74,11 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   clicks; hold, or tap and touch again, then move, to drag. Two fingers scroll, keep going after a
   fast lift, and pinch to zoom; two fingers tapping together click the right button. Three fingers
   tapping click the middle button, swiping left or right switch windows, and swiping down bring
-  the keyboard back. The arrow in the corner does the same. In the terminal the same action makes every touch the mouse
+  the keyboard back. The arrow in the corner does the same. The keyboard is never far while the
+  touchpad is up: tap a text field on the display and it comes to the front, and the touchpad is
+  back the moment the field lets go. The keyboard key brings it forward by hand, and the mouse key
+  sends it away again without leaving mouse mode.
+  In the terminal the same action makes every touch the mouse
   for programs that take one: a finger is the left button, two fingers are the wheel, and a fast
   lift keeps it turning. A program that has not asked for the mouse gets nothing typed at it;
   two fingers scroll the transcript there instead. A small mouse at the end of the status bar
@@ -107,6 +111,12 @@ are unchanged.
 
 A keyboard you opened yourself is yours: it stays until you close it, and taps on the desktop
 never take it away. Only a keyboard that came up for a text field is put away for one.
+
+With mouse mode on, the keyboard and the touchpad share one frame, so the field brings the keyboard
+to the front of it and the touchpad waits behind rather than going away. Tap somewhere that is not
+text, or press the mouse key, and the touchpad is back where it was. A tap on the touchpad counts as
+a tap on whatever the pointer is standing on, so this works in every touch mode while the touchpad
+is up.
 
 Two signals tell the launcher that a text field is under your finger.
 
