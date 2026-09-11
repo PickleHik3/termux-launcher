@@ -458,7 +458,10 @@ public final class PlaceMiniatureView extends View {
         float frameTop = (viewHeight - trayHeight - frameHeight) / 2f;
         mFrameRect.set(frameLeft, frameTop, frameLeft + frameWidth, frameTop + frameHeight);
         float trayTop = mFrameRect.bottom + dp(TRAY_GAP_DP);
-        mTrayRect.set(mFrameRect.left, trayTop, mFrameRect.right, trayTop + dp(TRAY_HEIGHT_DP));
+        // The tray takes the view's width, not the phone's: a portrait phone is too narrow for
+        // "Drop here to hide" or for two chips to keep their names, and the tray reads as a shelf
+        // under the phone either way.
+        mTrayRect.set(pad, trayTop, viewWidth - pad, trayTop + dp(TRAY_HEIGHT_DP));
 
         layoutLegend(legendLeft, legendWidth, Math.round(viewHeight - trayHeight), swatch);
         computeBlocks();
