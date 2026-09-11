@@ -673,6 +673,7 @@ public final class SurfaceEditorController {
         final int initialStatusRadius = prefs.getStatusBarCornerRadius();
         final int initialStatusInset = prefs.getStatusBarHorizontalInset();
         final String initialClockStyle = prefs.getTopPaneClockStyle();
+        final String initialClockAlignment = prefs.getTopPaneClockAlignment();
         final int initialIndicatorRadius = prefs.getStatusIndicatorCornerRadius();
         final int initialTerminal = prefs.getTerminalBackgroundOpacity();
         final boolean initialTerminalBorder = prefs.isTerminalBorderEnabled();
@@ -714,6 +715,7 @@ public final class SurfaceEditorController {
             prefs().setStatusBarCornerRadius(initialStatusRadius);
             prefs().setStatusBarHorizontalInset(initialStatusInset);
             prefs().setTopPaneClockStyle(initialClockStyle);
+            prefs().setTopPaneClockAlignment(initialClockAlignment);
             prefs().setStatusIndicatorCornerRadius(initialIndicatorRadius);
             prefs().setTerminalBackgroundOpacity(initialTerminal);
             prefs().setTerminalBorderEnabled(initialTerminalBorder);
@@ -3448,6 +3450,8 @@ public final class SurfaceEditorController {
         // The clock face is a look the editor owns, so one page, one reset covers it too.
         prefs().setTopPaneClockStyle(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE);
+        prefs().setTopPaneClockAlignment(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT);
         prefs().setStatusIndicatorCornerRadius(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_INDICATOR_CORNER_RADIUS);
         prefs().setTerminalPaneGap(
@@ -3820,8 +3824,9 @@ public final class SurfaceEditorController {
     //
     // The status bar's one control that is a look rather than a number, so it does not sit on the
     // card as a row: it is the live clock itself, marked with a ▾, and it drops the six faces under
-    // itself drawn as themselves. Picking one applies it the way every other editor control writes — live, and
-    // gated by ✓ like the rest.
+    // itself drawn as themselves, with the face's position — left, centre, right — beneath them.
+    // Picking either applies it the way every other editor control writes — live, and gated by ✓
+    // like the rest.
 
     /** Package-private so a test can hold it against the settings list's own entry values. */
     static final String[] CLOCK_STYLES = {
@@ -3831,6 +3836,22 @@ public final class SurfaceEditorController {
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
+
+    /** Package-private so a test can hold it against the settings list's own segment values. */
+    static final String[] CLOCK_ALIGNMENTS = {
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT};
+
+    /** Same fallback the widget itself applies to an unknown stored value. */
+    @StringRes
+    static int clockAlignmentLabel(@Nullable String alignment) {
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(alignment))
+            return R.string.settings_clock_alignment_center;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT.equals(alignment))
+            return R.string.settings_clock_alignment_right;
+        return R.string.settings_clock_alignment_left;
+    }
 
     /** Same fallback the widget itself applies to an unknown stored value. */
     @StringRes
@@ -3901,6 +3922,15 @@ public final class SurfaceEditorController {
                 popup.dismiss();
             }));
         }
+        View divider = new View(context);
+        divider.setBackgroundColor(mHost.themeColor(
+            com.termux.shared.R.attr.termuxColorOutlineVariant, R.color.termux_outline_variant));
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1)));
+        dividerParams.setMargins(0, dp(4), 0, dp(4));
+        divider.setLayoutParams(dividerParams);
+        column.addView(divider);
+        column.addView(clockPositionRow(context));
         mClockDropdown = popup;
         popup.showAsDropDown(anchor, 0, dp(4), Gravity.START);
     }
@@ -3979,6 +4009,99 @@ public final class SurfaceEditorController {
             });
         row.setOnClickListener(view -> onPicked.run());
         return row;
+    }
+
+    /**
+     * Where the face sits in the pane — left, centre or right — as three pills under the faces.
+     * The pane behind the drop-down moves as soon as one is tapped, so the row stays open for a
+     * second look instead of dismissing like a face pick does.
+     */
+    @NonNull
+    private View clockPositionRow(@NonNull Context context) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(48));
+        row.setPadding(0, dp(4), 0, dp(4));
+        row.setContentDescription(getString(R.string.settings_clock_alignment_title));
+        final TextView[] pills = new TextView[CLOCK_ALIGNMENTS.length];
+        for (int i = 0; i < CLOCK_ALIGNMENTS.length; i++) {
+            final String alignment = CLOCK_ALIGNMENTS[i];
+            TextView pill = new TextView(context);
+            pill.setText(clockAlignmentLabel(alignment));
+            pill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            pill.setGravity(Gravity.CENTER);
+            pill.setMaxLines(1);
+            pill.setEllipsize(TextUtils.TruncateAt.END);
+            pill.setMinimumHeight(dp(36));
+            pill.setPadding(dp(8), 0, dp(8), 0);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            params.setMargins(i == 0 ? 0 : dp(6), 0, 0, 0);
+            pill.setLayoutParams(params);
+            pill.setClickable(true);
+            pill.setFocusable(true);
+            pill.setContentDescription(getString(
+                R.string.termux_surface_tuning_clock_position_description,
+                getString(clockAlignmentLabel(alignment))));
+            pill.setOnClickListener(view -> {
+                pickClockAlignment(alignment);
+                for (int j = 0; j < pills.length; j++)
+                    styleClockPositionPill(pills[j], CLOCK_ALIGNMENTS[j].equals(alignment));
+            });
+            pills[i] = pill;
+            row.addView(pill);
+        }
+        String current = prefs() == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT
+            : prefs().getTopPaneClockAlignment();
+        for (int i = 0; i < pills.length; i++)
+            styleClockPositionPill(pills[i], CLOCK_ALIGNMENTS[i].equals(current));
+        return row;
+    }
+
+    /** A pill is filled with the accent container when chosen and outlined when not. */
+    private void styleClockPositionPill(@NonNull TextView pill, boolean selected) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dpToPx(18));
+        if (selected) {
+            shape.setColor(mHost.themeColor(
+                com.termux.shared.R.attr.termuxColorAccentContainer,
+                R.color.termux_accent_container));
+            pill.setTextColor(mHost.themeColor(
+                com.termux.shared.R.attr.termuxColorOnAccentContainer,
+                R.color.termux_on_accent_container));
+        } else {
+            shape.setColor(0);
+            shape.setStroke(Math.max(1, dp(1)), mHost.themeColor(
+                com.termux.shared.R.attr.termuxColorOutlineVariant,
+                R.color.termux_outline_variant));
+            pill.setTextColor(mHost.themeColor(
+                com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface));
+        }
+        pill.setBackground(shape);
+        final boolean isSelected = selected;
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(pill,
+            new androidx.core.view.AccessibilityDelegateCompat() {
+                @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                        @NonNull androidx.core.view.accessibility
+                            .AccessibilityNodeInfoCompat info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    info.setClassName(Button.class.getName());
+                    info.setCheckable(true);
+                    info.setChecked(isSelected);
+                }
+            });
+    }
+
+    /** Live like the face: written through, laid out at once, and gated by ✓. */
+    private void pickClockAlignment(@NonNull String alignment) {
+        if (prefs() == null || alignment.equals(prefs().getTopPaneClockAlignment()))
+            return;
+        prefs().setTopPaneClockAlignment(alignment);
+        // Re-reads the alignment onto the live widget and the slot that places it.
+        mHost.refreshTerminalWindowBar();
+        syncDirtyActions();
     }
 
     /** Live like every other editor control: written through, previewed, and gated by ✓. */
@@ -4089,6 +4212,7 @@ public final class SurfaceEditorController {
             .append(prefs().getStatusBarCornerRadius()).append('|')
             .append(prefs().getStatusBarHorizontalInset()).append('|')
             .append(prefs().getTopPaneClockStyle()).append('|')
+            .append(prefs().getTopPaneClockAlignment()).append('|')
             .append(prefs().getStatusIndicatorCornerRadius()).append('|')
             .append(prefs().getTerminalBackgroundOpacity()).append('|')
             .append(prefs().isTerminalBorderEnabled()).append('|')

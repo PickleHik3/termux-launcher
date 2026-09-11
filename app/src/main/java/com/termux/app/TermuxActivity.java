@@ -14317,6 +14317,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
             }
         }
+        // The slot places the clock's cell by the same alignment the widget draws with, so the
+        // two move together whether the change came from settings or the surface editor.
+        View slotView = findViewById(R.id.terminal_top_widget_area);
+        if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
+            ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setClockAlignment(
+                mPreferences == null ? null : mPreferences.getTopPaneClockAlignment());
+        }
         com.termux.app.statusbar.StatusBarStackedClockView stackedClock =
             findViewById(R.id.terminal_status_column_clock);
         if (stackedClock != null && mPreferences != null) {

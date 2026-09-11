@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.terminal.TerminalClockWidget;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 import java.util.List;
 
@@ -110,7 +111,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         applyFeed(false);
     }
 
-    /** The clock alignment decides the cell order; the tiles read the same preference it does. */
+    /**
+     * The clock alignment decides where the clock's cell sits when it has the slot to itself: a
+     * centred clock is centred on the bar, not on what is left beside the place icon.
+     */
     public void setClockAlignment(@Nullable String alignment) {
         if (alignment == null ? mClockAlignment == null : alignment.equals(mClockAlignment)) return;
         mClockAlignment = alignment;
@@ -265,6 +269,27 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             }).start();
     }
 
+    /**
+     * The clock's cell when it has the slot to itself, as {@code {start, end}} in px.
+     *
+     * <p>The widget centres its face inside its own bounds, so those bounds decide what "centre"
+     * means. Left and right keep the cell running from the place icon to the gutter, where the
+     * face sits flush against whichever edge it was asked for. Centre mirrors the leading cell on
+     * the trailing side instead, so the face lands on the bar's own centre line however wide the
+     * place icons grow — measured against the bar, not against what the icons leave over.
+     */
+    static int[] clockOnlySpan(int width, int leadingCell, int gutter, @Nullable String alignment) {
+        int start = leadingCell;
+        int end = width - gutter;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(alignment)) {
+            int inset = Math.max(leadingCell, gutter);
+            start = inset;
+            end = width - inset;
+        }
+        if (end < start) end = start;
+        return new int[]{start, end};
+    }
+
     // ---- Layout -----------------------------------------------------------
 
     @Override
@@ -286,8 +311,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         int clockWidth;
         int clockHeight;
+        int clockStart = contentStart;
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) {
-            clockWidth = available;
+            int[] span = clockOnlySpan(width, contentStart, gutter, mClockAlignment);
+            clockStart = span[0];
+            clockWidth = Math.max(0, span[1] - span[0]);
             clockHeight = height;
         } else {
             clockHeight = stacked ? Math.round(dp(14f)) : height;
@@ -297,8 +325,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         }
         mClock.measure(MeasureSpec.makeMeasureSpec(clockWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
-        mClockBounds.set(contentStart, stacked ? 0 : (height - clockHeight) / 2,
-            contentStart + clockWidth, (stacked ? 0 : (height - clockHeight) / 2) + clockHeight);
+        mClockBounds.set(clockStart, stacked ? 0 : (height - clockHeight) / 2,
+            clockStart + clockWidth, (stacked ? 0 : (height - clockHeight) / 2) + clockHeight);
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();

@@ -347,10 +347,10 @@ public final class TerminalClockWidget extends View {
     }
 
     /**
-     * Glass split-leaf stock. Both leaves are translucent sheets over the bar's own glass: the
-     * upper leaf carries {@code primaryContainer}, the lower stays in the neutral surface family,
-     * so the fold is the colour edge. The hinge clips and rim take {@code primary}; the seam keeps
-     * its neutral hairline and the digits stay {@code onSurface} so they read on either leaf.
+     * Glass stock. Both leaves are translucent {@code primaryContainer} sheets over the bar's own
+     * glass, with the rim in {@code primary}; the digits stay {@code onSurface}. The hinge clips
+     * and seam keep the neutral hardware of the original stock — coloured clips read as paint,
+     * not metal — so the theme colour lives in the leaves alone.
      *
      * <p>The card is painted in two passes — a whole-card base that casts the shadow, then the
      * leaf gradients over it — so every leaf colour here is chosen to stack on {@link #mFlipBase}
@@ -361,52 +361,50 @@ public final class TerminalClockWidget extends View {
         mFlipShaderGeneration++;
         mDarkFlipStock = ColorUtils.calculateLuminance(mSurfaceBase) < .5;
         int pc = mPrimaryContainer, on = mOnPrimaryContainer, pr = mPrimary;
-        mFlipBase = alpha(mSurfaceBase, .42f);
+        mFlipBase = alpha(pc, .38f);
         if (mDarkFlipStock) {
-            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .1f), .5f);
-            mUpperFlipColors[1] = alpha(pc, .45f);
-            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .2f), .48f);
-            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .55f), .55f);
-            mLowerFlipColors[0] = alpha(ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE,
-                .22f), .5f);
-            mLowerFlipColors[1] = alpha(mSurfacePanelHighest, .42f);
-            mLowerFlipColors[2] = alpha(mSurfacePanelHigh, .38f);
-            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(mSurfacePanelHigh, mSurfacePanel,
-                .35f), .42f);
-            mHingeFlipColors[0] = ColorUtils.blendARGB(pr, Color.WHITE, .2f);
-            mHingeFlipColors[1] = pr;
-            mHingeFlipColors[2] = ColorUtils.blendARGB(pc, Color.WHITE, .3f);
-            mHingeFlipColors[3] = pc;
-            mHingeFlipColors[4] = ColorUtils.blendARGB(pc, Color.BLACK, .2f);
-            mHingeFlipColors[5] = ColorUtils.blendARGB(pc, Color.WHITE, .1f);
-            mHingeFlipColors[6] = ColorUtils.blendARGB(pc, Color.BLACK, .55f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .1f), .42f);
+            mUpperFlipColors[1] = alpha(pc, .36f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .2f), .4f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .55f), .5f);
+            mLowerFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .3f), .5f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .08f), .4f);
+            mLowerFlipColors[2] = alpha(pc, .36f);
+            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .2f), .4f);
+            mHingeFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .45f);
+            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .25f);
+            mHingeFlipColors[2] = mSurfacePanelHighest;
+            mHingeFlipColors[3] = mSurfacePanelHigh;
+            mHingeFlipColors[4] = mSurfacePanel;
+            mHingeFlipColors[5] = ColorUtils.blendARGB(mSurfacePanelHigh,
+                mSurfacePanelHighest, .35f);
+            mHingeFlipColors[6] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
             mFlipRim = alpha(pr, .35f);
             mFlipSeam = Color.BLACK;
             mFlipShadow = Color.argb(90, 0, 0, 0);
             mFlipClipOutline = Color.BLACK;
             mFlipClipShadow = Color.argb(128, 0, 0, 0);
         } else {
-            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .5f), .5f);
-            mUpperFlipColors[1] = alpha(pc, .45f);
-            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(pc, on, .08f), .48f);
-            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(pc, on, .24f), .55f);
-            mLowerFlipColors[0] = alpha(Color.WHITE, .45f);
-            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .3f),
-                .35f);
-            mLowerFlipColors[2] = alpha(mSurfacePanelHigh, .32f);
-            mLowerFlipColors[3] = alpha(mSurfacePanelHighest, .36f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .5f), .45f);
+            mUpperFlipColors[1] = alpha(pc, .36f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(pc, on, .08f), .4f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(pc, on, .24f), .5f);
+            mLowerFlipColors[0] = alpha(Color.WHITE, .5f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .35f), .4f);
+            mLowerFlipColors[2] = alpha(pc, .36f);
+            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(pc, on, .08f), .4f);
             mHingeFlipColors[0] = Color.WHITE;
-            mHingeFlipColors[1] = ColorUtils.blendARGB(pr, Color.WHITE, .7f);
-            mHingeFlipColors[2] = ColorUtils.blendARGB(pr, Color.WHITE, .4f);
-            mHingeFlipColors[3] = pr;
-            mHingeFlipColors[4] = ColorUtils.blendARGB(pr, on, .3f);
-            mHingeFlipColors[5] = ColorUtils.blendARGB(pr, Color.WHITE, .3f);
-            mHingeFlipColors[6] = ColorUtils.blendARGB(pr, on, .45f);
+            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .35f);
+            mHingeFlipColors[2] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .5f);
+            mHingeFlipColors[3] = mOutlineVariant;
+            mHingeFlipColors[4] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .18f);
+            mHingeFlipColors[5] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .35f);
+            mHingeFlipColors[6] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .38f);
             mFlipRim = alpha(pr, .35f);
             mFlipSeam = alpha(mOnSurface, .55f);
             mFlipShadow = alpha(pr, .2f);
-            mFlipClipOutline = alpha(on, .34f);
-            mFlipClipShadow = alpha(on, .22f);
+            mFlipClipOutline = alpha(mOnSurface, .34f);
+            mFlipClipShadow = alpha(mOnSurface, .22f);
         }
         mFlipSecondsInk = alpha(pr, .75f);
         mFlipDateInk = mOnSurfaceVariant;
