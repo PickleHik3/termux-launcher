@@ -74,7 +74,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   clicks; hold, or tap and touch again, then move, to drag. Two fingers scroll, keep going after a
   fast lift, and pinch to zoom; two fingers tapping together click the right button. Three fingers
   tapping click the middle button, swiping left or right switch windows, and swiping down bring
-  the keyboard back. The arrow in the corner does the same. In the terminal the same action makes every touch the mouse
+  the keyboard back. The arrow in the corner does the same. A strip down the pad's trailing edge
+  scrolls with one thumb alone — no second finger needed — and coasts on after a flick the same
+  way the two-finger scroll does. In the terminal the same action makes every touch the mouse
   for programs that take one: a finger is the left button, two fingers are the wheel, and a fast
   lift keeps it turning. A program that has not asked for the mouse gets nothing typed at it;
   two fingers scroll the transcript there instead. A small mouse at the end of the status bar

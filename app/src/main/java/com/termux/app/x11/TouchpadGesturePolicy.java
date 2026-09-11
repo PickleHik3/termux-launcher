@@ -54,4 +54,33 @@ final class TouchpadGesturePolicy {
         double log2 = Math.log(spread / startSpread) / Math.log(2);
         return (int) (log2 / stepLog2);
     }
+
+    /**
+     * Whether a touch at {@code x} lands in the scroll strip along the pad's trailing edge:
+     * within {@code hitBand} of the pad's own right edge at {@code panelRight}. The strip's hit
+     * band reaches wider than the strip is drawn, the same way a rail's hit band does, so a
+     * thumb does not have to land on the thin track itself.
+     */
+    static boolean stripHit(float x, float panelRight, float hitBand) {
+        return x >= panelRight - hitBand;
+    }
+
+    /**
+     * Whole wheel notches earned by {@code accum} travel at {@code notch} spacing, signed by
+     * direction. The caller keeps what is left over by subtracting the count times {@code notch}
+     * from its own accumulator. Shared by the two-finger scroll and the strip, which differ only
+     * in notch size.
+     */
+    static int notchCount(float accum, float notch) {
+        return notch > 0f ? (int) (accum / notch) : 0;
+    }
+
+    /**
+     * Whether the strip still leaves a usable pointing area once it takes {@code stripWidth} off
+     * the pad's own {@code panelWidth}; below {@code minPointing} left over, the strip hides
+     * instead of crowding the pointing area further, rather than the pad growing to make room.
+     */
+    static boolean stripFits(float panelWidth, float stripWidth, float minPointing) {
+        return panelWidth - stripWidth >= minPointing;
+    }
 }
