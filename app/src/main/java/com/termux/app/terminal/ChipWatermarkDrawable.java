@@ -7,6 +7,8 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PathMeasure;
 import android.graphics.PixelFormat;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -41,6 +43,7 @@ final class ChipWatermarkDrawable extends Drawable {
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path mOutline = new Path();
     private final Path mArc = new Path();
@@ -60,7 +63,9 @@ final class ChipWatermarkDrawable extends Drawable {
     @Nullable private Typeface mGlyphFace;
     @Nullable private Bitmap mIcon;
     private int mGlyphColor;
-    private int mSelectedGlyphColor;
+    /** Rebuilt only when the accent moves; a filter per frame would be a new object per chip. */
+    @Nullable private PorterDuffColorFilter mIconTint;
+    private int mIconTintColor;
     private float mSelection;
 
     private boolean mBusy;
@@ -85,6 +90,9 @@ final class ChipWatermarkDrawable extends Drawable {
         mStrokePaint.setStyle(Paint.Style.STROKE);
         mStrokePaint.setStrokeCap(Paint.Cap.ROUND);
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
+        // Filled, as the Nerd Font face draws it: the watermark is a printed mark, not an outline.
+        mGlyphPaint.setStyle(Paint.Style.FILL);
+        mIconPaint.setFilterBitmap(true);
         mDotPaint.setStyle(Paint.Style.FILL);
     }
 
@@ -119,10 +127,13 @@ final class ChipWatermarkDrawable extends Drawable {
         invalidateSelf();
     }
 
-    void setGlyphColors(int color, int selectedColor) {
-        if (mGlyphColor == color && mSelectedGlyphColor == selectedColor) return;
+    /**
+     * The colour the glyph — or the window's icon silhouette — is printed in: the place accent,
+     * not the title's colour. Only its alpha moves with the selection.
+     */
+    void setGlyphColor(int color) {
+        if (mGlyphColor == color) return;
         mGlyphColor = color;
-        mSelectedGlyphColor = selectedColor;
         invalidateSelf();
     }
 
@@ -204,6 +215,12 @@ final class ChipWatermarkDrawable extends Drawable {
         return mSelection;
     }
 
+    /** The colour the watermark is printed in right now, alpha included; also what draw() uses. */
+    int watermarkColor() {
+        return ColorUtils.setAlphaComponent(
+            mGlyphColor, ChipWatermarkGeometry.glyphAlpha(mSelection));
+    }
+
     @Override protected void onBoundsChange(@NonNull Rect bounds) {
         super.onBoundsChange(bounds);
         rebuildOutline();
@@ -279,13 +296,19 @@ final class ChipWatermarkDrawable extends Drawable {
         drawCornerDots(canvas);
     }
 
-    /** The glyph or icon, 16dp, centred, faint, and clipped to the chip it belongs to. */
+    /**
+     * The glyph or icon: 21dp in the place accent, hugging the chip's leading edge and vertically
+     * centred, clipped by the outline — which is 20dp tall, so the mark is cropped top and bottom.
+     */
     private void drawWatermark(@NonNull Canvas canvas) {
         boolean hasIcon = mIcon != null && !mIcon.isRecycled();
         if (!hasIcon && (mGlyph == null || mGlyph.isEmpty())) return;
-        int alpha = ChipWatermarkGeometry.glyphAlpha(mSelection);
+        int color = watermarkColor();
         float size = ChipWatermarkGeometry.GLYPH_SIZE_DP * mDensity;
-        float cx = mRect.centerX();
+        float leading = mRtl ? mRect.right : mRect.left;
+        float trailing = mRtl ? mRect.left : mRect.right;
+        float cx = ChipWatermarkGeometry.glyphCentreOnAxis(leading, trailing,
+            ChipWatermarkGeometry.GLYPH_LEADING_INSET_DP * mDensity, size);
         float cy = mRect.centerY();
 
         int save = canvas.save();
@@ -293,19 +316,28 @@ final class ChipWatermarkDrawable extends Drawable {
         if (hasIcon) {
             mIconSource.set(0, 0, mIcon.getWidth(), mIcon.getHeight());
             mIconTarget.set(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f);
-            mGlyphPaint.setAlpha(alpha);
-            mGlyphPaint.setFilterBitmap(true);
-            canvas.drawBitmap(mIcon, mIconSource, mIconTarget, mGlyphPaint);
-            mGlyphPaint.setAlpha(255);
+            // The silhouette carries shape in its alpha and nothing in its colour, so the accent
+            // is painted through it — the same mark the process glyph would have drawn.
+            mIconPaint.setColorFilter(iconTint(ColorUtils.setAlphaComponent(color, 255)));
+            mIconPaint.setAlpha(android.graphics.Color.alpha(color));
+            canvas.drawBitmap(mIcon, mIconSource, mIconTarget, mIconPaint);
         } else {
             mGlyphPaint.setTypeface(mGlyphFace);
             mGlyphPaint.setTextSize(size);
-            int color = ColorUtils.blendARGB(mGlyphColor, mSelectedGlyphColor, mSelection);
-            mGlyphPaint.setColor(ColorUtils.setAlphaComponent(color, alpha));
+            mGlyphPaint.setColor(color);
             Paint.FontMetrics metrics = mGlyphPaint.getFontMetrics();
             canvas.drawText(mGlyph, cx, cy - (metrics.ascent + metrics.descent) / 2f, mGlyphPaint);
         }
         canvas.restoreToCount(save);
+    }
+
+    @NonNull
+    private PorterDuffColorFilter iconTint(int opaqueColor) {
+        if (mIconTint == null || mIconTintColor != opaqueColor) {
+            mIconTintColor = opaqueColor;
+            mIconTint = new PorterDuffColorFilter(opaqueColor, PorterDuff.Mode.SRC_IN);
+        }
+        return mIconTint;
     }
 
     /**

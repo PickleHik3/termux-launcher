@@ -338,7 +338,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mUnselectedStrokeColor;
     private int mSelectedFillColor;
     private int mSelectedStrokeColor;
-    private int mSelectedGlyphColor;
+    private int mGlyphColor;
+    private int mUnselectedHaloColor;
+    private int mSelectedHaloColor;
     private int mGroundColor;
     private int mBusyColor;
     private int mAttentionColor;
@@ -944,13 +946,25 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         String glyph = glyphOf(item.label);
         chip.setGlyph(glyph, glyph == null ? null : watermarkFace(glyph));
         chip.setIcon(item.icon);
-        chip.setGlyphColors(mUnselectedTextColor, mSelectedGlyphColor);
+        chip.setGlyphColor(mGlyphColor);
         chip.setSelection(selection);
+        applyTitleHalo(tab, selection);
         chip.setActivity(showsRing(item), item.progress,
             item.progressError ? mAttentionColor : mBusyColor, mLazyMode);
         ChipWatermarkDrawable.Mark mark = markFor(item);
         chip.setMark(mark, markColor(mark), mGroundColor);
         chip.setAgent(agentFor(item.agentState), agentDotColor(item.agentState));
+    }
+
+    /**
+     * The soft halo under a title, in the fill of the chip it stands on: the glyph runs behind the
+     * first letters now, and without this they sit in it rather than on it. The two fills differ,
+     * so the halo travels with the selection exactly as the text colour does.
+     */
+    private void applyTitleHalo(@NonNull TextView tab, float selection) {
+        float fraction = selection < 0f ? 0f : selection > 1f ? 1f : selection;
+        tab.setShadowLayer(dpF(ChipWatermarkGeometry.TITLE_HALO_DP), 0f, 0f,
+            ColorUtils.blendARGB(mUnselectedHaloColor, mSelectedHaloColor, fraction));
     }
 
     /** Every pill's watermark at once, after a palette, radius or face change. */
@@ -1167,8 +1181,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setMinWidth(0);
         tab.setMaxWidth(dp(104));
         // A half-dp on each side is visible at modern phone densities without making the compact
-        // window row feel loose.
-        tab.setPadding(dp(3.5f), 0, dp(3.5f), 0);
+        // window row feel loose; the leading side carries the title's nudge past the glyph too.
+        tab.setPaddingRelative(dp(3.5f) + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP), 0,
+            dp(3.5f), 0);
         tab.setSingleLine(true);
         tab.setIncludeFontPadding(false);
         tab.setTextAlignment(TEXT_ALIGNMENT_CENTER);
@@ -1183,7 +1198,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
         // Never narrower than the watermark behind it: a window whose whole label is its process
         // icon has no title left to size the chip, and a sliver of a glyph reads as damage.
-        tab.setMinWidth(dp(ChipWatermarkGeometry.GLYPH_SIZE_DP) + dp(3.5f) * 2);
+        tab.setMinWidth(dp(ChipWatermarkGeometry.GLYPH_SIZE_DP)
+            + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP) + dp(3.5f) * 2);
         applyChipWatermark(tab, item, selected ? 1f : 0f);
         tab.setSelected(selected);
         tab.setFocusable(true);
@@ -1298,6 +1314,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             tab.setSelected(selected);
             tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
             tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
+            applyTitleHalo(tab, selected ? 1f : 0f);
             ChipWatermarkDrawable chip = chipWatermarkAt(i);
             if (chip != null) chip.setSelection(selected ? 1f : 0f);
             tab.setAlpha(1f);
@@ -1314,15 +1331,18 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 tab.setTextColor(ColorUtils.blendARGB(
                     mSelectedTextColor, mUnselectedTextColor, progress));
                 tab.setTypeface(mTerminalTypeface, Typeface.BOLD);
+                applyTitleHalo(tab, 1f - progress);
                 if (chip != null) chip.setSelection(1f - progress);
             } else if (i == selectedIndex) {
                 tab.setTextColor(ColorUtils.blendARGB(
                     mUnselectedTextColor, mSelectedTextColor, progress));
                 tab.setTypeface(mTerminalTypeface, Typeface.BOLD);
+                applyTitleHalo(tab, progress);
                 if (chip != null) chip.setSelection(progress);
             } else {
                 tab.setTextColor(mUnselectedTextColor);
                 tab.setTypeface(mTerminalTypeface, Typeface.NORMAL);
+                applyTitleHalo(tab, 0f);
                 if (chip != null) chip.setSelection(0f);
             }
             tab.setAlpha(1f);
@@ -1377,10 +1397,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mUnselectedStrokeColor = ColorUtils.setAlphaComponent(secondary, 34);
         mSelectedFillColor = ColorUtils.setAlphaComponent(primary, 58);
         mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
-        // The watermark takes the label's colour, pulled towards the place accent on the chip the
-        // user is in — the same "this one is yours" tint the fill and the stroke already carry.
-        mSelectedGlyphColor = ColorUtils.blendARGB(mSelectedTextColor, primary,
-            ChipWatermarkGeometry.SELECTED_GLYPH_TINT);
+        // The watermark is the place's accent, never the label's colour: sharing the title's
+        // colour is what buried the glyph under it on the phone. Only its alpha moves with the
+        // selection — 30% at rest, 52% on the chip the user is in.
+        mGlyphColor = primary;
+        // The halo the title is drawn over, one per fill: near-opaque, so letters read against the
+        // glyph running behind them.
+        mUnselectedHaloColor = ChipWatermarkGeometry.haloColor(mUnselectedFillColor);
+        mSelectedHaloColor = ChipWatermarkGeometry.haloColor(mSelectedFillColor);
         // The ground a corner dot is haloed against: the panel the row itself stands on, so a dot
         // over the watermark still reads as a dot.
         mGroundColor = ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
@@ -1912,5 +1936,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    /** A blur radius is not a layout distance: rounding 1.5dp to whole pixels coarsens the halo. */
+    private float dpF(float value) {
+        return value * getResources().getDisplayMetrics().density;
     }
 }

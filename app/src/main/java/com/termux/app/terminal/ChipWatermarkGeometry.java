@@ -14,8 +14,20 @@ import com.termux.app.statusbar.WindowActivityRing;
  */
 public final class ChipWatermarkGeometry {
 
-    /** The watermark glyph's size, whatever the title beside it is set in. */
-    public static final float GLYPH_SIZE_DP = 16f;
+    /**
+     * The watermark glyph's size, whatever the title beside it is set in. Taller than the 20 dp
+     * chip on purpose: the rounded outline crops it top and bottom, so it reads as a mark printed
+     * on the chip rather than a small icon floating in it.
+     */
+    public static final float GLYPH_SIZE_DP = 21f;
+    /** How far inside the chip's leading edge — trailing, in RTL — the glyph's box starts. */
+    public static final float GLYPH_LEADING_INSET_DP = 2f;
+    /** How much further in the title starts than it used to, so its first letters clear the glyph. */
+    public static final float TITLE_NUDGE_DP = 5f;
+    /** The title's halo: a soft shadow in the chip's own fill, so the letters cut out of the glyph. */
+    public static final float TITLE_HALO_DP = 1.5f;
+    /** How opaque that fill is made for the halo — a fill at alpha 16 would hide nothing. */
+    public static final int TITLE_HALO_ALPHA = 200;
     /** A corner dot — a mark, or the agent reading — across. */
     public static final float DOT_DIAMETER_DP = 5f;
     /** How far past the outline a corner dot sits, where the chip's corner leaves room for it. */
@@ -25,11 +37,12 @@ public final class ChipWatermarkGeometry {
     /** The chip's outline, which is also the ring a working window draws. */
     public static final float OUTLINE_WIDTH_DP = 1f;
 
-    /** The watermark's strength against the title, as alpha: 30% at rest, 40% selected. */
+    /**
+     * The watermark's strength, as alpha: 30% at rest, 52% selected. It is drawn in the place
+     * accent rather than the title's colour — sharing the text's colour is exactly what buried it.
+     */
     public static final int GLYPH_ALPHA = 77;
-    public static final int SELECTED_GLYPH_ALPHA = 102;
-    /** How far the selected chip's watermark is pulled towards the place accent. */
-    public static final float SELECTED_GLYPH_TINT = .35f;
+    public static final int SELECTED_GLYPH_ALPHA = 133;
 
     /** The faint full outline a reported percentage fills over. */
     public static final int RING_TRACK_ALPHA = 56;
@@ -61,6 +74,26 @@ public final class ChipWatermarkGeometry {
     public static int glyphAlpha(float selection) {
         float fraction = clamp01(selection);
         return Math.round(GLYPH_ALPHA + (SELECTED_GLYPH_ALPHA - GLYPH_ALPHA) * fraction);
+    }
+
+    /**
+     * Where the glyph's centre sits across the chip: its box hugs the leading edge, {@code insetPx}
+     * inside it, whichever way the row reads. The glyph is drawn centred on that point, so this is
+     * the inset plus half the box — the outline clips whatever falls outside the chip.
+     */
+    public static float glyphCentreOnAxis(float leadingEdge, float trailingEdge, float insetPx,
+                                          float sizePx) {
+        float direction = trailingEdge >= leadingEdge ? 1f : -1f;
+        return leadingEdge + direction * (insetPx + sizePx / 2f);
+    }
+
+    /**
+     * The colour the title's halo is drawn in: the chip's own fill, raised to near-opaque. The
+     * fills are faint tints meant to be seen over the bar's ground, and a halo at alpha 16 would
+     * separate nothing; only the hue is wanted, so the alpha is ours.
+     */
+    public static int haloColor(int fillColor) {
+        return (TITLE_HALO_ALPHA << 24) | (fillColor & 0x00FFFFFF);
     }
 
     /**
