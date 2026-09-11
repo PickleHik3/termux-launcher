@@ -930,11 +930,13 @@ public final class TerminalActionDispatcher {
                 }
                 case TOOL_APP_KEY_INSPECTOR:
                     return ok().put("keyInspectorOpen", host.toggleKeyInspector());
+                // The legacy sessions drawer is gone; the two bindings it owned now reach the
+                // sessions browser, which is what they always meant.
                 case TOOL_APP_OPEN_DRAWER:
-                    host.openDrawer();
+                    host.showSessionBrowser();
                     return ok();
                 case TOOL_APP_CLOSE_DRAWER:
-                    host.closeDrawers();
+                    host.sheetController().dismiss();
                     return ok();
                 case TOOL_TERMINAL_ACTION_SHEET:
                     return host.showTerminalActionSheet(null) ? ok() : noSession(toolName);

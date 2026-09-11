@@ -9,7 +9,6 @@ import android.media.SoundPool;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
-import android.widget.ListView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -471,9 +470,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // and two stacked notices for one keypress read as noise. The indicator view stays for
             // notices that carry real news — an exited session, a refused split.
         }
-        // We call the following even when the session is already being displayed since config may
-        // be stale, like current session not selected or scrolled to.
-        checkAndScrollToSession(session);
         updateBackgroundColor();
     }
 
@@ -596,7 +592,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 return false;
             TerminalSession newTerminalSession = newTermuxSession.getTerminalSession();
             setCurrentSession(newTerminalSession);
-            mHost.closeDrawers();
             return true;
         }
     }
@@ -663,24 +658,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     public void termuxSessionListNotifyUpdated() {
         mHost.notifySessionListUpdated();
-    }
-
-    public void checkAndScrollToSession(TerminalSession session) {
-        if (!mHost.isVisible())
-            return;
-        TermuxService service = mHost.service();
-        if (service == null)
-            return;
-        // Use the drawer-visible index (secondary panes are filtered out).
-        final int indexOfSession = mHost.sessions().indexOf(session);
-        if (indexOfSession < 0)
-            return;
-        final ListView termuxSessionsListView = mHost.sessions().listView();
-        if (termuxSessionsListView == null)
-            return;
-        termuxSessionsListView.setItemChecked(indexOfSession, true);
-        // Delay is necessary otherwise sometimes scroll to newly added session does not happen
-        termuxSessionsListView.postDelayed(() -> termuxSessionsListView.smoothScrollToPosition(indexOfSession), 1000);
     }
 
     String toToastTitle(TerminalSession session) {

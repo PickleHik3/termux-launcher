@@ -71,460 +71,373 @@
             android:clipToPadding="false"
             android:orientation="vertical">
 
-        <androidx.drawerlayout.widget.DrawerLayout
-            android:id="@+id/drawer_layout"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
+        <LinearLayout
+            android:id="@+id/terminal_content_column"
             android:layout_alignParentTop="true"
             android:layout_above="@+id/accessory_stack_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
             android:clipChildren="false"
             android:clipToPadding="false">
 
-            <LinearLayout
-                android:id="@+id/terminal_content_column"
+            <!-- App-owned top glass pane: the modular widget slot above the bottom-aligned
+                 window row. The glass backdrop is extended behind the system status bar in
+                 applyTerminalOverlayInsets(). -->
+            <com.termux.app.statusbar.StatusBarSwipeLayout
+                android:id="@+id/terminal_window_bar_host"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
+                android:layout_height="96dp"
                 android:clipChildren="false"
-                android:clipToPadding="false">
+                android:clipToPadding="false"
+                android:visibility="gone">
 
-                <!-- App-owned top glass pane: the modular widget slot above the bottom-aligned
-                     window row. The glass backdrop is extended behind the system status bar in
-                     applyTerminalOverlayInsets(). -->
-                <com.termux.app.statusbar.StatusBarSwipeLayout
-                    android:id="@+id/terminal_window_bar_host"
+                <!-- Wallpaper-mode frost twin of terminal_status_bar_wallpaper_backdrop; both
+                     crops come from the same shared blur frame so the seam is invisible. -->
+                <ImageView
+                    android:id="@+id/terminal_window_bar_wallpaper_backdrop"
                     android:layout_width="match_parent"
-                    android:layout_height="96dp"
-                    android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:visibility="gone">
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
 
-                    <!-- Wallpaper-mode frost twin of terminal_status_bar_wallpaper_backdrop; both
-                         crops come from the same shared blur frame so the seam is invisible. -->
-                    <ImageView
-                        android:id="@+id/terminal_window_bar_wallpaper_backdrop"
-                        android:layout_width="match_parent"
+                <com.github.mmin18.widget.RealtimeBlurView
+                    android:id="@+id/terminal_window_bar_blur"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:realtimeBlurRadius="10dp"
+                    app:realtimeOverlayColor="@android:color/transparent" />
+
+                <View
+                    android:id="@+id/terminal_window_bar_background"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <!-- The lens edges and the place icons, behind everything the bar shows: the
+                     neighbours rest half past the edges and the icon at home sits beside the
+                     clock, none of it taking room from the row. Taps on a neighbour still land
+                     here, since nothing above owns the bar's edges. -->
+                <com.termux.app.statusbar.StatusBarLensView
+                    android:id="@+id/terminal_status_lens"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <!-- Stable modular slot: clocks render only here. A later widget editor can
+                     resize/reorder this host without coupling widget code to the pane. The slot
+                     owns the clock / media / pinned-notification contention; the pane height
+                     never changes, content compresses instead.
+
+                     Elevated above every glass view in this pane (backdrop, blur, surface) so
+                     the clock is excluded from the dock's surface tuning: opacity, grain and
+                     blur are the slab *behind* it and can never be composited over it, whatever
+                     elevation a future glass pass gives those siblings (see the palette-glass
+                     regression where setElevation reordered siblings, not just shadows).
+                     outlineProvider=none keeps the lift from casting a shadow of its own. -->
+                <com.termux.app.statusbar.TopPaneWidgetSlot
+                    android:id="@+id/terminal_top_widget_area"
+                    android:layout_width="match_parent"
+                    android:layout_height="68dp"
+                    android:layout_gravity="top"
+                    android:elevation="6dp"
+                    android:outlineProvider="none"
+                    android:clipChildren="true"
+                    android:clipToPadding="true">
+
+                    <com.termux.app.terminal.TerminalClockWidget
+                        android:id="@+id/terminal_clock_widget"
+                        android:layout_width="wrap_content"
                         android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:importantForAccessibility="no"
+                        android:contentDescription="@string/termux_top_pane_clock_content_description"
+                        android:importantForAccessibility="yes" />
+
+                    <com.termux.app.statusbar.PinnedNotificationsView
+                        android:id="@+id/terminal_pinned_notifications"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/termux_top_pane_pinned_notifications_content_description"
                         android:visibility="gone" />
 
+                    <com.termux.app.statusbar.MediaWidgetView
+                        android:id="@+id/terminal_media_widget"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/termux_top_pane_media_content_description"
+                        android:visibility="gone" />
+
+                </com.termux.app.statusbar.TopPaneWidgetSlot>
+
+                <!-- The clock a bar standing in a column wears, in place of the widget slot
+                     above: the hour over the minutes with the date beneath. Shown only while
+                     such a bar is open; lifted over the glass like the slot and the row. -->
+                <com.termux.app.statusbar.StatusBarStackedClockView
+                    android:id="@+id/terminal_status_column_clock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
+                    android:elevation="6dp"
+                    android:outlineProvider="none"
+                    android:visibility="gone" />
+
+                <!-- Bottom status row. Order is fixed: sessions indicator, window pills, then
+                     the compact CPU/RAM/weather trailing widgets. The reserved rows above stay
+                     empty until the next design pass. -->
+                <!-- Lifted like the widget slot above: the status row's pills and widgets sit
+                     over the pane's glass (backdrop, blur, surface) and must never be
+                     composited into it, whatever elevation a glass pass gives those siblings.
+                     outlineProvider=none keeps the lift from casting a shadow. -->
+                <LinearLayout
+                    android:id="@+id/terminal_status_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="24dp"
+                    android:layout_gravity="bottom"
+                    android:layout_marginBottom="4dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:elevation="6dp"
+                    android:outlineProvider="none"
+                    android:clipChildren="true"
+                    android:clipToPadding="true">
+
+                    <!-- The place's own row content: its badge and its chips. The strip slides
+                         with the pane wall and dissolves at the bar's edges, so one place's row
+                         leaves through the lens and the next arrives through it, while the
+                         stat widgets beside it hold still. -->
+                    <com.termux.app.statusbar.PlaceContentStrip
+                        android:id="@+id/terminal_status_place_content"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="8dp"
+                        android:gravity="center_vertical">
+
+                        <com.termux.app.statusbar.SessionsIndicatorView
+                            android:id="@+id/terminal_sessions_indicator"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent" />
+
+                        <com.termux.app.terminal.TerminalWindowBar
+                            android:id="@+id/terminal_window_bar"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            android:background="@android:color/transparent"
+                            android:contentDescription="@string/termux_window_bar_content_description" />
+
+                        <!-- The same window list for a bar standing in a column, where a pill
+                             carrying a whole label does not fit: one chip per window, stacked.
+                             Only one of the two is ever shown. -->
+                        <com.termux.app.statusbar.StatusBarWindowColumn
+                            android:id="@+id/terminal_status_window_column"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:layout_marginTop="6dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_window_bar_content_description" />
+                    </com.termux.app.statusbar.PlaceContentStrip>
+
+                    <!-- The CPU/RAM/weather cluster: CPU · RAM · Weather at the row's end
+                         everywhere, except the Widgets place, where TermuxActivity reverses
+                         the child order to Weather · RAM · CPU and shows the centring spacer
+                         after it — see applyStatsClusterArrangement(). -->
+                    <LinearLayout
+                        android:id="@+id/terminal_status_stats_cluster"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingStart="3dp"
+                        android:clipChildren="false"
+                        android:clipToPadding="false">
+
+                        <!-- No working indicator here: the window pill's own rim carries it, so
+                             the state is shown once, at the window it belongs to. -->
+                        <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_cpu"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_status_widget_cpu_content_description" />
+
+                        <com.termux.app.statusbar.MaterialDotSeparatorView
+                            android:id="@+id/terminal_status_dot_cpu_ram"
+                            android:layout_width="3dp"
+                            android:layout_height="3dp"
+                            android:layout_gravity="center_vertical"
+                            android:layout_marginHorizontal="1dp"
+                            android:visibility="gone" />
+
+                        <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_ram"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="3dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_status_widget_ram_content_description" />
+
+                        <com.termux.app.statusbar.MaterialDotSeparatorView
+                            android:id="@+id/terminal_status_dot_ram_weather"
+                            android:layout_width="3dp"
+                            android:layout_height="3dp"
+                            android:layout_gravity="center_vertical"
+                            android:layout_marginHorizontal="1dp"
+                            android:visibility="gone" />
+
+                        <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_weather"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="3dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_status_widget_weather_content_description" />
+                    </LinearLayout>
+
+                    <!-- Balances the place content strip's weight so the cluster above centres
+                         in the row on the Widgets place; gone (so weightless) everywhere else,
+                         where the cluster keeps hugging the row's end as it does today. -->
+                    <View
+                        android:id="@+id/terminal_status_stats_center_spacer"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:visibility="gone" />
+
+                    <!-- The stat widgets hold still while the place content slides; the end
+                         margin keeps them clear of the lens and the icon peeking through it. -->
+                    <LinearLayout
+                        android:id="@+id/terminal_status_widgets"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="10dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingEnd="3dp"
+                        android:clipChildren="false"
+                        android:clipToPadding="false">
+
+                        <!-- The AI glyph is not a preference: it appears only while a model is
+                             actually resident, so it owns its own visibility and its own dot. -->
+                        <com.termux.app.statusbar.MaterialDotSeparatorView
+                            android:id="@+id/terminal_status_dot_ai"
+                            android:layout_width="3dp"
+                            android:layout_height="3dp"
+                            android:layout_gravity="center_vertical"
+                            android:layout_marginHorizontal="1dp"
+                            android:visibility="gone" />
+
+                        <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_ai"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="3dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_status_widget_ai_content_description" />
+
+                        <!-- Mouse mode's mark: there while it is on, gone the moment it is off. -->
+                        <com.termux.app.statusbar.MaterialDotSeparatorView
+                            android:id="@+id/terminal_status_dot_mouse"
+                            android:layout_width="3dp"
+                            android:layout_height="3dp"
+                            android:layout_gravity="center_vertical"
+                            android:layout_marginHorizontal="1dp"
+                            android:visibility="gone" />
+
+                        <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_mouse"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="3dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_status_widget_mouse_content_description" />
+
+                    </LinearLayout>
+                </LinearLayout>
+
+            </com.termux.app.statusbar.StatusBarSwipeLayout>
+
+            <!-- The alphabets bar standing along the top, when the place on screen asks for
+                 that. A row in the content column like the status bar's own, so it lands under
+                 the status bar wherever that is on top and takes its slice of the terminal's
+                 height between the side columns. syncAzBarHosts() sizes, glazes and fills it. -->
+            <FrameLayout
+                android:id="@+id/place_az_bar_top"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:visibility="gone">
+
+                <!-- The glass sheet is exactly the plank, so it is the thing the rounded
+                     outline clips; the host around it stays unclipped for the wave's lift. -->
+                <FrameLayout
+                    android:id="@+id/place_az_bar_top_glass"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
                     <com.github.mmin18.widget.RealtimeBlurView
-                        android:id="@+id/terminal_window_bar_blur"
+                        android:id="@+id/place_az_bar_top_blur"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         app:realtimeBlurRadius="10dp"
                         app:realtimeOverlayColor="@android:color/transparent" />
 
                     <View
-                        android:id="@+id/terminal_window_bar_background"
+                        android:id="@+id/place_az_bar_top_surface"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
-
-                    <!-- The lens edges and the place icons, behind everything the bar shows: the
-                         neighbours rest half past the edges and the icon at home sits beside the
-                         clock, none of it taking room from the row. Taps on a neighbour still land
-                         here, since nothing above owns the bar's edges. -->
-                    <com.termux.app.statusbar.StatusBarLensView
-                        android:id="@+id/terminal_status_lens"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent" />
-
-                    <!-- Stable modular slot: clocks render only here. A later widget editor can
-                         resize/reorder this host without coupling widget code to the pane. The slot
-                         owns the clock / media / pinned-notification contention; the pane height
-                         never changes, content compresses instead.
-
-                         Elevated above every glass view in this pane (backdrop, blur, surface) so
-                         the clock is excluded from the dock's surface tuning: opacity, grain and
-                         blur are the slab *behind* it and can never be composited over it, whatever
-                         elevation a future glass pass gives those siblings (see the palette-glass
-                         regression where setElevation reordered siblings, not just shadows).
-                         outlineProvider=none keeps the lift from casting a shadow of its own. -->
-                    <com.termux.app.statusbar.TopPaneWidgetSlot
-                        android:id="@+id/terminal_top_widget_area"
-                        android:layout_width="match_parent"
-                        android:layout_height="68dp"
-                        android:layout_gravity="top"
-                        android:elevation="6dp"
-                        android:outlineProvider="none"
-                        android:clipChildren="true"
-                        android:clipToPadding="true">
-
-                        <com.termux.app.terminal.TerminalClockWidget
-                            android:id="@+id/terminal_clock_widget"
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:contentDescription="@string/termux_top_pane_clock_content_description"
-                            android:importantForAccessibility="yes" />
-
-                        <com.termux.app.statusbar.PinnedNotificationsView
-                            android:id="@+id/terminal_pinned_notifications"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:contentDescription="@string/termux_top_pane_pinned_notifications_content_description"
-                            android:visibility="gone" />
-
-                        <com.termux.app.statusbar.MediaWidgetView
-                            android:id="@+id/terminal_media_widget"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:contentDescription="@string/termux_top_pane_media_content_description"
-                            android:visibility="gone" />
-
-                    </com.termux.app.statusbar.TopPaneWidgetSlot>
-
-                    <!-- The clock a bar standing in a column wears, in place of the widget slot
-                         above: the hour over the minutes with the date beneath. Shown only while
-                         such a bar is open; lifted over the glass like the slot and the row. -->
-                    <com.termux.app.statusbar.StatusBarStackedClockView
-                        android:id="@+id/terminal_status_column_clock"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="top"
-                        android:elevation="6dp"
-                        android:outlineProvider="none"
-                        android:visibility="gone" />
-
-                    <!-- Bottom status row. Order is fixed: sessions indicator, window pills, then
-                         the compact CPU/RAM/weather trailing widgets. The reserved rows above stay
-                         empty until the next design pass. -->
-                    <!-- Lifted like the widget slot above: the status row's pills and widgets sit
-                         over the pane's glass (backdrop, blur, surface) and must never be
-                         composited into it, whatever elevation a glass pass gives those siblings.
-                         outlineProvider=none keeps the lift from casting a shadow. -->
-                    <LinearLayout
-                        android:id="@+id/terminal_status_row"
-                        android:layout_width="match_parent"
-                        android:layout_height="24dp"
-                        android:layout_gravity="bottom"
-                        android:layout_marginBottom="4dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:elevation="6dp"
-                        android:outlineProvider="none"
-                        android:clipChildren="true"
-                        android:clipToPadding="true">
-
-                        <!-- The place's own row content: its badge and its chips. The strip slides
-                             with the pane wall and dissolves at the bar's edges, so one place's row
-                             leaves through the lens and the next arrives through it, while the
-                             stat widgets beside it hold still. -->
-                        <com.termux.app.statusbar.PlaceContentStrip
-                            android:id="@+id/terminal_status_place_content"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="1"
-                            android:paddingStart="14dp"
-                            android:paddingEnd="8dp"
-                            android:gravity="center_vertical">
-
-                            <com.termux.app.statusbar.SessionsIndicatorView
-                                android:id="@+id/terminal_sessions_indicator"
-                                android:layout_width="wrap_content"
-                                android:layout_height="match_parent" />
-
-                            <com.termux.app.terminal.TerminalWindowBar
-                                android:id="@+id/terminal_window_bar"
-                                android:layout_width="0dp"
-                                android:layout_height="match_parent"
-                                android:layout_weight="1"
-                                android:layout_marginStart="6dp"
-                                android:background="@android:color/transparent"
-                                android:contentDescription="@string/termux_window_bar_content_description" />
-
-                            <!-- The same window list for a bar standing in a column, where a pill
-                                 carrying a whole label does not fit: one chip per window, stacked.
-                                 Only one of the two is ever shown. -->
-                            <com.termux.app.statusbar.StatusBarWindowColumn
-                                android:id="@+id/terminal_status_window_column"
-                                android:layout_width="match_parent"
-                                android:layout_height="0dp"
-                                android:layout_weight="1"
-                                android:layout_marginTop="6dp"
-                                android:visibility="gone"
-                                android:contentDescription="@string/termux_window_bar_content_description" />
-                        </com.termux.app.statusbar.PlaceContentStrip>
-
-                        <!-- The CPU/RAM/weather cluster: CPU · RAM · Weather at the row's end
-                             everywhere, except the Widgets place, where TermuxActivity reverses
-                             the child order to Weather · RAM · CPU and shows the centring spacer
-                             after it — see applyStatsClusterArrangement(). -->
-                        <LinearLayout
-                            android:id="@+id/terminal_status_stats_cluster"
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingStart="3dp"
-                            android:clipChildren="false"
-                            android:clipToPadding="false">
-
-                            <!-- No working indicator here: the window pill's own rim carries it, so
-                                 the state is shown once, at the window it belongs to. -->
-                            <com.termux.app.statusbar.StatusBarWidgetView
-                                android:id="@+id/terminal_status_widget_cpu"
-                                android:layout_width="wrap_content"
-                                android:layout_height="match_parent"
-                                android:visibility="gone"
-                                android:contentDescription="@string/termux_status_widget_cpu_content_description" />
-
-                            <com.termux.app.statusbar.MaterialDotSeparatorView
-                                android:id="@+id/terminal_status_dot_cpu_ram"
-                                android:layout_width="3dp"
-                                android:layout_height="3dp"
-                                android:layout_gravity="center_vertical"
-                                android:layout_marginHorizontal="1dp"
-                                android:visibility="gone" />
-
-                            <com.termux.app.statusbar.StatusBarWidgetView
-                                android:id="@+id/terminal_status_widget_ram"
-                                android:layout_width="wrap_content"
-                                android:layout_height="match_parent"
-                                android:layout_marginStart="3dp"
-                                android:visibility="gone"
-                                android:contentDescription="@string/termux_status_widget_ram_content_description" />
-
-                            <com.termux.app.statusbar.MaterialDotSeparatorView
-                                android:id="@+id/terminal_status_dot_ram_weather"
-                                android:layout_width="3dp"
-                                android:layout_height="3dp"
-                                android:layout_gravity="center_vertical"
-                                android:layout_marginHorizontal="1dp"
-                                android:visibility="gone" />
-
-                            <com.termux.app.statusbar.StatusBarWidgetView
-                                android:id="@+id/terminal_status_widget_weather"
-                                android:layout_width="wrap_content"
-                                android:layout_height="match_parent"
-                                android:layout_marginStart="3dp"
-                                android:visibility="gone"
-                                android:contentDescription="@string/termux_status_widget_weather_content_description" />
-                        </LinearLayout>
-
-                        <!-- Balances the place content strip's weight so the cluster above centres
-                             in the row on the Widgets place; gone (so weightless) everywhere else,
-                             where the cluster keeps hugging the row's end as it does today. -->
-                        <View
-                            android:id="@+id/terminal_status_stats_center_spacer"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="1"
-                            android:visibility="gone" />
-
-                        <!-- The stat widgets hold still while the place content slides; the end
-                             margin keeps them clear of the lens and the icon peeking through it. -->
-                        <LinearLayout
-                            android:id="@+id/terminal_status_widgets"
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:layout_marginEnd="10dp"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingEnd="3dp"
-                            android:clipChildren="false"
-                            android:clipToPadding="false">
-
-                            <!-- The AI glyph is not a preference: it appears only while a model is
-                                 actually resident, so it owns its own visibility and its own dot. -->
-                            <com.termux.app.statusbar.MaterialDotSeparatorView
-                                android:id="@+id/terminal_status_dot_ai"
-                                android:layout_width="3dp"
-                                android:layout_height="3dp"
-                                android:layout_gravity="center_vertical"
-                                android:layout_marginHorizontal="1dp"
-                                android:visibility="gone" />
-
-                            <com.termux.app.statusbar.StatusBarWidgetView
-                                android:id="@+id/terminal_status_widget_ai"
-                                android:layout_width="wrap_content"
-                                android:layout_height="match_parent"
-                                android:layout_marginStart="3dp"
-                                android:visibility="gone"
-                                android:contentDescription="@string/termux_status_widget_ai_content_description" />
-
-                            <!-- Mouse mode's mark: there while it is on, gone the moment it is off. -->
-                            <com.termux.app.statusbar.MaterialDotSeparatorView
-                                android:id="@+id/terminal_status_dot_mouse"
-                                android:layout_width="3dp"
-                                android:layout_height="3dp"
-                                android:layout_gravity="center_vertical"
-                                android:layout_marginHorizontal="1dp"
-                                android:visibility="gone" />
-
-                            <com.termux.app.statusbar.StatusBarWidgetView
-                                android:id="@+id/terminal_status_widget_mouse"
-                                android:layout_width="wrap_content"
-                                android:layout_height="match_parent"
-                                android:layout_marginStart="3dp"
-                                android:visibility="gone"
-                                android:contentDescription="@string/termux_status_widget_mouse_content_description" />
-
-                        </LinearLayout>
-                    </LinearLayout>
-
-                </com.termux.app.statusbar.StatusBarSwipeLayout>
-
-                <!-- The alphabets bar standing along the top, when the place on screen asks for
-                     that. A row in the content column like the status bar's own, so it lands under
-                     the status bar wherever that is on top and takes its slice of the terminal's
-                     height between the side columns. syncAzBarHosts() sizes, glazes and fills it. -->
-                <FrameLayout
-                    android:id="@+id/place_az_bar_top"
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:visibility="gone">
-
-                    <!-- The glass sheet is exactly the plank, so it is the thing the rounded
-                         outline clips; the host around it stays unclipped for the wave's lift. -->
-                    <FrameLayout
-                        android:id="@+id/place_az_bar_top_glass"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent">
-
-                        <com.github.mmin18.widget.RealtimeBlurView
-                            android:id="@+id/place_az_bar_top_blur"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            app:realtimeBlurRadius="10dp"
-                            app:realtimeOverlayColor="@android:color/transparent" />
-
-                        <View
-                            android:id="@+id/place_az_bar_top_surface"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent" />
-                    </FrameLayout>
                 </FrameLayout>
+            </FrameLayout>
 
-                <FrameLayout
-                    android:id="@+id/terminal_surface_host"
+            <FrameLayout
+                android:id="@+id/terminal_surface_host"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <View
+                    android:id="@+id/terminal_background"
                     android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    android:background="?attr/termuxColorSurfaceBase" />
+
+                <!-- The pane wall: fixed full-size places side by side, of which one is on
+                     screen at rest. The terminal is the middle one and its host below is
+                     untouched, so the terminal never resizes for the wall. The Widgets and
+                     Display pages are added by their controllers when the install has them. -->
+                <com.termux.app.wall.PaneWallLayout
+                    android:id="@+id/terminal_pane_wall"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
                     android:clipChildren="false"
                     android:clipToPadding="false">
 
-                    <View
-                        android:id="@+id/terminal_background"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:visibility="gone"
-                        android:background="?attr/termuxColorSurfaceBase" />
-
-                    <!-- The pane wall: fixed full-size places side by side, of which one is on
-                         screen at rest. The terminal is the middle one and its host below is
-                         untouched, so the terminal never resizes for the wall. The Widgets and
-                         Display pages are added by their controllers when the install has them. -->
-                    <com.termux.app.wall.PaneWallLayout
-                        android:id="@+id/terminal_pane_wall"
+                    <!-- Split-pane host: TerminalPaneController inflates the recursive pane
+                         tree (view_terminal_pane.xml per leaf) into this frame. A single
+                         unsplit shell is just one pane filling the host. -->
+                    <FrameLayout
+                        android:id="@+id/terminal_pane_host"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:clipChildren="false"
-                        android:clipToPadding="false">
+                        android:clipToPadding="false" />
+                </com.termux.app.wall.PaneWallLayout>
 
-                        <!-- Split-pane host: TerminalPaneController inflates the recursive pane
-                             tree (view_terminal_pane.xml per leaf) into this frame. A single
-                             unsplit shell is just one pane filling the host. -->
-                        <FrameLayout
-                            android:id="@+id/terminal_pane_host"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:clipChildren="false"
-                            android:clipToPadding="false" />
-                    </com.termux.app.wall.PaneWallLayout>
-
-                    <!-- Optional thin outline framing the terminal area; background/shape/margins
-                         are set programmatically in applyTerminalBorderAppearance(). Draws the
-                         shared glass rim instead of the plain stroke while the glass pane is on. -->
-                    <com.termux.app.TerminalGlassFrameView
-                        android:id="@+id/terminal_border_overlay"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:visibility="gone" />
-                </FrameLayout>
-            </LinearLayout>
-
-            <RelativeLayout
-                android:layout_width="240dp"
-                android:layout_height="match_parent"
-                android:layout_gravity="start"
-                android:orientation="vertical">
-
-                <View
-                    android:id="@+id/sessions_background"
+                <!-- Optional thin outline framing the terminal area; background/shape/margins
+                     are set programmatically in applyTerminalBorderAppearance(). Draws the
+                     shared glass rim instead of the plain stroke while the glass pane is on. -->
+                <com.termux.app.TerminalGlassFrameView
+                    android:id="@+id/terminal_border_overlay"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="?attr/termuxColorSurfacePanelHigh"/>
-
-                <LinearLayout
-                    android:id="@+id/left_drawer"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:orientation="vertical"
-                    android:background="@android:color/transparent"
-                    android:choiceMode="singleChoice"
-                    android:divider="@android:color/transparent"
-                    android:dividerHeight="0dp"
-                    android:descendantFocusability="blocksDescendants">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <ImageButton
-                            android:id="@+id/settings_button"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:src="@drawable/ic_settings"
-                            android:background="@null"
-                            android:contentDescription="@string/action_open_settings"
-                            app:tint="?attr/termuxColorOnSurfaceVariant" />
-                    </LinearLayout>
-
-                    <ListView
-                        android:id="@+id/terminal_sessions_list"
-                        android:layout_width="match_parent"
-                        android:layout_height="0dp"
-                        android:layout_weight="1"
-                        android:layout_gravity="top"
-                        android:choiceMode="singleChoice"
-                        android:divider="@android:color/transparent"
-                        android:longClickable="true" />
-
-                    <LinearLayout
-                        style="?android:attr/buttonBarStyle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/toggle_keyboard_button"
-                            style="?android:attr/buttonBarButtonStyle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="60dp"
-                            android:layout_weight="1"
-                            android:layout_gravity="center_horizontal"
-                            android:text="@string/action_toggle_soft_keyboard"
-                            android:textAllCaps="true"
-                            android:textColor="?attr/termuxColorOnSurface" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/new_session_button"
-                            style="?android:attr/buttonBarButtonStyle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="60dp"
-                            android:layout_weight="1"
-                            android:layout_gravity="center_horizontal"
-                            android:text="@string/action_new_session"
-                            android:textAllCaps="true"
-                            android:textColor="?attr/termuxColorOnSurface" />
-                    </LinearLayout>
-                </LinearLayout>
-            </RelativeLayout>
-        </androidx.drawerlayout.widget.DrawerLayout>
+                    android:visibility="gone" />
+            </FrameLayout>
+        </LinearLayout>
 
         <RelativeLayout
             android:id="@+id/accessory_stack_container"

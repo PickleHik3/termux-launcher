@@ -1,10 +1,8 @@
 package com.termux.app.terminal.io;
 
 import android.annotation.SuppressLint;
-import android.view.Gravity;
 import android.view.View;
 import androidx.annotation.NonNull;
-import androidx.drawerlayout.widget.DrawerLayout;
 import com.termux.app.TermuxActivity;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
@@ -107,11 +105,9 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             if (mTermuxTerminalViewClient != null)
                 mTermuxTerminalViewClient.onToggleSoftKeyboardRequest();
         } else if ("DRAWER".equals(key)) {
-            DrawerLayout drawerLayout = mActivity.getDrawer();
-            if (drawerLayout.isDrawerOpen(Gravity.LEFT))
-                drawerLayout.closeDrawer(Gravity.LEFT);
-            else
-                drawerLayout.openDrawer(Gravity.LEFT);
+            // The key kept its name so existing extra-keys rows keep working; the legacy sessions
+            // drawer it used to pull out is gone and the sessions browser replaces it.
+            com.termux.app.terminal.TerminalSessionBrowser.show(mActivity);
         } else if ("PASTE".equals(key)) {
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(null);

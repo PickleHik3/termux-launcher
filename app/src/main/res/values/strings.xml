@@ -133,9 +133,6 @@
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_wallpaper_alignment_title">Wallpaper alignment</string>
     <string name="settings_wallpaper_alignment_summary">Line up the wallpaper behind the launcher surfaces with the one on your screen.</string>
-    <string name="settings_sessions_sidebar_header">Sessions sidebar</string>
-    <string name="settings_sessions_opacity_title">Sessions opacity</string>
-    <string name="settings_sessions_opacity_summary">Background opacity of the legacy sessions drawer, shown only while split panes are off.</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Use monochrome icons</string>
     <string name="settings_icon_pack_title">Icon pack</string>
@@ -1472,8 +1469,8 @@
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
     <string name="tool_app_command_palette">Command palette</string>
     <string name="tool_app_launch">Launch app</string>
-    <string name="tool_app_open_drawer">Open sessions drawer</string>
-    <string name="tool_app_close_drawer">Close sessions drawer</string>
+    <string name="tool_app_open_drawer">Open sessions browser</string>
+    <string name="tool_app_close_drawer">Close sessions browser</string>
     <string name="tool_terminal_action_sheet">Terminal actions</string>
     <string name="tool_session_activate_by_index">Switch to session by number</string>
     <string name="tool_window_rename_prompt">Rename window…</string>
@@ -1595,8 +1592,8 @@
         <item quantity="one">Ignored %1$d terminal font configuration error; using safe fallbacks</item>
         <item quantity="other">Ignored %1$d terminal font configuration errors; using safe fallbacks</item>
     </plurals>
-    <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
-    <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
+    <string name="tool_desc_app_open_drawer">Open the sessions browser.</string>
+    <string name="tool_desc_app_close_drawer">Close the sessions browser.</string>
     <string name="tool_desc_window_rename_prompt">Name the current window — the tab it occupies in the window bar.</string>
     <string name="tool_desc_session_rename_prompt">Name the current session — the drawer row that holds the windows.</string>
     <string name="tool_desc_pane_rename_prompt">Name the focused pane\'s shell.</string>
