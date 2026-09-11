@@ -124,7 +124,7 @@ floating pane and its bounds.
 With split panes enabled, the top terminal status surface contains a horizontal window strip. Tap a
 window chip to switch directly, or tap its `+` button to create a window. Labels prefer an editor's
 open-file basename, then the foreground process, then the working-directory/title fallback. Tap the
-session indicator to open or close the sessions drawer. The strip is hidden in single-pane
+session indicator to open or close the sessions panel. The strip is hidden in single-pane
 compatibility mode.
 
 The following layouts act on the current window without restarting any shell:

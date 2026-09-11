@@ -18,6 +18,7 @@ import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -106,14 +107,14 @@ public class TermuxTerminalViewClientTest {
     }
 
     @Test
-    public void copyModeLocksTheDrawer() throws IOException {
+    public void copyModeRaisesTheSelectionLegendAndTakesItDownAgain() throws IOException {
         FakeTerminalHost host = host();
         TermuxTerminalViewClient client = client(host);
 
         client.copyModeChanged(true);
-        assertTrue(host.drawerLocked);
+        assertEquals(com.termux.app.terminal.TerminalModeHintCard.Mode.SELECTION, host.modeHint);
         client.copyModeChanged(false);
-        assertFalse(host.drawerLocked);
+        assertNull(host.modeHint);
     }
 
     @Test

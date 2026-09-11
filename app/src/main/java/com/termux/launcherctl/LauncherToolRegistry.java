@@ -1017,16 +1017,16 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_action_sheet, R.string.tool_desc_terminal_action_sheet,
             Binding.all("ctrl+alt+m"), REQUIRES_SESSION);
-        // Ctrl+Alt+left/right reach the drawer only with split panes off; with them
+        // Ctrl+Alt+left/right reach the sessions browser only with split panes off; with them
         // on the multiplexer claims the arrows for pane focus.
         addUi(map, TOOL_APP_OPEN_DRAWER,
-            "Open the sessions drawer.",
+            "Open the sessions browser.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_open_drawer, R.string.tool_desc_app_open_drawer,
             Collections.singletonList(Binding.of("ctrl+alt+right", BindingCondition.SPLITS_OFF)));
         addUi(map, TOOL_APP_CLOSE_DRAWER,
-            "Close the sessions drawer.",
+            "Close the sessions browser.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_close_drawer, R.string.tool_desc_app_close_drawer,
@@ -1034,7 +1034,7 @@ public final class LauncherToolRegistry {
         // The digit strokes supply the index, so this needs no palette entry of its
         // own; the resolver derives the argument from the key.
         addUi(map, TOOL_SESSION_ACTIVATE_BY_INDEX,
-            "Switch to a session by its one-based position in the drawer.",
+            "Switch to a session by its one-based position in the session list.",
             schemaObject()
                 .withInteger("index", "Zero-based session index", 0, 64, 0, true)
                 .build(),

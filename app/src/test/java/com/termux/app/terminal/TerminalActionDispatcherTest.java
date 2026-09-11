@@ -403,8 +403,8 @@ public class TerminalActionDispatcherTest {
             {"app.open_look_and_feel", "openLookAndFeel"},
             {"app.open_apps_bar", "openAppsBar"},
             {"app.command_palette", "showCommandPalette"},
-            {"app.open_drawer", "openDrawer"},
-            {"app.close_drawer", "closeDrawers"},
+            // The retired sessions drawer's own binding, kept pointed at its replacement.
+            {"app.open_drawer", "showSessionBrowser"},
             {"appearance.set_wallpaper", "openWallpaperPicker"},
             {"appearance.surface_editor", "openSurfaceEditor"},
             {"extrakeys.edit", "showExtraKeysRowEditor"},

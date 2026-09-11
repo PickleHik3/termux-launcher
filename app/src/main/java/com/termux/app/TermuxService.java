@@ -672,8 +672,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // now been processed
         if (executionCommand.isPluginExecutionCommand)
             mShellManager.mPendingPluginExecutionCommands.remove(executionCommand);
-        // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
-        // activity in is foreground
+        // Notify the activity that the sessions list has been updated if it is in the foreground
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
         updateNotification();
@@ -742,8 +741,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             if (executionCommand != null && executionCommand.isPluginExecutionCommand)
                 TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
             mShellManager.mTermuxSessions.remove(termuxSession);
-            // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
-            // activity in is foreground
+            // Notify the activity that the sessions list has been updated if it is in the
+            // foreground
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
         }

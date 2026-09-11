@@ -71,8 +71,6 @@ Use this section for visible surfaces and colors:
   sets the same padding by dragging the pill under the last key row), and **Customize keyboard
   appearance** for live size, spacing, radius, and color tuning. These rows are only enabled while
   the built-in keyboard is the chosen input method on the **Keyboard** page.
-- **Sessions opacity:** background opacity of the legacy sessions drawer, shown only while split
-  panes are off.
 
 The font picker writes its managed selection to `~/.termux/fonts.d/10-launcher.conf`. **Use font.ttf
 / Termux:Styling** removes that one managed config; it does not delete your own `fonts.conf` or
