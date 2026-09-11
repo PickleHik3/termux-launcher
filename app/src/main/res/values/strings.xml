@@ -60,6 +60,7 @@
     <string name="settings_layout_miniature_display">Display</string>
     <string name="settings_layout_miniature_display_overlay">Display, keyboard floats</string>
     <string name="settings_layout_miniature_hidden_format">%1$s, hidden</string>
+    <string name="settings_layout_drop_to_hide">Drop here to hide</string>
     <string name="settings_destination_appearance">Look</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons, keyboard look, and sessions opacity</string>
     <string name="settings_destination_terminal">Terminal</string>
