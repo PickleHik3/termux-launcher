@@ -36,16 +36,18 @@ public class WidgetProviderCatalogLoaderTest {
         FakeBoundary boundary = new FakeBoundary();
         AppWidgetProviderInfo home = info("z.pkg", "Home", true);
         AppWidgetProviderInfo nonHome = info("x.pkg", "Keyguard", false);
-        boundary.providers = Arrays.asList(home, nonHome); boundary.throwPreview = true;
+        boundary.providers = Arrays.asList(home, nonHome);
+        boundary.throwPreview = true; boundary.throwIcon = true;
         WidgetProviderCatalogLoader loader = loader(boundary);
         final List<WidgetAppGroup>[] result = new List[1];
         loader.load(metrics(400, 600), 0, (g, groups) -> result[0] = groups);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals(2, result[0].size()); // same package, separate personal/work serials
         assertEquals(1, result[0].get(0).providers.size());
-        assertNotNull(result[0].get(0).providers.get(0).icon);
-        // The broken preview surfaces at lazy resolution and must not break the row; the miss is
-        // remembered so the next bind does not ask the provider again.
+        assertEquals(1, result[0].get(0).providerCount);
+        assertEquals(0, boundary.iconCalls); // no artwork is resolved during the build
+        // A provider with neither preview nor icon surfaces at lazy resolution and must not break
+        // the row; the miss is remembered so the next bind does not ask the provider again.
         WidgetProviderItem broken = result[0].get(0).providers.get(0);
         final Drawable[] delivered = {new ColorDrawable(9)};
         loader.loadPreview(broken, (item, preview) -> delivered[0] = preview);
@@ -54,6 +56,66 @@ public class WidgetProviderCatalogLoaderTest {
         loader.loadPreview(broken, (item, preview) -> {});
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals(1, boundary.previewCalls);
+        assertEquals(1, boundary.iconCalls);
+    }
+
+    /** The icon is what the card shows when the provider ships no preview, resolved on bind. */
+    @Test public void artworkFallsBackToTheProviderIconAndStaysOutOfTheBuild() {
+        FakeBoundary boundary = new FakeBoundary();
+        boundary.providers = Collections.singletonList(info("pkg", "Clock", true));
+        boundary.throwPreview = true;
+        WidgetProviderCatalogLoader loader = loader(boundary);
+        final WidgetProviderItem[] item = new WidgetProviderItem[1];
+        loader.load(metrics(400, 600), 0, (g, groups) -> item[0] = groups.get(0).providers.get(0));
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(0, boundary.iconCalls);
+        final Drawable[] delivered = new Drawable[1];
+        loader.loadPreview(item[0], (it, preview) -> delivered[0] = preview);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertNotNull(delivered[0]);
+        assertEquals(1, boundary.iconCalls);
+        loader.loadPreview(item[0], (it, preview) -> { });
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(1, boundary.iconCalls); // held artwork answers without asking again
+    }
+
+    /**
+     * The default padding follows the application's target SDK, and every call is a PackageManager
+     * round trip, so a package with several widgets pays for it once.
+     */
+    @Test public void defaultPaddingIsResolvedOncePerPackage() {
+        FakeBoundary boundary = new FakeBoundary();
+        boundary.providers = Arrays.asList(info("pkg", "A", true), info("pkg", "B", true),
+            info("other.pkg", "C", true));
+        loader(boundary).load(metrics(400, 600), 0, (g, groups) -> { });
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        // Three providers in each of the two profiles, but one answer per package per profile.
+        assertEquals(Arrays.asList("other.pkg", "other.pkg", "pkg", "pkg"),
+            boundary.paddingPackages);
+    }
+
+    /** The app rows are reported first, counted and named, with their widgets still to come. */
+    @Test public void appRowsAreReportedBeforeTheFullCatalog() {
+        FakeBoundary boundary = new FakeBoundary();
+        boundary.providers = Arrays.asList(info("pkg", "A", true), info("pkg", "B", true));
+        final List<WidgetAppGroup>[] sections = new List[1];
+        final java.util.ArrayList<String> order = new java.util.ArrayList<>();
+        loader(boundary).load(metrics(400, 600), 0, new WidgetProviderCatalogLoader.Callback() {
+            @Override public void onCatalogSections(long generation, List<WidgetAppGroup> rows) {
+                order.add("sections"); sections[0] = rows;
+            }
+            @Override public void onCatalog(long generation, List<WidgetAppGroup> groups) {
+                order.add("catalog");
+                assertEquals(2, groups.get(0).providers.size());
+            }
+        });
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(Arrays.asList("sections", "catalog"), order);
+        assertEquals(2, sections[0].size()); // one row per profile
+        assertEquals(2, sections[0].get(0).providerCount);
+        assertTrue(sections[0].get(0).providers.isEmpty());
+        assertNotNull(sections[0].get(0).badgedIcon);
+        assertEquals(0, boundary.iconCalls); // still no per-provider artwork
     }
 
     @Test public void cachedCatalogSkipsRebuildUntilKeyChangesOrInvalidated() {
@@ -204,14 +266,26 @@ public class WidgetProviderCatalogLoaderTest {
     }
     private static final class FakeBoundary implements WidgetProviderCatalogLoader.Boundary {
         List<AppWidgetProviderInfo> providers = Collections.emptyList(); boolean throwPreview;
-        int serial; int previewCalls; int previewBitmapPx;
+        boolean throwIcon;
+        int serial; int previewCalls; int iconCalls; int labelCalls; int previewBitmapPx;
+        final java.util.ArrayList<String> paddingPackages = new java.util.ArrayList<>();
         @Override public List<UserHandle> profiles() { return Arrays.asList(Process.myUserHandle(), Process.myUserHandle()); }
         @Override public long serial(UserHandle profile) { return serial++ * 10L; }
         @Override public List<AppWidgetProviderInfo> providers(UserHandle profile) { return providers; }
-        @Override public String providerLabel(AppWidgetProviderInfo info) { return info.provider.getClassName(); }
+        @Override public String providerLabel(AppWidgetProviderInfo info) {
+            labelCalls++; return info.provider.getClassName();
+        }
         @Override public String appLabel(AppWidgetProviderInfo info) { return info.provider.getPackageName(); }
         @Override public Drawable appIcon(AppWidgetProviderInfo info) { return new ColorDrawable(1); }
-        @Override public Drawable providerIcon(AppWidgetProviderInfo info) { return new ColorDrawable(2); }
+        @Override public Drawable providerIcon(AppWidgetProviderInfo info) {
+            iconCalls++;
+            if (throwIcon) throw new RuntimeException("broken icon");
+            return new ColorDrawable(2);
+        }
+        @Override public Rect defaultPadding(AppWidgetProviderInfo info) {
+            paddingPackages.add(info.provider.getPackageName());
+            return new Rect();
+        }
         @Override public Drawable preview(AppWidgetProviderInfo info) {
             previewCalls++;
             if (throwPreview) throw new RuntimeException("broken preview");

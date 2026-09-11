@@ -42,13 +42,23 @@ import java.util.concurrent.Executors;
 /**
  * Sheet-scoped, generation-tokened provider enumeration.
  *
- * <p>The catalog itself — labels, spans, icons — is cached for the session so reopening the picker
- * costs nothing. Previews are not part of it: {@code loadPreviewImage} hands back a full-density
- * bitmap per provider, so they are resolved when a row binds, shrunk to the card's preview slot and
- * held in a budgeted store that the picker empties when it closes.
+ * <p>The catalog itself — labels and spans — is cached for the session so reopening the picker
+ * costs nothing. Artwork is not part of it: {@code loadPreviewImage} and {@code loadIcon} both go
+ * through {@code getResourcesForApplication}, which builds a fresh {@code Resources} per provider
+ * and then decodes a full-density bitmap, so both are resolved when a row binds, shrunk to the
+ * card's slot and held in a budgeted store that the picker empties when it closes.
+ *
+ * <p>The build reports twice. The app rows — label, icon, how many widgets — fall out of
+ * enumeration alone and go first, so the sheet has a list to show while the per-provider pass is
+ * still resolving labels and spans behind it.
  */
 public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.PreviewLoader {
     public interface Callback {
+        /**
+         * The app rows alone: each group carries its real widget count with an empty
+         * {@code providers} list. Never called for a cached catalog, which has nothing to wait for.
+         */
+        default void onCatalogSections(long generation, @NonNull List<WidgetAppGroup> sections) { }
         void onCatalog(long generation, @NonNull List<WidgetAppGroup> groups);
     }
     public interface PreviewCallback {
@@ -130,7 +140,9 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
         }
         final long packageToken = packageGeneration;
         worker.execute(() -> {
-            List<WidgetAppGroup> groups = build(metrics);
+            List<WidgetAppGroup> groups = build(metrics, sections -> main.post(() -> {
+                if (token == generation) callback.onCatalogSections(token, sections);
+            }));
             main.post(() -> {
                 if (packageToken == packageGeneration) {
                     cachedGroups = groups; cachedMetrics = metrics; cachedRevision = metricsRevision;
@@ -149,9 +161,10 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
     }
 
     /**
-     * Resolves the item's preview off the main thread when the store does not hold it; a held one
-     * (including a remembered "no preview") answers synchronously. Not generation-gated: a late
-     * arrival is still correct data and callers guard their views by item identity.
+     * Resolves the item's artwork off the main thread when the store does not hold it — the
+     * preview, or the provider's own icon when it offers no preview — while a held one (including
+     * a remembered "nothing to show") answers synchronously. Not generation-gated: a late arrival
+     * is still correct data and callers guard their views by item identity.
      */
     @Override
     public void loadPreview(@NonNull WidgetProviderItem item, @NonNull PreviewCallback callback) {
@@ -159,8 +172,9 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
         Drawable held = previews.get(key);
         if (held != null) { callback.onPreview(item, held == NO_PREVIEW ? null : held); return; }
         worker.execute(() -> {
-            Drawable preview = DrawablePixels.shrink(resources, safePreview(item.info),
-                previewExtentPx);
+            Drawable artwork = safePreview(item.info);
+            if (artwork == null) artwork = safeProviderIcon(item.info);
+            Drawable preview = DrawablePixels.shrink(resources, artwork, previewExtentPx);
             main.post(() -> {
                 previews.put(key, preview == null ? NO_PREVIEW : preview);
                 callback.onPreview(item, preview);
@@ -180,7 +194,11 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
     public void cancel() { generation++; }
     public long generation() { return generation; }
 
-    @NonNull private List<WidgetAppGroup> build(WidgetGridMetrics metrics) {
+    /** Receives the app rows as soon as enumeration has them, before the per-provider pass. */
+    private interface SectionSink { void onSections(@NonNull List<WidgetAppGroup> sections); }
+
+    /** Enumeration pass: which providers exist, grouped by app and already in display order. */
+    @NonNull private ArrayList<MutableGroup> enumerate(@NonNull Collator collator) {
         Map<String, MutableGroup> groups = new LinkedHashMap<>();
         List<UserHandle> profiles;
         try { profiles = boundary.profiles(); }
@@ -205,9 +223,49 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
                             safeAppLabel(info), safeAppIcon(info));
                         groups.put(key, group);
                     }
-                    Rect padding;
-                    try { padding = boundary.defaultPadding(info); }
-                    catch (RuntimeException exception) { padding = new Rect(); }
+                    group.providers.add(info);
+                } catch (RuntimeException ignored) {
+                    // One broken provider must not suppress its profile or application peers.
+                }
+            }
+        }
+        ArrayList<MutableGroup> sorted = new ArrayList<>(groups.values());
+        sorted.sort((a, b) -> {
+            int label = collator.compare(a.label, b.label);
+            if (label != 0) return label;
+            int pkg = a.packageName.compareTo(b.packageName);
+            return pkg != 0 ? pkg : Long.compare(a.serial, b.serial);
+        });
+        return sorted;
+    }
+
+    @NonNull private List<WidgetAppGroup> build(WidgetGridMetrics metrics,
+                                                @NonNull SectionSink sections) {
+        Collator collator = Collator.getInstance(Locale.getDefault());
+        ArrayList<MutableGroup> sorted = enumerate(collator);
+        ArrayList<WidgetAppGroup> appRows = new ArrayList<>();
+        for (MutableGroup group : sorted) {
+            appRows.add(new WidgetAppGroup(group.serial, group.packageName, group.label,
+                group.icon, Collections.emptyList(), group.providers.size()));
+        }
+        sections.onSections(appRows);
+
+        // Per provider from here down, and this is the pass that costs. The padding is asked for
+        // once per package: it follows the application's target SDK, so every provider in a
+        // package gets the same answer, and each getDefaultPaddingForWidget call is another
+        // PackageManager round trip for it.
+        ArrayList<WidgetAppGroup> out = new ArrayList<>();
+        for (MutableGroup group : sorted) {
+            Map<String, Rect> paddings = new LinkedHashMap<>();
+            for (AppWidgetProviderInfo info : group.providers) {
+                try {
+                    String packageName = info.provider.getPackageName();
+                    Rect padding = paddings.get(packageName);
+                    if (padding == null) {
+                        try { padding = boundary.defaultPadding(info); }
+                        catch (RuntimeException exception) { padding = new Rect(); }
+                        paddings.put(packageName, padding);
+                    }
                     int desiredWidth = Math.max(1, info.minWidth
                         + padding.left + padding.right);
                     int desiredHeight = Math.max(1, info.minHeight
@@ -224,26 +282,15 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
                         && rows <= metrics.definition().rows;
                     WidgetGridMetrics.Span minimum = metrics.spanForPixels(
                         Math.max(1, info.minResizeWidth), Math.max(1, info.minResizeHeight));
-                    Drawable icon = safeProviderIcon(info);
-                    // Previews stay deferred to loadPreview(): loadPreviewImage per provider is
-                    // the dominant cost of a full catalog build.
-                    group.items.add(new WidgetProviderItem(serial, info, safeProviderLabel(info),
-                        icon, columns, rows, minimum.columns, minimum.rows, fits));
+                    // Preview and icon both stay deferred to loadPreview(): resolving either per
+                    // provider is what made a full catalog build slow.
+                    group.items.add(new WidgetProviderItem(group.serial, info,
+                        safeProviderLabel(info), columns, rows, minimum.columns, minimum.rows,
+                        fits));
                 } catch (RuntimeException ignored) {
-                    // One broken provider must not suppress its profile or application peers.
+                    // One broken provider must not suppress its application peers.
                 }
             }
-        }
-        Collator collator = Collator.getInstance(Locale.getDefault());
-        ArrayList<MutableGroup> sorted = new ArrayList<>(groups.values());
-        sorted.sort((a, b) -> {
-            int label = collator.compare(a.label, b.label);
-            if (label != 0) return label;
-            int pkg = a.packageName.compareTo(b.packageName);
-            return pkg != 0 ? pkg : Long.compare(a.serial, b.serial);
-        });
-        ArrayList<WidgetAppGroup> out = new ArrayList<>();
-        for (MutableGroup group : sorted) {
             group.items.sort((a, b) -> {
                 int label = collator.compare(a.label, b.label);
                 return label != 0 ? label
@@ -275,6 +322,7 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
 
     private static final class MutableGroup {
         final long serial; final String packageName; final String label; final Drawable icon;
+        final ArrayList<AppWidgetProviderInfo> providers = new ArrayList<>();
         final ArrayList<WidgetProviderItem> items = new ArrayList<>();
         MutableGroup(long serial, String packageName, String label, Drawable icon) {
             this.serial = serial; this.packageName = packageName; this.label = label; this.icon = icon;

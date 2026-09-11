@@ -15,6 +15,14 @@
     <string name="widget_menu_remove_page">Remove page</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
+    <string name="widget_picker_search_hint">Search widgets</string>
+    <string name="widget_picker_no_matches">No widgets match that search.</string>
+    <string name="widget_picker_app_expanded">expanded</string>
+    <string name="widget_picker_app_collapsed">collapsed</string>
+    <plurals name="widget_picker_widget_count">
+        <item quantity="one">%1$d widget</item>
+        <item quantity="other">%1$d widgets</item>
+    </plurals>
     <!-- The grid-size tab on the Widgets page while a widget is being edited: columns by rows. -->
     <string name="widget_grid_size_tab">%1$d \u00d7 %2$d</string>
     <string name="widget_grid_size_separator">\u00d7</string>

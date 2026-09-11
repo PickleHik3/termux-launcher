@@ -69,6 +69,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
         pane.setReducedMotion(host.reducedMotion());
         pane.picker().adapter().setPreviewLoader(catalog);
+        // The picker's search field is a text input inside the pane like any other: it reaches the
+        // system keyboard through the same seam a provider's own editor does, and never by asking
+        // for it here.
+        pane.picker().setSearchFocusListener(this::relayEditorFocus);
         pane.grid().setListener(new WidgetGridView.Listener() {
             @Override public void onWidgetLongPressed(int appWidgetId, float rawX, float rawY) {
                 enterEditMode(appWidgetId, rawX, rawY);
@@ -214,11 +218,19 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private void loadCatalog() {
         if (!pane.picker().isOpen()) return;
         WidgetGridMetrics metrics = pane.grid().metrics();
-        catalog.load(metrics, widgets.repository().revision(), (generation, groups) -> {
-            if (!pane.picker().isOpen()) return;
-            pane.picker().adapter().setFitPredicate(this::canFit);
-            pane.picker().showCatalog(groups);
-        });
+        catalog.load(metrics, widgets.repository().revision(),
+            new WidgetProviderCatalogLoader.Callback() {
+                @Override public void onCatalogSections(long generation,
+                                                        @NonNull List<WidgetAppGroup> sections) {
+                    if (pane.picker().isOpen()) pane.picker().showSections(sections);
+                }
+                @Override public void onCatalog(long generation,
+                                                @NonNull List<WidgetAppGroup> groups) {
+                    if (!pane.picker().isOpen()) return;
+                    pane.picker().adapter().setFitPredicate(WidgetPaneController.this::canFit);
+                    pane.picker().showCatalog(groups);
+                }
+            });
     }
 
     private boolean canFit(@NonNull WidgetProviderItem item) {

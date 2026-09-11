@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.Application;
 import android.os.Build;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 
@@ -40,13 +39,11 @@ public class WidgetPickerInputFocusIntegrationTest {
         // The long-press menu's "Add widget" action reduces to this same picker-open call.
         pane.picker().setReducedMotion(true); pane.picker().open();
         assertTrue(pane.picker().isOpen()); assertSame(window, activity.getWindow());
-        assertSame(terminal, root.findFocus()); assertFalse(hasEditor(pane.picker()));
+        // The picker carries a search field now. Merely being on screen must still take nothing:
+        // the field is not focusable until it is tapped, so the terminal keeps focus and the IME.
+        EditText search = pane.picker().searchField();
+        assertFalse(search.isFocusable()); assertFalse(search.hasFocus());
+        assertSame(terminal, root.findFocus());
         assertTrue(pane.onBackPressed()); assertSame(terminal, root.findFocus());
-    }
-    private static boolean hasEditor(View view) {
-        if (view instanceof EditText || view.onCheckIsTextEditor()) return true;
-        if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++)
-            if (hasEditor(((ViewGroup) view).getChildAt(i))) return true;
-        return false;
     }
 }

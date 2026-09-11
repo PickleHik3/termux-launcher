@@ -35,6 +35,12 @@ public class WidgetPickerProductionSelectionTest {
         Fixture fixture = new Fixture(false);
         fixture.controller.openPicker();
         fixture.idleAndLayout();
+        // The list opens collapsed: the app row is what is there, and it opens the cards.
+        RecyclerView.ViewHolder app = fixture.pane.picker().list()
+            .findViewHolderForAdapterPosition(0);
+        assertNotNull("app row must be attached", app);
+        assertTrue(app.itemView.performClick());
+        fixture.idleAndLayout();
         RecyclerView.ViewHolder card = fixture.pane.picker().list()
             .findViewHolderForAdapterPosition(1);
         assertNotNull("real provider card must be attached", card);
