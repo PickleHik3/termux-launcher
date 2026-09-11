@@ -20,6 +20,13 @@ import java.util.concurrent.Executors;
  */
 public final class X11LinuxAppRunner {
 
+    /**
+     * What a toolkit needs before a finger on the display reaches it as a touch rather than as a
+     * mouse. Firefox reads its X11 input through XInput2 only when asked to, and without that a
+     * page cannot be scrolled or pinched with a finger at all.
+     */
+    static final List<String> TOUCH_ENV = java.util.Collections.singletonList("MOZ_USE_XINPUT2=1");
+
     /** How long a display gets to come up before the tap is given up on. */
     private static final long START_TIMEOUT_MS = 15_000L;
     private static final String LOG_TAG = "X11LinuxAppRunner";
@@ -119,13 +126,15 @@ public final class X11LinuxAppRunner {
 
     /**
      * The shell line that runs the app: the display, the GPU environment, the home directory,
-     * then the desktop file's own command. Pure, so the composition is tested.
+     * then the desktop file's own command. The touch environment goes in first so a GPU profile
+     * still has the last word over anything it sets. Pure, so the composition is tested.
      */
     @NonNull
     static String script(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
                          @NonNull List<String> env) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
+        for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
         script.append("cd \"$HOME\"\n");
         script.append("exec ").append(app.exec).append('\n');

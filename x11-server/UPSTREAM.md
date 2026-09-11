@@ -144,3 +144,34 @@ Both were found by running it, not by reading it, and both are cheap to break ag
   `xkeyboard-config` package, and upstream only knows how to find it under `com.termux`'s own
   prefix, so the generated `termux-x11` points `XKB_CONFIG_ROOT` at this edition's. The Display
   page says what to install when it is missing.
+
+## Touchscreen mode is the launcher's tablet mode
+
+Upstream has three touch modes and the middle one, `touchMode` 2 ("Simulated touch"), is mouse
+emulation: one finger moves the pointer, a drag needs a long press first, and two fingers are the
+wheel. On a phone that is the wrong half of a tablet. The launcher's Touchscreen mode delivers the
+same real XI2 touches Direct touch (`touchMode` 3) does, and keeps the launcher's own behaviour
+around them — the keyboard that follows text fields reads its taps, and the picture's pinch-zoom
+stays off so the two fingers belong to the X client.
+
+- **`input/InputStrategyInterface.TabletTouchInputStrategy` (new)** is a `NullInputStrategy`
+  subclass with nothing added. `TouchInputHandler` already recognises `NullInputStrategy` as "the
+  handler sends the raw events itself", so every branch that moves a cursor, sends a mouse click
+  or offers the gesture to the zoom detector leaves mode 2 alone exactly as it leaves mode 3, and
+  no `instanceof` in that file had to change. The separate type is what keeps the two modes
+  distinguishable — in the log line below, and for anything the launcher later adds on top of
+  touch without adding it to Direct touch as well.
+- **`input/TouchInputHandler.setInputMode`** builds that strategy for `InputMode.SIMULATED_TOUCH`.
+  `InputMode` itself, the preference and its stored values are untouched: the mode a user picks is
+  still 2. `SimulatedTouchInputStrategy` is kept in `InputStrategyInterface`, unused, so the file
+  stays diffable against upstream.
+- **`input/TouchInputHandler.handleTouchEvent`** logs one line per `ACTION_DOWN` under the tag
+  `X11TouchMode` — the event's source, its tool type and the strategy about to read it. It is a
+  diagnostic for a reported landscape bug where the display behaves as if it were in Trackpad
+  mode, and can go once that is understood.
+
+The app side of the same feature is not in this module: Firefox is given `MOZ_USE_XINPUT2=1` by
+`X11LinuxAppRunner`, and Android's Back is answered by the launcher (`DisplayBackPolicy`) before
+`LorieHost.handleKey` ever sees it — the page's `consumeLauncherKey` takes `KEYCODE_BACK`, lowers
+a keyboard the place raised, and otherwise sends Linux `KEY_BACK` (evdev 158, `XF86Back`) as a
+scancode through `LorieView.sendKeyEvent`.

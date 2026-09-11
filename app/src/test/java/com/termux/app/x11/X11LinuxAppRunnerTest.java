@@ -19,8 +19,17 @@ public class X11LinuxAppRunnerTest {
         String script = X11LinuxAppRunner.script(app("firefox --new-window"), ":1",
             Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform"));
 
-        assertEquals("export DISPLAY=:1\nexport MESA_LOADER_DRIVER_OVERRIDE=zink\n"
+        assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
+            + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
             + "export TU_DEBUG=noconform\ncd \"$HOME\"\nexec firefox --new-window\n", script);
+    }
+
+    @Test public void everyAppIsRunWithTouchThroughXInput2() {
+        // Without it Firefox takes the server's pointer emulation and a finger cannot scroll.
+        assertTrue(X11LinuxAppRunner.TOUCH_ENV.contains("MOZ_USE_XINPUT2=1"));
+        assertTrue("even with no GPU profile installed",
+            X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList())
+                .contains("\nexport MOZ_USE_XINPUT2=1\n"));
     }
 
     @Test public void onlyAnInstalledGpuProfileIsUsedAndSoftwareMeansNothingExtra() {
