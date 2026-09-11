@@ -194,6 +194,77 @@ public class TerminalWindowBarTest {
         assertTrue(bar.isBusyAnimationRunning());
     }
 
+    /**
+     * An agent's state is a dot in front of the label and one sentence for a screen reader. It rides
+     * on the same clock as the ring while it is working, and the pill view is reused, not
+     * re-inflated, when only the state moves.
+     */
+    @Test
+    public void agentStateAddsALeadingDotAndASpokenSentence() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("repo", "repo");
+        bar.setWindows(Arrays.asList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View pill = tabs.getChildAt(0);
+        assertEquals("repo", ((TextView) pill).getText().toString());
+        assertFalse(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.BLOCKED)), 0);
+        assertSame(pill, tabs.getChildAt(0));
+        CharSequence blocked = ((TextView) pill).getText();
+        assertEquals("\u25cf repo", blocked.toString());
+        assertEquals(1, ((android.text.Spanned) blocked)
+            .getSpans(0, 1, android.text.style.ReplacementSpan.class).length);
+        assertTrue(pill.getContentDescription().toString().contains("Needs you."));
+        // Waiting is a solid dot: nothing about it needs frames.
+        assertFalse(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.WORKING)), 0);
+        assertTrue(pill.getContentDescription().toString().contains("Working."));
+        assertTrue(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.IDLE)), 0);
+        assertTrue(pill.getContentDescription().toString().contains("Idle."));
+        assertFalse(bar.isBusyAnimationRunning());
+
+        // The way out: no agent, no dot, and the label is itself again.
+        bar.setWindows(Arrays.asList(item), 0);
+        assertEquals("repo", ((TextView) tabs.getChildAt(0)).getText().toString());
+    }
+
+    /**
+     * The dot sits in front of the mark slot, so it keeps its place whatever that slot shows, and
+     * it survives every other copy helper.
+     */
+    @Test
+    public void agentStateLeadsTheMarkSlotAndSurvivesTheOtherCopies() {
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("repo", "repo")
+            .withAgentState(AgentStatus.State.WORKING).withBusy(true).withAttention(true);
+        assertEquals(AgentStatus.State.WORKING, item.agentState);
+        assertTrue(item.busy);
+        assertTrue(item.attention);
+        assertSame(item, item.withAgentState(AgentStatus.State.WORKING));
+        assertEquals(AgentStatus.State.WORKING, item.withDone(true).agentState);
+        assertEquals(AgentStatus.State.WORKING, item.withProgress(40, false).agentState);
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        CharSequence text = ((TextView) tabs.getChildAt(0)).getText();
+        // Dot, then the bell in the slot the ring would otherwise have: a window that is asking is
+        // the news, and the dot still says an agent is behind it.
+        assertEquals("\u25cf " + TerminalWindowBar.BELL_GLYPH + " repo", text.toString());
+        assertEquals(1, ((android.text.Spanned) text)
+            .getSpans(0, text.length(), android.text.style.ReplacementSpan.class).length);
+
+        // With the slot free the ring comes back, and the dot is still in front of it.
+        bar.setWindows(Arrays.asList(item.withAttention(false)), 0);
+        CharSequence working = ((TextView) tabs.getChildAt(0)).getText();
+        assertTrue(working.toString().startsWith("\u25cf "));
+        assertEquals(2, ((android.text.Spanned) working)
+            .getSpans(0, working.length(), android.text.style.ReplacementSpan.class).length);
+    }
+
     /** The mark replaces the process glyph in its slot rather than joining the label's end. */
     @Test
     public void aMarkTakesTheProcessGlyphsSlot() {

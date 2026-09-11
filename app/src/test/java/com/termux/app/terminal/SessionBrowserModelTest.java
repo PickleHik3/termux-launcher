@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class SessionBrowserModelTest {
 
@@ -34,6 +35,31 @@ public class SessionBrowserModelTest {
         assertEquals(1, SessionBrowserModel.filter(sessions, "JOURNAL").get(0).index);
         assertEquals(2, SessionBrowserModel.filter(sessions, "build-output").get(0).index);
         assertEquals(0, SessionBrowserModel.filter(sessions, "missing").size());
+    }
+
+    /**
+     * A session shows the strongest reading of any pane under it: blocked outranks working outranks
+     * idle, and a session with no agent in it shows nothing at all.
+     */
+    @Test
+    public void sessionRollsUpTheAgentStateOfEveryPaneInEveryWindow() {
+        SessionBrowserModel.Window first = new SessionBrowserModel.Window(0, true, 0,
+            Arrays.asList(new SessionBrowserModel.Pane("/one", "claude", AgentStatus.State.IDLE),
+                new SessionBrowserModel.Pane("/two", "bash", null)));
+        SessionBrowserModel.Window second = new SessionBrowserModel.Window(1, false, 0,
+            Collections.singletonList(
+                new SessionBrowserModel.Pane("/three", "codex", AgentStatus.State.WORKING)));
+        assertEquals(AgentStatus.State.WORKING, new SessionBrowserModel.Session(0, true, "a",
+            Arrays.asList(first, second)).agentState);
+
+        SessionBrowserModel.Window blocked = new SessionBrowserModel.Window(2, false, 0,
+            Collections.singletonList(
+                new SessionBrowserModel.Pane("/four", "claude", AgentStatus.State.BLOCKED)));
+        assertEquals(AgentStatus.State.BLOCKED, new SessionBrowserModel.Session(0, true, "a",
+            Arrays.asList(first, second, blocked)).agentState);
+
+        assertNull(session(0, "plain", "/one", "bash", 2).agentState);
+        assertNull(new SessionBrowserModel.Pane("/one", "bash").agentState);
     }
 
     @Test

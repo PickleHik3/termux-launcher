@@ -152,7 +152,6 @@ android {
 dependencies {
     implementation "androidx.annotation:annotation:1.8.0"
     implementation "androidx.core:core:1.13.1"
-    implementation "androidx.drawerlayout:drawerlayout:1.2.0"
     implementation "androidx.preference:preference:1.2.1"
     implementation "androidx.recyclerview:recyclerview:1.1.0"
     implementation "androidx.viewpager:viewpager:1.1.0-alpha01"

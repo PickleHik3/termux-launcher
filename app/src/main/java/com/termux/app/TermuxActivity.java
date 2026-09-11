@@ -65,10 +65,8 @@ import android.util.DisplayMetrics;
 import android.util.LruCache;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -150,7 +148,6 @@ import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
-import com.termux.app.terminal.TermuxSessionsListViewController;
 import com.termux.app.terminal.io.TerminalToolbarViewPager;
 import com.termux.app.terminal.TermuxTerminalViewClient;
 import com.termux.app.terminal.TerminalNamePolicy;
@@ -184,7 +181,6 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsCompat.Type;
 import androidx.core.view.WindowInsetsControllerCompat;
-import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -279,6 +275,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Session the switch indicator last fired for; compared by identity, never dereferenced. */
     /** Resolves per-pane foreground process / open file for the window pill labels. */
     @Nullable private com.termux.app.statusbar.WindowForegroundResolver mWindowForegroundResolver;
+    /** What the AI coding agent in each pane is doing, keyed by shell pid. */
+    private final com.termux.app.terminal.AgentStatusTracker mAgentStatuses =
+        new com.termux.app.terminal.AgentStatusTracker();
     @Nullable private Runnable mSessionBrowserRefreshCallback;
     private final Handler mWindowLabelHandler = new Handler(Looper.getMainLooper());
     private static final long WINDOW_LABEL_POLL_MS = 2000L;
@@ -380,7 +379,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int REQUEST_CODE_WIDGET_BIND = 4714;
     private static final int REQUEST_CODE_WIDGET_CONFIGURE = 4715;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
-    /** Drawer-visible sessions = service sessions minus secondary panes. Backs the list adapter. */
+    /** Visible sessions = service sessions minus secondary panes. Backs the window bar and browser. */
     private final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
 
     /** The one {@link com.termux.app.terminal.TerminalHost} every terminal client is given. */
@@ -482,11 +481,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Key-page clients, index-aligned with {@link #mExtraKeysViews}. */
     final java.util.List<TermuxTerminalExtraKeys> mTermuxTerminalExtraKeysPages =
         new java.util.ArrayList<>();
-
-    /**
-     * The termux sessions list controller.
-     */
-    TermuxSessionsListViewController mTermuxSessionListViewController;
 
     /**
      * The {@link TermuxActivity} broadcast receiver for various things like terminal style configuration changes.
@@ -1059,9 +1053,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleSurfaceEditorIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
         }
-        setSettingsButtonView();
-        setNewSessionButtonView();
-        setToggleKeyboardView();
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
         try {
             // Start the {@link TermuxService} and make it run regardless of who is bound to it
@@ -1284,9 +1275,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mX11Display != null && isDisplayPageShowing() && !mPaneWallController.wall().isMoving()) {
             syncDisplayPageAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
         }
-        applySessionsDrawerLockState();
         syncRecentsVisibilityPolicy();
-        applySessionsSurfaceAlpha();
         mChrome.requestSync(ChromeRenderer.SCOPE_BLUR_HEALTH);
         registerTermuxActivityBroadcastReceiver();
         registerPackageChangeReceiver();
@@ -1471,7 +1460,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalSurfaceAppearance();
         syncRecentsVisibilityPolicy();
         applyWallpaperOffsetFixIfNeeded();
-        applySessionsSurfaceAlpha();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER
             | ChromeRenderer.SCOPE_BLUR_HEALTH);
         refreshPrivilegedBackendIfNeeded();
@@ -1510,10 +1498,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalBorderAppearance();
         boolean wallpaperMode = shouldUseWallpaperPassthroughMode();
         int accessoryBaseColor = resolveAccessoryGlassBaseColor();
-        int sessionsBaseColor = resolveAccessoryGlassBaseColor();
         applyGlassSurfaceColor(R.id.extrakeys_background, accessoryBaseColor);
         applyGlassSurfaceColor(R.id.activity_termux_bottom_space_background, accessoryBaseColor);
-        applyGlassSurfaceColor(R.id.sessions_background, sessionsBaseColor);
 
         if (wallpaperMode) {
             boolean showSurface = shouldShowTerminalOverlaySurface();
@@ -2785,28 +2771,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return ThemeUtils.getSystemAttrColor(this, attr, ContextCompat.getColor(this, fallbackRes));
     }
 
-    /**
-     * The legacy left sessions drawer is retired while split panes are on: the sessions panel
-     * under the status pill replaces it, and two session managers reachable at once made every
-     * rename/close land in the wrong list half the time.
-     */
-    private void applySessionsDrawerLockState() {
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-        if (drawer == null)
-            return;
-        // The same dim the drawer plane settles on, in place of the AndroidX default's near-black
-        // 60%, which sat on top of a glass stack that is already eight layers deep.
-        drawer.setScrimColor(GlassBackdropTint.colorFor(1f));
-        if (isSplitPanesEnabled()) {
-            drawer.closeDrawers();
-            drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
-        } else if (drawer.getDrawerLockMode(Gravity.LEFT)
-            == DrawerLayout.LOCK_MODE_LOCKED_CLOSED) {
-            // Copy mode re-asserts its own lock through setDrawerLocked whenever it toggles.
-            drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED);
-        }
-    }
-
     private boolean isNightThemeActive() {
         return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
             == Configuration.UI_MODE_NIGHT_YES;
@@ -3483,13 +3447,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(blur instanceof RealtimeBlurView)) return;
         if (rest) ((RealtimeBlurView) blur).refreshThenRest();
         else ((RealtimeBlurView) blur).setUpdatesPaused(false);
-    }
-
-    /** The legacy sessions drawer has an opacity but no blur; its glass is a plain tinted sheet. */
-    private void applySessionsSurfaceAlpha() {
-        View sessionsBackground = findViewById(R.id.sessions_background);
-        if (sessionsBackground != null && mPreferences != null)
-            sessionsBackground.setAlpha(mPreferences.getSessionsOpacity() / 100f);
     }
 
     private void configureBackgroundBlur(int blurViewId, int backgroundViewId, boolean isBlurEnabled, float surfaceAlpha, int blurRadiusDp) {
@@ -5989,7 +5946,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxService = ((TermuxService.LocalBinder) service).service;
         restorePaneLayoutState();
         ensureWindowsForServiceSessions();
-        setTermuxSessionsListView();
+        rebuildDrawerSessions();
         final Intent intent = getIntent();
         if (mLauncherTransitionController != null) {
             mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView);
@@ -6098,7 +6055,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTerminalView != null) {
             mTerminalView.onContextMenuClosed(null);
         }
-        getDrawer().closeDrawers();
     }
 
     public boolean recoverEmptyVisibleSessionInPlace(@Nullable Intent intent, @NonNull String reason) {
@@ -8109,11 +8065,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.refreshTerminalWindowBar();
         }
 
-        @Override public void applySessionsSurfaceBackground() {
-            if (mPreferences == null) return;
-            applySessionsSurfaceAlpha();
-        }
-
         @Override public void applyGeometryPreview(boolean commit) {
             updateAppLauncherBarHeight();
             // Without commit the dock/keyboard visuals still track the drag live; only the
@@ -8820,17 +8771,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
-    private void setTermuxSessionsListView() {
-        ListView termuxSessionsListView = findViewById(R.id.terminal_sessions_list);
-        // Backed by the filtered drawer list (excludes secondary panes) rather than the raw
-        // service session list, so panes don't show up as their own sessions.
-        rebuildDrawerSessions();
-        mTermuxSessionListViewController = new TermuxSessionsListViewController(this, mDrawerSessions);
-        termuxSessionsListView.setAdapter(mTermuxSessionListViewController);
-        termuxSessionsListView.setOnItemClickListener(mTermuxSessionListViewController);
-        termuxSessionsListView.setOnItemLongClickListener(mTermuxSessionListViewController);
-    }
-
     private void setTerminalToolbarView(Bundle savedInstanceState) {
         rebuildExtraKeysPageClients();
         final ViewPager terminalToolbarViewPager = getTerminalToolbarViewPager();
@@ -9286,7 +9226,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setTerminalToolbarHeight(true);
         applyTerminalSurfaceAppearance();
         refreshTerminalWindowBar();
-        applySessionsSurfaceAlpha();
         applySuggestionBarSurfaceStyling();
         if (mPaneController != null) mPaneController.refreshPaneLayout();
         if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
@@ -9550,7 +9489,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * is the later sibling, so it draws over what the content keeps.
      */
     private boolean applyContentKeyboardOverlap(int overlapPx) {
-        View content = findViewById(R.id.drawer_layout);
+        View content = findViewById(R.id.terminal_content_column);
         if (content == null) return false;
         ViewGroup.LayoutParams layoutParams = content.getLayoutParams();
         if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
@@ -9850,33 +9789,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!textInput.isEmpty())
                 savedInstanceState.putString(ARG_TERMINAL_TOOLBAR_TEXT_INPUT, textInput);
         }
-    }
-
-    private void setSettingsButtonView() {
-        ImageButton settingsButton = findViewById(R.id.settings_button);
-        settingsButton.setOnClickListener(v -> {
-            ActivityUtils.startActivity(this, new Intent(this, SettingsActivity.class));
-        });
-    }
-
-    private void setNewSessionButtonView() {
-        View newSessionButton = findViewById(R.id.new_session_button);
-        newSessionButton.setOnClickListener(v -> mTermuxTerminalSessionActivityClient.addNewSession(false, null));
-        newSessionButton.setOnLongClickListener(v -> {
-            promptNewSession();
-            return true;
-        });
-    }
-
-    private void setToggleKeyboardView() {
-        findViewById(R.id.toggle_keyboard_button).setOnClickListener(v -> {
-            mTermuxTerminalViewClient.onToggleSoftKeyboardRequest();
-            getDrawer().closeDrawers();
-        });
-        findViewById(R.id.toggle_keyboard_button).setOnLongClickListener(v -> {
-            toggleTerminalToolbar();
-            return true;
-        });
     }
 
     private void registerWallpaperActivityResultLaunchers() {
@@ -10858,8 +10770,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>The order is the Back order: the rename chip and the find strip are modal editors over one
      * surface; the widget pane is a place the palette can be summoned over; the palette
      * outranks the sheet plane so a sheet can never swallow the escape stroke; a sheet closes the
-     * drawer as it opens and so outranks it; and the surface editor and the legacy sessions drawer
-     * are conceptually behind everything else.
+     * app drawer as it opens and so outranks it; and the surface editor is conceptually behind
+     * everything else.
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
@@ -10976,19 +10888,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     default:
                         break;
                 }
-            }
-        });
-        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
-            @Override public boolean onBack() {
-                DrawerLayout drawer = getDrawer();
-                if (drawer == null || !drawer.isDrawerOpen(Gravity.LEFT)) return false;
-                drawer.closeDrawers();
-                return true;
-            }
-            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                DrawerLayout drawer = getDrawer();
-                if (drawer != null && reason != com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION)
-                    drawer.closeDrawers();
             }
         });
         return registry;
@@ -11411,21 +11310,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mTerminalSheet.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
     }
 
-    /**
-     * Back consumers, in the order {@link #createOverlayRegistry()} registers them. With nothing
-     * open and split panes off, Back opens the legacy sessions drawer instead.
-     */
+    /** Back consumers, in the order {@link #createOverlayRegistry()} registers them. */
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        if (mOverlays.onBackPressed())
-            return;
-        DrawerLayout drawer = getDrawer();
-        if (drawer != null && !isSplitPanesEnabled() && !drawer.isDrawerOpen(Gravity.LEFT)) {
-            // The legacy sessions drawer only exists without the in-app multiplexer: with split
-            // panes on, sessions live in the status pill's own panel and this drawer stays shut.
-            drawer.openDrawer(Gravity.LEFT);
-        }
+        mOverlays.onBackPressed();
     }
 
     void finishActivityIfNotFinishing() {
@@ -11846,10 +11735,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    public DrawerLayout getDrawer() {
-        return (DrawerLayout) findViewById(R.id.drawer_layout);
-    }
-
     public ViewPager getTerminalToolbarViewPager() {
         return (ViewPager) findViewById(R.id.terminal_toolbar_view_pager);
     }
@@ -12054,8 +11939,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         }
                     }
                     if (foreground == null) foreground = shell.getTitle();
+                    com.termux.app.terminal.AgentStatus agentStatus =
+                        mAgentStatuses.get(shell.getPid());
                     panes.add(new com.termux.app.terminal.SessionBrowserModel.Pane(
-                        shell.getCwd(), foreground));
+                        shell.getCwd(), foreground,
+                        agentStatus == null ? null : agentStatus.state));
                 }
                 String named = mPaneController.windowName(window);
                 String windowLabel = named != null ? named
@@ -12693,7 +12581,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** Rebuild the drawer list: one row per session (its current window's focused shell). */
+    /** Rebuild the visible session list: one entry per session (its current window's focused shell). */
     void rebuildDrawerSessions() {
         mDrawerSessions.clear();
         if (mTermuxService != null && mPaneController != null) {
@@ -12704,8 +12592,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (ts != null) mDrawerSessions.add(ts);
             }
         }
-        if (mTermuxSessionListViewController != null)
-            mTermuxSessionListViewController.notifyDataSetChanged();
         if (mTermuxService != null)
             mTermuxService.setVisibleSessionCount(mDrawerSessions.size());
         refreshTerminalWindowBar();
@@ -14132,9 +14018,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bar.setOnWindowSelectedListener(this::selectWindowFromStatusBar);
         bar.setOnWindowCloseRequestedListener(this::closeWindowFromStatusBar);
         bar.setOnCreateWindowListener(() -> {
-            // The Display place opens another app from the drawer rather than a terminal window.
-            if (isDisplayPageShowing()) getDrawer().openDrawer(android.view.Gravity.LEFT);
-            else createNewWindow();
+            // On the Display place the chips are the display's apps, and the plus meant
+            // "open another app"; the app drawer has no programmatic open yet, so the plus
+            // rests there instead of raising a terminal window under the display.
+            if (!isDisplayPageShowing()) createNewWindow();
         });
         // A strip with nothing to scroll, or one pulled past the edge it already rests at, hands
         // the finger to the pane wall; a finger that scrolled the chips keeps them to the end.
@@ -14569,7 +14456,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             ? com.termux.app.terminal.TerminalWindowBar.WindowItem.NO_PERCENTAGE
                             : progress.getProgressValue(),
                         progress != null && progress.getProgressState()
-                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR));
+                            == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
+                    .withAgentState(observeWindowAgents(window, now)));
             }
         }
         bar.setWindows(items, selected);
@@ -14579,7 +14467,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncBackgroundProcessStack();
         scheduleShellPhaseJudgement();
         java.util.List<Integer> pids = collectAllPanePids();
-        mShellPhases.retain(new java.util.HashSet<>(pids));
+        java.util.HashSet<Integer> live = new java.util.HashSet<>(pids);
+        mShellPhases.retain(live);
+        mAgentStatuses.retain(live);
         return pids;
     }
 
@@ -14614,6 +14504,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         return marks;
+    }
+
+    /**
+     * An agent's own report about its pane, from {@code launcherctl agent}. Authoritative, so the
+     * chips and the browser are repainted straight away rather than at the next poll.
+     */
+    void reportAgentStatus(@NonNull TerminalSession pane, @Nullable String agent,
+                           @Nullable com.termux.app.terminal.AgentStatus.State state) {
+        int pid = pane.getPid();
+        if (pid <= 0) return;
+        if (!mAgentStatuses.report(pid, agent, state, android.os.SystemClock.uptimeMillis())) return;
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null) syncWindowBarItems(bar);
+        if (mSessionBrowserRefreshCallback != null) mSessionBrowserRefreshCallback.run();
+    }
+
+    /**
+     * The rolled-up agent reading for one window: what each of its panes says, folded blocked over
+     * working over idle. Null when no pane in it is running an agent, which is the ordinary case and
+     * costs one map lookup per pane.
+     *
+     * <p>The screen half only runs for a pane whose foreground procfs reading names an agent, and
+     * only the bottom rows are ever read — the tracker throttles and hashes the rest.
+     */
+    @Nullable
+    private com.termux.app.terminal.AgentStatus.State observeWindowAgents(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, long nowMs) {
+        if (mPaneController == null) return null;
+        com.termux.app.terminal.AgentStatus.State folded = null;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            folded = com.termux.app.terminal.AgentStatus.rollUp(folded, observePaneAgent(shell, nowMs));
+        }
+        return folded;
+    }
+
+    /** One pane's agent reading, refreshed from procfs and (when due) from its screen. */
+    @Nullable
+    private com.termux.app.terminal.AgentStatus.State observePaneAgent(
+            @NonNull TerminalSession shell, long nowMs) {
+        int pid = shell.getPid();
+        if (pid <= 0) return null;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
+        String agent = info == null || info.idle ? null
+            : com.termux.app.terminal.AgentStatus.kindFor(info.processName, info.command);
+        // A pane whose foreground cannot be read at all keeps whatever it had: a missing procfs
+        // reading is not evidence the agent exited, and dropping it would flicker the dot.
+        if (agent == null && info == null && mAgentStatuses.isHooked(pid)) {
+            com.termux.app.terminal.AgentStatus held = mAgentStatuses.get(pid);
+            return held == null ? null : held.state;
+        }
+        // isWorkingAsOf, not the raw flag: a reading that stopped being refreshed must not go on
+        // asserting that an agent with no rules of its own is still working.
+        mAgentStatuses.observe(pid, agent,
+            info != null && info.isWorkingAsOf(nowMs, shell.getLastWriteUptimeMs()),
+            () -> agentScreenTail(shell), nowMs);
+        com.termux.app.terminal.AgentStatus status = mAgentStatuses.get(pid);
+        return status == null ? null : status.state;
+    }
+
+    /** The bottom rows of a pane, which is all a screen rule ever looks at. */
+    @Nullable
+    private static String agentScreenTail(@NonNull TerminalSession shell) {
+        com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+        if (emulator == null) return null;
+        int top = Math.max(0, emulator.mRows - com.termux.app.terminal.AgentScreenRules.TAIL_ROWS);
+        return emulator.getScreen().getSelectedText(0, top, emulator.mColumns,
+            emulator.mRows - 1, true, false);
     }
 
     /**
@@ -16148,14 +16106,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             else TermuxActivity.this.showTerminalModeHint(mode);
         }
 
-        @Override public void setDrawerLocked(boolean locked) {
-            // Split panes retire the legacy sessions drawer entirely, so leaving copy mode must
-            // not unlock it.
-            getDrawer().setDrawerLockMode(locked || isSplitPanesEnabled()
-                ? DrawerLayout.LOCK_MODE_LOCKED_CLOSED
-                : DrawerLayout.LOCK_MODE_UNLOCKED);
-        }
-
         @Override public void toggleTerminalToolbar() {
             TermuxActivity.this.toggleTerminalToolbar();
         }
@@ -16469,6 +16419,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : new java.util.ArrayList<>(mCurrentWSession.windows);
         }
 
+        @Override public void reportAgentStatus(@NonNull TerminalSession pane,
+                                               @Nullable String agent,
+                                               @Nullable com.termux.app.terminal.AgentStatus.State state) {
+            TermuxActivity.this.reportAgentStatus(pane, agent, state);
+        }
+
         @Override @Nullable public TerminalSession findPaneById(@NonNull String id) {
             if (mTermuxService == null) return null;
             for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
@@ -16621,14 +16577,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.beginTerminalRename(target);
         }
 
-        @Override public void openDrawer() {
-            getDrawer().openDrawer(android.view.Gravity.LEFT);
-        }
-
-        @Override public void closeDrawers() {
-            getDrawer().closeDrawers();
-        }
-
         @Override @NonNull public com.termux.app.terminal.TerminalWorkspace saveWorkspace(
                 @NonNull String requestedName, boolean overwrite, boolean captureCommands)
                 throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
@@ -16746,7 +16694,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** The drawer-visible session list, as the terminal clients see it. */
+    /** The visible session list, as the terminal clients see it. */
     private final com.termux.app.terminal.TerminalHost.Sessions mDrawerSessionsSurface =
         new com.termux.app.terminal.TerminalHost.Sessions() {
 
@@ -16779,10 +16727,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override @Nullable public String nameOf(@Nullable TerminalSession shell) {
                 return getSessionNameFor(shell);
-            }
-
-            @Override @Nullable public android.widget.ListView listView() {
-                return findViewById(R.id.terminal_sessions_list);
             }
         };
 

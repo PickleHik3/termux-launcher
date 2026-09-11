@@ -124,6 +124,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public final int progress;
         /** Whether the reported progress is in its error state, so the ring can say so. */
         public final boolean progressError;
+        /**
+         * What an AI coding agent in this window is doing, rolled up over its panes, or null when
+         * none of them is running one. Drawn as the status dot in front of the label; independent
+         * of every other mark, since an agent can be working in one pane while another rings.
+         */
+        @Nullable public final AgentStatus.State agentState;
 
         public static final int NO_PERCENTAGE = -1;
 
@@ -153,6 +159,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
                           boolean attention, int progress, boolean progressError, boolean done,
                           boolean doneFailed) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                null);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState) {
             this.label = label;
             this.spokenLabel = spokenLabel;
             this.busy = busy;
@@ -161,6 +174,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             this.progressError = progressError;
             this.done = done;
             this.doneFailed = doneFailed;
+            this.agentState = agentState;
         }
 
         /**
@@ -172,14 +186,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed);
+                    doneFailed, agentState);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed);
+                    doneFailed, agentState);
         }
 
         @NonNull
@@ -192,7 +206,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withDone(boolean done, boolean failed) {
             return done == this.done && failed == this.doneFailed ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    failed);
+                    failed, agentState);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
@@ -200,14 +214,38 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed);
+                    doneFailed, agentState);
+        }
+
+        /** The rolled-up agent reading for this window's panes; null removes the dot. */
+        @NonNull
+        public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
+            return agentState == this.agentState ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState);
         }
 
         /** Whether the two would draw the same marks. Labels are compared separately. */
         boolean sameActivity(@NonNull WindowItem other) {
             return busy == other.busy && attention == other.attention && done == other.done
                 && doneFailed == other.doneFailed
-                && progress == other.progress && progressError == other.progressError;
+                && progress == other.progress && progressError == other.progressError
+                && agentState == other.agentState;
+        }
+    }
+
+    /**
+     * The one word a user reads for an agent's state, here and in the sessions browser. Product
+     * copy: "Working", "Needs you", "Idle" — never the mechanism behind the reading.
+     */
+    @Nullable
+    public static String agentStateWord(@NonNull Context context,
+                                        @Nullable AgentStatus.State state) {
+        if (state == null) return null;
+        switch (state) {
+            case WORKING: return context.getString(R.string.termux_agent_state_working);
+            case BLOCKED: return context.getString(R.string.termux_agent_state_blocked);
+            default: return context.getString(R.string.termux_agent_state_idle);
         }
     }
 
@@ -674,6 +712,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 if (item.progress != WindowItem.NO_PERCENTAGE) description += ", " + getResources()
                     .getString(R.string.termux_window_tab_progress_content_description, item.progress);
             }
+            // The agent sentence rides on the description rather than on spokenLabel itself: the
+            // label is what sameItems compares, so changing it as the agent's state moved would
+            // re-inflate the whole pill row and kill the selection slide.
+            String agent = agentStateWord(getContext(), item.agentState);
+            if (agent != null) description += " · " + agent + ".";
             mTabs.getChildAt(i).setContentDescription(description);
         }
     }
@@ -725,18 +768,32 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             label = "\u25cf " + label;
             glyphEnd = 1;
         }
+        // The agent dot leads the whole label, in front of the mark slot, so it stays in the same
+        // place whatever that slot happens to be showing. Its own placeholder run, prepended before
+        // the font spans are applied, so every later offset is already counted from the dot.
+        int dotEnd = 0;
+        if (item.agentState != null) {
+            label = "\u25cf " + label;
+            dotEnd = 1;
+            glyphEnd += 2;
+        }
         CharSequence spanned = TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(context, label), mSymbolMaps);
-        if (!ring && mark == null) return spanned;
+        if (!ring && mark == null && dotEnd == 0) return spanned;
         SpannableStringBuilder text = new SpannableStringBuilder(spanned);
+        if (dotEnd > 0) {
+            text.setSpan(new AgentDotSpan(agentDotColor(item.agentState), item.agentState,
+                    mLazyMode), 0, dotEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        int slotStart = dotEnd == 0 ? 0 : 2;
         if (ring) {
             text.setSpan(new ProgressRingSpan(item.progressError ? mAttentionColor : mBusyColor,
                     item.progress, dp(1.25f), mLazyMode),
-                0, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        } else {
+                slotStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        } else if (mark != null) {
             text.setSpan(new ForegroundColorSpan(
                     item.attention || item.doneFailed ? mAttentionColor : mBusyColor),
-                0, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                slotStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         return text;
     }
@@ -755,6 +812,17 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
+     * The dot's colour per state: the row's working accent while the agent works, the same warm
+     * "this one wants you" colour the bell uses when it is waiting, and the pill's own muted label
+     * colour when it is sitting at its prompt.
+     */
+    private int agentDotColor(@Nullable AgentStatus.State state) {
+        if (state == AgentStatus.State.BLOCKED) return mAttentionColor;
+        if (state == AgentStatus.State.WORKING) return mBusyColor;
+        return mUnselectedTextColor;
+    }
+
+    /**
      * Length of the process glyph the factories put in front of every label — one private-use code
      * point and the space after it — or 0 when the label does not start with one.
      */
@@ -769,12 +837,21 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return label.charAt(end) == ' ' ? end : 0;
     }
 
-    /** Whether any pill is drawing the turning arc, which is the only mark that needs frames. */
+    /** Whether any pill is drawing a mark that moves, which is all the clock below exists for. */
     private boolean hasIndeterminateWindow() {
         for (WindowItem item : mItems) {
-            if (showsRing(item) && item.progress == WindowItem.NO_PERCENTAGE) return true;
+            if (needsClock(item)) return true;
         }
         return false;
+    }
+
+    /**
+     * The turning arc and the breathing agent dot are the only marks that need frames; a percentage
+     * ring, a bell, and a dot that is waiting or idle are as static as the label.
+     */
+    private static boolean needsClock(@NonNull WindowItem item) {
+        return (showsRing(item) && item.progress == WindowItem.NO_PERCENTAGE)
+            || item.agentState == AgentStatus.State.WORKING;
     }
 
     /**
@@ -835,9 +912,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     private void invalidateTurningRings() {
         for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
-            WindowItem item = mItems.get(i);
-            if (item.busy && item.progress == WindowItem.NO_PERCENTAGE)
-                mTabs.getChildAt(i).invalidate();
+            if (needsClock(mItems.get(i))) mTabs.getChildAt(i).invalidate();
         }
     }
 
@@ -1187,6 +1262,66 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             paint.setStyle(style);
             paint.setStrokeWidth(strokeWidth);
             paint.setStrokeCap(cap);
+        }
+    }
+
+    /**
+     * The agent status dot, drawn in the placeholder run in front of the label. Working breathes
+     * off the bar's one clock — the same phase the ring turns on, read at draw time, so nothing is
+     * stored per frame and no second animator exists; waiting and idle are solid and cost nothing.
+     */
+    private static final class AgentDotSpan extends ReplacementSpan {
+        /** Dot diameter as a share of the text's ascent-to-descent height. */
+        private static final float DIAMETER_FRACTION = 0.38f;
+        /** How faint an idle dot sits against the label beside it. */
+        private static final int IDLE_ALPHA = 110;
+        /** The ends of the working dot's breath, as alpha. */
+        private static final int PULSE_MIN_ALPHA = 96;
+        private static final int PULSE_MAX_ALPHA = 255;
+
+        private final int mColor;
+        @Nullable private final AgentStatus.State mState;
+        private final boolean mStepped;
+
+        AgentDotSpan(int color, @Nullable AgentStatus.State state, boolean stepped) {
+            mColor = color;
+            mState = state;
+            mStepped = stepped;
+        }
+
+        @Override
+        public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
+                           @Nullable Paint.FontMetricsInt fm) {
+            // As wide as the placeholder it replaces, so turning the dot on and off does not move
+            // the label it leads.
+            return Math.round(paint.measureText(text, start, end));
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end, float x,
+                         int top, int y, int bottom, @NonNull Paint paint) {
+            float width = getSize(paint, text, start, end, null);
+            float radius = (paint.descent() - paint.ascent()) * DIAMETER_FRACTION / 2f;
+            float cx = x + width / 2f;
+            float cy = y + (paint.ascent() + paint.descent()) / 2f;
+
+            int color = paint.getColor();
+            Paint.Style style = paint.getStyle();
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(ColorUtils.setAlphaComponent(mColor, alpha()));
+            canvas.drawCircle(cx, cy, radius, paint);
+            paint.setColor(color);
+            paint.setStyle(style);
+        }
+
+        private int alpha() {
+            if (mState == AgentStatus.State.IDLE) return IDLE_ALPHA;
+            if (mState != AgentStatus.State.WORKING) return 255;
+            float phase = WindowActivityRing.phase(SystemClock.uptimeMillis());
+            if (mStepped) phase = WindowActivityRing.steppedPhase(phase, WindowActivityRing.LAZY_STEPS);
+            // One breath per turn: up for the first half, down for the second.
+            float triangle = phase < 0.5f ? phase * 2f : (1f - phase) * 2f;
+            return Math.round(PULSE_MIN_ALPHA + (PULSE_MAX_ALPHA - PULSE_MIN_ALPHA) * triangle);
         }
     }
 

@@ -43,7 +43,12 @@ public final class TerminalSession extends TerminalOutput {
 
     private static final int MSG_PROCESS_EXITED = 4;
 
-    public final String mHandle = UUID.randomUUID().toString();
+    /**
+     * Stable id for this pane, used by everything outside the emulator that has to name one. It is
+     * accepted from the caller so the same value can be exported into the shell's own environment,
+     * which is created before this object is.
+     */
+    public final String mHandle;
 
     TerminalEmulator mEmulator;
 
@@ -117,6 +122,11 @@ public final class TerminalSession extends TerminalOutput {
     private static final String LOG_TAG = "TerminalSession";
 
     public TerminalSession(String shellPath, String cwd, String[] args, String[] env, Integer transcriptRows, TerminalSessionClient client) {
+        this(shellPath, cwd, args, env, transcriptRows, client, null);
+    }
+
+    public TerminalSession(String shellPath, String cwd, String[] args, String[] env, Integer transcriptRows, TerminalSessionClient client, String handle) {
+        this.mHandle = handle == null || handle.isEmpty() ? UUID.randomUUID().toString() : handle;
         this.mShellPath = shellPath;
         this.mCwd = cwd;
         this.mArgs = args;

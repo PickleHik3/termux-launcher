@@ -32,6 +32,13 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
     /** Value exported as {@link #ENV_TERM_PROGRAM}, identifying this terminal to capability detectors. */
     public static final String TERM_PROGRAM_NAME = "termux-launcher";
 
+    /**
+     * Environment variable naming the pane a shell is running in, i.e. its
+     * {@code TerminalSession.mHandle} — the same id the {@code /v1/panes} routes address. It is what
+     * lets a process in a shell talk about its own pane without being told which one it is.
+     */
+    public static final String ENV_LAUNCHER_PANE = "TERMUX_LAUNCHER_PANE";
+
     public TermuxShellEnvironment() {
         super();
         shellCommandShellEnvironment = new TermuxShellCommandShellEnvironment();

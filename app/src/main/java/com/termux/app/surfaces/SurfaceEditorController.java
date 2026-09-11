@@ -146,8 +146,6 @@ public final class SurfaceEditorController {
         void holdPaneWallOnPlace(@Nullable PaneWallPage place, boolean held);
         void applyTerminalSurfaceAppearance();
         void refreshTerminalWindowBar();
-        /** Re-applies the sessions panel background at its stored opacity. */
-        void applySessionsSurfaceBackground();
         /**
          * Dock geometry changed: bar height, toolbar height, immediate chrome apply. With
          * {@code commit} the terminal is also resized to the new geometry — a shell reflow worth
@@ -4318,7 +4316,6 @@ public final class SurfaceEditorController {
         if ((scopes & SurfaceEditorProperties.PREVIEW_SURFACES) != 0) {
             mHost.applyTerminalSurfaceAppearance();
             mHost.refreshTerminalWindowBar();
-            mHost.applySessionsSurfaceBackground();
         }
         // A full keyboard reload re-parses the layout ring; mid-drag its backdrop is already kept
         // live by the glass pass, so the reload waits for the release like geometry does.

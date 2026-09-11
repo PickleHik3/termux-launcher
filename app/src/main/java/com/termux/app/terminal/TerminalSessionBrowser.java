@@ -1,7 +1,10 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -15,7 +18,10 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
 
+import com.google.android.material.color.MaterialColors;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
@@ -450,9 +456,12 @@ public final class TerminalSessionBrowser {
             TextView subtitle = row.findViewById(R.id.session_browser_row_subtitle);
             TextView more = row.findViewById(R.id.session_browser_row_more);
             String displayName = displayName(activity, session);
-            title.setText(session.current
+            CharSequence titleText = session.current
                 ? displayName + " · " + activity.getString(R.string.session_browser_current)
-                : displayName);
+                : displayName;
+            // The session's rolled-up agent reading leads its name, in the same colours the pane
+            // lines under it use, so a blocked agent is findable without opening the session.
+            title.setText(withLeadingDot(activity, titleText, session.agentState));
             title.setTypeface(null, session.current ? android.graphics.Typeface.BOLD
                 : android.graphics.Typeface.NORMAL);
             subtitle.setText(buildSubtitle(activity, session));
@@ -464,13 +473,13 @@ public final class TerminalSessionBrowser {
     }
 
     @NonNull
-    private static String buildSubtitle(@NonNull Context context,
-                                        @NonNull SessionBrowserModel.Session session) {
+    private static CharSequence buildSubtitle(@NonNull Context context,
+                                              @NonNull SessionBrowserModel.Session session) {
         String windows = context.getResources().getQuantityString(R.plurals.session_browser_window_count,
             session.windows.size(), session.windows.size());
         String panes = context.getResources().getQuantityString(R.plurals.session_browser_pane_count,
             session.paneCount(), session.paneCount());
-        StringBuilder out = new StringBuilder(windows).append(" · ").append(panes);
+        SpannableStringBuilder out = new SpannableStringBuilder(windows).append(" · ").append(panes);
         for (SessionBrowserModel.Window window : session.windows) {
             out.append('\n').append(context.getString(R.string.session_browser_window,
                 window.index + 1));
@@ -483,8 +492,47 @@ public final class TerminalSessionBrowser {
                     out.append(pane.foreground);
                 }
                 if (pane.cwd == null && pane.foreground == null) out.append('—');
+                String agent = TerminalWindowBar.agentStateWord(context, pane.agentState);
+                if (agent == null) continue;
+                if (pane.cwd != null || pane.foreground != null) out.append(" · ");
+                int start = out.length();
+                out.append(agent);
+                out.setSpan(new ForegroundColorSpan(agentColor(context, pane.agentState)),
+                    start, out.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
         }
-        return out.toString();
+        return out;
+    }
+
+    /**
+     * {@code text} with a coloured dot in front of it when {@code state} says something, and
+     * unchanged when it does not — so a session with no agent in it looks exactly as it did.
+     */
+    @NonNull
+    private static CharSequence withLeadingDot(@NonNull Context context, @NonNull CharSequence text,
+                                               @Nullable AgentStatus.State state) {
+        if (state == null) return text;
+        SpannableStringBuilder out = new SpannableStringBuilder("●  ").append(text);
+        out.setSpan(new ForegroundColorSpan(agentColor(context, state)), 0, 1,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return out;
+    }
+
+    /** Working, waiting and idle in the same three colours the window chips draw their dot in. */
+    private static int agentColor(@NonNull Context context,
+                                  @Nullable AgentStatus.State state) {
+        if (state == AgentStatus.State.BLOCKED) {
+            return MaterialColors.getColor(context, com.google.android.material.R.attr.colorError,
+                ContextCompat.getColor(context, R.color.termux_error));
+        }
+        if (state == AgentStatus.State.WORKING) {
+            return MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorTertiary,
+                ContextCompat.getColor(context, R.color.termux_primary));
+        }
+        int onSurfaceVariant = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            ContextCompat.getColor(context, R.color.termux_on_surface_variant));
+        return ColorUtils.setAlphaComponent(onSurfaceVariant, 150);
     }
 }

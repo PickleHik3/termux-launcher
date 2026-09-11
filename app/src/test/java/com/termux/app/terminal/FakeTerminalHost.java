@@ -6,7 +6,6 @@ import android.graphics.PointF;
 import android.view.KeyEvent;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ListView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -80,7 +79,6 @@ class FakeTerminalHost implements TerminalHost {
     final List<TerminalView> paneViews = new ArrayList<>();
     boolean hasToolbar = true;
     boolean terminalViewSelected;
-    boolean drawerLocked;
     int toolbarToggles;
     int flushDockRequests;
     int paneFontSize;
@@ -188,7 +186,6 @@ class FakeTerminalHost implements TerminalHost {
         final Map<TerminalSession, String> names = new LinkedHashMap<>();
         @Nullable TerminalSession currentTabPrimary;
         int currentNumber;
-        @Nullable ListView listView;
 
         @Override public int count() {
             return rows.size();
@@ -217,10 +214,6 @@ class FakeTerminalHost implements TerminalHost {
 
         @Override @Nullable public String nameOf(@Nullable TerminalSession shell) {
             return names.get(shell);
-        }
-
-        @Override @Nullable public ListView listView() {
-            return listView;
         }
     }
 
@@ -252,10 +245,6 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public void setRootViewLoggingEnabled(boolean enabled) {
         record("setRootViewLoggingEnabled");
-    }
-
-    @Override public void setDrawerLocked(boolean locked) {
-        drawerLocked = locked;
     }
 
     /** The legend the terminal is currently showing, or null while no mode is up. */
@@ -758,14 +747,6 @@ class FakeTerminalHost implements TerminalHost {
     @Override public boolean beginTerminalRename(@NonNull TerminalRenameTarget target) {
         record("beginTerminalRename");
         return beginTerminalRenameResult;
-    }
-
-    @Override public void openDrawer() {
-        record("openDrawer");
-    }
-
-    @Override public void closeDrawers() {
-        record("closeDrawers");
     }
 
     // --- Workspaces ---

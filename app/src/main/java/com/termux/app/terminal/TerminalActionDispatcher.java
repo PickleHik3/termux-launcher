@@ -98,6 +98,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_CLOSE = "pane.close";
     public static final String TOOL_PANE_WRITE = "pane.write";
     public static final String TOOL_PANE_READ = "pane.read";
+    public static final String TOOL_AGENT_STATUS = "agent.status";
     /** Most transcript lines one pane.read returns; enough to see a screen and its recent past. */
     static final int PANE_READ_MAX_LINES = 500;
     static final int PANE_READ_DEFAULT_LINES = 60;
@@ -263,6 +264,7 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_CLOSE:
             case TOOL_PANE_WRITE:
             case TOOL_PANE_READ:
+            case TOOL_AGENT_STATUS:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
             case TOOL_WINDOW_NEXT:
@@ -717,6 +719,23 @@ public final class TerminalActionDispatcher {
                         .put("text", lastLines(transcript, lines))
                         .put("running", target.isRunning());
                 }
+                case TOOL_AGENT_STATUS: {
+                    TerminalSession target = paneArgument(host, arguments);
+                    if (target == null) return paneNotFound(arguments);
+                    // Deliberately not requireOwned: the caller is the agent reporting on the pane
+                    // it is itself running in, which is never a pane the API opened.
+                    String raw = arguments.optString("state", "").trim();
+                    boolean clear = "clear".equalsIgnoreCase(raw);
+                    AgentStatus.State state = AgentStatusTracker.parseState(raw);
+                    if (!clear && state == null) {
+                        return error(400, "bad_request",
+                            "'state' must be one of working, blocked, idle, clear");
+                    }
+                    String agent = arguments.optString("agent", "").trim();
+                    host.reportAgentStatus(target, agent.isEmpty() ? null : agent, state);
+                    return ok().put("id", target.mHandle)
+                        .put("state", clear ? "clear" : raw.toLowerCase(java.util.Locale.ROOT));
+                }
                 case TOOL_PANE_EQUALIZE:
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     if (!host.equalizePaneLayout()) return noSession(toolName);
@@ -930,11 +949,13 @@ public final class TerminalActionDispatcher {
                 }
                 case TOOL_APP_KEY_INSPECTOR:
                     return ok().put("keyInspectorOpen", host.toggleKeyInspector());
+                // The legacy sessions drawer is gone; the two bindings it owned now reach the
+                // sessions browser, which is what they always meant.
                 case TOOL_APP_OPEN_DRAWER:
-                    host.openDrawer();
+                    host.showSessionBrowser();
                     return ok();
                 case TOOL_APP_CLOSE_DRAWER:
-                    host.closeDrawers();
+                    host.sheetController().dismiss();
                     return ok();
                 case TOOL_TERMINAL_ACTION_SHEET:
                     return host.showTerminalActionSheet(null) ? ok() : noSession(toolName);

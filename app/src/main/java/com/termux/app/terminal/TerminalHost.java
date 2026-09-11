@@ -5,7 +5,6 @@ import android.graphics.PointF;
 import android.view.KeyEvent;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ListView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -57,9 +56,6 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     /** Mirrors the terminal view key logging toggle onto the activity root view. */
     void setRootViewLoggingEnabled(boolean enabled);
-
-    /** Locks the drawer closed, e.g. while a selection is being copied. */
-    void setDrawerLocked(boolean locked);
 
     /**
      * Shows the legend for a modal terminal mode on the terminal's top-trailing corner, or takes it
@@ -310,6 +306,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
         return null;
     }
 
+    /**
+     * An AI coding agent's own report about the pane it runs in, from {@code launcherctl agent}.
+     * {@code state} null clears the pane and hands it back to the screen rules.
+     */
+    default void reportAgentStatus(@NonNull TerminalSession pane, @Nullable String agent,
+                                   @Nullable AgentStatus.State state) {}
+
     // --- Shells ---
 
     /** The service holding every live shell, or null while it is not bound. */
@@ -360,15 +363,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
         /** The name of {@code shell}'s session, or null when it is unnamed. */
         @Nullable String nameOf(@Nullable TerminalSession shell);
-
-        /** The drawer's session list view, or null while the drawer is not inflated. */
-        @Nullable ListView listView();
     }
 
-    /** Rebuilds the drawer rows from the live session/window/pane topology. */
+    /** Rebuilds the visible session list from the live session/window/pane topology. */
     void rebuildDrawerSessions();
 
-    /** Tells the drawer adapter its rows changed. */
+    /** Tells the window bar and the sessions browser their rows changed. */
     void notifySessionListUpdated();
 
     /** Shows the session's tab and focuses the pane displaying it. */
@@ -427,10 +427,6 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     /** Opens the rename editor for {@code target}. */
     boolean beginTerminalRename(@NonNull TerminalRenameTarget target);
-
-    void openDrawer();
-
-    void closeDrawers();
 
     // --- Workspaces ---
 
