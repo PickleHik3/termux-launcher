@@ -404,7 +404,6 @@ public final class SurfaceEditorController {
         final ImageView reset;
         final ImageView done;
         final ImageView close;
-        final TextView sharedNote;
         final ViewGroup presets;
         final View pills;
         final MaterialButtonToggleGroup shape;
@@ -427,7 +426,6 @@ public final class SurfaceEditorController {
             reset = root.findViewById(R.id.surface_editor_pill_reset);
             done = root.findViewById(R.id.surface_editor_pill_done);
             close = root.findViewById(R.id.surface_editor_pill_close);
-            sharedNote = root.findViewById(R.id.surface_editor_pill_shared_note);
             presets = root.findViewById(R.id.surface_editor_pill_presets);
             pills = root.findViewById(R.id.surface_editor_pill_pills);
             shape = root.findViewById(R.id.surface_editor_pill_shape);
@@ -439,7 +437,7 @@ public final class SurfaceEditorController {
 
         boolean complete() {
             return header != null && title != null && save != null && reset != null && done != null
-                && close != null && sharedNote != null && presets != null && pills != null
+                && close != null && presets != null && pills != null
                 && shape != null && material != null && rowsHost != null
                 && floatPalette != null && floatDone != null;
         }
@@ -1468,13 +1466,14 @@ public final class SurfaceEditorController {
         if (rowSignature() != mShownRowSignature && !mSliderDragActive)
             rebuildRows();
 
-        // The heading names the surface, or — on the shared layer — wears the palette glyph that
-        // opened the card and says nothing more: the strip under it is what the layer is.
+        // The heading names the surface, or — on the shared layer — wears the palette glyph plus
+        // the "Global" label that says what all of them means: the strip under it is what the
+        // layer is.
         boolean shared = mSelectedSlot == null;
         PaneWallPage place = editPlace();
         // On a place, the heading names it beside the surface: what the card moves is that place's,
         // and the header is the only thing on screen that can say so.
-        String title = shared ? ""
+        String title = shared ? getString(R.string.surface_editor_global_heading)
             : place == null ? getString(SurfaceEditorRows.slotLabel(mSelectedSlot))
             : getString(R.string.termux_surface_editor_place_title,
                 getString(SurfaceEditorRows.slotLabel(mSelectedSlot)),
@@ -1493,10 +1492,6 @@ public final class SurfaceEditorController {
             panel.presets.setVisibility(sharedVisibility);
         if (panel.pills.getVisibility() != sharedVisibility)
             panel.pills.setVisibility(sharedVisibility);
-        // Presets and Base are everyone's even here, and on a place that is worth one line.
-        int noteVisibility = shared && place != null ? View.VISIBLE : View.GONE;
-        if (panel.sharedNote.getVisibility() != noteVisibility)
-            panel.sharedNote.setVisibility(noteVisibility);
         if (shared) {
             if (panel.presets.getChildCount() == 0)
                 buildPresetsStrip(mHost.context(), panel.presets);
