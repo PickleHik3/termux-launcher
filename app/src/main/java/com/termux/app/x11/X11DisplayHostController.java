@@ -397,4 +397,39 @@ public final class X11DisplayHostController {
         LorieView live = view;
         return live != null && live.dispatchKeyEvent(event);
     }
+
+    /**
+     * The key an X client reads as "go back": Linux {@code KEY_BACK}, evdev 158, which XKB's
+     * evdev map publishes as {@code XF86Back} — the key a mouse's back button sends and the one
+     * browsers bind Back to. It goes in as a scancode because that is the number the server uses
+     * as it stands; an Android keycode would have to find the same key in the server's own table.
+     */
+    private static final int KEY_BACK_SCANCODE = 158;
+
+    /**
+     * Send Alt+Left instead, the other Back chord every browser takes. Here to be flipped if a
+     * client on the phone turns out to ignore {@code XF86Back}; there is no setting for it
+     * because a user cannot be asked which of two keys their browser listens to.
+     */
+    private static final boolean ALT_LEFT_INSTEAD = false;
+
+    /**
+     * Android's Back, as the app on the display would receive it from a mouse or a keyboard.
+     * True when there was a live display to send it to.
+     */
+    public boolean sendBackKey() {
+        LorieView live = view;
+        if (live == null || !live.connected()) return false;
+        if (ALT_LEFT_INSTEAD) {
+            // The modifier wraps the key so none is left held, as the touchpad's chords do.
+            live.sendKeyEvent(0, KeyEvent.KEYCODE_ALT_LEFT, true);
+            live.sendKeyEvent(0, KeyEvent.KEYCODE_DPAD_LEFT, true);
+            live.sendKeyEvent(0, KeyEvent.KEYCODE_DPAD_LEFT, false);
+            live.sendKeyEvent(0, KeyEvent.KEYCODE_ALT_LEFT, false);
+            return true;
+        }
+        live.sendKeyEvent(KEY_BACK_SCANCODE, 0, true);
+        live.sendKeyEvent(KEY_BACK_SCANCODE, 0, false);
+        return true;
+    }
 }

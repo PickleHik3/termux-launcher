@@ -13288,8 +13288,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public boolean consumeLauncherKey(@NonNull KeyEvent event) {
                 // The display's keyboard is a PC keyboard: every key, chords included, is X's.
-                // The wall is left by touch, by the place icons, or by Home.
-                return false;
+                // The wall is left by touch, by the place icons, or by Home. Back is the one
+                // exception, because the phone has nothing else that means "back".
+                if (event.getKeyCode() != KeyEvent.KEYCODE_BACK) return false;
+                return consumeDisplayBack(event);
             }
         });
         page.applyEnabled(isX11DisplayEnabled());
@@ -13299,6 +13301,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.x11.X11Defaults.applyOnce(this);
             createX11DisplayController();
         }
+    }
+
+    /**
+     * Android's Back on the Display place: a keyboard the place raised goes down first, and with
+     * nothing of its own to put down the app on the display is told to go back. What it means is
+     * {@link com.termux.app.x11.DisplayBackPolicy}; this is where the answer is applied.
+     */
+    private boolean consumeDisplayBack(@NonNull KeyEvent event) {
+        com.termux.app.x11.DisplayBackPolicy.Action action =
+            com.termux.app.x11.DisplayBackPolicy.decide(isDisplayPageShowing(),
+                isEmbeddedDisplayRunning(),
+                mX11Display == null ? null : mX11Display.textFocusPolicy().state(),
+                mFrameContent.content());
+        if (action == com.termux.app.x11.DisplayBackPolicy.Action.PASS) return false;
+        // Answered once, on the way up; the press is swallowed with it so nothing below the page
+        // sees half a Back.
+        if (event.getAction() != KeyEvent.ACTION_UP) return true;
+        if (action == com.termux.app.x11.DisplayBackPolicy.Action.LOWER_KEYBOARD)
+            lowerDisplayKeyboard();
+        else if (mX11Display != null)
+            mX11Display.sendBackKey();
+        return true;
+    }
+
+    /**
+     * Put the Display place's keyboard down by the same route the keyboard key takes, so the
+     * text-focus policy hears the user asking for it away: the frame swaps back to mouse mode's
+     * touchpad, or the keyboard itself goes.
+     */
+    private void lowerDisplayKeyboard() {
+        if (applyDisplayFrameKeyboard(false)) return;
+        if (mInAppKeyboard != null) mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
+            .TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
     }
 
     /**
