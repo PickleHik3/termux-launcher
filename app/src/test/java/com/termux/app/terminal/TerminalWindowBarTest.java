@@ -700,6 +700,79 @@ public class TerminalWindowBarTest {
         assertEquals(null, bar.revealedCloseView());
     }
 
+    /**
+     * A window that carries its own icon wears it where the process glyph would have been, at the
+     * same strength — the Display windows' mark, arriving after the pill is already up.
+     */
+    @Test
+    public void aWindowIconTakesTheProcessGlyphsPlaceOnTheWatermark() {
+        android.graphics.Bitmap icon = android.graphics.Bitmap.createBitmap(
+            8, 8, android.graphics.Bitmap.Config.ARGB_8888);
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem(
+            "\uE795 firefox", "firefox");
+        assertSame("nothing to copy when the icon has not changed", item, item.withIcon(null));
+        TerminalWindowBar.WindowItem marked = item.withIcon(icon);
+        assertSame(icon, marked.icon);
+        assertEquals(item.label, marked.label);
+        // The icon survives every other copy helper, as the agent reading does.
+        assertSame(icon, marked.withBusy(true).withDone(true).withAgentState(null).icon);
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View pill = tabs.getChildAt(0);
+        assertEquals(null, bar.chipWatermarkAt(0).icon());
+
+        // An icon resolved after the row was built reaches the pill without re-inflating it.
+        bar.setWindows(Arrays.asList(marked), 0);
+
+        assertSame(pill, tabs.getChildAt(0));
+        assertSame(icon, bar.chipWatermarkAt(0).icon());
+        assertEquals("firefox", ((TextView) pill).getText().toString());
+    }
+
+    /**
+     * The × is 24dp wide but only as tall as the chip inside a 24dp row; the row lends it the rest
+     * of a square thumb target, or the control is a 20dp one on the busiest strip in the app.
+     */
+    @Test
+    public void theCloseBorrowsASquareThumbTargetFromTheRowItStandsIn() {
+        android.widget.FrameLayout host = attachedHost();
+        TerminalWindowBar bar = (TerminalWindowBar) host.getChildAt(0);
+        bar.setOnWindowSelectedListener(index -> { });
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook")), 1);
+        layOutHost(host);
+
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        // The segment opens on the bar's settle curve; the target is handed over once it is there.
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(400, java.util.concurrent.TimeUnit.MILLISECONDS);
+        layOutHost(host);
+
+        android.view.TouchDelegate delegate = host.getTouchDelegate();
+        assertTrue("the row has to carry the × its target", delegate != null);
+        android.graphics.Rect bounds =
+            org.robolectric.Shadows.shadowOf(delegate).getBounds();
+        int target = Math.round(24f * bar.getResources().getDisplayMetrics().density);
+        assertEquals(target, bounds.width());
+        assertEquals(target, bounds.height());
+        assertSame(bar.revealedCloseView(), org.robolectric.Shadows.shadowOf(delegate)
+            .getDelegateView());
+
+        // The way out: no ×, no borrowed target.
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOutHost(host);
+        assertEquals(null, host.getTouchDelegate());
+    }
+
+    private static void layOutHost(android.widget.FrameLayout host) {
+        int rowHeight = Math.round(24f * host.getResources().getDisplayMetrics().density);
+        host.measure(exact(240), exact(rowHeight));
+        host.layout(0, 0, 240, rowHeight);
+    }
+
     /** Two windows with the second selected, measured and laid out at a real row height. */
     private static TerminalWindowBar laidOutBar(AtomicInteger selected, AtomicInteger closed) {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
