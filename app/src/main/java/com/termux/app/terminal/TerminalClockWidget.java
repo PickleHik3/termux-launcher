@@ -37,8 +37,9 @@ import java.util.TimeZone;
  * with the seconds and period folded onto its baseline, and — in the full form — a date row that
  * ends in a hairline running to the right gutter, so the clock lines up with the status row below
  * instead of stopping at an arbitrary width. Colors come from the Material roles
- * ({@code termuxColorPrimary} / {@code termuxColorSecondary} / {@code termuxColorOnSurface}), which
- * are wallpaper-derived, rather than per-face literals.
+ * ({@code termuxColorPrimary} / {@code termuxColorSecondary} / {@code termuxColorOnSurface}, plus
+ * the primary container pair for the flip leaves), which are wallpaper-derived, rather than
+ * per-face literals.
  *
  * <p>The widget reports its content width so the slot can hand the remaining space to media or
  * pinned notifications, and it compresses through {@link TopPaneClockForm} instead of ever changing
@@ -153,6 +154,13 @@ public final class TerminalClockWidget extends View {
     private int mSurfacePanelHigh;
     private int mSurfacePanelHighest;
     private int mOutlineVariant;
+    private int mOnSurfaceVariant;
+    private int mPrimaryContainer;
+    private int mOnPrimaryContainer;
+    private int mFlipBase;
+    private int mFlipSecondsInk;
+    private int mFlipDateInk;
+    private int mFlipRuleColor;
     private final int[] mUpperFlipColors = new int[4];
     private final int[] mLowerFlipColors = new int[4];
     private final int[] mHingeFlipColors = new int[7];
@@ -320,6 +328,15 @@ public final class TerminalClockWidget extends View {
         mOutlineVariant = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorOutlineVariant,
             ContextCompat.getColor(context, R.color.termux_outline_variant));
+        mOnSurfaceVariant = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            ContextCompat.getColor(context, R.color.termux_on_surface_variant));
+        mPrimaryContainer = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorPrimaryContainer,
+            ContextCompat.getColor(context, R.color.termux_primary_container));
+        mOnPrimaryContainer = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnPrimaryContainer,
+            ContextCompat.getColor(context, R.color.termux_on_primary_container));
         mPrimaryLine = alpha(mPrimary, .45f);
         mSecondaryQuiet = alpha(mSecondary, .5f);
         mDateInk = alpha(mOnSurface, .62f);
@@ -329,59 +346,72 @@ public final class TerminalClockWidget extends View {
         resolveFlipColors();
     }
 
-    /** Card stock and hardware stay inside the resolved Material surface family. */
+    /**
+     * Glass split-leaf stock. Both leaves are translucent sheets over the bar's own glass: the
+     * upper leaf carries {@code primaryContainer}, the lower stays in the neutral surface family,
+     * so the fold is the colour edge. The hinge clips and rim take {@code primary}; the seam keeps
+     * its neutral hairline and the digits stay {@code onSurface} so they read on either leaf.
+     *
+     * <p>The card is painted in two passes — a whole-card base that casts the shadow, then the
+     * leaf gradients over it — so every leaf colour here is chosen to stack on {@link #mFlipBase}
+     * rather than to stand alone.
+     */
     private void resolveFlipColors() {
         // Any repalette retires the cached gradients; they carry the old colours.
         mFlipShaderGeneration++;
         mDarkFlipStock = ColorUtils.calculateLuminance(mSurfaceBase) < .5;
+        int pc = mPrimaryContainer, on = mOnPrimaryContainer, pr = mPrimary;
+        mFlipBase = alpha(mSurfaceBase, .42f);
         if (mDarkFlipStock) {
-            mUpperFlipColors[0] = mSurfacePanel;
-            mUpperFlipColors[1] = mSurfacePanelHigh;
-            mUpperFlipColors[2] = mSurfacePanelHighest;
-            mUpperFlipColors[3] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
-            mLowerFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .22f);
-            mLowerFlipColors[1] = mSurfacePanelHighest;
-            mLowerFlipColors[2] = mSurfacePanelHigh;
-            mLowerFlipColors[3] = ColorUtils.blendARGB(mSurfacePanelHigh, mSurfacePanel, .35f);
-            mHingeFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .45f);
-            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .25f);
-            mHingeFlipColors[2] = mSurfacePanelHighest;
-            mHingeFlipColors[3] = mSurfacePanelHigh;
-            mHingeFlipColors[4] = mSurfacePanel;
-            mHingeFlipColors[5] = ColorUtils.blendARGB(mSurfacePanelHigh,
-                mSurfacePanelHighest, .35f);
-            mHingeFlipColors[6] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
-            mFlipRim = Color.argb(199, 0, 0, 0);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .1f), .5f);
+            mUpperFlipColors[1] = alpha(pc, .45f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .2f), .48f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .55f), .55f);
+            mLowerFlipColors[0] = alpha(ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE,
+                .22f), .5f);
+            mLowerFlipColors[1] = alpha(mSurfacePanelHighest, .42f);
+            mLowerFlipColors[2] = alpha(mSurfacePanelHigh, .38f);
+            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(mSurfacePanelHigh, mSurfacePanel,
+                .35f), .42f);
+            mHingeFlipColors[0] = ColorUtils.blendARGB(pr, Color.WHITE, .2f);
+            mHingeFlipColors[1] = pr;
+            mHingeFlipColors[2] = ColorUtils.blendARGB(pc, Color.WHITE, .3f);
+            mHingeFlipColors[3] = pc;
+            mHingeFlipColors[4] = ColorUtils.blendARGB(pc, Color.BLACK, .2f);
+            mHingeFlipColors[5] = ColorUtils.blendARGB(pc, Color.WHITE, .1f);
+            mHingeFlipColors[6] = ColorUtils.blendARGB(pc, Color.BLACK, .55f);
+            mFlipRim = alpha(pr, .35f);
             mFlipSeam = Color.BLACK;
-            mFlipShadow = Color.argb(128, 0, 0, 0);
+            mFlipShadow = Color.argb(90, 0, 0, 0);
             mFlipClipOutline = Color.BLACK;
             mFlipClipShadow = Color.argb(128, 0, 0, 0);
         } else {
-            mUpperFlipColors[0] = mSurfaceBase;
-            mUpperFlipColors[1] = mSurfacePanel;
-            mUpperFlipColors[2] = mSurfacePanelHigh;
-            mUpperFlipColors[3] = mOutlineVariant;
-            mLowerFlipColors[0] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .82f);
-            mLowerFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .3f);
-            mLowerFlipColors[2] = mSurfacePanelHigh;
-            mLowerFlipColors[3] = ColorUtils.blendARGB(mSurfacePanelHigh,
-                mSurfacePanelHighest, .4f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .5f), .5f);
+            mUpperFlipColors[1] = alpha(pc, .45f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(pc, on, .08f), .48f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(pc, on, .24f), .55f);
+            mLowerFlipColors[0] = alpha(Color.WHITE, .45f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .3f),
+                .35f);
+            mLowerFlipColors[2] = alpha(mSurfacePanelHigh, .32f);
+            mLowerFlipColors[3] = alpha(mSurfacePanelHighest, .36f);
             mHingeFlipColors[0] = Color.WHITE;
-            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .35f);
-            mHingeFlipColors[2] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .5f);
-            mHingeFlipColors[3] = mOutlineVariant;
-            mHingeFlipColors[4] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .18f);
-            mHingeFlipColors[5] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .35f);
-            mHingeFlipColors[6] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .38f);
-            mFlipRim = alpha(mOnSurface, .22f);
+            mHingeFlipColors[1] = ColorUtils.blendARGB(pr, Color.WHITE, .7f);
+            mHingeFlipColors[2] = ColorUtils.blendARGB(pr, Color.WHITE, .4f);
+            mHingeFlipColors[3] = pr;
+            mHingeFlipColors[4] = ColorUtils.blendARGB(pr, on, .3f);
+            mHingeFlipColors[5] = ColorUtils.blendARGB(pr, Color.WHITE, .3f);
+            mHingeFlipColors[6] = ColorUtils.blendARGB(pr, on, .45f);
+            mFlipRim = alpha(pr, .35f);
             mFlipSeam = alpha(mOnSurface, .55f);
-            mFlipShadow = alpha(mOnSurface, .3f);
-            mFlipClipOutline = alpha(mOnSurface, .34f);
-            mFlipClipShadow = alpha(mOnSurface, .22f);
+            mFlipShadow = alpha(pr, .2f);
+            mFlipClipOutline = alpha(on, .34f);
+            mFlipClipShadow = alpha(on, .22f);
         }
+        mFlipSecondsInk = alpha(pr, .75f);
+        mFlipDateInk = mOnSurfaceVariant;
+        mFlipRuleColor = alpha(pr, .3f);
     }
-
-    // ---- Measurement ------------------------------------------------------
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -880,7 +910,7 @@ public final class TerminalClockWidget extends View {
 
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setColor(mUpperFlipColors[0]);
+        mFillPaint.setColor(mFlipBase);
         // Below API 28 hardware setShadowLayer is text-only; API 26/27 are shadowless (accepted).
         mFillPaint.setShadowLayer(dp(3.2f), 0f, dp(1.06f), mFlipShadow);
         canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
@@ -1041,7 +1071,7 @@ public final class TerminalClockWidget extends View {
         mPaint.setTypeface(condensedBoldTypeface());
         mPaint.setLetterSpacing(0f);
         mPaint.setTextSize(dp(10.6f));
-        mPaint.setColor(mSecondaryQuiet);
+        mPaint.setColor(mFlipSecondsInk);
         mPaint.setTextAlign(Paint.Align.CENTER);
         canvas.drawText(String.valueOf(digit), cell.centerX(), baseline, mPaint);
         canvas.restore();
@@ -1069,10 +1099,10 @@ public final class TerminalClockWidget extends View {
         // alignment: flanked when centered, one long run to the side the date has left free.
         float textX = dateRowTextX(right, textWidth, 7.5f);
         drawLabel(canvas, mSnapshot.date, textX, baseline(top, dp(11.7f), face, 9.2f), 9.2f,
-            face, .31f, alpha(mOnSurface, mDarkFlipStock ? .68f : .7f));
+            face, .31f, mFlipDateInk);
         float ruleY = top + dp(11.7f) / 2f;
         mFillPaint.setShader(null);
-        mFillPaint.setColor(mRuleColor);
+        mFillPaint.setColor(mFlipRuleColor);
         if (textX - gap > 0f) canvas.drawRect(0f, ruleY - .5f, textX - gap,
             ruleY + .5f, mFillPaint);
         if (textX + textWidth + gap < right) canvas.drawRect(textX + textWidth + gap,
@@ -1107,7 +1137,7 @@ public final class TerminalClockWidget extends View {
 
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setColor(mUpperFlipColors[0]);
+        mFillPaint.setColor(mFlipBase);
         mFillPaint.setShadowLayer(dp(2.2f), 0f, dp(.7f), mFlipShadow);
         canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
         mFillPaint.clearShadowLayer();
