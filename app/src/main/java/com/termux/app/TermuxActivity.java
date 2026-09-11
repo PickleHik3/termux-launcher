@@ -10761,8 +10761,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>The order is the Back order: the rename chip and the find strip are modal editors over one
      * surface; the widget pane is a place the palette can be summoned over; the palette
      * outranks the sheet plane so a sheet can never swallow the escape stroke; a sheet closes the
-     * drawer as it opens and so outranks it; and the surface editor and the legacy sessions drawer
-     * are conceptually behind everything else.
+     * app drawer as it opens and so outranks it; and the surface editor is conceptually behind
+     * everything else.
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
