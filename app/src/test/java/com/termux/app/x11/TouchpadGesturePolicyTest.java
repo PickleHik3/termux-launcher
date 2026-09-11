@@ -58,4 +58,31 @@ public class TouchpadGesturePolicyTest {
             TouchpadGesturePolicy.pinchClicks(160f, 240f, 0.25f));
         assertEquals(0, TouchpadGesturePolicy.pinchClicks(0f, 120f, 0.25f));
     }
+
+    @Test
+    public void stripHit_isWithinTheHitBandOfTheTrailingEdge() {
+        assertTrue(TouchpadGesturePolicy.stripHit(800f, 800f, 40f));
+        assertTrue(TouchpadGesturePolicy.stripHit(760f, 800f, 40f));
+        assertFalse(TouchpadGesturePolicy.stripHit(759f, 800f, 40f));
+        assertFalse(TouchpadGesturePolicy.stripHit(400f, 800f, 40f));
+        // A drag can carry the finger past the physical edge without leaving the strip.
+        assertTrue(TouchpadGesturePolicy.stripHit(801f, 800f, 40f));
+    }
+
+    @Test
+    public void notchCount_truncatesTowardZeroAndKeepsTheSign() {
+        assertEquals(2, TouchpadGesturePolicy.notchCount(65f, 26f));
+        assertEquals(-2, TouchpadGesturePolicy.notchCount(-65f, 26f));
+        assertEquals(0, TouchpadGesturePolicy.notchCount(10f, 26f));
+        assertEquals(0, TouchpadGesturePolicy.notchCount(10f, 0f));
+    }
+
+    @Test
+    public void stripFits_leavesRoomAtTheNarrowestSplitGap() {
+        // DisplayTouchpadPlacement.MIN_GAP_DP (160) minus a 30dp strip is still 130dp to point
+        // in, comfortably past a 60dp minimum, so the strip stays up even at the narrowest gap.
+        assertTrue(TouchpadGesturePolicy.stripFits(160f, 30f, 60f));
+        assertFalse(TouchpadGesturePolicy.stripFits(80f, 30f, 60f));
+        assertTrue(TouchpadGesturePolicy.stripFits(90f, 30f, 60f));
+    }
 }

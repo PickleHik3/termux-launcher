@@ -24,13 +24,20 @@ import com.termux.x11.input.InputStub;
  * clicks; hold, or tap and touch again, then move, to drag. Two fingers scroll, running on after
  * a fast lift, and pinch to zoom; two fingers tapping together click the right button. Three
  * fingers tapping click the middle button, swiping sideways switch windows, and swiping down
- * bring the keyboard back. The small arrow in its bottom-left corner does the same.
+ * bring the keyboard back. The small arrow in its bottom-left corner does the same. A strip down
+ * its trailing edge scrolls on its own: drag it with one thumb and no second finger is needed,
+ * and flicking it coasts the same way a two-finger scroll does. A second finger set down on the
+ * strip is ignored; the first keeps scrolling.
  *
  * <p>It lies over the place, so it is drawn solid: one opaque rounded panel in the overlay
  * surface colour, square-cornered against the dock or rounded as a card with the surfaces, and
  * with no rim at rest. The only stroke it draws is the ring that appears while a drag is held.
  * Standing in a split keyboard's parting it is flush instead — no inset, and the halves' own
- * radius — so the parting reads as a piece cut out of one surface.
+ * radius — so the parting reads as a piece cut out of one surface. The strip stands inside that
+ * panel along its trailing edge, a faint track down its centre with a short grip pill in the
+ * accent colour, and the dot grid that marks the pointing area stops at the strip's own edge; a
+ * gap too narrow to spare the strip's width and still leave room to point in drops it rather
+ * than grow.
  */
 public final class DisplayTouchpadView extends View {
 
@@ -65,14 +72,39 @@ public final class DisplayTouchpadView extends View {
     private static final float RADIUS_DP = 20f;
     private static final float BACK_SIZE_DP = 28f;
     private static final float BACK_INSET_DP = 8f;
+    /** The scroll strip along the pad's trailing edge, drawn this wide. */
+    private static final float STRIP_WIDTH_DP = 30f;
+    /**
+     * The band, from the pad's trailing edge, a finger has to land in to take the strip — the
+     * same value {@code DisplayScaleRailView.HIT_BAND_DP} uses, so both edge controls take the
+     * same reach to land a thumb on.
+     */
+    private static final float STRIP_HIT_BAND_DP = 40f;
+    /**
+     * Vertical travel per notch on the strip: a shorter throw than the two-finger scroll's
+     * {@link #SCROLL_NOTCH_DP}, since one thumb's whole reach along the strip is what has to
+     * cover the same wheel clicks.
+     */
+    private static final float STRIP_SCROLL_NOTCH_DP = 17f;
+    /** Below this much pointing area left over, the strip hides rather than crowd it further. */
+    private static final float STRIP_MIN_POINTING_WIDTH_DP = 60f;
+    private static final float STRIP_GRIP_HEIGHT_DP = 28f;
+    private static final float STRIP_GRIP_WIDTH_DP = 6f;
+    private static final float STRIP_TRACK_INSET_DP = 10f;
 
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mBackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mStripTrackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mStripGripPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mBounds = new RectF();
     private final RectF mBack = new RectF();
+    /** The scroll strip's own rect, along the pad's trailing edge; empty when it is hidden. */
+    private final RectF mStrip = new RectF();
+    /** The grip pill drawn centred in the strip; empty along with {@link #mStrip}. */
+    private final RectF mStripGrip = new RectF();
     private final int mTouchSlop;
     private final boolean mCard;
     /**
@@ -94,6 +126,8 @@ public final class DisplayTouchpadView extends View {
     /** The most fingers down at once in this gesture; it names the tap's button. */
     private int mMaxFingers;
     private boolean mOnBack;
+    /** The gesture started on the scroll strip; it owns every pointer until the fingers lift. */
+    private boolean mOnStrip;
     /** The last tap's time, for a touch soon after it that turns into a drag. */
     private long mLastTapTime = TouchpadGesturePolicy.NO_TAP;
     private boolean mTapDragArmed;
@@ -156,6 +190,13 @@ public final class DisplayTouchpadView extends View {
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
         mGlyphPaint.setTextSize(dp(13f));
         mDotPaint.setColor(ColorUtils.setAlphaComponent(onSurfaceColor, 40));
+        // The strip's own idiom: a faint track in on-surface, same low alpha as the dot grid,
+        // and a grip pill in the full accent colour so a thumb can find it at a glance.
+        mStripTrackPaint.setStyle(Paint.Style.STROKE);
+        mStripTrackPaint.setStrokeWidth(dp(1.5f));
+        mStripTrackPaint.setStrokeCap(Paint.Cap.ROUND);
+        mStripTrackPaint.setColor(ColorUtils.setAlphaComponent(onSurfaceColor, 40));
+        mStripGripPaint.setColor(accentColor);
         setClickable(true);
         setFocusable(false);
     }
@@ -188,6 +229,30 @@ public final class DisplayTouchpadView extends View {
         float size = dp(BACK_SIZE_DP);
         float margin = dp(BACK_INSET_DP);
         mBack.set(margin, h - margin - size, margin + size, h - margin);
+        layOutStrip();
+    }
+
+    /**
+     * The strip's rect along the pad's trailing edge, inside the panel inset; empty (and so
+     * hidden and untouchable) when the panel is too narrow to spare its width and still leave a
+     * usable pointing area, as {@link TouchpadGesturePolicy#stripFits} decides.
+     */
+    private void layOutStrip() {
+        float stripWidth = dp(STRIP_WIDTH_DP);
+        boolean fits = TouchpadGesturePolicy.stripFits(mBounds.width(), stripWidth,
+            dp(STRIP_MIN_POINTING_WIDTH_DP));
+        if (!fits) {
+            mStrip.setEmpty();
+            mStripGrip.setEmpty();
+            return;
+        }
+        mStrip.set(mBounds.right - stripWidth, mBounds.top, mBounds.right, mBounds.bottom);
+        float gripHalfHeight = dp(STRIP_GRIP_HEIGHT_DP) / 2f;
+        float gripHalfWidth = dp(STRIP_GRIP_WIDTH_DP) / 2f;
+        float centerX = mStrip.centerX();
+        float centerY = mStrip.centerY();
+        mStripGrip.set(centerX - gripHalfWidth, centerY - gripHalfHeight,
+            centerX + gripHalfWidth, centerY + gripHalfHeight);
     }
 
     @Override
@@ -201,16 +266,27 @@ public final class DisplayTouchpadView extends View {
         super.onDraw(canvas);
         float radius = panelRadius();
         canvas.drawRoundRect(mBounds, radius, radius, mFillPaint);
-        // A faint grid of dots says "this is a surface you move across", nothing more.
+        // A faint grid of dots says "this is a surface you move across", nothing more. It stops
+        // at the strip's own left edge, when the strip is up, so the pointing area reads smaller.
+        boolean stripShown = !mStrip.isEmpty();
+        float dotRight = stripShown ? mStrip.left : mBounds.right;
         float step = dp(28f);
         for (float y = mBounds.top + step; y < mBounds.bottom - step / 2f; y += step) {
-            for (float x = mBounds.left + step; x < mBounds.right - step / 2f; x += step) {
+            for (float x = mBounds.left + step; x < dotRight - step / 2f; x += step) {
                 canvas.drawCircle(x, y, dp(1f), mDotPaint);
             }
         }
         // The one stroke the pad draws: a ring while a drag is held, gone the moment it ends.
         if (mDragging) {
             canvas.drawRoundRect(mBounds, radius, radius, mStrokePaint);
+        }
+        if (stripShown) {
+            float trackX = mStrip.centerX();
+            float trackInset = dp(STRIP_TRACK_INSET_DP);
+            canvas.drawLine(trackX, mStrip.top + trackInset, trackX, mStrip.bottom - trackInset,
+                mStripTrackPaint);
+            float gripRadius = mStripGrip.width() / 2f;
+            canvas.drawRoundRect(mStripGrip, gripRadius, gripRadius, mStripGripPaint);
         }
         canvas.drawRoundRect(mBack, mBack.height() / 2f, mBack.height() / 2f, mBackPaint);
         float baseline = mBack.centerY() - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
@@ -232,14 +308,19 @@ public final class DisplayTouchpadView extends View {
                 mSwipeFired = false;
                 mTwoFingerMode = TouchpadGesturePolicy.TwoFingerMode.UNDECIDED;
                 mOnBack = mBack.contains(mDownX, mDownY);
-                mTapDragArmed = !mOnBack
+                mOnStrip = !mOnBack && !mStrip.isEmpty()
+                    && TouchpadGesturePolicy.stripHit(mDownX, mBounds.right, dp(STRIP_HIT_BAND_DP));
+                mTapDragArmed = !mOnBack && !mOnStrip
                     && TouchpadGesturePolicy.tapDragArmed(mDownTime, mLastTapTime, TAP_DRAG_MS);
                 if (mVelocity == null) mVelocity = android.view.VelocityTracker.obtain();
                 else mVelocity.clear();
                 mVelocity.addMovement(event);
-                if (!mOnBack) postDelayed(mHold, HOLD_MS);
+                if (!mOnBack && !mOnStrip) postDelayed(mHold, HOLD_MS);
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
+                // A second finger on the strip does nothing: the first keeps scrolling, and
+                // none of the two/three-finger state below gets to touch its accumulators.
+                if (mOnStrip) return true;
                 removeCallbacks(mHold);
                 if (mDragging && display != null) {
                     display.sendMouseEvent(0f, 0f, InputStub.BUTTON_LEFT, false, true);
@@ -259,6 +340,13 @@ public final class DisplayTouchpadView extends View {
             case MotionEvent.ACTION_MOVE: {
                 if (mOnBack) return true;
                 if (mVelocity != null) mVelocity.addMovement(event);
+                if (mOnStrip) {
+                    float y = event.getY();
+                    mScrollAccumY += y - mLastY;
+                    mLastY = y;
+                    sendStripScrollNotches(display);
+                    return true;
+                }
                 int fingers = event.getPointerCount();
                 if (mMaxFingers >= 3) {
                     if (fingers >= 3) handleThreeFingers(event);
@@ -306,6 +394,13 @@ public final class DisplayTouchpadView extends View {
                     }
                     return true;
                 }
+                if (mOnStrip) {
+                    // No travel is a tap on the strip, which does nothing — never a click.
+                    mOnStrip = false;
+                    flingScroll(event.getPointerId(event.getActionIndex()));
+                    recycleVelocity();
+                    return true;
+                }
                 if (mDragging) {
                     mDragging = false;
                     if (display != null) {
@@ -328,6 +423,7 @@ public final class DisplayTouchpadView extends View {
                 }
                 mDragging = false;
                 mOnBack = false;
+                mOnStrip = false;
                 recycleVelocity();
                 invalidate();
                 return true;
@@ -422,15 +518,41 @@ public final class DisplayTouchpadView extends View {
         float notch = dp(SCROLL_NOTCH_DP);
         // Fingers moving down bring the content down: a wheel-up click, which arrives as a
         // negative unit like a real wheel's.
-        while (Math.abs(mScrollAccumY) >= notch) {
-            float step = Math.signum(mScrollAccumY);
-            mScrollAccumY -= step * notch;
-            if (display != null) display.sendMouseWheelEvent(0f, -step * SCROLL_NOTCH_UNITS);
+        int notchesY = TouchpadGesturePolicy.notchCount(mScrollAccumY, notch);
+        if (notchesY != 0) {
+            mScrollAccumY -= notchesY * notch;
+            if (display != null) {
+                float unit = -Math.signum((float) notchesY) * SCROLL_NOTCH_UNITS;
+                for (int i = 0, n = Math.abs(notchesY); i < n; i++) {
+                    display.sendMouseWheelEvent(0f, unit);
+                }
+            }
         }
-        while (Math.abs(mScrollAccumX) >= notch) {
-            float step = Math.signum(mScrollAccumX);
-            mScrollAccumX -= step * notch;
-            if (display != null) display.sendMouseWheelEvent(-step * SCROLL_NOTCH_UNITS, 0f);
+        int notchesX = TouchpadGesturePolicy.notchCount(mScrollAccumX, notch);
+        if (notchesX != 0) {
+            mScrollAccumX -= notchesX * notch;
+            if (display != null) {
+                float unit = -Math.signum((float) notchesX) * SCROLL_NOTCH_UNITS;
+                for (int i = 0, n = Math.abs(notchesX); i < n; i++) {
+                    display.sendMouseWheelEvent(unit, 0f);
+                }
+            }
+        }
+    }
+
+    /**
+     * The strip's own, shorter notch: one thumb's vertical drag alone, ticking as it crosses
+     * each one so the strip has the same feel a wheel's clicks do.
+     */
+    private void sendStripScrollNotches(@Nullable LorieView display) {
+        float notch = dp(STRIP_SCROLL_NOTCH_DP);
+        int notches = TouchpadGesturePolicy.notchCount(mScrollAccumY, notch);
+        if (notches == 0) return;
+        mScrollAccumY -= notches * notch;
+        float unit = -Math.signum((float) notches) * SCROLL_NOTCH_UNITS;
+        for (int i = 0, n = Math.abs(notches); i < n; i++) {
+            if (display != null) display.sendMouseWheelEvent(0f, unit);
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
         }
     }
 
