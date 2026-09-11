@@ -144,3 +144,31 @@ Both were found by running it, not by reading it, and both are cheap to break ag
   `xkeyboard-config` package, and upstream only knows how to find it under `com.termux`'s own
   prefix, so the generated `termux-x11` points `XKB_CONFIG_ROOT` at this edition's. The Display
   page says what to install when it is missing.
+
+## The server names core glyph cursors (2026-09-11)
+
+`ci/x11-patch/0003-name-core-glyph-cursors.patch` is the third native change, and it exists
+because 0002 was not enough on a real phone. The cursor name 0002 forwards is only ever set by
+libXcursor, on cursors it loads from a theme; a Termux prefix with no `share/icons/*/cursors`
+leaves GTK, Qt and Firefox on the core font cursors of `XCreateFontCursor`, which carry no name at
+all, so every tap on the Display page reported "(no name)" and the keyboard never followed a text
+field.
+
+- **What it names.** Glyph N of the core "cursor" font is the shape `XC_<name> == N` of
+  `X11/cursorfont.h` — the list libXcursor's theme names come from — so the server sets
+  `CursorRec.name` to that name: `left_ptr`, `xterm`, `hand2`, byte for byte what a themed client
+  would have set. Only even glyphs below `XC_num_glyphs` (the odd ones are those shapes' masks),
+  only when the source font's `FONT` property is the literal "cursor" (the one core font with no
+  XLFD name — the cheap test that the glyphs really are the standard shapes), and never over a
+  cursor that already has a valid name, so `XFixesSetCursorName` still wins.
+- **Where the hook is.** In lorie's own `InitOutput.c`, wrapping `ProcVector[X_CreateGlyphCursor]`
+  from `InitOutput` and naming the cursor after upstream's handler created it. Naming it in dix's
+  `AllocGlyphCursor` would be three lines, and a hunk there does apply — but `xserver` is one of
+  the sixteen pinned freedesktop submodules, which termux-x11's own CMake patches at configure
+  time (`patches/xserver.patch`, `patch -N`), so our edit would live in a tree that is re-fetched
+  on every submodule bump and tracked by nothing here. Byte-swapped clients reach the same entry,
+  and `ProcVector` is not rebuilt per server generation, hence the wrapper's idempotence check.
+- **No Java change.** The names ride the 0002 event, so `LorieView.onCursorNameChanged` and the
+  host's `CursorNameListener` are untouched; nothing new is resolved with `FindMethodOrDie`.
+- **Merging.** 0003 applies after 0002 and edits the same file, below the block 0002 adds. Carry
+  the two forward together, and rebuild the prebuilts from the same commit as always.
