@@ -67,6 +67,8 @@ final class RowRenderCache {
         int[] decorationColors = NO_INTS;
         boolean hasHyperlinks;
         int[] hyperlinkIds = NO_INTS;
+        /** Summary of the URL underlines drawn over the row; see {@link UrlUnderlines#keyFor}. */
+        int urlKey;
         /** Drawn from image state this class cannot compare directly; see {@link #imageIds}. */
         boolean carriesAnImage;
         /** Holds a sixel, iTerm or kitty-placement cell, whose pixels the emulator swaps in place. */
@@ -190,7 +192,7 @@ final class RowRenderCache {
      * called once per visible row, in order, after {@link #beginFrame}.
      */
     boolean rowChanged(int index, TerminalRow line, int columns, int cursorColumn, int cursorShape,
-                       int cursorColor, int selectionStart, int selectionEnd) {
+                       int cursorColor, int selectionStart, int selectionEnd, int urlKey) {
         final Row state = mRows[index];
         boolean changed = mAllDirty || !state.recorded || state.line != line;
         // The cursor's shape and colour only reach the row it is drawn on.
@@ -200,6 +202,8 @@ final class RowRenderCache {
             changed = true;
         if (state.selectionStart != selectionStart || state.selectionEnd != selectionEnd)
             changed = true;
+        if (state.urlKey != urlKey) changed = true;
+        state.urlKey = urlKey;
         state.line = line;
         state.cursorColumn = cursorColumn;
         state.cursorShape = cursorShape;

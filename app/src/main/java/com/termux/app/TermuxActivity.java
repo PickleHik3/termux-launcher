@@ -12442,10 +12442,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPreferences.setTerminalCursorTrailEnabled(enabled);
         if (mTermuxTerminalViewClient != null) {
             if (mPaneController != null) {
-                for (TerminalView view : mPaneController.getVisiblePaneViews())
+                for (TerminalView view : mPaneController.getVisiblePaneViews()) {
                     mTermuxTerminalViewClient.applyCursorTrailPolicy(view);
+                    mTermuxTerminalViewClient.applyUrlUnderlinePolicy(view);
+                }
             }
             mTermuxTerminalViewClient.applyCursorTrailPolicy(getTerminalView());
+            mTermuxTerminalViewClient.applyUrlUnderlinePolicy(getTerminalView());
         }
         return enabled;
     }
@@ -16053,8 +16056,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 view.setTextSize(getPreferences().getFontSize());
                 view.setKeepScreenOn(getPreferences().shouldKeepScreenOn());
             }
-            if (mTermuxTerminalViewClient != null)
+            if (mTermuxTerminalViewClient != null) {
                 mTermuxTerminalViewClient.applyCursorTrailPolicy(view);
+                mTermuxTerminalViewClient.applyUrlUnderlinePolicy(view);
+            }
             // A pane created while the key inspector is open must report through it too.
             com.termux.app.terminal.TerminalKeyInspector.attachTo(view);
             view.setUseTransparentFrameClear(false);

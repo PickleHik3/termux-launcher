@@ -62,7 +62,7 @@ public class RowRenderCacheTest {
             final boolean onCursorRow = i == cursorRow;
             recorded[i] = mCache.rowChanged(i, mRows[i], COLUMNS,
                 onCursorRow ? cursorColumn : -1, 0, CURSOR_COLOR,
-                selectionStart, selectionEnd);
+                selectionStart, selectionEnd, 0);
         }
         return recorded;
     }
@@ -160,14 +160,14 @@ public class RowRenderCacheTest {
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         for (int i = 0; i < ROWS; i++)
-            mCache.rowChanged(i, mRows[i], COLUMNS, i == 1 ? 2 : -1, 0, CURSOR_COLOR, -1, -1);
+            mCache.rowChanged(i, mRows[i], COLUMNS, i == 1 ? 2 : -1, 0, CURSOR_COLOR, -1, -1, 0);
 
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         boolean[] recorded = new boolean[ROWS];
         for (int i = 0; i < ROWS; i++)
             recorded[i] = mCache.rowChanged(i, mRows[i], COLUMNS, i == 1 ? 2 : -1, 1, CURSOR_COLOR,
-                -1, -1);
+                -1, -1, 0);
 
         assertOnly(1, recorded);
     }
@@ -405,12 +405,12 @@ public class RowRenderCacheTest {
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 4f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         for (int i = 0; i < ROWS; i++)
-            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1));
+            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1, 0));
 
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 4f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         for (int i = 0; i < ROWS; i++)
-            assertFalse(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1));
+            assertFalse(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1, 0));
     }
 
     @Test
@@ -420,7 +420,7 @@ public class RowRenderCacheTest {
         mCache.beginFrame(new Object(), ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         for (int i = 0; i < ROWS; i++)
-            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1));
+            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1, 0));
     }
 
     @Test
@@ -430,7 +430,7 @@ public class RowRenderCacheTest {
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
             mPalette, 1080, 600, ROWS - 1);
         for (int i = 0; i < ROWS - 1; i++)
-            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1));
+            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1, 0));
 
         assertAll(frame());
     }
