@@ -337,6 +337,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
         java.util.Collections.emptyList();
     private int mDisplayActiveWindow = -1;
+    /** Closes the display's apps before the server is killed; built the first time Stop is used. */
+    @Nullable private com.termux.app.x11.DisplayStopSequence mDisplayStop;
     /** The place the wall last rested on, so leaving one can record what it leaves behind. */
     @NonNull private com.termux.app.wall.PaneWallPage mLastWallPage =
         com.termux.app.wall.PaneWallPage.TERMINAL;
@@ -5844,6 +5846,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mX11Windows != null) {
             mX11Windows.stop();
             mX11Windows = null;
+        }
+        if (mDisplayStop != null) {
+            mDisplayStop.abandon();
+            mDisplayStop = null;
         }
         if (mLinuxApps != null) {
             mLinuxApps.destroy();
@@ -13186,11 +13192,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Stop the display: every app on it is asked to close itself first, and the server goes once
+     * they have — or after {@link com.termux.app.x11.DisplayStopSequence#DRAIN_TIMEOUT_MS} ms,
+     * whichever comes first. Killing the server with apps still on it is what leaves Firefox and
+     * friends believing they crashed.
+     */
+    private void stopEmbeddedDisplay() {
+        displayStopSequence().start(mDisplayWindows.size());
+    }
+
+    @NonNull
+    private com.termux.app.x11.DisplayStopSequence displayStopSequence() {
+        if (mDisplayStop == null) {
+            final Handler handler = new Handler(Looper.getMainLooper());
+            mDisplayStop = new com.termux.app.x11.DisplayStopSequence(
+                new com.termux.app.x11.DisplayStopSequence.Actions() {
+                    @Override public void closeAllWindows() { closeAllDisplayWindows(); }
+                    @Override public void killDisplayServer() { killEmbeddedDisplayServer(); }
+                },
+                new com.termux.app.x11.DisplayStopSequence.Scheduler() {
+                    @Nullable private Runnable pending;
+
+                    @Override public void schedule(long delayMs, @NonNull Runnable action) {
+                        pending = action;
+                        handler.postDelayed(action, delayMs);
+                    }
+
+                    @Override public void cancel() {
+                        if (pending != null) handler.removeCallbacks(pending);
+                        pending = null;
+                    }
+                });
+        }
+        return mDisplayStop;
+    }
+
+    /** Ask every app listed on the display to close itself, as its own close button would. */
+    private void closeAllDisplayWindows() {
+        if (mX11Windows == null) return;
+        for (com.termux.app.x11.X11WindowList.Window window :
+                new java.util.ArrayList<>(mDisplayWindows)) {
+            mX11Windows.close(window.id);
+        }
+    }
+
+    /**
+     * Seam for a Display window's close: ask the app at {@code index} of the chip row to close.
+     * False when there is no such window.
+     */
+    boolean closeDisplayWindow(int index) {
+        if (mX11Windows == null || index < 0 || index >= mDisplayWindows.size()) return false;
+        mX11Windows.close(mDisplayWindows.get(index).id);
+        return true;
+    }
+
+    /**
      * Stop the server the way {@code pkill termux-x11} does. It is a separate process on
      * purpose — that is what keeps an X server crash off the home screen — so its own name is
      * the only handle the launcher has on it.
      */
-    private void stopEmbeddedDisplay() {
+    private void killEmbeddedDisplayServer() {
         if (mTermuxService != null) {
             mTermuxService.createTermuxTask(
                 TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkill",
@@ -13517,6 +13578,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull java.util.List<com.termux.app.x11.X11WindowList.Window> windows, int active) {
         mDisplayWindows = windows;
         mDisplayActiveWindow = active;
+        // A stop in progress is waiting for exactly this: the last app closing itself.
+        if (mDisplayStop != null) mDisplayStop.onWindowsChanged(windows.size());
         if (!isDisplayPageShowing() || !isSplitPanesEnabled()) return;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) syncWindowBarItems(bar);
@@ -15731,14 +15794,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Close the current window (Ctrl+Alt+X): kill its panes; if it was the session's last window,
      *  close the session too. */
     void closeCurrentWindow() {
-        if (mPaneController == null || mCurrentWSession == null) return;
-        com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.activeWindow();
-        if (w == null) return;
+        if (mCurrentWSession == null) return;
+        closeWindow(mCurrentWSession.current);
+    }
+
+    /**
+     * Seam for the window bar's ×: close the window at {@code index} of the current session, kill
+     * its panes, and close the session with it when it was the last one. False when there is no
+     * such window. Closing a window that is not the visible one leaves the view where it is — only
+     * the closed window's slot in the strip goes.
+     */
+    boolean closeWindow(int index) {
+        if (mPaneController == null || mCurrentWSession == null
+            || index < 0 || index >= mCurrentWSession.windows.size()) return false;
+        com.termux.app.terminal.TerminalPaneController.Window w = mCurrentWSession.windows.get(index);
+        int oldIndex = mCurrentWSession.current;
+        boolean visible = index == oldIndex;
         // Creation's pan in reverse: the dying window is carried off and a neighbour slides in —
         // from the left when the strip's tail was closed, from the right when a middle window's
-        // right-hand neighbour moves up to fill its slot.
-        int oldIndex = mCurrentWSession.current;
-        captureTerminalDeparture();
+        // right-hand neighbour moves up to fill its slot. Only the visible window is carried off;
+        // closing any other one changes nothing on screen.
+        if (visible) captureTerminalDeparture();
         for (TerminalSession s : mPaneController.removeWindow(w))
             if (mTermuxService != null) mTermuxService.killTermuxSession(s);
         mCurrentWSession.windows.remove(w);
@@ -15746,12 +15822,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWSessions.remove(mCurrentWSession);
             mCurrentWSession = null;
             showNextSessionAfterClose();
-        } else {
+        } else if (visible) {
             mCurrentWSession.current = Math.min(oldIndex, mCurrentWSession.windows.size() - 1);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
             animateTerminalWindowLifecycleArrival(mCurrentWSession.current < oldIndex ? -1 : 1);
+        } else {
+            // The same window is still on screen; everything after the gap moved up one slot.
+            if (index < oldIndex) mCurrentWSession.current = oldIndex - 1;
+            refreshTerminalWindowBar();
         }
         rebuildDrawerSessions();
+        return true;
     }
 
     /**
