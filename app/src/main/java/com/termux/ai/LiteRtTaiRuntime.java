@@ -815,9 +815,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         // context_window override) so the input prompt always fits. Using the request's max_tokens
         // here made short max_tokens (e.g. 12) reject any longer prompt with "Input token ids are
         // too long" and reloaded the engine on every distinct max_tokens value.
-        int engineMaxTokens = options.contextWindow != null
-            ? options.contextWindow
-            : Math.max(profile.defaultMaxTokens, modelSpec.endpointContextWindow);
+        int engineMaxTokens = TaiContextWindowPolicy.effectiveEndpointContextWindow(
+            modelSpec, 0L, options.contextWindow);
         EngineConfig config = new EngineConfig(
             modelPath,
             backend,

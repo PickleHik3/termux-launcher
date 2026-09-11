@@ -67,6 +67,26 @@ public class TaiContextWindowPolicyTest {
         assertEquals(gemma.defaultMaxOutputTokens, sized.defaultMaxOutputTokens);
     }
 
+    @Test
+    public void exportedMedGemmaCacheCapsAutoAndExplicitRequests() {
+        TaiModelSpec model = spec("medgemma", TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM,
+            "/models/medgemma-1.5-4b-it_q4_block32_ekv2048.litertlm", 4096, 131072);
+        assertEquals(2048, model.endpointContextWindow);
+        assertEquals(2048, TaiContextWindowPolicy.effectiveEndpointContextWindow(model, 16L * GIB, null));
+        assertEquals(2048, TaiContextWindowPolicy.effectiveEndpointContextWindow(model, 16L * GIB, 32768));
+        assertEquals(0, TaiContextWindowPolicy.artifactContextLimit("/models/other_ekv2048.litertlm"));
+    }
+
+    @Test
+    public void customArtifactLimitAndMarkersSurviveProfileRoundTrip() throws Exception {
+        TaiModelProfile profile = new TaiModelProfile(Collections.singletonList("cpu"), 1024, 64, .95, 1,
+            null, "user-artifact-profile", "none", "<start>", "<end>", 2048);
+        TaiModelProfile restored = TaiModelProfile.fromJson(profile.toJson());
+        assertEquals(2048, restored.maxContextTokens);
+        assertEquals("<start>", restored.thinkingChannelStart);
+        assertEquals("none", restored.thinkingMode);
+    }
+
     private static TaiModelSpec liteRt(String id, int endpoint, int source) {
         return spec(id, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "/models/" + id + ".litertlm", endpoint, source);
     }

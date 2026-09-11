@@ -55,6 +55,18 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/tai_catalog_sort_pill"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="9dp"
+        android:background="@drawable/settings_pill_background"
+        android:drawableEnd="@drawable/ic_arrow_drop_down_16"
+        android:drawableTint="?attr/termuxColorOnSurfaceVariant"
+        android:padding="12dp"
+        android:textColor="?attr/termuxColorOnSurface"
+        android:textSize="13sp" />
+
     <EditText
         android:id="@+id/tai_catalog_search_input"
         android:layout_width="match_parent"

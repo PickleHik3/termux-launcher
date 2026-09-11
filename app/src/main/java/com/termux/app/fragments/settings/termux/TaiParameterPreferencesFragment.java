@@ -132,6 +132,30 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
 
     private void buildModelScreen(@NonNull Context context, @NonNull PreferenceScreen screen) {
         TaiSettings.ParameterSchema schema = TaiSettings.getParameterSchema(backend);
+        TaiModelSpec editableModel = currentModelSpec(context);
+        if (editableModel != null && TaiModelSpec.BACKEND_LITERT_LM.equals(backend)) {
+            Preference profile = new Preference(context);
+            profile.setTitle(R.string.termux_ai_import_profile);
+            profile.setOnPreferenceClickListener(p -> {
+                TaiModelSpec current = currentModelSpec(context);
+                if (current == null) return true;
+                TaiImportProfileDialog.show(context, TaiModelProfile.forModel(current), updated -> {
+                    try {
+                        org.json.JSONObject json = current.toJson();
+                        json.put("runtimeProfile", updated == null ? org.json.JSONObject.NULL : updated.toJson());
+                        new TaiModelStore(context).upsertUserModel(TaiModelSpec.fromJson(json));
+                        AppNotice.show(context, R.string.termux_ai_profile_saved_reload, false);
+                        screen.removeAll();
+                        buildModelScreen(context, screen);
+                        SettingsLayoutUtils.applyScreenLayout(this);
+                    } catch (org.json.JSONException e) {
+                        AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
+                    }
+                });
+                return true;
+            });
+            screen.addPreference(profile);
+        }
         Preference header = new Preference(context);
         header.setKey("tai_model_parameter_header");
         header.setTitle(modelName == null ? modelId : modelName);
@@ -140,6 +164,33 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
         header.setSelectable(false);
         screen.addPreference(header);
 
+        Preference copyClient = new Preference(context);
+        copyClient.setTitle(R.string.termux_ai_copy_aichat);
+        copyClient.setOnPreferenceClickListener(p -> {
+            new Thread(() -> {
+                try {
+                    org.json.JSONObject endpoint = com.termux.launcherctl.LauncherCtlApiServer.getInstance().endpointSettings(context);
+                    String config = com.termux.ai.TaiAichatConfig.format(endpoint.optString("openAiBaseUrl"),
+                        new TaiSettings(context).getOrCreateApiToken(), modelId,
+                        com.termux.ai.TaiManager.getInstance(context).openAiModels());
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        if (!isAdded()) return;
+                        android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                            context.getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (clipboard != null) {
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("aichat", config));
+                            AppNotice.show(context, R.string.termux_ai_copy_aichat_done, false);
+                        }
+                    });
+                } catch (Exception e) {
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        if (isAdded()) AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
+                    });
+                }
+            }, "tai-client-config").start();
+            return true;
+        });
+        screen.addPreference(copyClient);
         addCapabilitySection(context, screen);
 
         PreferenceCategory configs = category(context, R.string.termux_ai_parameters_model_configs_title);

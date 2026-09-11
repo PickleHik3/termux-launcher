@@ -360,6 +360,7 @@ public final class TaiModelStore {
         File modelDir = config.getParentFile();
         if (modelDir == null) return false;
         try {
+            TaiMnnPackage.validate(config);
             JSONObject json = new JSONObject(readUtf8(config));
             return sidecarReadable(modelDir, json.optString("llm_model", "llm.mnn"))
                 && sidecarReadable(modelDir, json.optString("llm_weight", "llm.mnn.weight"))

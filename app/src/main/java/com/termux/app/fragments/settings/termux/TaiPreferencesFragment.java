@@ -98,6 +98,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         final java.util.LinkedHashSet<String> capabilities = new java.util.LinkedHashSet<>();
         // Ordered like Gallery model configs: the first compatible accelerator is the default.
         final java.util.LinkedHashSet<String> compatibleAccelerators = new java.util.LinkedHashSet<>();
+        TaiModelProfile customProfile;
         String defaultAccelerator = "cpu";
         boolean acceleratorSelectionExplicit;
 
@@ -128,13 +129,35 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     private final ActivityResultLauncher<String[]> modelPicker = registerForActivityResult(
         new ActivityResultContracts.OpenDocument(),
         this::onModelDocumentSelected);
-    private ImportDraft pendingImportDraft;
     @Nullable private volatile JSONObject lastRuntimeStatus;
     private final ExecutorService runtimeActionExecutor = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "tai-settings-runtime");
         thread.setDaemon(true);
         return thread;
     });
+    private ImportDraft pendingImportDraft;
+    private final ActivityResultLauncher<Uri> modelFolderPicker = registerForActivityResult(
+        new ActivityResultContracts.OpenDocumentTree(), uri -> {
+            ImportDraft draft = pendingImportDraft;
+            pendingImportDraft = null;
+            Context context = getContext();
+            if (uri == null || draft == null || context == null) return;
+            runtimeActionExecutor.execute(() -> {
+                String error = null;
+                try {
+                    JSONObject result = new TaiModelImporter(context, new TaiModelStore(context))
+                        .importMnnDirectory(uri, draft.modelId, draft.capabilities);
+                    if (!result.optBoolean("ok")) error = result.optString("message");
+                } catch (Exception e) { error = e.getMessage(); }
+                String message = error;
+                handler.post(() -> {
+                    if (getContext() == null) return;
+                    if (message == null) AppNotice.show(context, R.string.termux_ai_model_imported, false);
+                    else AppNotice.show(context, message, true);
+                    refreshTaiPage(context);
+                });
+            });
+        });
     private final Runnable refreshRuntimeRunnable = new Runnable() {
         @Override
         public void run() {
@@ -1595,6 +1618,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             @Override public void afterTextChanged(android.text.Editable s) {}
         });
 
+        Button profileButton = new Button(context);
+        profileButton.setText(R.string.termux_ai_import_profile);
+        profileButton.setOnClickListener(v -> TaiImportProfileDialog.show(context, importRuntimeProfile(draft),
+            profile -> draft.customProfile = profile));
+        layout.addView(profileButton);
+
         EditText modelIdInput = new EditText(context);
         modelIdInput.setSingleLine(true);
         modelIdInput.setHint(R.string.termux_ai_model_import_id_hint);
@@ -1643,6 +1672,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             draft.compatibleAccelerators.add("cpu");
         };
 
+        Button folder = new Button(context);
+        folder.setText(R.string.termux_ai_import_folder);
+        layout.addView(folder);
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_model_import_dialog_title)
             .setView(dialogScroll(context, layout))
@@ -1650,6 +1682,13 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             .setNeutralButton(R.string.termux_ai_model_import_choose_file, null)
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+        folder.setOnClickListener(v -> {
+            draft.modelId = modelIdInput.getText().toString().trim();
+            captureModalities.run();
+            pendingImportDraft = draft;
+            modelFolderPicker.launch(null);
+            dialog.dismiss();
+        });
         Button positive = dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE);
         positive.setOnClickListener(view -> {
             draft.backend = IMPORT_BACKEND_LITERT; // local files are LiteRT; URLs auto-detect downstream
@@ -1757,10 +1796,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 0.95d, 1.0d, 3, TaiModelProfile.SOURCE_LITERT_COMMUNITY,
                 TaiModelProfile.THINKING_ALWAYS, "<think>", "</think>");
         }
+        if (draft.customProfile != null) defaults = draft.customProfile;
         return new TaiModelProfile(accelerators, defaults.defaultMaxTokens, defaults.defaultTopK,
             defaults.defaultTopP, defaults.defaultTemperature, defaults.minDeviceMemoryInGb,
-            "import-dialog-selection", defaults.thinkingMode, defaults.thinkingChannelStart,
-            defaults.thinkingChannelEnd);
+            draft.customProfile == null ? "import-dialog-selection" : "user-artifact-profile",
+            defaults.thinkingMode, defaults.thinkingChannelStart, defaults.thinkingChannelEnd, defaults.maxContextTokens);
     }
 
     private CharSequence importSelectionText(Context context, ImportDraft draft) {
@@ -1827,6 +1867,10 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void startHuggingFaceImport(Context context, ImportDraft draft) {
+        startHuggingFaceImport(context, draft, false);
+    }
+
+    private void startHuggingFaceImport(Context context, ImportDraft draft, boolean selected) {
         String modelId = TaiModelImporter.sanitizeModelId(draft.modelId == null || draft.modelId.trim().isEmpty()
             ? deriveModelIdFromUrl(draft.hfUrl) : draft.modelId);
         if (modelId.isEmpty()) {
@@ -1840,6 +1884,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 request.put("modelId", modelId);
                 request.put("displayName", modelId);
                 request.put("url", draft.hfUrl);
+                request.put("previewOnly", !selected);
                 request.put("acceptedTerms", true);
                 // Backend/format are auto-detected by downloadModel from the resolved file.
                 JSONArray capabilities = new JSONArray();
@@ -1860,6 +1905,22 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     AppNotice.show(currentContext, R.string.termux_ai_model_download_started, false);
                     handler.removeCallbacks(refreshRuntimeRunnable);
                     handler.postDelayed(refreshRuntimeRunnable, 1000L);
+                } else if (finalResult != null && "artifact_selection_required".equals(finalResult.optString("error"))) {
+                    JSONArray choices = finalResult.optJSONArray("candidates");
+                    if (choices == null || choices.length() == 0) return;
+                    String[] labels = new String[choices.length()];
+                    for (int i = 0; i < choices.length(); i++) {
+                        JSONObject choice = choices.optJSONObject(i);
+                        labels[i] = choice.optString("file") + "\n" + formatBytes(choice.optLong("sizeBytes", 0));
+                    }
+                    new MaterialAlertDialogBuilder(currentContext)
+                        .setTitle(R.string.termux_ai_import_choose_variant)
+                        .setItems(labels, (dialog, which) -> {
+                            JSONObject choice = choices.optJSONObject(which);
+                            draft.hfUrl = choice.optString("url");
+                            startHuggingFaceImport(currentContext, draft, true);
+                        })
+                        .setNegativeButton(android.R.string.cancel, null).show();
                 } else if (finalResult != null && "gated_model_requires_auth".equals(finalResult.optString("error"))) {
                     // Gated/private repo: prompt for a token, then retry the same import.
                     new MaterialAlertDialogBuilder(currentContext)

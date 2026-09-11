@@ -9,6 +9,7 @@ ext {
     // Bootstrap of a different variant must not be manually installed by the user after app installation
     // by replacing $PREFIX since app code is dependent on the variant used to build the APK.
     // Currently supported values are: ["apt-android-7", "apt-android-5"]
+    litertLmVersion = "0.14.0"
     packageVariant = System.getenv("TERMUX_PACKAGE_VARIANT") ?: "apt-android-7" // Default: "apt-android-7"
 }
 
@@ -32,6 +33,7 @@ android {
         || Boolean.parseBoolean(project.property('x11Server').toString())
 
     defaultConfig {
+        buildConfigField "String", "LITERT_LM_VERSION", "\"${project.ext.litertLmVersion}\""
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -165,7 +167,7 @@ dependencies {
     implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
     // Renders the bundled Meteocons weather animations (app/src/main/assets/weather).
     implementation "com.airbnb.android:lottie:6.7.1"
-    implementation "com.google.ai.edge.litertlm:litertlm-android:0.14.0"
+    implementation "com.google.ai.edge.litertlm:litertlm-android:${project.ext.litertLmVersion}"
     implementation "com.google.ai.edge.litert:litert:1.4.2"
     implementation project(":terminal-view")
     implementation project(":termux-shared")

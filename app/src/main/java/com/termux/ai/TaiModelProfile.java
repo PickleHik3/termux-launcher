@@ -28,6 +28,7 @@ public final class TaiModelProfile {
     @Nullable public final Integer minDeviceMemoryInGb;
     public final String source;
     public final String thinkingMode;
+    public final int maxContextTokens;
     @Nullable public final String thinkingChannelStart;
     @Nullable public final String thinkingChannelEnd;
 
@@ -56,6 +57,14 @@ public final class TaiModelProfile {
         @Nullable String thinkingChannelStart,
         @Nullable String thinkingChannelEnd
     ) {
+        this(compatibleAccelerators, defaultMaxTokens, defaultTopK, defaultTopP, defaultTemperature,
+            minDeviceMemoryInGb, source, thinkingMode, thinkingChannelStart, thinkingChannelEnd, 0);
+    }
+
+    public TaiModelProfile(List<String> compatibleAccelerators, int defaultMaxTokens, int defaultTopK,
+            double defaultTopP, double defaultTemperature, Integer minDeviceMemoryInGb, String source,
+            String thinkingMode, String thinkingChannelStart, String thinkingChannelEnd, int maxContextTokens) {
+        this.maxContextTokens = Math.max(0, maxContextTokens);
         ArrayList<String> normalized = new ArrayList<>();
         for (String accelerator : compatibleAccelerators) {
             String value = normalizeAccelerator(accelerator);
@@ -140,7 +149,8 @@ public final class TaiModelProfile {
             profile.optString("source", fallback.source),
             profile.optString("thinkingMode", fallback.thinkingMode),
             nullableString(profile, "thinkingChannelStart", fallback.thinkingChannelStart),
-            nullableString(profile, "thinkingChannelEnd", fallback.thinkingChannelEnd)
+            nullableString(profile, "thinkingChannelEnd", fallback.thinkingChannelEnd),
+            profile.optInt("maxContextTokens", fallback.maxContextTokens)
         );
     }
 
@@ -156,7 +166,8 @@ public final class TaiModelProfile {
             json.optString("source", "persisted"),
             json.optString("thinkingMode", THINKING_NONE),
             nullableString(json, "thinkingChannelStart", null),
-            nullableString(json, "thinkingChannelEnd", null)
+            nullableString(json, "thinkingChannelEnd", null),
+            json.optInt("maxContextTokens", 0)
         );
     }
 
@@ -178,6 +189,7 @@ public final class TaiModelProfile {
         json.put("minDeviceMemoryInGb", minDeviceMemoryInGb == null ? JSONObject.NULL : minDeviceMemoryInGb);
         json.put("source", source);
         json.put("thinkingMode", thinkingMode);
+        json.put("maxContextTokens", maxContextTokens);
         json.put("thinkingChannelStart", thinkingChannelStart == null ? JSONObject.NULL : thinkingChannelStart);
         json.put("thinkingChannelEnd", thinkingChannelEnd == null ? JSONObject.NULL : thinkingChannelEnd);
         return json;

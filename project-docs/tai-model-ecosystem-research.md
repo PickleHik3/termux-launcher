@@ -108,3 +108,25 @@ Additional proposed regression cases: nested artifact paths and `/tree/<revision
 ## Remaining verification
 
 This assessment establishes source-level gaps, not phone performance. Before shipping changes, record exact artifact hashes, runtime builds, ABI, device, backend, context and test prompts. Measure cold-load time, time to first answer, throughput and peak memory independently; publisher benchmarks on another device are not promises for this launcher. Verify both aichat streaming and ordinary API responses, then image/audio/tool paths only where advertised. Preserve the launcher memory budget: successful model inference that destabilizes the home screen is not a successful integration. [Repository memory discipline](../AGENTS.md#2-memory-discipline).
+
+## What this branch implemented
+
+Added **2026-09-11**, after the assessment above. The priorities table still describes proposals;
+this section records which of them now have code, and what each one still owes a device check.
+
+| Gap | Implemented | Still unverified |
+| --- | --- | --- |
+| **1. Repository selection** | `TaiHuggingFace` parses repo/revision/path from repo, `/tree`, `/blob` and `/resolve` URLs, resolves the revision to an immutable commit and builds every file URL from that commit. `candidates()` returns every LiteRT artifact and every MNN `config.json` that has a `.mnn` beside it, with size, licence and SHA-256. The import dialog lists them; nothing downloads until one is picked. An empty repository yields no candidate. | Gated repositories where metadata is public but files 401, and repositories large enough to exceed the 2 MB metadata read. |
+| **2. Reasoning and context settings** | `TaiModelProfile` carries `maxContextTokens`; `TaiImportProfileDialog` edits thinking mode, both thought markers and the artifact context limit, with a reset to defaults, reachable from the import dialog and from an installed LiteRT model's parameter screen. `TaiContextWindowPolicy.artifactContextLimit` caps the two published MedGemma exports at their exported 2,048 cache, and the policy now clamps user overrides to the artifact limit instead of trusting them. | **The reported MedGemma `<unused94>` output is not reproduced or fixed.** The dialog lets a user correct it by hand; the artifact's own Jinja template has not been inspected, so no validated default profile ships. |
+| **3. Runtime compatibility** | `litertLmVersion` is one Gradle value feeding both the dependency and `BuildConfig.LITERT_LM_VERSION`. `TaiArtifactCompatibility.versionAtLeast` compares numerically and treats unparseable versions as unknown, not compatible. A candidate carrying `minimumRuntimeVersion` is refused before the transfer starts. | Only `litert-community/Qwen3.5-2B` is known to need ≥0.15; the requirement is a hard-coded publisher fact, not read from artifact metadata. The `.tflite`-means-embeddings fallback in `TaiManager` is unchanged. |
+| **4. MNN packages** | `TaiMnnPackage` derives dependencies from the selected `config.json` — declared graph/weights/tokenizer plus any package file referenced anywhere in the configuration, followed transitively through nested JSON — rejecting paths that escape the package. Sidecars resume per file against a `Content-Range` checked to start at the requested offset, with a `.source` marker so a changed URL restarts rather than appends. `validate()` refuses activation when a dependency is missing. `TaiModelImporter.importMnnDirectory` imports a folder offline through the SAF tree picker, staged and renamed into place. | No package has been imported end to end on a device, by either path. Discovery is still scoped to the config's own directory. |
+| **5. Capability evidence** | `capabilitiesVerified` no longer reports built-in catalog provenance as verification: it is always `false`, and `/v1/models` exposes `_capability_verification: "declared"` beside the existing `_capability_source`. `TaiAichatConfig` builds the client snippet from the same discovery response a client receives, so it cannot advertise a model or a context the endpoint does not. | No first-use probe exists, so "tested on this device" is still an unoccupied state. The gating flow is unchanged — no "Open model terms" / "Check access again" controls. |
+
+The catalog screen also remembers its backend, install and sort selections, and orders by
+availability (active model, installed, downloading, available, unavailable) unless an explicit
+name or size sort is chosen. The recommended star was dropped from catalog rows: the ordering now
+carries that signal, and a star that ranked nothing was noise.
+
+**Not attempted:** P2 in full — the signed catalog still carries no artifact/runtime/template
+metadata, and no catalog entries were added or removed. The candidate additions and the
+runtime-upgrade project remain open.

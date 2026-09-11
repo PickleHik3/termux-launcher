@@ -1789,4 +1789,25 @@
     <string name="onboarding_page_three_tip_two">Tap CPU, memory, or weather for details</string>
     <string name="onboarding_page_three_footer">Long-press the terminal to restyle the dock, keys and status bar</string>
 
+    <string name="termux_ai_sort_downloaded">Downloaded first</string>
+    <string name="termux_ai_sort_name">Name: A–Z</string>
+    <string name="termux_ai_sort_size">Size: smallest first</string>
+    <string name="termux_ai_import_choose_variant">Choose a model file</string>
+    <string name="termux_ai_import_profile">Model format settings</string>
+    <string name="termux_ai_import_profile_help">Use the settings supplied with this model file. Leave unknown values empty.</string>
+    <string name="termux_ai_import_profile_reset">Use defaults</string>
+    <string name="termux_ai_thought_start">Thought opening marker</string>
+    <string name="termux_ai_thought_end">Thought closing marker</string>
+    <string name="termux_ai_export_context">Maximum context supported by this file</string>
+    <string name="termux_ai_import_marker_error">Enter two different markers, or leave both empty.</string>
+    <string name="termux_ai_import_context_error">Enter a positive whole number, or leave empty.</string>
+    <string-array name="tai_import_thinking_modes">
+        <item>No thinking switch</item>
+        <item>Thinking can be switched on or off</item>
+        <item>Thinking is always on</item>
+    </string-array>
+    <string name="termux_ai_import_folder">Import an MNN folder</string>
+    <string name="termux_ai_profile_saved_reload">Saved. Reload this model to apply its format settings.</string>
+    <string name="termux_ai_copy_aichat">Copy aichat configuration</string>
+    <string name="termux_ai_copy_aichat_done">aichat configuration copied</string>
 </resources>
