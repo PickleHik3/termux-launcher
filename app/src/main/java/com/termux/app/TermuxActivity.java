@@ -15794,14 +15794,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Close the current window (Ctrl+Alt+X): kill its panes; if it was the session's last window,
      *  close the session too. */
     void closeCurrentWindow() {
-        if (mPaneController == null || mCurrentWSession == null) return;
-        com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.activeWindow();
-        if (w == null) return;
+        if (mCurrentWSession == null) return;
+        closeWindow(mCurrentWSession.current);
+    }
+
+    /**
+     * Seam for the window bar's ×: close the window at {@code index} of the current session, kill
+     * its panes, and close the session with it when it was the last one. False when there is no
+     * such window. Closing a window that is not the visible one leaves the view where it is — only
+     * the closed window's slot in the strip goes.
+     */
+    boolean closeWindow(int index) {
+        if (mPaneController == null || mCurrentWSession == null
+            || index < 0 || index >= mCurrentWSession.windows.size()) return false;
+        com.termux.app.terminal.TerminalPaneController.Window w = mCurrentWSession.windows.get(index);
+        int oldIndex = mCurrentWSession.current;
+        boolean visible = index == oldIndex;
         // Creation's pan in reverse: the dying window is carried off and a neighbour slides in —
         // from the left when the strip's tail was closed, from the right when a middle window's
-        // right-hand neighbour moves up to fill its slot.
-        int oldIndex = mCurrentWSession.current;
-        captureTerminalDeparture();
+        // right-hand neighbour moves up to fill its slot. Only the visible window is carried off;
+        // closing any other one changes nothing on screen.
+        if (visible) captureTerminalDeparture();
         for (TerminalSession s : mPaneController.removeWindow(w))
             if (mTermuxService != null) mTermuxService.killTermuxSession(s);
         mCurrentWSession.windows.remove(w);
@@ -15809,12 +15822,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWSessions.remove(mCurrentWSession);
             mCurrentWSession = null;
             showNextSessionAfterClose();
-        } else {
+        } else if (visible) {
             mCurrentWSession.current = Math.min(oldIndex, mCurrentWSession.windows.size() - 1);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
             animateTerminalWindowLifecycleArrival(mCurrentWSession.current < oldIndex ? -1 : 1);
+        } else {
+            // The same window is still on screen; everything after the gap moved up one slot.
+            if (index < oldIndex) mCurrentWSession.current = oldIndex - 1;
+            refreshTerminalWindowBar();
         }
         rebuildDrawerSessions();
+        return true;
     }
 
     /**
