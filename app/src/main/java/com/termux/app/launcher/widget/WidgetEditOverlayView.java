@@ -11,6 +11,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.font.NerdFontSpans;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,6 +32,8 @@ public final class WidgetEditOverlayView extends View {
         void onResizeDrag(@NonNull WidgetEditPolicy.Handle handle, int desiredEdgePx);
         void onResizeDragEnd();
         void onRemove();
+        /** The cog was tapped: open this widget's own settings. Only offered when it has any. */
+        void onConfigure();
         /**
          * A press landed on one of the outlined widgets. The selection moves there and this same
          * finger carries on as its move drag, exactly as a long-press on it would have.
@@ -49,7 +53,7 @@ public final class WidgetEditOverlayView extends View {
         }
     }
 
-    private enum Mode { NONE, MOVE, RESIZE, CHIP }
+    private enum Mode { NONE, MOVE, RESIZE, CHIP, SETTINGS }
 
     private final Paint framePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint outlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -59,6 +63,7 @@ public final class WidgetEditOverlayView extends View {
     private final Paint ghostFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint chipPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint chipCrossPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint chipGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private final Rect frame = new Rect();
     @NonNull private List<Outline> outlines = Collections.emptyList();
@@ -67,6 +72,7 @@ public final class WidgetEditOverlayView extends View {
     private boolean dragging;
     private boolean horizontalResizable;
     private boolean verticalResizable;
+    private boolean configurable;
     @Nullable private Listener listener;
     private Mode mode = Mode.NONE;
     @Nullable private WidgetEditPolicy.Handle activeHandle;
@@ -100,25 +106,36 @@ public final class WidgetEditOverlayView extends View {
         chipCrossPaint.setStrokeWidth(dp(1.8f));
         chipCrossPaint.setStrokeCap(Paint.Cap.ROUND);
         chipCrossPaint.setColor(0xFFFFFFFF);
+        chipGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
+        chipGlyphPaint.setTextAlign(Paint.Align.CENTER);
+        chipGlyphPaint.setTextSize(dp(13f));
+        chipGlyphPaint.setColor(0xFFFFFFFF);
     }
 
     public void setListener(@Nullable Listener value) { listener = value; }
 
     public void show(@NonNull Rect frameBounds, boolean horizontal, boolean vertical) {
-        show(frameBounds, horizontal, vertical, Collections.emptyList());
+        show(frameBounds, horizontal, vertical, Collections.emptyList(), false);
+    }
+
+    public void show(@NonNull Rect frameBounds, boolean horizontal, boolean vertical,
+                     @NonNull List<Outline> others) {
+        show(frameBounds, horizontal, vertical, others, false);
     }
 
     /**
      * The selected widget's frame plus the other widgets on the page, which are outlined and can
      * take the selection with one press. Every session hands over the whole set, so an outline can
-     * never outlive the layout it was measured from.
+     * never outlive the layout it was measured from. {@code hasSettings} adds the cog chip, for a
+     * provider that has a settings screen of its own and will reopen it.
      */
     public void show(@NonNull Rect frameBounds, boolean horizontal, boolean vertical,
-                     @NonNull List<Outline> others) {
+                     @NonNull List<Outline> others, boolean hasSettings) {
         outlines = others.isEmpty() ? Collections.emptyList() : new ArrayList<>(others);
         frame.set(frameBounds);
         horizontalResizable = horizontal;
         verticalResizable = vertical;
+        configurable = hasSettings;
         frameVisible = true;
         dragging = false;
         ghost = null;
@@ -129,6 +146,7 @@ public final class WidgetEditOverlayView extends View {
     public void hide() {
         frameVisible = false;
         dragging = false;
+        configurable = false;
         ghost = null;
         outlines = Collections.emptyList();
         mode = Mode.NONE;
@@ -187,6 +205,13 @@ public final class WidgetEditOverlayView extends View {
         float arm = chipRadius * 0.42f;
         canvas.drawLine(chipX - arm, chipY - arm, chipX + arm, chipY + arm, chipCrossPaint);
         canvas.drawLine(chipX - arm, chipY + arm, chipX + arm, chipY - arm, chipCrossPaint);
+        if (!configurable) return;
+        float settingsX = settingsCenterX(), settingsY = settingsCenterY();
+        canvas.drawCircle(settingsX, settingsY, chipRadius, chipPaint);
+        canvas.drawCircle(settingsX, settingsY, chipRadius, handleRingPaint);
+        Paint.FontMetrics metrics = chipGlyphPaint.getFontMetrics();
+        canvas.drawText(SETTINGS_GLYPH, settingsX,
+            settingsY - (metrics.ascent + metrics.descent) / 2f, chipGlyphPaint);
     }
 
     private void drawHandle(Canvas canvas, float x, float y, float radius) {
@@ -196,23 +221,58 @@ public final class WidgetEditOverlayView extends View {
 
     float chipRadius() { return dp(13f); }
 
+    /** nf-fa-cog. */
+    private static final String SETTINGS_GLYPH = "\uf013";
+
+    /**
+     * Whether this frame is in the page's top row, where the chip cannot straddle the frame's top
+     * edge without leaving the pane.
+     */
+    private boolean inTopRow() { return frame.top < chipRadius(); }
+
     /**
      * The chip straddles the frame's top-right corner, which for a cell against the pane's own edge
      * left half of it sitting out on the pane rim; such a cell wears the chip tucked fully inside
      * its frame instead. Interior cells keep the corner anchor, and the overlay bounds still clamp
      * the result so no geometry can push the chip off the pane.
+     *
+     * <p>A top-row frame moves to its top-<em>left</em> corner: the page's own grid-size tab comes
+     * out of the top-right corner and stays out for the whole edit session, and a chip underneath
+     * it can be neither seen nor tapped.
      */
     float chipCenterX() {
         float radius = chipRadius(), inset = dp(2f);
-        float center = frame.right + radius > getWidth() ? frame.right - radius - inset : frame.right - inset;
+        float center;
+        if (inTopRow()) {
+            center = frame.left + radius + inset;
+        } else {
+            center = frame.right + radius > getWidth()
+                ? frame.right - radius - inset : frame.right - inset;
+        }
         return Math.min(Math.max(center, radius + inset), getWidth() - radius - inset);
     }
 
     float chipCenterY() {
         float radius = chipRadius(), inset = dp(2f);
-        float center = frame.top < radius ? frame.top + radius + inset : frame.top + inset;
+        float center = inTopRow() ? frame.top + radius + inset : frame.top + inset;
         return Math.min(Math.max(center, radius + inset), getHeight() - radius - inset);
     }
+
+    /** Whether the cog chip is on the frame at all. */
+    boolean hasSettingsChip() { return configurable; }
+
+    /**
+     * The cog sits one chip inward from the remove chip, on whichever side of the frame that chip
+     * took, so the pair always reads as belonging to this widget and never leaves the pane.
+     */
+    float settingsCenterX() {
+        float radius = chipRadius(), inset = dp(2f);
+        float step = 2f * radius + dp(6f);
+        float center = inTopRow() ? chipCenterX() + step : chipCenterX() - step;
+        return Math.min(Math.max(center, radius + inset), getWidth() - radius - inset);
+    }
+
+    float settingsCenterY() { return chipCenterY(); }
 
     @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
         if (!frameVisible) return false;
@@ -221,6 +281,8 @@ public final class WidgetEditOverlayView extends View {
             case MotionEvent.ACTION_DOWN:
                 if (hitChip(x, y)) {
                     mode = Mode.CHIP;
+                } else if (hitSettings(x, y)) {
+                    mode = Mode.SETTINGS;
                 } else if ((activeHandle = hitHandle(x, y)) != null) {
                     mode = Mode.RESIZE;
                 } else if (frame.contains(Math.round(x), Math.round(y))) {
@@ -262,6 +324,9 @@ public final class WidgetEditOverlayView extends View {
                 if (ended == Mode.MOVE) listener.onMoveDragEnd(canceled);
                 else if (ended == Mode.RESIZE) listener.onResizeDragEnd();
                 else if (ended == Mode.CHIP && !canceled && hitChip(x, y)) listener.onRemove();
+                else if (ended == Mode.SETTINGS && !canceled && hitSettings(x, y)) {
+                    listener.onConfigure();
+                }
                 return true;
             default:
                 return true;
@@ -279,6 +344,25 @@ public final class WidgetEditOverlayView extends View {
     private boolean hitChip(float x, float y) {
         float slop = dp(8f);
         return Math.hypot(x - chipCenterX(), y - chipCenterY()) <= chipRadius() + slop;
+    }
+
+    private boolean hitSettings(float x, float y) {
+        if (!configurable) return false;
+        // Half the remove chip's slop, and only away from it: the two sit a chip apart, and a
+        // generous ring on both would let a sloppy press on × open settings instead.
+        float slop = dp(4f);
+        return Math.hypot(x - settingsCenterX(), y - settingsCenterY()) <= chipRadius() + slop;
+    }
+
+    /**
+     * Whether a point in this overlay's coordinates belongs to the edit chrome rather than to the
+     * page underneath. The page's frame asks before it claims a border tap of its own, so a chip
+     * or a handle sitting in that band is still the user's to press.
+     */
+    public boolean wantsPoint(float x, float y) {
+        if (!frameVisible) return false;
+        return hitChip(x, y) || hitSettings(x, y) || hitHandle(x, y) != null
+            || frame.contains(Math.round(x), Math.round(y));
     }
 
     @Nullable private WidgetEditPolicy.Handle hitHandle(float x, float y) {

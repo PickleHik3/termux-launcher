@@ -32,6 +32,8 @@ import java.util.UUID;
 public final class LauncherWidgetHostController implements LauncherAppWidgetHost.Callback {
     public static final int REQUEST_BIND_APPWIDGET = 4714;
     public static final int REQUEST_CONFIGURE_APPWIDGET = 4715;
+    /** Reopening a placed widget's own settings; deliberately not the add flow's request code. */
+    public static final int REQUEST_RECONFIGURE_APPWIDGET = 4716;
 
     public enum Capability { AVAILABLE, UNSUPPORTED }
     public enum AddResult {
@@ -253,8 +255,57 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         }
     }
 
-    /** @return true only for the two widget request codes, even when the durable result is stale. */
+    /**
+     * Whether this widget already on the page has settings of its own that can be reopened.
+     * Providers that never opted in to being reconfigured are not offered it; see
+     * {@link WidgetConfigurePolicy#reconfigurable}.
+     */
+    public boolean canReconfigure(int appWidgetId) {
+        LauncherWidgetRecord record = repository.get(appWidgetId);
+        if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
+        try {
+            AppWidgetProviderInfo info = platform.getInfo(appWidgetId);
+            if (info == null || !providerMatches(record, info)) return false;
+            return WidgetConfigurePolicy.reconfigurable(info.configure,
+                Build.VERSION.SDK_INT >= 28 ? info.widgetFeatures : 0, Build.VERSION.SDK_INT,
+                info.configure != null
+                    && platform.configureActivityAvailable(info.configure, info.getProfile()));
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    /**
+     * Sends a placed widget back to its provider's own settings screen, with the ID it already
+     * has. Nothing about the launcher's record changes here and no result can delete the widget:
+     * this is not the add transaction, so a user who backs out of the settings screen keeps the
+     * widget exactly as it was.
+     */
+    @NonNull
+    public AddResult reconfigureWidget(int appWidgetId) {
+        if (!canReconfigure(appWidgetId)) return AddResult.IGNORED;
+        LauncherWidgetRecord record = repository.get(appWidgetId);
+        if (record == null) return AddResult.IGNORED;
+        try {
+            platform.launchConfiguration(appWidgetId, REQUEST_RECONFIGURE_APPWIDGET,
+                record.sizeOptions());
+            return AddResult.STARTED;
+        } catch (ActivityNotFoundException | SecurityException exception) {
+            return AddResult.CONFIGURATION_UNAVAILABLE;
+        } catch (RuntimeException exception) {
+            return AddResult.FAILED;
+        }
+    }
+
+    /** @return true only for the widget request codes, even when the durable result is stale. */
     public boolean handleActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        if (requestCode == REQUEST_RECONFIGURE_APPWIDGET) {
+            // The provider rewrote its own state, not ours. Either way the widget stays, so this
+            // reports the flow finished well: the pane re-renders and brings its surface back,
+            // and nothing here can delete an ID.
+            notifyChanged(AddResult.READY);
+            return true;
+        }
         if (requestCode != REQUEST_BIND_APPWIDGET && requestCode != REQUEST_CONFIGURE_APPWIDGET) {
             return false;
         }

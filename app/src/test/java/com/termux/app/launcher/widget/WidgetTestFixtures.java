@@ -22,9 +22,15 @@ final class WidgetTestFixtures {
     static final ComponentName CONFIGURE = new ComponentName("provider.pkg", "Configure");
 
     static AppWidgetProviderInfo info(boolean configure) {
+        return info(configure, 0);
+    }
+
+    static AppWidgetProviderInfo info(boolean configure, int widgetFeatures) {
         AppWidgetProviderInfo info = new AppWidgetProviderInfo();
         info.provider = PROVIDER;
         info.configure = configure ? CONFIGURE : null;
+        // widgetFeatures arrived in API 28; tests pinned below it run without the field.
+        if (widgetFeatures != 0) info.widgetFeatures = widgetFeatures;
         ActivityInfo activityInfo = new ActivityInfo();
         activityInfo.applicationInfo = new ApplicationInfo();
         activityInfo.applicationInfo.uid = Process.myUid();
@@ -51,6 +57,8 @@ final class WidgetTestFixtures {
         int starts;
         int stops;
         int configureLaunches;
+        int lastConfigureId;
+        int lastConfigureRequestCode;
         int optionUpdates;
         boolean feature = true;
         boolean directBind;
@@ -87,6 +95,8 @@ final class WidgetTestFixtures {
         @Override public void launchConfiguration(int id, int requestCode, Bundle options) {
             if (configureLaunchFailure != null) throw configureLaunchFailure;
             configureLaunches++;
+            lastConfigureId = id;
+            lastConfigureRequestCode = requestCode;
         }
         @Override public AppWidgetProviderInfo getInfo(int id) { return info.get(id); }
         @Override public int[] getOwnedIds() {

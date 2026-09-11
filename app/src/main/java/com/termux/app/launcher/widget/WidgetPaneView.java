@@ -129,6 +129,16 @@ public final class WidgetPaneView extends FrameLayout {
 
     public boolean widgetEditActive() { return editOverlay != null && editOverlay.isShowing(); }
 
+    /**
+     * Whether a point, in this view's coordinates, is on the widget edit chrome. The page's frame
+     * asks before it takes a tap for its own border band: a top-row widget's remove chip sits
+     * inside that band, and without this the page swallowed the press and the widget could not be
+     * removed.
+     */
+    public boolean widgetEditWantsPoint(float x, float y) {
+        return editOverlay != null && editOverlay.isShowing() && editOverlay.wantsPoint(x, y);
+    }
+
     private WidgetEditOverlayView editOverlay;
 
     public void render(@NonNull LauncherWidgetRepository repository,

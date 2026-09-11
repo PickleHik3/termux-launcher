@@ -380,6 +380,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int REQUEST_CODE_WALLPAPER_READ_PERMISSION = 4713;
     private static final int REQUEST_CODE_WIDGET_BIND = 4714;
     private static final int REQUEST_CODE_WIDGET_CONFIGURE = 4715;
+    private static final int REQUEST_CODE_WIDGET_RECONFIGURE = 4716;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
     /** Visible sessions = service sessions minus secondary panes. Backs the window bar and browser. */
     private final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
@@ -11546,7 +11547,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: " + resultCode + ", data: " + IntentUtils.getIntentString(data));
-        if ((requestCode == REQUEST_CODE_WIDGET_BIND || requestCode == REQUEST_CODE_WIDGET_CONFIGURE)
+        if ((requestCode == REQUEST_CODE_WIDGET_BIND || requestCode == REQUEST_CODE_WIDGET_CONFIGURE
+                || requestCode == REQUEST_CODE_WIDGET_RECONFIGURE)
             && mWidgetHostController != null
             && mWidgetHostController.handleActivityResult(requestCode, resultCode, data)) {
             return;

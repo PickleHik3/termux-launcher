@@ -208,11 +208,26 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             // The editing tab is the mode's own chrome, so only leaving the mode puts it away.
             if (!mEditing) mControls.dismiss();
         }
-        if (isNearBorder(mDownX, mDownY)) {
+        if (isNearBorder(mDownX, mDownY) && !editChromeWantsPoint(mDownX, mDownY)) {
             mBorderPressed = true;
             return true;
         }
         return false;
+    }
+
+    /**
+     * Whether the widget edit chrome has something at this point. The grid's outermost cells are
+     * only the grid's own 6dp padding from the page's rim, so a top-row widget's remove chip and
+     * an edge cell's resize handles land inside the border band; those presses are the widget's,
+     * not the page's.
+     */
+    private boolean editChromeWantsPoint(float x, float y) {
+        if (!mEditing || !(mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView)) {
+            return false;
+        }
+        com.termux.app.launcher.widget.WidgetPaneView pane =
+            (com.termux.app.launcher.widget.WidgetPaneView) mGrid;
+        return pane.widgetEditWantsPoint(x - pane.getLeft(), y - pane.getTop());
     }
 
     @Override

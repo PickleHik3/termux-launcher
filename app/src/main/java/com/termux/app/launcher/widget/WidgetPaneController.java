@@ -345,6 +345,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 exitEditMode();
                 widgets.removeWidget(appWidgetId);
             }
+            @Override public void onConfigure() {
+                if (edit == null) return;
+                openWidgetSettings(edit.appWidgetId);
+            }
             @Override public void onSelectWidget(int appWidgetId, float rawX, float rawY) {
                 if (edit != null && edit.appWidgetId == appWidgetId) return;
                 enterEditMode(appWidgetId, rawX, rawY);
@@ -389,9 +393,27 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit = new EditState(appWidgetId, minColumns, minRows, horizontal, vertical);
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         overlay.setListener(overlayListener);
-        overlay.show(paneBounds(record.cell), horizontal, vertical, editableOutlines(appWidgetId));
+        overlay.show(paneBounds(record.cell), horizontal, vertical, editableOutlines(appWidgetId),
+            widgets.canReconfigure(appWidgetId));
         syncEditSession();
         return true;
+    }
+
+    /**
+     * The cog on the selected widget: hand the user back to the provider's own settings screen.
+     * It is another app's activity, so the surface is remembered the way the add flow remembers
+     * it, and the edit session closes — coming back to chrome measured against the old layout
+     * would be wrong if the provider resized itself.
+     */
+    private void openWidgetSettings(int appWidgetId) {
+        exitEditMode();
+        host.captureWidgetSurfaceOrigin();
+        LauncherWidgetHostController.AddResult result = widgets.reconfigureWidget(appWidgetId);
+        if (result == LauncherWidgetHostController.AddResult.STARTED) {
+            awaitingExternal = true;
+        } else if (result != LauncherWidgetHostController.AddResult.IGNORED) {
+            pane.showNotice(messageFor(result));
+        }
     }
 
     /**

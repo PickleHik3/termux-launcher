@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetHost;
 import android.appwidget.AppWidgetHostView;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.os.Process;
 import android.view.ContextThemeWrapper;
 
@@ -53,17 +54,49 @@ public final class LauncherAppWidgetHost extends AppWidgetHost {
     @Override
     protected AppWidgetHostView onCreateView(Context context, int appWidgetId,
                                              AppWidgetProviderInfo appWidget) {
-        // AppCompat installs its view factory on the activity inflater. RemoteViews validates
-        // actions against the inflated class, so substituting AppCompatImageView for the provider's
-        // framework ImageView makes ordinary setImageBitmap actions illegal. Base this wrapper on
-        // the application inflater (which has no activity factory) while retaining the activity's
-        // exact theme for host sizing and colours. This affects provider inflation only.
-        Context remoteViewsContext = new ContextThemeWrapper(
-            context.getApplicationContext(), context.getTheme());
         SafeLauncherAppWidgetHostView view =
-            new SafeLauncherAppWidgetHostView(remoteViewsContext, callback);
+            new SafeLauncherAppWidgetHostView(widgetContext(context), callback);
         view.setExecutor(INFLATE_EXECUTOR);
         return view;
+    }
+
+    /**
+     * The context a provider's RemoteViews are inflated against.
+     *
+     * <p>Two separate things are being fixed here, and they pull in opposite directions.
+     *
+     * <p>The <b>inflater</b> must not be the activity's. AppCompat installs its view factory
+     * there, and RemoteViews validates each action against the class that was actually inflated,
+     * so substituting AppCompatImageView for the provider's framework ImageView makes an ordinary
+     * setImageBitmap action illegal. The application context has no activity factory, so it is the
+     * base; the activity's own theme is carried over for host sizing and colours.
+     *
+     * <p>The <b>day/night</b> a widget renders in is decided by this context's Configuration, not
+     * by the provider's: RemoteViews resolves the provider's resources through
+     * {@code createConfigurationContext(hostContext.getResources().getConfiguration())}. The
+     * application context does not carry the activity's night mode, so widgets hosted against it
+     * could resolve their day resources while the launcher — and the phone — were dark. The night
+     * bits are taken from the host context and everything else is left to the application's own
+     * configuration, so a widget is dark exactly when the launcher around it is.
+     *
+     * <p>Nothing re-inflates a widget by itself when night mode changes — AppWidgetHostView has no
+     * configuration hook. The activity does not list {@code uiMode} in its configChanges, so the
+     * system recreates it and these views are built again against the new configuration.
+     */
+    @NonNull
+    static Context widgetContext(@NonNull Context context) {
+        Context base = context.getApplicationContext();
+        int hostNight = context.getResources().getConfiguration().uiMode
+            & Configuration.UI_MODE_NIGHT_MASK;
+        int applicationUiMode = base.getResources().getConfiguration().uiMode;
+        if (hostNight != (applicationUiMode & Configuration.UI_MODE_NIGHT_MASK)) {
+            Configuration override = new Configuration();
+            // Sparse override: every field left at its default is taken from the base.
+            override.fontScale = 0;
+            override.uiMode = hostNight | (applicationUiMode & ~Configuration.UI_MODE_NIGHT_MASK);
+            base = base.createConfigurationContext(override);
+        }
+        return new ContextThemeWrapper(base, context.getTheme());
     }
 
     @Override

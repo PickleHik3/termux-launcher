@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
 import android.app.Application;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Looper;
 import android.view.LayoutInflater;
@@ -14,6 +15,8 @@ import android.view.View;
 import android.view.ViewConfiguration;
 
 import com.termux.R;
+import com.termux.app.launcher.widget.WidgetEditOverlayView;
+import com.termux.app.launcher.widget.WidgetPaneView;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -127,6 +130,41 @@ public class WidgetPaneFrameTapTest {
         page.onTouchEvent(cancel);
         cancel.recycle();
         return claimed;
+    }
+
+    /**
+     * The grid's outermost cells are only its own 6dp padding from the page's rim, so a top-row
+     * widget's remove chip lives inside the page's 12dp border band. The page took that press as
+     * a border tap and the widget could not be removed.
+     */
+    @Test
+    public void aWidgetsOwnEditChipIsNotSwallowedByTheBorderBand() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        WidgetPaneView pane = (WidgetPaneView) page.grid();
+        float density = density(activity);
+        // The overlay is created lazily, so the page is laid out again with it in place.
+        WidgetEditOverlayView overlay = pane.widgetEditOverlay();
+        page.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        page.layout(0, 0, WIDTH, HEIGHT);
+
+        int pad = Math.round(6f * density);
+        overlay.show(new Rect(pad, pad, Math.round(200 * density), Math.round(120 * density)),
+            true, true);
+        page.applyWidgetEditing(true);
+
+        // The top of the chip, where a thumb reaching for it lands: inside the band, and the
+        // overlay's own hit test says it is the chip's.
+        float chipX = pad + 15f * density;
+        float chipY = 8f * density;
+        assertTrue("precondition: the press is inside the page's border band",
+            Math.min(chipX, chipY) <= BAND_DP * density);
+        assertTrue("precondition: the overlay claims this point",
+            overlay.wantsPoint(chipX - pane.getLeft(), chipY - pane.getTop()));
+        assertFalse("the remove chip belongs to the widget", intercepts(page, chipX, chipY));
+        assertTrue("the border away from the edit chrome is still the page's",
+            intercepts(page, 2f, HEIGHT / 2f));
     }
 
     @Test
