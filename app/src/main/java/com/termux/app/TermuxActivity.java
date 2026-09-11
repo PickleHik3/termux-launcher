@@ -14909,16 +14909,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A user-given name outranks every derived label: the whole point of naming a window is that
         // its tab stops changing under you as the foreground process comes and goes.
         if (windowName != null) {
-            String process = info != null && !info.idle ? info.processName
+            String process = info != null && !info.idle ? glyphProcessFor(info)
                 : com.termux.app.terminal.TerminalWindowBar.processName(session.getTitle());
             return com.termux.app.terminal.TerminalWindowBar.itemForNamed(windowName, process);
         }
         if (info != null && !info.idle && info.processName != null) {
             return com.termux.app.terminal.TerminalWindowBar.itemForForegroundProcess(
-                info.processName, info.openFile);
+                glyphProcessFor(info), info.openFile);
         }
         // Idle or not yet resolved: directory basename via the existing title/cwd derivation.
         return com.termux.app.terminal.TerminalWindowBar.itemFor(session, index);
+    }
+
+    /**
+     * The name the chip should wear for a resolved foreground: the agent the argv identifies when
+     * procfs only saw its runtime ({@code node} hosting Claude Code, {@code npx} hosting Codex),
+     * otherwise the process name itself. An agent's own name is the one the glyph table knows.
+     */
+    @Nullable
+    private static String glyphProcessFor(
+            @NonNull com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info) {
+        String agent = com.termux.app.terminal.AgentStatus.kindFor(info.processName, info.command);
+        return agent != null ? agent : info.processName;
     }
 
     /** Kick the throttled foreground resolver and keep it polling while the window bar is shown. */

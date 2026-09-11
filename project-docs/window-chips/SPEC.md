@@ -54,7 +54,11 @@ done and failed marks take the same slot. Up to four of thirteen cells go to ind
 
 - Watermark legibility depends on the user's terminal face; strength is capped and the glyph is
   centred so the first letters stay clean.
-- Some Nerd Font glyphs are dense at 16 dp; keep the current map, prefer outline variants where the
-  face has both.
+- Some Nerd Font glyphs are dense at 16 dp; prefer outline variants where the face has both. The
+  map lives in `ProcessGlyphs` (2026-09-11): coding agents (Claude, Codex, Gemini, Copilot,
+  herdr), multiplexers (tmux, zellij), editors, VCS, runtimes, package managers, monitors, file
+  managers and pagers each have a glyph; `ProcessGlyphsTest` checks every entry against the
+  bundled font catalogue. A runtime-hosted agent (`node` running Claude Code) wears the agent's
+  glyph via `AgentStatus.kindFor`.
 - The agent-status work merged 2026-09-11 15:46 also draws on chips; phase 5 must start from that
   dev head and keep its semantics.
