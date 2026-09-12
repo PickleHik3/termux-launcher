@@ -7,7 +7,7 @@ import com.termux.app.launcher.paging.DockPagingModel;
 
 /**
  * The floating strip of matches the standalone A–Z index shows above the letters, as arithmetic:
- * how many icons a width holds, where each one sits, which of them a page shows, which side the
+ * how many icons a width holds, where the band sits under the thumb, where each one sits, which of them a page shows, which side the
  * label reads on, and the curve the focused icon breathes to.
  *
  * <p>Pure: no {@code View}, no {@code Context}, no {@code Canvas}, no clock. The activity asks for a
@@ -162,14 +162,17 @@ public final class AzFloatingStripPolicy {
     }
 
     /**
-     * Lays a strip of {@code visibleCount} icons out centred in its host and resting above
-     * {@code anchorTopPx} — the top of the letters, so the strip floats clear of them.
+     * Lays a strip of {@code visibleCount} icons out centred on {@code anchorXPx} — the letter
+     * under the thumb, so the matches appear where the finger already is rather than in the middle
+     * of the bar — and resting above {@code anchorTopPx}, the top of the letters, so the strip
+     * floats clear of them. A band that would run past either side margin slides back inside it,
+     * so a letter at the end of the row still gets its whole strip.
      *
      * @return null when there is nothing to show
      */
     @Nullable
     public static Strip layout(float hostLeftPx, float hostWidthPx, float anchorTopPx,
-                               int visibleCount, float density) {
+                               float anchorXPx, int visibleCount, float density) {
         if (visibleCount <= 0 || hostWidthPx <= 0f) {
             return null;
         }
@@ -178,7 +181,11 @@ public final class AzFloatingStripPolicy {
         float icon = ICON_SIZE_DP * d;
         float spacing = SLOT_SPACING_DP * d;
         float bandWidth = (slots * icon) + ((slots - 1) * spacing);
-        float left = hostLeftPx + Math.max(SIDE_MARGIN_DP * d, (hostWidthPx - bandWidth) * 0.5f);
+        float minLeft = hostLeftPx + (SIDE_MARGIN_DP * d);
+        float maxLeft = hostLeftPx + hostWidthPx - (SIDE_MARGIN_DP * d) - bandWidth;
+        float left = anchorXPx - (bandWidth * 0.5f);
+        // A band wider than the margins allow (a sliver of a host) keeps the left margin instead.
+        left = maxLeft < minLeft ? minLeft : Math.max(minLeft, Math.min(maxLeft, left));
         float bottom = anchorTopPx - (ANCHOR_GAP_DP * d);
         return new Strip(left, bottom - icon, left + bandWidth, bottom, icon, spacing, slots);
     }

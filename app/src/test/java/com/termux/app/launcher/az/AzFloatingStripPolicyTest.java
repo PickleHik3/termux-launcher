@@ -29,8 +29,8 @@ public class AzFloatingStripPolicyTest {
     }
 
     @Test
-    public void aStripIsCentredInItsHostAndRestsAboveTheLetters() {
-        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 4, DENSITY);
+    public void aStripCentredOnTheMiddleLetterIsCentredInItsHostAndRestsAboveTheLetters() {
+        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 500f, 4, DENSITY);
         assertNotNull(strip);
         assertEquals(4, strip.slotCount);
         float icon = AzFloatingStripPolicy.ICON_SIZE_DP * DENSITY;
@@ -44,18 +44,40 @@ public class AzFloatingStripPolicyTest {
     }
 
     @Test
+    public void aStripCentresOnTheLetterUnderTheThumbAndStaysInsideTheMargins() {
+        float margin = AzFloatingStripPolicy.SIDE_MARGIN_DP * DENSITY;
+        // A letter a third of the way along: the band sits under it, not in the middle of the bar.
+        Strip under = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 330f, 3, DENSITY);
+        assertNotNull(under);
+        assertEquals(330f, under.centerX(), 0.01f);
+        // The first letters: a band centred there would run off the left, so it slides in to the margin.
+        Strip atStart = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 30f, 3, DENSITY);
+        assertNotNull(atStart);
+        assertEquals(margin, atStart.left, 0.01f);
+        // The last letters: it slides back from the right margin, keeping its full width.
+        Strip atEnd = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 980f, 3, DENSITY);
+        assertNotNull(atEnd);
+        assertEquals(1000f - margin, atEnd.right, 0.01f);
+        assertEquals(under.width(), atEnd.width(), 0.01f);
+        // A host offset on screen clamps against its own edges, not the screen's.
+        Strip offset = AzFloatingStripPolicy.layout(200f, 1000f, 800f, 190f, 3, DENSITY);
+        assertNotNull(offset);
+        assertEquals(200f + margin, offset.left, 0.01f);
+    }
+
+    @Test
     public void aStripNeverLaysOutMoreSlotsThanTheWidthHolds() {
-        Strip strip = AzFloatingStripPolicy.layout(0f, 400f, 500f, 8, DENSITY);
+        Strip strip = AzFloatingStripPolicy.layout(0f, 400f, 500f, 200f, 8, DENSITY);
         assertNotNull(strip);
         assertEquals(AzFloatingStripPolicy.slotsForWidth(400f, DENSITY), strip.slotCount);
         assertTrue(strip.left >= AzFloatingStripPolicy.SIDE_MARGIN_DP * DENSITY - 0.01f);
         assertNull("nothing to show is no strip",
-            AzFloatingStripPolicy.layout(0f, 400f, 500f, 0, DENSITY));
+            AzFloatingStripPolicy.layout(0f, 400f, 500f, 200f, 0, DENSITY));
     }
 
     @Test
     public void slotCentresRepeatOnTheIconAndSpacingPitchAndClampOutOfRange() {
-        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 3, DENSITY);
+        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 500f, 3, DENSITY);
         assertNotNull(strip);
         float pitch = strip.slotPitchPx();
         assertEquals(strip.left + (strip.iconSizePx * 0.5f), strip.slotCenterX(0), 0.01f);
@@ -82,7 +104,7 @@ public class AzFloatingStripPolicyTest {
 
     @Test
     public void slotHitTestingHoldsTheLastSlotAcrossItsBoundary() {
-        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 4, DENSITY);
+        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 500f, 4, DENSITY);
         assertNotNull(strip);
         float y = strip.centerY();
         float pitch = strip.slotPitchPx();
@@ -104,7 +126,7 @@ public class AzFloatingStripPolicyTest {
 
     @Test
     public void theEndsOfTheStripKeepTheirIconsSoAnEdgeDwellDoesNotLoseFocus() {
-        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 4, DENSITY);
+        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 500f, 4, DENSITY);
         assertNotNull(strip);
         float y = strip.centerY();
         assertEquals(0, AzFloatingStripPolicy.slotAt(strip, strip.left - 60f, y, -1, DENSITY));
@@ -120,7 +142,7 @@ public class AzFloatingStripPolicyTest {
 
     @Test
     public void anEdgeOnlyExistsWhenThereIsAnotherPageToReach() {
-        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 6, DENSITY);
+        Strip strip = AzFloatingStripPolicy.layout(0f, 1000f, 800f, 500f, 6, DENSITY);
         assertNotNull(strip);
         assertEquals(AzFloatingStripPolicy.EDGE_LEFT,
             AzFloatingStripPolicy.edgeAt(strip, strip.left + 2f, true, DENSITY));

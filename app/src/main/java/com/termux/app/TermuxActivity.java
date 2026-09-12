@@ -7127,7 +7127,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Measured against the letters, not the overlay that draws it: the overlay rests GONE and
         // has no width until something puts it on screen, and the strip is what would do that.
-        // The letters are also the right span to centre over — they are the surface being scrubbed.
+        // The letters are also the span the band is clamped to — they are the surface being scrubbed.
         // Their rectangle goes through the edge transform first, so the strip is laid out along a
         // bar at the bottom of the frame however the bar is really standing.
         float density = getResources().getDisplayMetrics().density;
@@ -7149,8 +7149,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mAzStrip;
         }
         List<com.termux.app.launcher.model.LauncherAppEntry> entries = mSuggestionBarView.azStripVisibleEntries();
+        // The band centres on the letter the thumb is holding, so the matches appear next to the
+        // finger rather than in the middle of the bar. Mapped through the frame like the bar was,
+        // and only re-read here, when the letter or page changes — never per touch sample.
+        float anchorX = rowLeftRaw + (rowWidth * 0.5f);
+        RectF letterGlass = new RectF();
+        mAzScrubRowView.getLetterFocusBoundsOnScreen(normalized, letterGlass);
+        if (!letterGlass.isEmpty()) {
+            AzScrubGesture.Bounds letterBar = frame.toCanonical(new AzScrubGesture.Bounds(
+                letterGlass.left, letterGlass.top, letterGlass.right, letterGlass.bottom));
+            anchorX = (letterBar.left + letterBar.right) * 0.5f;
+        }
         AzFloatingStripPolicy.Strip strip = entries.isEmpty() ? null : AzFloatingStripPolicy.layout(
-            rowLeftRaw, rowWidth, rowTopRaw, entries.size(), density);
+            rowLeftRaw, rowWidth, rowTopRaw, anchorX, entries.size(), density);
         if (strip == null) {
             clearAzStandaloneStrip();
             return null;
