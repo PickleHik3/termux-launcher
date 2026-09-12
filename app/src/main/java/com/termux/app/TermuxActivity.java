@@ -9753,6 +9753,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The two row hints last handed over, since neither setter reads back out of a view. */
     private int mAppliedDockRowHeightHintPx = Integer.MIN_VALUE;
     private int mAppliedAzRowChinPaddingPx = Integer.MIN_VALUE;
+    private int mAppliedAzRowCrownPaddingPx = Integer.MIN_VALUE;
 
     /** True when this layout moved the dock. */
     private boolean applyDockLayout(@NonNull DockLayout layout) {
@@ -9765,6 +9766,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             moved |= layout.azRowChinPaddingPx != mAppliedAzRowChinPaddingPx;
             mAppliedAzRowChinPaddingPx = layout.azRowChinPaddingPx;
             mAzScrubRowView.setChinPaddingPx(layout.azRowChinPaddingPx);
+            moved |= layout.azRowCrownPaddingPx != mAppliedAzRowCrownPaddingPx;
+            mAppliedAzRowCrownPaddingPx = layout.azRowCrownPaddingPx;
+            mAzScrubRowView.setCrownPaddingPx(layout.azRowCrownPaddingPx);
         }
         moved |= updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
         moved |= applyDockRowHorizontalInsets();

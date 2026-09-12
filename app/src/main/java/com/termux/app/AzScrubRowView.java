@@ -114,6 +114,8 @@ public final class AzScrubRowView extends AppCompatTextView {
     private int lastHapticLetterIndex = -1;
     /** Touchable dead space beside the letters, on the side the bar stands on. */
     private int chinPaddingPx;
+    /** Touchable air beside the letters, on the side away from the rim the bar stands on. */
+    private int crownPaddingPx;
     /**
      * True while the letters are not what the finger is choosing — it has climbed off this row and
      * is picking an icon out of the apps row, which ticks for itself.
@@ -193,30 +195,45 @@ public final class AzScrubRowView extends AppCompatTextView {
         return barEdge.isOnSide();
     }
 
-    /** The 1dp of air the letters keep, plus the chin, on whichever side the bar stands. */
+    /**
+     * Air over the letters, as padding on the side away from the rim the bar stands on: the dock's
+     * row wears it when no apps row stands above it, so the letters are not hard under the glass's
+     * top edge. Like the chin it stays inside the bar and takes a touch like the rest.
+     */
+    public void setCrownPaddingPx(int paddingPx) {
+        int crown = Math.max(0, paddingPx);
+        if (crown == crownPaddingPx)
+            return;
+        crownPaddingPx = crown;
+        applyEdgePadding();
+        invalidate();
+    }
+
+    /** The 1dp of air the letters keep, plus the chin and the crown, on the bar's two sides. */
     private void applyEdgePadding() {
         int air = dp(1);
         int chin = air + chinPaddingPx;
+        int crown = air + crownPaddingPx;
         switch (barEdge) {
             case TOP:
-                setPadding(0, chin, 0, air);
+                setPadding(0, chin, 0, crown);
                 break;
             case LEFT:
-                setPadding(chin, 0, air, 0);
+                setPadding(chin, 0, crown, 0);
                 break;
             case RIGHT:
-                setPadding(air, 0, chin, 0);
+                setPadding(crown, 0, chin, 0);
                 break;
             case BOTTOM:
             default:
-                setPadding(0, air, 0, chin);
+                setPadding(0, crown, 0, chin);
                 break;
         }
     }
 
-    /** The band the letters are drawn in: the bar's thickness without the chin beside them. */
+    /** The band the letters are drawn in: the bar's thickness without the chin and crown beside them. */
     public int letterBandThicknessPx() {
-        return Math.max(0, (isVerticalBar() ? getWidth() : getHeight()) - chinPaddingPx);
+        return Math.max(0, (isVerticalBar() ? getWidth() : getHeight()) - chinPaddingPx - crownPaddingPx);
     }
 
     private int dp(int value) {

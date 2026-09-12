@@ -87,15 +87,30 @@ public final class AccessoryStackLayoutPolicy {
     }
 
     /**
-     * The A-Z row's full height: the letter band, plus the chin under it when the row sits on the
-     * dock's bottom rim. The chin is drawn as bottom padding, so the letters keep their place in
-     * the band and the extra height is touchable space below them.
+     * Air above the letters when the A-Z row is the dock's top row. With the apps row above it the
+     * indicator band and that row's own bottom padding keep the letters off the dock's top rim;
+     * without it the 19dp band would stand 1dp under the rim, so the row carries the air itself.
      */
-    public static int computeAzRowHeightPx(boolean azEnabled, boolean extraKeysRowEnabled,
-                                           float density) {
+    private static final float AZ_ROW_CROWN_DP = 6f;
+
+    public static int computeAzRowCrownPaddingPx(boolean azEnabled, boolean appsRowEnabled,
+                                                 float density) {
+        if (!azEnabled || appsRowEnabled)
+            return 0;
+        return Math.round(Math.max(0f, density) * AZ_ROW_CROWN_DP);
+    }
+
+    /**
+     * The A-Z row's full height: the letter band, plus the crown over it when no apps row stands
+     * above and the chin under it when the row sits on the dock's bottom rim. Both are drawn as
+     * padding, so the letters keep their place in the band and the extra height is touchable air.
+     */
+    public static int computeAzRowHeightPx(boolean azEnabled, boolean appsRowEnabled,
+                                           boolean extraKeysRowEnabled, float density) {
         if (!azEnabled)
             return 0;
         return Math.round(Math.max(0f, density) * AZ_ROW_LETTER_BAND_DP)
+            + computeAzRowCrownPaddingPx(azEnabled, appsRowEnabled, density)
             + computeAzRowChinPaddingPx(azEnabled, extraKeysRowEnabled, density);
     }
 

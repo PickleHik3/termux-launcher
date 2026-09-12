@@ -213,7 +213,9 @@ public final class DockLayoutPolicy {
                     density, Math.max(0, in.additionalAppsBarHeightPx))
                 : 0;
             out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
-                azRowEnabled, in.extraKeysRowShown, density);
+                azRowEnabled, appsRowEnabled, in.extraKeysRowShown, density);
+            out.azRowCrownPaddingPx = AccessoryStackLayoutPolicy.computeAzRowCrownPaddingPx(
+                azRowEnabled, appsRowEnabled, density);
             out.azRowChinPaddingPx = AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(
                 azRowEnabled, in.extraKeysRowShown, density);
             out.indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(

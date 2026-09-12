@@ -79,14 +79,14 @@ public class AccessoryStackLayoutPolicyTest {
 
     @Test
     public void azRowHeight_usesFixedHeight() {
-        assertEquals(57, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, true, 3f));
-        assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowHeightPx(false, true, 3f));
+        assertEquals(57, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, true, true, 3f));
+        assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowHeightPx(false, true, true, 3f));
     }
 
     @Test
     public void azRowCarriesAChinOnlyWhenItIsTheDocksBottomRow() {
         // Extra keys hidden: the 19dp letter band plus a 10dp chin, all of it touchable.
-        assertEquals(87, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, 3f));
+        assertEquals(87, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, true, false, 3f));
         assertEquals(30, AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(true, false, 3f));
         // Extra keys shown: that row is the one on the rim, so the A-Z row is the band alone.
         assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(true, true, 3f));
@@ -94,19 +94,31 @@ public class AccessoryStackLayoutPolicyTest {
         assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(false, false, 3f));
     }
 
+    @Test
+    public void azRowCarriesACrownOnlyWhenItIsTheDocksTopRow() {
+        // Apps row hidden, extra keys shown: the 19dp band plus 6dp of air over the letters.
+        assertEquals(75, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, true, 3f));
+        assertEquals(18, AccessoryStackLayoutPolicy.computeAzRowCrownPaddingPx(true, false, 3f));
+        // Apps row shown: the indicator band keeps the letters off the rim, no crown.
+        assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowCrownPaddingPx(true, true, 3f));
+        assertEquals(0, AccessoryStackLayoutPolicy.computeAzRowCrownPaddingPx(false, false, 3f));
+        // Letters alone on the dock: crown over, chin under.
+        assertEquals(105, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, false, 3f));
+    }
+
     /**
      * The Alphabets bar standing alone: no apps row above it, no extra keys below it. The stack is
-     * the letter band plus its chin and nothing else — no inter-row gap is paid for a row that is
+     * the letter band with its crown and chin and nothing else — no inter-row gap is paid for a row that is
      * not there — so the glass drawn over that height ends flush on the chin the letters sit in.
      */
     @Test
     public void theLettersAloneAreTheWholeDockAndTheGlassIsExactlyTheirHeight() {
-        int alone = AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, 3f);
-        assertEquals(87, alone);
+        int alone = AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, false, 3f);
+        assertEquals(105, alone);
         assertEquals(alone, AccessoryStackLayoutPolicy.computeCombinedHeight(
             false, true, false, 300, alone, 112, 9));
         // With the extra keys back the letters drop the chin and the two rows are the whole stack.
-        int banded = AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, true, 3f);
+        int banded = AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, true, 3f);
         assertEquals(banded + 112, AccessoryStackLayoutPolicy.computeCombinedHeight(
             false, true, true, 300, banded, 112, 9));
     }

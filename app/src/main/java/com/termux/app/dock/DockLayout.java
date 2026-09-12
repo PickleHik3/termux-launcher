@@ -25,6 +25,8 @@ public final class DockLayout {
     public final int azRowHeightPx;
     /** Dead space under the A-Z row's letters, drawn as its bottom padding; 0 unless it is last. */
     public final int azRowChinPaddingPx;
+    /** Air over the A-Z row's letters, drawn as its top padding; 0 unless it is the top row. */
+    public final int azRowCrownPaddingPx;
     public final int interRowGapPx;
     /** The apps row's usable (icon) height: the row minus its own vertical padding. */
     public final int appsBarHeightHintPx;
@@ -80,6 +82,7 @@ public final class DockLayout {
         this.indicatorBandHeightPx = Math.max(0, b.indicatorBandHeightPx);
         this.azRowHeightPx = Math.max(0, b.azRowHeightPx);
         this.azRowChinPaddingPx = Math.max(0, b.azRowChinPaddingPx);
+        this.azRowCrownPaddingPx = Math.max(0, b.azRowCrownPaddingPx);
         this.interRowGapPx = Math.max(0, b.interRowGapPx);
         this.appsBarHeightHintPx = Math.max(0, b.appsBarHeightHintPx);
         this.appsRowEnabled = b.appsRowEnabled;
@@ -137,6 +140,7 @@ public final class DockLayout {
         int indicatorBandHeightPx;
         int azRowHeightPx;
         int azRowChinPaddingPx;
+        int azRowCrownPaddingPx;
         int interRowGapPx;
         int appsBarHeightHintPx;
         boolean appsRowEnabled;
