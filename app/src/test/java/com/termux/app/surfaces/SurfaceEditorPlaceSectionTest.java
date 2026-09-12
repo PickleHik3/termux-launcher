@@ -51,42 +51,47 @@ public class SurfaceEditorPlaceSectionTest {
     }
 
     @Test
-    public void theDockCardCarriesTheThreeBarsStandingOnIt() {
+    public void theDockCardCarriesItsThreeBars() {
         assertEquals(Arrays.asList(Element.PINNED_APPS, Element.AZ_INDEX, Element.EXTRA_KEYS),
             elements(SurfaceSlot.DOCK, PaneWallPage.TERMINAL,
                 layout(RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.BOTTOM)));
     }
 
+    /**
+     * A bar keeps its card whatever it is set to: hidden, railed or standing on an edge of its own,
+     * its control is still where the user last saw it. Only the terminal's own grid is elsewhere.
+     */
     @Test
-    public void aRailedAppsRowLeavesTheDockCardAndIsFoundOnTheCanvas() {
-        // The index stays on the band: standing alone it keeps its own stored edge, and that is
-        // still the bottom.
-        PlaceLayout railed = layout(RowPlacement.LEFT, true, Edge.BOTTOM, RowPlacement.BOTTOM);
-
-        assertEquals(Arrays.asList(Element.AZ_INDEX, Element.EXTRA_KEYS),
-            elements(SurfaceSlot.DOCK, PaneWallPage.TERMINAL, railed));
-        assertEquals(Arrays.asList(Element.PINNED_APPS),
-            elements(SurfaceSlot.CANVAS, PaneWallPage.TERMINAL, railed));
+    public void changingABarNeverMovesItToAnotherCard() {
+        PlaceLayout[] arrangements = {
+            layout(RowPlacement.LEFT, true, Edge.BOTTOM, RowPlacement.BOTTOM),   // apps railed
+            layout(RowPlacement.HIDDEN, true, Edge.BOTTOM, RowPlacement.BOTTOM), // apps hidden
+            layout(RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.HIDDEN), // keys hidden
+            layout(RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.RIGHT),  // keys in a column
+            layout(RowPlacement.BOTTOM, true, Edge.TOP, RowPlacement.BOTTOM),    // index on top
+            layout(RowPlacement.BOTTOM, false, Edge.BOTTOM, RowPlacement.BOTTOM), // index off
+            layout(RowPlacement.HIDDEN, false, Edge.BOTTOM, RowPlacement.BOTTOM), // keys alone
+        };
+        for (PlaceLayout arrangement : arrangements) {
+            assertEquals(arrangement.toString(),
+                Arrays.asList(Element.PINNED_APPS, Element.AZ_INDEX, Element.EXTRA_KEYS),
+                elements(SurfaceSlot.DOCK, PaneWallPage.TERMINAL, arrangement));
+            assertTrue(arrangement + " leaked a dock bar onto the terminal card",
+                elements(SurfaceSlot.CANVAS, PaneWallPage.TERMINAL, arrangement).isEmpty());
+        }
     }
 
     @Test
-    public void anIndexOnItsOwnEdgeLeavesTheDockCardToo() {
-        PlaceLayout onTop = layout(RowPlacement.LEFT, true, Edge.TOP, RowPlacement.BOTTOM);
-
-        assertEquals(Arrays.asList(Element.EXTRA_KEYS),
-            elements(SurfaceSlot.DOCK, PaneWallPage.TERMINAL, onTop));
-        assertEquals(Arrays.asList(Element.PINNED_APPS, Element.AZ_INDEX),
-            elements(SurfaceSlot.CANVAS, PaneWallPage.TERMINAL, onTop));
-    }
-
-    @Test
-    public void aHiddenBarIsAlwaysReachableFromTheCanvas() {
+    public void anEmptyBandHasNoCardSoItsBarsAreReachedFromTheCanvas() {
         PlaceLayout bare = layout(RowPlacement.HIDDEN, false, Edge.BOTTOM, RowPlacement.HIDDEN);
+        PlaceLayout railedOnly = layout(RowPlacement.LEFT, true, Edge.TOP, RowPlacement.RIGHT);
 
-        assertTrue("with nothing on the band there is no dock card at all",
-            elements(SurfaceSlot.DOCK, PaneWallPage.TERMINAL, bare).isEmpty());
-        assertEquals(Arrays.asList(Element.PINNED_APPS, Element.AZ_INDEX, Element.EXTRA_KEYS),
-            elements(SurfaceSlot.CANVAS, PaneWallPage.TERMINAL, bare));
+        for (PlaceLayout arrangement : new PlaceLayout[] {bare, railedOnly}) {
+            assertTrue("with nothing on the band there is no dock card at all",
+                elements(SurfaceSlot.DOCK, PaneWallPage.TERMINAL, arrangement).isEmpty());
+            assertEquals(Arrays.asList(Element.PINNED_APPS, Element.AZ_INDEX, Element.EXTRA_KEYS),
+                elements(SurfaceSlot.CANVAS, PaneWallPage.TERMINAL, arrangement));
+        }
     }
 
     @Test

@@ -15,12 +15,17 @@ import java.util.List;
 /**
  * Which of a place's arrangement controls lead one surface's card, in the order they stand in.
  *
- * <p>The editor has four surfaces and a place has more bars than that, so the division is by where
- * a bar actually stands. The dock band is a surface, and the bars standing on it are its Place
- * section. A bar that has left the band — a rail of pinned apps, a column of extra keys, an A–Z
- * index on an edge of its own, or a bar that is away entirely — draws no glass and therefore has no
- * card, so it is offered on the canvas: the one surface every place always has, which is also what
- * keeps a hidden bar from being a one-way door. The status bar and the keyboard each own their own.
+ * <p>The editor has four surfaces and a place has more bars than that, so each bar has one home
+ * card, and it keeps that home whatever its value is — hiding a bar, or standing it in a rail or a
+ * column, must not move its control to another card, because the next thing the user does is look
+ * for it where it was. The dock band's three bars — the pinned apps, the A–Z index and the extra
+ * keys — are the dock card's Place section in every arrangement. The status bar and the keyboard
+ * each own their own card, and the widget grid is the home canvas's.
+ *
+ * <p>The one exception is forced: with nothing standing on the band there is no dock glass to tap,
+ * so the dock has no card to reach, and the canvas — the one surface every place always has —
+ * offers the three bars instead, which is what keeps hiding the last of them from being a one-way
+ * door. They return to the dock card the moment one of them stands on the band again.
  *
  * <p>Pure: an arrangement in, an ordered list out, so every case is testable without a window.
  */
@@ -48,19 +53,22 @@ public final class SurfaceEditorPlaceSection {
                 elements.add(Element.KEYBOARD);
                 return elements;
             case DOCK:
-                if (PlaceChromePolicy.appsRowShown(layout)) elements.add(Element.PINNED_APPS);
-                if (PlaceChromePolicy.azRowOnDock(layout)) elements.add(Element.AZ_INDEX);
-                if (PlaceChromePolicy.extraKeysRowShown(layout)) elements.add(Element.EXTRA_KEYS);
+                if (PlaceChromePolicy.dockShown(layout)) addDockBars(elements);
                 return elements;
             case CANVAS:
             default:
-                // The canvas is the place's own body: its grid leads, and then whatever is not
-                // standing on the dock band, so there is always a way back to it.
+                // The canvas is the place's own body: its grid leads, and the dock's bars follow
+                // only while the band is empty and has no card of its own to reach.
                 if (Element.WIDGET_GRID.isOn(place)) elements.add(Element.WIDGET_GRID);
-                if (!PlaceChromePolicy.appsRowShown(layout)) elements.add(Element.PINNED_APPS);
-                if (!PlaceChromePolicy.azRowOnDock(layout)) elements.add(Element.AZ_INDEX);
-                if (!PlaceChromePolicy.extraKeysRowShown(layout)) elements.add(Element.EXTRA_KEYS);
+                if (!PlaceChromePolicy.dockShown(layout)) addDockBars(elements);
                 return elements;
         }
+    }
+
+    /** The dock band's three bars, in the order they stand in, whatever each one is set to. */
+    private static void addDockBars(@NonNull List<Element> elements) {
+        elements.add(Element.PINNED_APPS);
+        elements.add(Element.AZ_INDEX);
+        elements.add(Element.EXTRA_KEYS);
     }
 }
