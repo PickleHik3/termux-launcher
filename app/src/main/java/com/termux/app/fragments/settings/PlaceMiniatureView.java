@@ -99,12 +99,12 @@ public final class PlaceMiniatureView extends View {
     private static final String[] ALPHABETS_SAMPLE = {"A", "F", "M", "S", "Z"};
     /**
      * Sampled from the launcher's own default extra-keys row
-     * ({@code TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS}: the keyboard toggle, new
-     * session, and the three wall pages) — a preview illustrates the shape of the row, not
+     * ({@code TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS}: the keyboard toggle, the
+     * session browser, and the three wall pages) — a preview illustrates the shape of the row, not
      * whatever the user has actually edited it to.
      */
     private static final String[] EXTRA_KEY_GLYPHS =
-        {"󰥻", "󰝜", "", "", ""};
+        {"󰥻", "󰉹", "", "", ""};
     private static final int APPS_ROW_ICON_COUNT = 5;
     private static final int APPS_ROW_ACTIVE_INDEX = APPS_ROW_ICON_COUNT - 1;
     private static final int DISPLAY_KEY_GRID_COLUMNS = 6;

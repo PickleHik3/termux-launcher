@@ -22,8 +22,8 @@ public class DefaultExtraKeysTest {
         ExtraKeyButton[][] matrix = info.getMatrix();
         assertEquals(1, matrix.length);
         // The row carries what no key on the in-app keyboard reaches: the keyboard toggle (with
-        // the keyboard type on its swipe), mouse mode, the wall's three places, a split (with a
-        // new window on its swipe) and a new session. Window and session switching live on the
+        // the keyboard type on its swipe), mouse mode, the wall's three places, a new pane — Ctrl+Alt+Enter's split, along the longer side — (with a
+        // new window on its swipe) and the session browser (with a new session on its swipe). Window and session switching live on the
         // keyboard's space-bar swipes; workspaces, search, prompt jumps and the scratchpad have
         // chords and the palette.
         String[] expectedKeys = {
@@ -32,8 +32,8 @@ public class DefaultExtraKeysTest {
             "tool:wall.widgets",
             "tool:wall.terminal",
             "tool:wall.display",
-            "tool:pane.split_vertical",
-            "tool:session.new",
+            "tool:pane.split",
+            "tool:session.browser",
         };
         String[] expectedPopups = {
             "tool:keyboard.cycle_form",
@@ -42,7 +42,7 @@ public class DefaultExtraKeysTest {
             null,
             null,
             "tool:window.new",
-            null,
+            "tool:session.new",
         };
         assertEquals(expectedKeys.length, matrix[0].length);
         for (int i = 0; i < expectedKeys.length; i++) {
