@@ -105,6 +105,12 @@ public final class DisplayTouchpadView extends View {
     private final RectF mStrip = new RectF();
     /** The grip pill drawn centred in the strip; empty along with {@link #mStrip}. */
     private final RectF mStripGrip = new RectF();
+    /** The thumb's travel along the strip since it landed there, signed, in px. */
+    private float mStripTravelY;
+    /** How far from its resting centre the grip is drawn right now, in px. */
+    private float mGripOffsetPx;
+    /** Carries the grip back to rest after the thumb lifts; null while it is still or held. */
+    @Nullable private android.animation.ValueAnimator mGripSettle;
     private final int mTouchSlop;
     private final boolean mCard;
     /**
@@ -297,8 +303,12 @@ public final class DisplayTouchpadView extends View {
             float trackInset = dp(STRIP_TRACK_INSET_DP);
             canvas.drawLine(trackX, mStrip.top + trackInset, trackX, mStrip.bottom - trackInset,
                 mStripTrackPaint);
+            // The grip rides with the thumb that holds it and settles back once it lifts.
             float gripRadius = mStripGrip.width() / 2f;
+            canvas.save();
+            canvas.translate(0f, mGripOffsetPx);
             canvas.drawRoundRect(mStripGrip, gripRadius, gripRadius, mStripGripPaint);
+            canvas.restore();
         }
         canvas.drawRoundRect(mBack, mBack.height() / 2f, mBack.height() / 2f, mBackPaint);
         float baseline = mBack.centerY() - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
@@ -322,6 +332,7 @@ public final class DisplayTouchpadView extends View {
                 mOnBack = mBack.contains(mDownX, mDownY);
                 mOnStrip = !mOnBack && !mStrip.isEmpty()
                     && TouchpadGesturePolicy.stripHit(mDownX, mBounds.right, dp(STRIP_HIT_BAND_DP));
+                if (mOnStrip) grabGrip();
                 mTapDragArmed = !mOnBack && !mOnStrip
                     && TouchpadGesturePolicy.tapDragArmed(mDownTime, mLastTapTime, TAP_DRAG_MS);
                 if (mVelocity == null) mVelocity = android.view.VelocityTracker.obtain();
@@ -355,7 +366,10 @@ public final class DisplayTouchpadView extends View {
                 if (mOnStrip) {
                     float y = event.getY();
                     mScrollAccumY += y - mLastY;
+                    mStripTravelY += y - mLastY;
                     mLastY = y;
+                    mGripOffsetPx = TouchpadGesturePolicy.gripOffset(mStripTravelY, gripReachPx());
+                    invalidate();
                     sendStripScrollNotches(display);
                     return true;
                 }
@@ -409,6 +423,7 @@ public final class DisplayTouchpadView extends View {
                 if (mOnStrip) {
                     // No travel is a tap on the strip, which does nothing — never a click.
                     mOnStrip = false;
+                    settleGrip();
                     flingScroll(event.getPointerId(event.getActionIndex()));
                     recycleVelocity();
                     return true;
@@ -438,6 +453,7 @@ public final class DisplayTouchpadView extends View {
                 }
                 mDragging = false;
                 mOnBack = false;
+                if (mOnStrip) settleGrip();
                 mOnStrip = false;
                 recycleVelocity();
                 invalidate();
@@ -553,6 +569,45 @@ public final class DisplayTouchpadView extends View {
                 }
             }
         }
+    }
+
+    /** How far from the centre the grip may travel: to the track's ends, less its own half height. */
+    private float gripReachPx() {
+        if (mStrip.isEmpty()) return 0f;
+        return Math.max(0f, mStrip.height() / 2f - dp(STRIP_TRACK_INSET_DP) - mStripGrip.height() / 2f);
+    }
+
+    /** A thumb has landed on the strip: the grip is its from here, starting from wherever it rests. */
+    private void grabGrip() {
+        if (mGripSettle != null) {
+            mGripSettle.cancel();
+            mGripSettle = null;
+        }
+        mStripTravelY = 0f;
+        mGripOffsetPx = 0f;
+        invalidate();
+    }
+
+    /** The thumb lifted: the grip eases back to the centre, the way a jog wheel's handle returns. */
+    private void settleGrip() {
+        if (mGripSettle != null) mGripSettle.cancel();
+        mStripTravelY = 0f;
+        if (mGripOffsetPx == 0f) return;
+        android.animation.ValueAnimator settle =
+            android.animation.ValueAnimator.ofFloat(mGripOffsetPx, 0f);
+        settle.setDuration(com.termux.app.terminal.Motion.FLOAT_DEPTH_MS);
+        settle.setInterpolator(com.termux.app.terminal.Motion.settle());
+        settle.addUpdateListener(animation -> {
+            mGripOffsetPx = (float) animation.getAnimatedValue();
+            invalidate();
+        });
+        settle.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (mGripSettle == animation) mGripSettle = null;
+            }
+        });
+        mGripSettle = settle;
+        settle.start();
     }
 
     /**

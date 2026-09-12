@@ -57,10 +57,23 @@ public final class X11PaneFrame extends PaneContentFrame {
         default boolean consumeLauncherKey(@NonNull android.view.KeyEvent event) { return false; }
     }
 
-    /** Told about a tap that landed on the display's own picture. */
+    /** Told about a tap that landed on the display's own picture, or a touch that became a gesture. */
     public interface TapListener {
         /** A finger went down and came up on the display without drifting into a gesture. */
         void onDisplayTap();
+
+        /**
+         * A finger that landed on the display's picture turned into a gesture — it drifted past
+         * touch slop, or a second finger joined it. Reported once per touch, the moment it does.
+         */
+        default void onDisplayDrag() {}
+    }
+
+    /** The touch being watched is a gesture from here: not a tap, and said so once, on the display. */
+    private void noteGesture() {
+        if (mWatchMoved) return;
+        mWatchMoved = true;
+        if (mWatchIsDisplays && mTapListener != null) mTapListener.onDisplayDrag();
     }
 
     /** A tap this close to the frame's edge, inside it, is for the page rather than for X. */
@@ -378,12 +391,12 @@ public final class X11PaneFrame extends PaneContentFrame {
             case android.view.MotionEvent.ACTION_MOVE:
                 if (Math.hypot(event.getX() - mWatchDownX, event.getY() - mWatchDownY)
                         > android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
-                    mWatchMoved = true;
+                    noteGesture();
                 }
                 break;
             case android.view.MotionEvent.ACTION_POINTER_DOWN:
                 // A second finger makes this a gesture — a scroll, a pinch — and never a tap.
-                mWatchMoved = true;
+                noteGesture();
                 break;
             case android.view.MotionEvent.ACTION_UP:
                 boolean tap = mWatchIsDisplays && !mWatchMoved;

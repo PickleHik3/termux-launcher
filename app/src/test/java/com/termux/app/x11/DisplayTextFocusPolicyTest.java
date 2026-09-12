@@ -2,6 +2,7 @@ package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import androidx.annotation.NonNull;
@@ -13,6 +14,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /** The Display place's "keyboard follows text fields" state machine, window and all. */
@@ -97,6 +99,52 @@ public class DisplayTextFocusPolicyTest {
         tapOver("left_ptr");
         assertEquals(State.CLOSED, policy.state());
         assertEquals(List.of("show", "hide"), keyboard.calls);
+    }
+
+    @Test
+    public void aScrollOnThePage_closesWhatAutoOpenOpened() {
+        tapOver("xterm");
+        assertEquals(Arrays.asList("show"), keyboard.calls);
+        // Entering a URL and scrolling the page that loads: the finger lands on the page.
+        policy.onCursorName("left_ptr");
+        policy.onDisplayDrag();
+        assertEquals(Arrays.asList("show", "hide"), keyboard.calls);
+        assertEquals(DisplayTextFocusPolicy.State.CLOSED, policy.state());
+    }
+
+    @Test
+    public void aDragThatBeginsInTheField_isSelecting_andKeepsTheKeyboard() {
+        tapOver("xterm");
+        policy.onDisplayDrag();
+        assertEquals(Arrays.asList("show"), keyboard.calls);
+        assertEquals(DisplayTextFocusPolicy.State.AUTO_OPEN, policy.state());
+    }
+
+    @Test
+    public void aGesture_neverOpensTheKeyboard() {
+        policy.onCursorName("xterm");
+        policy.onDisplayDrag();
+        assertTrue(keyboard.calls.isEmpty());
+    }
+
+    @Test
+    public void aScroll_leavesAPinnedKeyboardAlone() {
+        keyboard.up = true;
+        policy.onUserKeyboardIntent(true);
+        policy.onCursorName("left_ptr");
+        policy.onDisplayDrag();
+        assertTrue(keyboard.calls.isEmpty());
+        assertEquals(DisplayTextFocusPolicy.State.PINNED, policy.state());
+    }
+
+    @Test
+    public void aGestureMidWindow_dropsTheWindow() {
+        policy.onDisplayTap();
+        policy.onDisplayDrag();
+        assertNull(scheduler.pending);
+        policy.onCursorName("xterm");
+        scheduler.expire();
+        assertTrue(keyboard.calls.isEmpty());
     }
 
     @Test

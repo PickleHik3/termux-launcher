@@ -72,6 +72,9 @@ Auto-hide only closes what auto-show opened. "Keyboard on enter" decides the sta
 - **Tap window.** A tap is an ACTION_UP in Touchscreen mode with no drag; the last cursor name
   within 150 ms after it decides. Cursor changes with no tap never toggle. Taps on the keyboard or
   launcher chrome are not display taps.
+- **Gestures close, never open.** The moment a touch on the picture becomes a drag (past touch
+  slop) or gains a second finger, `onDisplayDrag` fires once: an Auto-open keyboard goes down unless
+  the cursor under the finger names text (selecting in the field). Pinned keyboards are untouched.
 ### With the touchpad up
 
 Mouse mode and text focus want the same frame, so while mouse mode is on the frame keeps its size
@@ -82,10 +85,10 @@ content but NONE, so `mMouseMode` is gone.
 
 | Event | PAD | KEYBOARD |
 |---|---|---|
-| Mouse key / `mouse.toggle` | mouse mode off, `onUserKeyboardIntent(true)` if a keyboard is left up | PAD, unpinned, still mouse mode |
+| Mouse key / `mouse.toggle` | mouse mode off; the frame goes down too if the pad raised it (no keyboard was up when mouse mode came on), else `onUserKeyboardIntent(true)` | PAD, unpinned, still mouse mode |
 | Keyboard key, `keyboard.show/hide --source manual`, the keyboard's hide key, display Back | KEYBOARD, pinned | PAD, unpinned |
 | Text focus in / out (the policy's own `showKeyboardForTextFocus`/`hide`) | KEYBOARD (policy Auto-open) | PAD (policy Closed) |
-| Exit arrow, three-finger swipe down | mouse mode off, as today | mouse mode off |
+| Exit arrow, three-finger swipe down | mouse mode off, the frame down too if the pad raised it | mouse mode off, keyboard stays |
 | Wall leaves the place, display stops | PAD (frame lost; mouse mode survives) | PAD |
 
 The keyboard view itself stays up for the whole of mouse mode — a swap never resizes the X screen —

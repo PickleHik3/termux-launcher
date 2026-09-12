@@ -94,6 +94,22 @@ final class TouchpadGesturePolicy {
      * the pad's own {@code panelWidth}; below {@code minPointing} left over, the strip hides
      * instead of crowding the pointing area further, rather than the pad growing to make room.
      */
+    /**
+     * Where the strip's grip is drawn while a thumb holds it: it follows the thumb's travel from
+     * where it landed, easing into the ends of its reach rather than stopping dead against them,
+     * so the grip moves with the finger and reads as the handle it looks like. The scroll itself is
+     * unbounded — wheel notches — so the grip's place carries no position, only motion, and it
+     * settles back to the centre when the thumb lifts.
+     *
+     * @param travelPx the thumb's travel along the strip since it landed, signed
+     * @param reachPx  how far from the centre the grip may go, never negative
+     */
+    static float gripOffset(float travelPx, float reachPx) {
+        float reach = Math.max(0f, reachPx);
+        if (reach <= 0f || travelPx == 0f) return 0f;
+        return reach * (float) Math.tanh(travelPx / reach);
+    }
+
     static boolean stripFits(float panelWidth, float stripWidth, float minPointing) {
         return panelWidth - stripWidth >= minPointing;
     }

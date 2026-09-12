@@ -346,6 +346,11 @@ public final class X11DisplayHostController {
         textFocus.onDisplayTap();
     }
 
+    /** A touch on the display's picture became a scroll, a swipe or a pinch. */
+    public void onDisplayDrag() {
+        textFocus.onDisplayDrag();
+    }
+
     /**
      * Mouse mode's touchpad took the keyboard frame, or gave it back. While it is there its taps
      * are the display's taps whatever the touch mode, so the policy reads them.

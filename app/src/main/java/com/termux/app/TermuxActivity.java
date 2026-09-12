@@ -13474,8 +13474,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mInAppKeyboard != null && mInAppKeyboard.isVisible();
             }
         });
-        page.setTapListener(() -> {
-            if (mX11Display != null) mX11Display.onDisplayTap();
+        page.setTapListener(new com.termux.app.x11.X11PaneFrame.TapListener() {
+            @Override public void onDisplayTap() {
+                if (mX11Display != null) mX11Display.onDisplayTap();
+            }
+
+            @Override public void onDisplayDrag() {
+                if (mX11Display != null) mX11Display.onDisplayDrag();
+            }
         });
         mX11Display.host().setLorieView(page.display());
         mX11Display.setListener(running -> {
@@ -13584,7 +13590,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull private final com.termux.app.x11.DisplayFrameContentPolicy mFrameContent =
         new com.termux.app.x11.DisplayFrameContentPolicy();
-    /** Set while {@link #syncDisplayTouchpad} is raising the frame the touchpad stands in. */
+    /** Set while the frame the touchpad stands in is being raised or lowered for the pad's sake. */
     private boolean mRaisingDisplayFrameKeyboard;
     @Nullable private com.termux.app.x11.DisplayTouchpadView mDisplayTouchpad;
     /** The keyboard layout the pad follows, held so a second attach does not stack another. */
@@ -13654,6 +13660,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!decision.taken) return;
         if (mPaneController != null) mPaneController.setTouchMouseMode(decision.mouseMode());
         syncDisplayTouchpad();
+        // The frame the pad raised for itself goes down with the pad, so the mouse key closes
+        // exactly what it opened and the user is not left with a keyboard to dismiss.
+        if (decision.releaseFrame) lowerDisplayFrameKeyboard();
         syncMouseModeMark();
         if (mX11Display == null) return;
         switch (decision.intent) {
@@ -13729,7 +13738,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean reduced = isReducedMotionEnabled();
         // The keyboard is the frame both contents stand in: it has to be up for either to have a
         // size, and it stays up across a swap so the X screen is never resized to make room.
-        if (ours && !mInAppKeyboard.isVisible()) raiseDisplayFrameKeyboard();
+        if (ours && !mInAppKeyboard.isVisible()) {
+            raiseDisplayFrameKeyboard();
+            mFrameContent.onFrameRaisedForPad();
+        }
         if (!wanted) {
             releaseDisplayTouchpadWait();
             mDisplayTouchpadWaitRound = 0;
@@ -13847,6 +13859,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .ShowReason.KEYBOARD_ACTION);
+        } finally {
+            mRaisingDisplayFrameKeyboard = false;
+        }
+    }
+
+    /**
+     * Take down the keyboard the touchpad had raised for its frame, now that the pad is gone.
+     * Nobody asked for a keyboard to go here either, so the visibility listener is held off.
+     */
+    private void lowerDisplayFrameKeyboard() {
+        if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return;
+        mRaisingDisplayFrameKeyboard = true;
+        try {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .HideReason.KEYBOARD_ACTION);
         } finally {
             mRaisingDisplayFrameKeyboard = false;
         }

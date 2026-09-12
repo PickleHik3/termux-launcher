@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 /**
  * Whether the keyboard should be up on the Display place: it goes up when a tap lands on
  * something the X session draws a text cursor over, and down again when the next tap lands
- * anywhere else.
+ * anywhere else — or when the next touch becomes a scroll or a swipe that began anywhere else.
  *
  * <p>All policy, no views. Two signals reach it and neither is a focus event in itself:
  *
@@ -196,6 +196,31 @@ public final class DisplayTextFocusPolicy {
         windowOpen = true;
         scheduler.cancel();
         scheduler.schedule(TAP_WINDOW_MS, decide);
+    }
+
+    /**
+     * A finger on the display turned into a gesture — a drag past touch slop, or a second finger.
+     * A scroll or a swipe on the page is the user working somewhere other than the field that
+     * raised the keyboard, so the keyboard goes down, the way a tap elsewhere puts it down —
+     * unless the gesture began over text, which is selecting in the field, or the keyboard is the
+     * user's own. A gesture never raises the keyboard: the pointer crosses too many widgets on
+     * the way for a name to mean anything.
+     */
+    public void onDisplayDrag() {
+        if (!isActive()) return;
+        closeWindow();
+        String seen = cursorName.isEmpty() ? "(no name)" : cursorName;
+        if (state != State.AUTO_OPEN) {
+            say("drag over " + seen + " -> nothing to do" + (state == State.PINNED ? ": pinned" : ""));
+            return;
+        }
+        if (isTextCursor(cursorName)) {
+            say("drag over " + seen + " -> selecting, keyboard stays");
+            return;
+        }
+        state = State.CLOSED;
+        say("drag over " + seen + " -> hide");
+        keyboard.hideKeyboardForTextFocus();
     }
 
     /** The pointer's cursor changed its name. On its own this decides nothing. */

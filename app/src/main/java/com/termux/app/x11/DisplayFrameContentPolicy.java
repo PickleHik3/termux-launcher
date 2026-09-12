@@ -11,7 +11,11 @@ import androidx.annotation.NonNull;
  * resizes the X screen twice and loses the pointer — the frame keeps its size and swaps its
  * content: {@link Content#PAD} while the user is pointing, {@link Content#KEYBOARD} while they
  * are typing into whatever took text focus. Turning mouse mode off is the only thing that hands
- * the frame back to the keyboard alone ({@link Content#NONE}).
+ * the frame back to the keyboard alone ({@link Content#NONE}) — and if the pad had to raise that
+ * frame itself, because no keyboard was up when mouse mode came on, the frame goes away with the
+ * pad ({@link Decision#releaseFrame}): the mouse key then opens and closes the pad, and nothing
+ * else, which is what a toggle is. A keyboard the user asked for in the meantime is theirs, and
+ * stays.
  *
  * <p>All policy, no views: every event answers with a {@link Decision} the caller applies. Three
  * things ask for the swap and they mean different things to the text-focus policy beside this one:
@@ -68,11 +72,18 @@ public final class DisplayFrameContentPolicy {
          * it does off the Display place instead. Nothing was changed.
          */
         public final boolean taken;
+        /**
+         * True when the keyboard frame should go down with the pad: mouse mode is ending from the
+         * pad, and the frame was only ever up because the pad raised it.
+         */
+        public final boolean releaseFrame;
 
-        private Decision(@NonNull Content content, @NonNull Intent intent, boolean taken) {
+        private Decision(@NonNull Content content, @NonNull Intent intent, boolean taken,
+                         boolean releaseFrame) {
             this.content = content;
             this.intent = intent;
             this.taken = taken;
+            this.releaseFrame = releaseFrame;
         }
 
         /** True while mouse mode is on, pad up or keyboard parked in front of it. */
@@ -83,11 +94,18 @@ public final class DisplayFrameContentPolicy {
         @Override
         @NonNull
         public String toString() {
-            return "Decision{" + content + ", " + intent + (taken ? "" : ", not taken") + "}";
+            return "Decision{" + content + ", " + intent + (taken ? "" : ", not taken")
+                + (releaseFrame ? ", release frame" : "") + "}";
         }
     }
 
     @NonNull private Content content = Content.NONE;
+    /**
+     * True while the keyboard frame is up only because the pad needed it — no keyboard was up when
+     * mouse mode came on, so the caller raised one for the pad to stand in. Cleared the moment the
+     * user asks for the keyboard themselves, and when the frame is lost or mouse mode ends.
+     */
+    private boolean frameRaisedForPad;
 
     /** What the frame holds. */
     @NonNull
@@ -118,14 +136,24 @@ public final class DisplayFrameContentPolicy {
     }
 
     /**
-     * Mouse mode went off — the pad's own exit arrow, the three-finger swipe down, or anything
-     * else that ends it. The keyboard frame stays as it is, so a keyboard left on screen is the
-     * user's from here on.
+     * The caller put a keyboard up for the pad to stand in, because none was up when mouse mode
+     * came on. That frame is the pad's, not the user's, and leaves with it.
+     */
+    public void onFrameRaisedForPad() {
+        if (content != Content.NONE) frameRaisedForPad = true;
+    }
+
+    /**
+     * Mouse mode went off — the mouse key with the pad up, the pad's own exit arrow, the
+     * three-finger swipe down, or anything else that ends it. A keyboard frame the pad raised for
+     * itself goes away with the pad; a frame the user had, or asked for, stays as it is, so a
+     * keyboard left on screen is the user's from here on.
      */
     @NonNull
     public Decision onMouseModeOff() {
         if (content == Content.NONE) return notTaken();
-        return decide(Content.NONE, Intent.PIN);
+        boolean release = content == Content.PAD && frameRaisedForPad;
+        return decide(Content.NONE, release ? Intent.NONE : Intent.PIN, release);
     }
 
     /**
@@ -192,17 +220,26 @@ public final class DisplayFrameContentPolicy {
     @NonNull
     public Decision onFrameLost() {
         if (content == Content.NONE) return notTaken();
+        frameRaisedForPad = false;
         return decide(Content.PAD, Intent.NONE);
     }
 
     @NonNull
     private Decision decide(@NonNull Content next, @NonNull Intent intent) {
+        return decide(next, intent, false);
+    }
+
+    @NonNull
+    private Decision decide(@NonNull Content next, @NonNull Intent intent, boolean releaseFrame) {
         content = next;
-        return new Decision(next, intent, true);
+        // A keyboard the user asked for is theirs from here on, whoever raised the frame first;
+        // and with mouse mode over there is no pad's frame to speak of.
+        if (intent == Intent.PIN || next == Content.NONE) frameRaisedForPad = false;
+        return new Decision(next, intent, true, releaseFrame);
     }
 
     @NonNull
     private Decision notTaken() {
-        return new Decision(content, Intent.NONE, false);
+        return new Decision(content, Intent.NONE, false, false);
     }
 }

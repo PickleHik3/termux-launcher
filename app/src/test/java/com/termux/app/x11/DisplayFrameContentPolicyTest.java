@@ -22,9 +22,15 @@ public class DisplayFrameContentPolicyTest {
     }
 
     private void assertDecision(Decision decision, Content content, Intent intent) {
+        assertDecision(decision, content, intent, false);
+    }
+
+    private void assertDecision(Decision decision, Content content, Intent intent,
+                                boolean releaseFrame) {
         assertTrue("the event should have been taken", decision.taken);
         assertEquals(content, decision.content);
         assertEquals(intent, decision.intent);
+        assertEquals("release frame", releaseFrame, decision.releaseFrame);
         assertEquals(content, policy.content());
     }
 
@@ -55,9 +61,65 @@ public class DisplayFrameContentPolicyTest {
     @Test
     public void theMouseKey_turnsItOn_thenOff() {
         assertDecision(policy.onMouseKey(), Content.PAD, Intent.UNPIN);
-        // Off again the keyboard frame is left as it is, so a keyboard still on screen is theirs.
+        // Off again with a keyboard that was already up: the frame is left as it is, so a
+        // keyboard still on screen is theirs.
         assertDecision(policy.onMouseKey(), Content.NONE, Intent.PIN);
         assertFalse(policy.isMouseMode());
+    }
+
+    /**
+     * The keyboard was off when the mouse key came: the pad raised a frame to stand in, so the
+     * mouse key closes that frame with the pad — a toggle opens and closes the same thing.
+     */
+    @Test
+    public void theMouseKey_closesTheFrameThePadRaised() {
+        assertDecision(policy.onMouseKey(), Content.PAD, Intent.UNPIN);
+        policy.onFrameRaisedForPad();
+        assertDecision(policy.onMouseKey(), Content.NONE, Intent.NONE, true);
+        assertFalse(policy.isMouseMode());
+
+        // Next time round the frame is judged afresh.
+        assertDecision(policy.onMouseKey(), Content.PAD, Intent.UNPIN);
+        assertDecision(policy.onMouseKey(), Content.NONE, Intent.PIN);
+    }
+
+    @Test
+    public void aKeyboardTheUserAskedFor_staysWhenMouseModeEnds_evenOnThePadsFrame() {
+        policy.onMouseKey();
+        policy.onFrameRaisedForPad();
+        // The keyboard key brings the keyboard forward, then puts it back behind the pad: the
+        // user has asked for a keyboard here, so the frame is theirs now.
+        assertDecision(policy.onKeyboardKey(), Content.KEYBOARD, Intent.PIN);
+        assertDecision(policy.onKeyboardKey(), Content.PAD, Intent.UNPIN);
+        assertDecision(policy.onMouseKey(), Content.NONE, Intent.PIN);
+    }
+
+    @Test
+    public void textFocusOnThePadsFrame_doesNotMakeTheFrameTheUsers() {
+        policy.onMouseKey();
+        policy.onFrameRaisedForPad();
+        // A text field took the keyboard and let it go again: nobody asked for a keyboard.
+        assertDecision(policy.onTextFocus(true), Content.KEYBOARD, Intent.NONE);
+        assertDecision(policy.onTextFocus(false), Content.PAD, Intent.NONE);
+        assertDecision(policy.onMouseKey(), Content.NONE, Intent.NONE, true);
+    }
+
+    @Test
+    public void mouseModeEndingFromAParkedKeyboard_keepsIt() {
+        policy.onMouseKey();
+        policy.onFrameRaisedForPad();
+        policy.onTextFocus(true);
+        // The user is typing into it: the exit arrow or the swipe ends mouse mode, not the typing.
+        assertDecision(policy.onMouseModeOff(), Content.NONE, Intent.PIN);
+    }
+
+    @Test
+    public void losingTheFrame_forgetsThatThePadRaisedIt() {
+        policy.onMouseKey();
+        policy.onFrameRaisedForPad();
+        policy.onFrameLost();
+        // Back on the place a keyboard is up already (the user's): the mouse key leaves it.
+        assertDecision(policy.onMouseKey(), Content.NONE, Intent.PIN);
     }
 
     @Test

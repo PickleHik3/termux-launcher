@@ -78,6 +78,23 @@ public class TouchpadGesturePolicyTest {
     }
 
     @Test
+    public void gripOffset_followsTheThumbAndEasesIntoTheEnds() {
+        // At rest, and with no reach, the grip stays put.
+        assertEquals(0f, TouchpadGesturePolicy.gripOffset(0f, 100f), 0f);
+        assertEquals(0f, TouchpadGesturePolicy.gripOffset(40f, 0f), 0f);
+        // A short travel is followed almost one for one, in its own direction.
+        assertEquals(10f, TouchpadGesturePolicy.gripOffset(10f, 100f), 0.5f);
+        assertEquals(-10f, TouchpadGesturePolicy.gripOffset(-10f, 100f), 0.5f);
+        // A long one eases into the end of the reach and never passes it.
+        float far = TouchpadGesturePolicy.gripOffset(400f, 100f);
+        assertTrue(far > 95f && far <= 100f);
+        assertTrue(TouchpadGesturePolicy.gripOffset(-4000f, 100f) >= -100f);
+        // Monotonic: more travel is never less offset.
+        assertTrue(TouchpadGesturePolicy.gripOffset(60f, 100f)
+            < TouchpadGesturePolicy.gripOffset(120f, 100f));
+    }
+
+    @Test
     public void stripFits_leavesRoomAtTheNarrowestSplitGap() {
         // DisplayTouchpadPlacement.MIN_GAP_DP (160) minus a 30dp strip is still 130dp to point
         // in, comfortably past a 60dp minimum, so the strip stays up even at the narrowest gap.
