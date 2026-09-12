@@ -8624,11 +8624,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public void openKeyboardSettings() {
-            ActivityUtils.startActivity(TermuxActivity.this,
-                SettingsActivity.createFragmentIntent(TermuxActivity.this,
-                    com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment.class,
-                    R.string.termux_keyboard_preferences_title));
+        /** The keyboard's settings key opens the launcher's settings, the same page as the palette's. */
+        public void openLauncherSettings() {
+            TermuxActivity.this.openSettings();
         }
 
         @Override

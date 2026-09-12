@@ -270,7 +270,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     private void dispatchEvent(KeyValue.Event event, TerminalModifiers modifiers) {
         switch (event) {
             case CONFIG:
-                mHostActions.openKeyboardSettings();
+                mHostActions.openLauncherSettings();
                 break;
             case SWITCH_TEXT:
                 mHostActions.requestTextLayout();

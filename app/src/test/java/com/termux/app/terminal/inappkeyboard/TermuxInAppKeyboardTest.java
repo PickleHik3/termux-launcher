@@ -772,7 +772,7 @@ public class TermuxInAppKeyboardTest {
         @Override public void requestGreekMathLayout() { }
         @Override public void requestForwardLayout() { }
         @Override public void requestBackwardLayout() { }
-        @Override public void openKeyboardSettings() { }
+        @Override public void openLauncherSettings() { }
         @Override public void hideKeyboard() { }
         @Override public void setComposePending(boolean pending) { }
         @Override public void toggleCapsLock() { }

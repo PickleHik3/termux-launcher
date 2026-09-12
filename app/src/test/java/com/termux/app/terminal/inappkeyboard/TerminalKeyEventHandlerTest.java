@@ -690,7 +690,7 @@ public class TerminalKeyEventHandlerTest {
         }
 
         @Override
-        public void openKeyboardSettings() {
+        public void openLauncherSettings() {
             settings++;
         }
 
