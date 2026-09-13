@@ -281,6 +281,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.terminal.AgentStatusTracker mAgentStatuses =
         new com.termux.app.terminal.AgentStatusTracker();
     @Nullable private Runnable mSessionBrowserRefreshCallback;
+    /** Built once; read live by the notice pill and the sessions drawer. */
+    @Nullable private TerminalDress.Source mTerminalDressSource;
     private final Handler mWindowLabelHandler = new Handler(Looper.getMainLooper());
     private static final long WINDOW_LABEL_POLL_MS = 2000L;
     /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
@@ -1174,20 +1176,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Read through, never copied: the corner knob, the opacity slider and the glass tint all
         // move while the surface editor is open, and the pill has to be wearing what the terminal
         // is wearing at the moment it is raised.
-        host.setTerminalDressSource(new TerminalDress.Source() {
-            @Override public float terminalCornerRadiusPx() {
-                return terminalEdgeCornerRadiusPx();
-            }
-
-            @Override public int terminalFillColor() {
-                return shouldShowTerminalOverlaySurface()
-                    ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
-            }
-        });
+        host.setTerminalDressSource(terminalDressSource());
         host.setOccupancyListener(height -> {
             mAppNoticeOccupancyPx = height;
             applyNoticeColumnOffsets();
         });
+    }
+
+    /**
+     * What the terminal is wearing, for everything the launcher draws on top of it: the notice pill
+     * and the sessions drawer read the same numbers, so the two can never disagree about the radius
+     * or the fill.
+     */
+    @NonNull
+    private TerminalDress.Source terminalDressSource() {
+        if (mTerminalDressSource == null) {
+            mTerminalDressSource = new TerminalDress.Source() {
+                @Override public float terminalCornerRadiusPx() {
+                    return terminalEdgeCornerRadiusPx();
+                }
+
+                @Override public int terminalFillColor() {
+                    return shouldShowTerminalOverlaySurface()
+                        ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
+                }
+            };
+        }
+        return mTerminalDressSource;
     }
 
     /** The column under the pill: the background stack sits directly below whatever it is showing. */
@@ -10452,6 +10467,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public float terminalCornerRadiusPx() {
             return terminalEdgeCornerRadiusPx();
+        }
+
+        @Nullable @Override public TerminalDress.Source terminalDressSource() {
+            return TermuxActivity.this.terminalDressSource();
         }
 
         @Override public boolean isReducedMotionEnabled() {
