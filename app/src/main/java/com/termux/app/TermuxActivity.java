@@ -122,7 +122,6 @@ import com.termux.app.launcher.folder.FolderRenameTitleView;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.LockAccessibilityService;
 import com.termux.app.launcher.TerminalAppSearchKeyDecision;
-import com.termux.app.onboarding.FirstLaunchOnboarding;
 import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
@@ -557,7 +556,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Handler mBackgroundProcessHandler = new Handler(Looper.getMainLooper());
     /** Height the in-app notice chip is occupying above the background stack; 0 when not showing. */
     private int mAppNoticeOccupancyPx;
-    /** True between the onboarding finishing and the last of its permission dialogs closing. */
+    /** True between the first-run permission chain starting and its last dialog closing. */
     private boolean mFirstRunPermissionChainActive;
     /** Guards {@link #mFirstRunChainFinishedListener} firing more than once per chain. */
     private boolean mFirstRunChainFinishedNotified;
@@ -1093,36 +1092,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
             contentView.post(() -> {
-                FirstLaunchOnboarding.showIfNeeded(this, forceOnboarding, () -> {
-                    // The run teaches gestures on the live home screen, so it starts from the
-                    // chain's own finished callback rather than beside it — registered first,
-                    // because a chain with nothing left to ask closes inside the call below.
-                    setFirstRunChainFinishedListener(() -> {
-                        com.termux.app.tour.FirstBootTour tour = firstBootTour();
-                        if (tour == null) return;
-                        if (forceOnboarding) tour.restart();
-                        else tour.startIfNeeded();
-                    });
-                    startFirstRunPermissionChain();
+                // A run a process death interrupted picks back up on its own card, no permission
+                // chain involved — that already ran the first time this run started. Skipped for
+                // a forced replay, which always restarts from card one instead.
+                com.termux.app.tour.FirstBootTour tour = firstBootTour();
+                if (!forceOnboarding && tour != null && tour.resumeIfInProgress()) return;
+                // Otherwise this is either the first launch ever or Settings asking for the tour
+                // again from a cold start. The chain's own dialogs no-op for anyone who has
+                // already answered them, so running it unconditionally is safe both ways; the
+                // tour starts (or restarts) only once it closes — registered first, because a
+                // chain with nothing left to ask closes inside the call below.
+                setFirstRunChainFinishedListener(() -> {
+                    com.termux.app.tour.FirstBootTour t = firstBootTour();
+                    if (t == null) return;
+                    if (forceOnboarding) t.restart();
+                    else t.startIfNeeded();
                 });
-                // Nothing was shown, so nothing will call back: pick up a run that a process death
-                // interrupted. A user who never started one is left alone.
-                com.termux.app.tour.FirstBootTour pending = firstBootTour();
-                if (pending != null && !FirstLaunchOnboarding.isShowing(this))
-                    pending.resumeIfInProgress();
+                startFirstRunPermissionChain();
             });
         }
     }
 
     /**
      * The permissions the launcher wants but cannot function without, asked for once, in order,
-     * immediately after the onboarding's last page.
+     * on first launch — before the overlay tour starts, so the run teaches gestures on a screen
+     * that already looks and behaves the way it will from then on.
      *
      * <p>Both used to be asked reactively — the wallpaper one only after a read had already failed
      * and the surface had drawn wrong, the location one at the moment the user first opened the
-     * weather card. Asking at the end of the introduction instead means the user has just been told
-     * what the wallpaper-aware surface and the weather widget are, so the dialogs have a reason
-     * attached, and the first real frame is already correct.
+     * weather card. Asking up front instead means the dialogs have a reason attached before the
+     * tour ever points at the surfaces they gate, and the first real frame is already correct.
      *
      * <p>Strictly sequential: two runtime permission dialogs requested in the same frame means the
      * second one is dropped by the framework, so the location step is started from the wallpaper
@@ -1614,7 +1613,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Step seven launches an app; the run is picked back up on the card it was on when the
         // launcher returns.
         com.termux.app.tour.FirstBootTour tour = firstBootTour();
-        if (tour != null && !FirstLaunchOnboarding.isShowing(this)) tour.resumeIfInProgress();
+        if (tour != null) tour.resumeIfInProgress();
         mIsOnResumeAfterOnCreate = false;
     }
 
@@ -4928,11 +4927,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!mIsVisible || mPreferences == null || isFinishing() || isDestroyed()) {
             return;
         }
-        // On a fresh install the wallpaper read fails while the first-launch tour is still up, so
-        // this reactive prompt used to open over the tour. The first-run permission chain asks the
-        // same question after the tour is dismissed; if the user skips it there, the next failed
-        // read after onboarding re-triggers this path.
-        if (com.termux.app.onboarding.FirstLaunchOnboarding.isShowing(this)) {
+        // The overlay tour draws its cards over the live home screen; a system dialog opening on
+        // top of one would fight it for attention. The first-run permission chain already asks
+        // this same question before the tour starts, so a failed read while the tour is up means
+        // the user declined it there — a later failed read re-arms this path once the run is done.
+        com.termux.app.tour.FirstBootTour tour = firstBootTour();
+        if (tour != null && tour.isShowing()) {
             return;
         }
         boolean permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(this,

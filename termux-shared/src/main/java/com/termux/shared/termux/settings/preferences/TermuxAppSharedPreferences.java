@@ -2610,4 +2610,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_FIRST_BOOT_TOUR_SKIPPED, skipped, true);
     }
+
+    /** Whether the removed footage onboarding's completion has already been folded in, or not. */
+    public boolean isFirstBootTourLegacyOnboardingMigrated() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED);
+    }
+
+    public void setFirstBootTourLegacyOnboardingMigrated(boolean migrated) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED, migrated, true);
+    }
 }

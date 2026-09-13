@@ -43,15 +43,44 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Nullable private ViewGroup mOverlayHost;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mLayoutListener;
 
+    /** The removed footage onboarding's own once-per-install preferences file and key. */
+    private static final String LEGACY_ONBOARDING_PREFS_NAME = "termux_first_launch";
+    private static final String LEGACY_ONBOARDING_COMPLETED_VERSION_KEY =
+        "onboarding_completed_version";
+    private static final int LEGACY_ONBOARDING_COMPLETED_VERSION = 2;
+
     public FirstBootTour(@NonNull Activity activity,
                          @NonNull TermuxAppSharedPreferences preferences,
                          @Nullable SpaceBarProbe spaceBarProbe) {
         mActivity = activity;
         mSpaceBarProbe = spaceBarProbe;
+        migrateLegacyOnboardingCompletionIfNeeded(activity, preferences);
         mController = new TourController(TourRun.steps(), new TourPreferences(preferences),
             SystemClock::uptimeMillis);
         mController.setListener(this);
         mSignals.setTourSignalListener(this);
+    }
+
+    /**
+     * Treats a completed run of the removed footage onboarding (`FirstLaunchOnboarding`, dropped
+     * when this overlay tour replaced it) as a completed run of this tour, so an install that
+     * already sat through the old one is never shown this run too. Runs once, ever, guarded by
+     * its own flag rather than by {@link TermuxAppSharedPreferences#getFirstBootTourCompletedVersion()}
+     * — Replay legitimately zeroes that version, and reading it back after that would look
+     * exactly like "never migrated" and clobber the replay to "seen".
+     */
+    private static void migrateLegacyOnboardingCompletionIfNeeded(
+            @NonNull Activity activity, @NonNull TermuxAppSharedPreferences preferences) {
+        if (preferences.isFirstBootTourLegacyOnboardingMigrated()) return;
+        int legacyVersion = activity
+            .getSharedPreferences(LEGACY_ONBOARDING_PREFS_NAME, Activity.MODE_PRIVATE)
+            .getInt(LEGACY_ONBOARDING_COMPLETED_VERSION_KEY, 0);
+        if (TourController.legacyOnboardingCounts(
+                legacyVersion, LEGACY_ONBOARDING_COMPLETED_VERSION,
+                preferences.getFirstBootTourCompletedVersion())) {
+            preferences.setFirstBootTourCompletedVersion(TourController.RUN_VERSION);
+        }
+        preferences.setFirstBootTourLegacyOnboardingMigrated(true);
     }
 
     /**
@@ -67,9 +96,18 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mController.start();
     }
 
-    /** Picks an unfinished run back up after a process death or a trip out of the launcher. */
-    public void resumeIfInProgress() {
-        mController.resumeIfInProgress();
+    /**
+     * Picks an unfinished run back up after a process death or a trip out of the launcher.
+     *
+     * @return true when a run was actually resumed.
+     */
+    public boolean resumeIfInProgress() {
+        return mController.resumeIfInProgress();
+    }
+
+    /** Whether a card is up right now — for suppressing dialogs that would draw over it. */
+    public boolean isShowing() {
+        return mController.isRunning();
     }
 
     /** The place the status bar is showing for, once it has settled there. */

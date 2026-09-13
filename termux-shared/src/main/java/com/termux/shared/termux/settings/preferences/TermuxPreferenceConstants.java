@@ -1320,6 +1320,16 @@ public final class TermuxPreferenceConstants {
         /** Whether the user skipped past a card in the run they are on. */
         public static final String KEY_FIRST_BOOT_TOUR_SKIPPED = "first_boot_tour_skipped";
         public static final boolean DEFAULT_FIRST_BOOT_TOUR_SKIPPED = false;
+
+        /**
+         * Whether the one-time migration that folds a completed run of the removed footage
+         * onboarding into {@link #KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION} has already run. Guarded
+         * by its own flag, never by the completed version itself, since Replay legitimately zeroes
+         * that version and must not be read back as "never migrated".
+         */
+        public static final String KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED =
+            "first_boot_tour_legacy_onboarding_migrated";
+        public static final boolean DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED = false;
     }
 
     /**
