@@ -1327,12 +1327,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             feedDockPlank(ev);
             feedTerminalPlank(ev);
-            mKeybindHintPresenter.onTerminalTouch(ev);
+            if (touchBeganOverTerminal(ev)) mKeybindHintPresenter.onTerminalTouch(ev);
             notifyKeybindHintPanelTouch(ev);
             return super.dispatchTouchEvent(ev);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /**
+     * Whether this touch is a tap on the terminal itself. The hint presenter reads such a tap
+     * while its strip is up as "the user has moved on from the chord", so a tap anywhere else must
+     * never reach it: every touch used to, and the in-app keyboard's Shift cap joining a latched
+     * Ctrl+Alt took the strip down and marked the chord spent, so letting Shift go again brought
+     * nothing back. The keyboard is ruled out on its own as well, since the floating keyboard sits
+     * over the terminal's bounds.
+     */
+    private boolean touchBeganOverTerminal(@NonNull MotionEvent ev) {
+        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return false;
+        if (!viewContainsScreenPoint(findViewById(R.id.terminal_surface_host), ev)) return false;
+        return !viewContainsScreenPoint(findViewById(R.id.inapp_keyboard_container), ev);
+    }
+
+    private static boolean viewContainsScreenPoint(@Nullable View view, @NonNull MotionEvent ev) {
+        if (view == null || !view.isShown()) return false;
+        int[] location = new int[2];
+        view.getLocationOnScreen(location);
+        float x = ev.getRawX();
+        float y = ev.getRawY();
+        return x >= location[0] && x < location[0] + view.getWidth()
+            && y >= location[1] && y < location[1] + view.getHeight();
     }
 
     /**
