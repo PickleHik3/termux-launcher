@@ -1,6 +1,8 @@
 package com.termux.app.x11;
 
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -8,6 +10,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
@@ -34,9 +38,11 @@ import com.termux.x11.LorieView;
  * window meets the same corners the panes have.
  *
  * <p>While no server is running the page shows its empty state, which is where a home screen
- * rests: the launcher never starts a display on its own. A tap on the page's border drops the
- * same two-button tab a pane's border does: power, and the display's settings — and, while a
- * display runs, the scale rail along the page's leading edge.
+ * rests: the launcher never starts a display on its own. A tap on one of the page's four corners
+ * drops the same two-button tab a pane's corner does, out of the corner that was touched: power,
+ * and the display's settings — and, while a display runs, the scale rail along the page's leading
+ * edge, which is out only while that tab is. Between the corners the edges are X's: a maximised
+ * window is touchable to its rim.
  */
 public final class X11PaneFrame extends PaneContentFrame {
 
@@ -76,9 +82,6 @@ public final class X11PaneFrame extends PaneContentFrame {
         if (mWatchIsDisplays && mTapListener != null) mTapListener.onDisplayDrag();
     }
 
-    /** A tap this close to the frame's edge, inside it, is for the page rather than for X. */
-    private static final float BORDER_BAND_DP = 12f;
-
     /** The buttons the page's border tab carries: power, and the display's settings. */
     private static final int ACTION_POWER = 0;
     private static final int ACTION_SETTINGS = 1;
@@ -88,14 +91,19 @@ public final class X11PaneFrame extends PaneContentFrame {
     private static final String GLYPH_SETTINGS = "\uf013";
 
     private final PaneRim mRim = new PaneRim();
+    private final CornerBracket mBracket = new CornerBracket();
+    private final RectF mBracketBounds = new RectF();
     @Nullable private PaneControlsView mControls;
     @Nullable private DisplayScaleRailView mRail;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
     /** A finger on the rail's thumb, from its landing to its lift. */
     private boolean mRailPressed;
-    private boolean mBorderPressed;
-    /** Whether the tab was out when the finger landed: a border tap puts it away, or brings it out. */
+    /** The corner the finger is holding, from its landing to its lift. */
+    private int mPressedCorner = CornerZones.NONE;
+    /** Whether the tab was out when the finger landed: a corner tap puts it away, or moves it. */
     private boolean mShownAtDown;
+    /** And which corner it was out of, so a tap on another corner moves it rather than closing it. */
+    private int mShownCornerAtDown = CornerZones.NONE;
     private boolean mTouchMoved;
     private float mDownX, mDownY;
     @Nullable private LorieView mDisplay;
@@ -165,18 +173,18 @@ public final class X11PaneFrame extends PaneContentFrame {
     }
 
     /**
-     * A tap on the page's border drops the controls from its top edge, as a tap on a pane's border
-     * does; a tap on one of them runs it, and a tap anywhere else puts them away and goes on to
-     * X. Only those touches are taken from the display: everything inside the border band that is
-     * not a control is X's, as before.
+     * A tap on one of the page's corners drops the controls out of it, as a tap on a pane's corner
+     * does; a tap on one of them runs it, and a tap anywhere else puts them away and goes on to X.
+     * Only those touches are taken from the display: the edges between the corners are X's.
      */
     @Override
     public boolean onInterceptTouchEvent(@NonNull android.view.MotionEvent event) {
         if (event.getActionMasked() != android.view.MotionEvent.ACTION_DOWN) {
-            return mPressedAction != PaneControlsView.ACTION_NONE || mBorderPressed || mRailPressed;
+            return mPressedAction != PaneControlsView.ACTION_NONE
+                || mPressedCorner != CornerZones.NONE || mRailPressed;
         }
         mPressedAction = PaneControlsView.ACTION_NONE;
-        mBorderPressed = false;
+        mPressedCorner = CornerZones.NONE;
         mRailPressed = false;
         mTouchMoved = false;
         mDownX = event.getX();
@@ -185,6 +193,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         // on the tab alone must not leave it standing.
         mShownAtDown = (mControls != null && mControls.isControlsShown())
             || (mRail != null && mRail.isRailShown());
+        mShownCornerAtDown = mControls != null && mControls.isControlsShown()
+            ? mControls.corner() : CornerZones.NONE;
         if (mRail != null && mRail.hits(mDownX, mDownY)) {
             mRailPressed = true;
             mRail.beginDrag(mDownY);
@@ -198,17 +208,26 @@ public final class X11PaneFrame extends PaneContentFrame {
             }
             dismissControls();
         }
-        if (isNearBorder(mDownX, mDownY)) {
-            mBorderPressed = true;
+        int corner = cornerAt(mDownX, mDownY);
+        if (corner != CornerZones.NONE) {
+            mPressedCorner = corner;
+            invalidate();
             return true;
         }
         return false;
     }
 
+    /** The corner a touch lands in, or {@link CornerZones#NONE} when it is the display's. */
+    private int cornerAt(float x, float y) {
+        return CornerZones.cornerAt(x, y, getWidth(), getHeight(),
+            CornerZones.sizePx(getResources().getDisplayMetrics().density));
+    }
+
     @Override
     public boolean onTouchEvent(@NonNull android.view.MotionEvent event) {
         if (mRailPressed) return onRailTouch(event);
-        if (mPressedAction == PaneControlsView.ACTION_NONE && !mBorderPressed) {
+        if (mPressedAction == PaneControlsView.ACTION_NONE
+            && mPressedCorner == CornerZones.NONE) {
             return super.onTouchEvent(event);
         }
         float slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
@@ -224,18 +243,23 @@ public final class X11PaneFrame extends PaneContentFrame {
                             dismissControls();
                             mControls.activate(mPressedAction);
                         }
-                    } else if (mBorderPressed) {
+                    } else if (mPressedCorner != CornerZones.NONE) {
                         performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
-                        if (mShownAtDown) dismissControls();
-                        else showControls();
+                        // Out of the corner that was touched; the corner it is already out of
+                        // is the one that puts it away again.
+                        if (!mShownAtDown || mShownCornerAtDown != mPressedCorner)
+                            showControls(mPressedCorner);
+                        else dismissControls();
                     }
                 }
                 mPressedAction = PaneControlsView.ACTION_NONE;
-                mBorderPressed = false;
+                mPressedCorner = CornerZones.NONE;
+                invalidate();
                 return true;
             case android.view.MotionEvent.ACTION_CANCEL:
                 mPressedAction = PaneControlsView.ACTION_NONE;
-                mBorderPressed = false;
+                mPressedCorner = CornerZones.NONE;
+                invalidate();
                 return true;
             default:
                 return true;
@@ -288,9 +312,9 @@ public final class X11PaneFrame extends PaneContentFrame {
         getContext().sendBroadcast(intent);
     }
 
-    /** The tab, and the rail with it while a display runs, reading the stop the store holds. */
-    private void showControls() {
-        if (mControls != null) mControls.show();
+    /** The tab out of one corner, and the rail with it while a display runs. */
+    private void showControls(int corner) {
+        if (mControls != null) mControls.show(corner);
         if (mRail == null || !mRunning) return;
         com.termux.x11.Prefs prefs = prefsOrNull();
         if (prefs != null) {
@@ -310,10 +334,14 @@ public final class X11PaneFrame extends PaneContentFrame {
         }
     }
 
-    private boolean isNearBorder(float x, float y) {
-        float band = BORDER_BAND_DP * getResources().getDisplayMetrics().density;
-        if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) return false;
-        return Math.min(Math.min(x, getWidth() - x), Math.min(y, getHeight() - y)) <= band;
+    /** The corner under the finger is marked for as long as the finger is on it, never at rest. */
+    @Override
+    protected void dispatchDraw(@NonNull Canvas canvas) {
+        super.dispatchDraw(canvas);
+        if (mPressedCorner == CornerZones.NONE) return;
+        mBracketBounds.set(0f, 0f, getWidth(), getHeight());
+        mBracket.draw(canvas, mPressedCorner, mBracketBounds,
+            getResources().getDisplayMetrics().density, CornerBracket.color(getContext()));
     }
 
     /** Whether the border tab is out (or coming out). */
@@ -373,7 +401,8 @@ public final class X11PaneFrame extends PaneContentFrame {
 
     /**
      * A tap is one finger down and up on the display's own picture with no drift: not a drag, not
-     * a two-finger gesture, and not one of the page's controls or its border band.
+     * a two-finger gesture, and not one of the page's controls or one of its corners. The edges
+     * are the display's, so a maximised window's own edge controls answer.
      */
     private void watchForTap(@NonNull android.view.MotionEvent event) {
         if (mTapListener == null) return;
@@ -385,8 +414,8 @@ public final class X11PaneFrame extends PaneContentFrame {
                 boolean onControl = mControls != null && mControls.isControlsShown()
                     && mControls.actionAt(mWatchDownX, mWatchDownY) != PaneControlsView.ACTION_NONE;
                 onControl |= mRail != null && mRail.hits(mWatchDownX, mWatchDownY);
-                mWatchIsDisplays = mRunning && !onControl
-                    && !isNearBorder(mWatchDownX, mWatchDownY);
+                mWatchIsDisplays = touchIsTheDisplays(mRunning, onControl,
+                    cornerAt(mWatchDownX, mWatchDownY));
                 break;
             case android.view.MotionEvent.ACTION_MOVE:
                 if (Math.hypot(event.getX() - mWatchDownX, event.getY() - mWatchDownY)
@@ -409,6 +438,16 @@ public final class X11PaneFrame extends PaneContentFrame {
             default:
                 break;
         }
+    }
+
+    /**
+     * Whether a touch down belongs to the display's own picture: a display has to be running, the
+     * page's own chrome must not want it, and it must not be in a corner. Everything else — every
+     * pixel of every edge — is X's.
+     */
+    @androidx.annotation.VisibleForTesting
+    static boolean touchIsTheDisplays(boolean running, boolean onPageChrome, int corner) {
+        return running && !onPageChrome && corner == CornerZones.NONE;
     }
 
     @NonNull

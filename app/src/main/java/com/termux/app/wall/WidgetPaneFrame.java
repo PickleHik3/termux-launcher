@@ -1,6 +1,8 @@
 package com.termux.app.wall;
 
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
@@ -11,6 +13,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
@@ -26,10 +30,12 @@ import com.termux.app.terminal.PaneSurfaceStyle;
  * <p>The grid view is moved in rather than inflated: there is one widget grid in the app, and it
  * keeps its app-widget host views across the move.
  *
- * <p>A tap on the page's border drops the same tab the Display page's border drops, with the
- * page's own two buttons: its settings, and the pencil that starts editing the widgets. While a
- * widget is being edited that pair is replaced by the grid's size, which opens the wheels that
- * change it.
+ * <p>A tap on one of the page's four corners drops the same tab the Display page's corners drop,
+ * with the page's own two buttons: its settings, and the pencil that starts editing the widgets.
+ * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
+ * While a widget is being edited that pair is replaced by the grid's size, which opens the wheels
+ * that change it. Everything between the corners is the widgets': a grid that reaches the rim is
+ * touchable to its last pixel.
  */
 public final class WidgetPaneFrame extends PaneContentFrame {
 
@@ -47,9 +53,6 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         void setWidgetGrid(int columns, int rows);
     }
 
-    /** A tap this close to the frame's edge, inside it, is for the page rather than for a widget. */
-    private static final float BORDER_BAND_DP = 12f;
-
     /** The buttons the page's border tab carries. */
     private static final int ACTION_SETTINGS = 0;
     private static final int ACTION_EDIT = 1;
@@ -60,6 +63,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final String GLYPH_EDIT = "";
 
     private final PaneRim mRim = new PaneRim();
+    private final CornerBracket mBracket = new CornerBracket();
+    private final RectF mBracketBounds = new RectF();
     @Nullable private PaneGlassBackdropView mGlass;
     @Nullable private View mGrid;
     @Nullable private PaneSurfaceStyle mStyle;
@@ -68,9 +73,12 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     @Nullable private com.termux.app.launcher.widget.WidgetGridSizePopup mGridSizePopup;
     private boolean mEditing;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
-    private boolean mBorderPressed;
-    /** Whether the tab was out when the finger landed: a border tap puts it away, or brings it out. */
+    /** The corner the finger is holding, from its landing to its lift. */
+    private int mPressedCorner = CornerZones.NONE;
+    /** Whether the tab was out when the finger landed: a corner tap puts it away, or moves it. */
     private boolean mShownAtDown;
+    /** And which corner it was out of, so a tap on another corner moves it rather than closing it. */
+    private int mShownCornerAtDown = CornerZones.NONE;
     private boolean mTouchMoved;
     private float mDownX, mDownY;
 
@@ -133,6 +141,13 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         return mControls != null && mControls.isControlsShown();
     }
 
+    /** The tab, for a test that has to find where it came out. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable
+    PaneControlsView controlsTab() {
+        return mControls;
+    }
+
     public void dismissControls() {
         dismissGridSizePopup();
         if (mControls != null) mControls.dismiss();
@@ -183,22 +198,24 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     }
 
     /**
-     * A tap on the page's border drops the controls from its top edge, as a tap on a pane's
-     * border does; a tap on one of them runs it, and a tap anywhere else puts them away and goes
-     * on to the grid. Only those touches are taken from the widgets: everything inside the border
-     * band that is not a control belongs to whatever is drawn there, as before.
+     * A tap on one of the page's corners drops the controls out of it, as a tap on a pane's corner
+     * does; a tap on one of them runs it, and a tap anywhere else puts them away and goes on to
+     * the grid. Only those touches are taken from the widgets: the edges between the corners, and
+     * anything the edit chrome wants, belong to whatever is drawn there.
      */
     @Override
     public boolean onInterceptTouchEvent(@NonNull MotionEvent event) {
         if (event.getActionMasked() != MotionEvent.ACTION_DOWN) {
-            return mPressedAction != PaneControlsView.ACTION_NONE || mBorderPressed;
+            return mPressedAction != PaneControlsView.ACTION_NONE
+                || mPressedCorner != CornerZones.NONE;
         }
         mPressedAction = PaneControlsView.ACTION_NONE;
-        mBorderPressed = false;
+        mPressedCorner = CornerZones.NONE;
         mTouchMoved = false;
         mDownX = event.getX();
         mDownY = event.getY();
         mShownAtDown = mControls != null && mControls.isControlsShown();
+        mShownCornerAtDown = mShownAtDown ? mControls.corner() : CornerZones.NONE;
         if (mShownAtDown) {
             int action = mControls.actionAt(mDownX, mDownY);
             if (action != PaneControlsView.ACTION_NONE) {
@@ -208,11 +225,26 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             // The editing tab is the mode's own chrome, so only leaving the mode puts it away.
             if (!mEditing) mControls.dismiss();
         }
-        if (isNearBorder(mDownX, mDownY) && !editChromeWantsPoint(mDownX, mDownY)) {
-            mBorderPressed = true;
+        int corner = claimedCorner(mDownX, mDownY, getWidth(), getHeight(),
+            getResources().getDisplayMetrics().density, editChromeWantsPoint(mDownX, mDownY));
+        if (corner != CornerZones.NONE) {
+            mPressedCorner = corner;
+            invalidate();
             return true;
         }
         return false;
+    }
+
+    /**
+     * Which corner a touch down takes for the page, or {@link CornerZones#NONE} when it belongs to
+     * whatever the page is holding. The edit chrome comes first: a widget's own remove chip and
+     * resize handles are inside the page's corners, and they are the widget's.
+     */
+    @androidx.annotation.VisibleForTesting
+    static int claimedCorner(float x, float y, int width, int height, float density,
+                             boolean editChromeWantsPoint) {
+        if (editChromeWantsPoint) return CornerZones.NONE;
+        return CornerZones.cornerAt(x, y, width, height, CornerZones.sizePx(density));
     }
 
     /**
@@ -232,7 +264,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
 
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
-        if (mPressedAction == PaneControlsView.ACTION_NONE && !mBorderPressed) {
+        if (mPressedAction == PaneControlsView.ACTION_NONE
+            && mPressedCorner == CornerZones.NONE) {
             return super.onTouchEvent(event);
         }
         float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
@@ -249,28 +282,38 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                             if (mPressedAction != ACTION_GRID_SIZE) mControls.dismiss();
                             mControls.activate(mPressedAction);
                         }
-                    } else if (mBorderPressed) {
+                    } else if (mPressedCorner != CornerZones.NONE) {
                         performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                        if (mShownAtDown) dismissControls();
-                        else mControls.show();
+                        // Out of the corner that was touched; the corner it is already out of
+                        // is the one that puts it away again.
+                        if (!mShownAtDown) mControls.show(mPressedCorner);
+                        else if (mShownCornerAtDown != mPressedCorner)
+                            mControls.show(mPressedCorner);
+                        else dismissControls();
                     }
                 }
                 mPressedAction = PaneControlsView.ACTION_NONE;
-                mBorderPressed = false;
+                mPressedCorner = CornerZones.NONE;
+                invalidate();
                 return true;
             case MotionEvent.ACTION_CANCEL:
                 mPressedAction = PaneControlsView.ACTION_NONE;
-                mBorderPressed = false;
+                mPressedCorner = CornerZones.NONE;
+                invalidate();
                 return true;
             default:
                 return true;
         }
     }
 
-    private boolean isNearBorder(float x, float y) {
-        float band = BORDER_BAND_DP * getResources().getDisplayMetrics().density;
-        if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) return false;
-        return Math.min(Math.min(x, getWidth() - x), Math.min(y, getHeight() - y)) <= band;
+    /** The corner under the finger is marked for as long as the finger is on it, never at rest. */
+    @Override
+    protected void dispatchDraw(@NonNull Canvas canvas) {
+        super.dispatchDraw(canvas);
+        if (mPressedCorner == CornerZones.NONE) return;
+        mBracketBounds.set(0f, 0f, getWidth(), getHeight());
+        mBracket.draw(canvas, mPressedCorner, mBracketBounds,
+            getResources().getDisplayMetrics().density, CornerBracket.color(getContext()));
     }
 
     /**
@@ -283,8 +326,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             getResources().getDisplayMetrics().density);
         boolean glass = PaneGlass.apply(style, this, mGlass, requestedRadiusPx);
         // The frame clips to its shape once the glass is on, so the tab is moved in past the
-        // corner arc - it starts where the top edge goes straight, rather than being cut by it.
-        if (mControls != null) mControls.setTrailingInsetPx(glass ? requestedRadiusPx : 0f);
+        // corner arc - it starts where that edge goes straight, rather than being cut by it.
+        if (mControls != null) mControls.setCornerInsetPx(glass ? requestedRadiusPx : 0f);
         // A page is never a divided pane, so its radius is the surface's own; only the glass
         // shape clips, exactly as on a full-height terminal pane.
         setPaneShape(glass ? requestedRadiusPx : 0f, glass);
