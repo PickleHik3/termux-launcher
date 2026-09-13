@@ -52,6 +52,64 @@ public class AgentScreenRulesTest {
             + "\n"
             + "  Ask Codex to do anything\n";
 
+    private static final String PI_WORKING =
+        "> summarise the diff\n"
+            + "\n"
+            + "  Working...\n";
+
+    private static final String PI_IDLE =
+        "  Done. Three files changed.\n"
+            + "\n"
+            + "> \n";
+
+    private static final String OPENCODE_BLOCKED =
+        "\u25b3 Permission required\n"
+            + "  bash: rm -rf build\n";
+
+    /** opencode's other prompts have no headline, only the footer of key hints. */
+    private static final String OPENCODE_BLOCKED_FOOTER =
+        "  Which branch?\n"
+            + "  dev\n"
+            + "  main\n"
+            + "\u2191\u2193 select   enter confirm   esc dismiss\n";
+
+    private static final String OPENCODE_WORKING =
+        "  reading src/index.ts\n"
+            + "  opencode  esc again to interrupt\n";
+
+    private static final String OPENCODE_WORKING_BAR =
+        "  building\n"
+            + "  \u25a0\u25a0\u25a0\u25a0\u25a0\u25a0\n";
+
+    private static final String OPENCODE_IDLE =
+        "  Done.\n"
+            + "\n"
+            + "> ask opencode anything\n";
+
+    @Test
+    public void pi_readsItsWorkingLineAndNothingElse() {
+        assertEquals(AgentStatus.State.WORKING, AgentScreenRules.classify(
+            AgentStatus.AGENT_PI, PI_WORKING, false));
+        // No idle rule: an unremarkable screen leaves the last reading alone.
+        assertNull(AgentScreenRules.classify(AgentStatus.AGENT_PI, PI_IDLE, false));
+    }
+
+    @Test
+    public void opencode_readsItsPromptsAndItsInterruptHints() {
+        assertEquals(AgentStatus.State.BLOCKED, AgentScreenRules.classify(
+            AgentStatus.AGENT_OPENCODE, OPENCODE_BLOCKED, false));
+        assertEquals(AgentStatus.State.BLOCKED, AgentScreenRules.classify(
+            AgentStatus.AGENT_OPENCODE, OPENCODE_BLOCKED_FOOTER, false));
+        assertEquals(AgentStatus.State.WORKING, AgentScreenRules.classify(
+            AgentStatus.AGENT_OPENCODE, OPENCODE_WORKING, true));
+        assertEquals(AgentStatus.State.WORKING, AgentScreenRules.classify(
+            AgentStatus.AGENT_OPENCODE, OPENCODE_WORKING_BAR, true));
+        assertNull(AgentScreenRules.classify(AgentStatus.AGENT_OPENCODE, OPENCODE_IDLE, false));
+        // A prompt drawn under a stale interrupt hint is still a prompt.
+        assertEquals(AgentStatus.State.BLOCKED, AgentScreenRules.classify(
+            AgentStatus.AGENT_OPENCODE, OPENCODE_WORKING + OPENCODE_BLOCKED, true));
+    }
+
     @Test
     public void claude_screensClassifyToEachState() {
         assertEquals(AgentStatus.State.BLOCKED, AgentScreenRules.classify(

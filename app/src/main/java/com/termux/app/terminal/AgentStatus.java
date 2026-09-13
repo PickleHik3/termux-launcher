@@ -10,28 +10,41 @@ import java.util.Locale;
  * What an AI coding agent running in one pane is doing right now: working on a turn, blocked
  * waiting for the user to answer something, or idle at its prompt with nothing to do.
  *
- * <p>Two sources feed it, and {@link Source#HOOK} always wins while it is fresh: the agent itself
- * reporting through {@code launcherctl agent <state>}, or — for agents that report nothing — the
- * screen rules in {@link AgentScreenRules} matched against the bottom of the pane. Immutable, so a
- * status can be held and compared without copying.
+ * <p>Three sources feed it, and {@link Source#HOOK} always wins while it is fresh: the agent itself
+ * reporting through {@code launcherctl agent <state>}, the OSC title it set ({@link
+ * AgentTitleRules}), or — for agents that neither report nor title — the screen rules in {@link
+ * AgentScreenRules} matched against the bottom of the pane. Immutable, so a status can be held and
+ * compared without copying.
  */
 public final class AgentStatus {
 
     /** Ordered by precedence: a blocked pane outranks a working one outranks an idle one. */
     public enum State { IDLE, WORKING, BLOCKED }
 
-    /** Where the reading came from. A hook report is authoritative; a screen reading is a guess. */
-    public enum Source { HOOK, SCREEN }
+    /**
+     * Where the reading came from, worst evidence last: a hook report is the agent saying so, a
+     * title is the agent writing it where every terminal can see it, a screen reading is a guess
+     * from the chrome it happens to have drawn.
+     */
+    public enum Source { HOOK, TITLE, SCREEN }
 
     public static final String AGENT_CLAUDE = "claude";
     public static final String AGENT_CODEX = "codex";
+    public static final String AGENT_OPENCODE = "opencode";
+    public static final String AGENT_PI = "pi";
+    public static final String AGENT_AMP = "amp";
+    public static final String AGENT_QWEN = "qwen";
+    public static final String AGENT_GROK = "grok";
+    public static final String AGENT_HERMES = "hermes";
 
     /**
-     * The agent binaries whose panes carry a status. Anything here but Claude and Codex only ever
-     * gets the generic CPU fallback, which can never say blocked.
+     * The agent binaries whose panes carry a status. One with neither title rules
+     * ({@link AgentTitleRules}) nor screen rules only ever gets the generic CPU fallback, which can
+     * never say blocked.
      */
     private static final String[] KNOWN_AGENTS = {
-        AGENT_CLAUDE, AGENT_CODEX, "opencode", "gemini", "aider", "cursor-agent", "copilot",
+        AGENT_CLAUDE, AGENT_CODEX, AGENT_OPENCODE, AGENT_PI, AGENT_AMP, AGENT_QWEN, AGENT_GROK,
+        AGENT_HERMES, "gemini", "aider", "cursor-agent", "copilot", "aichat", "crush", "vibe",
     };
 
     /**
@@ -82,7 +95,8 @@ public final class AgentStatus {
 
     /** Whether {@code agent} has screen rules of its own, rather than only the CPU fallback. */
     public static boolean hasScreenRules(@Nullable String agent) {
-        return AGENT_CLAUDE.equals(agent) || AGENT_CODEX.equals(agent);
+        return AGENT_CLAUDE.equals(agent) || AGENT_CODEX.equals(agent)
+            || AGENT_PI.equals(agent) || AGENT_OPENCODE.equals(agent);
     }
 
     /**

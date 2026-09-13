@@ -223,6 +223,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // reports progress, which made the notice fire several times a second for one background job.
         // A window of this session says so on its own pill; another session's job gets a standing row
         // in the corner stack. Neither needs a transient copy of the same news.
+        //
+        // The chips do care: an agent's title is how it says its turn started or ended, so the bar
+        // is repainted on the same coalesced beat as output rather than at the next label poll.
+        mHost.scheduleWindowBarRefresh();
         mHost.syncBackgroundProcessStack();
         termuxSessionListNotifyUpdated();
     }

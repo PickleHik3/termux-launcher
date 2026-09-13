@@ -305,6 +305,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Marks output activity on a shell, which is tmux's monitor-activity. */
     void noteShellActivity(@Nullable TerminalSession session);
 
+    /** Asks for one coalesced repaint of the window chips, without counting anything as activity. */
+    default void scheduleWindowBarRefresh() {}
+
     /** Marks a shell as wanting attention, e.g. after a bell. */
     void noteShellAttention(@NonNull TerminalSession session);
 

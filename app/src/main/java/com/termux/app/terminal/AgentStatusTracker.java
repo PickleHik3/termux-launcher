@@ -8,15 +8,17 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * One {@link AgentStatus} per pane, keyed by the pane's shell pid. Two sources write into it and
+ * One {@link AgentStatus} per pane, keyed by the pane's shell pid. Three sources write into it and
  * the tracker is what keeps them in order:
  *
  * <ul>
  *   <li>{@link #report} — the agent's own hook, through {@code launcherctl agent}. Authoritative,
  *       and it holds until the next report, until the agent clears it, or until the agent process
  *       leaves the foreground.</li>
- *   <li>{@link #observe} — the screen rules, for agents that report nothing. Ignored for a pane a
- *       hook is speaking for.</li>
+ *   <li>{@link #observe} with a title — {@link AgentTitleRules} over the OSC title the agent set.
+ *       Ignored for a pane a hook is speaking for.</li>
+ *   <li>{@link #observe} with none — the screen rules, for agents that neither report nor title, and
+ *       for the prompt an agent's title never mentions.</li>
  * </ul>
  *
  * <p>Reading the screen is the expensive half, so it is gated twice: the caller's supplier is only
@@ -90,6 +92,18 @@ public final class AgentStatusTracker {
      */
     public boolean observe(int pid, @Nullable String agent, boolean cpuWorking,
                            @NonNull ScreenSource screenSource, long nowMs) {
+        return observe(pid, agent, null, cpuWorking, screenSource, nowMs);
+    }
+
+    /**
+     * The same pass with the pane's OSC title, which is what the agent itself last said about its
+     * turn. Ranked between the hook and the screen: a title that says working or blocked settles the
+     * pass and the screen is not read at all, and a title that says idle holds against a stale
+     * "esc to interrupt" the agent left on screen — only a visible prompt may still raise it to
+     * blocked. A pane whose agent sets no title we read falls through to the screen unchanged.
+     */
+    public boolean observe(int pid, @Nullable String agent, @Nullable String title,
+                           boolean cpuWorking, @NonNull ScreenSource screenSource, long nowMs) {
         if (pid < 1) return false;
         if (agent == null) {
             Entry gone = mEntries.remove(pid);
@@ -105,16 +119,23 @@ public final class AgentStatusTracker {
                 return false;
             }
         }
-        if (entry.status != null && nowMs - entry.lastScreenAtMs < SCREEN_INTERVAL_MS) return false;
+        AgentStatus.State titleState = AgentTitleRules.classify(agent, title);
+        if (titleState == AgentStatus.State.WORKING || titleState == AgentStatus.State.BLOCKED) {
+            return write(entry, agent, titleState, AgentStatus.Source.TITLE, nowMs);
+        }
+        boolean titleIdle = titleState == AgentStatus.State.IDLE;
+        if (entry.status != null && nowMs - entry.lastScreenAtMs < SCREEN_INTERVAL_MS) {
+            return titleIdle && settleIdle(entry, agent, nowMs);
+        }
         entry.lastScreenAtMs = nowMs;
         AgentStatus.State state;
         if (AgentStatus.hasScreenRules(agent)) {
             String screen = screenSource.screenTail();
-            if (screen == null) return false;
+            if (screen == null) return titleIdle && settleIdle(entry, agent, nowMs);
             int length = screen.length();
             int hash = screen.hashCode();
             if (length == entry.lastScreenLength && hash == entry.lastScreenHash
-                && entry.status != null) return false;
+                && entry.status != null) return titleIdle && settleIdle(entry, agent, nowMs);
             entry.lastScreenLength = length;
             entry.lastScreenHash = hash;
             state = AgentScreenRules.classify(agent, screen, cpuWorking);
@@ -124,8 +145,31 @@ public final class AgentStatusTracker {
         } else {
             state = AgentScreenRules.classifyGeneric(cpuWorking);
         }
+        // The agent said it is resting. Only a prompt drawn on the screen outranks that; the
+        // interrupt footers and half-finished spinners it left behind do not.
+        if (titleIdle && state != AgentStatus.State.BLOCKED) {
+            return write(entry, agent, AgentStatus.State.IDLE, AgentStatus.Source.TITLE, nowMs);
+        }
+        return write(entry, agent, state, AgentStatus.Source.SCREEN, nowMs);
+    }
+
+    /**
+     * The reading for a pane whose title says idle and whose screen had nothing new to add. The
+     * prompt the last screen pass found stands until the next one gets to look again — dropping it
+     * every other refresh would flicker the dot between the two passes.
+     */
+    private static boolean settleIdle(@NonNull Entry entry, @NonNull String agent, long nowMs) {
+        if (entry.status != null && entry.status.state == AgentStatus.State.BLOCKED
+            && entry.status.source == AgentStatus.Source.SCREEN) return false;
+        return write(entry, agent, AgentStatus.State.IDLE, AgentStatus.Source.TITLE, nowMs);
+    }
+
+    /** Writes one reading, answering whether the pane now shows something else. */
+    private static boolean write(@NonNull Entry entry, @NonNull String agent,
+                                 @NonNull AgentStatus.State state, @NonNull AgentStatus.Source source,
+                                 long nowMs) {
         AgentStatus previous = entry.status;
-        entry.status = new AgentStatus(agent, state, AgentStatus.Source.SCREEN, nowMs);
+        entry.status = new AgentStatus(agent, state, source, nowMs);
         return !entry.status.equals(previous);
     }
 

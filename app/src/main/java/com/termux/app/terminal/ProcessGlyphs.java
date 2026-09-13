@@ -32,7 +32,9 @@ public final class ProcessGlyphs {
         put(0xEC81, "codex");                                  // nf-cod-openai
         put(0xE7F0, "gemini");                                 // nf-dev-google
         put(0xEC1E, "copilot", "github-copilot");              // nf-cod-copilot
-        put(0xEC20, "opencode", "aider", "cursor-agent", "goose", "amp"); // nf-cod-robot
+        // nf-cod-robot: every agent with no mark of its own wears the same one.
+        put(0xEC20, "opencode", "aider", "cursor-agent", "goose", "amp", "pi", "aichat", "crush",
+            "vibe", "qwen", "grok", "hermes");
         put(0xF0CC6, "herdr");                                 // nf-md-sheep: the herder's flock
 
         // --- shells ---

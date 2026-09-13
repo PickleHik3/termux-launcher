@@ -74,6 +74,23 @@ public final class AgentScreenRules {
         rules.add(new Rule(AgentStatus.AGENT_CODEX, AgentStatus.State.IDLE,
             "(?mi)ask codex to do anything|^\\s*[»›]\\s*$"));
 
+        // --- pi (no OSC title of its own, so the screen is all there is) ---
+        rules.add(new Rule(AgentStatus.AGENT_PI, AgentStatus.State.WORKING,
+            "(?i)working\\.\\.\\."));
+
+        // --- opencode ---
+        rules.add(new Rule(AgentStatus.AGENT_OPENCODE, AgentStatus.State.BLOCKED,
+            "(?i)\u25B3\\s*permission required"));
+        // Its other prompts have no headline, only a footer of key hints: a dismiss, a commit and a
+        // way to move between the options. All three together, in any order, are the prompt.
+        rules.add(new Rule(AgentStatus.AGENT_OPENCODE, AgentStatus.State.BLOCKED,
+            "(?is)\\A(?=.*esc dismiss)(?=.*(?:enter confirm|enter submit|enter toggle))"
+                + "(?=.*(?:\u2191\u2193 select|\u21C6 tab))"));
+        rules.add(new Rule(AgentStatus.AGENT_OPENCODE, AgentStatus.State.WORKING,
+            "(?i)esc to interrupt|ctrl\\+c to interrupt|opencode.*esc (?:again to )?interrupt"));
+        rules.add(new Rule(AgentStatus.AGENT_OPENCODE, AgentStatus.State.WORKING,
+            "[\u25A0\u2B1D]{4,}"));
+
         return Collections.unmodifiableList(rules);
     }
 

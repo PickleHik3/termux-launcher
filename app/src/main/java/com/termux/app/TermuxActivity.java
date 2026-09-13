@@ -14583,6 +14583,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
                 if (i == selected) clearWindowAttention(window);
                 com.termux.terminal.TerminalEmulator progress = windowProgressReporter(window, now);
+                // Agents first: observeWindowPhases reads back what this refresh's agent pass wrote,
+                // so a title that has just turned the ring on must not be a refresh behind.
+                com.termux.app.terminal.AgentStatus.State agentState = observeWindowAgents(window, now);
                 int phases = observeWindowPhases(window, i == selected, now);
                 items.add(buildWindowItem(session, i, foregroundPids,
                     mPaneController.windowName(window))
@@ -14596,7 +14599,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             : progress.getProgressValue(),
                         progress != null && progress.getProgressState()
                             == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
-                    .withAgentState(observeWindowAgents(window, now)));
+                    .withAgentState(agentState));
             }
         }
         bar.setWindows(items, selected);
@@ -14633,7 +14636,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
                 mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
             com.termux.app.statusbar.ShellPhaseTracker.Phase phase = mShellPhases.observe(pid, nowMs,
-                isShellWorking(shell, nowMs), info != null, info != null && info.idle,
+                isPaneWorking(shell, pid, nowMs), info != null, info != null && info.idle,
                 () -> screenLooksLikeQuestion(shell), seen);
             switch (phase) {
                 case WORKING: marks |= PHASE_WORKING; break;
@@ -14643,6 +14646,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         return marks;
+    }
+
+    /**
+     * Whether this pane counts as working for the phase tracker: an agent that said so itself, by
+     * hook or by title, answers for its own pane, because output on the screen is a poor proxy for
+     * a turn — a Claude at rest with a background shell still writes, and one thinking quietly does
+     * not. Every other pane is judged by its output, exactly as before.
+     */
+    private boolean isPaneWorking(@NonNull TerminalSession shell, int pid, long nowMs) {
+        com.termux.app.terminal.AgentStatus status = mAgentStatuses.get(pid);
+        if (status != null && (status.source == com.termux.app.terminal.AgentStatus.Source.TITLE
+            || status.source == com.termux.app.terminal.AgentStatus.Source.HOOK)) {
+            return status.state == com.termux.app.terminal.AgentStatus.State.WORKING;
+        }
+        return isShellWorking(shell, nowMs);
     }
 
     /**
@@ -14696,7 +14714,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // isWorkingAsOf, not the raw flag: a reading that stopped being refreshed must not go on
         // asserting that an agent with no rules of its own is still working.
-        mAgentStatuses.observe(pid, agent,
+        mAgentStatuses.observe(pid, agent, shell.getTitle(),
             info != null && info.isWorkingAsOf(nowMs, shell.getLastWriteUptimeMs()),
             () -> agentScreenTail(shell), nowMs);
         com.termux.app.terminal.AgentStatus status = mAgentStatuses.get(pid);
@@ -14949,6 +14967,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long now = android.os.SystemClock.uptimeMillis();
         mShellActivityTracker.noteActivity(pid, now, session.getLastWriteUptimeMs());
         mShellActivityTracker.pruneBefore(now - 4 * com.termux.app.statusbar.ShellActivityTracker.DECAY_MS);
+        scheduleWindowBarRefresh();
+    }
+
+    /**
+     * One coalesced window-bar refresh, for news that changes what a chip shows without being output
+     * of its own — an agent retitling its pane. Deliberately not routed through
+     * {@link #noteShellActivity}: a title is not activity, and counting it as such would ring a
+     * plain shell that only renamed its window.
+     */
+    void scheduleWindowBarRefresh() {
         if (mShellActivityRefreshPending) return;
         mShellActivityRefreshPending = true;
         mShellActivityHandler.postDelayed(mShellActivityRefresh, SHELL_ACTIVITY_REFRESH_MS);
@@ -16485,6 +16513,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override @Nullable public TermuxService service() {
             return getTermuxService();
+        }
+
+        @Override public void scheduleWindowBarRefresh() {
+            TermuxActivity.this.scheduleWindowBarRefresh();
         }
 
         @Override public void noteShellActivity(@Nullable TerminalSession session) {

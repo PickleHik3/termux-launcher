@@ -14,6 +14,10 @@ public class AgentStatusTrackerTest {
 
     private static final String WORKING_SCREEN = "✳ Pondering… (esc to interrupt)\n";
     private static final String BLOCKED_SCREEN = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n";
+    private static final String IDLE_SCREEN = "│ > │\n  ? for shortcuts\n";
+    /** Claude's spinner title while a turn runs, and the sparkle it sets at rest. */
+    private static final String WORKING_TITLE = "⠹ Pondering…";
+    private static final String IDLE_TITLE = "✳ ~/projects/tl";
 
     /** Counts how often the tracker actually asked for the screen. */
     private static final class CountingScreen implements AgentStatusTracker.ScreenSource {
@@ -100,6 +104,77 @@ public class AgentStatusTrackerTest {
         assertTrue(tracker.observe(13, "aider", false, screen, 3_000L));
         assertEquals(AgentStatus.State.IDLE, tracker.get(13).state);
         assertEquals(0, screen.reads);
+    }
+
+    @Test
+    public void aWorkingTitleOutranksAScreenThatSaysIdle() {
+        AgentStatusTracker tracker = new AgentStatusTracker();
+        CountingScreen screen = new CountingScreen(IDLE_SCREEN);
+
+        assertTrue(tracker.observe(20, AgentStatus.AGENT_CLAUDE, WORKING_TITLE, false, screen, 1_000L));
+        assertEquals(AgentStatus.State.WORKING, tracker.get(20).state);
+        assertEquals(AgentStatus.Source.TITLE, tracker.get(20).source);
+        // A settled title is the whole pass: the screen is not even asked for.
+        assertEquals(0, screen.reads);
+    }
+
+    @Test
+    public void anIdleTitleHoldsAgainstAStaleInterruptFooter() {
+        AgentStatusTracker tracker = new AgentStatusTracker();
+        CountingScreen screen = new CountingScreen(WORKING_SCREEN);
+
+        assertTrue(tracker.observe(21, AgentStatus.AGENT_CLAUDE, IDLE_TITLE, true, screen, 1_000L));
+        assertEquals(AgentStatus.State.IDLE, tracker.get(21).state);
+        assertEquals(AgentStatus.Source.TITLE, tracker.get(21).source);
+        assertFalse(tracker.observe(21, AgentStatus.AGENT_CLAUDE, IDLE_TITLE, true, screen, 2_000L));
+        assertEquals(AgentStatus.State.IDLE, tracker.get(21).state);
+    }
+
+    @Test
+    public void anIdleTitleStillYieldsToAPromptOnTheScreen() {
+        AgentStatusTracker tracker = new AgentStatusTracker();
+        CountingScreen screen = new CountingScreen(BLOCKED_SCREEN);
+
+        assertTrue(tracker.observe(22, AgentStatus.AGENT_CLAUDE, IDLE_TITLE, false, screen, 1_000L));
+        assertEquals(AgentStatus.State.BLOCKED, tracker.get(22).state);
+        assertEquals(AgentStatus.Source.SCREEN, tracker.get(22).source);
+
+        // Inside the throttle the prompt the last pass found stands, rather than flickering back.
+        assertFalse(tracker.observe(22, AgentStatus.AGENT_CLAUDE, IDLE_TITLE, false, screen, 1_400L));
+        assertEquals(AgentStatus.State.BLOCKED, tracker.get(22).state);
+
+        // Once the prompt is answered the title decides again.
+        screen.text = IDLE_SCREEN;
+        assertTrue(tracker.observe(22, AgentStatus.AGENT_CLAUDE, IDLE_TITLE, false, screen, 2_000L));
+        assertEquals(AgentStatus.State.IDLE, tracker.get(22).state);
+        assertEquals(AgentStatus.Source.TITLE, tracker.get(22).source);
+    }
+
+    @Test
+    public void aTitleNoRuleClaimsFallsThroughToTheScreen() {
+        AgentStatusTracker tracker = new AgentStatusTracker();
+        CountingScreen screen = new CountingScreen(WORKING_SCREEN);
+
+        assertTrue(tracker.observe(23, AgentStatus.AGENT_CLAUDE, "~/projects/tl", true, screen, 1_000L));
+        assertEquals(AgentStatus.State.WORKING, tracker.get(23).state);
+        assertEquals(AgentStatus.Source.SCREEN, tracker.get(23).source);
+        assertEquals(1, screen.reads);
+
+        // And so does a pane with no title at all.
+        assertTrue(tracker.observe(24, AgentStatus.AGENT_CLAUDE, null, true, screen, 1_000L));
+        assertEquals(AgentStatus.State.WORKING, tracker.get(24).state);
+        assertEquals(AgentStatus.Source.SCREEN, tracker.get(24).source);
+    }
+
+    @Test
+    public void aHookReportStillOutranksTheTitle() {
+        AgentStatusTracker tracker = new AgentStatusTracker();
+        CountingScreen screen = new CountingScreen(IDLE_SCREEN);
+
+        assertTrue(tracker.report(25, AgentStatus.AGENT_CLAUDE, AgentStatus.State.BLOCKED, 500L));
+        assertFalse(tracker.observe(25, AgentStatus.AGENT_CLAUDE, WORKING_TITLE, false, screen, 1_000L));
+        assertEquals(AgentStatus.State.BLOCKED, tracker.get(25).state);
+        assertEquals(AgentStatus.Source.HOOK, tracker.get(25).source);
     }
 
     @Test
