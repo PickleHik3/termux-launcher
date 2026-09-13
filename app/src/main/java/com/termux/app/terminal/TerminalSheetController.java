@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.notice.TerminalDress;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import java.util.ArrayList;
@@ -85,6 +86,13 @@ public final class TerminalSheetController
         /** The terminal frame's corner radius, so a card sitting in its corners can match them. */
         float terminalCornerRadiusPx();
 
+        /**
+         * What the terminal is wearing, for a card that borrows its material rather than floating
+         * over it in glass of its own. Null on a screen with no terminal, where the dress reads
+         * stored preferences instead.
+         */
+        @Nullable TerminalDress.Source terminalDressSource();
+
         boolean isReducedMotionEnabled();
     }
 
@@ -93,6 +101,18 @@ public final class TerminalSheetController
 
     private static final long ENTER_DURATION_MS = 170L;
     private static final long EXIT_DURATION_MS = 110L;
+    /**
+     * A drawer travels its own width rather than a card's few dp, so it takes longer to arrive and
+     * is slowed hard at the end — the emphasized-decelerate shape, which is what makes a panel this
+     * big read as having been pulled out rather than as having appeared.
+     */
+    private static final long DRAWER_ENTER_DURATION_MS = 260L;
+    private static final long DRAWER_EXIT_DURATION_MS = 200L;
+    private static final PathInterpolator EMPHASIZED_DECELERATE =
+        new PathInterpolator(0.05f, 0.7f, 0.1f, 1f);
+    /** A drawer spends less on its own edges than a dialog: its rows are the whole panel. */
+    private static final float DRAWER_SIDE_PADDING_DP = 12f;
+    private static final float DRAWER_VERTICAL_PADDING_DP = 10f;
     /** Side inset of a card, and the vertical inset of a full-height one. */
     private static final float SIDE_INSET_DP = 14f;
     private static final float VERTICAL_INSET_DP = 28f;
@@ -143,7 +163,8 @@ public final class TerminalSheetController
 
     /** Where a card sits on the plane. */
     public static final class Placement {
-        private static final Placement CENTERED = new Placement(null, false, false, false);
+        private static final Placement CENTERED =
+            new Placement(null, false, false, false, false);
 
         @Nullable final PointF anchor;
         /** No plane backdrop: the surface behind this card stays exactly as it was. */
@@ -152,12 +173,16 @@ public final class TerminalSheetController
         final boolean strip;
         /** A panel rising from the terminal's own bottom edge, inside its frame. */
         final boolean foot;
+        /** A drawer sliding out of the terminal's leading edge, spanning its whole height. */
+        final boolean leading;
 
-        private Placement(@Nullable PointF anchor, boolean bare, boolean strip, boolean foot) {
+        private Placement(@Nullable PointF anchor, boolean bare, boolean strip, boolean foot,
+                          boolean leading) {
             this.anchor = anchor;
             this.bare = bare;
             this.strip = strip;
             this.foot = foot;
+            this.leading = leading;
         }
 
         /** The default: a centred card with side and vertical insets. */
@@ -169,7 +194,8 @@ public final class TerminalSheetController
         /** A compact menu at a touch point, clamped inside the plane. */
         @NonNull
         public static Placement at(@Nullable PointF screenPoint) {
-            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, false, false);
+            return screenPoint == null ? CENTERED
+                : new Placement(screenPoint, false, false, false, false);
         }
 
         /**
@@ -181,7 +207,8 @@ public final class TerminalSheetController
          */
         @NonNull
         public static Placement stripAbove(@Nullable PointF screenPoint) {
-            return screenPoint == null ? CENTERED : new Placement(screenPoint, true, true, false);
+            return screenPoint == null ? CENTERED
+                : new Placement(screenPoint, true, true, false, false);
         }
 
         /**
@@ -198,7 +225,25 @@ public final class TerminalSheetController
          */
         @NonNull
         public static Placement terminalFoot() {
-            return new Placement(null, true, false, true);
+            return new Placement(null, true, false, true, false);
+        }
+
+        /**
+         * A drawer that slides out of the terminal's leading edge and spans the whole terminal area.
+         *
+         * <p>The area, not a pane: with the window split there is no single pane the sessions list
+         * could belong to, and a panel that stopped at the first seam would read as one pane's menu
+         * rather than as the terminal's own. It wears the terminal's dress — the leading corners are
+         * the arc the terminal is already drawing on that edge, the trailing pair the same radius
+         * capped for a tall narrow card — and it dims the rest of the area behind it rather than the
+         * whole screen, so the dock and the status row stay lit and reachable.
+         *
+         * <p>Bare: the drawer carries its own material, and a plane-wide frost would put glass over
+         * the dock as well.
+         */
+        @NonNull
+        public static Placement terminalLeading() {
+            return new Placement(null, true, false, false, true);
         }
     }
 
@@ -348,15 +393,22 @@ public final class TerminalSheetController
         final boolean bare;
         /** True for a card that rose from the terminal's foot, and has to sink back into it. */
         final boolean foot;
+        /** True for a drawer on the terminal's leading edge; see {@link Placement#terminalLeading()}. */
+        final boolean leading;
+        /** A drawer's dimming of the terminal behind it, which leaves and arrives with it. */
+        @Nullable final View scrim;
 
         Sheet(@NonNull View card, @Nullable TextSink sink, @Nullable Runnable onDismiss,
-              boolean coversPrevious, boolean bare, boolean foot) {
+              boolean coversPrevious, boolean bare, boolean foot, boolean leading,
+              @Nullable View scrim) {
             this.card = card;
             this.sink = sink;
             this.onDismiss = onDismiss;
             this.coversPrevious = coversPrevious;
             this.bare = bare;
             this.foot = foot;
+            this.leading = leading;
+            this.scrim = scrim;
         }
     }
 
@@ -372,8 +424,12 @@ public final class TerminalSheetController
     private int mPlaneBottomInset;
     /** Foot cards on the plane, including one still sinking back into the terminal. */
     private int mFootCards;
+    /** Drawers on the plane, including one still sliding back out of the terminal. */
+    private int mLeadingCards;
     private final Rect mKeyboardBounds = new Rect();
     private final Rect mTerminalBounds = new Rect();
+    /** The terminal area in plane coordinates, recomputed rather than reallocated per pass. */
+    private final Rect mAreaBounds = new Rect();
     private final int[] mPlaneOnScreen = new int[2];
 
     public TerminalSheetController(@NonNull Host host) {
@@ -441,23 +497,30 @@ public final class TerminalSheetController
         mPendingPlacement = placement;
         if (mStack.isEmpty()) mHost.yieldCompetingPlanes();
         boolean bare = placement.bare;
+        View scrim = placement.leading ? buildScrim() : null;
         View card = buildCard(title, content, fillHeight);
         if (coverPrevious && !mStack.isEmpty())
             mStack.get(mStack.size() - 1).card.setVisibility(View.GONE);
+        // Under the card, so the drawer is the one thing in the area the scrim does not dim.
+        if (scrim != null) mStackHost.addView(scrim);
         mStackHost.addView(card);
         if (placement.foot) mFootCards++;
-        mStack.add(new Sheet(card, sink, onDismiss, coverPrevious, bare, placement.foot));
+        if (placement.leading) mLeadingCards++;
+        mStack.add(new Sheet(card, sink, onDismiss, coverPrevious, bare, placement.foot,
+            placement.leading, scrim));
         mPlane.setVisibility(View.VISIBLE);
         applyBackdropMaterial();
         // Live while the card arrives; animateIn rests it on one fresh capture once it has. The
         // glass itself never moves, and a resize of it (the keyboard inset) recaptures on its own.
         if (mLiveBlur != null) mLiveBlur.setUpdatesPaused(false);
         // Only a sheet with somewhere for typing to land is worth summoning a keyboard for; a
-        // confirmation is all buttons and would just push the terminal around.
-        if (sink != null) mHost.ensureInAppTypingKeyboard();
+        // confirmation is all buttons and would just push the terminal around. A drawer is a list
+        // first and a field only once a row asks to be renamed, so it summons the keys itself
+        // through requestTypingKeyboard() rather than pushing the terminal on every open.
+        if (sink != null && !placement.leading) mHost.ensureInAppTypingKeyboard();
         mHost.setSheetInterceptorActive(true);
         applyPlaneInsets();
-        animateIn(card, placement.foot);
+        animateIn(card, placement.foot, placement.leading);
         return true;
     }
 
@@ -465,7 +528,7 @@ public final class TerminalSheetController
     public void dismiss() {
         if (mStack.isEmpty()) return;
         Sheet top = mStack.remove(mStack.size() - 1);
-        animateOut(top.card, top.foot);
+        animateOut(top.card, top.foot, top.leading, top.scrim);
         if (top.coversPrevious && !mStack.isEmpty())
             mStack.get(mStack.size() - 1).card.setVisibility(View.VISIBLE);
         if (top.onDismiss != null) top.onDismiss.run();
@@ -486,7 +549,7 @@ public final class TerminalSheetController
         int limit = Math.min(count, mStack.size());
         for (int i = limit - 1; i >= 0; i--) {
             Sheet sheet = mStack.remove(i);
-            animateOut(sheet.card, sheet.foot);
+            animateOut(sheet.card, sheet.foot, sheet.leading, sheet.scrim);
             if (sheet.onDismiss != null) sheet.onDismiss.run();
         }
         // Whatever is left is on top now, so nothing may still be hidden behind a card that went.
@@ -502,11 +565,15 @@ public final class TerminalSheetController
     /** Drops the plane without animating, for pause, configuration change and destroy. */
     public void dismissImmediately() {
         for (Sheet sheet : mStack) {
-            if (mStackHost != null) mStackHost.removeView(sheet.card);
+            if (mStackHost != null) {
+                mStackHost.removeView(sheet.card);
+                if (sheet.scrim != null) mStackHost.removeView(sheet.scrim);
+            }
             if (sheet.onDismiss != null) sheet.onDismiss.run();
         }
         mStack.clear();
         mFootCards = 0;
+        mLeadingCards = 0;
         applyPlaneInsets();
         onEmptied();
     }
@@ -584,9 +651,13 @@ public final class TerminalSheetController
     private void applyPlaneInsets() {
         if (mPlane == null || mStackHost == null) return;
         boolean foot = mFootCards > 0;
-        // A foot panel is clipped by the plane's own edge, which is the terminal's; nothing else on
-        // the plane is clipped, because a card's shadow is drawn outside it.
-        mStackHost.setClipChildren(foot);
+        // A foot panel is clipped by the plane's own edge, which is the terminal's; a drawer is
+        // clipped so the width it travels is spent off the plane rather than across the dock.
+        // Nothing else is clipped, because a card's shadow is drawn outside it.
+        mStackHost.setClipChildren(foot || mLeadingCards > 0);
+        // The terminal area moves under an open drawer — the keyboard rises, a split lands, the
+        // dock lifts — and the drawer is laid out against that area rather than against the plane.
+        if (mLeadingCards > 0) placeLeadingCards();
         int inset = foot ? terminalFootInsetPx() : keyboardInsetPx();
         // The frost is one pre-blurred frame of the wallpaper stretched over the whole plane, so
         // shortening its container would rescale it and slide the wallpaper out of register with
@@ -606,6 +677,68 @@ public final class TerminalSheetController
         mPlaneBottomInset = inset;
         setBottomInset(mHost.findView(R.id.terminal_sheet_glass), inset);
         setBottomInset(mStackHost, inset);
+    }
+
+    /** Re-lays every open drawer against the terminal area as it is now. */
+    private void placeLeadingCards() {
+        for (Sheet sheet : mStack) {
+            if (!sheet.leading) continue;
+            applyLeadingParams(sheet.card, leadingBounds());
+            if (sheet.scrim != null) applyScrimParams(sheet.scrim);
+        }
+    }
+
+    /** True while a drawer is on the plane, so a second trigger can close the one that is open. */
+    public boolean isLeadingDrawerOpen() {
+        for (Sheet sheet : mStack) {
+            if (sheet.leading) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Summons the typing keyboard for a field that unfolded after its card opened — a drawer's
+     * inline rename, which did not exist when the drawer arrived.
+     */
+    public void requestTypingKeyboard() {
+        mHost.ensureInAppTypingKeyboard();
+    }
+
+    /** What the terminal is wearing, for content that has to match the card it is drawn on. */
+    @NonNull
+    public TerminalDress dress() {
+        return TerminalDress.resolve(mHost.context(), mHost.terminalDressSource());
+    }
+
+    /** True when the layout runs right to left, which is the only thing "leading" depends on. */
+    private boolean isRtl() {
+        return mHost.context().getResources().getConfiguration().getLayoutDirection()
+            == View.LAYOUT_DIRECTION_RTL;
+    }
+
+    /**
+     * The terminal area in plane coordinates — everything the terminal owns, across every pane —
+     * falling back to the whole plane before there is a terminal laid out.
+     */
+    private void terminalAreaInPlane(@NonNull Rect out) {
+        int planeWidth = mStackHost == null ? 0 : mStackHost.getWidth();
+        int planeHeight = mStackHost == null ? 0 : mStackHost.getHeight();
+        if (mStackHost == null || !mHost.terminalFrameOnScreen(mTerminalBounds)
+            || mTerminalBounds.width() <= 0) {
+            out.set(0, 0, planeWidth, planeHeight);
+            return;
+        }
+        mStackHost.getLocationOnScreen(mPlaneOnScreen);
+        out.set(mTerminalBounds.left - mPlaneOnScreen[0], mTerminalBounds.top - mPlaneOnScreen[1],
+            mTerminalBounds.right - mPlaneOnScreen[0], mTerminalBounds.bottom - mPlaneOnScreen[1]);
+    }
+
+    /** The drawer's own rectangle: the leading slice of that area. */
+    @NonNull
+    private TerminalDrawerMetrics.Bounds leadingBounds() {
+        terminalAreaInPlane(mAreaBounds);
+        return TerminalDrawerMetrics.place(mAreaBounds.left, mAreaBounds.top, mAreaBounds.width(),
+            mAreaBounds.height(), isRtl(), mDensity);
     }
 
     /** How much of the plane's bottom the in-app keyboard is taking. */
@@ -676,9 +809,19 @@ public final class TerminalSheetController
     private View buildCard(@NonNull CharSequence title, @NonNull View content,
                            boolean fillHeight) {
         Context context = mStackHost.getContext();
-        LinearLayout card = new LinearLayout(context);
+        boolean rtl = isRtl();
+        LinearLayout card = mPendingPlacement.leading
+            ? new SwipeAwayCard(context, rtl, this::dismiss) : new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
-        if (mPendingPlacement.foot) {
+        if (mPendingPlacement.leading) {
+            applyLeadingDress(card, rtl);
+            card.addOnLayoutChangeListener((view, l, t, r, b, ol, ot, or, ob) -> {
+                if (r - l != or - ol || b - t != ob - ot) applyLeadingDress(card, rtl);
+            });
+            int padH = dp(DRAWER_SIDE_PADDING_DP);
+            int padV = dp(DRAWER_VERTICAL_PADDING_DP);
+            card.setPadding(padH, padV, padH, padV);
+        } else if (mPendingPlacement.foot) {
             // The keybind hints' dress, the other way up: this panel sits in the terminal's bottom
             // corners, so it takes the terminal's radius there and its own where it leaves the edge.
             applyFootDress(card);
@@ -756,6 +899,10 @@ public final class TerminalSheetController
 
         Placement placement = mPendingPlacement;
         mPendingPlacement = Placement.centered();
+        if (placement.leading) {
+            applyLeadingParams(card, leadingBounds());
+            return card;
+        }
         if (placement.foot) {
             card.setLayoutParams(terminalFootParams(fillHeight));
             return card;
@@ -774,6 +921,82 @@ public final class TerminalSheetController
         params.bottomMargin = dp(VERTICAL_INSET_DP);
         card.setLayoutParams(params);
         return card;
+    }
+
+    /**
+     * The drawer's material: the terminal's own fill and hairline, its radius on the leading edge it
+     * sits on, and that radius capped on the trailing pair — a drawer is tall and narrow, and an
+     * uncapped corner there would bow the free edge into a lozenge.
+     */
+    private void applyLeadingDress(@NonNull View card, boolean rtl) {
+        TerminalDress dress = dress();
+        float leading = dress.terminalRadiusPx;
+        float trailing = TerminalDrawerMetrics.trailingRadiusPx(leading,
+            card.getWidth(), card.getHeight());
+        android.graphics.drawable.GradientDrawable shape =
+            new android.graphics.drawable.GradientDrawable();
+        shape.setColor(dress.fillColor);
+        shape.setStroke(Math.round(dress.strokeWidthPx), dress.strokeColor);
+        shape.setCornerRadii(TerminalDrawerMetrics.cornerRadii(leading, trailing, rtl));
+        card.setBackground(shape);
+    }
+
+    /**
+     * The dimming behind a drawer, over the terminal area and nothing else.
+     *
+     * <p>A full-screen scrim would put the dock, the status row and the keys behind glass as well,
+     * and none of them is what the drawer is covering. Tapping it closes, like tapping anywhere
+     * else outside the card does.
+     */
+    @NonNull
+    private View buildScrim() {
+        View scrim = new View(mStackHost.getContext());
+        scrim.setBackgroundColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+            android.graphics.Color.BLACK, TerminalDrawerMetrics.SCRIM_ALPHA));
+        scrim.setClickable(true);
+        scrim.setOnClickListener(view -> dismiss());
+        applyScrimParams(scrim);
+        return scrim;
+    }
+
+    /**
+     * The whole area, drawer included: the card is opaque and drawn over it, and cutting the scrim
+     * to the strip beside the drawer would leave a seam travelling with the card.
+     */
+    private void applyScrimParams(@NonNull View scrim) {
+        terminalAreaInPlane(mAreaBounds);
+        setFrameBounds(scrim, mAreaBounds.left, mAreaBounds.top,
+            mAreaBounds.width(), mAreaBounds.height());
+    }
+
+    private void applyLeadingParams(@NonNull View card,
+                                    @NonNull TerminalDrawerMetrics.Bounds bounds) {
+        setFrameBounds(card, bounds.leftMargin, bounds.topMargin, bounds.width, bounds.height);
+    }
+
+    /**
+     * Positions a plane child absolutely, and only when something actually moved.
+     *
+     * <p>The check is not an optimisation. Every drawer is re-placed from the plane's own layout
+     * listener, and {@code setLayoutParams} asks for another layout — so writing the same numbers
+     * back unconditionally would lay the plane out again on every frame for as long as the drawer
+     * was open.
+     */
+    private static void setFrameBounds(@NonNull View view, int left, int top, int width,
+                                       int height) {
+        ViewGroup.LayoutParams existing = view.getLayoutParams();
+        FrameLayout.LayoutParams params = existing instanceof FrameLayout.LayoutParams
+            ? (FrameLayout.LayoutParams) existing
+            : new FrameLayout.LayoutParams(width, height);
+        if (existing == params && params.leftMargin == left && params.topMargin == top
+            && params.width == width && params.height == height
+            && params.gravity == (Gravity.TOP | Gravity.START)) return;
+        params.width = width;
+        params.height = height;
+        params.leftMargin = left;
+        params.topMargin = top;
+        params.gravity = Gravity.TOP | Gravity.START;
+        view.setLayoutParams(params);
     }
 
     private void applyFootDress(@NonNull View card) {
@@ -862,14 +1085,34 @@ public final class TerminalSheetController
         return params;
     }
 
-    private void animateIn(@NonNull View card, boolean foot) {
+    private void animateIn(@NonNull View card, boolean foot, boolean leading) {
         card.animate().cancel();
         if (mHost.isReducedMotionEnabled()) {
             card.setAlpha(1f);
             card.setScaleX(1f);
             card.setScaleY(1f);
             card.setTranslationY(0f);
+            card.setTranslationX(0f);
             restLiveBlur();
+            return;
+        }
+        if (leading) {
+            // Travel is the card's own width, which is only known once it has been laid out, so
+            // the drawer waits a frame rather than guessing at it.
+            card.setAlpha(1f);
+            card.getViewTreeObserver().addOnPreDrawListener(
+                new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override public boolean onPreDraw() {
+                        card.getViewTreeObserver().removeOnPreDrawListener(this);
+                        card.setTranslationX(TerminalDrawerMetrics.enterTranslationX(
+                            card.getWidth(), isRtl()));
+                        card.animate().translationX(0f).setDuration(DRAWER_ENTER_DURATION_MS)
+                            .setInterpolator(EMPHASIZED_DECELERATE)
+                            .withEndAction(TerminalSheetController.this::restLiveBlur)
+                            .start();
+                        return true;
+                    }
+                });
             return;
         }
         if (foot) {
@@ -906,13 +1149,32 @@ public final class TerminalSheetController
         if (mLiveBlur != null && !mStack.isEmpty()) mLiveBlur.refreshThenRest();
     }
 
-    private void animateOut(@NonNull View card, boolean foot) {
+    private void animateOut(@NonNull View card, boolean foot, boolean leading,
+                            @Nullable View scrim) {
         FrameLayout stack = mStackHost;
         if (stack == null) return;
         card.animate().cancel();
         if (mHost.isReducedMotionEnabled()) {
             stack.removeView(card);
-            onCardRemoved(foot);
+            if (scrim != null) stack.removeView(scrim);
+            onCardRemoved(foot, leading);
+            return;
+        }
+        if (leading) {
+            if (scrim != null) {
+                scrim.animate().cancel();
+                scrim.animate().alpha(0f).setDuration(DRAWER_EXIT_DURATION_MS)
+                    .withEndAction(() -> stack.removeView(scrim)).start();
+            }
+            card.animate()
+                .translationX(TerminalDrawerMetrics.enterTranslationX(card.getWidth(), isRtl()))
+                .setDuration(DRAWER_EXIT_DURATION_MS)
+                .setInterpolator(EMPHASIZED_DECELERATE)
+                .withEndAction(() -> {
+                    stack.removeView(card);
+                    onCardRemoved(false, true);
+                })
+                .start();
             return;
         }
         if (foot) {
@@ -921,7 +1183,7 @@ public final class TerminalSheetController
             card.animate().translationY(card.getHeight()).setDuration(EXIT_DURATION_MS)
                 .withEndAction(() -> {
                     stack.removeView(card);
-                    onCardRemoved(true);
+                    onCardRemoved(true, false);
                 })
                 .start();
             return;
@@ -933,8 +1195,9 @@ public final class TerminalSheetController
     }
 
     /** A card has actually left the plane, so the insets it was holding can be given back. */
-    private void onCardRemoved(boolean foot) {
+    private void onCardRemoved(boolean foot, boolean leading) {
         if (foot && mFootCards > 0) mFootCards--;
+        if (leading && mLeadingCards > 0) mLeadingCards--;
         applyPlaneInsets();
     }
 
@@ -1061,6 +1324,63 @@ public final class TerminalSheetController
 
     private int dp(float value) {
         return Math.round(value * mDensity);
+    }
+
+    /**
+     * A drawer that a drag toward the leading edge sends back where it came from.
+     *
+     * <p>Intercepted rather than listened for, because the drawer is a list: without the intercept
+     * the rows would claim the gesture and the only way out would be the scrim. A drag has to be
+     * more horizontal than vertical to count, so scrolling the list never closes it.
+     */
+    private static final class SwipeAwayCard extends LinearLayout {
+        private final boolean mRtl;
+        @NonNull private final Runnable mOnSwipedAway;
+        private final int mSlop;
+        private float mDownX;
+        private float mDownY;
+
+        SwipeAwayCard(@NonNull Context context, boolean rtl, @NonNull Runnable onSwipedAway) {
+            super(context);
+            mRtl = rtl;
+            mOnSwipedAway = onSwipedAway;
+            mSlop = android.view.ViewConfiguration.get(context).getScaledTouchSlop();
+        }
+
+        /** How far this gesture has travelled toward the edge the drawer came out of. */
+        private float towardLeadingEdge(@NonNull MotionEvent event) {
+            float dx = event.getX() - mDownX;
+            return mRtl ? dx : -dx;
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent event) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mDownX = event.getX();
+                    mDownY = event.getY();
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (towardLeadingEdge(event) > mSlop
+                        && towardLeadingEdge(event) > Math.abs(event.getY() - mDownY)) return true;
+                    break;
+                default:
+                    break;
+            }
+            return super.onInterceptTouchEvent(event);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            if (event.getActionMasked() == MotionEvent.ACTION_MOVE
+                && towardLeadingEdge(event) > mSlop) {
+                mOnSwipedAway.run();
+                return true;
+            }
+            // A card swallows every touch that lands on it, or the plane's own listener would read
+            // it as a tap outside and close.
+            return true;
+        }
     }
 
     /** Corner radius of a sheet card, so the activity's glass builder and the plane agree. */

@@ -949,8 +949,8 @@ public final class TerminalActionDispatcher {
                 }
                 case TOOL_APP_KEY_INSPECTOR:
                     return ok().put("keyInspectorOpen", host.toggleKeyInspector());
-                // The legacy sessions drawer is gone; the two bindings it owned now reach the
-                // sessions browser, which is what they always meant.
+                // The drawer these two bindings name is the sessions drawer: one panel out of the
+                // terminal's leading edge, which is what the pair always meant.
                 case TOOL_APP_OPEN_DRAWER:
                     host.showSessionBrowser();
                     return ok();

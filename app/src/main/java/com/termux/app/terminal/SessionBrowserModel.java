@@ -6,9 +6,8 @@ import androidx.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
-/** Immutable session/window/pane projection used by the searchable session browser. */
+/** Immutable session/window/pane projection the sessions drawer is built from. */
 public final class SessionBrowserModel {
 
     public static final class Pane {
@@ -32,8 +31,8 @@ public final class SessionBrowserModel {
     /**
      * Home-relative display form of a working directory: paths inside the Termux home render as
      * {@code ~} or {@code ~/sub}, while anything above home — the user walked backward out of it —
-     * keeps its full {@code /data/data/com.termux/...} prefix. Display-only; the model and the
-     * search filter keep the raw path.
+     * keeps its full {@code /data/data/com.termux/...} prefix. Display-only; the model keeps the
+     * raw path.
      */
     @NonNull
     public static String displayCwd(@NonNull String cwd) {
@@ -107,36 +106,6 @@ public final class SessionBrowserModel {
     }
 
     private SessionBrowserModel() {}
-
-    /** Case-insensitive search over session name plus every pane's CWD and foreground label. */
-    @NonNull
-    public static List<Session> filter(@NonNull List<Session> sessions, @Nullable String query) {
-        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        if (needle.isEmpty()) return new ArrayList<>(sessions);
-        List<Session> filtered = new ArrayList<>();
-        for (Session session : sessions) {
-            if (contains(session.name, needle)) {
-                filtered.add(session);
-                continue;
-            }
-            boolean matched = false;
-            for (Window window : session.windows) {
-                for (Pane pane : window.panes) {
-                    if (contains(pane.cwd, needle) || contains(pane.foreground, needle)) {
-                        matched = true;
-                        break;
-                    }
-                }
-                if (matched) break;
-            }
-            if (matched) filtered.add(session);
-        }
-        return filtered;
-    }
-
-    private static boolean contains(@Nullable String value, @NonNull String needle) {
-        return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
-    }
 
     @Nullable
     private static String emptyToNull(@Nullable String value) {

@@ -23,7 +23,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * Hosts the single status-bar detail card or dropdown panel. Exactly one is shown at a time; opening a new one
+ * Hosts the single status-bar detail card. Exactly one is shown at a time; opening a new one
  * dismisses the previous. The card is a {@link PopupWindow} that drops beneath the status bar and
  * dismisses on an outside tap, on Back, or whenever {@link #dismiss()} is called (e.g. a window
  * change). Width is constrained to the portrait-screen bounds; the popup itself keeps the card on
@@ -33,8 +33,6 @@ import androidx.annotation.Nullable;
  * {@link #STANDARD_WIDTH_DP}, just below the bar — regardless of which widget was tapped. The bar's
  * widgets are entry points to one shared surface, not owners of their own popups; a card that
  * jumped to sit under whichever icon happened to be hit would read as several unrelated windows.
- * Only the leading-edge panel (the sessions list) keeps its anchor alignment, since it is a
- * dropdown of the chip itself.
  */
 public final class StatusCardHost {
 
@@ -43,14 +41,14 @@ public final class StatusCardHost {
 
     /** Supplies the current status-bar styling so the card matches Default glass or the capsule. */
     public interface StyleProvider {
-        @NonNull Drawable cardBackground(boolean panel);
-        float cornerRadiusPx(boolean panel);
-        float contentInsetPx(boolean panel);
+        @NonNull Drawable cardBackground();
+        float cornerRadiusPx();
+        float contentInsetPx();
     }
 
     private static final long ENTER_DURATION_MS = 200L;
     private static final long EXIT_DURATION_MS = 180L;
-    /** Thin, shared gap between the status bar's bottom edge and every card and panel. */
+    /** Thin, shared gap between the status bar's bottom edge and every card. */
     private static final int DROP_GAP_DP = 4;
 
     @Nullable private PopupWindow mPopup;
@@ -92,17 +90,7 @@ public final class StatusCardHost {
      */
     public void show(@NonNull View anchor, @NonNull View content, @NonNull StyleProvider style,
                      @Nullable Runnable onDismiss) {
-        show(anchor, content, style, STANDARD_WIDTH_DP, false, false, onDismiss);
-    }
-
-    /**
-     * Panel variant: aligned to the anchor's leading edge instead of its trailing edge, and given
-     * the fork's short fade + drop choreography on the way in and out. Escape closes it the way an
-     * outside tap does.
-     */
-    public void showPanel(@NonNull View anchor, @NonNull View content, @NonNull StyleProvider style,
-                          int desiredWidthDp, @Nullable Runnable onDismiss) {
-        show(anchor, content, style, desiredWidthDp, true, true, onDismiss);
+        show(anchor, content, style, STANDARD_WIDTH_DP, false, true, onDismiss);
     }
 
     /**
@@ -125,7 +113,7 @@ public final class StatusCardHost {
     public void showPassive(@NonNull View anchor, @NonNull View content,
                             @NonNull StyleProvider style, int desiredWidthDp,
                             @Nullable Runnable onDismiss, @Nullable Runnable onOutsideTap) {
-        show(anchor, content, style, desiredWidthDp, false, true, false, onDismiss);
+        show(anchor, content, style, desiredWidthDp, true, false, onDismiss);
         PopupWindow popup = mPopup;
         if (popup == null || onOutsideTap == null) return;
         popup.setOutsideTouchable(true);
@@ -146,21 +134,15 @@ public final class StatusCardHost {
     }
 
     private void show(@NonNull View anchor, @NonNull View content, @NonNull StyleProvider style,
-                      int desiredWidthDp, boolean alignStart, boolean animate,
-                      @Nullable Runnable onDismiss) {
-        show(anchor, content, style, desiredWidthDp, alignStart, animate, true, onDismiss);
-    }
-
-    private void show(@NonNull View anchor, @NonNull View content, @NonNull StyleProvider style,
-                      int desiredWidthDp, boolean alignStart, boolean animate, boolean focusable,
+                      int desiredWidthDp, boolean animate, boolean focusable,
                       @Nullable Runnable onDismiss) {
         dismiss();
         Context context = anchor.getContext();
         int maxWidth = portraitMaxWidthPx(context, desiredWidthDp);
 
         FrameLayout container = new FrameLayout(context);
-        final float radius = style.cornerRadiusPx(alignStart);
-        container.setBackground(style.cardBackground(alignStart));
+        final float radius = style.cornerRadiusPx();
+        container.setBackground(style.cardBackground());
         container.setClipToOutline(true);
         container.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -172,7 +154,7 @@ public final class StatusCardHost {
         // cannot fall outside it — it renders only inside the four corner notches beyond the
         // rounded arc and is clipped square at the window edge, which reads as tinted sharp
         // corners behind the card (issue #13). The 1dp outline stroke carries the edge instead.
-        int pad = Math.round(style.contentInsetPx(alignStart));
+        int pad = Math.round(style.contentInsetPx());
         container.setPadding(pad, pad, pad, pad);
         container.addView(content,
             new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -221,8 +203,7 @@ public final class StatusCardHost {
         }
 
         // Cards open centred in the window — the standard place, whichever widget was tapped —
-        // and drop just below the status row. Panels instead keep the anchor's leading edge,
-        // which is where the leading session chip lives.
+        // and drop just below the status row.
         int centeredWidth = maxWidth;
         if (!focusable) {
             // A wrap-width popup has no window width to centre on until it is measured.
@@ -231,7 +212,7 @@ public final class StatusCardHost {
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
             centeredWidth = container.getMeasuredWidth();
         }
-        int xOffset = alignStart ? 0 : windowCenteredXOffset(anchor, centeredWidth);
+        int xOffset = windowCenteredXOffset(anchor, centeredWidth);
         popup.showAsDropDown(anchor, xOffset, dropYOffset(anchor), Gravity.START);
         if (animate) {
             if (focusable) container.requestFocus();

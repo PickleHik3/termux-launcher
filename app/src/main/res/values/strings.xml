@@ -1447,8 +1447,8 @@
     <string name="tool_session_next">Next session</string>
     <string name="tool_session_previous">Previous session</string>
     <string name="tool_session_close_current">Close session</string>
-    <string name="tool_session_browser">Session browser</string>
-    <string name="tool_session_panel">Sessions panel</string>
+    <string name="tool_session_browser">Sessions</string>
+    <string name="tool_session_panel">Toggle sessions</string>
     <string name="tool_session_clone_current">Clone session with CWD</string>
     <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
     <string name="tool_keyboard_cycle_form">Next keyboard type</string>
@@ -1485,8 +1485,8 @@
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
     <string name="tool_app_command_palette">Command palette</string>
     <string name="tool_app_launch">Launch app</string>
-    <string name="tool_app_open_drawer">Open sessions browser</string>
-    <string name="tool_app_close_drawer">Close sessions browser</string>
+    <string name="tool_app_open_drawer">Open sessions</string>
+    <string name="tool_app_close_drawer">Close sessions</string>
     <string name="tool_terminal_action_sheet">Terminal actions</string>
     <string name="tool_session_activate_by_index">Switch to session by number</string>
     <string name="tool_window_rename_prompt">Rename window…</string>
@@ -1511,21 +1511,12 @@
     <string name="tool_desc_terminal_toggle_scratchpad">Show or hide a dedicated floating terminal; its shell keeps running while hidden.</string>
     <string name="tool_desc_workspace_picker">Pick a saved workspace and load it into the current layout or in place of it.</string>
     <string name="tool_desc_workspace_save_prompt">Prompt for a name and save the current sessions, windows, and panes.</string>
-    <string name="workspace_picker_title">Load workspace</string>
     <string name="workspace_delete_description">Delete workspace %1$s</string>
-    <string name="workspace_delete_title">Delete “%1$s”?</string>
     <string name="workspace_delete_message">The saved workspace file is removed. Running sessions are not affected.</string>
     <string name="workspace_delete_confirm">Delete</string>
     <string name="workspace_deleted">Deleted “%1$s”</string>
     <string name="workspace_picker_empty">No saved workspaces</string>
-    <string name="workspace_picker_mode_message">Load “%1$s” in place of the current workspace, or append its windows to it?</string>
     <string name="workspace_picker_replace">Replace</string>
-    <plurals name="workspace_load_run_commands">
-        <item quantity="one">Re-run the 1 saved command</item>
-        <item quantity="other">Re-run the %1$d saved commands</item>
-    </plurals>
-    <string name="workspace_load_run_commands_summary">Each command starts again from the beginning; it is not resumed. Its shell stays open afterwards.</string>
-    <string name="workspace_picker_append">Append</string>
     <string name="workspace_picker_loaded">Workspace “%1$s” loaded</string>
     <string name="workspace_picker_failed">Could not load workspace: %1$s</string>
     <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
@@ -1536,8 +1527,8 @@
     <string name="tool_desc_session_next">Switch to the next terminal session.</string>
     <string name="tool_desc_session_previous">Switch to the previous terminal session.</string>
     <string name="tool_desc_session_close_current">Close the current session, including all of its windows and panes.</string>
-    <string name="tool_desc_session_browser">Search sessions by name, working directory, or foreground process.</string>
-    <string name="tool_desc_session_panel">Drop the sessions list beneath the status row to switch, rename, close, or create sessions.</string>
+    <string name="tool_desc_session_browser">Open the sessions drawer to switch, rename, close, or save sessions.</string>
+    <string name="tool_desc_session_panel">Show the sessions drawer, or put it away when it is already open.</string>
     <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
     <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
     <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
@@ -1608,8 +1599,8 @@
         <item quantity="one">Ignored %1$d terminal font configuration error; using safe fallbacks</item>
         <item quantity="other">Ignored %1$d terminal font configuration errors; using safe fallbacks</item>
     </plurals>
-    <string name="tool_desc_app_open_drawer">Open the sessions browser.</string>
-    <string name="tool_desc_app_close_drawer">Close the sessions browser.</string>
+    <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
+    <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
     <string name="tool_desc_window_rename_prompt">Name the current window — the tab it occupies in the window bar.</string>
     <string name="tool_desc_session_rename_prompt">Name the current session — the drawer row that holds the windows.</string>
     <string name="tool_desc_pane_rename_prompt">Name the focused pane\'s shell.</string>
@@ -1624,20 +1615,13 @@
     <string name="sessions_panel_window_fallback">shell</string>
     <string name="sessions_panel_window_title">Window %1$d · %2$s</string>
     <string name="sessions_panel_more">More actions for session %1$d</string>
-    <string name="sessions_panel_expanded">Expanded</string>
-    <string name="sessions_panel_collapsed">Collapsed</string>
     <string name="voice_typing_chooser_title">Choose speech recognizer</string>
     <string name="voice_typing_unavailable">Speech recognition unavailable</string>
     <plurals name="background_process_hidden_count">
         <item quantity="one">%d more background process</item>
         <item quantity="other">%d more background processes</item>
     </plurals>
-    <string name="session_browser_search_hint">Search name, CWD, or process</string>
-    <string name="session_browser_empty">No matching sessions</string>
-    <string name="session_browser_new">New</string>
-    <string name="session_browser_clone_current">Clone</string>
     <string name="session_browser_save_workspace">Save</string>
-    <string name="session_browser_more_actions">More session actions</string>
     <string name="session_browser_current">Current</string>
     <string name="session_browser_unnamed">Session %1$d</string>
     <string name="session_browser_named">Session %1$d · %2$s</string>
@@ -1650,20 +1634,13 @@
         <item quantity="other">%1$d panes</item>
     </plurals>
     <string name="session_browser_window">Window %1$d</string>
-    <string name="session_browser_activate">Activate</string>
     <string name="session_browser_clone">Clone with CWD</string>
     <string name="session_browser_rename">Rename</string>
     <string name="session_browser_close">Close</string>
     <string name="session_browser_close_title">Close %1$s?</string>
-    <plurals name="session_browser_close_message">
-        <item quantity="one">This terminates the pane in the session.</item>
-        <item quantity="other">This terminates all %1$d panes in the session.</item>
-    </plurals>
     <string name="termux_window_close_running_message">Something is still running in this window.</string>
     <string name="session_browser_workspace_name">Workspace name</string>
-    <string name="session_browser_save_workspace_title">Save Workspace</string>
     <string name="workspace_save_capture_commands">Also save what is running</string>
-    <string name="workspace_save_capture_commands_summary">Records the command in the foreground of each pane so loading can offer to run it again. Idle panes record nothing.</string>
     <string name="session_browser_workspace_saved">Saved workspace %1$s</string>
     <string name="session_browser_workspace_overwrite_title">Replace %1$s?</string>
     <string name="session_browser_workspace_overwrite_message">A workspace with this name already exists.</string>
@@ -1673,6 +1650,15 @@
     <!-- Status-row sessions panel -->
     <string name="sessions_panel_empty">No sessions</string>
     <string name="sessions_panel_new">New session</string>
+    <string name="sessions_drawer_live">Live</string>
+    <string name="sessions_drawer_saved">Saved</string>
+    <string name="sessions_drawer_done">Done</string>
+    <string name="sessions_drawer_keep">Keep</string>
+    <string name="sessions_drawer_close_question">Close this session?</string>
+    <string name="sessions_drawer_add_to_current">Add to current</string>
+    <string name="sessions_drawer_save_workspace">Save as workspace…</string>
+    <string name="sessions_drawer_run_commands">Also start what was running</string>
+    <string name="sessions_drawer_session_name">Session name</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
     <string name="palette_unavailable_no_in_app_keyboard">Unavailable: the in-app keyboard is off</string>

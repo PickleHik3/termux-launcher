@@ -157,11 +157,12 @@ public class TerminalSheetPromptsTest {
     }
 
     /**
-     * The Save-workspace prompt: the caret is on the field before a key is pressed, and the answers
-     * are the tick and the cross in its heading rather than a button row of their own.
+     * Saving a workspace is the drawer's footer, not a prompt of its own: the field is unfolded and
+     * already taking keys, and folding it back leaves the drawer where it was rather than dropping
+     * the user on the terminal — the whole point of answering inside the surface that asked.
      */
     @Test
-    public void theSaveWorkspacePromptShowsItsCaretAndAnswersFromTheHeading() {
+    public void theSaveWorkspaceFieldOpensUnfoldedInsideTheDrawer() {
         TermuxActivity activity = laidOutActivity();
         TerminalSheetController sheet = activity.getTerminalSheetController();
 
@@ -170,15 +171,28 @@ public class TerminalSheetPromptsTest {
         View card = sheet.topCard();
         assertNotNull(card);
         TextView field = findCaretField(card);
-        assertNotNull("nothing said the prompt was already taking keys", field);
+        assertNotNull("nothing said the field was already taking keys", field);
         assertTrue("the hint follows the caret rather than replacing it",
             field.getText().toString().startsWith("▏"));
 
-        assertNotNull("the cross closes the panel", findByDescription(card, "Cancel"));
-        assertNotNull("the tick commits it", findByDescription(card, "OK"));
+        View cancel = findByText(card, activity.getString(android.R.string.cancel));
+        assertNotNull("the way out of the field has to be in the field", cancel);
+        cancel.performClick();
 
-        findByDescription(card, "Cancel").performClick();
-        assertFalse(sheet.isOpen());
+        assertTrue("folding the field away must not take the drawer with it", sheet.isOpen());
+        assertNull("and the field itself is gone", findCaretField(sheet.topCard()));
+    }
+
+    @Nullable
+    private static View findByText(@NonNull View view, @NonNull String text) {
+        if (view instanceof TextView && text.contentEquals(((TextView) view).getText())) return view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View found = findByText(group.getChildAt(i), text);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     /**

@@ -1,538 +1,268 @@
 package com.termux.app.terminal;
 
-import android.content.Context;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.TextUtils;
-import android.text.style.ForegroundColorSpan;
-import android.view.Gravity;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.CheckBox;
-import android.widget.ImageButton;
-import android.widget.LinearLayout;
-import android.widget.ListView;
-import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
-import androidx.core.graphics.ColorUtils;
 
-import com.google.android.material.color.MaterialColors;
-import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.app.notice.AppNotice;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Searchable surface for inspecting and managing sessions, windows, and panes, and everything it
- * prompts for on the way.
+ * The sessions drawer's front door: every way into it, and everything it asks the activity for.
  *
- * <p>All of it runs on {@link TerminalSheetController} rather than on {@code AlertDialog} and
- * {@code PopupMenu}. The browser was the last terminal surface that opened windows of its own, and
- * its search box was the worst of them: a focused {@code EditText} took the {@code InputConnection}
- * off {@code TerminalView}, which collapsed the in-app keyboard and resized the terminal twice just
- * to type a filter. On the sheet plane nothing takes focus and the search field is typed from the
- * key channel, exactly like the palette and the rename chip.
+ * <p>One surface now answers what used to be two. The browser was a panel on the terminal's foot
+ * that opened a second panel for a rename, a third for a close, a fourth for the workspace picker
+ * and a fifth to confirm a delete; the status chip dropped a shorter copy of the same list into a
+ * pop-up window. Both bound {@link TermuxActivity#getSessionBrowserSessions()} and called the same
+ * methods, so the only thing the second one really added was a second set of answers to the same
+ * questions.
+ *
+ * <p>{@link SessionsDrawerView} draws it and holds the state; this class owns the one that is open,
+ * so that every trigger — the chip, the DRAWER key, {@code session.browser}, {@code session.panel},
+ * the open-drawer bindings — toggles the same drawer rather than stacking another copy of it.
  */
 public final class TerminalSessionBrowser {
 
-    private TerminalSessionBrowser() {}
+    /** The drawer currently on the plane, or null. There is only ever one, on one activity. */
+    @Nullable private static TerminalSessionBrowser sOpen;
 
-    /** Shows the browser. Must be called on the main thread. */
+    @NonNull private final TermuxActivity mActivity;
+    @NonNull private final SessionsDrawerView mView;
+
+    private TerminalSessionBrowser(@NonNull TermuxActivity activity) {
+        mActivity = activity;
+        mView = new SessionsDrawerView(activity);
+        mView.setListener(new DrawerListener());
+    }
+
+    /** True while the drawer is the card on the plane. */
+    public static boolean isOpen(@NonNull TermuxActivity activity) {
+        return sOpen != null && activity.getTerminalSheetController().isLeadingDrawerOpen();
+    }
+
+    /** The plain trigger: pull the drawer out, or put it away when it is already out. */
+    public static void toggle(@NonNull TermuxActivity activity) {
+        if (isOpen(activity)) {
+            activity.getTerminalSheetController().dismiss();
+            return;
+        }
+        open(activity, SessionsDrawerView.Tab.LIVE, false);
+    }
+
+    /** Legacy name kept for the {@code session.browser} seam; the drawer is what it opens. */
     public static void show(@NonNull TermuxActivity activity) {
-        View container = activity.getLayoutInflater().inflate(R.layout.session_browser, null);
-        TextView search = container.findViewById(R.id.session_browser_search);
-        ListView list = container.findViewById(R.id.session_browser_list);
-        TextView empty = container.findViewById(R.id.session_browser_empty);
-        BrowserAdapter adapter = new BrowserAdapter(activity);
-        list.setAdapter(adapter);
-        list.setEmptyView(empty);
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-
-        list.setOnItemClickListener((parent, view, position, id) -> {
-            SessionBrowserModel.Session session = adapter.entryAt(position);
-            // Activating leaves the browser describing a layout the user has just left, so the
-            // whole stack goes rather than only this card.
-            if (session != null && activity.activateBrowserSession(session.index)) sheet.dismissAll();
-        });
-
-        container.findViewById(R.id.session_browser_new).setOnClickListener(v -> {
-            if (activity.createBrowserSession()) adapter.reload();
-            else showActionFailed(activity);
-        });
-        container.findViewById(R.id.session_browser_clone).setOnClickListener(v -> {
-            if (activity.cloneCurrentBrowserSession()) adapter.reload();
-            else showActionFailed(activity);
-        });
-        container.findViewById(R.id.session_browser_save).setOnClickListener(v -> promptSave(activity));
-
-        adapter.setMenuListener((anchor, session) -> showSessionMenu(activity, adapter, session));
-        // The heading rides inside the body so it can carry the close mark on its own line; the
-        // card's own heading would put the title on a row of its own above it.
-        TerminalSheetViews.addHeaderRow((LinearLayout) container,
-            activity.getString(R.string.session_browser_title), null, sheet::dismiss);
-        // Subscribed only once the sheet is actually up: a callback registered against a surface
-        // that never opened would keep reloading a browser nobody can see.
-        if (!sheet.show("", container, false,
-            new TerminalSheetController.TextField(search,
-                activity.getString(R.string.session_browser_search_hint), adapter::setQuery),
-            () -> activity.setSessionBrowserRefreshCallback(null), false,
-            TerminalSheetController.Placement.terminalFoot())) return;
-        activity.setSessionBrowserRefreshCallback(adapter::reload);
-        activity.requestSessionBrowserForegroundRefresh();
+        toggle(activity);
     }
 
-    /**
-     * The per-row actions, as a sheet stacked on the browser rather than as a {@code PopupMenu}
-     * anchored to the row. The anchor is gone with the popup: a menu window over a plane that is
-     * itself an in-activity view had no reason to be a window.
-     */
-    private static void showSessionMenu(@NonNull TermuxActivity activity,
-                                        @NonNull BrowserAdapter adapter,
-                                        @NonNull SessionBrowserModel.Session session) {
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-        LinearLayout body = TerminalSheetViews.body(activity);
-        TerminalSheetViews.addMenuRow(body, activity.getString(R.string.session_browser_activate), () -> {
-            if (activity.activateBrowserSession(session.index)) sheet.dismissAll();
-            else showActionFailed(activity);
-        });
-        TerminalSheetViews.addMenuRow(body, activity.getString(R.string.session_browser_clone), () -> {
-            sheet.dismiss();
-            if (activity.cloneBrowserSession(session.index)) adapter.reload();
-            else showActionFailed(activity);
-        });
-        TerminalSheetViews.addMenuRow(body, activity.getString(R.string.session_browser_rename),
-            () -> promptRename(activity, adapter, session));
-        TerminalSheetViews.addMenuRow(body, activity.getString(R.string.session_browser_close), () -> {
-            sheet.dismiss();
-            confirmClose(activity, adapter, session);
-        });
-        TerminalSheetViews.addHeaderRow(body, displayName(activity, session), null, sheet::dismiss);
-        sheet.show("", body, false, null, null, false,
-            TerminalSheetController.Placement.terminalFoot());
-    }
-
-    /**
-     * Renames through the anchored editor rather than a prompt, so the browser's rename costs no
-     * system-IME swap either. {@code beginTerminalRename} closes the sheet stack on the way — the
-     * chip anchors to the session indicator, which sits behind a modal sheet — and the adapter
-     * reloads when the editor ends, through the activity's own refresh.
-     */
-    private static void promptRename(@NonNull TermuxActivity activity,
-                                     @NonNull BrowserAdapter adapter,
-                                     @NonNull SessionBrowserModel.Session session) {
-        if (activity.beginSessionRenameAtIndex(session.index)) adapter.reload();
-        else showActionFailed(activity);
-    }
-
-    private static void confirmClose(@NonNull TermuxActivity activity,
-                                     @NonNull BrowserAdapter adapter,
-                                     @NonNull SessionBrowserModel.Session session) {
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-        LinearLayout body = TerminalSheetViews.body(activity);
-        TerminalSheetViews.addMessage(body, activity.getResources().getQuantityString(
-            R.plurals.session_browser_close_message, session.paneCount(), session.paneCount()));
-        TerminalSheetViews.addHeaderRow(body, activity.getString(
-            R.string.session_browser_close_title, displayName(activity, session)),
-            () -> {
-                sheet.dismiss();
-                if (activity.closeBrowserSession(session.index)) adapter.reload();
-                else showActionFailed(activity);
-            },
-            activity.getString(R.string.session_browser_close), sheet::dismiss);
-        sheet.show("", body, false, null, null, false,
-            TerminalSheetController.Placement.terminalFoot());
-    }
-
-    /** Extra-keys/palette entry: the same save-name prompt the browser's Save button shows. */
-    public static void promptSaveWorkspace(@NonNull TermuxActivity activity) {
-        promptSave(activity);
-    }
-
-    /**
-     * Picker over the saved workspaces: tapping a name asks whether to load it in place of the
-     * live workspace or append its windows, then loads without running captured commands.
-     */
+    /** The workspace picker's entry: the drawer, already showing what was saved. */
     public static void showWorkspacePicker(@NonNull TermuxActivity activity) {
-        List<com.termux.app.terminal.TerminalWorkspaceStore.Entry> entries;
-        try {
-            entries = activity.listWorkspaces();
-        } catch (TerminalWorkspace.WorkspaceException e) {
-            AppNotice.show(activity, activity.getString(R.string.workspace_picker_failed,
-                e.getMessage()), false);
+        if (isOpen(activity)) {
+            sOpen.mView.setTab(SessionsDrawerView.Tab.SAVED);
+            sOpen.reload();
             return;
         }
-        if (entries.isEmpty()) {
-            AppNotice.show(activity, R.string.workspace_picker_empty, false);
+        open(activity, SessionsDrawerView.Tab.SAVED, false);
+    }
+
+    /** The save prompt's entry: the drawer, with its name field already taking keys. */
+    public static void promptSaveWorkspace(@NonNull TermuxActivity activity) {
+        if (isOpen(activity)) {
+            sOpen.mView.openSaveField();
             return;
         }
-        LinearLayout list = new LinearLayout(activity);
-        list.setOrientation(LinearLayout.VERTICAL);
-        for (com.termux.app.terminal.TerminalWorkspaceStore.Entry entry : entries) {
-            TerminalSheetViews.addToFrame(list, workspaceRow(activity, entry.name));
-        }
-        // The workspace panels rise out of the terminal's own bottom edge rather than floating over
-        // it: they are about the sessions behind them, and that edge is where they belong whether
-        // the dock and its rows are all there or none of them is.
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-        LinearLayout body = TerminalSheetViews.body(activity);
-        body.addView(TerminalSheetViews.wrapScrolling(list));
-        TerminalSheetViews.addHeaderRow(body, activity.getString(R.string.workspace_picker_title),
-            null, sheet::dismiss);
-        sheet.show("", body, false, null, null, false,
-            TerminalSheetController.Placement.terminalFoot());
+        open(activity, SessionsDrawerView.Tab.LIVE, true);
     }
 
-    /** One picker row: the name loads it, the trailing button deletes it. */
-    @NonNull
-    private static View workspaceRow(@NonNull TermuxActivity activity, @NonNull String name) {
+    private static void open(@NonNull TermuxActivity activity, @NonNull SessionsDrawerView.Tab tab,
+                             boolean saving) {
         TerminalSheetController sheet = activity.getTerminalSheetController();
-        int density = Math.round(activity.getResources().getDisplayMetrics().density);
-        LinearLayout row = new LinearLayout(activity);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView label = new TextView(activity);
-        label.setText(name);
-        label.setTextSize(16f);
-        label.setSingleLine(true);
-        label.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-        label.setMinHeight(44 * density);
-        label.setGravity(Gravity.CENTER_VERTICAL);
-        label.setOnClickListener(v -> {
-            sheet.dismiss();
-            promptWorkspaceLoadMode(activity, name);
-        });
-        row.addView(label, new LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        ImageButton delete = new ImageButton(activity);
-        delete.setImageResource(R.drawable.ic_delete_sweep_24);
-        delete.setBackgroundColor(0x00000000);
-        delete.setContentDescription(activity.getString(R.string.workspace_delete_description, name));
-        delete.setOnClickListener(v -> {
-            sheet.dismiss();
-            promptWorkspaceDelete(activity, name);
-        });
-        row.addView(delete, new LinearLayout.LayoutParams(40 * density, 40 * density));
-        return row;
-    }
-
-    /** Deleting a workspace file cannot be undone, so it is always confirmed by name. */
-    private static void promptWorkspaceDelete(@NonNull TermuxActivity activity,
-                                              @NonNull String name) {
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-        LinearLayout body = TerminalSheetViews.body(activity);
-        TerminalSheetViews.addMessage(body, activity.getString(R.string.workspace_delete_message));
-        TerminalSheetViews.addHeaderRow(body,
-            activity.getString(R.string.workspace_delete_title, name),
+        TerminalSessionBrowser drawer = new TerminalSessionBrowser(activity);
+        drawer.mView.setDress(sheet.dress());
+        drawer.mView.setTab(tab);
+        drawer.reload();
+        // The title lives in the drawer's own header, next to the segments and the +, so the card
+        // adds none of its own.
+        if (!sheet.show("", drawer.mView, true, drawer.mView,
             () -> {
-                sheet.dismiss();
-                try {
-                    activity.deleteWorkspace(name);
-                    AppNotice.show(activity, activity.getString(
-                        R.string.workspace_deleted, name), false);
-                } catch (TerminalWorkspace.WorkspaceException e) {
-                    AppNotice.show(activity, activity.getString(
-                        R.string.workspace_picker_failed, e.getMessage()), false);
-                }
-                showWorkspacePicker(activity);
+                if (sOpen == drawer) sOpen = null;
+                activity.setSessionBrowserRefreshCallback(null);
             },
-            activity.getString(R.string.workspace_delete_confirm),
-            () -> {
-                sheet.dismiss();
-                showWorkspacePicker(activity);
-            });
-        // Part of the same flow as the picker it replaces, so it arrives on the same edge rather
-        // than jumping to the middle of the screen and back.
-        sheet.show("", body, false, null, null, false,
-            TerminalSheetController.Placement.terminalFoot());
+            false, TerminalSheetController.Placement.terminalLeading())) return;
+        sOpen = drawer;
+        // Subscribed only once the drawer is actually up: a callback registered against a surface
+        // that never opened would keep reloading a list nobody can see.
+        activity.setSessionBrowserRefreshCallback(drawer::reload);
+        activity.requestSessionBrowserForegroundRefresh();
+        if (saving) drawer.mView.openSaveField();
     }
 
-    private static void promptWorkspaceLoadMode(@NonNull TermuxActivity activity,
-                                                @NonNull String name) {
-        // Only offer to run commands when the workspace actually carries some. Reading the file
-        // here keeps the offer honest; a workspace saved without capture never shows the box.
-        int commandCount = 0;
-        try {
-            commandCount = new TerminalWorkspaceStore().load(name).commandCount();
-        } catch (TerminalWorkspace.WorkspaceException ignored) {
-            // Loading proper will surface the failure; the checkbox simply stays hidden.
-        }
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-        LinearLayout body = TerminalSheetViews.body(activity);
-        TerminalSheetViews.addMessage(body, activity.getString(R.string.workspace_picker_mode_message, name));
-        final CheckBox runCommands = commandCount == 0 ? null : addCheckBox(body,
-            activity.getResources().getQuantityString(
-                R.plurals.workspace_load_run_commands, commandCount, commandCount),
-            activity.getString(R.string.workspace_load_run_commands_summary));
-        // Two verbs, not one answer: append and replace both load, and a tick could only mean one
-        // of them. The cross in the heading is the way out.
-        LinearLayout actions = TerminalSheetViews.addActionRow(body);
-        TerminalSheetViews.addAction(actions, activity.getString(R.string.workspace_picker_append), () -> {
-            sheet.dismiss();
-            loadWorkspace(activity, name, false, isChecked(runCommands));
-        });
-        TerminalSheetViews.addAction(actions, activity.getString(R.string.workspace_picker_replace), () -> {
-            sheet.dismiss();
-            loadWorkspace(activity, name, true, isChecked(runCommands));
-        });
-        TerminalSheetViews.addHeaderRow(body, name, null, sheet::dismiss);
-        sheet.show("", body, false, null, null, false,
-            TerminalSheetController.Placement.terminalFoot());
+    /** Back, aimed at the drawer: an unfolded row closes before the drawer itself does. */
+    public static boolean onBackPressed(@NonNull TermuxActivity activity) {
+        return isOpen(activity) && sOpen.mView.collapseOne();
     }
 
-    private static void loadWorkspace(@NonNull TermuxActivity activity, @NonNull String name,
-                                      boolean replace, boolean runCommands) {
-        try {
-            activity.loadWorkspace(name, replace, runCommands);
-            AppNotice.show(activity, activity.getString(R.string.workspace_picker_loaded, name), false);
-        } catch (TerminalWorkspace.WorkspaceException e) {
-            AppNotice.show(activity, activity.getString(R.string.workspace_picker_failed,
-                e.getMessage()), false);
-        }
-    }
-
-    private static void promptSave(@NonNull TermuxActivity activity) {
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-        LinearLayout body = TerminalSheetViews.body(activity);
-        TextView nameField = new TextView(activity);
-        nameField.setTextSize(16f);
-        nameField.setSingleLine(true);
-        nameField.setMinHeight(Math.round(
-            40 * activity.getResources().getDisplayMetrics().density));
-        nameField.setGravity(Gravity.CENTER_VERTICAL);
-        TerminalSheetViews.addToFrame(body, nameField);
-        CheckBox captureCommands = addCheckBox(body,
-            activity.getString(R.string.workspace_save_capture_commands),
-            activity.getString(R.string.workspace_save_capture_commands_summary));
-        // Held in a one-slot array because the field and the action that reads it are mutually
-        // recursive: ⏎ on the field saves, and saving has to ask the field for the name.
-        final TerminalSheetController.TextField[] field = new TerminalSheetController.TextField[1];
-        Runnable save = () -> {
-            String name = field[0].value();
-            sheet.dismiss();
-            saveWorkspace(activity, name, false, captureCommands.isChecked());
-        };
-        field[0] = new TerminalSheetController.TextField(nameField,
-            activity.getString(R.string.session_browser_workspace_name), null, save);
-        TerminalSheetViews.addHeaderRow(body,
-            activity.getString(R.string.session_browser_save_workspace_title), save, sheet::dismiss);
-        sheet.show("", body, false, field[0], null, false,
-            TerminalSheetController.Placement.terminalFoot());
-    }
-
-    private static boolean isChecked(@Nullable CheckBox box) {
-        return box != null && box.isChecked();
+    private void reload() {
+        mView.bindLive(mActivity.getSessionBrowserSessions());
+        if (mView.tab() == SessionsDrawerView.Tab.SAVED) mView.bindSaved(readSaved());
     }
 
     /**
-     * An unchecked box with the explanation its consequence needs stacked underneath, since both
-     * of these boxes change what happens to the user's shells rather than just what is stored.
+     * The saved workspaces, with what each one holds.
+     *
+     * <p>The listing carries only names and timestamps, so the pane count and whether the file
+     * captured any commands are read from the files themselves — small JSON documents in the user's
+     * own directory, and the same read the old load prompt already made to decide whether to offer
+     * to run them. A file that will not parse is still listed: deleting it is one of the things the
+     * drawer is for.
      */
     @NonNull
-    private static CheckBox addCheckBox(@NonNull LinearLayout frame, @NonNull String title,
-                                        @NonNull String summary) {
-        Context context = frame.getContext();
-        int density = Math.round(context.getResources().getDisplayMetrics().density);
-        CheckBox box = new CheckBox(context);
-        box.setText(title);
-        // A checkbox brings a 48dp target and its own padding; on a panel that is four rows tall
-        // that is a row of air above and below the one line it is asking about.
-        box.setMinHeight(40 * density);
-        box.setPaddingRelative(box.getPaddingStart(), 0, 0, 0);
-        TerminalSheetViews.addToFrame(frame, box);
-
-        TextView explanation = new TextView(context);
-        explanation.setText(summary);
-        explanation.setTextSize(12f);
-        explanation.setAlpha(0.7f);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.bottomMargin = 4 * density;
-        frame.addView(explanation, params);
-        return box;
+    private List<SessionsDrawerView.SavedWorkspace> readSaved() {
+        List<SessionsDrawerView.SavedWorkspace> out = new ArrayList<>();
+        List<TerminalWorkspaceStore.Entry> entries;
+        try {
+            entries = mActivity.listWorkspaces();
+        } catch (TerminalWorkspace.WorkspaceException e) {
+            AppNotice.show(mActivity, mActivity.getString(R.string.workspace_picker_failed,
+                e.getMessage()), false);
+            return out;
+        }
+        TerminalWorkspaceStore store = new TerminalWorkspaceStore();
+        for (TerminalWorkspaceStore.Entry entry : entries) {
+            int panes = 0;
+            boolean commands = false;
+            try {
+                TerminalWorkspace workspace = store.load(entry.name);
+                panes = workspace.paneCount();
+                commands = workspace.commandCount() > 0;
+            } catch (TerminalWorkspace.WorkspaceException ignored) {
+                // Unreadable, but still the user's file and still deletable from the row.
+            }
+            out.add(new SessionsDrawerView.SavedWorkspace(entry.name, panes,
+                entry.modifiedAtEpochMs, commands));
+        }
+        return out;
     }
 
-    private static void saveWorkspace(@NonNull TermuxActivity activity, @Nullable String name,
-                                      boolean overwrite, final boolean captureCommands) {
-        try {
-            TerminalWorkspace workspace = activity.saveWorkspace(name == null ? "" : name,
-                overwrite, captureCommands);
-            AppNotice.show(activity,
-                activity.getString(R.string.session_browser_workspace_saved, workspace.name), false);
-        } catch (TerminalWorkspace.WorkspaceException e) {
-            if (!overwrite && "conflict".equals(e.code)) {
-                final String requested = name == null ? "" : name.trim();
-                TerminalSheetController sheet = activity.getTerminalSheetController();
-                LinearLayout body = TerminalSheetViews.body(activity);
-                TerminalSheetViews.addMessage(body, activity.getString(
-                    R.string.session_browser_workspace_overwrite_message));
-                LinearLayout actions = TerminalSheetViews.addActionRow(body);
-                TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
-                TerminalSheetViews.addAction(actions, activity.getString(R.string.session_browser_overwrite), () -> {
-                    sheet.dismiss();
-                    saveWorkspace(activity, requested, true, captureCommands);
-                });
-                sheet.show(activity.getString(
-                    R.string.session_browser_workspace_overwrite_title, requested), body);
-            } else {
-                AppNotice.show(activity, e.getMessage(), true);
+    private void dismiss() {
+        mActivity.getTerminalSheetController().dismiss();
+    }
+
+    private void showActionFailed() {
+        AppNotice.show(mActivity, R.string.session_browser_action_failed, false);
+    }
+
+    /** Everything the drawer can ask for, answered by the activity that owns the shells. */
+    private final class DrawerListener implements SessionsDrawerView.Listener {
+
+        @Override public void onNewSession() {
+            if (mActivity.createBrowserSession()) reload();
+            else showActionFailed();
+        }
+
+        @Override public void onNewSessionPrompt() {
+            // A named session is asked for in a dialog of its own, which cannot share the screen
+            // with a modal plane.
+            dismiss();
+            mActivity.promptNewSession();
+        }
+
+        @Override public void onActivateSession(long sessionId) {
+            int index = mActivity.browserSessionIndex(sessionId);
+            // Switching leaves the drawer describing a layout the user has just left.
+            if (mActivity.activateBrowserSession(index)) dismiss();
+            else showActionFailed();
+        }
+
+        @Override public void onActivateWindow(long sessionId, long windowId) {
+            if (mActivity.activateBrowserWindow(sessionId, windowId)) dismiss();
+            else showActionFailed();
+        }
+
+        @Override public void onCloneSession(long sessionId) {
+            if (mActivity.cloneBrowserSession(mActivity.browserSessionIndex(sessionId))) reload();
+            else showActionFailed();
+        }
+
+        @Override public void onRenameSession(long sessionId, @NonNull String name) {
+            if (mActivity.renameBrowserSession(mActivity.browserSessionIndex(sessionId), name))
+                reload();
+            else showActionFailed();
+        }
+
+        @Override public void onCloseSession(long sessionId) {
+            if (mActivity.closeBrowserSession(mActivity.browserSessionIndex(sessionId))) reload();
+            else showActionFailed();
+        }
+
+        @Override public void onSaveWorkspace(@NonNull String name, boolean captureCommands) {
+            saveWorkspace(name, false, captureCommands);
+        }
+
+        @Override public void onLoadWorkspace(@NonNull String name, boolean replace,
+                                              boolean runCommands) {
+            dismiss();
+            try {
+                mActivity.loadWorkspace(name, replace, runCommands);
+                AppNotice.show(mActivity,
+                    mActivity.getString(R.string.workspace_picker_loaded, name), false);
+            } catch (TerminalWorkspace.WorkspaceException e) {
+                AppNotice.show(mActivity, mActivity.getString(R.string.workspace_picker_failed,
+                    e.getMessage()), false);
             }
         }
-    }
 
-    private static void showActionFailed(@NonNull Context context) {
-        AppNotice.show(context, R.string.session_browser_action_failed, false);
-    }
-
-    @NonNull
-    private static String displayName(@NonNull Context context,
-                                      @NonNull SessionBrowserModel.Session session) {
-        return TextUtils.isEmpty(session.name)
-            ? context.getString(R.string.session_browser_unnamed, session.index + 1)
-            : context.getString(R.string.session_browser_named, session.index + 1, session.name);
-    }
-
-    private interface MenuListener {
-        void onMenu(@NonNull View anchor, @NonNull SessionBrowserModel.Session session);
-    }
-
-    private static final class BrowserAdapter extends BaseAdapter {
-        @NonNull private final TermuxActivity activity;
-        @NonNull private List<SessionBrowserModel.Session> all = new ArrayList<>();
-        @NonNull private List<SessionBrowserModel.Session> filtered = new ArrayList<>();
-        @NonNull private String query = "";
-        @Nullable private MenuListener menuListener;
-
-        BrowserAdapter(@NonNull TermuxActivity activity) {
-            this.activity = activity;
+        @Override public void onDeleteWorkspace(@NonNull String name) {
+            try {
+                mActivity.deleteWorkspace(name);
+                AppNotice.show(mActivity,
+                    mActivity.getString(R.string.workspace_deleted, name), false);
+            } catch (TerminalWorkspace.WorkspaceException e) {
+                AppNotice.show(mActivity, mActivity.getString(R.string.workspace_picker_failed,
+                    e.getMessage()), false);
+            }
             reload();
         }
 
-        void setMenuListener(@Nullable MenuListener listener) {
-            menuListener = listener;
+        @Override public void onTypingStarted() {
+            mActivity.getTerminalSheetController().requestTypingKeyboard();
         }
-
-        void setQuery(@Nullable String value) {
-            query = value == null ? "" : value;
-            filtered = SessionBrowserModel.filter(all, query);
-            notifyDataSetChanged();
-        }
-
-        void reload() {
-            all = activity.getSessionBrowserSessions();
-            filtered = SessionBrowserModel.filter(all, query);
-            notifyDataSetChanged();
-        }
-
-        @Nullable
-        SessionBrowserModel.Session entryAt(int position) {
-            return position >= 0 && position < filtered.size() ? filtered.get(position) : null;
-        }
-
-        @Override public int getCount() { return filtered.size(); }
-        @Override public Object getItem(int position) { return entryAt(position); }
-        @Override public long getItemId(int position) {
-            SessionBrowserModel.Session session = entryAt(position);
-            return session == null ? position : session.id;
-        }
-        @Override public boolean hasStableIds() { return true; }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            View row = convertView;
-            if (row == null) {
-                row = LayoutInflater.from(activity).inflate(R.layout.session_browser_row, parent, false);
-            }
-            SessionBrowserModel.Session session = filtered.get(position);
-            TextView title = row.findViewById(R.id.session_browser_row_title);
-            TextView subtitle = row.findViewById(R.id.session_browser_row_subtitle);
-            TextView more = row.findViewById(R.id.session_browser_row_more);
-            String displayName = displayName(activity, session);
-            CharSequence titleText = session.current
-                ? displayName + " · " + activity.getString(R.string.session_browser_current)
-                : displayName;
-            // The session's rolled-up agent reading leads its name, in the same colours the pane
-            // lines under it use, so a blocked agent is findable without opening the session.
-            title.setText(withLeadingDot(activity, titleText, session.agentState));
-            title.setTypeface(null, session.current ? android.graphics.Typeface.BOLD
-                : android.graphics.Typeface.NORMAL);
-            subtitle.setText(buildSubtitle(activity, session));
-            more.setOnClickListener(v -> {
-                if (menuListener != null) menuListener.onMenu(v, session);
-            });
-            return row;
-        }
-    }
-
-    @NonNull
-    private static CharSequence buildSubtitle(@NonNull Context context,
-                                              @NonNull SessionBrowserModel.Session session) {
-        String windows = context.getResources().getQuantityString(R.plurals.session_browser_window_count,
-            session.windows.size(), session.windows.size());
-        String panes = context.getResources().getQuantityString(R.plurals.session_browser_pane_count,
-            session.paneCount(), session.paneCount());
-        SpannableStringBuilder out = new SpannableStringBuilder(windows).append(" · ").append(panes);
-        for (SessionBrowserModel.Window window : session.windows) {
-            out.append('\n').append(context.getString(R.string.session_browser_window,
-                window.index + 1));
-            if (window.current) out.append(" •");
-            for (SessionBrowserModel.Pane pane : window.panes) {
-                out.append("  ");
-                if (pane.cwd != null) out.append(SessionBrowserModel.displayCwd(pane.cwd));
-                if (pane.foreground != null) {
-                    if (pane.cwd != null) out.append(" · ");
-                    out.append(pane.foreground);
-                }
-                if (pane.cwd == null && pane.foreground == null) out.append('—');
-                String agent = TerminalWindowBar.agentStateWord(context, pane.agentState);
-                if (agent == null) continue;
-                if (pane.cwd != null || pane.foreground != null) out.append(" · ");
-                int start = out.length();
-                out.append(agent);
-                out.setSpan(new ForegroundColorSpan(agentColor(context, pane.agentState)),
-                    start, out.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-        }
-        return out;
     }
 
     /**
-     * {@code text} with a coloured dot in front of it when {@code state} says something, and
-     * unchanged when it does not — so a session with no agent in it looks exactly as it did.
+     * Saves, and asks again when the name is taken.
+     *
+     * <p>The overwrite question is the one thing here that cannot be a row: the drawer is gone by
+     * then, and the answer is about a file rather than about anything the list is showing.
      */
-    @NonNull
-    private static CharSequence withLeadingDot(@NonNull Context context, @NonNull CharSequence text,
-                                               @Nullable AgentStatus.State state) {
-        if (state == null) return text;
-        SpannableStringBuilder out = new SpannableStringBuilder("●  ").append(text);
-        out.setSpan(new ForegroundColorSpan(agentColor(context, state)), 0, 1,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        return out;
-    }
-
-    /** Working, waiting and idle in the same three colours the window chips draw their dot in. */
-    private static int agentColor(@NonNull Context context,
-                                  @Nullable AgentStatus.State state) {
-        if (state == AgentStatus.State.BLOCKED) {
-            return MaterialColors.getColor(context, com.google.android.material.R.attr.colorError,
-                ContextCompat.getColor(context, R.color.termux_error));
+    private void saveWorkspace(@Nullable String name, boolean overwrite, boolean captureCommands) {
+        try {
+            TerminalWorkspace workspace = mActivity.saveWorkspace(name == null ? "" : name,
+                overwrite, captureCommands);
+            AppNotice.show(mActivity, mActivity.getString(
+                R.string.session_browser_workspace_saved, workspace.name), false);
+        } catch (TerminalWorkspace.WorkspaceException e) {
+            if (overwrite || !"conflict".equals(e.code)) {
+                AppNotice.show(mActivity, e.getMessage(), true);
+                return;
+            }
+            String requested = name == null ? "" : name.trim();
+            TerminalSheetController sheet = mActivity.getTerminalSheetController();
+            android.widget.LinearLayout body = TerminalSheetViews.body(mActivity);
+            TerminalSheetViews.addMessage(body, mActivity.getString(
+                R.string.session_browser_workspace_overwrite_message));
+            android.widget.LinearLayout actions = TerminalSheetViews.addActionRow(body);
+            TerminalSheetViews.addAction(actions,
+                mActivity.getString(android.R.string.cancel), sheet::dismiss);
+            TerminalSheetViews.addAction(actions,
+                mActivity.getString(R.string.session_browser_overwrite), () -> {
+                    sheet.dismiss();
+                    saveWorkspace(requested, true, captureCommands);
+                });
+            sheet.show(mActivity.getString(
+                R.string.session_browser_workspace_overwrite_title, requested), body);
         }
-        if (state == AgentStatus.State.WORKING) {
-            return MaterialColors.getColor(context,
-                com.google.android.material.R.attr.colorTertiary,
-                ContextCompat.getColor(context, R.color.termux_primary));
-        }
-        int onSurfaceVariant = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            ContextCompat.getColor(context, R.color.termux_on_surface_variant));
-        return ColorUtils.setAlphaComponent(onSurfaceVariant, 150);
     }
 }
