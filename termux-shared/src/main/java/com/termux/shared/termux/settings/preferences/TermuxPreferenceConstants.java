@@ -1295,6 +1295,31 @@ public final class TermuxPreferenceConstants {
             "display_enable_prompted";
 
         public static final boolean DEFAULT_VALUE_DISPLAY_ENABLE_PROMPTED = false;
+
+        /**
+         * The version of the first-boot tour the user has been through, or 0. Versioned rather
+         * than a flag so a later run can be offered to someone who saw an earlier one; an install
+         * that already has a launcher on it is never shown a run it did not opt into.
+         */
+        public static final String KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION =
+            "first_boot_tour_completed_version";
+        public static final int DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION = 0;
+
+        /**
+         * The card an unfinished run is on, or -1. The launcher is the home screen and is killed
+         * and restarted under the user constantly, so the run is written through on every move and
+         * resumes where it was rather than starting over.
+         */
+        public static final String KEY_FIRST_BOOT_TOUR_STEP = "first_boot_tour_step";
+        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP = -1;
+
+        /** How many of the current card's gestures have been observed. */
+        public static final String KEY_FIRST_BOOT_TOUR_STEP_STAGE = "first_boot_tour_step_stage";
+        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE = 0;
+
+        /** Whether the user skipped past a card in the run they are on. */
+        public static final String KEY_FIRST_BOOT_TOUR_SKIPPED = "first_boot_tour_skipped";
+        public static final boolean DEFAULT_FIRST_BOOT_TOUR_SKIPPED = false;
     }
 
     /**

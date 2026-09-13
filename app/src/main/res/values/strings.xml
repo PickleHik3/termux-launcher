@@ -1801,6 +1801,22 @@
     <string name="onboarding_page_three_tip_two">Tap CPU, memory, or weather for details</string>
     <string name="onboarding_page_three_footer">Long-press the terminal to restyle the dock, keys and status bar</string>
 
+    <!-- First-boot tour: one card per gesture, shown over the real home screen -->
+    <string name="tour_skip">Skip</string>
+    <string name="tour_done">Done</string>
+    <string name="tour_card_status_place">Swipe the status bar left or right.</string>
+    <string name="tour_card_status_place_then">Swipe back.</string>
+    <string name="tour_card_status_expand">Drag the status bar down, then up.</string>
+    <string name="tour_card_window">Tap + to open a window.</string>
+    <string name="tour_card_window_then">Tap the window chip, then × to close it.</string>
+    <string name="tour_card_split">Swipe up on the split key.</string>
+    <string name="tour_card_pane_corner">Tap a pane corner.</string>
+    <string name="tour_card_drawer">Pull down on the dock.</string>
+    <string name="tour_card_drawer_then">Swipe down to close the drawer.</string>
+    <string name="tour_card_az_scrub">Slide along the A–Z row, drag up to an app and let go.</string>
+    <string name="tour_card_palette">Swipe up on the space bar.</string>
+    <string name="tour_card_closing">That is the tour. Enjoy the launcher.</string>
+
     <string name="termux_ai_sort_downloaded">Downloaded first</string>
     <string name="termux_ai_sort_name">Name: A–Z</string>
     <string name="termux_ai_sort_size">Size: smallest first</string>
