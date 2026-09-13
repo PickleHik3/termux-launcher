@@ -66,7 +66,7 @@ public final class ExtraKeyActionLabels {
             case LauncherToolRegistry.TOOL_WALL_WIDGETS: return "\uf015";
             case LauncherToolRegistry.TOOL_WALL_TERMINAL: return "\uf120";
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return "\uf108";
-            case LauncherToolRegistry.TOOL_MOUSE_TOGGLE: return "\uf245";
+            case LauncherToolRegistry.TOOL_MOUSE_TOGGLE: return "\uDB80\uDF7D"; // nf-md-mouse
             case LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM: return "\uf11c";
             default: return null;
         }
