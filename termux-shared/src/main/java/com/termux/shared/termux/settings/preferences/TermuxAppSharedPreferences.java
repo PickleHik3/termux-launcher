@@ -2556,4 +2556,50 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setCrashReportNotificationsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_CRASH_REPORT_NOTIFICATIONS_ENABLED, value, false);
     }
+
+    /** The first-boot tour run the user has finished, or 0. */
+    public int getFirstBootTourCompletedVersion() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION);
+    }
+
+    public void setFirstBootTourCompletedVersion(int version) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION, version, true);
+    }
+
+    /** The card an unfinished run is on, or -1. */
+    public int getFirstBootTourStep() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP, TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_STEP);
+    }
+
+    public void setFirstBootTourStep(int step) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP, step, true);
+    }
+
+    /** How many of that card's gestures have been observed. */
+    public int getFirstBootTourStepStage() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP_STAGE,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE);
+    }
+
+    public void setFirstBootTourStepStage(int stage) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP_STAGE, stage, true);
+    }
+
+    /** Whether a card was skipped in the run the user is on. */
+    public boolean getFirstBootTourSkipped() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_SKIPPED, TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_SKIPPED);
+    }
+
+    public void setFirstBootTourSkipped(boolean skipped) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_SKIPPED, skipped, true);
+    }
 }

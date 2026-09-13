@@ -21,8 +21,13 @@ import androidx.annotation.NonNull;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 
-/** Shared artwork-contour focus renderer for dock drag and terminal-search focus. */
-final class FocusOutlineRenderer {
+/**
+ * Shared artwork-contour focus renderer for dock drag and terminal-search focus.
+ *
+ * <p>Public for the first-boot tour, which glows a chrome control with the same treatment rather
+ * than inventing a second one.
+ */
+public final class FocusOutlineRenderer {
 
     private static final float STROKE_WIDTH_DP = 1.5f;
     private static final float HALO_RADIUS_DP = 6f;
@@ -124,7 +129,7 @@ final class FocusOutlineRenderer {
     private FocusOutlineRenderer() {}
 
     @ColorInt
-    static int resolveAccent(@NonNull android.view.View view) {
+    public static int resolveAccent(@NonNull android.view.View view) {
         return MaterialColors.getColor(view, com.termux.shared.R.attr.termuxColorPrimary,
             androidx.core.content.ContextCompat.getColor(view.getContext(), R.color.termux_primary));
     }
@@ -197,9 +202,9 @@ final class FocusOutlineRenderer {
      * Fallback for focus targets without an artwork mask (folder previews, views measured at zero).
      * Same stroke, halo, and tint parameters as the contour path so the two are visually siblings.
      */
-    static void drawRoundRectFallback(@NonNull Canvas canvas, @NonNull RectF target,
-                                      float cornerRadius, @ColorInt int accent, float alpha,
-                                      float scale, float density) {
+    public static void drawRoundRectFallback(@NonNull Canvas canvas, @NonNull RectF target,
+                                             float cornerRadius, @ColorInt int accent, float alpha,
+                                             float scale, float density) {
         float boundedAlpha = clamp01(alpha);
         if (boundedAlpha <= 0f || target.isEmpty()) return;
         int accentAlpha = Color.alpha(accent);
@@ -285,7 +290,7 @@ final class FocusOutlineRenderer {
         }
     }
 
-    static boolean animationsEnabled(@NonNull Context context) {
+    public static boolean animationsEnabled(@NonNull Context context) {
         try {
             return Settings.Global.getFloat(
                 context.getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f

@@ -348,6 +348,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallPage.TERMINAL;
     /** Every place's arrangement and memory; built on the preferences the first time it is asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
+    /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
+    @Nullable private com.termux.app.tour.FirstBootTour mFirstBootTour;
 
     /**
      * The look layer sitting under {@link #mPreferences}: every surface value the chrome reads
@@ -1086,8 +1088,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState == null) {
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
-            contentView.post(() -> FirstLaunchOnboarding.showIfNeeded(this, forceOnboarding,
-                this::startFirstRunPermissionChain));
+            contentView.post(() -> {
+                FirstLaunchOnboarding.showIfNeeded(this, forceOnboarding, () -> {
+                    startFirstRunPermissionChain();
+                    // The run teaches gestures on the live home screen, so it can only start once
+                    // the first-launch chain has stopped covering it.
+                    com.termux.app.tour.FirstBootTour tour = firstBootTour();
+                    if (tour != null) tour.startIfNeeded();
+                });
+                // Nothing was shown, so nothing will call back: pick up a run that a process death
+                // interrupted. A user who never started one is left alone.
+                com.termux.app.tour.FirstBootTour pending = firstBootTour();
+                if (pending != null && !FirstLaunchOnboarding.isShowing(this))
+                    pending.resumeIfInProgress();
+            });
         }
     }
 
@@ -1524,7 +1538,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Check if a crash happened on last run of the app or if a plugin crashed and show a
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
+        // Step seven launches an app; the run is picked back up on the card it was on when the
+        // launcher returns.
+        com.termux.app.tour.FirstBootTour tour = firstBootTour();
+        if (tour != null && !FirstLaunchOnboarding.isShowing(this)) tour.resumeIfInProgress();
         mIsOnResumeAfterOnCreate = false;
+    }
+
+    /** The tour, built on the preferences the first time anything asks for it. */
+    @Nullable
+    private com.termux.app.tour.FirstBootTour firstBootTour() {
+        if (mFirstBootTour == null && mPreferences != null) {
+            mFirstBootTour = new com.termux.app.tour.FirstBootTour(this, mPreferences);
+            // Both signals are edge-triggered, so the run starts knowing where the chrome rests
+            // and a card is never cleared by a state the user did not put it in.
+            mFirstBootTour.onStatusBarCollapsedSettled(isStatusBarCompact());
+            com.termux.app.wall.PaneWallPage place = currentWallPlace();
+            mFirstBootTour.onPlaceSettled(place == null ? null : place.name());
+        }
+        return mFirstBootTour;
     }
 
     @Override
@@ -12842,6 +12874,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Where the wall rests is where the home screen comes back to, across Home
                     // presses and across launches alike.
                     if (mPreferences != null) mPreferences.setWallLastPage(page.name());
+                    if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
                     syncPlaceBarOffset(offsetPx);
@@ -14404,6 +14437,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (preferenceChanged) setStatusBarCompact(collapsed);
+        if (mFirstBootTour != null) mFirstBootTour.onStatusBarCollapsedSettled(collapsed);
         if (host == null) {
             refreshTerminalWindowBar();
             return;
