@@ -30,13 +30,14 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * The launcher's in-app notice surface: a Material pill that appears at the top of the screen,
- * centred, holds one message, and fades away.
+ * The launcher's in-app notice surface: one pill, centred at the top of the screen, holding one
+ * message and fading away.
  *
  * <p>Replaces the stock Android {@code Toast} everywhere in the app. A toast is bottom-centre, sits
  * over the shell prompt and the keyboard, cannot be themed and cannot be positioned at all from
- * Android 11 onward. The pill sits in the row just under whatever chrome the screen has
- * ({@link AppNoticePlacement} keeps it there) where nothing else competes for space.
+ * Android 11 onward. The pill lands inside the terminal's own rim where there is a terminal, and in
+ * the row just under whatever chrome the screen has where there is not ({@link AppNoticePlacement}
+ * decides which), and it wears the terminal's {@link TerminalDress} either way.
  *
  * <p>Nothing here animates by drawing. The pill is one {@link TerminalDress} background — a single
  * display list, recorded once — and appearing or leaving is alpha and translation on the view

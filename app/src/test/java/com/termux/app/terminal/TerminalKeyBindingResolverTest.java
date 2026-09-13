@@ -553,7 +553,7 @@ public class TerminalKeyBindingResolverTest {
     @Test
     public void pendingOverlay_formatsASequenceForPeople() {
         assertEquals("Ctrl+Alt+Space  ›  P",
-            TerminalKeyChordOverlay.displaySequence("ctrl+alt+space>p"));
+            TerminalKeyBindingResolver.displaySequence("ctrl+alt+space>p"));
     }
 
     @Test

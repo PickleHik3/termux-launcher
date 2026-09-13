@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
@@ -272,7 +273,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // Show indicator for non-current sessions that exit.
             // Verify that session was not removed before we got told about it finishing:
             if (index >= 0)
-                mHost.showSessionSwitchIndicator(toToastTitle(finishedSession) + " - exited");
+                mHost.showTerminalNotice(toToastTitle(finishedSession) + " - exited",
+                    AppNoticeItem.Hold.INFO);
         }
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
             // On Android TV devices we need to use older behaviour because we may
@@ -579,9 +581,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // can do nothing about mid-dialog. The window and pane paths report this on the notice
             // chip; match them. This branch returns before createShellForCwd, so the same event
             // never produces two presentations.
-            mHost.showSessionSwitchIndicator(
+            mHost.showTerminalNotice(
                 mContext.getString(R.string.title_max_terminals_reached) + " — "
-                    + mContext.getString(R.string.msg_max_terminals_reached));
+                    + mContext.getString(R.string.msg_max_terminals_reached),
+                AppNoticeItem.Hold.REFUSAL);
             return false;
         } else {
             if (workingDirectory == null) {

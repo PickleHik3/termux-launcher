@@ -712,6 +712,30 @@ public final class TerminalKeyBindingResolver {
      * board can name each drawn key the way a binding suffix would.
      */
     @Nullable
+    /**
+     * A normalized sequence as it is shown to the user: {@code ctrl+alt+space>p} reads
+     * {@code Ctrl+Alt+Space  ›  P}. Lives beside the parsing it is the inverse of, rather than in
+     * whichever surface happens to be displaying it.
+     */
+    @NonNull
+    public static String displaySequence(@NonNull String normalizedSequence) {
+        StringBuilder result = new StringBuilder();
+        for (String stroke : normalizedSequence.split(">")) {
+            if (result.length() > 0) result.append("  ›  ");
+            String[] pieces = stroke.split("\\+");
+            for (int i = 0; i < pieces.length; i++) {
+                if (i > 0) result.append('+');
+                String piece = pieces[i];
+                if (piece.length() == 1) {
+                    result.append(piece.toUpperCase(java.util.Locale.US));
+                } else {
+                    result.append(Character.toUpperCase(piece.charAt(0))).append(piece.substring(1));
+                }
+            }
+        }
+        return result.toString();
+    }
+
     public static String keyToken(int keyCode) {
         if (keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
             return String.valueOf((char) ('a' + (keyCode - KeyEvent.KEYCODE_A)));
