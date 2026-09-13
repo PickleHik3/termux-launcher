@@ -14,6 +14,37 @@ public final class AppNoticeItem {
     /** Severity, which picks the glyph and the accent the progress hairline is drawn in. */
     public enum Kind { INFO, SUCCESS, WARNING, ERROR }
 
+    /**
+     * How long the pill keeps a notice, chosen by what the notice <em>is</em> rather than by how
+     * severe it is.
+     *
+     * <p>The app used to have three separate notice surfaces with three unrelated sets of timings —
+     * a terminal chip at 1400ms, a chord label at 950 and 2400, and this pill at 2600 and 3800 — so
+     * how long a message stayed depended on which corner it had been written for. One surface needs
+     * one scale, and the scale is the reading: a read-out is glanced at, a refusal is read.
+     */
+    public enum Hold {
+        /** What a key or a tool just did. Gone by the time the eye is back on the shell. */
+        READOUT(1000L),
+        /** Something the user asked for, done: copied, saved. */
+        CONFIRM(1600L),
+        /** News the user did not ask for: a bell, a shell that exited, a setting that changed. */
+        INFO(2600L),
+        /** Why something did not happen. The one kind that has to survive being read twice. */
+        REFUSAL(3800L),
+        /** A write whose only way back is the tap on the pill. */
+        UNDO(9000L),
+        /** Until whatever it reports is resolved: a multi-stroke binding waiting for its next key. */
+        STICKY(0L);
+
+        /** The hold in ms, or 0 for {@link #STICKY}, which has none. */
+        public final long ms;
+
+        Hold(long ms) {
+            this.ms = ms;
+        }
+    }
+
     @NonNull public final Kind kind;
     @NonNull public final CharSequence title;
     @Nullable public final CharSequence sub;
@@ -77,6 +108,15 @@ public final class AppNoticeItem {
         this.attention = attention;
         this.actionHint = actionHint;
         this.fleeting = fleeting;
+    }
+
+    /**
+     * True for a notice that holds until it is taken down rather than until a timer runs out. The
+     * pending-chord report is the only one: it is the state of the keyboard, and a keyboard state
+     * that expired on its own would be a lie.
+     */
+    public boolean isSticky() {
+        return durationMs <= 0L;
     }
 
     /** The glyph actually drawn: the caller's, or the kind's default. */

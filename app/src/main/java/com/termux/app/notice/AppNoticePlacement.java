@@ -1,7 +1,10 @@
 package com.termux.app.notice;
 
+import android.annotation.SuppressLint;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -10,30 +13,33 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 /**
- * Keeps the notice chip hanging off the bottom edge of whatever chrome sits above it.
+ * Puts the notice pill where the screen it is on wants it.
+ *
+ * <p>Two placements, one rule for keeping either of them current. With a terminal on screen the
+ * pill belongs to the terminal: it lands inside the terminal area, centred over the whole of it
+ * however many panes it has been split into, and drops out of the window's own top rim. Everywhere
+ * else — Settings, the keyboard colour scheme, the file picker — it hangs in the row just under
+ * whatever chrome that screen has.
  *
  * <p>The offset used to be measured once, when the host was first attached, off whatever the
  * toolbar happened to be at that moment. That is wrong more often than it is right: a notice raised
  * from a screen's {@code onCreate} measures a toolbar that has never been laid out and lands on the
  * title, and an offset that was correct at attach time survives a rotation, a multi-window resize,
  * a cutout change and a bar that shows or hides — all of which move the edge the chip is supposed
- * to be hanging from.
+ * to be hanging from. The terminal moves more than any of them: the keyboard comes up and down, a
+ * split changes the area's height, a window bar shows and hides.
  *
- * <p>So the offset is derived, not remembered. It is recomputed from the real chrome and the real
- * insets whenever either moves, and once more immediately before a chip is shown, which is the only
- * moment it has to be right. Layout params are touched only when the number actually changes, so a
- * screen that never moves its chrome never lays out on this account.
+ * <p>So the placement is derived, not remembered. It is recomputed from the real chrome, the real
+ * terminal bounds and the real insets whenever any of them moves, and once more immediately before
+ * a pill is shown, which is the only moment it has to be right. Layout params are touched only when
+ * a number actually changes, so a screen that never moves its chrome never lays out on this account.
  *
- * <p>The pill is centred horizontally, so all this settles is the row it lands in: clear of the
- * screen's own chrome, by a hair, so it reads as floating over the content rather than stuck to the
- * bar above it.
- *
- * <p>Every screen goes through the same rule, including the terminal. The terminal used to hand
- * over a structural anchor instead — its surface host, whose top edge is the window bar's bottom
+ * <p>The pill is parented to the window's content root either way, never to the terminal. It used
+ * to hang off a structural anchor — the surface host, whose top edge is the window bar's bottom
  * edge — but a child of that host is a sibling of whatever the terminal opens inside it, and a
  * later sibling draws on top: the preset-applied notice was laid out at the right place and
- * completely hidden behind the surface editor that raised it. The chip belongs in the window's
- * topmost layer, positioned against the chrome rather than parented to it.
+ * completely hidden behind the surface editor that raised it. The band this class positions gives
+ * the pill the terminal's geometry from the window's topmost layer.
  */
 final class AppNoticePlacement implements View.OnLayoutChangeListener {
 
@@ -48,38 +54,61 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
         com.termux.R.id.terminal_window_bar_host,
     };
 
-    /** Air between the chrome's bottom edge and the pill. */
+    /**
+     * The terminal area, spanning every pane of a split. The pill is centred over the whole of it
+     * rather than over the focused pane: a notice belongs to the terminal, not to one of its
+     * columns, and a pill that jumped between panes as focus moved would be read as pointing at one.
+     */
+    static final int TERMINAL_AREA_ID = com.termux.R.id.terminal_surface_host;
+
+    /** Air between the chrome's bottom edge — or the terminal's own rim — and the pill. */
     private static final float TOP_GAP_DP = 8f;
 
+    /**
+     * What the entrance has to cover before the pill has cleared the rim, when it has not been
+     * measured yet. The pill's own minimum height plus its padding: over-travelling is invisible
+     * behind the clip, a short travel shows a sliver of it above the terminal.
+     */
+    private static final float UNMEASURED_PILL_DP = 44f;
+
     @NonNull private final ViewGroup mAnchor;
+    @NonNull private final FrameLayout mFrame;
     @NonNull private final AppNoticeHostView mHost;
     @NonNull private final int[] mChromeIds;
 
     /** The chrome we are currently listening to, so a screen that swaps it is followed. */
     @Nullable private View mChrome;
+    /** The terminal area, watched in its own right: the keyboard and a split resize it alone. */
+    @Nullable private View mTerminalArea;
 
     private int mAppliedTopPx = Integer.MIN_VALUE;
+    private int mAppliedLeftPx = Integer.MIN_VALUE;
+    private int mAppliedWidthPx = Integer.MIN_VALUE;
+    private int mAppliedGapPx = Integer.MIN_VALUE;
 
     /**
-     * Starts keeping {@code host} under the chrome of the screen {@code anchor} belongs to. A
-     * structural anchor is left alone: there is nothing to measure and nothing to go stale.
+     * Starts keeping {@code host}, inside {@code frame}, where the screen {@code anchor} belongs to
+     * wants it.
      */
-    static void attach(@NonNull ViewGroup anchor, @NonNull AppNoticeHostView host) {
-        attach(anchor, host, DEFAULT_CHROME_IDS);
+    static void attach(@NonNull ViewGroup anchor, @NonNull FrameLayout frame,
+                       @NonNull AppNoticeHostView host) {
+        attach(anchor, frame, host, DEFAULT_CHROME_IDS);
     }
 
     /**
-     * As {@link #attach(ViewGroup, AppNoticeHostView)}, hanging the chip from the first visible view
-     * among {@code chromeIds}, looked up from the anchor's root in the order given.
+     * As {@link #attach(ViewGroup, FrameLayout, AppNoticeHostView)}, hanging the pill from the first
+     * visible view among {@code chromeIds} — looked up from the anchor's root in the order given —
+     * on any screen with no terminal area on it.
      */
-    static void attach(@NonNull ViewGroup anchor, @NonNull AppNoticeHostView host,
-                       @NonNull int[] chromeIds) {
-        new AppNoticePlacement(anchor, host, chromeIds).install();
+    static void attach(@NonNull ViewGroup anchor, @NonNull FrameLayout frame,
+                       @NonNull AppNoticeHostView host, @NonNull int[] chromeIds) {
+        new AppNoticePlacement(anchor, frame, host, chromeIds).install();
     }
 
-    private AppNoticePlacement(@NonNull ViewGroup anchor, @NonNull AppNoticeHostView host,
-                               @NonNull int[] chromeIds) {
+    private AppNoticePlacement(@NonNull ViewGroup anchor, @NonNull FrameLayout frame,
+                               @NonNull AppNoticeHostView host, @NonNull int[] chromeIds) {
         mAnchor = anchor;
+        mFrame = frame;
         mHost = host;
         mChromeIds = chromeIds;
     }
@@ -89,16 +118,16 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
         // target a sibling that fits system windows consumes them before they reach the chip, so
         // what arrives here is not what the screen is actually inset by. The callback is only a
         // signal that something moved.
-        ViewCompat.setOnApplyWindowInsetsListener(mHost, (view, insets) -> {
+        ViewCompat.setOnApplyWindowInsetsListener(mFrame, (view, insets) -> {
             schedule();
             return insets;
         });
         mAnchor.addOnLayoutChangeListener(this);
-        mHost.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+        mFrame.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(@NonNull View view) { schedule(); }
             @Override public void onViewDetachedFromWindow(@NonNull View view) { uninstall(); }
         });
-        // The one moment the offset has to be right: the frame a chip becomes visible.
+        // The one moment the placement has to be right: the frame a pill becomes visible.
         mHost.setPlacementRefresh(this::apply);
         apply();
     }
@@ -108,6 +137,10 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
         if (mChrome != null) {
             mChrome.removeOnLayoutChangeListener(this);
             mChrome = null;
+        }
+        if (mTerminalArea != null) {
+            mTerminalArea.removeOnLayoutChangeListener(this);
+            mTerminalArea = null;
         }
         mHost.setPlacementRefresh(null);
     }
@@ -121,23 +154,77 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
     /**
      * Applies, but never from inside the layout pass that told us to: writing layout params there
      * is the "requestLayout() improperly called during layout" warning, and one frame late is
-     * invisible for a chip that is not on screen yet.
+     * invisible for a pill that is not on screen yet.
      */
     private void schedule() {
-        if (mHost.isInLayout() || mAnchor.isInLayout()) mHost.post(this::apply);
+        if (mFrame.isInLayout() || mAnchor.isInLayout()) mFrame.post(this::apply);
         else apply();
     }
 
     private void apply() {
-        View chrome = resolveChrome();
-        int top = placementTop(insetFloor(), chromeBottom(chrome), density());
-        if (top == mAppliedTopPx) return;
-        ViewGroup.LayoutParams params = mHost.getLayoutParams();
-        if (!(params instanceof ViewGroup.MarginLayoutParams)) return;
-        mAppliedTopPx = top;
-        ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
-        margins.topMargin = top;
-        mHost.setLayoutParams(margins);
+        View terminal = resolveTerminalArea();
+        if (terminal != null) applyTerminalBand(terminal);
+        else applyChromeRow(resolveChrome());
+    }
+
+    /**
+     * Inside the terminal: the frame takes the terminal area's own left edge and width, so the pill
+     * centres over every pane of a split at once, and its top edge is the terminal's rim, which is
+     * what the frame clips at.
+     */
+    private void applyTerminalBand(@NonNull View terminal) {
+        int[] location = new int[2];
+        terminal.getLocationInWindow(location);
+        int[] anchorLocation = new int[2];
+        mAnchor.getLocationInWindow(anchorLocation);
+        int gap = Math.round(TOP_GAP_DP * density());
+        applyBand(bandEdge(location[0], anchorLocation[0]), bandEdge(location[1], anchorLocation[1]),
+            terminal.getWidth(), gap, true);
+    }
+
+    /** Off the terminal: the row just under whatever chrome the screen has, full width. */
+    private void applyChromeRow(@Nullable View chrome) {
+        applyBand(0, placementTop(insetFloor(), chromeBottom(chrome), density()),
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, false);
+    }
+
+    @SuppressLint("RtlHardcoded")
+    private void applyBand(int leftPx, int topPx, int widthPx, int gapPx, boolean clipAtRim) {
+        if (leftPx == mAppliedLeftPx && topPx == mAppliedTopPx && widthPx == mAppliedWidthPx
+            && gapPx == mAppliedGapPx) {
+            refreshEntranceRise(gapPx, clipAtRim);
+            return;
+        }
+        ViewGroup.LayoutParams frameParams = mFrame.getLayoutParams();
+        if (!(frameParams instanceof FrameLayout.LayoutParams)) return;
+        mAppliedLeftPx = leftPx;
+        mAppliedTopPx = topPx;
+        mAppliedWidthPx = widthPx;
+        mAppliedGapPx = gapPx;
+
+        FrameLayout.LayoutParams band = (FrameLayout.LayoutParams) frameParams;
+        band.gravity = Gravity.TOP | Gravity.LEFT;
+        band.leftMargin = leftPx;
+        band.topMargin = topPx;
+        band.width = widthPx;
+        mFrame.setLayoutParams(band);
+        mFrame.setClipChildren(clipAtRim);
+
+        ViewGroup.LayoutParams hostParams = mHost.getLayoutParams();
+        if (hostParams instanceof ViewGroup.MarginLayoutParams) {
+            ((ViewGroup.MarginLayoutParams) hostParams).topMargin = gapPx;
+            mHost.setLayoutParams(hostParams);
+        }
+        refreshEntranceRise(gapPx, clipAtRim);
+    }
+
+    /**
+     * How far the pill travels on its way in. Inside the terminal that is the whole way back
+     * through the rim; elsewhere the host keeps its own small drop.
+     */
+    private void refreshEntranceRise(int gapPx, boolean clipAtRim) {
+        mHost.setEntranceRisePx(clipAtRim
+            ? entranceRisePx(gapPx, mHost.getHeight(), density()) : 0f);
     }
 
     /**
@@ -146,7 +233,7 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
      * starts below the status bar needs no offset for it, and one drawn edge to edge needs the lot.
      */
     private int insetFloor() {
-        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(mHost);
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(mFrame);
         if (insets == null) return 0;
         Insets bars = insets.getInsets(WindowInsetsCompat.Type.statusBars()
             | WindowInsetsCompat.Type.displayCutout()
@@ -191,6 +278,37 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
         return Math.max(insetFloorPx, chromeBottomPx) + Math.round(TOP_GAP_DP * density);
     }
 
+    /** One edge of the terminal band in the anchor's coordinates; never outside it. */
+    static int bandEdge(int areaEdgeInWindowPx, int anchorEdgeInWindowPx) {
+        return Math.max(0, areaEdgeInWindowPx - anchorEdgeInWindowPx);
+    }
+
+    /**
+     * The distance from the pill's resting place back through the rim it came from. Its own height
+     * plus the gap it rests below the edge, so at the start of the entrance it is entirely on the
+     * far side of the clip.
+     *
+     * @param pillHeightPx the pill's measured height, or 0 before it has ever been laid out.
+     */
+    static float entranceRisePx(int gapPx, int pillHeightPx, float density) {
+        return gapPx + Math.max(pillHeightPx, UNMEASURED_PILL_DP * density);
+    }
+
+    /** The terminal area of this screen, or null on a screen that has none showing. */
+    @Nullable
+    private View resolveTerminalArea() {
+        View found = mAnchor.getRootView().findViewById(TERMINAL_AREA_ID);
+        if (found != null && (!found.isShown() || found.getWidth() <= 0 || found.getHeight() <= 0))
+            found = null;
+        if (found != mTerminalArea) {
+            if (mTerminalArea != null) mTerminalArea.removeOnLayoutChangeListener(this);
+            mTerminalArea = found;
+            // The keyboard, a split and a window bar all resize this without the anchor moving.
+            if (mTerminalArea != null) mTerminalArea.addOnLayoutChangeListener(this);
+        }
+        return found;
+    }
+
     /** The chrome this screen has, looked up afresh: screens replace their bars. */
     @Nullable
     private View resolveChrome() {
@@ -214,6 +332,6 @@ final class AppNoticePlacement implements View.OnLayoutChangeListener {
     }
 
     private float density() {
-        return mHost.getResources().getDisplayMetrics().density;
+        return mFrame.getResources().getDisplayMetrics().density;
     }
 }

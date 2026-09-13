@@ -84,6 +84,7 @@ import com.canhub.cropper.CropImageContractOptions;
 import com.canhub.cropper.CropImageOptions;
 import com.canhub.cropper.CropImageView;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.notice.TerminalDress;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.chrome.ChromePolicy;
@@ -1163,21 +1164,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Creates the in-app notice chip up front and joins it to the top-trailing column, so the
-     * session-switch chip and the background-process stack move down under it while a notice is up
-     * rather than being drawn over.
+     * Creates the notice pill up front, hands it the terminal it will be floating over, and joins
+     * it to the column below, so the background-process stack moves down under it while a notice is
+     * up rather than being drawn over.
      */
     private void ensureAppNoticeHost() {
         com.termux.app.notice.AppNoticeHostView host = AppNotice.hostFor(this);
         if (host == null) return;
+        // Read through, never copied: the corner knob, the opacity slider and the glass tint all
+        // move while the surface editor is open, and the pill has to be wearing what the terminal
+        // is wearing at the moment it is raised.
+        host.setTerminalDressSource(new TerminalDress.Source() {
+            @Override public float terminalCornerRadiusPx() {
+                return terminalEdgeCornerRadiusPx();
+            }
+
+            @Override public int terminalFillColor() {
+                return shouldShowTerminalOverlaySurface()
+                    ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
+            }
+        });
         host.setOccupancyListener(height -> {
             mAppNoticeOccupancyPx = height;
             applyNoticeColumnOffsets();
         });
     }
 
-    /** The top-trailing column: notice chip on top, background stack right under it. The
-     *  session-switch indicator lives in the top-leading corner now and no longer shares it. */
+    /** The column under the pill: the background stack sits directly below whatever it is showing. */
     private void applyNoticeColumnOffsets() {
         if (mBackgroundProcessStack != null)
             mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx);
@@ -2234,9 +2247,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     //
     // Tool keys draw a glyph and nothing else, so the row and the keyboard's space-bar swipes are
     // only as discoverable as the guesses people make about them. Every action the dispatcher runs
-    // names itself for a beat, in the same top-centre pill as every other notice — it used to have a
-    // chip of its own in the terminal's top-trailing corner, the one message in the app that landed
-    // somewhere else.
+    // names itself for a beat, on the same pill as every other notice.
 
     /**
      * Names a dispatched tool in the notice pill; a no-op for tools with no UI title and for
@@ -2247,7 +2258,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void showTerminalActionHint(@NonNull String toolName) {
         LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(toolName);
         if (tool == null || tool.titleRes == 0 || tool.selfEvident) return;
-        com.termux.app.notice.AppNotice.hint(this, getString(tool.titleRes));
+        com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes));
     }
 
     private int resolveAccessoryGlassBaseColor() {
@@ -11355,7 +11366,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Raise a transient notice in the top-trailing chip.
+     * Raise a transient notice on the pill.
      *
      * <p>Was a stock toast with {@code setGravity(TOP)}, which Android 11 quietly stopped honouring
      * for text toasts — the notices had been landing bottom-centre over the prompt and the keyboard
