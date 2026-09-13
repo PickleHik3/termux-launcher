@@ -64,6 +64,8 @@ Use this section for visible surfaces and colors:
   `~/.termux/colors.properties`. Needs Android 11 or newer, and a scheme on disk — apply one from
   Termux:Styling first. See [Theming from a color scheme](#theming-from-a-color-scheme).
 - **Terminal contrast:** choose Softer, Default, or Harder for the generated wallpaper palette.
+- **Tools that follow the terminal colours:** pick the command-line tools that should be recolored
+  with the terminal. See [Tools that follow the terminal colours](#tools-that-follow-the-terminal-colours).
 - **Wallpaper:** show or hide the system wallpaper behind launcher surfaces.
 - **Icon appearance:** monochrome icons, system or custom icon pack, and pinned-app icon behavior.
 - **Keyboard look:** **Theme**, **Keyboard colors**, and **Typeface** for the built-in keyboard,
@@ -79,6 +81,42 @@ downloaded families.
 The launcher exports its resolved roles to `~/.termux/material-colors.sh` and `.properties` —
 including container/on-container pairs, tertiary, error-container, and outline roles for prompts and
 scripts — whether the palette came from the wallpaper or from a color scheme.
+
+### Tools that follow the terminal colours
+
+Pick a tool in this list and the launcher writes its theme file whenever the palette changes, then
+wires it into that tool's own config. Turning one off puts the config back as it was. Tools that can
+reload live do; the rest pick the colors up the next time they start.
+
+You can add your own. A template is a directory in `~/.termux/theme-templates/<id>/` holding a
+`template.properties` manifest, the file to render, and its hooks:
+
+```properties
+name     = Starship
+summary  = Prompt palette
+input    = starship.toml
+output   = ~/.config/launcher-material/starship.toml
+post_hook = apply.sh
+undo_hook = undo.sh
+```
+
+Templates in that directory apply because they are there — they need no switch — and an id that
+matches a shipped template replaces it. `output` understands `~`, `$VAR` and `${VAR}`, with
+`XDG_CONFIG_HOME` and `XDG_CACHE_HOME` defaulting to `~/.config` and `~/.cache`.
+
+The input file is plain text with `{{ colors.<token>.<mode>.<format> }}` placeholders — for example
+`{{ colors.primary.dark.hex }}`. Tokens are the key names in `~/.termux/material-colors.properties`,
+mode is `default`, `dark` or `light` (all three give the active palette), and the formats are `hex`,
+`hex_stripped`, `rgb`, `rgba`, `red`, `green` and `blue`. `{{ mode }}` renders `dark` or `light`.
+Everything else in the file is left exactly as written, so a Go or Lua template survives intact. An
+unknown token or format skips that template and logs why; nothing is written.
+
+`post_hook` runs after the file is written, `undo_hook` when the template is turned off or removed.
+Both are run as `bash <hook>` from the template directory with `TERMUX_THEME_ID`, `TERMUX_THEME_DIR`,
+`TERMUX_THEME_OUTPUT` and `TERMUX_THEME_MODE` set, and are stopped if they take longer than thirty
+seconds. Write them to be repeatable: add one include line or a marker block, change nothing when
+nothing changed, and have the undo remove exactly what the apply added. The theme name used
+throughout is `launcher-material`.
 
 ### Theming from a color scheme
 
