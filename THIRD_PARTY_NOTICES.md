@@ -28,6 +28,12 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
 - **Tinted Theming schemes** — MIT — imported on demand from
   [tinted-theming/schemes](https://github.com/tinted-theming/schemes); palette authors remain
   credited in the downloaded scheme metadata.
+- **[noctalia shell](https://github.com/noctalia-dev/noctalia-shell)** — MIT — Copyright the
+  noctalia-shell contributors. The `starship` and `helix` theme templates under
+  `app/src/main/assets/theme-templates/` are ported from noctalia's
+  `assets/templates/{starship,helix}/`, renamed from `noctalia` to `launcher-material` and
+  adapted to the launcher's own hook environment and Material palette (no filters or wallpaper
+  ANSI-derivation logic carried over).
 - **[termux-x11](https://github.com/termux/termux-x11)** — GPL-3.0-only — Copyright Twaik Yont
   and termux-x11 contributors. The `lorie` library module is vendored and modified as
   `x11-server/` and its `shell-loader` as `x11-server/loader/` (upstream commit

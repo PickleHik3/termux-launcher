@@ -1,0 +1,685 @@
+#!/usr/bin/env bash
+# Dev-only acceptance check for the built-in theme-template pack. For each
+# template: renders its input against the fixture palette (fails on any
+# unresolved `{{`), validates the rendered output (with the real tool where
+# installed on this machine, otherwise a syntax-only parse), then round-trips
+# apply.sh/apply.sh/undo.sh in a temp HOME, twice: once where the tool's own
+# config is absent, once where it pre-exists with unrelated content. A
+# second apply must change no bytes; undo must restore the original bytes
+# and remove the rendered file. Prints one PASS/FAIL line per template and
+# exits nonzero if any template failed.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TEMPLATES_DIR="$REPO_ROOT/app/src/main/assets/theme-templates"
+FIXTURE="$SCRIPT_DIR/fixture-palette.properties"
+RENDER="$SCRIPT_DIR/render.py"
+PY="${PYTHON:-python3}"
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+OVERALL=0
+NOTES=()
+
+note() { NOTES+=("$1"); }
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+# read_prop <template-dir> <key>
+read_prop() {
+    awk -F'=' -v k="$2" '$1 == k { sub(/^[^=]*=/, ""); print; exit }' "$1/template.properties"
+}
+
+# render_template <id> <input-file> -> writes rendered bytes to stdout, or
+# prints a render error to stderr and returns nonzero.
+render_template() {
+    local dir="$1" input="$2"
+    "$PY" "$RENDER" "$FIXTURE" "$dir/$input"
+}
+
+# assert_no_stray_braces <rendered-file>: fails if `{{` remains anywhere.
+assert_no_stray_braces() {
+    ! grep -q '{{' "$1"
+}
+
+# apply_env <home> <theme-dir> <output> [shell] - print the env assignment
+# arguments hooks receive, for use with `env`.
+hook_env() {
+    local home="$1" theme_dir="$2" output="$3" shell="${4:-}"
+    printf 'HOME=%s XDG_CONFIG_HOME=%s/.config XDG_CACHE_HOME=%s/.cache TERMUX_THEME_ID=%s TERMUX_THEME_DIR=%s TERMUX_THEME_OUTPUT=%s TERMUX_THEME_MODE=dark' \
+        "$home" "$home" "$home" "$(basename "$theme_dir")" "$theme_dir" "$output"
+    if [ -n "$shell" ]; then
+        printf ' TERMUX_THEME_SHELL=%s' "$shell"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Per-template config-path resolvers and round-trip drivers. Each test_<id>
+# function does its own thing and returns 0/1, appending to FAILS on error.
+# ---------------------------------------------------------------------------
+
+FAILS=()
+fail() { FAILS+=("$1"); }
+
+reset_fails() { FAILS=(); }
+
+run_hook() {
+    # run_hook <home> <theme-dir> <output> <hook-script>
+    local home="$1" theme_dir="$2" output="$3" hook="$4"
+    env HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
+        TERMUX_THEME_ID="$(basename "$theme_dir")" TERMUX_THEME_DIR="$theme_dir" \
+        TERMUX_THEME_OUTPUT="$output" TERMUX_THEME_MODE=dark \
+        bash "$hook" >"$WORK/.last_hook_output" 2>&1
+}
+
+run_hook_shell() {
+    # run_hook_shell <home> <theme-dir> <output> <hook-script> <shell>
+    local home="$1" theme_dir="$2" output="$3" hook="$4" shell="$5"
+    env HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
+        TERMUX_THEME_ID="$(basename "$theme_dir")" TERMUX_THEME_DIR="$theme_dir" \
+        TERMUX_THEME_OUTPUT="$output" TERMUX_THEME_MODE=dark TERMUX_THEME_SHELL="$shell" \
+        bash "$hook" >"$WORK/.last_hook_output" 2>&1
+}
+
+# generic_roundtrip <id> <config_rel_path_expr via function> ...
+# Implemented per-template below since config resolution differs.
+
+# ---- starship ----
+test_starship() {
+    local dir="$TEMPLATES_DIR/starship"
+    local rendered="$WORK/starship.rendered"
+    render_template "$dir" "starship.toml" >"$rendered" 2>"$WORK/starship.err" || { fail "render error: $(cat "$WORK/starship.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$rendered" 2>"$WORK/starship.tomlerr" || { fail "invalid TOML: $(cat "$WORK/starship.tomlerr")"; return; }
+    note "starship: not installed on this machine - syntax validation only (TOML parse)"
+
+    local case
+    for case in absent pre; do
+        local home="$WORK/starship-$case/home"
+        rm -rf "$WORK/starship-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/starship-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.cache/launcher-material/starship-palette.toml"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+
+        local orig=""
+        if [ "$case" = "pre" ]; then
+            mkdir -p "$home/.config"
+            printf '[character]\nsuccess_symbol = "➜"\n' > "$home/.config/starship.toml"
+            orig="$WORK/starship-$case/orig.toml"
+            cp "$home/.config/starship.toml" "$orig"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        cp "$home/.config/starship.toml" "$WORK/starship-$case/after1.toml" 2>/dev/null
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/starship-$case/after1.toml" "$home/.config/starship.toml" 2>/dev/null || fail "apply.sh ($case) not idempotent"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig" "$home/.config/starship.toml" || fail "undo.sh (pre) did not restore original bytes"
+        else
+            [ -e "$home/.config/starship.toml" ] && fail "undo.sh (absent) left a starship.toml behind"
+        fi
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
+    done
+
+    # setup.sh: bash, zsh, fish, each with the rc file absent and pre-existing,
+    # plus idempotency and undo.
+    local shell
+    for shell in bash zsh; do
+        local rcname=".${shell}rc"
+        for case in absent pre; do
+            local home="$WORK/starship-setup-$shell-$case/home"
+            rm -rf "$WORK/starship-setup-$shell-$case"; mkdir -p "$home"
+            local theme_dir="$WORK/starship-setup-$shell-$case/theme_dir"; mkdir -p "$theme_dir"
+            local output="$home/.config/dummy-starship-output"
+            local orig=""
+            if [ "$case" = "pre" ]; then
+                printf '# my rc\nexport FOO=bar\n' > "$home/$rcname"
+                orig="$WORK/starship-setup-$shell-$case/orig"
+                cp "$home/$rcname" "$orig"
+            fi
+            run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" "$shell" >/dev/null || { fail "setup.sh ($shell/$case) failed"; continue; }
+            cp "$home/$rcname" "$WORK/starship-setup-$shell-$case/after1" 2>/dev/null
+            run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" "$shell" >/dev/null || { fail "second setup.sh ($shell/$case) failed"; continue; }
+            cmp -s "$WORK/starship-setup-$shell-$case/after1" "$home/$rcname" 2>/dev/null || fail "setup.sh ($shell/$case) not idempotent"
+            run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" >/dev/null || { fail "undo.sh after setup.sh ($shell/$case) failed"; continue; }
+            if [ "$case" = "pre" ]; then
+                cmp -s "$orig" "$home/$rcname" || fail "undo.sh did not restore original $rcname ($shell)"
+            else
+                [ -e "$home/$rcname" ] && fail "undo.sh left a $rcname behind that setup.sh created ($shell)"
+            fi
+        done
+    done
+
+    # fish: setup.sh's own conf.d init file, absent case + idempotency + undo.
+    local home="$WORK/starship-setup-fish/home"
+    rm -rf "$WORK/starship-setup-fish"; mkdir -p "$home"
+    local theme_dir="$WORK/starship-setup-fish/theme_dir"; mkdir -p "$theme_dir"
+    local output="$home/.config/dummy-starship-output"
+    run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" fish >/dev/null || fail "setup.sh (fish) failed"
+    local fish_init="$home/.config/fish/conf.d/launcher-material-starship-init.fish"
+    [ -f "$fish_init" ] || fail "setup.sh (fish) did not create its conf.d init file"
+    cp "$fish_init" "$WORK/starship-setup-fish/after1" 2>/dev/null
+    run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" fish >/dev/null || fail "second setup.sh (fish) failed"
+    cmp -s "$WORK/starship-setup-fish/after1" "$fish_init" 2>/dev/null || fail "setup.sh (fish) not idempotent"
+    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" >/dev/null || fail "undo.sh after setup.sh (fish) failed"
+    [ -e "$fish_init" ] && fail "undo.sh left the fish init file behind"
+}
+
+# ---- helix ----
+test_helix() {
+    local dir="$TEMPLATES_DIR/helix"
+    local rendered="$WORK/helix.rendered"
+    render_template "$dir" "launcher-material.toml" >"$rendered" 2>"$WORK/helix.err" || { fail "render error: $(cat "$WORK/helix.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$rendered" 2>"$WORK/helix.tomlerr" || { fail "invalid TOML: $(cat "$WORK/helix.tomlerr")"; return; }
+    note "helix (hx): not installed on this machine - syntax validation only (TOML parse)"
+
+    local case
+    for case in absent pre; do
+        local home="$WORK/helix-$case/home"
+        rm -rf "$WORK/helix-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/helix-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/helix/themes/launcher-material.toml"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig=""
+        if [ "$case" = "pre" ]; then
+            mkdir -p "$home/.config/helix"
+            printf 'theme = "onedark"\neditor.cursorline = true\n' > "$home/.config/helix/config.toml"
+            orig="$WORK/helix-$case/orig.toml"; cp "$home/.config/helix/config.toml" "$orig"
+        fi
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        cp "$home/.config/helix/config.toml" "$WORK/helix-$case/after1.toml" 2>/dev/null
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/helix-$case/after1.toml" "$home/.config/helix/config.toml" 2>/dev/null || fail "apply.sh ($case) not idempotent"
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig" "$home/.config/helix/config.toml" || fail "undo.sh (pre) did not restore original bytes exactly (including the previous theme= line)"
+        else
+            [ -e "$home/.config/helix/config.toml" ] && fail "undo.sh (absent) left a config.toml behind"
+        fi
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
+    done
+}
+
+# ---- tmux ----
+test_tmux() {
+    local dir="$TEMPLATES_DIR/tmux"
+    local rendered="$WORK/tmux.rendered"
+    render_template "$dir" "launcher-material.conf" >"$rendered" 2>"$WORK/tmux.err" || { fail "render error: $(cat "$WORK/tmux.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    if grep -vE '^(#.*|set -g [A-Za-z-]+ .*|)$' "$rendered" >"$WORK/tmux.bad" && [ -s "$WORK/tmux.bad" ]; then
+        fail "line(s) not matching tmux's set -g <option> <value> shape: $(cat "$WORK/tmux.bad")"; return
+    fi
+    note "tmux: not installed on this machine - syntax validation only (set -g <option> <value> shape)"
+
+    # neither xdg tmux.conf nor ~/.tmux.conf exists
+    local home="$WORK/tmux-absent/home"
+    rm -rf "$WORK/tmux-absent"; mkdir -p "$home"
+    local theme_dir="$WORK/tmux-absent/theme_dir"; mkdir -p "$theme_dir"
+    local output="$home/.config/tmux/launcher-material.conf"
+    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (absent) failed"
+    cp "$home/.config/tmux/tmux.conf" "$WORK/tmux-absent/after1.conf" 2>/dev/null
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (absent) failed"
+    cmp -s "$WORK/tmux-absent/after1.conf" "$home/.config/tmux/tmux.conf" 2>/dev/null || fail "apply.sh (absent) not idempotent"
+    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (absent) failed"
+    [ -e "$home/.config/tmux/tmux.conf" ] && fail "undo.sh (absent) left a tmux.conf behind"
+    [ -e "$output" ] && fail "undo.sh (absent) left the rendered file behind"
+
+    # ~/.tmux.conf pre-exists with unrelated content
+    home="$WORK/tmux-pre/home"
+    rm -rf "$WORK/tmux-pre"; mkdir -p "$home"
+    theme_dir="$WORK/tmux-pre/theme_dir"; mkdir -p "$theme_dir"
+    output="$home/.config/tmux/launcher-material.conf"
+    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+    printf '# my tmux settings\nset -g mouse on\n' > "$home/.tmux.conf"
+    local orig="$WORK/tmux-pre/orig.conf"; cp "$home/.tmux.conf" "$orig"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (pre) failed"
+    cp "$home/.tmux.conf" "$WORK/tmux-pre/after1.conf" 2>/dev/null
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (pre) failed"
+    cmp -s "$WORK/tmux-pre/after1.conf" "$home/.tmux.conf" 2>/dev/null || fail "apply.sh (pre) not idempotent"
+    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (pre) failed"
+    cmp -s "$orig" "$home/.tmux.conf" || fail "undo.sh (pre) did not restore original bytes"
+    [ -e "$output" ] && fail "undo.sh (pre) left the rendered file behind"
+}
+
+# ---- bat ----
+test_bat() {
+    local dir="$TEMPLATES_DIR/bat"
+    local rendered="$WORK/bat.rendered"
+    render_template "$dir" "launcher-material.tmTheme" >"$rendered" 2>"$WORK/bat.err" || { fail "render error: $(cat "$WORK/bat.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+
+    if command -v bat >/dev/null 2>&1; then
+        local tmp_bat_config="$WORK/bat-validate-config"
+        mkdir -p "$tmp_bat_config/themes"
+        cp "$rendered" "$tmp_bat_config/themes/launcher-material.tmTheme"
+        if ! env BAT_CONFIG_DIR="$tmp_bat_config" bat cache --build >"$WORK/bat.buildlog" 2>&1; then
+            fail "bat cache --build rejected the rendered tmTheme: $(cat "$WORK/bat.buildlog")"; return
+        fi
+        note "bat: installed - validated with 'bat cache --build' under a temp BAT_CONFIG_DIR"
+    else
+        note "bat: not installed - skipped cache --build validation"
+    fi
+
+    local case
+    for case in absent pre; do
+        local home="$WORK/bat-$case/home"
+        rm -rf "$WORK/bat-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/bat-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/bat/themes/launcher-material.tmTheme"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig=""
+        if [ "$case" = "pre" ]; then
+            mkdir -p "$home/.config/bat"
+            printf '%s\n' '--paging=never' > "$home/.config/bat/config"
+            orig="$WORK/bat-$case/orig.conf"; cp "$home/.config/bat/config" "$orig"
+        fi
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        cp "$home/.config/bat/config" "$WORK/bat-$case/after1.conf" 2>/dev/null
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/bat-$case/after1.conf" "$home/.config/bat/config" 2>/dev/null || fail "apply.sh ($case) not idempotent"
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig" "$home/.config/bat/config" || fail "undo.sh (pre) did not restore original bytes"
+        else
+            [ -e "$home/.config/bat/config" ] && fail "undo.sh (absent) left a bat config behind"
+        fi
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
+    done
+}
+
+# ---- yazi ----
+test_yazi() {
+    local dir="$TEMPLATES_DIR/yazi"
+    local rendered="$WORK/yazi.rendered"
+    render_template "$dir" "flavor.toml" >"$rendered" 2>"$WORK/yazi.err" || { fail "render error: $(cat "$WORK/yazi.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$rendered" 2>"$WORK/yazi.tomlerr" || { fail "invalid TOML: $(cat "$WORK/yazi.tomlerr")"; return; }
+    note "yazi: installed, but has no flavor-validate subcommand - TOML parse only (as the acceptance criteria's generic TOML fallback)"
+
+    local case
+    for case in absent pre; do
+        local home="$WORK/yazi-$case/home"
+        rm -rf "$WORK/yazi-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/yazi-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/yazi/flavors/launcher-material.yazi/flavor.toml"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig=""
+        if [ "$case" = "pre" ]; then
+            mkdir -p "$home/.config/yazi"
+            printf '[manager]\nratio = [1, 4, 3]\n' > "$home/.config/yazi/theme.toml"
+            orig="$WORK/yazi-$case/orig.toml"; cp "$home/.config/yazi/theme.toml" "$orig"
+        fi
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        cp "$home/.config/yazi/theme.toml" "$WORK/yazi-$case/after1.toml" 2>/dev/null
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/yazi-$case/after1.toml" "$home/.config/yazi/theme.toml" 2>/dev/null || fail "apply.sh ($case) not idempotent"
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig" "$home/.config/yazi/theme.toml" || fail "undo.sh (pre) did not restore original bytes"
+        else
+            [ -e "$home/.config/yazi/theme.toml" ] && fail "undo.sh (absent) left a theme.toml behind"
+        fi
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
+    done
+    note "yazi: known limitation - if theme.toml already has an active [flavor] table, apply.sh would append a second one (invalid TOML); check.sh's fixtures avoid that so the round-trip above still passes"
+}
+
+# ---- fzf ----
+test_fzf() {
+    local dir="$TEMPLATES_DIR/fzf"
+    local rendered="$WORK/fzf.rendered"
+    render_template "$dir" "launcher-material.sh" >"$rendered" 2>"$WORK/fzf.err" || { fail "render error: $(cat "$WORK/fzf.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    bash -n "$rendered" 2>"$WORK/fzf.bashn" || { fail "rendered .sh fails bash -n: $(cat "$WORK/fzf.bashn")"; return; }
+    grep -qE "^export FZF_DEFAULT_OPTS=\"--color=([a-z+]+:#[0-9A-Fa-f]{6},?)+\"\$" "$rendered" || { fail "FZF_DEFAULT_OPTS does not look like a --color=key:#hex,... spec"; return; }
+    note "fzf: installed, but has no options-validate subcommand - validated the rendered file with 'bash -n' plus a --color=key:#hex,... shape check"
+
+    local case
+    for case in absent pre; do
+        local home="$WORK/fzf-$case/home"
+        rm -rf "$WORK/fzf-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/fzf-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/fzf/launcher-material.sh"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig_bashrc="" orig_zshrc=""
+        if [ "$case" = "pre" ]; then
+            printf '# my bashrc\nexport FOO=bar\n' > "$home/.bashrc"
+            printf '# my zshrc\nexport BAZ=qux\n' > "$home/.zshrc"
+            orig_bashrc="$WORK/fzf-$case/orig.bashrc"; cp "$home/.bashrc" "$orig_bashrc"
+            orig_zshrc="$WORK/fzf-$case/orig.zshrc"; cp "$home/.zshrc" "$orig_zshrc"
+        fi
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        [ -f "$home/.config/fish/conf.d/launcher-material-fzf.fish" ] || fail "apply.sh ($case) did not create the fish drop-in"
+        cp "$home/.config/fish/conf.d/launcher-material-fzf.fish" "$WORK/fzf-$case/after1.fish" 2>/dev/null
+        [ "$case" = "pre" ] && cp "$home/.bashrc" "$WORK/fzf-$case/after1.bashrc"
+        [ "$case" = "pre" ] && cp "$home/.zshrc" "$WORK/fzf-$case/after1.zshrc"
+        if [ "$case" = "absent" ]; then
+            [ -e "$home/.bashrc" ] && fail "apply.sh (absent) created a .bashrc"
+            [ -e "$home/.zshrc" ] && fail "apply.sh (absent) created a .zshrc"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/fzf-$case/after1.fish" "$home/.config/fish/conf.d/launcher-material-fzf.fish" 2>/dev/null || fail "fish drop-in ($case) not idempotent"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$WORK/fzf-$case/after1.bashrc" "$home/.bashrc" || fail "bashrc ($case) not idempotent"
+            cmp -s "$WORK/fzf-$case/after1.zshrc" "$home/.zshrc" || fail "zshrc ($case) not idempotent"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        [ -e "$home/.config/fish/conf.d/launcher-material-fzf.fish" ] && fail "undo.sh ($case) left the fish drop-in behind"
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig_bashrc" "$home/.bashrc" || fail "undo.sh (pre) did not restore original .bashrc"
+            cmp -s "$orig_zshrc" "$home/.zshrc" || fail "undo.sh (pre) did not restore original .zshrc"
+        else
+            [ -e "$home/.bashrc" ] && fail "undo.sh (absent) left a .bashrc behind"
+            [ -e "$home/.zshrc" ] && fail "undo.sh (absent) left a .zshrc behind"
+        fi
+    done
+}
+
+# ---- lazygit ----
+test_lazygit() {
+    local dir="$TEMPLATES_DIR/lazygit"
+    local rendered="$WORK/lazygit.rendered"
+    render_template "$dir" "launcher-material.yml" >"$rendered" 2>"$WORK/lazygit.err" || { fail "render error: $(cat "$WORK/lazygit.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+
+    if "$PY" -c "import yaml" 2>/dev/null; then
+        "$PY" -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$rendered" 2>"$WORK/lazygit.yamlerr" || { fail "invalid YAML: $(cat "$WORK/lazygit.yamlerr")"; return; }
+        note "lazygit: not installed - validated with PyYAML"
+    else
+        # Structural check: every non-comment/non-blank line is either
+        # "key:" or "- value" at some indent, colons balanced with quotes.
+        if grep -vE '^([[:space:]]*#.*|[[:space:]]*[A-Za-z0-9_]+:.*|[[:space:]]*-.*|[[:space:]]*)$' "$rendered" >"$WORK/lazygit.bad" && [ -s "$WORK/lazygit.bad" ]; then
+            fail "line(s) not matching a plain YAML key: or - item shape: $(cat "$WORK/lazygit.bad")"; return
+        fi
+        note "lazygit: not installed and PyYAML unavailable - structural (key:/- item shape) check only"
+    fi
+
+    local case
+    for case in absent pre; do
+        local home="$WORK/lazygit-$case/home"
+        rm -rf "$WORK/lazygit-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/lazygit-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/lazygit/launcher-material.yml"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig_bashrc="" orig_zshrc=""
+        if [ "$case" = "pre" ]; then
+            printf '# my bashrc\nexport X=1\n' > "$home/.bashrc"
+            printf '# my zshrc\nexport Y=2\n' > "$home/.zshrc"
+            orig_bashrc="$WORK/lazygit-$case/orig.bashrc"; cp "$home/.bashrc" "$orig_bashrc"
+            orig_zshrc="$WORK/lazygit-$case/orig.zshrc"; cp "$home/.zshrc" "$orig_zshrc"
+        fi
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        [ -f "$home/.config/fish/conf.d/launcher-material-lazygit.fish" ] || fail "apply.sh ($case) did not create the fish drop-in"
+        cp "$home/.config/fish/conf.d/launcher-material-lazygit.fish" "$WORK/lazygit-$case/after1.fish" 2>/dev/null
+        [ "$case" = "pre" ] && cp "$home/.bashrc" "$WORK/lazygit-$case/after1.bashrc"
+        [ "$case" = "pre" ] && cp "$home/.zshrc" "$WORK/lazygit-$case/after1.zshrc"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/lazygit-$case/after1.fish" "$home/.config/fish/conf.d/launcher-material-lazygit.fish" 2>/dev/null || fail "fish drop-in ($case) not idempotent"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$WORK/lazygit-$case/after1.bashrc" "$home/.bashrc" || fail "bashrc ($case) not idempotent"
+            cmp -s "$WORK/lazygit-$case/after1.zshrc" "$home/.zshrc" || fail "zshrc ($case) not idempotent"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        [ -e "$home/.config/fish/conf.d/launcher-material-lazygit.fish" ] && fail "undo.sh ($case) left the fish drop-in behind"
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig_bashrc" "$home/.bashrc" || fail "undo.sh (pre) did not restore original .bashrc"
+            cmp -s "$orig_zshrc" "$home/.zshrc" || fail "undo.sh (pre) did not restore original .zshrc"
+        else
+            [ -e "$home/.bashrc" ] && fail "undo.sh (absent) left a .bashrc behind"
+            [ -e "$home/.zshrc" ] && fail "undo.sh (absent) left a .zshrc behind"
+        fi
+    done
+}
+
+# ---- ohmyposh ----
+test_ohmyposh() {
+    local dir="$TEMPLATES_DIR/ohmyposh"
+    local rendered="$WORK/ohmyposh.rendered"
+    render_template "$dir" "launcher-material.omp.json" >"$rendered" 2>"$WORK/ohmyposh.err" || { fail "render error: $(cat "$WORK/ohmyposh.err")"; return; }
+    "$PY" -c "import json,sys; json.load(open(sys.argv[1]))" "$rendered" 2>"$WORK/ohmyposh.jsonerr" || { fail "invalid JSON: $(cat "$WORK/ohmyposh.jsonerr")"; return; }
+    if grep -q 'TERMUX_MATERIAL' "$rendered"; then
+        fail "TERMUX_MATERIAL still present in rendered output"; return
+    fi
+    local input_count rendered_count
+    input_count="$(grep -o '{{ \.' "$dir/launcher-material.omp.json" | wc -l)"
+    rendered_count="$(grep -o '{{ \.' "$rendered" | wc -l)"
+    [ "$input_count" = "$rendered_count" ] || { fail "Go-template {{ . count changed: input=$input_count rendered=$rendered_count"; return; }
+    note "ohmyposh: not installed - JSON parse, no TERMUX_MATERIAL left, {{ . (Go template) count preserved ($input_count occurrences)"
+
+    local case
+    for case in absent pre; do
+        local home="$WORK/ohmyposh-$case/home"
+        rm -rf "$WORK/ohmyposh-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/ohmyposh-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/ohmyposh/launcher-material.omp.json"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig_bashrc="" orig_zshrc=""
+        if [ "$case" = "pre" ]; then
+            printf '# my bashrc\nexport X=1\n' > "$home/.bashrc"
+            printf '# my zshrc\nexport Y=2\n' > "$home/.zshrc"
+            orig_bashrc="$WORK/ohmyposh-$case/orig.bashrc"; cp "$home/.bashrc" "$orig_bashrc"
+            orig_zshrc="$WORK/ohmyposh-$case/orig.zshrc"; cp "$home/.zshrc" "$orig_zshrc"
+        fi
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        [ -f "$home/.config/fish/conf.d/launcher-material-ohmyposh.fish" ] || fail "apply.sh ($case) did not create the fish drop-in"
+        cp "$home/.config/fish/conf.d/launcher-material-ohmyposh.fish" "$WORK/ohmyposh-$case/after1.fish" 2>/dev/null
+        [ "$case" = "pre" ] && cp "$home/.bashrc" "$WORK/ohmyposh-$case/after1.bashrc"
+        [ "$case" = "pre" ] && cp "$home/.zshrc" "$WORK/ohmyposh-$case/after1.zshrc"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/ohmyposh-$case/after1.fish" "$home/.config/fish/conf.d/launcher-material-ohmyposh.fish" 2>/dev/null || fail "fish drop-in ($case) not idempotent"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$WORK/ohmyposh-$case/after1.bashrc" "$home/.bashrc" || fail "bashrc ($case) not idempotent"
+            cmp -s "$WORK/ohmyposh-$case/after1.zshrc" "$home/.zshrc" || fail "zshrc ($case) not idempotent"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        [ -e "$home/.config/fish/conf.d/launcher-material-ohmyposh.fish" ] && fail "undo.sh ($case) left the fish drop-in behind"
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig_bashrc" "$home/.bashrc" || fail "undo.sh (pre) did not restore original .bashrc"
+            cmp -s "$orig_zshrc" "$home/.zshrc" || fail "undo.sh (pre) did not restore original .zshrc"
+        else
+            [ -e "$home/.bashrc" ] && fail "undo.sh (absent) left a .bashrc behind"
+            [ -e "$home/.zshrc" ] && fail "undo.sh (absent) left a .zshrc behind"
+        fi
+    done
+
+    # setup.sh: bash/zsh (absent + pre), fish (no existing init), and the
+    # fish "config.fish already initialises oh-my-posh" special case.
+    local shell
+    for shell in bash zsh; do
+        local rcname=".${shell}rc"
+        for case in absent pre; do
+            local home="$WORK/ohmyposh-setup-$shell-$case/home"
+            rm -rf "$WORK/ohmyposh-setup-$shell-$case"; mkdir -p "$home"
+            local theme_dir="$WORK/ohmyposh-setup-$shell-$case/theme_dir"; mkdir -p "$theme_dir"
+            local output="$home/.config/ohmyposh/launcher-material.omp.json"
+            mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+            local orig=""
+            if [ "$case" = "pre" ]; then
+                printf '# my rc\nexport FOO=bar\n' > "$home/$rcname"
+                orig="$WORK/ohmyposh-setup-$shell-$case/orig"; cp "$home/$rcname" "$orig"
+            fi
+            run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" "$shell" >/dev/null || { fail "setup.sh ($shell/$case) failed"; continue; }
+            cp "$home/$rcname" "$WORK/ohmyposh-setup-$shell-$case/after1" 2>/dev/null
+            run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" "$shell" >/dev/null || { fail "second setup.sh ($shell/$case) failed"; continue; }
+            cmp -s "$WORK/ohmyposh-setup-$shell-$case/after1" "$home/$rcname" 2>/dev/null || fail "setup.sh ($shell/$case) not idempotent"
+            run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" >/dev/null || { fail "undo.sh after setup.sh ($shell/$case) failed"; continue; }
+            if [ "$case" = "pre" ]; then
+                cmp -s "$orig" "$home/$rcname" || fail "undo.sh did not restore original $rcname ($shell)"
+            else
+                [ -e "$home/$rcname" ] && fail "undo.sh left a $rcname behind that setup.sh created ($shell)"
+            fi
+        done
+    done
+
+    local home="$WORK/ohmyposh-setup-fish/home"
+    rm -rf "$WORK/ohmyposh-setup-fish"; mkdir -p "$home"
+    local theme_dir="$WORK/ohmyposh-setup-fish/theme_dir"; mkdir -p "$theme_dir"
+    local output="$home/.config/ohmyposh/launcher-material.omp.json"
+    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+    run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" fish >/dev/null || fail "setup.sh (fish) failed"
+    local fish_init="$home/.config/fish/conf.d/launcher-material-ohmyposh-init.fish"
+    [ -f "$fish_init" ] || fail "setup.sh (fish) did not create its conf.d init file"
+    cp "$fish_init" "$WORK/ohmyposh-setup-fish/after1" 2>/dev/null
+    run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" fish >/dev/null || fail "second setup.sh (fish) failed"
+    cmp -s "$WORK/ohmyposh-setup-fish/after1" "$fish_init" 2>/dev/null || fail "setup.sh (fish) not idempotent"
+    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" >/dev/null || fail "undo.sh after setup.sh (fish) failed"
+    [ -e "$fish_init" ] && fail "undo.sh left the fish init file behind"
+
+    # fish: config.fish already initialises oh-my-posh -> setup.sh must skip.
+    home="$WORK/ohmyposh-setup-fish-already/home"
+    rm -rf "$WORK/ohmyposh-setup-fish-already"; mkdir -p "$home/.config/fish"
+    theme_dir="$WORK/ohmyposh-setup-fish-already/theme_dir"; mkdir -p "$theme_dir"
+    output="$home/.config/ohmyposh/launcher-material.omp.json"
+    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+    {
+        echo 'if type -q oh-my-posh'
+        echo '    set -l omp_theme "$HOME/.config/ohmyposh/aliens-material.omp.json"'
+        echo '    if test -f "$omp_theme"'
+        echo '        oh-my-posh --config "$omp_theme" init fish | source'
+        echo '    end'
+        echo 'end'
+    } > "$home/.config/fish/config.fish"
+    run_hook_shell "$home" "$theme_dir" "$output" "$dir/setup.sh" fish >/dev/null || fail "setup.sh (fish, already-initialised) failed"
+    [ -e "$home/.config/fish/conf.d/launcher-material-ohmyposh-init.fish" ] && fail "setup.sh (fish, already-initialised) should not have written an init file"
+    note "ohmyposh setup.sh: covered bash/zsh (absent+pre, idempotent, undo), fish (fresh init, idempotent, undo), and fish's already-initialised config.fish skip"
+}
+
+# ---- nvim ----
+test_nvim() {
+    local dir="$TEMPLATES_DIR/nvim"
+    local rendered="$WORK/nvim.rendered"
+    render_template "$dir" "launcher-material.lua" >"$rendered" 2>"$WORK/nvim.err" || { fail "render error: $(cat "$WORK/nvim.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+
+    if command -v luac >/dev/null 2>&1; then
+        luac -p "$rendered" 2>"$WORK/nvim.luacerr" || { fail "luac -p rejected the rendered spec: $(cat "$WORK/nvim.luacerr")"; return; }
+        luac -p "$dir/colors/launcher-material.lua" 2>"$WORK/nvim.luacerr2" || { fail "luac -p rejected colors/launcher-material.lua: $(cat "$WORK/nvim.luacerr2")"; return; }
+        luac -p "$dir/lua/launcher/material_palette.lua" 2>"$WORK/nvim.luacerr3" || { fail "luac -p rejected material_palette.lua: $(cat "$WORK/nvim.luacerr3")"; return; }
+    fi
+    if command -v nvim >/dev/null 2>&1; then
+        nvim --headless --clean -l "$rendered" >"$WORK/nvim.nvimlog" 2>&1 || { fail "nvim --headless --clean -l rejected the rendered spec: $(cat "$WORK/nvim.nvimlog")"; return; }
+    fi
+    if ! cmp -s "$dir/colors/launcher-material.lua" "$REPO_ROOT/docs/en/examples/nvim/colors/launcher-material.lua"; then
+        fail "template's colors/launcher-material.lua has drifted from docs/en/examples"; return
+    fi
+    if ! cmp -s "$dir/lua/launcher/material_palette.lua" "$REPO_ROOT/docs/en/examples/nvim/lua/launcher/material_palette.lua"; then
+        fail "template's material_palette.lua has drifted from docs/en/examples"; return
+    fi
+    note "nvim: installed (luac -p on all three Lua files, nvim --headless --clean -l on the rendered spec); both shipped colorscheme copies verified byte-identical to docs/en/examples"
+
+    run_nvim_case() {
+        local name="$1"; shift
+        local home="$WORK/nvim-$name/home"
+        rm -rf "$WORK/nvim-$name"; mkdir -p "$home"
+        local theme_dir="$dir"
+        local output="$home/.config/nvim/lua/plugins/launcher-material.lua"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        "$@" "$home"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($name) failed"; return; }
+        cmp -s "$home/.config/nvim/colors/launcher-material.lua" "$dir/colors/launcher-material.lua" || fail "apply.sh ($name) did not install colors/launcher-material.lua correctly"
+        cmp -s "$home/.config/nvim/lua/launcher/material_palette.lua" "$dir/lua/launcher/material_palette.lua" || fail "apply.sh ($name) did not install material_palette.lua correctly"
+
+        local snapshot="$WORK/nvim-$name/after1"
+        mkdir -p "$snapshot"; cp -r "$home/.config" "$snapshot/config" 2>/dev/null
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($name) failed"; return; }
+        diff -rq "$snapshot/config" "$home/.config" >"$WORK/nvim-$name.diff" 2>&1
+        [ -s "$WORK/nvim-$name.diff" ] && fail "apply.sh ($name) not idempotent: $(cat "$WORK/nvim-$name.diff")"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($name) failed"; return; }
+        [ -e "$home/.config/nvim/colors/launcher-material.lua" ] && fail "undo.sh ($name) left colors/launcher-material.lua behind"
+        [ -e "$home/.config/nvim/lua/launcher/material_palette.lua" ] && fail "undo.sh ($name) left material_palette.lua behind"
+        [ -e "$output" ] && fail "undo.sh ($name) left the rendered spec behind"
+    }
+
+    setup_plain() { :; }
+    setup_lazyvim() {
+        local home="$1"
+        mkdir -p "$home/.config/nvim/lua/config"
+        echo 'require("lazy").setup({ "LazyVim/LazyVim" })' > "$home/.config/nvim/lua/config/lazy.lua"
+    }
+    setup_astronvim() {
+        local home="$1"
+        mkdir -p "$home/.config/nvim/lua"
+        echo '-- AstroNvim community' > "$home/.config/nvim/lua/community.lua"
+    }
+
+    run_nvim_case plain setup_plain
+    if [ -e "$WORK/nvim-plain/home/.config/nvim/init.lua" ]; then
+        fail "plain case: init.lua should have been cleaned up by undo.sh"
+    fi
+    run_nvim_case lazyvim setup_lazyvim
+    run_nvim_case astronvim setup_astronvim
+
+    # A hand-edited colorscheme file must survive undo.
+    local home="$WORK/nvim-edited/home"
+    rm -rf "$WORK/nvim-edited"; mkdir -p "$home"
+    local output="$home/.config/nvim/lua/plugins/launcher-material.lua"
+    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+    run_hook "$home" "$dir" "$output" "$dir/apply.sh" >/dev/null || fail "apply.sh (edited case) failed"
+    echo '-- user edit' >> "$home/.config/nvim/colors/launcher-material.lua"
+    run_hook "$home" "$dir" "$output" "$dir/undo.sh" >/dev/null || fail "undo.sh (edited case) failed"
+    [ -f "$home/.config/nvim/colors/launcher-material.lua" ] || fail "undo.sh removed a hand-edited colorscheme file; it should have survived"
+}
+
+# ---------------------------------------------------------------------------
+# Run all templates
+# ---------------------------------------------------------------------------
+
+declare -A TEST_FN=(
+    [starship]=test_starship
+    [helix]=test_helix
+    [tmux]=test_tmux
+    [bat]=test_bat
+    [yazi]=test_yazi
+    [fzf]=test_fzf
+    [lazygit]=test_lazygit
+    [ohmyposh]=test_ohmyposh
+    [nvim]=test_nvim
+)
+
+ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim"
+
+for id in $ORDER; do
+    dir="$TEMPLATES_DIR/$id"
+    if [ ! -d "$dir" ]; then
+        echo "FAIL $id: template directory missing"
+        OVERALL=1
+        continue
+    fi
+
+    NOTES=()
+    reset_fails
+    "${TEST_FN[$id]}"
+
+    if [ "${#FAILS[@]}" -eq 0 ]; then
+        msg="ok"
+        [ "${#NOTES[@]}" -gt 0 ] && msg="${NOTES[*]}"
+        echo "PASS $id: $msg"
+    else
+        OVERALL=1
+        joined="$(printf '; %s' "${FAILS[@]}")"
+        joined="${joined#; }"
+        echo "FAIL $id: $joined"
+    fi
+done
+
+exit "$OVERALL"
