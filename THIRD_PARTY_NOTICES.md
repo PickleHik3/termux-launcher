@@ -29,9 +29,9 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   [tinted-theming/schemes](https://github.com/tinted-theming/schemes); palette authors remain
   credited in the downloaded scheme metadata.
 - **[noctalia shell](https://github.com/noctalia-dev/noctalia-shell)** — MIT — Copyright the
-  noctalia-shell contributors. The `starship`, `btop` and `helix` theme templates under
+  noctalia-shell contributors. The `starship` and `helix` theme templates under
   `app/src/main/assets/theme-templates/` are ported from noctalia's
-  `assets/templates/{starship,btop,helix}/`, renamed from `noctalia` to `launcher-material` and
+  `assets/templates/{starship,helix}/`, renamed from `noctalia` to `launcher-material` and
   adapted to the launcher's own hook environment and Material palette (no filters or wallpaper
   ANSI-derivation logic carried over).
 - **[termux-x11](https://github.com/termux/termux-x11)** — GPL-3.0-only — Copyright Twaik Yont

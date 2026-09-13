@@ -172,51 +172,6 @@ test_starship() {
     [ -e "$fish_init" ] && fail "undo.sh left the fish init file behind"
 }
 
-# ---- btop ----
-test_btop() {
-    local dir="$TEMPLATES_DIR/btop"
-    local rendered="$WORK/btop.rendered"
-    render_template "$dir" "btop.theme" >"$rendered" 2>"$WORK/btop.err" || { fail "render error: $(cat "$WORK/btop.err")"; return; }
-    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
-    if ! grep -qE '^theme\[[A-Za-z0-9_]+\]="#[0-9A-Fa-f]{6}"$' "$rendered"; then
-        fail "no theme[...]=\"#rrggbb\" lines matched"; return
-    fi
-    if grep -vE '^(#.*|theme\[[A-Za-z0-9_]+\]="#[0-9A-Fa-f]{6}"|)$' "$rendered" >"$WORK/btop.bad"; then
-        [ -s "$WORK/btop.bad" ] && { fail "line(s) not matching theme[...]=\"#rrggbb\" or a comment: $(cat "$WORK/btop.bad")"; return; }
-    fi
-    note "btop: installed - theme[...]=\"#rrggbb\" structural check (btop has no config-validate flag)"
-
-    local case
-    for case in absent pre; do
-        local home="$WORK/btop-$case/home"
-        rm -rf "$WORK/btop-$case"; mkdir -p "$home"
-        local theme_dir="$WORK/btop-$case/theme_dir"; mkdir -p "$theme_dir"
-        local output="$home/.config/btop/themes/launcher-material.theme"
-        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
-        local orig=""
-        if [ "$case" = "pre" ]; then
-            mkdir -p "$home/.config/btop"
-            printf 'vim_keys = true\nupdate_ms = 1500\n' > "$home/.config/btop/btop.conf"
-            orig="$WORK/btop-$case/orig.conf"; cp "$home/.config/btop/btop.conf" "$orig"
-        fi
-        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
-        local had_conf_after1=0
-        [ -e "$home/.config/btop/btop.conf" ] && { had_conf_after1=1; cp "$home/.config/btop/btop.conf" "$WORK/btop-$case/after1.conf"; }
-        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
-        if [ "$had_conf_after1" -eq 1 ]; then
-            cmp -s "$WORK/btop-$case/after1.conf" "$home/.config/btop/btop.conf" || fail "apply.sh ($case) not idempotent"
-        elif [ -e "$home/.config/btop/btop.conf" ]; then
-            fail "apply.sh ($case) not idempotent (config appeared on the second run)"
-        fi
-        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
-        if [ "$case" = "pre" ]; then
-            cmp -s "$orig" "$home/.config/btop/btop.conf" || fail "undo.sh (pre) did not restore original bytes"
-        fi
-        [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
-    done
-    note "btop: known limitation (ported from noctalia) - a pre-existing color_theme= line is overwritten by apply.sh and not restored by undo.sh; check.sh's own fixtures avoid that key so the round-trip above still passes"
-}
-
 # ---- helix ----
 test_helix() {
     local dir="$TEMPLATES_DIR/helix"
@@ -691,7 +646,6 @@ test_nvim() {
 
 declare -A TEST_FN=(
     [starship]=test_starship
-    [btop]=test_btop
     [helix]=test_helix
     [tmux]=test_tmux
     [bat]=test_bat
@@ -702,7 +656,7 @@ declare -A TEST_FN=(
     [nvim]=test_nvim
 )
 
-ORDER="starship btop helix tmux bat yazi fzf lazygit ohmyposh nvim"
+ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim"
 
 for id in $ORDER; do
     dir="$TEMPLATES_DIR/$id"
