@@ -634,6 +634,34 @@ public class KeybindHintPresenterTest {
         assertFalse(mScheduler.hasPending());
     }
 
+    @Test
+    public void inAppShiftJoiningAndLeavingTheLatchSwapsLayersBothWays() {
+        mPresenter.onInAppModifiersChanged(ctrlAlt());
+        assertTrue(hintsUp());
+        assertTrue(mSurface.highlights.containsKey("v"));
+
+        mPresenter.onInAppModifiersChanged(ctrlAltShift());
+        assertTrue("Shift joining swaps the strip for the Shift layer", hintsUp());
+        assertEquals("ctrl+alt+shift+", mHints.asked.get(mHints.asked.size() - 1));
+        assertNotNull(mSurface.highlights);
+        assertTrue(mSurface.highlights.containsKey("p"));
+        assertFalse(mSurface.highlights.containsKey("v"));
+
+        mPresenter.onInAppModifiersChanged(ctrlAlt());
+        assertTrue("Shift leaving brings the Ctrl+Alt layer back", hintsUp());
+        assertEquals("ctrl+alt+", mHints.asked.get(mHints.asked.size() - 1));
+        assertNotNull(mSurface.highlights);
+        assertTrue(mSurface.highlights.containsKey("v"));
+        assertFalse(mSurface.highlights.containsKey("p"));
+    }
+
+    private static TerminalModifiers ctrlAltShift() {
+        return TerminalModifiers.from(juloo.keyboard2.Pointers.Modifiers.EMPTY
+            .with_extra_mod(juloo.keyboard2.KeyValue.getKeyByName("ctrl"))
+            .with_extra_mod(juloo.keyboard2.KeyValue.getKeyByName("alt"))
+            .with_extra_mod(juloo.keyboard2.KeyValue.getKeyByName("shift")));
+    }
+
     private static TerminalModifiers ctrlAlt() {
         return TerminalModifiers.from(juloo.keyboard2.Pointers.Modifiers.EMPTY
             .with_extra_mod(juloo.keyboard2.KeyValue.getKeyByName("ctrl"))
