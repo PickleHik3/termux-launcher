@@ -360,17 +360,22 @@ public final class TerminalClockWidget extends View {
         // Any repalette retires the cached gradients; they carry the old colours.
         mFlipShaderGeneration++;
         mDarkFlipStock = ColorUtils.calculateLuminance(mSurfaceBase) < .5;
-        int pc = mPrimaryContainer, on = mOnPrimaryContainer, pr = mPrimary;
-        mFlipBase = alpha(pc, .38f);
+        int pc = mPrimaryContainer, on = mOnPrimaryContainer;
+        // The leaves are surface stock with a breath of the theme's container colour, so the
+        // face reads as part of the bar's chrome rather than a primary-coloured badge. Digits
+        // stay onSurface like every other face; the hinge hardware stays neutral.
+        int leaf = ColorUtils.blendARGB(mDarkFlipStock ? mSurfacePanelHigh : mSurfacePanel,
+            pc, .22f);
+        mFlipBase = alpha(leaf, .5f);
         if (mDarkFlipStock) {
-            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .1f), .42f);
-            mUpperFlipColors[1] = alpha(pc, .36f);
-            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .2f), .4f);
-            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .55f), .5f);
-            mLowerFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .3f), .5f);
-            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .08f), .4f);
-            mLowerFlipColors[2] = alpha(pc, .36f);
-            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(pc, Color.BLACK, .2f), .4f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .08f), .5f);
+            mUpperFlipColors[1] = alpha(leaf, .46f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .16f), .5f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .42f), .56f);
+            mLowerFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .2f), .54f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .06f), .48f);
+            mLowerFlipColors[2] = alpha(leaf, .46f);
+            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .16f), .5f);
             mHingeFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .45f);
             mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .25f);
             mHingeFlipColors[2] = mSurfacePanelHighest;
@@ -379,20 +384,20 @@ public final class TerminalClockWidget extends View {
             mHingeFlipColors[5] = ColorUtils.blendARGB(mSurfacePanelHigh,
                 mSurfacePanelHighest, .35f);
             mHingeFlipColors[6] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
-            mFlipRim = alpha(pr, .35f);
-            mFlipSeam = Color.BLACK;
-            mFlipShadow = Color.argb(90, 0, 0, 0);
+            mFlipRim = alpha(mOutlineVariant, .6f);
+            mFlipSeam = alpha(Color.BLACK, .85f);
+            mFlipShadow = Color.argb(70, 0, 0, 0);
             mFlipClipOutline = Color.BLACK;
             mFlipClipShadow = Color.argb(128, 0, 0, 0);
         } else {
-            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .5f), .45f);
-            mUpperFlipColors[1] = alpha(pc, .36f);
-            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(pc, on, .08f), .4f);
-            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(pc, on, .24f), .5f);
-            mLowerFlipColors[0] = alpha(Color.WHITE, .5f);
-            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(pc, Color.WHITE, .35f), .4f);
-            mLowerFlipColors[2] = alpha(pc, .36f);
-            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(pc, on, .08f), .4f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .5f), .55f);
+            mUpperFlipColors[1] = alpha(leaf, .5f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(leaf, on, .05f), .52f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, on, .14f), .58f);
+            mLowerFlipColors[0] = alpha(Color.WHITE, .55f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .35f), .5f);
+            mLowerFlipColors[2] = alpha(leaf, .5f);
+            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, on, .05f), .52f);
             mHingeFlipColors[0] = Color.WHITE;
             mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .35f);
             mHingeFlipColors[2] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .5f);
@@ -400,15 +405,15 @@ public final class TerminalClockWidget extends View {
             mHingeFlipColors[4] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .18f);
             mHingeFlipColors[5] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .35f);
             mHingeFlipColors[6] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .38f);
-            mFlipRim = alpha(pr, .35f);
-            mFlipSeam = alpha(mOnSurface, .55f);
-            mFlipShadow = alpha(pr, .2f);
+            mFlipRim = alpha(mOutlineVariant, .8f);
+            mFlipSeam = alpha(mOnSurface, .45f);
+            mFlipShadow = alpha(mOnSurface, .12f);
             mFlipClipOutline = alpha(mOnSurface, .34f);
             mFlipClipShadow = alpha(mOnSurface, .22f);
         }
-        mFlipSecondsInk = alpha(pr, .75f);
+        mFlipSecondsInk = alpha(mOnSurfaceVariant, .85f);
         mFlipDateInk = mOnSurfaceVariant;
-        mFlipRuleColor = alpha(pr, .3f);
+        mFlipRuleColor = alpha(mOutlineVariant, .8f);
     }
 
     @Override
@@ -510,9 +515,10 @@ public final class TerminalClockWidget extends View {
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
                     + stackedMetaWidth(9f, mediumTypeface());
             default:
-                // 15dp cards x4 + 1.5dp intra-pair gaps x2 + 4dp hour/minute gap.
+                // 15dp cards x4 + 1.5dp intra-pair gaps x2 + 4dp hour/minute gap, then the meta
+                // column plus the ink that glyphs and the card shadow carry past their advance.
                 return dp(67f) + dp(4f)
-                    + stackedMetaWidth(9.5f, Typeface.DEFAULT);
+                    + stackedMetaWidth(9.5f, Typeface.DEFAULT) + dp(2f);
         }
     }
 
@@ -786,6 +792,13 @@ public final class TerminalClockWidget extends View {
     private void drawCompact(Canvas canvas, long now) {
         float columnDp = compactColumnHeightDp();
         float scale = Math.min(1f, getHeight() / dp(columnDp));
+        // The slot can hand the clock less than its face paints (a wide meta column beside a
+        // media strip); rather than let the trailing glyphs fall off the edge, the whole face
+        // shrinks to the width it was given.
+        float content = compactContentWidth();
+        if (content > 0f && getWidth() > 0 && getWidth() < content * scale) {
+            scale = getWidth() / content;
+        }
         canvas.save();
         canvas.translate(0f, Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f));
         canvas.scale(scale, scale);

@@ -30,6 +30,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
     private static final float GUTTER_DP = 12f;
     private static final float GAP_DP = 12f;
+    /** The least run the media strip or the pinned cards keep beside a compact clock. */
+    private static final float SIDE_MIN_DP = 120f;
     private static final long MEDIA_TRANSITION_MS = 180L;
     private static final long PINNED_TRANSITION_MS = 200L;
     private static final float STACK_HEIGHT_DP = 66f;
@@ -321,7 +323,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             clockHeight = stacked ? Math.round(dp(14f)) : height;
             mClock.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
                 MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
-            clockWidth = Math.min(mClock.getMeasuredWidth(), Math.round(available * .55f));
+            // The clock keeps the width its compact face paints, as long as the media strip or
+            // the cards beside it still get a usable run; only then is it cut to just over half.
+            int sideMin = Math.round(dp(SIDE_MIN_DP)) + gap;
+            int cap = Math.max(Math.round(available * .55f), available - sideMin);
+            clockWidth = Math.min(mClock.getMeasuredWidth(), Math.max(0, cap));
         }
         mClock.measure(MeasureSpec.makeMeasureSpec(clockWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
