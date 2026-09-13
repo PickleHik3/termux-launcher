@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.os.Build;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -20,6 +21,8 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.color.MaterialColors;
 
 import com.termux.R;
+import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerZones;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.Collections;
@@ -34,11 +37,15 @@ import java.util.List;
  * and its height controls, and is measured by the normal layout pass against the width this frame
  * was given. What the frame owns is the handle and the drag: it clamps the offset it is dragged to
  * against the travel it was handed and reports where it ended up, so the arithmetic stays in
- * {@link FloatingKeyboardGeometry} and the memory stays in the store. The bottom-left corner is
+ * {@link FloatingKeyboardGeometry} and the memory stays in the store. The bottom-leading corner is
  * the other half of that: a grip the card is resized from, which scales its width and the
  * keyboard's row height at once and reports both the same way. Out from that corner is bigger —
  * left widens the card, up makes its rows taller — so the two edges the finger is not on, the
  * right one and the bottom one, are the ones that stay put.</p>
+ *
+ * <p>The card is moved from its two top corners, as every frame on the wall is moved and resized
+ * from its corners, and from the pill drawn between them — an affordance that is drawn has to
+ * answer where it is drawn. The rest of the handle row is only the gap above the keys.</p>
  *
  * <p>It lives in {@code floating_keyboard_host}, which covers the whole content region. That is
  * what makes a keyboard parked halfway up the screen touchable: a view translated outside its
@@ -124,6 +131,10 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     private boolean mDragging;
 
     private final Paint mGripPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final CornerBracket mBracket = new CornerBracket();
+    private final RectF mBracketBounds = new RectF();
+    /** The corner a move is being made from, marked for as long as the finger is on it. */
+    private int mHeldCorner = CornerZones.NONE;
 
     /**
      * The width the card is being resized to. NaN at rest, which is what sends {@link #onMeasure}
@@ -300,6 +311,34 @@ public final class FloatingKeyboardFrame extends LinearLayout {
      * dock's own height pill uses, and the only one a card parked along the bottom of the screen
      * has any room for.</p>
      */
+    /**
+     * Whether a touch on the handle row takes hold of the card: its two top corners, or the pill
+     * in the middle of the row. Everything between them is the gap above the keys and moves
+     * nothing.
+     */
+    boolean isInMoveZone(float x, float y) {
+        int width = getWidth();
+        if (width <= 0) return false;
+        float density = getResources().getDisplayMetrics().density;
+        float handle = dp(HANDLE_ROW_DP);
+        if (y < 0f || y > handle) return false;
+        float corner = CornerZones.sizePx(density);
+        if (x >= 0f && x <= corner) return true;
+        if (x >= width - corner && x <= width) return true;
+        float pill = dp(PILL_WIDTH_DP) / 2f + dp(8f);
+        return Math.abs(x - width / 2f) <= pill;
+    }
+
+    /** Which corner a move started from, or {@link CornerZones#NONE} when the pill did. */
+    private int moveCornerAt(float x) {
+        int width = getWidth();
+        if (width <= 0) return CornerZones.NONE;
+        float corner = CornerZones.sizePx(getResources().getDisplayMetrics().density);
+        if (x >= 0f && x <= corner) return CornerZones.TOP_LEFT;
+        if (x >= width - corner && x <= width) return CornerZones.TOP_RIGHT;
+        return CornerZones.NONE;
+    }
+
     boolean isInGripZone(float x, float y) {
         int height = getHeight();
         if (height <= 0) return false;
@@ -491,6 +530,10 @@ public final class FloatingKeyboardFrame extends LinearLayout {
             mGripPaint);
         canvas.drawLine(left + dp(GRIP_SHORT_DP), bottom, left, bottom - dp(GRIP_SHORT_DP),
             mGripPaint);
+        if (mHeldCorner == CornerZones.NONE) return;
+        mBracketBounds.set(0f, 0f, getWidth(), getHeight());
+        mBracket.draw(canvas, mHeldCorner, mBracketBounds,
+            getResources().getDisplayMetrics().density, CornerBracket.color(getContext()));
     }
 
     /** {@link R.drawable#floating_keyboard_grab_handle}'s colour at rest, the accent under a
@@ -508,11 +551,14 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     private boolean onHandleTouch(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                if (!isInMoveZone(event.getX(), event.getY())) return false;
                 mDragging = true;
+                mHeldCorner = moveCornerAt(event.getX());
                 mDragStartRawX = event.getRawX();
                 mDragStartRawY = event.getRawY();
                 mDragStartXPx = mPositionXPx;
                 mDragStartYPx = mPositionYPx;
+                invalidate();
                 return true;
             case MotionEvent.ACTION_MOVE:
                 if (!mDragging) return false;
@@ -522,7 +568,9 @@ public final class FloatingKeyboardFrame extends LinearLayout {
             case MotionEvent.ACTION_CANCEL:
                 if (!mDragging) return false;
                 mDragging = false;
+                mHeldCorner = CornerZones.NONE;
                 moveTo(event, true);
+                invalidate();
                 return true;
             default:
                 return false;

@@ -165,6 +165,9 @@ public class FloatingKeyboardFrameTest {
     @Test
     public void theHandleDragsTheCardAndHoldsItInsideTheContent() {
         FloatingKeyboardFrame frame = new FloatingKeyboardFrame(context);
+        // The card takes hold by its corners and its pill, so it has to have a width for them
+        // to be anywhere.
+        frame.layout(0, 0, 600, 418);
         frame.setTravelPx(400, 1000);
         frame.setPositionPx(200, 1000);
         int[] last = new int[3];
@@ -174,8 +177,8 @@ public class FloatingKeyboardFrameTest {
             last[2] = committed ? 1 : 0;
         });
 
-        dispatch(frame, MotionEvent.ACTION_DOWN, 500, 900);
-        dispatch(frame, MotionEvent.ACTION_MOVE, 460, 700);
+        dispatch(frame, MotionEvent.ACTION_DOWN, 300, 9);
+        dispatch(frame, MotionEvent.ACTION_MOVE, 260, -191);
         assertEquals(160f, frame.getTranslationX(), 0f);
         assertEquals(800f, frame.getTranslationY(), 0f);
         assertEquals(160, last[0]);
@@ -183,14 +186,14 @@ public class FloatingKeyboardFrameTest {
         assertEquals("a frame in flight is not a place worth remembering", 0, last[2]);
 
         // Past the edge is held at the edge, in both directions.
-        dispatch(frame, MotionEvent.ACTION_MOVE, 0, 0);
+        dispatch(frame, MotionEvent.ACTION_MOVE, -200, -891);
         assertEquals(0f, frame.getTranslationX(), 0f);
         assertEquals(100f, frame.getTranslationY(), 0f);
-        dispatch(frame, MotionEvent.ACTION_MOVE, 5000, 5000);
+        dispatch(frame, MotionEvent.ACTION_MOVE, 4800, 4109);
         assertEquals(400f, frame.getTranslationX(), 0f);
         assertEquals(1000f, frame.getTranslationY(), 0f);
 
-        dispatch(frame, MotionEvent.ACTION_UP, 700, 1100);
+        dispatch(frame, MotionEvent.ACTION_UP, 500, 209);
         assertEquals(400, frame.positionXPx());
         assertEquals(1000, frame.positionYPx());
         assertEquals("the finger leaving the handle is what commits the place", 1, last[2]);
@@ -261,8 +264,8 @@ public class FloatingKeyboardFrameTest {
         FloatingKeyboardFrame frame = controller.frame();
         int travelY = HOST_HEIGHT - frame.getHeight();
 
-        dispatch(frame, MotionEvent.ACTION_DOWN, 500, 1700);
-        dispatch(frame, MotionEvent.ACTION_UP, 500, 1700 - travelY);
+        dispatch(frame, MotionEvent.ACTION_DOWN, 300, 9);
+        dispatch(frame, MotionEvent.ACTION_UP, 300, 9 - travelY);
 
         assertEquals(0, frame.positionYPx());
         assertEquals(0f, store.floatingKeyboardY(PaneWallPage.TERMINAL,
@@ -301,6 +304,43 @@ public class FloatingKeyboardFrameTest {
     }
 
     // -------------------------------------------------------------------- the grip
+
+    /**
+     * The whole handle row used to move the card. It moves from its two top corners now, and from
+     * the pill drawn between them — what is drawn has to answer — and the gap on either side of
+     * that pill moves nothing, so the row above the keys is not one long grab band any more.
+     */
+    @Test
+    public void theCardMovesFromItsTopCornersAndItsPill() {
+        floatAndLayout();
+        FloatingKeyboardFrame frame = controller.frame();
+        int width = frame.getWidth();
+        assertEquals(600, width);
+
+        assertTrue("the leading corner", frame.isInMoveZone(0, 0));
+        assertTrue("its far side", frame.isInMoveZone(32, 17));
+        assertTrue("the trailing corner", frame.isInMoveZone(width, 2));
+        assertTrue("its far side", frame.isInMoveZone(width - 32, 17));
+        assertTrue("the pill", frame.isInMoveZone(width / 2f, 9));
+
+        assertFalse("the gap between a corner and the pill", frame.isInMoveZone(150, 9));
+        assertFalse("and on the other side of it", frame.isInMoveZone(450, 9));
+        assertFalse("below the handle row", frame.isInMoveZone(16, 40));
+    }
+
+    /** A touch in that gap is nobody's: the handle lets it go rather than moving the card. */
+    @Test
+    public void aDragFromTheGapInTheHandleRowMovesNothing() {
+        floatAndLayout();
+        FloatingKeyboardFrame frame = controller.frame();
+        int before = frame.positionXPx();
+
+        dispatch(frame, MotionEvent.ACTION_DOWN, 150, 9);
+        dispatch(frame, MotionEvent.ACTION_MOVE, 50, 9);
+        dispatch(frame, MotionEvent.ACTION_UP, 50, 9);
+
+        assertEquals(before, frame.positionXPx());
+    }
 
     @Test
     public void theGripIsTheBottomLeftCornerAndNowhereElse() {
@@ -461,8 +501,8 @@ public class FloatingKeyboardFrameTest {
         FloatingKeyboardFrame frame = controller.frame();
 
         // Parked against the top, where the bottom edge is the one that has to give.
-        dispatch(frame, MotionEvent.ACTION_DOWN, 500, 1700);
-        dispatch(frame, MotionEvent.ACTION_UP, 500, 0);
+        dispatch(frame, MotionEvent.ACTION_DOWN, 300, 9);
+        dispatch(frame, MotionEvent.ACTION_UP, 300, -1691);
         assertEquals(0, frame.positionYPx());
 
         dispatchToFrame(frame, MotionEvent.ACTION_DOWN, 8, 410);
@@ -503,8 +543,8 @@ public class FloatingKeyboardFrameTest {
 
         // The platform maps the rect through the card's translation when it is handed the rect,
         // so a move has to hand it over again.
-        dispatch(frame, MotionEvent.ACTION_DOWN, 500, 1700);
-        dispatch(frame, MotionEvent.ACTION_UP, 400, 1500);
+        dispatch(frame, MotionEvent.ACTION_DOWN, 300, 9);
+        dispatch(frame, MotionEvent.ACTION_UP, 200, -191);
         assertEquals(100, frame.positionXPx());
         assertEquals(Collections.singletonList(grip), frame.getSystemGestureExclusionRects());
         assertEquals(grip, frame.gripRect());
@@ -515,9 +555,9 @@ public class FloatingKeyboardFrameTest {
         floatAndLayout();
         FloatingKeyboardFrame frame = controller.frame();
 
-        dispatch(frame, MotionEvent.ACTION_DOWN, 500, 1700);
-        dispatch(frame, MotionEvent.ACTION_MOVE, 400, 1500);
-        dispatch(frame, MotionEvent.ACTION_UP, 400, 1500);
+        dispatch(frame, MotionEvent.ACTION_DOWN, 300, 9);
+        dispatch(frame, MotionEvent.ACTION_MOVE, 200, -191);
+        dispatch(frame, MotionEvent.ACTION_UP, 200, -191);
 
         assertEquals("the handle drag is untouched", 100, frame.positionXPx());
         assertEquals(0, fakeHost.resizePreviews);
