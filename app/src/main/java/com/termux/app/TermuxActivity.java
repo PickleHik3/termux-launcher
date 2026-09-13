@@ -1159,6 +1159,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setWallpaperReadPermissionPrompted(true);
                 if (!requestDisplayEnableForFirstRun()) requestWeatherLocationPermissionForFirstRun();
             })
+            .setOnCancelListener(dialog -> {
+                mPreferences.setWallpaperReadPermissionPrompted(true);
+                if (!requestDisplayEnableForFirstRun()) requestWeatherLocationPermissionForFirstRun();
+            })
             .setOnDismissListener(dialog -> mWallpaperReadPermissionPromptShowing = false)
             .show();
         return true;
@@ -1185,6 +1189,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 requestWeatherLocationPermissionForFirstRun();
             })
             .setNegativeButton(R.string.action_display_enable_permission_dismiss, (dialog, which) -> {
+                mPreferences.setDisplayEnablePrompted(true);
+                requestWeatherLocationPermissionForFirstRun();
+            })
+            .setOnCancelListener(dialog -> {
                 mPreferences.setDisplayEnablePrompted(true);
                 requestWeatherLocationPermissionForFirstRun();
             })
