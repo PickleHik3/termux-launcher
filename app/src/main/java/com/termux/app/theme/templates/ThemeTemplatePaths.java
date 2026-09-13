@@ -1,5 +1,9 @@
 package com.termux.app.theme.templates;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -89,5 +93,21 @@ public final class ThemeTemplatePaths {
 
     private static boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    /**
+     * Whether {@code file} already holds exactly these bytes.
+     *
+     * <p>Every file this feature writes — a rendered config, an unpacked template, the applied
+     * ledger — is written only when the answer is no. Tools watch their config files by modification
+     * time, so rewriting identical content is not free: it reloads them for nothing.
+     */
+    public static boolean sameOnDisk(File file, byte[] wanted) {
+        if (file == null || !file.isFile() || file.length() != wanted.length) return false;
+        try {
+            return Arrays.equals(Files.readAllBytes(file.toPath()), wanted);
+        } catch (IOException e) {
+            return false;
+        }
     }
 }

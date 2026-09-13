@@ -115,6 +115,25 @@ public final class ThemeTemplates {
         });
     }
 
+    /**
+     * Unpack a built-in template's directory, off the caller's thread.
+     *
+     * <p>Settings hands the user a command that runs a script out of that directory. The directory
+     * exists once the template has been through a pass, but the user may copy the command before
+     * the pass has run — or with no palette exported yet, in which case it never will — so the
+     * files are put in place here, on the same thread the passes use.
+     */
+    public static void unpackAsync(@NonNull ThemeTemplate template) {
+        SETTINGS_EXECUTOR.execute(() -> {
+            try {
+                template.directory();
+            } catch (IOException e) {
+                Logger.logWarn(LOG_TAG, "Theme template \"" + template.id + "\" cannot be unpacked: "
+                    + e.getMessage());
+            }
+        });
+    }
+
     /** Every built-in template, for the settings list. */
     @NonNull
     public static List<ThemeTemplate> builtInTemplates(@NonNull Context context) {

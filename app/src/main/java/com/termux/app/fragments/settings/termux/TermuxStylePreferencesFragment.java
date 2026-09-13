@@ -1,5 +1,6 @@
 package com.termux.app.fragments.settings.termux;
 
+import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -15,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
@@ -61,6 +63,10 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
 
     /** The shipped templates by id, for the summary line and the setup a tool still needs. */
     private final Map<String, ThemeTemplate> mThemeTemplates = new LinkedHashMap<>();
+
+    /** The setup dialog on screen, so the view going away takes it along instead of leaking it. */
+    @Nullable
+    private AlertDialog mThemeTemplateSetupDialog;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -409,26 +415,47 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
      * <p>Tools like these are switched on by a line in a shell startup file, and the app does not
      * edit those behind someone's back. So the command is offered to copy and the user runs it
      * themselves. Several at once are offered one after another rather than all at the same time.
+     *
+     * <p>The chain stops when the screen goes: the dismiss that runs while the activity is being
+     * torn down for a rotation must not open the next dialog against a window that is on its way
+     * out. The tools already switched on keep working; the command is also in the docs.
      */
     private void offerThemeTemplateSetup(@NonNull List<ThemeTemplate> pending, int index) {
-        Context context = getContext();
-        if (context == null || index >= pending.size()) return;
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed() || !isAdded()
+            || getView() == null || index >= pending.size()) return;
         ThemeTemplate template = pending.get(index);
-        new MaterialAlertDialogBuilder(context)
+        mThemeTemplateSetupDialog = new MaterialAlertDialogBuilder(activity)
             .setTitle(template.name)
             .setMessage(R.string.settings_theme_templates_setup_message)
             .setNegativeButton(R.string.settings_theme_templates_setup_dismiss, null)
             .setPositiveButton(R.string.settings_theme_templates_setup_copy,
-                (dialog, which) -> copyThemeTemplateSetupCommand(context, template))
-            .setOnDismissListener(dialog -> offerThemeTemplateSetup(pending, index + 1))
+                (dialog, which) -> copyThemeTemplateSetupCommand(template))
+            .setOnDismissListener(dialog -> {
+                if (mThemeTemplateSetupDialog != dialog) return;
+                mThemeTemplateSetupDialog = null;
+                offerThemeTemplateSetup(pending, index + 1);
+            })
             .show();
     }
 
-    private void copyThemeTemplateSetupCommand(@NonNull Context context,
-                                               @NonNull ThemeTemplate template) {
+    @Override
+    public void onDestroyView() {
+        AlertDialog dialog = mThemeTemplateSetupDialog;
+        mThemeTemplateSetupDialog = null;
+        if (dialog != null) dialog.dismiss();
+        super.onDestroyView();
+    }
+
+    private void copyThemeTemplateSetupCommand(@NonNull ThemeTemplate template) {
+        Context context = getContext();
+        if (context == null) return;
         ClipboardManager clipboard =
             (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null) return;
+        // The command names files inside the template's unpacked directory; put them there now,
+        // so they exist by the time the user has pasted it.
+        ThemeTemplates.unpackAsync(template);
         clipboard.setPrimaryClip(ClipData.newPlainText(template.name, template.setupCommand()));
         // Android 13 and up shows its own confirmation for anything copied; a second one would be
         // the app talking over the system.

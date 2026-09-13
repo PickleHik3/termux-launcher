@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -26,7 +25,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Which templates were applied, and where each one wrote, is kept in a small tsv next to them.
  * Without it a template switched off could not be undone: the app would know the id it had to
- * forget but not the file it had left behind.
+ * forget but not the file it had left behind. A template whose hook failed is recorded too — the
+ * file is on disk and must still be undone — but marked, so the hook is asked again next pass
+ * instead of the failure standing as done.
  *
  * <p>Passes are ordered by {@link #schedule()}. Colour refreshes arrive in bursts — a wallpaper
  * change, then the contrast that follows it — and a pass that has been overtaken stops between
@@ -57,6 +58,29 @@ public final class ThemeTemplateApplier {
 
     private final AtomicLong mLatestPass = new AtomicLong();
 
+    /** Passes arrive from two threads — the palette writer and the settings screen — one at a time. */
+    private final Object mPassLock = new Object();
+
+    /** Ledger column marking a template whose last hook did not finish. */
+    private static final String HOOK_PENDING = "hook-pending";
+
+    /** What the ledger says: where each applied template wrote, and whose hook is still owed. */
+    private static final class Ledger {
+        final Map<String, String> outputs = new LinkedHashMap<>();
+        final Set<String> hookPending = new LinkedHashSet<>();
+    }
+
+    /** What one template's turn in the pass came to. */
+    private static final class Outcome {
+        final String output;
+        final boolean hookPending;
+
+        Outcome(String output, boolean hookPending) {
+            this.output = output;
+            this.hookPending = hookPending;
+        }
+    }
+
     public ThemeTemplateApplier(ThemeTemplateLoader loader, HookRunner hooks, File appliedFile,
                                 ThemeTemplateLog log) {
         mLoader = loader;
@@ -85,10 +109,23 @@ public final class ThemeTemplateApplier {
         apply(palette, enabledIds, schedule());
     }
 
-    /** Run the pass claimed by {@code pass}, stopping early if a newer one has been scheduled. */
+    /**
+     * Run the pass claimed by {@code pass}, stopping early if a newer one has been scheduled.
+     *
+     * <p>Passes run one at a time: both callers read and rewrite the same ledger and run the same
+     * hooks, and a pass that waited its turn finds out it was overtaken before it touches anything.
+     */
     public void apply(Properties palette, Collection<String> enabledIds, long pass) {
-        Map<String, String> applied = readApplied();
+        synchronized (mPassLock) {
+            applyLocked(palette, enabledIds, pass);
+        }
+    }
+
+    private void applyLocked(Properties palette, Collection<String> enabledIds, long pass) {
+        Ledger ledger = readLedger();
+        Map<String, String> applied = ledger.outputs;
         Map<String, String> next = new LinkedHashMap<>(applied);
+        Set<String> pending = new LinkedHashSet<>(ledger.hookPending);
         String mode = ThemeTemplateRenderer.modeOf(palette);
         List<ThemeTemplate> active = mLoader.active(enabledIds);
         Set<String> activeIds = new LinkedHashSet<>();
@@ -99,8 +136,12 @@ public final class ThemeTemplateApplier {
                 superseded = true;
                 break;
             }
-            String output = applyOne(template, palette, mode, !applied.containsKey(template.id));
-            if (output != null) next.put(template.id, output);
+            boolean hookDue = !applied.containsKey(template.id) || pending.contains(template.id);
+            Outcome outcome = applyOne(template, palette, mode, hookDue);
+            if (outcome == null) continue;
+            next.put(template.id, outcome.output);
+            if (outcome.hookPending) pending.add(template.id);
+            else pending.remove(template.id);
         }
         if (!superseded) {
             for (Map.Entry<String, String> entry : new ArrayList<>(applied.entrySet())) {
@@ -108,13 +149,24 @@ public final class ThemeTemplateApplier {
                 if (isSuperseded(pass)) break;
                 undo(entry.getKey(), entry.getValue(), mode);
                 next.remove(entry.getKey());
+                pending.remove(entry.getKey());
             }
         }
-        if (!next.equals(applied)) writeApplied(next);
+        pending.retainAll(next.keySet());
+        if (!next.equals(applied) || !pending.equals(ledger.hookPending)) writeLedger(next, pending);
     }
 
-    /** @return the path written, or {@code null} when the template was skipped. */
-    private String applyOne(ThemeTemplate template, Properties palette, String mode, boolean isNew) {
+    /** @return the path written and whether its hook is still owed, or {@code null} when skipped. */
+    private Outcome applyOne(ThemeTemplate template, Properties palette, String mode, boolean hookDue) {
+        // Unpacked before anything else: the hooks run out of this directory, and so does the setup
+        // command Settings hands the user, which must point at files that exist by the time they
+        // paste it.
+        File directory = null;
+        try {
+            directory = template.directory();
+        } catch (IOException e) {
+            mLog.warn("Theme template \"" + template.id + "\" cannot be unpacked: " + e.getMessage());
+        }
         String source;
         try {
             source = template.readInput();
@@ -129,10 +181,12 @@ public final class ThemeTemplateApplier {
         }
         File output = new File(template.output);
         byte[] bytes = rendered.text.getBytes(StandardCharsets.UTF_8);
-        boolean changed = !sameOnDisk(output, bytes);
+        boolean changed = !ThemeTemplatePaths.sameOnDisk(output, bytes);
         if (changed && !write(output, bytes)) return null;
-        if (template.hasPostHook() && (changed || isNew)) runHook(template, template.postHook, mode);
-        return template.output;
+        boolean hookPending = false;
+        if (template.hasPostHook() && (changed || hookDue))
+            hookPending = !runHook(template, directory, template.postHook, mode);
+        return new Outcome(template.output, hookPending);
     }
 
     private void undo(String id, String recordedOutput, String mode) {
@@ -146,7 +200,7 @@ public final class ThemeTemplateApplier {
             }
         }
         if (template != null && template.hasUndoHook() && directory != null && directory.isDirectory()) {
-            runHook(template, template.undoHook, mode);
+            runHook(template, directory, template.undoHook, mode);
             return;
         }
         // Nothing left to ask: the template is gone, or never had an undo of its own. All the app
@@ -157,15 +211,13 @@ public final class ThemeTemplateApplier {
             mLog.warn("Theme template \"" + id + "\" left " + recordedOutput + " behind");
     }
 
-    private void runHook(ThemeTemplate template, String hook, String mode) {
-        File directory;
-        try {
-            directory = template.directory();
-        } catch (IOException e) {
-            mLog.warn("Theme template \"" + template.id + "\" cannot be unpacked: " + e.getMessage());
-            return;
+    /** @return whether the hook ran and finished; the failure has already been logged when not. */
+    private boolean runHook(ThemeTemplate template, File directory, String hook, String mode) {
+        if (directory == null) {
+            mLog.warn("Theme template \"" + template.id + "\" hook " + hook + " has no directory to run from");
+            return false;
         }
-        if (mHooks == null) return;
+        if (mHooks == null) return true;
         boolean ok;
         try {
             ok = mHooks.run(template, directory, hook, mode);
@@ -175,6 +227,7 @@ public final class ThemeTemplateApplier {
         }
         // A tool that refuses the new colours is not a reason to leave the rest of them stale.
         if (!ok) mLog.warn("Theme template \"" + template.id + "\" hook " + hook + " did not succeed");
+        return ok;
     }
 
     private boolean isSuperseded(long pass) {
@@ -197,40 +250,44 @@ public final class ThemeTemplateApplier {
         return true;
     }
 
-    private static boolean sameOnDisk(File file, byte[] wanted) {
-        if (!file.isFile() || file.length() != wanted.length) return false;
-        try {
-            return Arrays.equals(Files.readAllBytes(file.toPath()), wanted);
-        } catch (IOException e) {
-            return false;
-        }
-    }
-
     /** The ids applied so far and the file each one wrote, in the order they were applied. */
     public Map<String, String> readApplied() {
-        Map<String, String> applied = new LinkedHashMap<>();
-        if (mAppliedFile == null || !mAppliedFile.isFile()) return applied;
+        return readLedger().outputs;
+    }
+
+    /** The applied templates whose hook is still owed, for the next pass to run again. */
+    public Set<String> readHookPending() {
+        return readLedger().hookPending;
+    }
+
+    private Ledger readLedger() {
+        Ledger ledger = new Ledger();
+        if (mAppliedFile == null || !mAppliedFile.isFile()) return ledger;
         List<String> lines;
         try {
             lines = Files.readAllLines(mAppliedFile.toPath(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             mLog.warn("Cannot read " + mAppliedFile + ": " + e.getMessage());
-            return applied;
+            return ledger;
         }
         for (String line : lines) {
             if (line.isEmpty() || line.startsWith("#")) continue;
-            int tab = line.indexOf('\t');
-            if (tab <= 0) continue;
-            applied.put(line.substring(0, tab), line.substring(tab + 1));
+            String[] columns = line.split("\t", -1);
+            if (columns.length < 2 || columns[0].isEmpty()) continue;
+            ledger.outputs.put(columns[0], columns[1]);
+            if (columns.length > 2 && HOOK_PENDING.equals(columns[2])) ledger.hookPending.add(columns[0]);
         }
-        return applied;
+        return ledger;
     }
 
-    private void writeApplied(Map<String, String> applied) {
+    private void writeLedger(Map<String, String> applied, Set<String> hookPending) {
         if (mAppliedFile == null) return;
         StringBuilder text = new StringBuilder();
-        for (Map.Entry<String, String> entry : applied.entrySet())
-            text.append(entry.getKey()).append('\t').append(entry.getValue()).append('\n');
+        for (Map.Entry<String, String> entry : applied.entrySet()) {
+            text.append(entry.getKey()).append('\t').append(entry.getValue());
+            if (hookPending.contains(entry.getKey())) text.append('\t').append(HOOK_PENDING);
+            text.append('\n');
+        }
         write(mAppliedFile, text.toString().getBytes(StandardCharsets.UTF_8));
     }
 }

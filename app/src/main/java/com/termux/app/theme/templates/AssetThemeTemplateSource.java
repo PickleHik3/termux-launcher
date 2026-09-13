@@ -10,7 +10,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -114,7 +113,7 @@ public final class AssetThemeTemplateSource implements ThemeTemplateSource {
             try (InputStream in = mAssets.open(childAsset)) {
                 wanted = readAll(in);
             }
-            if (sameOnDisk(childFile, wanted)) continue;
+            if (ThemeTemplatePaths.sameOnDisk(childFile, wanted)) continue;
             try (FileOutputStream out = new FileOutputStream(childFile)) {
                 out.write(wanted);
             }
@@ -122,15 +121,6 @@ public final class AssetThemeTemplateSource implements ThemeTemplateSource {
             // anyway so the same directory can be run by hand while writing a template.
             //noinspection ResultOfMethodCallIgnored
             childFile.setExecutable(child.endsWith(".sh"), true);
-        }
-    }
-
-    private static boolean sameOnDisk(File file, byte[] wanted) {
-        if (!file.isFile() || file.length() != wanted.length) return false;
-        try {
-            return Arrays.equals(Files.readAllBytes(file.toPath()), wanted);
-        } catch (IOException e) {
-            return false;
         }
     }
 

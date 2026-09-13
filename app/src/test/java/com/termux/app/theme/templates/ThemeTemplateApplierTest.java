@@ -31,11 +31,13 @@ public class ThemeTemplateApplierTest {
 
         Runnable beforeEachCall;
 
+        boolean succeed = true;
+
         @Override
         public boolean run(ThemeTemplate template, File directory, String hook, String mode) {
             if (beforeEachCall != null) beforeEachCall.run();
             calls.add(template.id + " " + hook + " " + mode);
-            return true;
+            return succeed;
         }
     }
 
@@ -88,6 +90,28 @@ public class ThemeTemplateApplierTest {
         applier.apply(palette, Collections.singleton("starship"));
         assertTrue(mHooks.calls.isEmpty());
         assertEquals(writtenAt, output("starship.toml").lastModified());
+    }
+
+    @Test
+    public void aFailedPostHookIsAskedAgainNextPassAndTheFileStaysOnRecord() throws IOException {
+        ThemeTemplateFixtures.template(mBuiltInRoot, "starship", "~/.config/starship.toml");
+        ThemeTemplateApplier applier = applier();
+        Properties palette = ThemeTemplateFixtures.palette();
+        mHooks.succeed = false;
+        applier.apply(palette, Collections.singleton("starship"));
+        // The file is written and remembered either way: a later disable still has to undo it.
+        assertEquals(output("starship.toml").getAbsolutePath(), applier.readApplied().get("starship"));
+        assertEquals(Collections.singleton("starship"), applier.readHookPending());
+        // Same palette, nothing rewritten — but the hook that failed is owed, so it runs again.
+        mHooks.calls.clear();
+        mHooks.succeed = true;
+        applier.apply(palette, Collections.singleton("starship"));
+        assertEquals(Collections.singletonList("starship apply.sh dark"), mHooks.calls);
+        assertTrue(applier.readHookPending().isEmpty());
+        // And once it has finished, an unchanged palette leaves it alone again.
+        mHooks.calls.clear();
+        applier.apply(palette, Collections.singleton("starship"));
+        assertTrue(mHooks.calls.isEmpty());
     }
 
     @Test
