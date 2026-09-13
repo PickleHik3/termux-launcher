@@ -1816,6 +1816,19 @@
     <string name="tour_card_az_scrub">Slide along the A–Z row, drag up to an app and let go.</string>
     <string name="tour_card_palette">Swipe up on the space bar.</string>
     <string name="tour_card_closing">That is the tour. Enjoy the launcher.</string>
+    <string name="tour_copy_commands">Copy commands</string>
+    <string name="tour_copied_commands">Copied</string>
+    <string name="tour_closing_hints">Hold Ctrl+Alt, or Ctrl+Alt+Shift, to see key hints.</string>
+    <string name="tour_closing_extras">Install extras from tlstore: fastfetch, sigye, Claude Code. For images in the terminal, pkg install timg.</string>
+    <string name="tour_closing_graphical">For graphical apps, pkg install x11-repo, then launch them from the drawer.</string>
+    <string name="tour_closing_extras_nix">Install extras from tlstore: fastfetch, sigye, Claude Code. For images in the terminal, nix profile install nixpkgs#timg.</string>
+    <string name="tour_closing_graphical_nix">For graphical apps, install them from nixpkgs and launch them from the drawer.</string>
+    <string name="tour_closing_commands">pkg install timg\npkg install x11-repo</string>
+    <string name="tour_closing_commands_nix">nix profile install nixpkgs#timg</string>
+
+    <!-- Settings: replay the first-boot tour -->
+    <string name="tour_replay_title">Play the tour again</string>
+    <string name="tour_replay_summary">Walk through the launcher\'s gestures on the home screen once more.</string>
 
     <string name="termux_ai_sort_downloaded">Downloaded first</string>
     <string name="termux_ai_sort_name">Name: A–Z</string>

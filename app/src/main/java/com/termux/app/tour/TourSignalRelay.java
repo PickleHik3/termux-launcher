@@ -17,6 +17,9 @@ public final class TourSignalRelay implements TourSignals {
     private Listener mListener;
     private String mHomePlace;
     private Boolean mStatusBarCollapsed;
+    private Integer mWindowCount;
+    private String mSelectedWindow;
+    private Boolean mDrawerOpen;
 
     @Override
     public void setTourSignalListener(Listener listener) {
@@ -48,6 +51,68 @@ public final class TourSignalRelay implements TourSignals {
         mStatusBarCollapsed = collapsed;
         if (first) return;
         emit(collapsed ? STATUS_BAR_COLLAPSED : STATUS_BAR_EXPANDED);
+    }
+
+    /**
+     * How many windows the top row is showing, whenever it has just been rebuilt. One more than
+     * last time is the + button; one fewer is the chip's ×. The row is rebuilt on a rename, a
+     * theme change and a rotation too, so a count that did not move says nothing.
+     */
+    public void onWindowCountSettled(int count) {
+        if (count < 0) return;
+        Integer previous = mWindowCount;
+        mWindowCount = count;
+        if (previous == null || previous == count) return;
+        emit(count > previous ? WINDOW_OPENED : WINDOW_CLOSED);
+    }
+
+    /**
+     * The window the row is showing as current. Only a move to a different one is the user tapping
+     * a chip; the row re-applies its selection every time it is rebuilt, including right after the
+     * + button made a window current by creating it.
+     */
+    public void onWindowSelected(String windowId) {
+        if (windowId == null) return;
+        String previous = mSelectedWindow;
+        mSelectedWindow = windowId;
+        if (previous == null || previous.equals(windowId)) return;
+        emit(WINDOW_CHIP_SELECTED);
+    }
+
+    /** The drawer's resting state, once it has settled there. */
+    public void onDrawerOpenSettled(boolean open) {
+        if (mDrawerOpen != null && mDrawerOpen == open) return;
+        boolean first = mDrawerOpen == null;
+        mDrawerOpen = open;
+        if (first) return;
+        emit(open ? DRAWER_OPENED : DRAWER_CLOSED);
+    }
+
+    /**
+     * A split was asked for, however it was asked for. An action dispatch is already the one edge
+     * — it happens when the user does it and never on a rebuild — so there is nothing to compare
+     * against, unlike the states above.
+     */
+    public void onPaneSplit() {
+        emit(PANE_SPLIT);
+    }
+
+    /** A pane's corner menu was raised. */
+    public void onPaneCornerMenuOpened() {
+        emit(PANE_CORNER_MENU);
+    }
+
+    /** An app was launched by the A–Z row's scrub, rather than by a tap anywhere else. */
+    public void onAppLaunchedFromScrub() {
+        emit(APP_LAUNCHED_FROM_SCRUB);
+    }
+
+    /**
+     * The command palette came up. The space bar's swipe up is one of four ways into it and
+     * nothing downstream carries which one was used, so any open clears the card.
+     */
+    public void onPaletteOpened() {
+        emit(PALETTE_OPENED);
     }
 
     private void emit(String signalId) {

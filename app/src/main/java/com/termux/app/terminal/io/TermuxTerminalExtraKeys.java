@@ -123,7 +123,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
     }
 
     /** Extra-keys entries prefixed with this run a registry tool instead of sending keys. */
-    static final String LAUNCHER_TOOL_KEY_PREFIX = "tool:";
+    public static final String LAUNCHER_TOOL_KEY_PREFIX = "tool:";
 
     /**
      * What the A-Z row readout names for a press: latched modifiers spelled out before the key,

@@ -86,6 +86,10 @@
             app:entries="@array/app_launcher_az_lock_method_entries"
             app:entryValues="@array/app_launcher_az_lock_method_values"
             app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="app_launcher_replay_tour"
+            app:title="@string/tour_replay_title"
+            app:summary="@string/tour_replay_summary" />
         <SwitchPreferenceCompat
             app:key="show_in_recents_when_not_default"
             app:title="@string/settings_show_recents_title"

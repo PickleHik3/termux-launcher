@@ -171,6 +171,8 @@ public class TerminalPaneController {
          * panes are on screen can refresh from one place.
          */
         default void onPanesRendered() {}
+        /** A pane's corner controls — move, maximize, close — are now on screen. */
+        default void onPaneControlsShown() {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
         /** Spawn a new shell carrying a session name; defaults to an unnamed shell. */
@@ -3482,6 +3484,7 @@ public class TerminalPaneController {
             mControlLeaf = leaf;
             mControlsShown = true;
             animateControlProgress(1f, false);
+            mHost.onPaneControlsShown();
         }
 
         private void dismissControls() {

@@ -45,11 +45,14 @@ import com.termux.app.notice.TerminalDress;
  */
 public final class TourOverlayView extends FrameLayout {
 
-    /** The card's two buttons; only one is on screen at a time. */
+    /** The card's buttons. Every card but the last one carries Skip alone. */
     public interface Callbacks {
         void onTourSkipTapped();
 
         void onTourFinishTapped();
+
+        /** The closing card's Copy commands: put its shell lines on the clipboard. */
+        void onTourCopyCommandsTapped();
     }
 
     private static final long CARD_IN_MS = 200L;
@@ -71,6 +74,9 @@ public final class TourOverlayView extends FrameLayout {
 
     private final LinearLayout mCard;
     private final TextView mCopy;
+    private final TextView mBody;
+    private final LinearLayout mButtonRow;
+    private final TextView mCopyCommands;
     private final TextView mButton;
 
     @Nullable private Callbacks mCallbacks;
@@ -112,23 +118,56 @@ public final class TourOverlayView extends FrameLayout {
         mCard.addView(mCopy, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        mButton = new TextView(context);
-        mButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-        mButton.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        mButton.setTextColor(mAccent);
-        mButton.setAllCaps(false);
-        mButton.setPadding(dp(8), dp(6), dp(8), dp(6));
-        mButton.setBackground(buttonBackground());
-        mButton.setOnClickListener(view -> onButtonTapped());
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+        // The closing card's three lines. Secondary to the sentence above them, and the only card
+        // that has any, so it is gone for the other eight rather than empty.
+        mBody = new TextView(context);
+        mBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+        mBody.setTextColor(ColorUtils.setAlphaComponent(mDress.textColor, 204));
+        mBody.setLineSpacing(dp(2), 1f);
+        mBody.setVisibility(GONE);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bodyParams.topMargin = dp(8);
+        mCard.addView(mBody, bodyParams);
+
+        mButtonRow = new LinearLayout(context);
+        mButtonRow.setOrientation(LinearLayout.HORIZONTAL);
+        mButtonRow.setGravity(Gravity.END);
+
+        mCopyCommands = textButton(context, view -> onCopyCommandsTapped());
+        mCopyCommands.setVisibility(GONE);
+        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        copyParams.rightMargin = dp(6);
+        mButtonRow.addView(mCopyCommands, copyParams);
+
+        mButton = textButton(context, view -> onButtonTapped());
+        mButtonRow.addView(mButton, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         buttonParams.gravity = Gravity.END;
         buttonParams.topMargin = dp(2);
         buttonParams.rightMargin = -dp(4);
-        mCard.addView(mButton, buttonParams);
+        mCard.addView(mButtonRow, buttonParams);
 
         addView(mCard, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    /** One of the card's text buttons: the only children of this view that take a touch. */
+    @NonNull
+    private TextView textButton(@NonNull Context context, @NonNull OnClickListener onClick) {
+        TextView button = new TextView(context);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        button.setTextColor(mAccent);
+        button.setAllCaps(false);
+        button.setPadding(dp(8), dp(6), dp(8), dp(6));
+        button.setBackground(buttonBackground());
+        button.setOnClickListener(onClick);
+        return button;
     }
 
     public void setCallbacks(@Nullable Callbacks callbacks) {
@@ -145,7 +184,13 @@ public final class TourOverlayView extends FrameLayout {
         mStep = step;
         mStage = stage;
         mCopy.setText(step.showsSecondLineAt(stage) ? step.secondLineRes : step.copyRes);
-        mButton.setText(step.signalCount() == 0 ? R.string.tour_done : R.string.tour_skip);
+        boolean closing = step.signalCount() == 0;
+        mButton.setText(closing ? R.string.tour_done : R.string.tour_skip);
+        if (closing) showClosingBody();
+        else {
+            mBody.setVisibility(GONE);
+            mCopyCommands.setVisibility(GONE);
+        }
         setVisibility(VISIBLE);
         if (!sameCard) animateCardIn();
         refreshTarget();
@@ -318,6 +363,27 @@ public final class TourOverlayView extends FrameLayout {
         mTraceProgress = 1f;
     }
 
+    /** The three lines the running edition installs things with, plus their Copy button. */
+    private void showClosingBody() {
+        TourEdition edition = TourEdition.of(getContext().getPackageName());
+        StringBuilder text = new StringBuilder();
+        for (int line : TourClosingCard.bodyLines(edition)) {
+            if (text.length() > 0) text.append("\n\n");
+            text.append(getContext().getString(line));
+        }
+        mBody.setText(text);
+        mBody.setVisibility(VISIBLE);
+        mCopyCommands.setText(R.string.tour_copy_commands);
+        mCopyCommands.setVisibility(VISIBLE);
+    }
+
+    private void onCopyCommandsTapped() {
+        if (mCallbacks == null) return;
+        mCallbacks.onTourCopyCommandsTapped();
+        // The run draws no toasts, so the button itself is the acknowledgement.
+        mCopyCommands.setText(R.string.tour_copied_commands);
+    }
+
     private void onButtonTapped() {
         if (mCallbacks == null || mStep == null) return;
         if (mStep.signalCount() == 0) mCallbacks.onTourFinishTapped();
@@ -354,6 +420,8 @@ public final class TourOverlayView extends FrameLayout {
         mAccent = FocusOutlineRenderer.resolveAccent(this);
         mButton.setTextColor(mAccent);
         mButton.setBackground(buttonBackground());
+        mCopyCommands.setTextColor(mAccent);
+        mCopyCommands.setBackground(buttonBackground());
         invalidate();
     }
 }

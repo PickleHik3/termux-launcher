@@ -9,31 +9,45 @@ import android.view.ViewTreeObserver;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * The run, assembled: the state machine, the overlay, the targets and the two signals that are
- * wired today, held in one place so the activity owns a field and three calls rather than a tour.
+ * The run, assembled: the state machine, the overlay, the targets and every signal, held in one
+ * place so the activity owns a field and a handful of one-line calls rather than a tour.
  *
- * <p>Everything the launcher has to tell it arrives through {@link #onPlaceSettled} and
- * {@link #onStatusBarCollapsedSettled} — both edge-triggered, both called from where the chrome
- * already decides the thing, so no controller grows a second listener slot and the activity grows
- * no public method.
+ * <p>Everything the launcher has to tell it arrives through the {@code on...} calls below, every
+ * one of them made from the single place in the chrome that already decides the thing — a Host
+ * interface's new default method, or a funnel every path through the feature already takes. The
+ * states among them are edge-triggered in {@link TourSignalRelay}, because the chrome re-applies
+ * them constantly and a card cleared by a state the user never put it in is the failure mode the
+ * whole run is built against.
  */
 public final class FirstBootTour implements TourController.Listener, TourOverlayView.Callbacks,
     TourSignals.Listener, TourViewTargets.ViewFinder {
 
+    /**
+     * The one control the tour points at that the chrome measures for itself: the in-app
+     * keyboard's space bar is a key inside a rendered keyboard, not a view with an id.
+     */
+    public interface SpaceBarProbe {
+        boolean spaceBarRectOnScreen(@NonNull android.graphics.Rect out);
+    }
+
     @NonNull private final Activity mActivity;
     @NonNull private final TourController mController;
     @NonNull private final TourSignalRelay mSignals = new TourSignalRelay();
+    @Nullable private final SpaceBarProbe mSpaceBarProbe;
 
     @Nullable private TourOverlayView mOverlay;
     @Nullable private ViewGroup mOverlayHost;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mLayoutListener;
 
     public FirstBootTour(@NonNull Activity activity,
-                         @NonNull TermuxAppSharedPreferences preferences) {
+                         @NonNull TermuxAppSharedPreferences preferences,
+                         @Nullable SpaceBarProbe spaceBarProbe) {
         mActivity = activity;
+        mSpaceBarProbe = spaceBarProbe;
         mController = new TourController(TourRun.steps(), new TourPreferences(preferences),
             SystemClock::uptimeMillis);
         mController.setListener(this);
@@ -68,6 +82,41 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onStatusBarCollapsedSettled(collapsed);
     }
 
+    /** How many windows the top row is showing, each time it has been rebuilt. */
+    public void onWindowCountSettled(int count) {
+        mSignals.onWindowCountSettled(count);
+    }
+
+    /** The window the top row is showing as current. */
+    public void onWindowSelected(@Nullable String windowId) {
+        mSignals.onWindowSelected(windowId);
+    }
+
+    /** The app drawer's resting state, once it has settled. */
+    public void onDrawerOpenSettled(boolean open) {
+        mSignals.onDrawerOpenSettled(open);
+    }
+
+    /** A split was asked for. */
+    public void onPaneSplit() {
+        mSignals.onPaneSplit();
+    }
+
+    /** A pane's corner menu was raised. */
+    public void onPaneCornerMenuOpened() {
+        mSignals.onPaneCornerMenuOpened();
+    }
+
+    /** The A-Z row's scrub launched an app. */
+    public void onAppLaunchedFromScrub() {
+        mSignals.onAppLaunchedFromScrub();
+    }
+
+    /** The command palette came up. */
+    public void onPaletteOpened() {
+        mSignals.onPaletteOpened();
+    }
+
     // TourController.Listener
 
     @Override
@@ -94,6 +143,17 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mController.finish();
     }
 
+    @Override
+    public void onTourCopyCommandsTapped() {
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+            mActivity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) return;
+        TourEdition edition = TourEdition.of(mActivity.getPackageName());
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+            mActivity.getString(R.string.tour_copy_commands),
+            mActivity.getString(TourClosingCard.commands(edition))));
+    }
+
     // TourSignals.Listener
 
     @Override
@@ -107,6 +167,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Nullable
     public View findTourView(int viewId) {
         return mActivity.findViewById(viewId);
+    }
+
+    @Override
+    public boolean findTourSpaceBarRect(@NonNull android.graphics.Rect outOnScreen) {
+        return mSpaceBarProbe != null && mSpaceBarProbe.spaceBarRectOnScreen(outOnScreen);
     }
 
     @Nullable

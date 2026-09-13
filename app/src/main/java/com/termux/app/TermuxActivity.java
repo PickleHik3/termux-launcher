@@ -1094,11 +1094,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View contentView = findViewById(android.R.id.content);
             contentView.post(() -> {
                 FirstLaunchOnboarding.showIfNeeded(this, forceOnboarding, () -> {
+                    // The run teaches gestures on the live home screen, so it starts from the
+                    // chain's own finished callback rather than beside it — registered first,
+                    // because a chain with nothing left to ask closes inside the call below.
+                    setFirstRunChainFinishedListener(() -> {
+                        com.termux.app.tour.FirstBootTour tour = firstBootTour();
+                        if (tour == null) return;
+                        if (forceOnboarding) tour.restart();
+                        else tour.startIfNeeded();
+                    });
                     startFirstRunPermissionChain();
-                    // The run teaches gestures on the live home screen, so it can only start once
-                    // the first-launch chain has stopped covering it.
-                    com.termux.app.tour.FirstBootTour tour = firstBootTour();
-                    if (tour != null) tour.startIfNeeded();
                 });
                 // Nothing was shown, so nothing will call back: pick up a run that a process death
                 // interrupted. A user who never started one is left alone.
@@ -1298,6 +1303,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
         handleEditExtraKeysIntent(intent);
+        handleReplayTourIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
         }
@@ -1612,11 +1618,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mIsOnResumeAfterOnCreate = false;
     }
 
+    /**
+     * Settings asking for the tour again, on the launcher that is already up. The run starts from
+     * card one whatever came before; the permission chain is not replayed, because every one of its
+     * links has already been asked once and would close on itself.
+     */
+    private void handleReplayTourIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_SHOW_ONBOARDING, false)) return;
+        intent.removeExtra(EXTRA_SHOW_ONBOARDING);
+        View contentView = findViewById(android.R.id.content);
+        if (contentView == null) return;
+        contentView.post(() -> {
+            com.termux.app.tour.FirstBootTour tour = firstBootTour();
+            if (tour != null) tour.restart();
+        });
+    }
+
     /** The tour, built on the preferences the first time anything asks for it. */
     @Nullable
     private com.termux.app.tour.FirstBootTour firstBootTour() {
         if (mFirstBootTour == null && mPreferences != null) {
-            mFirstBootTour = new com.termux.app.tour.FirstBootTour(this, mPreferences);
+            mFirstBootTour = new com.termux.app.tour.FirstBootTour(this, mPreferences,
+                this::getInAppKeyboardSpaceBarRect);
             // Both signals are edge-triggered, so the run starts knowing where the chrome rests
             // and a card is never cleared by a state the user did not put it in.
             mFirstBootTour.onStatusBarCollapsedSettled(isStatusBarCompact());
@@ -7250,6 +7273,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ? mSuggestionBarView.launchAzStripEntry(focusResult.entry)
                     : mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
+            if (launched && mFirstBootTour != null) mFirstBootTour.onAppLaunchedFromScrub();
             resetAzGestureState(!launched, false);
             updateAzOverflowAffordance();
             if (!launched) {
@@ -10670,6 +10694,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class AppDrawerHost implements com.termux.app.launcher.drawer.AppDrawerController.Host {
         @NonNull @Override public Context context() {
             return TermuxActivity.this;
+        }
+
+        @Override public void onDrawerOpenSettled(boolean open) {
+            if (mFirstBootTour != null) mFirstBootTour.onDrawerOpenSettled(open);
         }
 
         @Nullable @Override public <T extends View> T findView(int viewId) {
@@ -14186,6 +14214,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mPaneController == null || mCurrentWSession == null
             || index < 0 || index >= mCurrentWSession.windows.size()) return;
+        if (mFirstBootTour != null) mFirstBootTour.onWindowSelected(String.valueOf(index));
         showWindowFromBar(index);
     }
 
@@ -14704,6 +14733,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         bar.setWindows(items, selected);
+        // The row is rebuilt whenever anything about a window changes, so the count is the edge
+        // the tour reads: one more chip is the +, one fewer is a chip's ×.
+        if (mFirstBootTour != null) mFirstBootTour.onWindowCountSettled(items.size());
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);
@@ -15843,6 +15875,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         runWithoutNotices(() -> mPaneController.splitAuto());
+        // Every way a split is asked for — the extra key's swipe, a keybinding, the palette, the
+        // agent — reaches this one method, past the guards that refuse it.
+        if (mFirstBootTour != null) mFirstBootTour.onPaneSplit();
     }
 
     /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
@@ -16162,6 +16197,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
         @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
             return createShellForCwd(cwd);
+        }
+
+        @Override public void onPaneControlsShown() {
+            if (mFirstBootTour != null) mFirstBootTour.onPaneCornerMenuOpened();
         }
 
         @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,
@@ -16829,6 +16868,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void showCommandPalette() {
             com.termux.app.terminal.TerminalCommandPalette.show(TermuxActivity.this);
+            // This entry point toggles, and the space bar's swipe up is one of the four ways into
+            // it; nothing downstream carries which one, so the run is told whenever the palette
+            // actually came up.
+            if (mFirstBootTour != null && getCommandPaletteController().isOpen())
+                mFirstBootTour.onPaletteOpened();
         }
 
         @Override public boolean toggleMouseMode() {

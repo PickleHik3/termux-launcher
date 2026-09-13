@@ -9,9 +9,10 @@ import java.util.List;
 /**
  * The run, as data: nine cards in the order the launcher teaches itself.
  *
- * <p>Steps 1 and 2 are wired end to end. The rest carry their copy, their target and their
- * gestures so the table is readable in one place, and wait on signals nothing emits yet — a card
- * whose signal never arrives is still skippable, which is how the run behaves today past step 2.
+ * <p>Every card's signals are emitted by the chrome now, and every target but the closing card's
+ * resolves to a control the overlay can glow. A card whose control is not in the layout in front
+ * of the user — no plus on the landscape rail, no space bar with the keyboard down — shows
+ * without a glow, and is still cleared by the gesture and still skippable.
  */
 public final class TourRun {
 
@@ -52,8 +53,8 @@ public final class TourRun {
             new String[] {TourSignals.PALETTE_OPENED},
             new TourGesture[] {TourGesture.SWIPE_UP}),
 
-        // TODO(tour phase 2): the closing card carries three edition-aware lines and a
-        // Copy commands button; today it is the one card that ends on Done alone.
+        // The only card with no target and no signal: it carries the three edition-aware lines
+        // and ends on its own buttons.
         new TourStep("closing", R.string.tour_card_closing, 0, "",
             new String[] {},
             new TourGesture[] {TourGesture.NONE})

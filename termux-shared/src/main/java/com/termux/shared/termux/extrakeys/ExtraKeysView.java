@@ -647,6 +647,7 @@ public final class ExtraKeysView extends GridLayout {
         mGlowLevels.clear();
         removeAllViews();
         ExtraKeyButton[][] buttons = extraKeysInfo.getMatrix();
+        mLoadedMatrix = buttons;
         // A column transposes the matrix: the configured rows stand side by side as columns.
         setRowCount(mVertical ? maximumLength(buttons) : buttons.length);
         setColumnCount(mVertical ? buttons.length : maximumLength(buttons));
@@ -819,6 +820,27 @@ public final class ExtraKeysView extends GridLayout {
                 addView(button);
             }
         }
+    }
+
+    /**
+     * The key that sends {@code key}, or null when this row is not carrying it.
+     *
+     * <p>The children are added in the matrix's own row-major order and never reordered, so the
+     * matrix is the index: nothing has to be tagged, and a row that stopped short of building
+     * every key still answers for the ones it did build.
+     */
+    @Nullable
+    public View buttonForKey(@NonNull String key) {
+        if (mLoadedMatrix == null) return null;
+        int index = 0;
+        for (ExtraKeyButton[] row : mLoadedMatrix) {
+            for (ExtraKeyButton buttonInfo : row) {
+                if (buttonInfo != null && key.equals(buttonInfo.getKey()))
+                    return index < getChildCount() ? getChildAt(index) : null;
+                index++;
+            }
+        }
+        return null;
     }
 
     public void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
@@ -1086,6 +1108,9 @@ public final class ExtraKeysView extends GridLayout {
     }
 
     private final Map<MaterialButton, GlowState> mGlowLevels = new HashMap<>();
+
+    /** The matrix the children were last built from; the index anything looks a key up by. */
+    @Nullable private ExtraKeyButton[][] mLoadedMatrix;
     private final Map<MaterialButton, GlowGradient> mGlowGradients = new HashMap<>();
     private final Paint mGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
