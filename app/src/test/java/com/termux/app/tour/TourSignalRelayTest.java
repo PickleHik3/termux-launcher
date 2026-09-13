@@ -98,4 +98,104 @@ public class TourSignalRelayTest {
         relay.onStatusBarCollapsedSettled(false);
         assertTrue(signals.isEmpty());
     }
+
+    @Test
+    public void aWindowCountThatGrowsIsAnOpenAndOneThatShrinksIsAClose() {
+        relay.onWindowCountSettled(1);
+        assertTrue(signals.isEmpty());
+        relay.onWindowCountSettled(2);
+        relay.onWindowCountSettled(1);
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.WINDOW_OPENED, signals.get(0));
+        assertEquals(TourSignals.WINDOW_CLOSED, signals.get(1));
+    }
+
+    @Test
+    public void aRowRebuiltWithTheSameWindowsSaysNothing() {
+        relay.onWindowCountSettled(2);
+        relay.onWindowCountSettled(2);
+        relay.onWindowCountSettled(2);
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void aCountThatIsNotThereYetIsNotASignal() {
+        relay.onWindowCountSettled(-1);
+        relay.onWindowCountSettled(1);
+        relay.onWindowCountSettled(-1);
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void onlyAMoveToADifferentWindowIsAChipTap() {
+        relay.onWindowSelected("a");
+        assertTrue(signals.isEmpty());
+        relay.onWindowSelected("a");
+        assertTrue(signals.isEmpty());
+        relay.onWindowSelected("b");
+        relay.onWindowSelected("b");
+        relay.onWindowSelected("a");
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.WINDOW_CHIP_SELECTED, signals.get(0));
+        assertEquals(TourSignals.WINDOW_CHIP_SELECTED, signals.get(1));
+    }
+
+    @Test
+    public void aWindowThatIsNotThereYetIsNotASignal() {
+        relay.onWindowSelected(null);
+        relay.onWindowSelected("a");
+        relay.onWindowSelected(null);
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void theDrawerSpeaksOnlyWhenItActuallyMoves() {
+        relay.onDrawerOpenSettled(false);
+        assertTrue(signals.isEmpty());
+        relay.onDrawerOpenSettled(false);
+        assertTrue(signals.isEmpty());
+        relay.onDrawerOpenSettled(true);
+        relay.onDrawerOpenSettled(true);
+        relay.onDrawerOpenSettled(false);
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.DRAWER_OPENED, signals.get(0));
+        assertEquals(TourSignals.DRAWER_CLOSED, signals.get(1));
+    }
+
+    @Test
+    public void aDrawerThatStartsOpenReportsItsCloseFirst() {
+        relay.onDrawerOpenSettled(true);
+        relay.onDrawerOpenSettled(false);
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.DRAWER_CLOSED, signals.get(0));
+    }
+
+    @Test
+    public void theFourActionsAreTheirOwnEdge() {
+        relay.onPaneSplit();
+        relay.onPaneCornerMenuOpened();
+        relay.onAppLaunchedFromScrub();
+        relay.onPaletteOpened();
+        assertEquals(4, signals.size());
+        assertEquals(TourSignals.PANE_SPLIT, signals.get(0));
+        assertEquals(TourSignals.PANE_CORNER_MENU, signals.get(1));
+        assertEquals(TourSignals.APP_LAUNCHED_FROM_SCRUB, signals.get(2));
+        assertEquals(TourSignals.PALETTE_OPENED, signals.get(3));
+    }
+
+    @Test
+    public void nothingAtAllIsEmittedWithoutSomeoneListening() {
+        relay.setTourSignalListener(null);
+        relay.onWindowCountSettled(1);
+        relay.onWindowCountSettled(2);
+        relay.onWindowSelected("a");
+        relay.onWindowSelected("b");
+        relay.onDrawerOpenSettled(false);
+        relay.onDrawerOpenSettled(true);
+        relay.onPaneSplit();
+        relay.onPaneCornerMenuOpened();
+        relay.onAppLaunchedFromScrub();
+        relay.onPaletteOpened();
+        assertTrue(signals.isEmpty());
+    }
 }

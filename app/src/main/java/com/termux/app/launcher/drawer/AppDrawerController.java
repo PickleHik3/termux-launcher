@@ -105,6 +105,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         /** The launcher row the grid borrows icons, tint and launch ladder from; null before built. */
         @Nullable SuggestionBarView suggestionBar();
 
+        /** The plane has settled open, or has finished closing and been torn down. */
+        default void onDrawerOpenSettled(boolean open) {}
+
         /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
         boolean applyWallpaperFrost(@NonNull ImageView frost);
 
@@ -451,6 +454,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // typed into a drawer that is on its way out.
         applyContentOpenState();
         if (open) {
+            mHost.onDrawerOpenSettled(true);
             requestSearchKeyboardOnOpenIfEnabled();
             nudgeCategorizationIfPending();
         } else {
@@ -1452,6 +1456,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * silently stops responding to every style and height change.
      */
     private void onClosed() {
+        mHost.onDrawerOpenSettled(false);
         try {
             // First, and before anything that can throw: a full-screen grid left interactive and
             // VISIBLE over the terminal swallows every touch, and does it silently.

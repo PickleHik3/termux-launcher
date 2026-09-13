@@ -50,6 +50,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     private static final String KEY_STORAGE = "app_launcher_storage_access";
+    private static final String KEY_REPLAY_TOUR = "app_launcher_replay_tour";
     private static final String KEY_NOTIFICATION_ACCESS = "app_launcher_notification_access";
     private static final String KEY_ACCESSIBILITY_LOCK = "app_launcher_accessibility_lock_access";
     private static final String KEY_NOTIFICATION_SETTINGS = "app_launcher_notification_settings";
@@ -65,6 +66,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.launcher_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         configurePermissionActions(context);
+        configureTourReplay(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
 
@@ -218,6 +220,21 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         });
         setClickListener(KEY_APP_PERMISSIONS, preference -> {
             openAppDetails(context);
+            return true;
+        });
+    }
+
+    /**
+     * Hands the home screen back to the user on card one of the tour. The run itself is what
+     * forgets that it was ever finished, so there is nothing to clear here first.
+     */
+    private void configureTourReplay(@NonNull Context context) {
+        setClickListener(KEY_REPLAY_TOUR, preference -> {
+            Intent intent = new Intent(context, TermuxActivity.class)
+                .putExtra(TermuxActivity.EXTRA_SHOW_ONBOARDING, true);
+            startActivity(intent);
+            // Settings gets out of the way: the run is on the home screen behind it.
+            if (getActivity() != null) getActivity().finish();
             return true;
         });
     }

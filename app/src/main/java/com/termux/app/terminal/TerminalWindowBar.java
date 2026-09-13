@@ -404,6 +404,20 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (shown) addCreateButton(mItems.isEmpty());
     }
 
+    /**
+     * The plus at the end of the strip, or null when this place is not offering one. Same test the
+     * strip uses to take it away again, so the two can never disagree about which child it is.
+     */
+    @Nullable
+    public View createWindowButtonView() {
+        if (!mCreateButtonShown) return null;
+        for (int i = mTabs.getChildCount() - 1; i >= 0; i--) {
+            View child = mTabs.getChildAt(i);
+            if (child != mCloseButton && child instanceof AppCompatImageButton) return child;
+        }
+        return null;
+    }
+
     public void setOnEdgeOverswipeListener(@Nullable OnEdgeOverswipeListener listener) {
         mEdgeOverswipeListener = listener;
     }
