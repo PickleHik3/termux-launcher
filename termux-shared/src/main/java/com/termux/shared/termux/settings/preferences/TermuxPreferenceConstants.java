@@ -1286,6 +1286,15 @@ public final class TermuxPreferenceConstants {
             "wallpaper_read_permission_prompted";
 
         public static final boolean DEFAULT_VALUE_WALLPAPER_READ_PERMISSION_PROMPTED = false;
+
+        /**
+         * Defines the key for whether the first-run "turn on the Linux display" prompt has been
+         * shown. Asked at most once, on the first-launch chain only.
+         */
+        public static final String KEY_DISPLAY_ENABLE_PROMPTED =
+            "display_enable_prompted";
+
+        public static final boolean DEFAULT_VALUE_DISPLAY_ENABLE_PROMPTED = false;
     }
 
     /**

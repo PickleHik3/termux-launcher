@@ -557,6 +557,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mAppNoticeOccupancyPx;
     /** True between the onboarding finishing and the last of its permission dialogs closing. */
     private boolean mFirstRunPermissionChainActive;
+    /** Guards {@link #mFirstRunChainFinishedListener} firing more than once per chain. */
+    private boolean mFirstRunChainFinishedNotified;
+    /** Told about exactly once, when the first-run permission chain has fully closed. */
+    @Nullable private Runnable mFirstRunChainFinishedListener;
     /**
      * Nesting depth of {@link #runWithoutNotices}. Creating a window or a pane touches the focused
      * shell, which several unrelated listeners read as a session change worth announcing; the user
@@ -1103,14 +1107,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * <p>Strictly sequential: two runtime permission dialogs requested in the same frame means the
      * second one is dropped by the framework, so the location step is started from the wallpaper
-     * step's result rather than beside it.
+     * step's result rather than beside it. The Linux display step sits between the two: it needs
+     * no runtime permission, but keeps the same one-dialog-at-a-time shape.
+     *
+     * <p>{@link #setFirstRunChainFinishedListener(Runnable)} is told once the last link has closed,
+     * by whichever path that turns out to be.
      */
     private void startFirstRunPermissionChain() {
         if (isFinishing() || isDestroyed()) return;
         mFirstRunPermissionChainActive = true;
-        if (!requestWallpaperReadPermissionForFirstRun()) {
-            requestWeatherLocationPermissionForFirstRun();
-        }
+        mFirstRunChainFinishedNotified = false;
+        if (requestWallpaperReadPermissionForFirstRun()) return;
+        if (requestDisplayEnableForFirstRun()) return;
+        requestWeatherLocationPermissionForFirstRun();
+    }
+
+    /**
+     * Lets the first-boot tour know when the first-run permission chain has fully closed — every
+     * dialog in it dismissed or skipped — so the overlay run can wait for it instead of racing the
+     * last dialog. Does not start the tour itself.
+     */
+    public void setFirstRunChainFinishedListener(@Nullable Runnable listener) {
+        mFirstRunChainFinishedListener = listener;
+    }
+
+    /** Fires {@link #mFirstRunChainFinishedListener} at most once per chain. */
+    private void finishFirstRunChain() {
+        if (mFirstRunChainFinishedNotified) return;
+        mFirstRunChainFinishedNotified = true;
+        if (mFirstRunChainFinishedListener != null) mFirstRunChainFinishedListener.run();
     }
 
     /** @return true when a dialog was raised, so the chain continues from its result instead. */
@@ -1132,7 +1157,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             })
             .setNegativeButton(R.string.action_wallpaper_read_permission_dismiss, (dialog, which) -> {
                 mPreferences.setWallpaperReadPermissionPrompted(true);
-                requestWeatherLocationPermissionForFirstRun();
+                if (!requestDisplayEnableForFirstRun()) requestWeatherLocationPermissionForFirstRun();
             })
             .setOnDismissListener(dialog -> mWallpaperReadPermissionPromptShowing = false)
             .show();
@@ -1140,17 +1165,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Second link in the chain: coarse location, which is the only thing the weather widget needs.
+     * Second link in the chain: switch the embedded Linux display on. Skipped when the build has
+     * no display server, when it is already on, or once this has already been asked. "Turn on"
+     * takes the exact path the Display place's own button and the Settings switch take,
+     * {@link #turnOnEmbeddedDisplay()}, so the pref, the defaults pass and the page state all agree
+     * with what the user would get either other way.
+     *
+     * @return true when a dialog was raised, so the chain continues from its result instead.
+     */
+    private boolean requestDisplayEnableForFirstRun() {
+        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return false;
+        if (isX11DisplayEnabled() || mPreferences.isDisplayEnablePrompted()) return false;
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.title_display_enable_permission)
+            .setMessage(R.string.msg_display_enable_permission)
+            .setPositiveButton(R.string.action_display_enable_permission_allow, (dialog, which) -> {
+                mPreferences.setDisplayEnablePrompted(true);
+                turnOnEmbeddedDisplay();
+                requestWeatherLocationPermissionForFirstRun();
+            })
+            .setNegativeButton(R.string.action_display_enable_permission_dismiss, (dialog, which) -> {
+                mPreferences.setDisplayEnablePrompted(true);
+                requestWeatherLocationPermissionForFirstRun();
+            })
+            .show();
+        return true;
+    }
+
+    /**
+     * Third link in the chain: coarse location, which is the only thing the weather widget needs.
      * Skipped when the widget is switched off — a permission for a feature the user is not running
-     * is exactly the kind of prompt that gets denied out of hand.
+     * is exactly the kind of prompt that gets denied out of hand. The last link, so every path
+     * through it — skipped outright, or its dialog dismissed either way — closes the chain.
      */
     private void requestWeatherLocationPermissionForFirstRun() {
         if (!mFirstRunPermissionChainActive || isFinishing() || isDestroyed()) return;
         mFirstRunPermissionChainActive = false;
-        if (mPreferences == null || !mPreferences.isStatusWidgetWeatherEnabled()) return;
+        if (mPreferences == null || !mPreferences.isStatusWidgetWeatherEnabled()) {
+            finishFirstRunChain();
+            return;
+        }
         if (androidx.core.content.ContextCompat.checkSelfPermission(this,
                 android.Manifest.permission.ACCESS_COARSE_LOCATION)
                 == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            finishFirstRunChain();
             return;
         }
         new MaterialAlertDialogBuilder(this)
@@ -1161,6 +1219,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new String[] {android.Manifest.permission.ACCESS_COARSE_LOCATION},
                     REQUEST_CODE_WEATHER_LOCATION))
             .setNegativeButton(R.string.action_weather_location_permission_dismiss, null)
+            .setOnDismissListener(dialog -> finishFirstRunChain())
             .show();
     }
 
@@ -11673,7 +11732,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.onWallpaperChanged();
             }
             // Granted or denied, the first-run chain moves on: the two permissions are unrelated.
-            requestWeatherLocationPermissionForFirstRun();
+            if (!requestDisplayEnableForFirstRun()) requestWeatherLocationPermissionForFirstRun();
         }
     }
 

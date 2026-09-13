@@ -626,10 +626,14 @@
     <string name="wallpaper_target_home_screen">Home Screen</string>
     <string name="wallpaper_target_lock_screen">Lock Screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>
-    <string name="title_wallpaper_read_permission">Blur needs the wallpaper</string>
-    <string name="msg_wallpaper_read_permission">The glass status bar, dock and keyboard blur a crop of your wallpaper, and this device won\'t hand it over without storage access. Allow it to turn the blur on. Setting a wallpaper from within the launcher works without this permission.</string>
+    <string name="title_wallpaper_read_permission">Allow wallpaper access</string>
+    <string name="msg_wallpaper_read_permission">The status bar, dock and keyboard blur your wallpaper. Allow storage access to turn the blur on.</string>
     <string name="action_wallpaper_read_permission_allow">Allow</string>
     <string name="action_wallpaper_read_permission_dismiss">Not now</string>
+    <string name="title_display_enable_permission">Turn on the Linux display</string>
+    <string name="msg_display_enable_permission">Run graphical Linux apps on the Display page. You can change this later in Settings.</string>
+    <string name="action_display_enable_permission_allow">Turn on</string>
+    <string name="action_display_enable_permission_dismiss">Not now</string>
     <string name="title_weather_location_permission">Weather needs a rough location</string>
     <string name="msg_weather_location_permission">The status bar can show the temperature where you are. It asks for coarse location only — city-level, never a precise fix — and the lookup runs only while the weather widget is switched on. Decline and everything else works exactly the same.</string>
     <string name="action_weather_location_permission_allow">Allow</string>
