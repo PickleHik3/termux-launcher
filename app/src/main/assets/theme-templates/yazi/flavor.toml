@@ -1,0 +1,83 @@
+# Launcher Material flavor for yazi
+# Rendered by Termux Launcher - do not edit manually
+
+[manager]
+cwd = "{{colors.primary.default.hex}}"
+
+hovered = "{{colors.on_primary.default.hex}}"
+hovered_bg = "{{colors.primary.default.hex}}"
+preview_hovered = "{{colors.on_secondary_container.default.hex}}"
+preview_hovered_bg = "{{colors.secondary_container.default.hex}}"
+
+find_keyword = "{{colors.tertiary.default.hex}}"
+find_position = "{{colors.secondary.default.hex}}"
+
+marker_copied = "{{colors.tertiary.default.hex}}"
+marker_cut = "{{colors.error.default.hex}}"
+marker_marked = "{{colors.secondary.default.hex}}"
+marker_selected = "{{colors.primary.default.hex}}"
+
+tab_active = "{{colors.on_primary.default.hex}}"
+tab_active_bg = "{{colors.primary.default.hex}}"
+tab_inactive = "{{colors.on_surface_variant.default.hex}}"
+tab_inactive_bg = "{{colors.surface_container.default.hex}}"
+
+count_copied = "{{colors.on_tertiary.default.hex}}"
+count_copied_bg = "{{colors.tertiary.default.hex}}"
+count_cut = "{{colors.on_error.default.hex}}"
+count_cut_bg = "{{colors.error.default.hex}}"
+count_selected = "{{colors.on_primary.default.hex}}"
+count_selected_bg = "{{colors.primary.default.hex}}"
+
+border_symbol = "│"
+border_style = "{{colors.outline_variant.default.hex}}"
+
+syntect_theme = ""
+
+[mode]
+normal_main = "{{colors.on_primary.default.hex}}"
+normal_alt = "{{colors.primary.default.hex}}"
+select_main = "{{colors.on_tertiary.default.hex}}"
+select_alt = "{{colors.tertiary.default.hex}}"
+unset_main = "{{colors.on_error.default.hex}}"
+unset_alt = "{{colors.error.default.hex}}"
+
+[status]
+separator_style = "{{colors.surface_container.default.hex}}"
+progress_label = "{{colors.on_surface.default.hex}}"
+progress_normal = "{{colors.primary.default.hex}}"
+progress_error = "{{colors.error.default.hex}}"
+
+[which]
+mask = "{{colors.surface_container.default.hex}}"
+cand = "{{colors.tertiary.default.hex}}"
+rest = "{{colors.on_surface_variant.default.hex}}"
+desc = "{{colors.on_surface.default.hex}}"
+separator_style = "{{colors.outline.default.hex}}"
+
+[input]
+border = "{{colors.outline.default.hex}}"
+title = "{{colors.on_surface.default.hex}}"
+value = "{{colors.on_surface.default.hex}}"
+selected = "{{colors.surface_variant.default.hex}}"
+
+[select]
+border = "{{colors.outline.default.hex}}"
+active = "{{colors.primary.default.hex}}"
+inactive = "{{colors.on_surface_variant.default.hex}}"
+
+[tasks]
+border = "{{colors.outline.default.hex}}"
+title = "{{colors.on_surface.default.hex}}"
+hovered = "{{colors.primary.default.hex}}"
+
+[confirm]
+border = "{{colors.outline.default.hex}}"
+title = "{{colors.on_surface.default.hex}}"
+content = "{{colors.on_surface.default.hex}}"
+list = "{{colors.on_surface_variant.default.hex}}"
+
+[notify]
+title_info = "{{colors.tertiary.default.hex}}"
+title_warn = "{{colors.secondary.default.hex}}"
+title_error = "{{colors.error.default.hex}}"
