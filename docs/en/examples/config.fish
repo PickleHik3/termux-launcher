@@ -127,8 +127,13 @@ if status is-interactive
 
     # Oh My Posh prompt. Keep this after the Material colors are sourced.
     # The compact Aliens-derived theme follows the launcher's Material palette.
+    # A theme chosen elsewhere wins: the launcher's "Tools that follow the terminal
+    # colours" setting exports POSH_THEME from ~/.config/fish/conf.d.
     if type -q oh-my-posh
         set -l omp_theme "$HOME/.config/ohmyposh/aliens-material.omp.json"
+        if set -q POSH_THEME; and test -f "$POSH_THEME"
+            set omp_theme "$POSH_THEME"
+        end
 
         if test -f "$omp_theme"
             oh-my-posh --config "$omp_theme" init fish | source
