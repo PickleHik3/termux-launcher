@@ -1297,6 +1297,14 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_DISPLAY_ENABLE_PROMPTED = false;
 
         /**
+         * Whether the first-run permission chain (wallpaper, display, weather) has run to its end
+         * once. It runs on the first launch only; everything it asks is reachable from Settings.
+         */
+        public static final String KEY_FIRST_RUN_CHAIN_DONE = "first_run_chain_done";
+
+        public static final boolean DEFAULT_VALUE_FIRST_RUN_CHAIN_DONE = false;
+
+        /**
          * The version of the first-boot tour the user has been through, or 0. Versioned rather
          * than a flag so a later run can be offered to someone who saw an earlier one; an install
          * that already has a launcher on it is never shown a run it did not opt into.

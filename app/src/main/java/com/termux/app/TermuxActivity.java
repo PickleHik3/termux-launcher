@@ -1133,8 +1133,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void startFirstRunPermissionChain() {
         if (isFinishing() || isDestroyed()) return;
-        mFirstRunPermissionChainActive = true;
         mFirstRunChainFinishedNotified = false;
+        // The chain asks once, on the first launch. Every cold start still goes through here so
+        // the tour's listener fires, but a chain that has already run has nothing left to ask.
+        if (mPreferences != null && mPreferences.isFirstRunChainDone()) {
+            finishFirstRunChain();
+            return;
+        }
+        mFirstRunPermissionChainActive = true;
         if (requestWallpaperReadPermissionForFirstRun()) return;
         if (requestDisplayEnableForFirstRun()) return;
         requestWeatherLocationPermissionForFirstRun();
@@ -1153,6 +1159,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void finishFirstRunChain() {
         if (mFirstRunChainFinishedNotified) return;
         mFirstRunChainFinishedNotified = true;
+        if (mPreferences != null) mPreferences.setFirstRunChainDone(true);
         if (mFirstRunChainFinishedListener != null) mFirstRunChainFinishedListener.run();
     }
 

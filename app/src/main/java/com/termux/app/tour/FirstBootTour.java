@@ -79,6 +79,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
                 legacyVersion, LEGACY_ONBOARDING_COMPLETED_VERSION,
                 preferences.getFirstBootTourCompletedVersion())) {
             preferences.setFirstBootTourCompletedVersion(TourController.RUN_VERSION);
+            // The footage tour ran the permission chain once already; an upgrade stays silent.
+            preferences.setFirstRunChainDone(true);
         }
         preferences.setFirstBootTourLegacyOnboardingMigrated(true);
     }
