@@ -254,6 +254,8 @@ built-in one. Keyboard height is remembered separately for portrait and landscap
   default.
 - **Reset usage ranking:** clear learned rankings without changing pins.
 - **Set as default launcher:** open Android's default Home app screen.
+- **Play the tour again:** replay the first-launch overlay tour, card one onward, on the home
+  screen behind Settings.
 - **Double tap A–Z Row to lock screen:** choose and configure the available lock backend.
 
 Where the pinned apps stand, the alphabets row, and the widget grid's size are all on the **Layout**

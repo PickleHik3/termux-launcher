@@ -1864,6 +1864,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_DISPLAY_ENABLE_PROMPTED, value, false);
     }
 
+    public boolean isFirstRunChainDone() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_FIRST_RUN_CHAIN_DONE, TERMUX_APP.DEFAULT_VALUE_FIRST_RUN_CHAIN_DONE);
+    }
+
+    public void setFirstRunChainDone(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FIRST_RUN_CHAIN_DONE, value, false);
+    }
+
     public int getTerminalBackgroundOpacity() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
             TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY), 0, 100);
@@ -2609,5 +2617,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setFirstBootTourSkipped(boolean skipped) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_FIRST_BOOT_TOUR_SKIPPED, skipped, true);
+    }
+
+    /** Whether the removed footage onboarding's completion has already been folded in, or not. */
+    public boolean isFirstBootTourLegacyOnboardingMigrated() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED);
+    }
+
+    public void setFirstBootTourLegacyOnboardingMigrated(boolean migrated) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED, migrated, true);
     }
 }

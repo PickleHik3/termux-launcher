@@ -140,7 +140,7 @@ everywhere else. Before calling a change done, walk this list and say which entr
   - `app/surfaces/` — the surface editor, inheritance row table, presets, materials, outlines.
   - `app/launcher/` — app catalogue, icons, paging, popups, A–Z scrub, notifications.
   - `app/chrome/`, `app/dock/`, `app/statusbar/`, `app/notice/`, `app/theme/`, `app/settings/`,
-    `app/onboarding/` — the named chrome subsystems.
+    `app/tour/` — the named chrome subsystems.
   - `ai/`, `launcherctl/`, `privileged/`, `filepicker/` — the non-terminal side features.
 - `terminal-emulator/` — escape-sequence parsing, buffers, kitty graphics, sixel. Upstream-shaped.
 - `terminal-view/` — the `TerminalView` widget and input handling.

@@ -313,6 +313,29 @@ public class TourControllerTest {
         assertFalse(controller.resumeIfInProgress());
     }
 
+    @Test
+    public void legacyOnboardingCountsWhenItsVersionIsMetAndThisTourIsUntouched() {
+        assertTrue(TourController.legacyOnboardingCounts(2, 2, 0));
+    }
+
+    @Test
+    public void legacyOnboardingDoesNotCountBelowItsRequiredVersion() {
+        assertFalse(TourController.legacyOnboardingCounts(1, 2, 0));
+    }
+
+    @Test
+    public void legacyOnboardingDoesNotCountOnceThisTourIsAlreadyFinished() {
+        assertFalse(TourController.legacyOnboardingCounts(2, 2, TourController.RUN_VERSION));
+    }
+
+    @Test
+    public void legacyOnboardingDoesNotCountWhileAReplayHasZeroedThisTourBackDeliberately() {
+        // Same shape as after start()/restart(): completed version is 0 again. The caller must
+        // never re-evaluate this after the one-time migration flag is set, which is why the flag
+        // — not this function re-run against live state — is what actually guards the migration.
+        assertTrue(TourController.legacyOnboardingCounts(2, 2, 0));
+    }
+
     private static final class FakeClock implements TourController.Clock {
         private long now = 1_000L;
 

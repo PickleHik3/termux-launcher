@@ -25,6 +25,21 @@ public final class TourController {
     /** How long a freshly shown card ignores signals. */
     public static final long ARM_DELAY_MS = 400L;
 
+    /**
+     * Whether a completed run of some earlier once-per-install introduction should count as a
+     * completed run of this tour, so an install that already sat through it is not shown this run
+     * too. A pure function so the migration decision is a unit test rather than a device check.
+     *
+     * @param legacyCompletedVersion the version stamp the earlier introduction recorded, or 0
+     * @param legacyRequiredVersion the version that earlier introduction considers "finished"
+     * @param currentTourCompletedVersion this tour's own completed version right now
+     */
+    public static boolean legacyOnboardingCounts(int legacyCompletedVersion,
+            int legacyRequiredVersion, int currentTourCompletedVersion) {
+        return legacyCompletedVersion >= legacyRequiredVersion
+            && currentTourCompletedVersion < RUN_VERSION;
+    }
+
     /** Nothing is running and no card has ever been shown. */
     private static final int STEP_NONE = -1;
 

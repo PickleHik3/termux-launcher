@@ -357,8 +357,8 @@ public final class AppNoticeHostView extends LinearLayout {
         // Where the terminal's rim and the chrome's bottom edge are, as of this frame — not as of
         // whenever the host was attached, which may have been before either was laid out.
         if (mPlacementRefresh != null) mPlacementRefresh.run();
-        // Above anything added to the content root after the pill was: an onboarding sheet, a
-        // transition overlay. A notice nobody can see is worse than no notice.
+        // Above anything added to the content root after the pill was: the first-boot tour
+        // overlay, a transition overlay. A notice nobody can see is worse than no notice.
         View outermost = getParent() instanceof ViewGroup ? (View) getParent() : this;
         ViewGroup parent = outermost.getParent() instanceof ViewGroup
             ? (ViewGroup) outermost.getParent() : null;

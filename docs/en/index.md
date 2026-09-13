@@ -20,7 +20,10 @@ different Android package name.
 4. [Use the settings map](Launcher_Settings.md) when you want to change something.
 5. [Troubleshoot common problems](Launcher_Troubleshooting.md).
 
-The app's first-launch tour gives the same short introduction. Its two recommended commands are:
+After a couple of permission prompts, the app's first-launch tour points out the launcher's
+gestures with nine short cards over the real home screen; skip any of them, and replay the whole
+run later from **Settings → Apps → Play the tour again**. Two commands are worth running in your
+first terminal regardless:
 
 ```sh
 pkg update && pkg upgrade
