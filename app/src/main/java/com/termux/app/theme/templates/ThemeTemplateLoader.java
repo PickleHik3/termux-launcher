@@ -95,6 +95,7 @@ public final class ThemeTemplateLoader {
             mPaths.expand(output),
             value(manifest, ThemeTemplate.KEY_POST_HOOK),
             value(manifest, ThemeTemplate.KEY_UNDO_HOOK),
+            value(manifest, ThemeTemplate.KEY_SETUP_HOOK),
             source);
     }
 

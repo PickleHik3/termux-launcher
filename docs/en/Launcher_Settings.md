@@ -111,6 +111,10 @@ mode is `default`, `dark` or `light` (all three give the active palette), and th
 Everything else in the file is left exactly as written, so a Go or Lua template survives intact. An
 unknown token or format skips that template and logs why; nothing is written.
 
+An optional `setup_hook` names a script for a tool that is only switched on by a line in your shell
+startup file, which the launcher never edits for you. Turning such a tool on offers you the command
+— `bash "<template dir>/<setup_hook>"` — to copy and run in the terminal once; it adds that line.
+
 `post_hook` runs after the file is written, `undo_hook` when the template is turned off or removed.
 Both are run as `bash <hook>` from the template directory with `TERMUX_THEME_ID`, `TERMUX_THEME_DIR`,
 `TERMUX_THEME_OUTPUT` and `TERMUX_THEME_MODE` set, and are stopped if they take longer than thirty

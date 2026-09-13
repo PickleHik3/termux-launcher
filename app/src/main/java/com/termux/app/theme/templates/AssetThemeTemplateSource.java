@@ -94,6 +94,11 @@ public final class AssetThemeTemplateSource implements ThemeTemplateSource {
         return directory;
     }
 
+    @Override
+    public File plannedDirectory(String id) {
+        return new File(mExtractRoot, id);
+    }
+
     private void extractInto(String assetDirectory, File target) throws IOException {
         for (String child : listOf(assetDirectory)) {
             String childAsset = assetDirectory + "/" + child;

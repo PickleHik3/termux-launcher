@@ -63,6 +63,23 @@ public class ThemeTemplateLoaderTest {
         assertTrue(template.isBuiltIn());
         assertTrue(template.hasPostHook());
         assertTrue(template.hasUndoHook());
+        // Most tools need nothing from the user's shell startup, so the key is optional.
+        assertFalse(template.hasSetupHook());
+        assertEquals("", template.setupHook);
+    }
+
+    @Test
+    public void readsTheOptionalSetupHook() throws IOException {
+        File directory = ThemeTemplateFixtures.template(mBuiltInRoot, "ohmyposh", "~/.config/omp.json");
+        ThemeTemplateFixtures.write(new File(directory, ThemeTemplate.MANIFEST_NAME),
+            "name=Oh My Posh\ninput=input.txt\noutput=~/.config/omp.json\n"
+                + "post_hook=apply.sh\nundo_hook=undo.sh\nsetup_hook=setup.sh\n");
+        ThemeTemplate template = loader().find("ohmyposh");
+        assertNotNull(template);
+        assertTrue(template.hasSetupHook());
+        assertEquals("setup.sh", template.setupHook);
+        assertEquals("bash \"" + new File(mBuiltInRoot, "ohmyposh/setup.sh").getAbsolutePath() + "\"",
+            template.setupCommand());
     }
 
     @Test

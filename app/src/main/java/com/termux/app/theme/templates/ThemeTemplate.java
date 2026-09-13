@@ -20,6 +20,7 @@ public final class ThemeTemplate {
     public static final String KEY_OUTPUT = "output";
     public static final String KEY_POST_HOOK = "post_hook";
     public static final String KEY_UNDO_HOOK = "undo_hook";
+    public static final String KEY_SETUP_HOOK = "setup_hook";
 
     public final String id;
     public final String name;
@@ -29,10 +30,19 @@ public final class ThemeTemplate {
     public final String postHook;
     public final String undoHook;
 
+    /**
+     * The one thing the app will not do for the user: add a line to their shell startup.
+     *
+     * <p>Some tools are only wired in by an init line in a shell rc, and a hook writing into
+     * {@code ~/.bashrc} behind someone's back is not a trade the app makes. A template that needs one
+     * names a script here, and the user is offered the command to run themselves.
+     */
+    public final String setupHook;
+
     private final ThemeTemplateSource mSource;
 
     ThemeTemplate(String id, String name, String summary, String input, String output,
-                  String postHook, String undoHook, ThemeTemplateSource source) {
+                  String postHook, String undoHook, String setupHook, ThemeTemplateSource source) {
         this.id = id;
         this.name = name;
         this.summary = summary;
@@ -40,6 +50,7 @@ public final class ThemeTemplate {
         this.output = output;
         this.postHook = postHook;
         this.undoHook = undoHook;
+        this.setupHook = setupHook;
         this.mSource = source;
     }
 
@@ -58,11 +69,25 @@ public final class ThemeTemplate {
         return mSource.directory(id);
     }
 
+    /** Where that directory is, without unpacking anything — for naming a path to the user. */
+    public File plannedDirectory() {
+        return mSource.plannedDirectory(id);
+    }
+
+    /** The command that finishes the setup, for the user to run in their own shell. */
+    public String setupCommand() {
+        return "bash \"" + new File(plannedDirectory(), setupHook).getAbsolutePath() + "\"";
+    }
+
     public boolean hasPostHook() {
         return postHook != null && !postHook.isEmpty();
     }
 
     public boolean hasUndoHook() {
         return undoHook != null && !undoHook.isEmpty();
+    }
+
+    public boolean hasSetupHook() {
+        return setupHook != null && !setupHook.isEmpty();
     }
 }

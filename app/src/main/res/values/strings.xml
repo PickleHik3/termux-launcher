@@ -131,6 +131,10 @@
     <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
     <string name="settings_theme_templates_title">Tools that follow the terminal colours</string>
     <string name="settings_theme_templates_summary_none">Starship, btop and other tools can pick up the terminal palette.</string>
+    <string name="settings_theme_templates_setup_message">One line in your shell setup finishes this. Copy the command, paste it in the terminal and press Enter.</string>
+    <string name="settings_theme_templates_setup_copy">Copy</string>
+    <string name="settings_theme_templates_setup_dismiss">Not now</string>
+    <string name="settings_theme_templates_setup_copied">Copied</string>
     <!-- The last two names of a short list: "Starship, btop and Helix". -->
     <string name="settings_theme_templates_summary_last">%1$s and %2$s</string>
     <string name="settings_theme_templates_summary_separator">%1$s, %2$s</string>

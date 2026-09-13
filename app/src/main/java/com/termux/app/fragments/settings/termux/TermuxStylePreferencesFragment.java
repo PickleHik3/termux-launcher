@@ -1,9 +1,12 @@
 package com.termux.app.fragments.settings.termux;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -56,8 +59,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
 
     private ActivityResultLauncher<String[]> mFontPickerLauncher;
 
-    /** Shipped template id to the name its manifest gives it, for the summary line. */
-    private final Map<String, String> mThemeTemplateNames = new LinkedHashMap<>();
+    /** The shipped templates by id, for the summary line and the setup a tool still needs. */
+    private final Map<String, ThemeTemplate> mThemeTemplates = new LinkedHashMap<>();
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -362,11 +365,11 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         Context context = getContext();
         if (templates == null || context == null) return;
         List<ThemeTemplate> builtIns = ThemeTemplates.builtInTemplates(context);
-        mThemeTemplateNames.clear();
+        mThemeTemplates.clear();
         List<CharSequence> entries = new ArrayList<>();
         List<CharSequence> values = new ArrayList<>();
         for (ThemeTemplate template : builtIns) {
-            mThemeTemplateNames.put(template.id, template.name);
+            mThemeTemplates.put(template.id, template);
             entries.add(template.name);
             values.add(template.id);
         }
@@ -380,17 +383,65 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             if (value instanceof Set) {
                 for (Object id : (Set<?>) value) chosen.add(String.valueOf(id));
             }
+            Set<String> before = templates.getValues();
             updateThemeTemplatesSummary(templates, chosen);
+            offerThemeTemplateSetup(newlyEnabledWithSetup(before, chosen), 0);
             return true;
         });
+    }
+
+    /** The tools just switched on that still need a line in the user's own shell setup. */
+    @NonNull
+    private List<ThemeTemplate> newlyEnabledWithSetup(@Nullable Set<String> before,
+                                                      @NonNull Set<String> after) {
+        List<ThemeTemplate> needing = new ArrayList<>();
+        for (Map.Entry<String, ThemeTemplate> entry : mThemeTemplates.entrySet()) {
+            if (!after.contains(entry.getKey())) continue;
+            if (before != null && before.contains(entry.getKey())) continue;
+            if (entry.getValue().hasSetupHook()) needing.add(entry.getValue());
+        }
+        return needing;
+    }
+
+    /**
+     * Hand over the one command the app will not run for the user.
+     *
+     * <p>Tools like these are switched on by a line in a shell startup file, and the app does not
+     * edit those behind someone's back. So the command is offered to copy and the user runs it
+     * themselves. Several at once are offered one after another rather than all at the same time.
+     */
+    private void offerThemeTemplateSetup(@NonNull List<ThemeTemplate> pending, int index) {
+        Context context = getContext();
+        if (context == null || index >= pending.size()) return;
+        ThemeTemplate template = pending.get(index);
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(template.name)
+            .setMessage(R.string.settings_theme_templates_setup_message)
+            .setNegativeButton(R.string.settings_theme_templates_setup_dismiss, null)
+            .setPositiveButton(R.string.settings_theme_templates_setup_copy,
+                (dialog, which) -> copyThemeTemplateSetupCommand(context, template))
+            .setOnDismissListener(dialog -> offerThemeTemplateSetup(pending, index + 1))
+            .show();
+    }
+
+    private void copyThemeTemplateSetupCommand(@NonNull Context context,
+                                               @NonNull ThemeTemplate template) {
+        ClipboardManager clipboard =
+            (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) return;
+        clipboard.setPrimaryClip(ClipData.newPlainText(template.name, template.setupCommand()));
+        // Android 13 and up shows its own confirmation for anything copied; a second one would be
+        // the app talking over the system.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+            AppNotice.show(context, R.string.settings_theme_templates_setup_copied, false);
     }
 
     /** What is on, in the templates' own words, or the invitation when nothing is. */
     private void updateThemeTemplatesSummary(@NonNull MultiSelectListPreference templates,
                                              @Nullable Set<String> enabled) {
         List<String> names = new ArrayList<>();
-        for (Map.Entry<String, String> entry : mThemeTemplateNames.entrySet()) {
-            if (enabled != null && enabled.contains(entry.getKey())) names.add(entry.getValue());
+        for (Map.Entry<String, ThemeTemplate> entry : mThemeTemplates.entrySet()) {
+            if (enabled != null && enabled.contains(entry.getKey())) names.add(entry.getValue().name);
         }
         if (names.isEmpty()) {
             templates.setSummary(R.string.settings_theme_templates_summary_none);

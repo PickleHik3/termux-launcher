@@ -70,4 +70,9 @@ public final class DirectoryThemeTemplateSource implements ThemeTemplateSource {
     public File directory(String id) {
         return new File(mRoot, id);
     }
+
+    @Override
+    public File plannedDirectory(String id) {
+        return new File(mRoot, id);
+    }
 }

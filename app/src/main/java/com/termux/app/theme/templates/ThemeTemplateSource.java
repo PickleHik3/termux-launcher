@@ -31,4 +31,7 @@ public interface ThemeTemplateSource {
 
     /** The template's directory on disk, extracting it first if this source is not one. */
     File directory(String id) throws IOException;
+
+    /** Where {@link #directory(String)} puts it, without doing the work. */
+    File plannedDirectory(String id);
 }
