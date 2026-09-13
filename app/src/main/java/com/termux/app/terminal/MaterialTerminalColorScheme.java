@@ -170,10 +170,78 @@ public final class MaterialTerminalColorScheme {
         putMaterialColor(props, "outline_variant", context, com.google.android.material.R.attr.colorOutlineVariant,
             R.color.termux_outline_variant);
 
+        // The rest of noctalia's 48-role set. Material Components 1.12.0 defines all of these
+        // attributes on its own M3 themes, but a theme that does not derive from one of those
+        // (or an old dynamic-color theme) can leave any of them unresolved; MaterialColors.getColor
+        // then hands back the sentinel below instead of throwing, and we fall back to the nearest
+        // role already in this map rather than to a made-up app resource, so the exported file is
+        // always complete even off such a theme.
+        putRoleColor(props, "primary_fixed", context,
+            com.google.android.material.R.attr.colorPrimaryFixed, "primary_container");
+        putRoleColor(props, "primary_fixed_dim", context,
+            com.google.android.material.R.attr.colorPrimaryFixedDim, "primary");
+        putRoleColor(props, "on_primary_fixed", context,
+            com.google.android.material.R.attr.colorOnPrimaryFixed, "on_primary_container");
+        putRoleColor(props, "on_primary_fixed_variant", context,
+            com.google.android.material.R.attr.colorOnPrimaryFixedVariant, "on_primary_container");
+        putRoleColor(props, "secondary_fixed", context,
+            com.google.android.material.R.attr.colorSecondaryFixed, "secondary_container");
+        putRoleColor(props, "secondary_fixed_dim", context,
+            com.google.android.material.R.attr.colorSecondaryFixedDim, "secondary");
+        putRoleColor(props, "on_secondary_fixed", context,
+            com.google.android.material.R.attr.colorOnSecondaryFixed, "on_secondary_container");
+        putRoleColor(props, "on_secondary_fixed_variant", context,
+            com.google.android.material.R.attr.colorOnSecondaryFixedVariant, "on_secondary_container");
+        putRoleColor(props, "tertiary_fixed", context,
+            com.google.android.material.R.attr.colorTertiaryFixed, "tertiary_container");
+        putRoleColor(props, "tertiary_fixed_dim", context,
+            com.google.android.material.R.attr.colorTertiaryFixedDim, "tertiary");
+        putRoleColor(props, "on_tertiary_fixed", context,
+            com.google.android.material.R.attr.colorOnTertiaryFixed, "on_tertiary_container");
+        putRoleColor(props, "on_tertiary_fixed_variant", context,
+            com.google.android.material.R.attr.colorOnTertiaryFixedVariant, "on_tertiary_container");
+        putRoleColor(props, "surface_dim", context,
+            com.google.android.material.R.attr.colorSurfaceDim, "surface");
+        putRoleColor(props, "surface_bright", context,
+            com.google.android.material.R.attr.colorSurfaceBright, "surface");
+        putRoleColor(props, "surface_container_lowest", context,
+            com.google.android.material.R.attr.colorSurfaceContainerLowest, "surface");
+        putRoleColor(props, "surface_container_low", context,
+            com.google.android.material.R.attr.colorSurfaceContainerLow, "surface");
+        putRoleColor(props, "background", context,
+            android.R.attr.colorBackground, "surface");
+        putRoleColor(props, "on_background", context,
+            com.google.android.material.R.attr.colorOnBackground, "on_surface");
+        putRoleColor(props, "inverse_surface", context,
+            com.google.android.material.R.attr.colorSurfaceInverse, "on_surface");
+        putRoleColor(props, "inverse_on_surface", context,
+            com.google.android.material.R.attr.colorOnSurfaceInverse, "surface");
+        putRoleColor(props, "inverse_primary", context,
+            com.google.android.material.R.attr.colorPrimaryInverse, "primary");
+        // Not theme attributes: noctalia expects a literal black for both regardless of contrast.
+        props.setProperty("shadow", "#000000");
+        props.setProperty("scrim", "#000000");
+
         props.setProperty("contrast_level", level.value);
         for (String key : terminalProps.stringPropertyNames()) {
             props.setProperty("terminal_" + key, terminalProps.getProperty(key));
         }
+
+        // noctalia's terminal_* names, as byte-identical aliases of the keys above.
+        String[] ansiNames = {"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"};
+        for (int i = 0; i < ansiNames.length; i++) {
+            props.setProperty("terminal_normal_" + ansiNames[i], props.getProperty("terminal_color" + i));
+            props.setProperty("terminal_bright_" + ansiNames[i], props.getProperty("terminal_color" + (i + 8)));
+        }
+        props.setProperty("terminal_cursor_text", props.getProperty("terminal_background"));
+        props.setProperty("terminal_selection_fg", props.getProperty("on_surface_variant"));
+        props.setProperty("terminal_selection_bg", props.getProperty("surface_variant"));
+
+        // dark below tone 50, light at or above it — the same split MaterialTerminalColorScheme
+        // already uses internally via perceivedBrightness, but expressed in HCT tone since that is
+        // what the rest of this export is built from.
+        double backgroundTone = Hct.fromInt(Color.parseColor(terminalProps.getProperty("background"))).getTone();
+        props.setProperty("mode", backgroundTone < 50 ? "dark" : "light");
 
         return props;
     }
@@ -340,6 +408,18 @@ public final class MaterialTerminalColorScheme {
         props.setProperty(key, hex(materialColor(context, attr, fallbackRes)));
     }
 
+    /**
+     * Like {@link #putMaterialColor}, but for the roles that have no app resource of their own to
+     * fall back to: an unresolved attribute copies the value already recorded under
+     * {@code fallbackKey} instead. {@code fallbackKey} must already be in {@code props}.
+     */
+    private static void putRoleColor(@NonNull Properties props, @NonNull String key, @NonNull Context context,
+                                     int attr, @NonNull String fallbackKey) {
+        int resolved = MaterialColors.getColor(context, attr, 0);
+        int value = resolved != 0 ? resolved : Color.parseColor(props.getProperty(fallbackKey));
+        props.setProperty(key, hex(value));
+    }
+
     private static void writeFile(@NonNull String path, @NonNull String content) {
         if (alreadyOnDisk(path, content)) return;
         Error error = FileUtils.writeTextToFile(path, path, StandardCharsets.UTF_8, content, false);
@@ -348,7 +428,8 @@ public final class MaterialTerminalColorScheme {
         }
     }
 
-    private static String toPropertiesText(@NonNull Properties props) {
+    @VisibleForTesting
+    static String toPropertiesText(@NonNull Properties props) {
         StringBuilder builder = new StringBuilder();
         builder.append("# Generated by Termux. Do not edit.\n");
         ArrayList<String> keys = sortedKeys(props);
@@ -358,7 +439,8 @@ public final class MaterialTerminalColorScheme {
         return builder.toString();
     }
 
-    private static String toShellExports(@NonNull Properties props) {
+    @VisibleForTesting
+    static String toShellExports(@NonNull Properties props) {
         StringBuilder builder = new StringBuilder();
         builder.append("# Generated by Termux. Source this file from shell scripts.\n");
         ArrayList<String> keys = sortedKeys(props);

@@ -137,6 +137,96 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
+    /** All 48 Material 3 role tokens noctalia expects, present and a valid {@code #rrggbb}. */
+    @Test
+    public void allFortyEightRoleTokensAreValidHexColours() {
+        Properties roles = MaterialTerminalColorScheme.createMaterialRoleProperties(
+            ApplicationProvider.getApplicationContext(),
+            MaterialTerminalColorScheme.create(
+                ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT),
+            TerminalContrastLevel.DEFAULT);
+        String[] roleKeys = {
+            "primary", "on_primary", "primary_container", "on_primary_container",
+            "secondary", "on_secondary", "secondary_container", "on_secondary_container",
+            "tertiary", "on_tertiary", "tertiary_container", "on_tertiary_container",
+            "error", "on_error", "error_container", "on_error_container",
+            "outline", "outline_variant",
+            "surface", "surface_variant", "surface_container", "surface_container_high",
+            "surface_container_highest", "on_surface", "on_surface_variant",
+            "primary_fixed", "primary_fixed_dim", "on_primary_fixed", "on_primary_fixed_variant",
+            "secondary_fixed", "secondary_fixed_dim", "on_secondary_fixed", "on_secondary_fixed_variant",
+            "tertiary_fixed", "tertiary_fixed_dim", "on_tertiary_fixed", "on_tertiary_fixed_variant",
+            "surface_dim", "surface_bright", "surface_container_lowest", "surface_container_low",
+            "background", "on_background",
+            "inverse_surface", "inverse_on_surface", "inverse_primary",
+            "shadow", "scrim",
+        };
+        assertEquals("token list itself covers 48 roles", 48, roleKeys.length);
+        for (String key : roleKeys) {
+            String value = roles.getProperty(key);
+            assertNotNull(key, value);
+            assertTrue(key + " = '" + value + "' is not #rrggbb", value.matches("#[0-9A-Fa-f]{6}"));
+        }
+    }
+
+    /** noctalia's 22 terminal_* names, byte-identical to the keys they alias. */
+    @Test
+    public void terminalAliasesAreByteIdenticalToTheirSourceKeys() {
+        Properties roles = MaterialTerminalColorScheme.createMaterialRoleProperties(
+            ApplicationProvider.getApplicationContext(),
+            MaterialTerminalColorScheme.create(
+                ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT),
+            TerminalContrastLevel.DEFAULT);
+        String[] ansiNames = {"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"};
+        for (int i = 0; i < ansiNames.length; i++) {
+            assertEquals("terminal_normal_" + ansiNames[i],
+                roles.getProperty("terminal_color" + i),
+                roles.getProperty("terminal_normal_" + ansiNames[i]));
+            assertEquals("terminal_bright_" + ansiNames[i],
+                roles.getProperty("terminal_color" + (i + 8)),
+                roles.getProperty("terminal_bright_" + ansiNames[i]));
+        }
+        assertEquals(roles.getProperty("terminal_background"), roles.getProperty("terminal_cursor_text"));
+        assertEquals(roles.getProperty("on_surface_variant"), roles.getProperty("terminal_selection_fg"));
+        assertEquals(roles.getProperty("surface_variant"), roles.getProperty("terminal_selection_bg"));
+        // Already existed before this spec; confirm they are still exported under their own names.
+        assertNotNull(roles.getProperty("terminal_foreground"));
+        assertNotNull(roles.getProperty("terminal_background"));
+        assertNotNull(roles.getProperty("terminal_cursor"));
+    }
+
+    /** {@code mode} has to agree with the terminal background's own HCT tone, not the theme's. */
+    @Test
+    public void modeAgreesWithTheTerminalBackgroundTone() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties terminal = MaterialTerminalColorScheme.create(
+                ApplicationProvider.getApplicationContext(), level);
+            Properties roles = MaterialTerminalColorScheme.createMaterialRoleProperties(
+                ApplicationProvider.getApplicationContext(), terminal, level);
+            String mode = roles.getProperty("mode");
+            assertTrue("mode='" + mode + "'", "dark".equals(mode) || "light".equals(mode));
+            double tone = com.google.android.material.color.utilities.Hct
+                .fromInt(color(terminal, "background")).getTone();
+            assertEquals("level " + level.value, tone < 50 ? "dark" : "light", mode);
+        }
+    }
+
+    /** The two writers pick up new keys through their existing sorted-key loop, unchanged. */
+    @Test
+    public void bothWritersIncludeANewKey() {
+        Properties roles = MaterialTerminalColorScheme.createMaterialRoleProperties(
+            ApplicationProvider.getApplicationContext(),
+            MaterialTerminalColorScheme.create(
+                ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT),
+            TerminalContrastLevel.DEFAULT);
+        String propertiesText = MaterialTerminalColorScheme.toPropertiesText(roles);
+        String shellText = MaterialTerminalColorScheme.toShellExports(roles);
+        assertTrue(propertiesText.contains("\nprimary_fixed=" + roles.getProperty("primary_fixed") + "\n"));
+        assertTrue(propertiesText.contains("\nmode=" + roles.getProperty("mode") + "\n"));
+        assertTrue(shellText.contains("export TERMUX_MATERIAL_PRIMARY_FIXED='" + roles.getProperty("primary_fixed") + "'"));
+        assertTrue(shellText.contains("export TERMUX_MATERIAL_MODE='" + roles.getProperty("mode") + "'"));
+    }
+
     private static int color(Properties properties, String key) {
         return Color.parseColor(properties.getProperty(key));
     }
