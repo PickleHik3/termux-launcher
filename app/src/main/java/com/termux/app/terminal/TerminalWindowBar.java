@@ -356,6 +356,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * a ViewRootImpl the view may not have yet.
      */
     private boolean mWindowVisible = true;
+    /** The chip whose fresh × should be scrolled into view on the next layout pass. */
+    private int mPendingRevealScroll = ChipRevealPolicy.NONE;
     private boolean mAttached;
 
     public TerminalWindowBar(Context context, AttributeSet attrs) {
@@ -660,7 +662,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         close.setVisibility(VISIBLE);
         mTabs.setCloseTarget(index);
         mTabs.requestLayout();
-        if (fresh) startCloseReveal();
+        if (fresh) {
+            startCloseReveal();
+            // Scrolled from onLayout, once the strip has been measured with the × in it.
+            mPendingRevealScroll = index;
+        }
         mRevealTimeout = () -> {
             mRevealTimeout = null;
             if (mReveal.onTimeout(SystemClock.uptimeMillis())) applyReveal();
@@ -1118,6 +1124,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         super.onLayout(changed, l, t, r, b);
         // The × moves with the row it is in; its borrowed thumb target has to move with it.
         updateCloseTouchDelegate();
+        if (mPendingRevealScroll != ChipRevealPolicy.NONE) {
+            int index = mPendingRevealScroll;
+            mPendingRevealScroll = ChipRevealPolicy.NONE;
+            scrollRevealedIntoView(index);
+        }
     }
 
     @Override
@@ -1280,6 +1291,36 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             }
         });
         mSelectionAnimator.start();
+    }
+
+    /**
+     * The × takes precedence over the row's resting scroll: a chip near the trailing end grows
+     * into room the bar does not have (the stats cluster owns the rest of the status row), so the
+     * strip slides just far enough for the whole segment to sit inside the viewport. Runs after
+     * the layout pass that measured the × into the strip, so the scroll range already reaches it.
+     */
+    private void scrollRevealedIntoView(int index) {
+        if (mTabs.closeTarget() != index || index < 0 || index >= mTabs.getChildCount()) return;
+        View chip = mTabs.getChildAt(index);
+        int margin = dp(5);
+        int viewport = getWidth() - getPaddingLeft() - getPaddingRight();
+        if (viewport <= 0 || chip.getWidth() <= 0) return;
+        int extent = mTabs.closeExtentPx();
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        int left = rtl ? chip.getLeft() - extent : chip.getLeft();
+        int right = rtl ? chip.getRight() : chip.getRight() + extent;
+        int target = getScrollX();
+        if (right + margin > target + viewport) target = right + margin - viewport;
+        if (left - margin < target) target = left - margin;
+        // When the chip and its × are wider than the viewport, the × wins: it is the thing the
+        // thumb is reaching for.
+        if (right + margin > target + viewport) target = right + margin - viewport;
+        int maxScroll = Math.max(0, mTabs.getWidth() + getPaddingLeft() + getPaddingRight()
+            - getWidth());
+        target = Math.max(0, Math.min(target, maxScroll));
+        if (target == getScrollX()) return;
+        if (mAttached && mWindowVisible) animateScrollTo(target);
+        else scrollTo(target, 0);
     }
 
     private void scrollSelectedIntoView(int selectedIndex) {

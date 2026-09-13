@@ -658,6 +658,43 @@ public class TerminalWindowBarTest {
         assertTrue(close.getContentDescription().toString().contains("ssh in zbook"));
     }
 
+    /**
+     * A chip at the trailing end of a bar that is narrower than its chips has no room for the ×:
+     * the strip slides so the whole segment sits inside the viewport, because the × is what the
+     * thumb is reaching for.
+     */
+    @Test
+    public void revealingTheCloseOnATrailingChipScrollsItIntoView() {
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook"),
+            new TerminalWindowBar.WindowItem("vim-icon notes", "vim in notes")), 2);
+        int rowHeight = Math.round(24f * bar.getResources().getDisplayMetrics().density);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        bar.setLayoutParams(new android.widget.FrameLayout.LayoutParams(1000, rowHeight));
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS);
+        // Wide enough for the selected chip to end exactly at the viewport's edge, with no room
+        // left for its ×.
+        int width = tabs.getChildAt(2).getRight();
+        bar.setLayoutParams(new android.widget.FrameLayout.LayoutParams(width, rowHeight));
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals(width, bar.getWidth());
+        bar.scrollTo(0, 0);
+
+        tabs.getChildAt(2).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+        android.view.View close = bar.revealedCloseView();
+        assertTrue(close != null);
+        assertTrue("the × ends inside the viewport",
+            close.getRight() <= bar.getScrollX() + bar.getWidth());
+        assertTrue(bar.getScrollX() > 0);
+    }
+
     /** The selection highlight follows the wider chip rather than stopping at the title. */
     @Test
     public void theSelectionHighlightGrowsOverTheCloseSegment() {
