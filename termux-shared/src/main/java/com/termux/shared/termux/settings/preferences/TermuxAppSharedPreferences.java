@@ -1856,6 +1856,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_READ_PERMISSION_PROMPTED, value, false);
     }
 
+    public boolean isDisplayEnablePrompted() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_DISPLAY_ENABLE_PROMPTED, TERMUX_APP.DEFAULT_VALUE_DISPLAY_ENABLE_PROMPTED);
+    }
+
+    public void setDisplayEnablePrompted(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_DISPLAY_ENABLE_PROMPTED, value, false);
+    }
+
     public int getTerminalBackgroundOpacity() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
             TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY), 0, 100);
