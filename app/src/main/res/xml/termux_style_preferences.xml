@@ -45,6 +45,10 @@
             app:entries="@array/terminal_contrast_entries"
             app:entryValues="@array/terminal_contrast_values"
             android:defaultValue="default" />
+        <MultiSelectListPreference
+            app:key="theme_templates_enabled"
+            app:title="@string/settings_theme_templates_title"
+            app:summary="@string/settings_theme_templates_summary_none" />
         <SwitchPreferenceCompat
             app:key="use_system_wallpaper"
             app:title="@string/settings_wallpaper_title"

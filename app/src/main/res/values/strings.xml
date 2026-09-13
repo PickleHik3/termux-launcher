@@ -129,6 +129,15 @@
     <string name="settings_terminal_contrast_title">Terminal contrast</string>
     <string name="settings_terminal_contrast_summary">%1$s</string>
     <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
+    <string name="settings_theme_templates_title">Tools that follow the terminal colours</string>
+    <string name="settings_theme_templates_summary_none">Starship, btop and other tools can pick up the terminal palette.</string>
+    <!-- The last two names of a short list: "Starship, btop and Helix". -->
+    <string name="settings_theme_templates_summary_last">%1$s and %2$s</string>
+    <string name="settings_theme_templates_summary_separator">%1$s, %2$s</string>
+    <plurals name="settings_theme_templates_summary_more">
+        <item quantity="one">%1$s and %2$d more</item>
+        <item quantity="other">%1$s and %2$d more</item>
+    </plurals>
     <string-array name="terminal_contrast_entries">
         <item>Softer</item>
         <item>Default</item>

@@ -26,6 +26,7 @@ import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
 import com.termux.shared.logger.Logger;
 import com.termux.app.theme.LauncherSchemeTheme;
+import com.termux.app.theme.templates.ThemeTemplates;
 import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
@@ -720,9 +721,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // palette the terminal just took.
                 final Properties exported =
                     MaterialTerminalColorScheme.createMaterialRoleProperties(mContext, props, level);
+                // Claimed here rather than on the writer thread: a burst of refreshes queues several
+                // of these, and each one needs to know it has been overtaken before it starts.
+                final long templatePass = ThemeTemplates.schedulePass(mContext);
                 MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
                     try {
                         MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
+                        ThemeTemplates.runPass(mContext, exported, templatePass);
                     } catch (Exception e) {
                         Logger.logStackTraceWithMessage(LOG_TAG,
                             "Error writing material color files", e);
@@ -761,6 +766,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // thread rather than costing the activity two stats and a palette build during onCreate.
         final Properties snapshot = new Properties();
         snapshot.putAll(terminalProps);
+        final long templatePass = ThemeTemplates.schedulePass(mContext);
         MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
             try {
                 LinkedHashMap<String, Integer> tokens = LauncherSchemeTheme.tokens();
@@ -770,6 +776,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     exported.setProperty("terminal_" + key, snapshot.getProperty(key));
                 }
                 MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
+                ThemeTemplates.runPass(mContext, exported, templatePass);
             } catch (Exception e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Error writing scheme color files", e);
             }

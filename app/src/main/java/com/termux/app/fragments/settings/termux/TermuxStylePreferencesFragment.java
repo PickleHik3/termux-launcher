@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.preference.ListPreference;
+import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
@@ -27,6 +28,8 @@ import com.termux.launcherctl.LauncherCtlNotificationStore;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.theme.LauncherSchemeTheme;
+import com.termux.app.theme.templates.ThemeTemplate;
+import com.termux.app.theme.templates.ThemeTemplates;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
@@ -37,6 +40,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Keep
 public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
@@ -46,6 +55,9 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
     private static final String FONT_FILE_NAME = "label-font.ttf";
 
     private ActivityResultLauncher<String[]> mFontPickerLauncher;
+
+    /** Shipped template id to the name its manifest gives it, for the summary line. */
+    private final Map<String, String> mThemeTemplateNames = new LinkedHashMap<>();
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -92,6 +104,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             });
         }
         configureTerminalContrastPreference();
+        configureThemeTemplatesPreference();
         configureDynamicColorsHint();
         refreshThemeEntries();
         updateKeyboardLookEnabled(context);
@@ -109,6 +122,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             LauncherIconPackPreferenceController.configure(this, context);
         }
         configureTerminalContrastPreference();
+        configureThemeTemplatesPreference();
         configureDynamicColorsHint();
         refreshThemeEntries();
         if (context != null) updateKeyboardLookEnabled(context);
@@ -335,6 +349,72 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         });
     }
 
+    /**
+     * The list of tools that can take the terminal palette, named by the templates that do it.
+     *
+     * <p>The entries are the shipped templates' own names, read at startup rather than written into
+     * the preference XML, so a template added to the app appears here without a second list to keep
+     * in step. Templates the user wrote are not listed: those apply because they exist. With nothing
+     * shipped to offer, the row is not shown at all.
+     */
+    private void configureThemeTemplatesPreference() {
+        MultiSelectListPreference templates = findPreference("theme_templates_enabled");
+        Context context = getContext();
+        if (templates == null || context == null) return;
+        List<ThemeTemplate> builtIns = ThemeTemplates.builtInTemplates(context);
+        mThemeTemplateNames.clear();
+        List<CharSequence> entries = new ArrayList<>();
+        List<CharSequence> values = new ArrayList<>();
+        for (ThemeTemplate template : builtIns) {
+            mThemeTemplateNames.put(template.id, template.name);
+            entries.add(template.name);
+            values.add(template.id);
+        }
+        templates.setVisible(!entries.isEmpty());
+        if (entries.isEmpty()) return;
+        templates.setEntries(entries.toArray(new CharSequence[0]));
+        templates.setEntryValues(values.toArray(new CharSequence[0]));
+        updateThemeTemplatesSummary(templates, templates.getValues());
+        templates.setOnPreferenceChangeListener((preference, value) -> {
+            Set<String> chosen = new LinkedHashSet<>();
+            if (value instanceof Set) {
+                for (Object id : (Set<?>) value) chosen.add(String.valueOf(id));
+            }
+            updateThemeTemplatesSummary(templates, chosen);
+            return true;
+        });
+    }
+
+    /** What is on, in the templates' own words, or the invitation when nothing is. */
+    private void updateThemeTemplatesSummary(@NonNull MultiSelectListPreference templates,
+                                             @Nullable Set<String> enabled) {
+        List<String> names = new ArrayList<>();
+        for (Map.Entry<String, String> entry : mThemeTemplateNames.entrySet()) {
+            if (enabled != null && enabled.contains(entry.getKey())) names.add(entry.getValue());
+        }
+        if (names.isEmpty()) {
+            templates.setSummary(R.string.settings_theme_templates_summary_none);
+            return;
+        }
+        if (names.size() == 1) {
+            templates.setSummary(names.get(0));
+            return;
+        }
+        if (names.size() > 3) {
+            String first = getString(R.string.settings_theme_templates_summary_separator,
+                names.get(0), names.get(1));
+            templates.setSummary(getResources().getQuantityString(
+                R.plurals.settings_theme_templates_summary_more, names.size() - 2, first,
+                names.size() - 2));
+            return;
+        }
+        String head = names.get(0);
+        for (int index = 1; index < names.size() - 1; index++)
+            head = getString(R.string.settings_theme_templates_summary_separator, head, names.get(index));
+        templates.setSummary(getString(R.string.settings_theme_templates_summary_last, head,
+            names.get(names.size() - 1)));
+    }
+
     private void updateTerminalContrastSummary(@NonNull androidx.preference.ListPreference contrast,
                                                boolean enabled) {
         if (!enabled) {
@@ -514,6 +594,24 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherAzDoubleTapLockEnabled();
             default:
                 return defValue;
+        }
+    }
+
+    @Override
+    public Set<String> getStringSet(String key, Set<String> defValues) {
+        if (mPreferences == null || key == null) return defValues;
+        if ("theme_templates_enabled".equals(key)) return mPreferences.getThemeTemplatesEnabled();
+        return defValues;
+    }
+
+    @Override
+    public void putStringSet(String key, Set<String> values) {
+        if (mPreferences == null || key == null) return;
+        if ("theme_templates_enabled".equals(key)) {
+            mPreferences.setThemeTemplatesEnabled(values);
+            // A tool the user just switched on should be wearing the colours by the time they leave
+            // this screen, so the pass runs now rather than at the next palette refresh.
+            ThemeTemplates.applyFromDiskAsync(mContext);
         }
     }
 
