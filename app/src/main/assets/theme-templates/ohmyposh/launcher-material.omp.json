@@ -1,0 +1,110 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "blocks": [
+    {
+      "alignment": "left",
+      "segments": [
+        {
+          "background_templates": [
+            "{{colors.primary.default.hex}}"
+          ],
+          "foreground_templates": [
+            "{{colors.on_primary.default.hex}}"
+          ],
+          "leading_diamond": "",
+          "style": "diamond",
+          "template": "{{ if le .PromptCount 1 }}󰚩{{ else if eq .Code 0 }}{{ if eq (mod .PromptCount 3) 0 }}󱚥{{ else if eq (mod .PromptCount 3) 1 }}󱚣{{ else }}󱜙{{ end }}{{ else if eq .Code 1 }}󱚟{{ else if eq .Code 2 }}󱚝{{ else if or (eq .Code 126) (eq .Code 127) }}󱚡{{ else if ge .Code 128 }}󱚡{{ else }}󱚝{{ end }} ",
+          "trailing_diamond": "",
+          "type": "session"
+        },
+        {
+          "background_templates": [
+            "{{colors.surface_container_highest.default.hex}}"
+          ],
+          "foreground_templates": [
+            "{{colors.tertiary.default.hex}}"
+          ],
+          "powerline_symbol": "",
+          "options": {
+            "style": "full"
+          },
+          "style": "powerline",
+          "template": " {{ .Path }}",
+          "type": "path"
+        },
+        {
+          "background_templates": [
+            "{{colors.surface_variant.default.hex}}"
+          ],
+          "foreground_templates": [
+            "{{colors.secondary.default.hex}}"
+          ],
+          "powerline_symbol": "",
+          "options": {
+            "fetch_status": true,
+            "fetch_upstream_icon": true
+          },
+          "style": "powerline",
+          "template": " {{ .HEAD }}{{ if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} *{{ .Working.String }}{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Staging.Changed }} +{{ .Staging.String }}{{ end }}",
+          "type": "git"
+        },
+        {
+          "background_templates": [
+            "{{colors.tertiary_container.default.hex}}",
+            "{{ if .Error }}{{colors.error_container.default.hex}}{{ end }}"
+          ],
+          "foreground_templates": [
+            "{{colors.on_tertiary_container.default.hex}}",
+            "{{ if .Error }}{{colors.on_error_container.default.hex}}{{ end }}"
+          ],
+          "leading_diamond": "",
+          "style": "diamond",
+          "template": "{{ if .Error }}{{ .Error }}{{ else }}{{ if .Venv }}{{ .Venv }} {{ end }}{{ .Full }}{{ end }}",
+          "trailing_diamond": "",
+          "type": "python"
+        }
+      ],
+      "type": "prompt"
+    },
+    {
+      "alignment": "left",
+      "newline": true,
+      "segments": [
+        {
+          "background": "transparent",
+          "foreground_templates": [
+            "{{colors.primary.default.hex}}",
+            "{{ if gt .Code 0 }}{{colors.error.default.hex}}{{ end }}"
+          ],
+          "options": {
+            "always_enabled": true
+          },
+          "style": "plain",
+          "template": "❯",
+          "type": "status"
+        },
+        {
+          "background": "transparent",
+          "foreground_templates": [
+            "{{colors.tertiary.default.hex}}",
+            "{{ if gt .Code 0 }}{{colors.error_container.default.hex}}{{ end }}"
+          ],
+          "options": {
+            "always_enabled": true
+          },
+          "style": "plain",
+          "template": "❯",
+          "type": "status"
+        }
+      ],
+      "type": "prompt"
+    }
+  ],
+  "console_title_template": "{{ if .Root }}[root] {{ end }}{{ .Shell }} in {{ .PWD }}",
+  "final_space": true,
+  "transient_prompt": {
+    "background": "transparent",
+    "template": "<{{ if gt .Code 0 }}{{colors.error.default.hex}}{{ else }}{{colors.primary.default.hex}}{{ end }}>❯</><{{ if gt .Code 0 }}{{colors.error_container.default.hex}}{{ else }}{{colors.tertiary.default.hex}}{{ end }}>❯</> "
+  },
+  "version": 4
+}
