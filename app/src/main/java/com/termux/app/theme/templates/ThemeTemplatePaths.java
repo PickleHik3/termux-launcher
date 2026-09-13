@@ -80,7 +80,16 @@ public final class ThemeTemplatePaths {
                 }
             }
             String name = value.substring(nameStart, nameEnd);
+            String fallback = null;
+            int fallbackAt = braced ? name.indexOf(":-") : -1;
+            if (fallbackAt >= 0) {
+                // ${NAME:-default}, the shell's own spelling: templates are written by people who
+                // write shell, and a default that goes unread silently sends the output to /.
+                fallback = name.substring(fallbackAt + 2);
+                name = name.substring(0, fallbackAt);
+            }
             String replacement = mEnvironment.get(name);
+            if (isBlank(replacement) && fallback != null) replacement = expandVariables(fallback);
             out.append(replacement == null ? "" : replacement);
             index = braced ? nameEnd + 1 : nameEnd;
         }

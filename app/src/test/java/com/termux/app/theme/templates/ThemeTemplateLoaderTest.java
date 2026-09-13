@@ -120,6 +120,19 @@ public class ThemeTemplateLoaderTest {
     }
 
     @Test
+    public void aShellStyleDefaultInTheOutputPathIsHonoured() throws IOException {
+        ThemeTemplateFixtures.template(mBuiltInRoot, "starship",
+            "${XDG_CACHE_HOME:-$HOME/.cache}/launcher-material/starship-palette.toml");
+        ThemeTemplateFixtures.template(mBuiltInRoot, "tmux", "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/x.conf");
+        Map<String, String> environment = new HashMap<>();
+        environment.put("XDG_CONFIG_HOME", "/elsewhere/config");
+        ThemeTemplateLoader loader = loader(environment);
+        assertEquals(mHome.getAbsolutePath() + "/.cache/launcher-material/starship-palette.toml",
+            loader.find("starship").output);
+        assertEquals("/elsewhere/config/tmux/x.conf", loader.find("tmux").output);
+    }
+
+    @Test
     public void builtInsApplyOnlyWhileTheyAreEnabled() throws IOException {
         ThemeTemplateFixtures.template(mBuiltInRoot, "starship", "~/.config/starship.toml");
         ThemeTemplateFixtures.template(mBuiltInRoot, "btop", "~/.config/btop.theme");
