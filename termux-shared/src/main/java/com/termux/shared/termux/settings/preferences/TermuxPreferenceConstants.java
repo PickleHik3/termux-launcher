@@ -1265,6 +1265,13 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL = "default";
 
         /**
+         * Defines the key for which shipped theme templates the user has turned on, as a set of
+         * template ids. Templates the user drops into ~/.termux/theme-templates are not listed here:
+         * they apply because they are there.
+         */
+        public static final String KEY_THEME_TEMPLATES_ENABLED = "theme_templates_enabled";
+
+        /**
          * Defines the key for whether the system wallpaper should be used.
          */
         public static final String KEY_USE_SYSTEM_WALLPAPER = "use_system_wallpaper";

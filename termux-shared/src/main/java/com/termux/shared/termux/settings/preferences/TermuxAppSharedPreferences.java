@@ -2520,6 +2520,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             level.value, false);
     }
 
+    /** The shipped theme templates the user has turned on, by template id. */
+    @NonNull
+    public java.util.Set<String> getThemeTemplatesEnabled() {
+        java.util.Set<String> enabled = SharedPreferenceUtils.getStringSet(mSharedPreferences,
+            TERMUX_APP.KEY_THEME_TEMPLATES_ENABLED, java.util.Collections.emptySet());
+        // Copied out: the set a SharedPreferences hands back must not be modified, and callers pass
+        // it straight to a preference dialog that will.
+        return enabled == null ? new java.util.LinkedHashSet<>() : new java.util.LinkedHashSet<>(enabled);
+    }
+
+    public void setThemeTemplatesEnabled(@Nullable java.util.Set<String> value) {
+        SharedPreferenceUtils.setStringSet(mSharedPreferences, TERMUX_APP.KEY_THEME_TEMPLATES_ENABLED,
+            value == null ? java.util.Collections.emptySet() : new java.util.LinkedHashSet<>(value), false);
+    }
+
     public boolean arePluginErrorNotificationsEnabled(boolean readFromFile) {
         if (readFromFile)
             return SharedPreferenceUtils.getBoolean(mMultiProcessSharedPreferences, TERMUX_APP.KEY_PLUGIN_ERROR_NOTIFICATIONS_ENABLED, TERMUX_APP.DEFAULT_VALUE_PLUGIN_ERROR_NOTIFICATIONS_ENABLED);
