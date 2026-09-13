@@ -33,8 +33,8 @@ import androidx.annotation.Nullable;
  * {@link #STANDARD_WIDTH_DP}, just below the bar — regardless of which widget was tapped. The bar's
  * widgets are entry points to one shared surface, not owners of their own popups; a card that
  * jumped to sit under whichever icon happened to be hit would read as several unrelated windows.
- * Only the leading-edge panel (the sessions list) keeps its anchor alignment, since it is a
- * dropdown of the chip itself.
+ * A panel variant keeps its anchor's leading edge instead, for a card that reads as a dropdown of
+ * the chip it came from rather than as a detail card about it.
  */
 public final class StatusCardHost {
 
