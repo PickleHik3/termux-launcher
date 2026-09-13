@@ -97,8 +97,8 @@ public final class AppDrawerSearchController
     /**
      * The Android-keyboard search: a focused text field owns typing, deleting and caret movement,
      * and reports the result through {@link #replaceQuery}. The hardware-key channel then keeps
-     * only the strokes that mean something to the drawer rather than to the text — Enter and Esc —
-     * and the in-app keyboard's interceptor is left to the yielded keyboard.
+     * only the strokes that mean something to the drawer rather than to the text — Enter, Esc and
+     * Back — and the in-app keyboard's interceptor is left to the yielded keyboard.
      */
     public void setTextFieldOwnsInput(boolean owns) {
         mTextFieldOwnsInput = owns;
@@ -257,6 +257,9 @@ public final class AppDrawerSearchController
         if (mTextFieldOwnsInput) {
             // Letters, backspace and the arrows are the field's; only the strokes that act on the
             // drawer are claimed, and on the down stroke alone so the field never sees a stray up.
+            // A stroke reaching this channel at all means the terminal still holds focus — the
+            // field only takes it while its keyboard is up — so nothing claimed here is taken
+            // from a field that was about to be typed into.
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             switch (keyCode) {
                 case KeyEvent.KEYCODE_ENTER:
@@ -264,6 +267,13 @@ public final class AppDrawerSearchController
                     commit();
                     return true;
                 case KeyEvent.KEYCODE_ESCAPE:
+                case KeyEvent.KEYCODE_BACK:
+                    // Back is the drawer's, never the field's, and it has to be claimed here even
+                    // though the field would answer one that reached it: while the plane is up the
+                    // activity swallows the *release* of every stroke, so a Back this channel
+                    // declines is dropped on the floor — onBackPressed() never runs and the press
+                    // neither collapses a category nor closes the drawer. Spends the press on the
+                    // same hierarchy Esc does.
                     dismiss();
                     return true;
                 default:
