@@ -236,7 +236,15 @@ public final class TerminalView extends View {
         }
     };
 
+    private final int mTouchSlop;
+
     private final int mTouchSlopSquared;
+
+    /** Where the current gesture's finger landed, which is where a still finger clicks. */
+    private float mTouchDownX, mTouchDownY;
+
+    /** Whether this gesture has actually scrolled anything; see {@link TapPrecision.ScrollDelivery}. */
+    private final TapPrecision.ScrollDelivery mScrollDelivery = new TapPrecision.ScrollDelivery();
 
     /**
      * If non-zero, this is the last unicode code point received if that was a combining character.
@@ -302,26 +310,22 @@ public final class TerminalView extends View {
         super(context, attributes);
         mGestureRecognizer = new GestureAndScaleRecognizer(context, new GestureAndScaleRecognizer.Listener() {
 
-            boolean scrolledWithFinger;
-
             @Override
             public boolean onUp(MotionEvent event) {
                 mScrollRemainder = 0.0f;
                 mScrollXRemainder = 0.0f;
                 if (mScroller.isFinished())
                     settleScrollOffset();
-                if (mTouchMouseDragReported) {
-                    scrolledWithFinger = false;
+                if (mTouchMouseDragReported)
                     return true;
-                }
-                if (mEmulator != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !scrolledWithFinger) {
+                if (mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !mScrollDelivery.delivered()) {
                     // Quick event processing when mouse tracking is active - do not wait for check of double tapping
                     // for zooming.
-                    sendMouseEventCode(event, TerminalEmulator.MOUSE_LEFT_BUTTON, true);
-                    sendMouseEventCode(event, TerminalEmulator.MOUSE_LEFT_BUTTON, false);
+                    float[] at = TapPrecision.clickPointFor(mTouchDownX, mTouchDownY, event.getX(),
+                        event.getY(), mRenderer.mFontLineSpacing);
+                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]));
                     return true;
                 }
-                scrolledWithFinger = false;
                 return false;
             }
 
@@ -351,15 +355,17 @@ public final class TerminalView extends View {
                     // which we do not do for touch input, only mouse in onTouchEvent().
                     sendMouseEventCode(e, TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, true);
                 } else {
-                    scrolledWithFinger = true;
                     if (isSmoothScrollAllowed()) {
                         abortSmoothScroll();
-                        setScrollPixelPosition(getScrollPixelPosition() + distanceY);
+                        float before = getScrollPixelPosition();
+                        setScrollPixelPosition(before + distanceY);
+                        mScrollDelivery.pixelsScrolled(before, getScrollPixelPosition());
                         invalidate();
                     } else {
                         distanceY += mScrollRemainder;
                         int deltaRows = (int) (distanceY / mRenderer.mFontLineSpacing);
                         mScrollRemainder = distanceY - deltaRows * mRenderer.mFontLineSpacing;
+                        mScrollDelivery.rowsScrolled(deltaRows);
                         doScroll(e, deltaRows);
                     }
 
@@ -367,6 +373,7 @@ public final class TerminalView extends View {
                     int deltaCols = (int) (distanceX / mRenderer.mFontWidth);
                     mScrollXRemainder = distanceX - deltaCols * mRenderer.mFontWidth;
 //mClient.logError("scrolll", distanceY, distanceX);
+                    mScrollDelivery.columnsScrolled(deltaCols);
                     doScrollX(e, deltaCols);
                 }
                 return true;
@@ -465,8 +472,8 @@ public final class TerminalView extends View {
             }
         });
         mScroller = new Scroller(context);
-        int touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mTouchSlopSquared = touchSlop * touchSlop;
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        mTouchSlopSquared = mTouchSlop * mTouchSlop;
         AccessibilityManager am = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
         mAccessibilityEnabled = am.isEnabled();
 
@@ -1535,6 +1542,12 @@ public final class TerminalView extends View {
         mEmulator.sendMouseEvent(button, column + 1, row + 1, pressed);
     }
 
+    /** Press and release the left button on one cell, which is the whole of a finger click. */
+    private void sendClickAt(int column, int row) {
+        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, column, row, true);
+        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, column, row, false);
+    }
+
     /**
      * Arm a possible mouse drag from a long press, without reporting anything yet: a long press
      * alone - held then released without moving - is still local text selection (so its floating
@@ -1656,6 +1669,9 @@ public final class TerminalView extends View {
             return true;
         final int action = event.getAction();
         if (action == MotionEvent.ACTION_DOWN) {
+            mTouchDownX = event.getX();
+            mTouchDownY = event.getY();
+            mScrollDelivery.reset();
             mTouchMouseDragActive = false;
             mTouchMouseDragReported = false;
             clearArmedTouchMouseDrag();
