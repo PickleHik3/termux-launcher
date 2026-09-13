@@ -23,25 +23,6 @@ public class SessionBrowserModelTest {
     }
 
     @Test
-    public void filter_matchesNameCwdAndForegroundCaseInsensitively() {
-        List<SessionBrowserModel.Session> sessions = Arrays.asList(
-            session(0, "work", "/data/data/com.termux/files/home/project", "nvim · Main.java", 2),
-            session(1, "logs", "/data/data/com.termux/files/home", "journalctl", 1),
-            session(2, null, "/tmp/build-output", "bash", 1));
-
-        assertEquals(0, SessionBrowserModel.filter(sessions, "WORK").get(0).index);
-        assertEquals(0, SessionBrowserModel.filter(sessions, "project").get(0).index);
-        assertEquals(0, SessionBrowserModel.filter(sessions, "main.java").get(0).index);
-        assertEquals(1, SessionBrowserModel.filter(sessions, "JOURNAL").get(0).index);
-        assertEquals(2, SessionBrowserModel.filter(sessions, "build-output").get(0).index);
-        assertEquals(0, SessionBrowserModel.filter(sessions, "missing").size());
-    }
-
-    /**
-     * A session shows the strongest reading of any pane under it: blocked outranks working outranks
-     * idle, and a session with no agent in it shows nothing at all.
-     */
-    @Test
     public void sessionRollsUpTheAgentStateOfEveryPaneInEveryWindow() {
         SessionBrowserModel.Window first = new SessionBrowserModel.Window(0, true, 0,
             Arrays.asList(new SessionBrowserModel.Pane("/one", "claude", AgentStatus.State.IDLE),
@@ -63,18 +44,14 @@ public class SessionBrowserModelTest {
     }
 
     @Test
-    public void filter_blankPreservesOrderAndPaneCountCoversAllWindows() {
+    public void aPaneCountCoversEveryWindowOfTheSession() {
         SessionBrowserModel.Session first = session(3, "one", "/one", "bash", 2);
         SessionBrowserModel.Window secondWindow = new SessionBrowserModel.Window(1, false, 0,
             Arrays.asList(new SessionBrowserModel.Pane("/two", "git"),
                 new SessionBrowserModel.Pane("/three", "vim")));
         SessionBrowserModel.Session expanded = new SessionBrowserModel.Session(first.index,
             first.current, first.name, Arrays.asList(first.windows.get(0), secondWindow));
-        List<SessionBrowserModel.Session> sessions = Arrays.asList(expanded,
-            session(4, "two", "/four", "fish", 1));
-
-        List<SessionBrowserModel.Session> filtered = SessionBrowserModel.filter(sessions, "  ");
-        assertEquals(Arrays.asList(3, 4), Arrays.asList(filtered.get(0).index, filtered.get(1).index));
-        assertEquals(4, filtered.get(0).paneCount());
+        assertEquals("one pane in the first window and two in the second",
+            4, expanded.paneCount());
     }
 }

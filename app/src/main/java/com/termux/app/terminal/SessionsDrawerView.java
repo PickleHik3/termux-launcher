@@ -698,8 +698,11 @@ public final class SessionsDrawerView extends LinearLayout
         // Built after the commit action so ⏎ and the button spend the same draft.
         TerminalSheetController.TextField typed = new TerminalSheetController.TextField(
             field, hint, value -> mDraft = value, () -> onValue.onValue(mDraft));
-        for (int i = 0; i < mDraft.length(); ) {
-            int codePoint = mDraft.codePointAt(i);
+        // Replayed from a snapshot: every keystroke reports back through onChanged and rewrites
+        // mDraft, so walking the live field would end the loop after the first character.
+        String seed = mDraft;
+        for (int i = 0; i < seed.length(); ) {
+            int codePoint = seed.codePointAt(i);
             typed.onText(new String(Character.toChars(codePoint)));
             i += Character.charCount(codePoint);
         }

@@ -1447,8 +1447,8 @@
     <string name="tool_session_next">Next session</string>
     <string name="tool_session_previous">Previous session</string>
     <string name="tool_session_close_current">Close session</string>
-    <string name="tool_session_browser">Session browser</string>
-    <string name="tool_session_panel">Sessions panel</string>
+    <string name="tool_session_browser">Sessions</string>
+    <string name="tool_session_panel">Toggle sessions</string>
     <string name="tool_session_clone_current">Clone session with CWD</string>
     <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
     <string name="tool_keyboard_cycle_form">Next keyboard type</string>
@@ -1485,8 +1485,8 @@
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
     <string name="tool_app_command_palette">Command palette</string>
     <string name="tool_app_launch">Launch app</string>
-    <string name="tool_app_open_drawer">Open sessions browser</string>
-    <string name="tool_app_close_drawer">Close sessions browser</string>
+    <string name="tool_app_open_drawer">Open sessions</string>
+    <string name="tool_app_close_drawer">Close sessions</string>
     <string name="tool_terminal_action_sheet">Terminal actions</string>
     <string name="tool_session_activate_by_index">Switch to session by number</string>
     <string name="tool_window_rename_prompt">Rename window…</string>
@@ -1527,8 +1527,8 @@
     <string name="tool_desc_session_next">Switch to the next terminal session.</string>
     <string name="tool_desc_session_previous">Switch to the previous terminal session.</string>
     <string name="tool_desc_session_close_current">Close the current session, including all of its windows and panes.</string>
-    <string name="tool_desc_session_browser">Search sessions by name, working directory, or foreground process.</string>
-    <string name="tool_desc_session_panel">Drop the sessions list beneath the status row to switch, rename, close, or create sessions.</string>
+    <string name="tool_desc_session_browser">Open the sessions drawer to switch, rename, close, or save sessions.</string>
+    <string name="tool_desc_session_panel">Show the sessions drawer, or put it away when it is already open.</string>
     <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
     <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
     <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
@@ -1599,8 +1599,8 @@
         <item quantity="one">Ignored %1$d terminal font configuration error; using safe fallbacks</item>
         <item quantity="other">Ignored %1$d terminal font configuration errors; using safe fallbacks</item>
     </plurals>
-    <string name="tool_desc_app_open_drawer">Open the sessions browser.</string>
-    <string name="tool_desc_app_close_drawer">Close the sessions browser.</string>
+    <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
+    <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
     <string name="tool_desc_window_rename_prompt">Name the current window — the tab it occupies in the window bar.</string>
     <string name="tool_desc_session_rename_prompt">Name the current session — the drawer row that holds the windows.</string>
     <string name="tool_desc_pane_rename_prompt">Name the focused pane\'s shell.</string>
