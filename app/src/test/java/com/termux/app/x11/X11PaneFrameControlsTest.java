@@ -82,10 +82,10 @@ public class X11PaneFrameControlsTest {
         ShadowLooper.idleMainLooper(400, TimeUnit.MILLISECONDS);
     }
 
-    /** A tap on the top border brings the tab and, with a display running, the rail. */
+    /** A tap on a corner brings the tab out of it and, with a display running, the rail. */
     private static X11PaneFrame pageWithControlsOut() {
         X11PaneFrame page = page();
-        tap(page, WIDTH / 2f, 2f);
+        tap(page, WIDTH - 2f, 2f);
         settle();
         assertTrue(page.isControlsTabShown());
         assertTrue(page.isScaleRailShown());
@@ -99,6 +99,27 @@ public class X11PaneFrameControlsTest {
             if (rail.hits(8f, y)) return y;
         }
         throw new AssertionError("the rail answers nowhere along the edge");
+    }
+
+    /** At rest the rail is not on screen and answers nowhere: every pixel is X's. */
+    @Test
+    public void aRailThatIsNotOutTakesNoTouches() {
+        X11PaneFrame page = page();
+        assertFalse(page.isScaleRailShown());
+        for (float y = 0; y < HEIGHT; y += 8f) {
+            assertFalse("the rail answered at " + y, page.scaleRail().hits(8f, y));
+        }
+    }
+
+    /** The rail comes out with the tab and never on its own. */
+    @Test
+    public void theRailIsOutOnlyWhileTheTabIs() {
+        X11PaneFrame page = pageWithControlsOut();
+        tap(page, WIDTH - 2f, 2f);
+        settle();
+        assertFalse("the tab went away", page.isControlsTabShown());
+        assertFalse("and took the rail with it", page.isScaleRailShown());
+        assertFalse(page.scaleRail().hits(8f, HEIGHT / 2f));
     }
 
     @Test

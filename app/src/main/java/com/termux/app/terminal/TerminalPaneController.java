@@ -37,6 +37,8 @@ import androidx.core.graphics.ColorUtils;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.DockPlankController;
+import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerZones;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TextStyle;
@@ -3016,33 +3018,23 @@ public class TerminalPaneController {
         return clampFirstWeight(total, total * snappedPixels / availablePixels);
     }
 
-    static int touchedBorderIndex(@NonNull List<RectF> panes, int activeIndex,
-                                  float x, float y, float threshold) {
-        int contained = -1;
-        int activeCandidate = -1;
-        int nearest = -1;
-        float containedDistance = Float.MAX_VALUE;
-        float nearestDistance = Float.MAX_VALUE;
-        for (int i = 0; i < panes.size(); i++) {
-            RectF rect = panes.get(i);
-            if (rect == null || x < rect.left - threshold || x > rect.right + threshold
-                || y < rect.top - threshold || y > rect.bottom + threshold) continue;
-            float edgeDistance = Math.min(
-                Math.min(Math.abs(x - rect.left), Math.abs(x - rect.right)),
-                Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom)));
-            if (edgeDistance > threshold) continue;
-            if (rect.contains(x, y) && edgeDistance < containedDistance) {
-                contained = i;
-                containedDistance = edgeDistance;
-            }
-            if (activeIndex == i) activeCandidate = i;
-            if (edgeDistance < nearestDistance) {
-                nearest = i;
-                nearestDistance = edgeDistance;
-            }
-        }
-        if (contained >= 0) return contained;
-        return activeCandidate >= 0 ? activeCandidate : nearest;
+    /**
+     * Whether a pane corner drags this seam: the corner's own point has to line up with the seam
+     * on the seam's axis, and to lie within the split's extent along the other one — a corner in
+     * another branch of the tree is not the end of this seam, however well it happens to line up.
+     *
+     * @param seam where the seam sits on its own axis
+     * @param extentStart the split layout's near edge on the other axis
+     * @param extentEnd its far edge on that axis
+     * @param cornerOnSeamAxis the corner's coordinate on the seam's axis
+     * @param cornerOnOtherAxis the corner's coordinate on the other one
+     */
+    static boolean cornerDragsSeam(float seam, float extentStart, float extentEnd,
+                                   float cornerOnSeamAxis, float cornerOnOtherAxis,
+                                   float threshold) {
+        return Math.abs(cornerOnSeamAxis - seam) <= threshold
+            && cornerOnOtherAxis >= extentStart - threshold
+            && cornerOnOtherAxis <= extentEnd + threshold;
     }
 
     private void setAllPaneSizeUpdatesPaused(boolean paused, boolean keepBottom) {
@@ -3083,7 +3075,10 @@ public class TerminalPaneController {
 
         @Nullable private Split mXSplit;
         @Nullable private Split mYSplit;
-        @Nullable private Leaf mBorderTapLeaf;
+        @Nullable private Leaf mCornerTapLeaf;
+        /** Which of that leaf's corners the finger is on, or {@link CornerZones#NONE}. */
+        private int mPressedCorner = CornerZones.NONE;
+        private final CornerBracket mBracket = new CornerBracket();
         @Nullable private Leaf mControlLeaf;
         @Nullable private Leaf mMovingLeaf;
         @Nullable private Leaf mMoveTarget;
@@ -3097,7 +3092,7 @@ public class TerminalPaneController {
         private float mYWeightB;
         private float mControlProgress;
         private boolean mDraggingDivider;
-        private boolean mBorderPressed;
+        private boolean mCornerPressed;
         private boolean mTouchMoved;
         private boolean mControlsShown;
         private int mPressedControlAction = ACTION_NONE;
@@ -3155,12 +3150,16 @@ public class TerminalPaneController {
                     }
 
                     if (mControlsShown && mMaximizedLeaf == null) dismissControls();
-                    findDividerTargets(x, y);
-                    // Resolve pane ownership from the touched border before falling back to the
-                    // nearest pane. This is important for the original pane: the empty pixels in
-                    // a shared divider otherwise tend to resolve to the newly-created neighbour.
-                    mBorderTapLeaf = leafAtTouchedBorder(x, y);
-                    if (mBorderTapLeaf == null) mBorderTapLeaf = leafAtOrNearest(x, y);
+                    // A pane is taken hold of by its corners, never by an edge: the edges are the
+                    // terminal's own, down to the last column. Ownership is resolved from the
+                    // corner the finger is actually in, which matters for the original pane —
+                    // the empty pixels in a shared divider otherwise tend to resolve to the
+                    // neighbour created after it.
+                    mPressedCorner = findTouchedCorner(x, y);
+                    if (mPressedCorner == CornerZones.NONE) return false;
+                    // Which seams that corner sits on: one at the end of a seam, both where two
+                    // cross, none at a corner the host's own edge makes.
+                    findCornerDividerTargets();
                     if (mXSplit != null || mYSplit != null) {
                         mDraggingDivider = true;
                         beginHostSurfaceResize();
@@ -3172,19 +3171,16 @@ public class TerminalPaneController {
                             mYWeightA = mYSplit.weightA;
                             mYWeightB = mYSplit.weightB;
                         }
-                        focusLeaf(mBorderTapLeaf);
+                        focusLeaf(mCornerTapLeaf);
                         getParent().requestDisallowInterceptTouchEvent(true);
                         invalidate();
                         return true;
                     }
-                    if (mBorderTapLeaf != null && isNearPaneBorder(mBorderTapLeaf, x, y)) {
-                        mBorderPressed = true;
-                        focusLeaf(mBorderTapLeaf);
-                        getParent().requestDisallowInterceptTouchEvent(true);
-                        invalidate();
-                        return true;
-                    }
-                    return false;
+                    mCornerPressed = true;
+                    focusLeaf(mCornerTapLeaf);
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    invalidate();
+                    return true;
 
                 case MotionEvent.ACTION_MOVE:
                     if (mMovingLeaf != null) {
@@ -3208,7 +3204,7 @@ public class TerminalPaneController {
                         invalidate();
                         return true;
                     }
-                    if (mBorderTapLeaf != null) {
+                    if (mCornerTapLeaf != null) {
                         mHandleX = x;
                         mHandleY = y;
                         mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(3);
@@ -3248,8 +3244,8 @@ public class TerminalPaneController {
                         if (activate && leaf != null) performControlAction(action, leaf);
                         return true;
                     }
-                    if (mDraggingDivider || mBorderTapLeaf != null) {
-                        Leaf leaf = mBorderTapLeaf;
+                    if (mDraggingDivider || mCornerTapLeaf != null) {
+                        Leaf leaf = mCornerTapLeaf;
                         boolean resized = mDraggingDivider && mTouchMoved;
                         if (resized) {
                             snapSplitToCellGrid(mXSplit);
@@ -3306,6 +3302,22 @@ public class TerminalPaneController {
             mHost.onActivePaneChanged();
         }
 
+        /**
+         * The seams the pane corner under the finger sits on. The corner's own point on the pane
+         * is what is matched against each seam, not the finger's — so the whole 32dp square drags
+         * whatever that corner is the end of, rather than only the part of it near the seam.
+         */
+        private void findCornerDividerTargets() {
+            mXSplit = null;
+            mYSplit = null;
+            if (mCornerTapLeaf == null || mPressedCorner == CornerZones.NONE) return;
+            RectF pane = paneRect(mCornerTapLeaf, mHitPaneRect);
+            if (pane == null) return;
+            findDividerTargets(
+                CornerZones.isLeft(mPressedCorner) ? pane.left : pane.right,
+                CornerZones.isTop(mPressedCorner) ? pane.top : pane.bottom);
+        }
+
         private void findDividerTargets(float x, float y) {
             mXSplit = null;
             mYSplit = null;
@@ -3327,7 +3339,7 @@ public class TerminalPaneController {
                 if (split.orientation == LinearLayout.HORIZONTAL) {
                     float boundary = dividerLocation[0] - host[0] + divider.getWidth() / 2f;
                     float distance = Math.abs(x - boundary);
-                    if (distance <= threshold && y >= top - threshold && y <= bottom + threshold
+                    if (cornerDragsSeam(boundary, top, bottom, x, y, threshold)
                         && distance < bestX) {
                         bestX = distance;
                         mXSplit = split;
@@ -3335,7 +3347,7 @@ public class TerminalPaneController {
                 } else {
                     float boundary = dividerLocation[1] - host[1] + divider.getHeight() / 2f;
                     float distance = Math.abs(y - boundary);
-                    if (distance <= threshold && x >= left - threshold && x <= right + threshold
+                    if (cornerDragsSeam(boundary, left, right, y, x, threshold)
                         && distance < bestY) {
                         bestY = distance;
                         mYSplit = split;
@@ -3389,14 +3401,14 @@ public class TerminalPaneController {
         }
 
         /**
-         * Return the leaf whose border was actually touched. A point inside a pane wins over an
-         * equally-near pane across the divider; for the divider's exact centre, the focused pane
-         * wins. This makes the first/original pane as reachable as every pane created after it.
+         * Takes hold of the pane whose corner was touched, and returns which corner it was. A
+         * point inside a pane wins over an equally-near pane across the divider; for the
+         * divider's own empty pixels, the focused pane wins. This makes the first pane of a split
+         * as reachable as every pane created after it.
          */
-        @Nullable
-        private Leaf leafAtTouchedBorder(float x, float y) {
-            if (mActiveWindow == null) return null;
-            float threshold = dp(12);
+        private int findTouchedCorner(float x, float y) {
+            mCornerTapLeaf = null;
+            if (mActiveWindow == null) return CornerZones.NONE;
             List<Leaf> leaves = new ArrayList<>();
             List<RectF> panes = new ArrayList<>();
             int activeIndex = -1;
@@ -3407,8 +3419,11 @@ public class TerminalPaneController {
                 leaves.add(leaf);
                 panes.add(rect);
             }
-            int index = touchedBorderIndex(panes, activeIndex, x, y, threshold);
-            return index < 0 ? null : leaves.get(index);
+            CornerZones.Hit hit = CornerZones.pick(panes, activeIndex, x, y,
+                CornerZones.sizePx(getResources().getDisplayMetrics().density), dp(6));
+            if (hit == null) return CornerZones.NONE;
+            mCornerTapLeaf = leaves.get(hit.index);
+            return hit.corner;
         }
 
         @Nullable
@@ -3429,14 +3444,6 @@ public class TerminalPaneController {
                 }
             }
             return best;
-        }
-
-        private boolean isNearPaneBorder(@NonNull Leaf leaf, float x, float y) {
-            RectF rect = paneRect(leaf, mHitPaneRect);
-            if (rect == null) return false;
-            float threshold = dp(12);
-            return Math.min(Math.min(Math.abs(x - rect.left), Math.abs(x - rect.right)),
-                Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom))) <= threshold;
         }
 
         /** Allocating form, for callers that keep several pane rects alive at once. */
@@ -3543,7 +3550,7 @@ public class TerminalPaneController {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (!mDraggingDivider && !mBorderPressed && mMovingLeaf == null
+            if (!mDraggingDivider && !mCornerPressed && mMovingLeaf == null
                 && !(mControlsShown && mControlLeaf != null && mControlProgress > 0f)) {
                 // Nothing of ours to draw. Resolving theme colours before this check meant an overlay
                 // that draws nothing still did two theme lookups on every pass.
@@ -3558,7 +3565,7 @@ public class TerminalPaneController {
                 // The edge being dragged glows on the focused pane instead of drawing a slab down
                 // the divider: a resize is a change to *this* pane's edge, and a 3dp accent line
                 // over the seam read as a second, thicker border appearing out of nowhere.
-                RectF focused = paneRect(mBorderTapLeaf, mDrawPaneRect);
+                RectF focused = paneRect(mCornerTapLeaf, mDrawPaneRect);
                 if (focused != null) {
                     drawEdgeGlow(canvas, focused, primary, edgeBandFor(focused, mXSplit, true));
                     drawEdgeGlow(canvas, focused, primary, edgeBandFor(focused, mYSplit, false));
@@ -3574,17 +3581,15 @@ public class TerminalPaneController {
                     canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 }
             }
-            if (mBorderPressed && mBorderTapLeaf != null && !mDraggingDivider) {
-                RectF border = paneRect(mBorderTapLeaf, mDrawPaneRect);
-                if (border != null) {
-                    // Grabbed but not yet moved: the whole border of the focused pane glows, so the
-                    // pane that will resize is named without drawing a frame around it.
-                    drawEdgeGlow(canvas, border, primary, null);
-                    mPaint.setStyle(Paint.Style.FILL);
-                    mPaint.setColor(tertiary);
-                    mHandleRect.set(mHandleX - dp(5), mHandleY - dp(2),
-                        mHandleX + dp(5), mHandleY + dp(2));
-                    canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
+            if (mCornerPressed && mCornerTapLeaf != null && !mDraggingDivider) {
+                RectF corner = paneRect(mCornerTapLeaf, mDrawPaneRect);
+                if (corner != null) {
+                    // Held but not yet moved: the corner itself is marked, which says both which
+                    // pane answered and which of its corners the finger has, where a glow around
+                    // the whole border said only the first.
+                    mBracket.draw(canvas, mPressedCorner, corner,
+                        getResources().getDisplayMetrics().density,
+                        CornerBracket.color(getContext()));
                 }
             }
             if (mMovingLeaf != null && mMoveTarget != null && mMoveTarget != mMovingLeaf) {
@@ -3779,11 +3784,12 @@ public class TerminalPaneController {
         private void resetTouchState() {
             mXSplit = null;
             mYSplit = null;
-            mBorderTapLeaf = null;
+            mCornerTapLeaf = null;
+            mPressedCorner = CornerZones.NONE;
             mMovingLeaf = null;
             mMoveTarget = null;
             mDraggingDivider = false;
-            mBorderPressed = false;
+            mCornerPressed = false;
             mTouchMoved = false;
             mPressedControlAction = ACTION_NONE;
         }
@@ -3795,17 +3801,25 @@ public class TerminalPaneController {
 
     /**
      * Chrome around one floating pane: a transparent top handle row holding a floating pill
-     * (drag = move, tap = expand into action buttons) and a bottom-right grip band (resize).
-     * The panel surface starts at the terminal's top edge, so nothing extends under the pill.
-     * Move/resize deliberately never start from the terminal content itself — long-press
-     * plus drag there is mouse-drag reporting (TerminalView.armTouchMouseDragFromLongPress) and
-     * must keep reaching the shell — so only these chrome regions ever intercept.
+     * (tap = expand into action buttons), a top-leading corner it is moved from and a
+     * bottom-trailing corner it is resized from. The panel surface starts at the terminal's top
+     * edge, so nothing extends under the pill.
+     *
+     * <p>The whole handle row used to move the float. It moves from its top-leading corner now,
+     * like every other frame on the wall, and the pill keeps only the tap that opens its actions
+     * — an affordance that is drawn has to answer, so the pill is still touchable where it is
+     * drawn. Move and resize deliberately never start from the terminal content itself —
+     * long-press plus drag there is mouse-drag reporting
+     * (TerminalView.armTouchMouseDragFromLongPress) and must keep reaching the shell — so only
+     * these chrome regions ever intercept.
      */
     private final class FloatingPaneContainer extends FrameLayout {
 
         private static final int DRAG_NONE = 0;
         private static final int DRAG_MOVE = 1;
         private static final int DRAG_RESIZE = 2;
+        /** The pill: it takes the touch so the terminal does not, but the float never moves. */
+        private static final int DRAG_PILL = 3;
 
         private static final int PILL_ACTION_NONE = 0;
         private static final int PILL_ACTION_CLOSE = 1;
@@ -3816,6 +3830,7 @@ public class TerminalPaneController {
         /** Scratch for the pill grip and its glyphs, redrawn on every frame a float is on screen. */
         private final RectF mChromeScratch = new RectF();
         private final Runnable mCollapsePill = this::collapsePill;
+        private final CornerBracket mBracket = new CornerBracket();
         private int mDragMode = DRAG_NONE;
         private float mDownRawX;
         private float mDownRawY;
@@ -3910,6 +3925,11 @@ public class TerminalPaneController {
                         }
                         return true;
                     }
+                    if (mDragMode == DRAG_PILL) {
+                        if (Math.hypot(event.getRawX() - mDownRawX, event.getRawY() - mDownRawY)
+                                > dp(6)) mDragMoved = true;
+                        return true;
+                    }
                     if (mDragMode == DRAG_NONE || mDownFrac == null) return false;
                     float hostWidth = mHostView.getWidth();
                     float hostHeight = mHostView.getHeight();
@@ -3947,7 +3967,8 @@ public class TerminalPaneController {
                         else invalidate();
                         return true;
                     }
-                    if (mDragMode == DRAG_MOVE && !mDragMoved) togglePill();
+                    if ((mDragMode == DRAG_MOVE || mDragMode == DRAG_PILL) && !mDragMoved)
+                        togglePill();
                     endDrag();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
@@ -3967,6 +3988,10 @@ public class TerminalPaneController {
             mDownRawX = event.getRawX();
             mDownRawY = event.getRawY();
             mDragMoved = false;
+            if (mDragMode == DRAG_PILL) {
+                getParent().requestDisallowInterceptTouchEvent(true);
+                return;
+            }
             // Seed from what is on screen when the float is currently clamped, so a drag that
             // starts while the host is short does not teleport back to the remembered shape. The
             // MOVE branch still writes floatFrac: a deliberate gesture IS new intent.
@@ -4048,10 +4073,20 @@ public class TerminalPaneController {
             else finishHostSurfaceResizeKeepingBottom();
         }
 
+        /**
+         * Resize from the bottom-trailing corner, move from the top-leading one, and the pill in
+         * between keeps its own tap. Everything else on the float is the terminal's.
+         */
         private int dragModeAt(float x, float y) {
-            if (x >= getWidth() - dp(FLOAT_GRIP_DP) && y >= getHeight() - dp(FLOAT_GRIP_DP))
-                return DRAG_RESIZE;
-            if (y <= dp(FLOAT_HANDLE_DP)) return DRAG_MOVE;
+            float grip = dp(FLOAT_GRIP_DP);
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            if (y >= getHeight() - grip
+                && (rtl ? x <= grip : x >= getWidth() - grip)) return DRAG_RESIZE;
+            if (y <= grip && (rtl ? x >= getWidth() - grip : x <= grip)) return DRAG_MOVE;
+            RectF pill = pillRect();
+            pill.inset(-dp(8), -dp(6));
+            pill.top = 0f;
+            if (pill.contains(x, y)) return DRAG_PILL;
             return DRAG_NONE;
         }
 
@@ -4081,6 +4116,14 @@ public class TerminalPaneController {
                 mChromePaint.setStrokeWidth(Math.max(1f, dp(1f)));
                 mChromePaint.setColor(ColorUtils.setAlphaComponent(outlineVariant, 0x66));
                 canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+            }
+            if (mDragMode == DRAG_MOVE) {
+                // The corner under the finger, marked for as long as the finger is on it.
+                mChromeScratch.set(0f, 0f, getWidth(), getHeight());
+                mBracket.draw(canvas, CornerZones.corner(true, true,
+                        getLayoutDirection() == LAYOUT_DIRECTION_RTL), mChromeScratch,
+                    getResources().getDisplayMetrics().density,
+                    CornerBracket.color(getContext()));
             }
             int chromeAlpha = active ? 200 : 90;
             mChromePaint.setStyle(Paint.Style.FILL);

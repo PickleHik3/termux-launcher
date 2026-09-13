@@ -18,6 +18,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.CornerZones;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
@@ -25,8 +26,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The tab a wall page drops from its top edge when its border is tapped: the same fill, stroke and
- * motion a terminal pane's tab has, so every place on the wall answers a border tap the same way.
+ * The tab a wall page drops from the corner that was tapped: the same fill, stroke and motion a
+ * terminal pane's tab has, so every place on the wall answers a corner tap the same way. It slides
+ * out of whichever edge that corner is on — down from a top corner, up from a bottom one — and
+ * lines up with whichever side it is on.
  *
  * <p>What the tab holds is the page's own business — the Display page offers power and its
  * settings, the Widgets page offers its settings and an edit pencil, and while a widget is being
@@ -84,8 +87,10 @@ public final class PaneControlsView extends View {
     /** The ids drawn in the error colour rather than the primary one. */
     private final List<Integer> mAlerted = new ArrayList<>();
     @Nullable private ValueAnimator mAnimator;
-    /** How far in from the trailing edge the tab starts; negative until a page says. */
-    private float mTrailingInsetPx = -1f;
+    /** How far in from the frame's own edge the tab starts; negative until a page says. */
+    private float mCornerInsetPx = -1f;
+    /** The corner it comes out of; {@link CornerZones#NONE} until a page or the default says. */
+    private int mCorner = CornerZones.NONE;
     private float mProgress;
     private boolean mShown;
     /** Sliding back in; cleared when the slide lands or a show() turns it round. */
@@ -111,14 +116,27 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * How far in from the page's trailing edge the tab sits. A page that clips to its own rounded
-     * shape has to keep the tab clear of the corner arc, or the arc cuts the tab's own corner
-     * off; a page that paints its corners instead leaves this alone.
+     * How far in from the page's own edge the tab sits. A page that clips to its rounded shape has
+     * to keep the tab clear of the corner arc, or the arc cuts the tab's own corner off; a page
+     * that paints its corners instead leaves this alone.
      */
-    public void setTrailingInsetPx(float insetPx) {
-        if (mTrailingInsetPx == insetPx) return;
-        mTrailingInsetPx = insetPx;
+    public void setCornerInsetPx(float insetPx) {
+        if (mCornerInsetPx == insetPx) return;
+        mCornerInsetPx = insetPx;
         invalidate();
+    }
+
+    /** The corner the tab is out of, or coming out of. */
+    public int corner() {
+        return mCorner == CornerZones.NONE ? defaultCorner() : mCorner;
+    }
+
+    /**
+     * Where a tab nobody aimed goes: the top-trailing corner, which is where every place on the
+     * wall has always carried its controls.
+     */
+    private int defaultCorner() {
+        return CornerZones.corner(true, false, getLayoutDirection() == LAYOUT_DIRECTION_RTL);
     }
 
     /**
@@ -155,11 +173,26 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * Slide out. A tab still retracting turns round here rather than staying put - the pencil
-     * puts the pair away and, in the same touch, editing asks for the grid's size in its place.
+     * Slide out at the top-trailing corner, for a tab nobody aimed — a mode's own chrome coming
+     * out on its own, rather than a finger asking for it somewhere in particular.
      */
     public void show() {
-        if (mShown && !mRetracting) return;
+        show(defaultCorner());
+    }
+
+    /**
+     * Slide out at one corner. A tab still retracting turns round here rather than staying put -
+     * the pencil puts the pair away and, in the same touch, editing asks for the grid's size in
+     * its place. A tab already out at another corner starts again from the new one, so it always
+     * comes out of the corner the finger asked at.
+     */
+    public void show(int corner) {
+        boolean moved = corner() != corner;
+        mCorner = corner;
+        if (mShown && !mRetracting) {
+            if (!moved) return;
+            mProgress = 0f;
+        }
         animateTo(1f, false);
         mShown = true;
         mRetracting = false;
@@ -229,10 +262,11 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * The tab at the top-trailing corner: the buttons a finger's width apart in a 32dp tab.
+     * The tab at its corner: the buttons a finger's width apart in a 32dp tab, lined up with the
+     * side that corner is on and sliding out of the edge it is on.
      *
      * <p>Each button's hit rectangle takes half the gap to either side and the full tab height, so
-     * a thumb that lands between or just below the glyphs still counts — and the outermost two
+     * a thumb that lands between or just past the glyphs still counts — and the outermost two
      * reach the tab's own edges.
      */
     private void computeGeometry() {
@@ -244,10 +278,22 @@ public final class PaneControlsView extends View {
         float pad = dp(5);
         float width = pad + pad + gap * (mActions.size() - 1);
         for (Action action : mActions) width += buttonWidth(action);
-        float right = getWidth() - Math.max(dp(3), mTrailingInsetPx);
-        float left = Math.max(dp(3), right - width);
+        float inset = Math.max(dp(3), mCornerInsetPx);
+        int corner = corner();
+        float left;
+        float right;
+        if (CornerZones.isLeft(corner)) {
+            left = inset;
+            right = Math.min(getWidth() - dp(3), left + width);
+        } else {
+            right = getWidth() - inset;
+            left = Math.max(dp(3), right - width);
+        }
         float height = dp(32);
-        float top = -height * (1f - mProgress);
+        // Out of the edge its corner is on: down from a top corner, up from a bottom one.
+        float top = CornerZones.isTop(corner)
+            ? -height * (1f - mProgress)
+            : getHeight() - height * mProgress;
         mTab.set(left, top, right, top + height);
         float edge = left + pad;
         for (int i = 0; i < mActions.size(); i++) {
@@ -257,6 +303,16 @@ public final class PaneControlsView extends View {
             mButtons.get(i).set(start, top, end, top + height);
             edge += gap;
         }
+    }
+
+    /** The frame edge the tab slides out of. */
+    private float edgeY() {
+        return CornerZones.isTop(corner()) ? 0f : getHeight();
+    }
+
+    /** The tab's own far edge, the one that carries the rounded pair. */
+    private float innerY() {
+        return CornerZones.isTop(corner()) ? mTab.bottom : mTab.top;
     }
 
     @Override
@@ -271,31 +327,35 @@ public final class PaneControlsView extends View {
             ContextCompat.getColor(context, R.color.termux_surface_panel));
         int error = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorError, Color.RED);
         float radius = dp(4);
+        float edge = edgeY();
+        float inner = innerY();
+        // Which way the tab's far edge lies from the frame edge it came out of.
+        float dir = CornerZones.isTop(corner()) ? 1f : -1f;
         int save = canvas.save();
-        // Revealed through the page's top edge, so the closing motion disappears into the frame.
-        canvas.clipRect(0f, -dp(1), getWidth(), getHeight());
+        // Revealed through the page's own edge, so the closing motion disappears into the frame.
+        canvas.clipRect(0f, -dp(1), getWidth(), getHeight() + dp(1));
 
         mPath.reset();
-        mPath.moveTo(mTab.left, 0f);
-        mPath.lineTo(mTab.right, 0f);
-        mPath.lineTo(mTab.right, mTab.bottom - radius);
-        mPath.quadTo(mTab.right, mTab.bottom, mTab.right - radius, mTab.bottom);
-        mPath.lineTo(mTab.left + radius, mTab.bottom);
-        mPath.quadTo(mTab.left, mTab.bottom, mTab.left, mTab.bottom - radius);
+        mPath.moveTo(mTab.left, edge);
+        mPath.lineTo(mTab.right, edge);
+        mPath.lineTo(mTab.right, inner - dir * radius);
+        mPath.quadTo(mTab.right, inner, mTab.right - radius, inner);
+        mPath.lineTo(mTab.left + radius, inner);
+        mPath.quadTo(mTab.left, inner, mTab.left, inner - dir * radius);
         mPath.close();
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setColor(ColorUtils.setAlphaComponent(surface, Math.round(232f * mProgress)));
         canvas.drawPath(mPath, mPaint);
 
         mPath.reset();
-        mPath.moveTo(mTab.left - dp(5), 0f);
-        mPath.lineTo(mTab.left, 0f);
-        mPath.lineTo(mTab.left, mTab.bottom - radius);
-        mPath.quadTo(mTab.left, mTab.bottom, mTab.left + radius, mTab.bottom);
-        mPath.lineTo(mTab.right - radius, mTab.bottom);
-        mPath.quadTo(mTab.right, mTab.bottom, mTab.right, mTab.bottom - radius);
-        mPath.lineTo(mTab.right, 0f);
-        mPath.lineTo(mTab.right + dp(5), 0f);
+        mPath.moveTo(mTab.left - dp(5), edge);
+        mPath.lineTo(mTab.left, edge);
+        mPath.lineTo(mTab.left, inner - dir * radius);
+        mPath.quadTo(mTab.left, inner, mTab.left + radius, inner);
+        mPath.lineTo(mTab.right - radius, inner);
+        mPath.quadTo(mTab.right, inner, mTab.right, inner - dir * radius);
+        mPath.lineTo(mTab.right, edge);
+        mPath.lineTo(mTab.right + dp(5), edge);
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setStrokeWidth(dp(1));
         mPaint.setStrokeCap(Paint.Cap.ROUND);

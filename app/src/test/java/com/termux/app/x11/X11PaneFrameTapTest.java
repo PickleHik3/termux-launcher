@@ -1,6 +1,8 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
 import android.app.Application;
@@ -8,6 +10,8 @@ import android.os.Build;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+
+import com.termux.app.chrome.CornerZones;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -17,8 +21,9 @@ import org.robolectric.annotation.Config;
 
 /**
  * Which touches the Display page reports as taps. The text-focus policy reads a tap as "the user
- * pointed at something", so a drag, a two-finger gesture and the page's own border band must not
- * count — and nothing here may take a touch away from X.
+ * pointed at something", so a drag, a two-finger gesture and the page's own corners must not
+ * count — and nothing here may take a touch away from X. The edges between the corners are the
+ * display's: a maximised window's own title bar and edge controls have to answer.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -102,11 +107,38 @@ public class X11PaneFrameTapTest {
     }
 
     @Test
-    public void theBorderBandBelongsToThePage_notToTheDisplay() {
+    public void theCornersBelongToThePage_notToTheDisplay() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         assertEquals(0, tapsFor(activity,
-            event(MotionEvent.ACTION_DOWN, 2f, 400f),
-            event(MotionEvent.ACTION_UP, 2f, 400f)));
+            event(MotionEvent.ACTION_DOWN, 2f, 2f),
+            event(MotionEvent.ACTION_UP, 2f, 2f)));
+    }
+
+    /** The old 12dp band swallowed these; a maximised X window needs every one of them. */
+    @Test
+    public void theEdgesBetweenTheCornersReachTheDisplay() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        assertEquals("the middle of the leading edge", 1, tapsFor(activity,
+            event(MotionEvent.ACTION_DOWN, 1f, HEIGHT / 2f),
+            event(MotionEvent.ACTION_UP, 1f, HEIGHT / 2f)));
+        assertEquals("the middle of the top edge", 1, tapsFor(activity,
+            event(MotionEvent.ACTION_DOWN, WIDTH / 2f, 1f),
+            event(MotionEvent.ACTION_UP, WIDTH / 2f, 1f)));
+        assertEquals("the middle of the bottom edge", 1, tapsFor(activity,
+            event(MotionEvent.ACTION_DOWN, WIDTH / 2f, HEIGHT - 1f),
+            event(MotionEvent.ACTION_UP, WIDTH / 2f, HEIGHT - 1f)));
+    }
+
+    /** The rule itself, without a frame around it. */
+    @Test
+    public void aTouchIsTheDisplaysOnlyWhenNothingElseWantsIt() {
+        assertTrue(X11PaneFrame.touchIsTheDisplays(true, false, CornerZones.NONE));
+        assertFalse("no display running",
+            X11PaneFrame.touchIsTheDisplays(false, false, CornerZones.NONE));
+        assertFalse("the page's own tab or rail",
+            X11PaneFrame.touchIsTheDisplays(true, true, CornerZones.NONE));
+        assertFalse("a corner",
+            X11PaneFrame.touchIsTheDisplays(true, false, CornerZones.BOTTOM_LEFT));
     }
 
     @Test
