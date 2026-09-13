@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxService;
+import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
@@ -156,25 +157,8 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** What the hint slab documents right now: a held or latched prefix, or null for nothing. */
     void setHardwareKeybindHintPrefix(@Nullable String prefix, boolean shift);
 
-    /** The pending-chord indicator. */
-    @NonNull KeyChordUi keyChordUi();
-
     /** The click a cancelled chord plays. */
     void playKeyChordCancelledSound();
-
-    /** The small indicator shown while a multi-stroke binding is pending or has just run. */
-    interface KeyChordUi {
-
-        void show(@NonNull String normalizedSequence);
-
-        void showMode(@NonNull String mode);
-
-        void showAction(@NonNull String stroke, @NonNull String name);
-
-        void showFailure(@NonNull String stroke, @NonNull String message);
-
-        void hide();
-    }
 
     // --- Notices and surfaces ---
 
@@ -327,7 +311,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     void clearShellAttention(int shellPid);
 
     /** The corner chip that reports a session switch, an exit, or a refused split. */
-    void showSessionSwitchIndicator(@Nullable String text);
+    /**
+     * Raises a notice the terminal is the subject of, held for as long as its kind is worth
+     * reading. Goes quiet inside {@code runWithoutNotices}, so an operation that is visible in
+     * itself does not narrate itself as well.
+     */
+    void showTerminalNotice(@Nullable String text, @NonNull AppNoticeItem.Hold hold);
 
     /** Re-reads the standing rows for shells running in the background. */
     void syncBackgroundProcessStack();

@@ -84,6 +84,8 @@ import com.canhub.cropper.CropImageContractOptions;
 import com.canhub.cropper.CropImageOptions;
 import com.canhub.cropper.CropImageView;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.notice.AppNoticeItem;
+import com.termux.app.notice.TerminalDress;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.chrome.ChromePolicy;
@@ -546,7 +548,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final long SHELL_INPUT_GRACE_MS =
         com.termux.app.statusbar.ShellActivityTracker.INPUT_ECHO_MS;
 
-    @Nullable private com.termux.app.terminal.SessionSwitchIndicatorView mSessionSwitchIndicator;
     private final com.termux.app.statusbar.BackgroundProcessModel mBackgroundProcessModel =
         new com.termux.app.statusbar.BackgroundProcessModel();
     @Nullable private com.termux.app.statusbar.BackgroundProcessStackView mBackgroundProcessStack;
@@ -1163,21 +1164,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Creates the in-app notice chip up front and joins it to the top-trailing column, so the
-     * session-switch chip and the background-process stack move down under it while a notice is up
-     * rather than being drawn over.
+     * Creates the notice pill up front, hands it the terminal it will be floating over, and joins
+     * it to the column below, so the background-process stack moves down under it while a notice is
+     * up rather than being drawn over.
      */
     private void ensureAppNoticeHost() {
         com.termux.app.notice.AppNoticeHostView host = AppNotice.hostFor(this);
         if (host == null) return;
+        // Read through, never copied: the corner knob, the opacity slider and the glass tint all
+        // move while the surface editor is open, and the pill has to be wearing what the terminal
+        // is wearing at the moment it is raised.
+        host.setTerminalDressSource(new TerminalDress.Source() {
+            @Override public float terminalCornerRadiusPx() {
+                return terminalEdgeCornerRadiusPx();
+            }
+
+            @Override public int terminalFillColor() {
+                return shouldShowTerminalOverlaySurface()
+                    ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
+            }
+        });
         host.setOccupancyListener(height -> {
             mAppNoticeOccupancyPx = height;
             applyNoticeColumnOffsets();
         });
     }
 
-    /** The top-trailing column: notice chip on top, background stack right under it. The
-     *  session-switch indicator lives in the top-leading corner now and no longer shares it. */
+    /** The column under the pill: the background stack sits directly below whatever it is showing. */
     private void applyNoticeColumnOffsets() {
         if (mBackgroundProcessStack != null)
             mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx);
@@ -2234,9 +2247,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     //
     // Tool keys draw a glyph and nothing else, so the row and the keyboard's space-bar swipes are
     // only as discoverable as the guesses people make about them. Every action the dispatcher runs
-    // names itself for a beat, in the same top-centre pill as every other notice — it used to have a
-    // chip of its own in the terminal's top-trailing corner, the one message in the app that landed
-    // somewhere else.
+    // names itself for a beat, on the same pill as every other notice.
 
     /**
      * Names a dispatched tool in the notice pill; a no-op for tools with no UI title and for
@@ -2247,7 +2258,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void showTerminalActionHint(@NonNull String toolName) {
         LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(toolName);
         if (tool == null || tool.titleRes == 0 || tool.selfEvident) return;
-        com.termux.app.notice.AppNotice.hint(this, getString(tool.titleRes));
+        com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes));
     }
 
     private int resolveAccessoryGlassBaseColor() {
@@ -11355,7 +11366,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Raise a transient notice in the top-trailing chip.
+     * Raise a transient notice on the pill.
      *
      * <p>Was a stock toast with {@code setGravity(TOP)}, which Android 11 quietly stopped honouring
      * for text toasts — the notices had been landing bottom-centre over the prompt and the keyboard
@@ -11369,16 +11380,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Fork-styled replacement for {@link #showToast(String, boolean)} used for session switch,
-     * title-change and session-exit notices: a small glass chip centered near the top of the
-     * terminal surface instead of a stock Android toast.
+     * Raises a notice the terminal is the subject of, on the same pill as everything else, held for
+     * as long as its kind is worth reading.
+     *
+     * <p>These used to have a chip of their own in the terminal's top-leading corner, with one hold
+     * for all of them: a refusal the user has to act on and a window number they have already seen
+     * both left after 1400ms. On the pill each says how long it is worth.
      */
-    void showSessionSwitchIndicator(@Nullable String text) {
+    void showTerminalNotice(@Nullable String text, @NonNull AppNoticeItem.Hold hold) {
         if (text == null || text.isEmpty() || isFinishing() || mNoticeSuppressionDepth > 0)
             return;
-        com.termux.app.terminal.SessionSwitchIndicatorView indicator = obtainSessionSwitchIndicator();
-        if (indicator != null)
-            indicator.show(text);
+        AppNotice.held(this, hold == AppNoticeItem.Hold.REFUSAL
+            ? AppNoticeItem.Kind.WARNING
+            : AppNoticeItem.Kind.INFO, text, hold);
     }
 
     /**
@@ -11386,8 +11400,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * <p>Window and pane creation are visible in themselves — a new pane appears, the window bar
      * grows a pill — so announcing them was pure noise, and worse, the new shell also tripped the
-     * session-change notice, so one keypress raised two chips at once. Only session switches and
-     * new sessions are worth a chip, and neither goes through here.
+     * session-change notice, so one keypress raised two notices at once. Only session switches and
+     * new sessions are worth a notice, and neither goes through here.
      */
     private void runWithoutNotices(@NonNull Runnable body) {
         mNoticeSuppressionDepth++;
@@ -11448,23 +11462,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.terminal.TerminalModeHintCard card) {
         float radiusPx = terminalEdgeCornerRadiusPx();
         card.setTerminalFrame(terminalFrameInsetPx(false), terminalFrameInsetPx(true), radiusPx);
-    }
-
-    @Nullable
-    private com.termux.app.terminal.SessionSwitchIndicatorView obtainSessionSwitchIndicator() {
-        FrameLayout host = findViewById(R.id.terminal_surface_host);
-        if (host == null)
-            return null;
-        if (mSessionSwitchIndicator == null) {
-            // Top-leading corner, flush with the host's top edge — the same row the AppNotice chip
-            // hangs from in the top-trailing corner, so two simultaneous notices read as one band.
-            mSessionSwitchIndicator = new com.termux.app.terminal.SessionSwitchIndicatorView(this);
-        }
-        if (mSessionSwitchIndicator.getParent() == null) {
-            host.addView(mSessionSwitchIndicator,
-                com.termux.app.terminal.SessionSwitchIndicatorView.buildHostLayoutParams(this));
-        }
-        return mSessionSwitchIndicator;
     }
 
     @Nullable
@@ -15743,7 +15740,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void splitCurrentPane(int orientation) {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         if (mTermuxService == null || mPaneController.getActiveSession() == null) {
-            showSessionSwitchIndicator(getString(R.string.msg_no_session_to_split));
+            showTerminalNotice(getString(R.string.msg_no_session_to_split),
+                AppNoticeItem.Hold.REFUSAL);
             return;
         }
         // No notice on success: the new pane is the feedback. The refusal above still speaks,
@@ -15763,7 +15761,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void splitCurrentPaneAuto() {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         if (mTermuxService == null || mPaneController.getActiveSession() == null) {
-            showSessionSwitchIndicator(getString(R.string.msg_no_session_to_split));
+            showTerminalNotice(getString(R.string.msg_no_session_to_split),
+                AppNoticeItem.Hold.REFUSAL);
             return;
         }
         runWithoutNotices(() -> mPaneController.splitAuto());
@@ -15888,8 +15887,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxService == null) return null;
         if (mTermuxService.getTermuxSessionsSize()
                 >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
-            showSessionSwitchIndicator(getString(R.string.title_max_terminals_reached) + " — "
-                + getString(R.string.msg_max_terminals_reached));
+            showTerminalNotice(getString(R.string.title_max_terminals_reached) + " — "
+                + getString(R.string.msg_max_terminals_reached), AppNoticeItem.Hold.REFUSAL);
             return null;
         }
         if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
@@ -15998,7 +15997,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View windowBar = findViewById(R.id.terminal_window_bar_host);
         if (windowBar == null || !windowBar.isShown()) {
             String direction = getString(forward ? R.string.tool_window_next : R.string.tool_window_previous);
-            showSessionSwitchIndicator(getString(R.string.msg_window_switch_position, direction, target + 1, n));
+            showTerminalNotice(getString(R.string.msg_window_switch_position, direction, target + 1, n),
+                AppNoticeItem.Hold.READOUT);
         }
     }
 
@@ -16011,7 +16011,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View windowBar = findViewById(R.id.terminal_window_bar_host);
         if (windowBar == null || !windowBar.isShown()) {
             String direction = getString(forward ? R.string.tool_window_next : R.string.tool_window_previous);
-            showSessionSwitchIndicator(getString(R.string.msg_window_switch_position, direction, target + 1, n));
+            showTerminalNotice(getString(R.string.msg_window_switch_position, direction, target + 1, n),
+                AppNoticeItem.Hold.READOUT);
         }
     }
 
@@ -16171,8 +16172,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Bridges the terminal clients back into the activity. */
     private final class ActivityTerminalHost implements com.termux.app.terminal.TerminalHost {
-
-        @Nullable private com.termux.app.terminal.TerminalKeyChordOverlay mKeyChordOverlay;
 
         @Override @Nullable public TerminalView focusedView() {
             return getTerminalView();
@@ -16354,13 +16353,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void setHardwareKeybindHintPrefix(@Nullable String prefix, boolean shift) {
             mKeybindHintPresenter.setHardwarePrefix(prefix, shift);
-        }
-
-        @Override @NonNull public KeyChordUi keyChordUi() {
-            if (mKeyChordOverlay == null)
-                mKeyChordOverlay = new com.termux.app.terminal.TerminalKeyChordOverlay(
-                    TermuxActivity.this);
-            return mKeyChordOverlay;
         }
 
         @Override public void playKeyChordCancelledSound() {
@@ -16559,8 +16551,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.clearShellAttention(shellPid);
         }
 
-        @Override public void showSessionSwitchIndicator(@Nullable String text) {
-            TermuxActivity.this.showSessionSwitchIndicator(text);
+        @Override public void showTerminalNotice(@Nullable String text,
+                @NonNull AppNoticeItem.Hold hold) {
+            TermuxActivity.this.showTerminalNotice(text, hold);
         }
 
         @Override public void syncBackgroundProcessStack() {

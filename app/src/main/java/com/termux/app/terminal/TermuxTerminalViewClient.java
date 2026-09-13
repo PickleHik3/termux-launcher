@@ -446,7 +446,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private boolean handleRegistryKeybinds(KeyEvent e, boolean swallowUnbound) {
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         if (mHost.properties().areHardwareKeyboardShortcutsDisabled()) {
-            if (resolver.cancelPendingSequence()) clearPendingKeyChordUi();
+            if (resolver.cancelPendingSequence()) clearPendingKeyChordNotice();
             return false;
         }
 
@@ -510,10 +510,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             // "waiting for key" chip would be a second, smaller copy of it. It stays only as the
             // fallback for when the legend cannot be shown at all.
             if (!mHost.isKeybindHintPopupVisible())
-                mHost.keyChordUi().show(step.pendingSequence);
+                AppNotice.sticky(mContext, mContext.getString(R.string.terminal_key_chord_pending,
+                    TerminalKeyBindingResolver.displaySequence(step.pendingSequence)));
             return true;
         }
-        clearPendingKeyChordUi();
+        clearPendingKeyChordNotice();
         // Both endings retire the legend at once: a stroke that ran, and a stroke that turned out
         // not to be bound. Only letting the prefix go keeps the lingering fade.
         mHost.onKeybindHintConsumed();
@@ -532,7 +533,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return swallowUnbound; // unbound Ctrl+Alt stroke: swallowed, as before
 
         boolean handled = runMatch(resolver, dispatcher, match);
-        if (handled) mHost.keyChordUi().showAction(match.stroke, bindingDisplayName(match));
+        // Several actions change nothing visible on their own - a rename prompt on a pane already
+        // named, a layout cycle between two similar layouts - and without the read-out the stroke
+        // and a dead key look the same.
+        if (handled)
+            AppNotice.readout(mContext, mContext.getString(R.string.terminal_key_binding_ran,
+                TerminalKeyBindingResolver.displaySequence(match.stroke),
+                bindingDisplayName(match)));
         resolver.afterMatch(match);
         refreshKeyModeUi(resolver);
         return handled;
@@ -612,8 +619,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     + " failed: " + message);
                 // Say so on screen too: a swallowed stroke that logs and shows nothing is how a
                 // broken binding passes for an unbound one.
-                mHost.keyChordUi().showFailure(match.stroke,
-                    message.isEmpty() ? action.value : message);
+                AppNotice.refusal(mContext, mContext.getString(R.string.terminal_key_binding_failed,
+                    TerminalKeyBindingResolver.displaySequence(match.stroke),
+                    message.isEmpty() ? action.value : message));
                 handled = true;
                 continue;
             }
@@ -645,12 +653,12 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     private void cancelPendingKeyChord() {
         TerminalKeyBindingResolver.getInstance().cancelPendingSequence();
-        clearPendingKeyChordUi();
+        clearPendingKeyChordNotice();
     }
 
-    private void clearPendingKeyChordUi() {
+    private void clearPendingKeyChordNotice() {
         mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
-        mHost.keyChordUi().hide();
+        AppNotice.clearSticky(mContext);
         if (mPendingSequencePrefix != null) {
             mPendingSequencePrefix = null;
             refreshKeybindHints();
@@ -674,10 +682,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
         String mode = resolver.getCurrentMode();
         if (mode.isEmpty()) {
-            mHost.keyChordUi().hide();
+            AppNotice.clearSticky(mContext);
             return;
         }
-        mHost.keyChordUi().showMode(mode);
+        AppNotice.sticky(mContext, mContext.getString(R.string.terminal_key_mode_active, mode));
         long timeout = resolver.getCurrentModeTimeoutMillis();
         if (timeout > 0) mKeyChordHandler.postDelayed(mKeyModeTimeout, timeout);
     }
@@ -781,7 +789,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onShowNotice(CharSequence text) {
-        AppNotice.show(mContext, AppNoticeItem.Kind.SUCCESS, "⧉", text, null, false);
+        AppNotice.confirm(mContext, "⧉", text);
     }
 
     @Override

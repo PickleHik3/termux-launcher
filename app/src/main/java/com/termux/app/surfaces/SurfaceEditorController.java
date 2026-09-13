@@ -3781,10 +3781,10 @@ public final class SurfaceEditorController {
         if (look() != null) look().clearAllOverrides();
         runShared(() -> SurfacePresets.apply(prefs(), preset));
         syncEditorAfterBulkWrite();
-        // The confirmation goes to the app's own notice chip, not a snackbar: a snackbar lands
+        // The confirmation goes to the app's own notice pill, not a snackbar: a snackbar lands
         // bottom-centre — on top of the dock, under the soft keyboard, into the display cutouts, in
-        // Material's palette rather than this app's, with no swipe to get rid of it. The chip sits
-        // in the top-trailing corner the rest of the app's notices use, and its tap is the Undo.
+        // Material's palette rather than this app's, with no swipe to get rid of it. The pill is
+        // where the rest of the app's notices land, and its tap is the Undo.
         AppNotice.undoable(mHost.context(),
             getString(R.string.termux_surface_preset_applied, getString(preset.nameRes)),
             getString(R.string.termux_surface_preset_undo_hint),

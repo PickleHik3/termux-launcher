@@ -1,8 +1,7 @@
 package com.termux.app.notice;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
@@ -25,24 +24,22 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
-import com.google.android.material.shape.MaterialShapeDrawable;
-import com.google.android.material.shape.RelativeCornerSize;
-import com.google.android.material.shape.ShapeAppearanceModel;
 import com.termux.R;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * The launcher's in-app notice surface: a Material pill that appears at the top of the screen,
- * centred, holds one message, and fades away.
+ * The launcher's in-app notice surface: one pill, centred at the top of the screen, holding one
+ * message and fading away.
  *
  * <p>Replaces the stock Android {@code Toast} everywhere in the app. A toast is bottom-centre, sits
  * over the shell prompt and the keyboard, cannot be themed and cannot be positioned at all from
- * Android 11 onward. The pill sits in the row just under whatever chrome the screen has
- * ({@link AppNoticePlacement} keeps it there) where nothing else competes for space.
+ * Android 11 onward. The pill lands inside the terminal's own rim where there is a terminal, and in
+ * the row just under whatever chrome the screen has where there is not ({@link AppNoticePlacement}
+ * decides which), and it wears the terminal's {@link TerminalDress} either way.
  *
- * <p>Nothing here animates by drawing. The pill is a {@link MaterialShapeDrawable} background — one
+ * <p>Nothing here animates by drawing. The pill is one {@link TerminalDress} background — a single
  * display list, recorded once — and appearing or leaving is alpha and translation on the view
  * itself, which the render thread owns. Earlier versions animated a height fraction through
  * {@code requestLayout()} (a layout pass of the whole activity, per frame), then a draw-time clip
@@ -60,21 +57,19 @@ public final class AppNoticeHostView extends LinearLayout {
     private static final long OUT_MS = 160L;
     private static final long SWAP_OUT_MS = 120L;
 
-    /** Hold times, mapped from the {@code Toast.LENGTH_*} the call sites used to pass. */
-    public static final long HOLD_SHORT_MS = 2600L;
-    public static final long HOLD_LONG_MS = 3800L;
+    /**
+     * The holds, named by {@link AppNoticeItem.Hold}. The two the {@code Toast.LENGTH_*} call sites
+     * still pass as a boolean keep their aliases, so the fifty-odd plain {@code show(…)} callers do
+     * not each have to pick a kind.
+     */
+    public static final long HOLD_SHORT_MS = AppNoticeItem.Hold.INFO.ms;
+    public static final long HOLD_LONG_MS = AppNoticeItem.Hold.REFUSAL.ms;
     /**
      * For a notice whose tap is the only way back — a bulk write with an Undo. A confirmation is
      * gone in a few seconds, which is less time than the surfaces take to finish re-rendering, let
      * alone than deciding the old look was better.
      */
-    public static final long HOLD_UNDO_MS = 9000L;
-    /**
-     * For a fleeting read-out of what a key just did. Long enough to be read after the eye has moved
-     * from the key to the pill, short enough that a run of key presses reads as a running commentary
-     * rather than a message that is in the way.
-     */
-    public static final long HOLD_HINT_MS = 1400L;
+    public static final long HOLD_UNDO_MS = AppNoticeItem.Hold.UNDO.ms;
 
     /** Beyond this the oldest queued notices are dropped — a burst must still drain. */
     private static final int MAX_QUEUED = 4;
@@ -112,6 +107,20 @@ public final class AppNoticeHostView extends LinearLayout {
     /** Recomputes where the pill sits; run in the frame before one becomes visible. */
     @Nullable private Runnable mPlacementRefresh;
 
+    /**
+     * What the terminal is wearing, while there is one on this screen. Null everywhere else, where
+     * {@link TerminalDress} reads the same numbers out of stored preferences instead.
+     */
+    @Nullable private TerminalDress.Source mDressSource;
+    @Nullable private TerminalDress mDress;
+
+    /**
+     * How far above its resting place the pill starts. The screen's own 8dp drop by default; the
+     * whole distance back through the terminal's rim when {@link AppNoticePlacement} has put the
+     * pill inside the terminal area, where a clipping frame hides everything above that edge.
+     */
+    private float mEntranceRisePx;
+
     @Nullable private Runnable mHoldRunnable;
     @Nullable private AppNoticeItem mActive;
     private int mNaturalHeightPx;
@@ -140,13 +149,6 @@ public final class AppNoticeHostView extends LinearLayout {
         mInInterpolator = new PathInterpolator(0.05f, 0.7f, 0.1f, 1f);
         mOutInterpolator = new PathInterpolator(0.4f, 0f, 1f, 1f);
 
-        int surface = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh,
-            MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-                ContextCompat.getColor(context, R.color.termux_surface_panel_high)));
-        int outline = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOutlineVariant,
-            ContextCompat.getColor(context, R.color.termux_outline_variant));
         int onSurface = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
@@ -159,17 +161,11 @@ public final class AppNoticeHostView extends LinearLayout {
             MaterialColors.getColor(context,
                 com.google.android.material.R.attr.colorSecondary, mAccentError));
 
-        // Fully rounded whatever the pill's height turns out to be — a message that wraps to two
-        // lines is still a pill and not a rounded rectangle. The drawable supplies the view's
-        // outline too, so the shadow follows the shape without anything being recomputed per frame.
-        MaterialShapeDrawable pill = new MaterialShapeDrawable(ShapeAppearanceModel.builder()
-            .setAllCornerSizes(new RelativeCornerSize(0.5f))
-            .build());
-        pill.setFillColor(ColorStateList.valueOf(surface));
-        pill.setStroke(Math.max(1f, dp(1f) * 0.9f), ColorStateList.valueOf(
-            ColorUtils.setAlphaComponent(outline, 128)));
-        setBackground(pill);
-        setElevation(dp(3f));
+        mEntranceRisePx = dp(RISE_DP);
+        // Flat, like every other surface that hangs off the terminal. The Material capsule this
+        // used to be carried a 3dp shadow, which is what made one notice read as a dialog over the
+        // shell while the hint cards beside it read as part of the window.
+        setElevation(0f);
 
         mTouchSlopPx = ViewConfiguration.get(context).getScaledTouchSlop();
         mSwipeDismissDistancePx = Math.round(dp(56f));
@@ -188,7 +184,6 @@ public final class AppNoticeHostView extends LinearLayout {
         mTitle.setIncludeFontPadding(false);
         mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
         mTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        mTitle.setTextColor(onSurface);
         mTitle.setEllipsize(TextUtils.TruncateAt.END);
         addView(mTitle, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -196,7 +191,6 @@ public final class AppNoticeHostView extends LinearLayout {
         mSub = new AppCompatTextView(context);
         mSub.setIncludeFontPadding(false);
         mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        mSub.setTextColor(ColorUtils.setAlphaComponent(onSurface, 122));
         mSub.setSingleLine(true);
         mSub.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
@@ -215,6 +209,49 @@ public final class AppNoticeHostView extends LinearLayout {
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         countParams.setMarginStart(Math.round(dp(8f)));
         addView(mCount, countParams);
+
+        applyDress();
+    }
+
+    /**
+     * Hands the pill the terminal it is floating over, so the dress follows the corner knob, the
+     * opacity slider and the glass tint live rather than being read once at construction. Set by
+     * the activity that owns a terminal; every other screen leaves it null.
+     */
+    public void setTerminalDressSource(@Nullable TerminalDress.Source source) {
+        mDressSource = source;
+        applyDress();
+    }
+
+    /**
+     * Re-reads the dress: the surfaces moved, or the pill is about to be seen again. Cut to the
+     * height the pill last turned out to be — the radius is the terminal's, capped at half the
+     * height, so a message that wraps to two lines is a rounded rectangle rather than a lozenge.
+     */
+    void applyDress() {
+        mDress = TerminalDress.resolve(getContext(), mDressSource);
+        mTitle.setTextColor(mDress.textColor);
+        mSub.setTextColor(mDress.subTextColor);
+        setBackground(mDress.background(getHeight() > 0 ? getHeight() : mNaturalHeightPx));
+    }
+
+    @Override
+    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight);
+        // The radius alone, mutated in place: this runs inside a layout pass, and handing the view
+        // a whole new background there is how "requestLayout() improperly called during layout"
+        // happens.
+        if (mDress != null && getBackground() instanceof GradientDrawable)
+            ((GradientDrawable) getBackground()).setCornerRadius(mDress.cornerRadiusPx(height));
+    }
+
+    /**
+     * How far the pill travels on its way in, from {@link AppNoticePlacement}: the whole way back
+     * through the terminal's rim where a clipping frame hides it, the screen's own small drop
+     * everywhere else.
+     */
+    void setEntranceRisePx(float risePx) {
+        mEntranceRisePx = Math.max(dp(RISE_DP), risePx);
     }
 
     public void setOccupancyListener(@Nullable OccupancyListener listener) {
@@ -239,13 +276,17 @@ public final class AppNoticeHostView extends LinearLayout {
      */
     public void enqueue(@NonNull AppNoticeItem item) {
         AppNoticeItem active = mActive;
-        if (active != null && active.fleeting) {
-            // Nothing can be queued behind a read-out, so the queue is empty here.
+        // A read-out and a sticky report both say what is true right now rather than what happened,
+        // so neither holds anything up and neither waits: the text swaps in place, the entrance is
+        // not replayed, and the pill is never seen to leave and come back for a state that changed.
+        boolean swapsInPlace = active != null
+            && (active.fleeting || active.isSticky() || item.isSticky());
+        if (swapsInPlace) {
+            // Nothing can be queued behind either of them, so the queue is empty here.
             mActive = item;
             bind(item);
-            cancelHold();
-            mHoldRunnable = this::leaveAndAdvance;
-            postDelayed(mHoldRunnable, item.durationMs);
+            settleAtRest();
+            startHold(item);
             notifyOccupancy();
             return;
         }
@@ -254,6 +295,32 @@ public final class AppNoticeHostView extends LinearLayout {
         while (mQueue.size() > MAX_QUEUED) mQueue.removeFirst();
         if (active == null) showNext();
         else updateCount();
+    }
+
+    /**
+     * Takes down the pending-chord report once the chord has resolved. A no-op when something else
+     * has already taken the pill — the report is gone either way, and dropping a real notice to
+     * tidy up after it would be worse.
+     */
+    public void clearSticky() {
+        if (mActive == null || !mActive.isSticky()) return;
+        leaveAndAdvance();
+    }
+
+    /** Puts the pill back where it rests, cancelling whatever it was in the middle of. */
+    private void settleAtRest() {
+        animate().cancel();
+        setTranslationX(0f);
+        setTranslationY(0f);
+        setAlpha(1f);
+    }
+
+    /** Starts (or deliberately does not start) the hold timer for the notice now on the pill. */
+    private void startHold(@NonNull AppNoticeItem item) {
+        cancelHold();
+        if (item.isSticky()) return;
+        mHoldRunnable = this::leaveAndAdvance;
+        postDelayed(mHoldRunnable, item.durationMs);
     }
 
     /** For tests: the notice on the pill right now. */
@@ -283,19 +350,23 @@ public final class AppNoticeHostView extends LinearLayout {
             return;
         }
         mActive = item;
+        // The surfaces may have moved since the last notice — the corner knob, the opacity slider,
+        // a theme change — and this is the frame it has to be right in.
+        applyDress();
         bind(item);
-        // Where the chrome's bottom edge is, as of this frame — not as of whenever the host was
-        // attached, which may have been before that bar was ever laid out.
+        // Where the terminal's rim and the chrome's bottom edge are, as of this frame — not as of
+        // whenever the host was attached, which may have been before either was laid out.
         if (mPlacementRefresh != null) mPlacementRefresh.run();
         // Above anything added to the content root after the pill was: an onboarding sheet, a
         // transition overlay. A notice nobody can see is worse than no notice.
-        ViewGroup parent = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
-        if (parent != null && parent.getChildAt(parent.getChildCount() - 1) != this) bringToFront();
+        View outermost = getParent() instanceof ViewGroup ? (View) getParent() : this;
+        ViewGroup parent = outermost.getParent() instanceof ViewGroup
+            ? (ViewGroup) outermost.getParent() : null;
+        if (parent != null && parent.getChildAt(parent.getChildCount() - 1) != outermost)
+            outermost.bringToFront();
         setVisibility(VISIBLE);
         appear();
-        cancelHold();
-        mHoldRunnable = this::leaveAndAdvance;
-        postDelayed(mHoldRunnable, item.durationMs);
+        startHold(item);
         notifyOccupancy();
     }
 
@@ -361,12 +432,17 @@ public final class AppNoticeHostView extends LinearLayout {
         mCount.setVisibility(VISIBLE);
     }
 
-    /** Drops in from just above its resting place. One property animation, no drawing of our own. */
+    /**
+     * Drops in from above its resting place: the screen's own small drop, or — inside the terminal
+     * area, where the frame around the pill clips at the rim — the whole way back through that
+     * edge, so the notice arrives out of the terminal window rather than on top of it. One property
+     * animation either way, no drawing of our own.
+     */
     private void appear() {
         animate().cancel();
         setTranslationX(0f);
         setAlpha(0f);
-        setTranslationY(-dp(RISE_DP));
+        setTranslationY(-mEntranceRisePx);
         animate()
             .alpha(1f)
             .translationY(0f)
@@ -376,11 +452,18 @@ public final class AppNoticeHostView extends LinearLayout {
             .start();
     }
 
-    /** Fades the current message out, then shows the next one or leaves the corner empty. */
+    /** Fades the current message out, then shows the next one or leaves the row empty. */
     private void leaveAndAdvance() {
         mHoldRunnable = null;
         if (mActive == null) return;
+        // It stops holding the pill the moment it starts leaving, not when the fade finishes.
+        // Anything raised during those 160ms then gets a clean entrance of its own instead of
+        // being swapped onto a view that is already on its way out — which is what a resolved key
+        // chord does: the report comes down and the read-out of what the chord ran follows it by a
+        // frame or two.
+        mActive = null;
         boolean more = !mQueue.isEmpty();
+        notifyOccupancy();
         animate().cancel();
         animate()
             .alpha(0f)
@@ -389,6 +472,8 @@ public final class AppNoticeHostView extends LinearLayout {
             .setInterpolator(mOutInterpolator)
             .withLayer()
             .withEndAction(() -> {
+                // Something took the pill while this one was fading; it owns the view now.
+                if (mActive != null) return;
                 if (mQueue.isEmpty()) hide();
                 else showNext();
             })
@@ -527,9 +612,7 @@ public final class AppNoticeHostView extends LinearLayout {
     /** Restart the hold after a touch that did not dismiss. */
     private void resumeHold() {
         if (mActive == null) return;
-        cancelHold();
-        mHoldRunnable = this::leaveAndAdvance;
-        postDelayed(mHoldRunnable, mActive.durationMs);
+        startHold(mActive);
     }
 
     private void cancelHold() {
@@ -579,9 +662,9 @@ public final class AppNoticeHostView extends LinearLayout {
     }
 
     /**
-     * Where the pill sits in its host: centred at the top, in the row {@link AppNoticePlacement}
-     * puts just under the screen's own chrome. Side margins so a long message on a narrow screen
-     * still reads as a pill with air around it rather than a bar.
+     * Where the pill sits inside its frame: centred at the top of whatever band
+     * {@link AppNoticePlacement} has put that frame in. Side margins so a long message on a narrow
+     * screen still reads as a pill with air around it rather than a bar.
      */
     @NonNull
     public static FrameLayout.LayoutParams buildHostLayoutParams(@NonNull Context context) {
@@ -592,6 +675,29 @@ public final class AppNoticeHostView extends LinearLayout {
         params.leftMargin = Math.round(16 * density);
         params.rightMargin = Math.round(16 * density);
         return params;
+    }
+
+    /**
+     * The band the pill lives in, and the reason there is a frame at all: inside the terminal area
+     * it clips at the terminal's own top edge, so a pill sliding in from above it is hidden until
+     * it clears that rim instead of crossing the window bar and the status bar on its way down.
+     * Off the terminal it clips nothing and simply carries the row.
+     */
+    @NonNull
+    public static FrameLayout buildFrame(@NonNull Context context) {
+        FrameLayout frame = new FrameLayout(context);
+        frame.setClipChildren(false);
+        frame.setClipToPadding(false);
+        return frame;
+    }
+
+    /** The layout params the frame is added to the window's content root with. */
+    @NonNull
+    @SuppressLint("RtlHardcoded")
+    public static FrameLayout.LayoutParams buildFrameLayoutParams() {
+        return new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP | Gravity.LEFT);
     }
 
     private float dp(float value) {

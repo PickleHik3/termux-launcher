@@ -149,7 +149,7 @@ class FakeTerminalHost implements TerminalHost {
     @Nullable PointF lastActionSheetAnchor;
     @Nullable String lastActionHint;
     final List<String> toasts = new ArrayList<>();
-    final List<String> sessionSwitchIndicators = new ArrayList<>();
+    final List<String> terminalNotices = new ArrayList<>();
 
     // Shells
     @Nullable TermuxService service;
@@ -415,20 +415,6 @@ class FakeTerminalHost implements TerminalHost {
         record("setHardwareKeybindHintPrefix");
     }
 
-    @Override @NonNull public KeyChordUi keyChordUi() {
-        return new KeyChordUi() {
-            @Override public void show(@NonNull String normalizedSequence) {}
-
-            @Override public void showMode(@NonNull String mode) {}
-
-            @Override public void showAction(@NonNull String stroke, @NonNull String name) {}
-
-            @Override public void showFailure(@NonNull String stroke, @NonNull String message) {}
-
-            @Override public void hide() {}
-        };
-    }
-
     @Override public void playKeyChordCancelledSound() {
         record("playKeyChordCancelledSound");
     }
@@ -610,9 +596,10 @@ class FakeTerminalHost implements TerminalHost {
         clearedShellAttentionPids.add(shellPid);
     }
 
-    @Override public void showSessionSwitchIndicator(@Nullable String text) {
-        record("showSessionSwitchIndicator");
-        sessionSwitchIndicators.add(text);
+    @Override public void showTerminalNotice(@Nullable String text,
+            @NonNull com.termux.app.notice.AppNoticeItem.Hold hold) {
+        record("showTerminalNotice");
+        terminalNotices.add(text);
     }
 
     @Override public void syncBackgroundProcessStack() {
