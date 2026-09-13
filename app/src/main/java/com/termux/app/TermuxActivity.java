@@ -15229,7 +15229,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.statusbar.StatusCardHost.StyleProvider statusCardStyleProvider() {
         return new com.termux.app.statusbar.StatusCardHost.StyleProvider() {
             @Override
-            public Drawable cardBackground(boolean panel) {
+            public Drawable cardBackground() {
                 int surface = getTermuxThemeColor(
                     com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
                     R.color.termux_surface_panel_high);
@@ -15238,22 +15238,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     R.color.termux_outline_variant);
                 GradientDrawable materialSurface = new GradientDrawable();
                 materialSurface.setColor(withAlphaComponent(surface, 248));
-                materialSurface.setCornerRadius(panel && isRoundedDockStyle()
-                    ? resolveStatusBarCapsuleCornerRadiusPx(Integer.MAX_VALUE) : dpToPx(16));
+                materialSurface.setCornerRadius(dpToPx(16));
                 materialSurface.setStroke(Math.max(1, Math.round(dpToPx(1))),
                     withAlphaComponent(outline, 118));
                 return materialSurface;
             }
 
             @Override
-            public float cornerRadiusPx(boolean panel) {
-                return panel && isRoundedDockStyle()
-                    ? resolveStatusBarCapsuleCornerRadiusPx(Integer.MAX_VALUE) : dpToPx(16);
+            public float cornerRadiusPx() {
+                return dpToPx(16);
             }
 
             @Override
-            public float contentInsetPx(boolean panel) {
-                return dpToPx(panel ? 8 : 12);
+            public float contentInsetPx() {
+                return dpToPx(12);
             }
         };
     }

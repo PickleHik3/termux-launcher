@@ -428,6 +428,8 @@ public final class TerminalSheetController
     private int mLeadingCards;
     private final Rect mKeyboardBounds = new Rect();
     private final Rect mTerminalBounds = new Rect();
+    /** The terminal area in plane coordinates, recomputed rather than reallocated per pass. */
+    private final Rect mAreaBounds = new Rect();
     private final int[] mPlaneOnScreen = new int[2];
 
     public TerminalSheetController(@NonNull Host host) {
@@ -681,9 +683,8 @@ public final class TerminalSheetController
     private void placeLeadingCards() {
         for (Sheet sheet : mStack) {
             if (!sheet.leading) continue;
-            TerminalDrawerMetrics.Bounds bounds = leadingBounds();
-            applyLeadingParams(sheet.card, bounds);
-            if (sheet.scrim != null) applyScrimParams(sheet.scrim, bounds);
+            applyLeadingParams(sheet.card, leadingBounds());
+            if (sheet.scrim != null) applyScrimParams(sheet.scrim);
         }
     }
 
@@ -735,10 +736,9 @@ public final class TerminalSheetController
     /** The drawer's own rectangle: the leading slice of that area. */
     @NonNull
     private TerminalDrawerMetrics.Bounds leadingBounds() {
-        Rect area = new Rect();
-        terminalAreaInPlane(area);
-        return TerminalDrawerMetrics.place(area.left, area.top, area.width(), area.height(),
-            isRtl(), mDensity);
+        terminalAreaInPlane(mAreaBounds);
+        return TerminalDrawerMetrics.place(mAreaBounds.left, mAreaBounds.top, mAreaBounds.width(),
+            mAreaBounds.height(), isRtl(), mDensity);
     }
 
     /** How much of the plane's bottom the in-app keyboard is taking. */
@@ -955,7 +955,7 @@ public final class TerminalSheetController
             android.graphics.Color.BLACK, TerminalDrawerMetrics.SCRIM_ALPHA));
         scrim.setClickable(true);
         scrim.setOnClickListener(view -> dismiss());
-        applyScrimParams(scrim, leadingBounds());
+        applyScrimParams(scrim);
         return scrim;
     }
 
@@ -963,24 +963,40 @@ public final class TerminalSheetController
      * The whole area, drawer included: the card is opaque and drawn over it, and cutting the scrim
      * to the strip beside the drawer would leave a seam travelling with the card.
      */
-    private void applyScrimParams(@NonNull View scrim,
-                                  @NonNull TerminalDrawerMetrics.Bounds bounds) {
-        Rect area = new Rect();
-        terminalAreaInPlane(area);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(area.width(), area.height(),
-            Gravity.TOP | Gravity.START);
-        params.leftMargin = area.left;
-        params.topMargin = area.top;
-        scrim.setLayoutParams(params);
+    private void applyScrimParams(@NonNull View scrim) {
+        terminalAreaInPlane(mAreaBounds);
+        setFrameBounds(scrim, mAreaBounds.left, mAreaBounds.top,
+            mAreaBounds.width(), mAreaBounds.height());
     }
 
     private void applyLeadingParams(@NonNull View card,
                                     @NonNull TerminalDrawerMetrics.Bounds bounds) {
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(bounds.width, bounds.height,
-            Gravity.TOP | Gravity.START);
-        params.leftMargin = bounds.leftMargin;
-        params.topMargin = bounds.topMargin;
-        card.setLayoutParams(params);
+        setFrameBounds(card, bounds.leftMargin, bounds.topMargin, bounds.width, bounds.height);
+    }
+
+    /**
+     * Positions a plane child absolutely, and only when something actually moved.
+     *
+     * <p>The check is not an optimisation. Every drawer is re-placed from the plane's own layout
+     * listener, and {@code setLayoutParams} asks for another layout — so writing the same numbers
+     * back unconditionally would lay the plane out again on every frame for as long as the drawer
+     * was open.
+     */
+    private static void setFrameBounds(@NonNull View view, int left, int top, int width,
+                                       int height) {
+        ViewGroup.LayoutParams existing = view.getLayoutParams();
+        FrameLayout.LayoutParams params = existing instanceof FrameLayout.LayoutParams
+            ? (FrameLayout.LayoutParams) existing
+            : new FrameLayout.LayoutParams(width, height);
+        if (existing == params && params.leftMargin == left && params.topMargin == top
+            && params.width == width && params.height == height
+            && params.gravity == (Gravity.TOP | Gravity.START)) return;
+        params.width = width;
+        params.height = height;
+        params.leftMargin = left;
+        params.topMargin = top;
+        params.gravity = Gravity.TOP | Gravity.START;
+        view.setLayoutParams(params);
     }
 
     private void applyFootDress(@NonNull View card) {
