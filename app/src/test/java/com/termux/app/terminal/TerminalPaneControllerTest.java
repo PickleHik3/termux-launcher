@@ -11,6 +11,7 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.chrome.CornerZones;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
@@ -30,6 +31,7 @@ import org.robolectric.util.ReflectionHelpers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -88,20 +90,50 @@ public class TerminalPaneControllerTest {
             TerminalPaneController.snapFirstWeightToCell(2f, 1000f, 1.9f, 100f), .001f);
     }
 
+    /**
+     * A pane is taken hold of by its corners now, so the pane a touch resolves to follows the
+     * corner it landed in — and the middle of a shared seam, which used to arm a resize down its
+     * whole length, belongs to the terminals on both sides of it.
+     */
     @Test
-    public void touchedBorderIndex_preservesOriginalPaneOwnershipAtSharedDivider() {
+    public void paneOwnership_followsTheCornerAndLeavesTheSeamAlone() {
         java.util.List<RectF> panes = Arrays.asList(
             new RectF(0f, 0f, 499f, 500f),
             new RectF(501f, 0f, 1000f, 500f));
 
-        assertEquals(0, TerminalPaneController.touchedBorderIndex(
-            panes, 1, 498f, 250f, 12f));
-        assertEquals(1, TerminalPaneController.touchedBorderIndex(
-            panes, 0, 502f, 250f, 12f));
-        assertEquals(0, TerminalPaneController.touchedBorderIndex(
-            panes, 0, 500f, 250f, 12f));
-        assertEquals(1, TerminalPaneController.touchedBorderIndex(
-            panes, 1, 500f, 250f, 12f));
+        CornerZones.Hit first = CornerZones.pick(panes, 1, 495f, 5f, 32f, 6f);
+        assertEquals("the pane the finger is on", 0, first.index);
+        assertEquals(CornerZones.TOP_RIGHT, first.corner);
+
+        CornerZones.Hit second = CornerZones.pick(panes, 0, 505f, 495f, 32f, 6f);
+        assertEquals(1, second.index);
+        assertEquals(CornerZones.BOTTOM_LEFT, second.corner);
+
+        // The divider's own empty pixels at a corner go to the focused pane.
+        assertEquals(0, CornerZones.pick(panes, 0, 500f, 5f, 32f, 6f).index);
+        assertEquals(1, CornerZones.pick(panes, 1, 500f, 5f, 32f, 6f).index);
+
+        assertNull("the middle of the seam is the terminals'",
+            CornerZones.pick(panes, 0, 500f, 250f, 32f, 6f));
+        assertNull("and so is the middle of a pane's edge",
+            CornerZones.pick(panes, 0, 250f, 499f, 32f, 6f));
+    }
+
+    /**
+     * Which seams a pane corner drags: the one it is the end of, both where two cross, and none
+     * belonging to a split it is not part of.
+     */
+    @Test
+    public void cornerDragsSeam_takesTheSeamsItsOwnCornerSitsOn() {
+        // A vertical seam at x = 500, running the full height of a split from y = 0 to y = 500.
+        assertTrue("the corner is the seam's end",
+            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 499f, 0f, 14f));
+        assertTrue("and its other end",
+            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 501f, 500f, 14f));
+        assertFalse("the pane's far corner is not on it",
+            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 0f, 0f, 14f));
+        assertFalse("a corner in another branch only lines up by accident",
+            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 499f, 900f, 14f));
     }
 
     @Test
