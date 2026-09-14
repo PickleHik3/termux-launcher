@@ -293,6 +293,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private static final float CLOSE_TARGET_DP = 24f;
 
     private final SelectionStrip mTabs;
+
+    /** Live chip strip, excluding the separate create button. */
+    public View chipStripView() { return mTabs; }
+
     @Nullable private OnWindowSelectedListener mSelectionListener;
     @Nullable private OnChipTappedListener mChipTapListener;
     @Nullable private OnCreateWindowListener mCreateListener;

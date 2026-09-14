@@ -126,6 +126,19 @@ public final class DisplayScaleRailView extends View {
         invalidate();
     }
 
+    /** The painted rail, rather than the full-page transparent interaction view. */
+    public android.graphics.Rect helpBounds() {
+        if (!mShown) return null;
+        float slab = dp(THUMB_RADIUS_DP + 6);
+        android.graphics.Rect out = new android.graphics.Rect();
+        new RectF(dp(TRACK_X_DP) - slab, trackTop() - slab,
+            dp(TRACK_X_DP) + slab, trackBottom() + slab).roundOut(out);
+        android.graphics.Rect label = new android.graphics.Rect();
+        mLabel.roundOut(label);
+        out.union(label);
+        return out;
+    }
+
     private int stepAtY(float y) {
         float top = trackTop();
         float length = Math.max(1f, trackBottom() - top);

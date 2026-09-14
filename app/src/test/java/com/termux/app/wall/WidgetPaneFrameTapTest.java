@@ -49,10 +49,10 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps. */
     private static final float CORNER_DP = CornerZones.SIZE_DP;
-    /** The tab: two 30dp buttons 8dp apart, 5dp of padding, 3dp in from the trailing edge. */
-    private static final float TAB_WIDTH_DP = 78f;
+    /** The tab: three 30dp buttons 8dp apart, 5dp of padding, 3dp in from the trailing edge. */
+    private static final float TAB_WIDTH_DP = 116f;
     private static final float TAB_INSET_DP = 3f;
-    /** Where the pair is split: the middle of the gap between the two buttons. */
+    /** The middle of the gap between Settings and Edit. */
     private static final float TAB_SPLIT_DP = 39f;
 
     /** What the page asked the launcher for, in order, over a 4 x 5 grid. */
@@ -62,6 +62,7 @@ public class WidgetPaneFrameTapTest {
         int rows = 5;
         @Override public void openWidgetGridSettings() { log.add("settings"); }
         @Override public void editWidgets() { log.add("edit"); }
+        @Override public void showHelpOverlay() { log.add("help"); }
         @Override public int widgetGridColumns() { return columns; }
         @Override public int widgetGridRows() { return rows; }
         @Override public void setWidgetGrid(int newColumns, int newRows) {
@@ -85,13 +86,13 @@ public class WidgetPaneFrameTapTest {
         return activity.getResources().getDisplayMetrics().density;
     }
 
-    /** The left half of the tab: the settings cog. */
+    /** The first button: the settings cog. */
     private static float cogX(Activity activity) {
         float density = density(activity);
         return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + (TAB_SPLIT_DP - 8f) * density;
     }
 
-    /** The right half of the tab: the edit pencil. */
+    /** The second button: the edit pencil. */
     private static float pencilX(Activity activity) {
         float density = density(activity);
         return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + (TAB_SPLIT_DP + 8f) * density;
@@ -260,6 +261,31 @@ public class WidgetPaneFrameTapTest {
         tap(page, pencilX(activity), tabCentreY(activity));
 
         assertEquals(Arrays.asList("settings", "edit"), calls.log);
+    }
+
+    @Test
+    public void helpStaysOnBothTheRestingAndEditingTabs() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        Calls calls = new Calls();
+        page.setHost(calls);
+        tapCorner(page);
+        tapHelp(page, activity);
+        assertEquals(Collections.singletonList("help"), calls.log);
+        assertFalse(page.isControlsTabShown());
+
+        page.applyWidgetEditing(true);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
+        tapHelp(page, activity);
+        assertEquals(Arrays.asList("help", "help"), calls.log);
+        assertFalse(page.isControlsTabShown());
+    }
+
+    private static void tapHelp(WidgetPaneFrame page, Activity activity) {
+        // Help is the trailing 30dp button on either tab, measured from its actual bounds.
+        RectF bounds = new RectF();
+        page.controlsTab().tabBounds(bounds);
+        tap(page, bounds.right - 20f * density(activity), bounds.centerY());
     }
 
     /**

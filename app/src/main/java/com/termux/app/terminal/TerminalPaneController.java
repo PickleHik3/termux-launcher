@@ -178,6 +178,7 @@ public class TerminalPaneController {
         default void onPanesRendered() {}
         /** A pane's corner controls — move, maximize, close — are now on screen. */
         default void onPaneControlsShown() {}
+        default void showHelpOverlay() {}
         /** Those controls are going away again, however the user asked for that. */
         default void onPaneControlsDismissed() {}
         /** The lone pane's corner asked for the surface editor. */
@@ -789,6 +790,11 @@ public class TerminalPaneController {
 
     public boolean isTouchMouseMode() {
         return mTouchMouseMode;
+    }
+
+    /** Help also dismisses the maximised pane's normally persistent tab. */
+    public void dismissControlsForHelp() {
+        mInteractionOverlay.dismissControlsForHelp();
     }
 
     @Nullable public TerminalView getActivePaneView() {
@@ -2830,6 +2836,7 @@ public class TerminalPaneController {
             ll.setClipChildren(false);
             ll.setClipToPadding(false);
             View divider = new View(mHostView.getContext());
+            divider.setTag(com.termux.R.id.help_split_divider, Boolean.TRUE);
             divider.setBackground(ContextCompat.getDrawable(mHostView.getContext(),
                 R.drawable.pane_divider));
             ll.addView(reconcile(null, split.a), new LinearLayout.LayoutParams(
@@ -3130,8 +3137,9 @@ public class TerminalPaneController {
         private static final int ACTION_MOVE_PANE = 0;
         private static final int ACTION_MAXIMIZE = 1;
         private static final int ACTION_CLOSE = 2;
-        /** The lone pane's only control: open the surface editor on this page. */
+        /** Open the surface editor on this page. */
         private static final int ACTION_SURFACE_EDITOR = 3;
+        private static final int ACTION_HELP = 4;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -3148,9 +3156,9 @@ public class TerminalPaneController {
         private final RectF mHitPaneRect = new RectF();
         private final Path mPath = new Path();
         private final RectF mControlRect = new RectF();
-        private final RectF[] mControlButtons = {new RectF(), new RectF(), new RectF()};
+        private final RectF[] mControlButtons = {new RectF(), new RectF(), new RectF(), new RectF()};
         /** Scratch for the button widths handed to {@link CornerTabGeometry}; never allocated per frame. */
-        private final float[] mControlWidths = new float[3];
+        private final float[] mControlWidths = new float[4];
 
         @Nullable private Split mXSplit;
         @Nullable private Split mYSplit;
@@ -3359,7 +3367,10 @@ public class TerminalPaneController {
         }
 
         private void performControlAction(int action, @NonNull Leaf leaf) {
-            if (action == ACTION_MAXIMIZE) {
+            if (action == ACTION_HELP) {
+                dismissControlsForHelp();
+                mHost.showHelpOverlay();
+            } else if (action == ACTION_MAXIMIZE) {
                 mMaximizedLeaf = mMaximizedLeaf == null ? leaf : null;
                 mActiveWindow.active = leaf;
                 render();
@@ -3605,6 +3616,16 @@ public class TerminalPaneController {
             mHost.onPaneControlsShown();
         }
 
+        private void dismissControlsForHelp() {
+            if (mControlAnimator != null) mControlAnimator.cancel();
+            if (mControlsShown) mHost.onPaneControlsDismissed();
+            mControlsShown = false;
+            mControlProgress = 0f;
+            mControlLeaf = null;
+            mControlCorner = CornerZones.NONE;
+            invalidate();
+        }
+
         private void dismissControls() {
             if (mMaximizedLeaf != null) return;
             if (mControlsShown) mHost.onPaneControlsDismissed();
@@ -3650,14 +3671,15 @@ public class TerminalPaneController {
                 mMaximizedLeaf != null);
         }
 
-        /** How many buttons the tab holds: one for a lone pane, two maximized, three in a split. */
+        /** The pane actions plus Help: two alone, three maximised, four in a split. */
         private int controlCount() {
-            if (isLonePane()) return 1;
-            return mMaximizedLeaf == null ? 3 : 2;
+            if (isLonePane()) return 2;
+            return mMaximizedLeaf == null ? 4 : 3;
         }
 
         /** Which action sits in a slot of the tab, leading to trailing. */
         private int controlActionInSlot(int slot) {
+            if (slot == controlCount() - 1) return ACTION_HELP;
             if (isLonePane()) return ACTION_SURFACE_EDITOR;
             return mMaximizedLeaf == null ? slot : slot + 1;
         }
@@ -3970,6 +3992,12 @@ public class TerminalPaneController {
                         canvas.drawLine(cx - dp(5), cy + dp(2), cx - dp(2), cy + dp(5), mPaint);
                         canvas.drawLine(cx + dp(5), cy - dp(2), cx + dp(2), cy - dp(5), mPaint);
                     }
+                } else if (action == ACTION_HELP) {
+                    mPaint.setStyle(Paint.Style.FILL);
+                    mPaint.setTextSize(dp(16));
+                    mPaint.setTextAlign(Paint.Align.CENTER);
+                    canvas.drawText(getContext().getString(com.termux.R.string.help_button), cx,
+                        cy - (mPaint.ascent() + mPaint.descent()) / 2, mPaint);
                 } else if (action == ACTION_SURFACE_EDITOR) {
                     // Three sliders, knobs at different stops: the editor's own rows in miniature.
                     drawSliderGlyph(canvas, cx, cy);

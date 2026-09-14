@@ -382,6 +382,21 @@ public final class StatusBarLensView extends View {
         }
     }
 
+    /** Visible part of a peeking place icon, in this view's coordinates. */
+    @Nullable
+    public android.graphics.Rect helpAnchorBounds() {
+        for (PaneWallPage page : mPages) {
+            if (page == mCurrent) continue;
+            RectF hit = new RectF(mHitRects[page.ordinal()]);
+            if (hit.intersect(0, 0, getWidth(), getHeight())) {
+                android.graphics.Rect out = new android.graphics.Rect();
+                hit.roundOut(out);
+                return out;
+            }
+        }
+        return null;
+    }
+
     /** Whether a touch lands on a peeking icon that is present enough to be a target. */
     public boolean isIconAt(float x, float y) {
         return iconAt(x, y) != null;
