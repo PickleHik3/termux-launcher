@@ -1,10 +1,10 @@
 package com.termux.terminal;
 
 import android.graphics.Bitmap;
-import android.util.Base64;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Objects;
@@ -3317,14 +3317,26 @@ public final class TerminalEmulator {
             8:
                 setCurrentHyperlink(textParameter);
                 break;
-            case // Manipulate Selection Data. Skip the optional first selection parameter(s).
+            case // Manipulate Selection Data: "$selection;$base64" writes, "$selection;?" queries.
             52:
-                int startIndex = textParameter.indexOf(";") + 1;
-                try {
-                    String clipboardText = new String(Base64.decode(textParameter.substring(startIndex), Base64.DEFAULT), StandardCharsets.UTF_8);
-                    mSession.onCopyTextToClipboard(clipboardText);
-                } catch (Exception e) {
-                    Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "'");
+                int selectionEnd = textParameter.indexOf(";");
+                String clipboardSelection = selectionEnd < 0 ? "" : textParameter.substring(0, selectionEnd);
+                if (clipboardSelection.isEmpty()) clipboardSelection = "c";
+                String clipboardPayload = selectionEnd < 0 ? textParameter : textParameter.substring(selectionEnd + 1);
+                if ("?".equals(clipboardPayload)) {
+                    // A waiting program must not be left hanging: answer empty rather than nothing
+                    // when there is no client, the setting is off, or the clipboard is unset.
+                    String clipboardText = mSession.onReadTextFromClipboard();
+                    String encoded = (clipboardText == null || clipboardText.isEmpty()) ? "" :
+                        Base64.getEncoder().encodeToString(clipboardText.getBytes(StandardCharsets.UTF_8));
+                    mSession.write("\033]52;" + clipboardSelection + ";" + encoded + bellOrStringTerminator);
+                } else {
+                    try {
+                        String clipboardText = new String(Base64.getMimeDecoder().decode(clipboardPayload), StandardCharsets.UTF_8);
+                        mSession.onCopyTextToClipboard(clipboardText);
+                    } catch (Exception e) {
+                        Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "'");
+                    }
                 }
                 break;
             case // Shell integration marks: "133;A" prompt, "133;B" command, "133;C" output, "133;D[;code]" done.

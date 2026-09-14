@@ -19,6 +19,14 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/settings_clipboard_header">
+        <SwitchPreferenceCompat
+            app:key="terminal_osc52_clipboard_read_enabled"
+            app:title="@string/settings_osc52_clipboard_read_title"
+            app:summary="@string/settings_osc52_clipboard_read_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_sessions_panes_header">
         <SwitchPreferenceCompat
             app:key="split_pane_controls"

@@ -23,10 +23,36 @@ import juloo.keyboard2.KeyValue;
  *
  * <p>The extra-keys row keeps working because it emits the same values, so Esc, Tab, Ctrl and the
  * arrows reach X without a second mapping table.
+ *
+ * <p>Everything leaves through a {@link Sink}, so the mapping — and the chords the edit keys
+ * become — can be read back in a test without a native {@link LorieView} behind it.
  */
 public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValueInterceptor {
 
-    @NonNull private final Supplier display;
+    @NonNull private final Sinks sinks;
+
+    /** Everything the bridge does to the display. */
+    public interface Sink {
+        /** Press ({@code down}) or release one Android keycode. */
+        void key(int keyCode, boolean down);
+
+        /** Type text, whatever the keyboard can produce, emoji included. */
+        void text(@NonNull String text);
+
+        /** Whether there is a display server on the other end. */
+        boolean connected();
+
+        /** Offer the newest Android clip to X, so a paste chord pastes what was last copied. */
+        void refreshClipboard();
+
+        /** Android's clipboard text, for the paste that types instead of chording. */
+        @Nullable String clipboardText();
+    }
+
+    /** Where the live sink comes from; it changes as the page attaches and detaches. */
+    public interface Sinks {
+        @Nullable Sink sink();
+    }
 
     /** Where the live view comes from; it changes as the page attaches and detaches. */
     public interface Supplier {
@@ -34,14 +60,27 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
     }
 
     public X11KeyboardBridge(@NonNull Supplier display) {
-        this.display = display;
+        this.sinks = () -> {
+            LorieView view = display.displayView();
+            return view == null ? null : new ViewSink(view);
+        };
+    }
+
+    /** For the test that reads the chords back; production goes through the view. */
+    @NonNull
+    static X11KeyboardBridge over(@NonNull Sinks sinks) {
+        return new X11KeyboardBridge(sinks);
+    }
+
+    private X11KeyboardBridge(@NonNull Sinks sinks) {
+        this.sinks = sinks;
     }
 
     @Override
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
         if (isLauncherSide(value)) return false;
-        LorieView view = display.displayView();
+        Sink view = sinks.sink();
         if (view == null || !view.connected()) return false;
         switch (value.getKind()) {
             case Event:
@@ -60,18 +99,7 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                 sendText(view, value.getString());
                 return true;
             case Editing:
-                switch (value.getEditing()) {
-                    case SPACE_BAR:
-                        return sendModified(view, KeyEvent.KEYCODE_SPACE, ctrl, alt, shift);
-                    case BACKSPACE:
-                        return sendModified(view, KeyEvent.KEYCODE_DEL, ctrl, alt, shift);
-                    case DELETE_WORD:
-                        return sendModified(view, KeyEvent.KEYCODE_DEL, true, alt, shift);
-                    case FORWARD_DELETE_WORD:
-                        return sendModified(view, KeyEvent.KEYCODE_FORWARD_DEL, true, alt, shift);
-                    default:
-                        return true;
-                }
+                return sendEditing(view, value.getEditing(), ctrl, alt, shift);
             case Keyevent:
                 return sendModified(view, value.getKeyevent(), ctrl, alt, shift);
             case Modifier:
@@ -100,9 +128,52 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
         }
     }
 
-    private void sendText(@NonNull LorieView view, @Nullable String text) {
+    /**
+     * The edit keys are the chords a desktop app expects: copy Ctrl+C, cut Ctrl+X, paste Ctrl+V,
+     * select all Ctrl+A, undo Ctrl+Z, redo Ctrl+Y. A held Shift or Alt rides along, so Shift+copy
+     * is Ctrl+Shift+C — the copy chord of every X terminal emulator.
+     *
+     * <p>Paste as plain text types the clipboard instead, which is the way into an app where
+     * Ctrl+V means something else of its own.
+     */
+    private boolean sendEditing(@NonNull Sink view, @NonNull KeyValue.Editing editing,
+                                boolean ctrl, boolean alt, boolean shift) {
+        switch (editing) {
+            case SPACE_BAR:
+                return sendModified(view, KeyEvent.KEYCODE_SPACE, ctrl, alt, shift);
+            case BACKSPACE:
+                return sendModified(view, KeyEvent.KEYCODE_DEL, ctrl, alt, shift);
+            case DELETE_WORD:
+                return sendModified(view, KeyEvent.KEYCODE_DEL, true, alt, shift);
+            case FORWARD_DELETE_WORD:
+                return sendModified(view, KeyEvent.KEYCODE_FORWARD_DEL, true, alt, shift);
+            case COPY:
+                return sendModified(view, KeyEvent.KEYCODE_C, true, alt, shift);
+            case CUT:
+                return sendModified(view, KeyEvent.KEYCODE_X, true, alt, shift);
+            case PASTE:
+                // X pastes its own selection, so it has to be told what Android holds now — a
+                // copy made in another app is otherwise a paste of whatever X had last.
+                view.refreshClipboard();
+                return sendModified(view, KeyEvent.KEYCODE_V, true, alt, shift);
+            case SELECT_ALL:
+                return sendModified(view, KeyEvent.KEYCODE_A, true, alt, shift);
+            case UNDO:
+                return sendModified(view, KeyEvent.KEYCODE_Z, true, alt, shift);
+            case REDO:
+                return sendModified(view, KeyEvent.KEYCODE_Y, true, alt, shift);
+            case PASTE_PLAIN:
+                sendText(view, view.clipboardText());
+                return true;
+            default:
+                // Selection actions and Android's own context-menu entries mean nothing to X.
+                return true;
+        }
+    }
+
+    private void sendText(@NonNull Sink view, @Nullable String text) {
         if (text == null || text.isEmpty()) return;
-        view.sendTextEvent(text.getBytes(StandardCharsets.UTF_8));
+        view.text(text);
     }
 
     /**
@@ -110,18 +181,49 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
      * pressed and released around it so the server sees a complete chord and is never left with
      * a stuck Ctrl when the page goes away mid-stroke.
      */
-    private boolean sendModified(@NonNull LorieView view, int keyCode, boolean ctrl, boolean alt,
+    private boolean sendModified(@NonNull Sink view, int keyCode, boolean ctrl, boolean alt,
                                  boolean shift) {
         if (keyCode == KeyEvent.KEYCODE_UNKNOWN) return true;
-        if (ctrl) view.sendKeyEvent(0, KeyEvent.KEYCODE_CTRL_LEFT, true);
-        if (alt) view.sendKeyEvent(0, KeyEvent.KEYCODE_ALT_LEFT, true);
-        if (shift) view.sendKeyEvent(0, KeyEvent.KEYCODE_SHIFT_LEFT, true);
-        view.sendKeyEvent(0, keyCode, true);
-        view.sendKeyEvent(0, keyCode, false);
-        if (shift) view.sendKeyEvent(0, KeyEvent.KEYCODE_SHIFT_LEFT, false);
-        if (alt) view.sendKeyEvent(0, KeyEvent.KEYCODE_ALT_LEFT, false);
-        if (ctrl) view.sendKeyEvent(0, KeyEvent.KEYCODE_CTRL_LEFT, false);
+        if (ctrl) view.key(KeyEvent.KEYCODE_CTRL_LEFT, true);
+        if (alt) view.key(KeyEvent.KEYCODE_ALT_LEFT, true);
+        if (shift) view.key(KeyEvent.KEYCODE_SHIFT_LEFT, true);
+        view.key(keyCode, true);
+        view.key(keyCode, false);
+        if (shift) view.key(KeyEvent.KEYCODE_SHIFT_LEFT, false);
+        if (alt) view.key(KeyEvent.KEYCODE_ALT_LEFT, false);
+        if (ctrl) view.key(KeyEvent.KEYCODE_CTRL_LEFT, false);
         return true;
+    }
+
+    /** The sink the launcher runs on: the Display page's own view. */
+    static final class ViewSink implements Sink {
+
+        @NonNull private final LorieView view;
+
+        ViewSink(@NonNull LorieView view) {
+            this.view = view;
+        }
+
+        @Override public void key(int keyCode, boolean down) {
+            view.sendKeyEvent(0, keyCode, down);
+        }
+
+        @Override public void text(@NonNull String text) {
+            view.sendTextEvent(text.getBytes(StandardCharsets.UTF_8));
+        }
+
+        @Override public boolean connected() {
+            return view.connected();
+        }
+
+        @Override public void refreshClipboard() {
+            view.checkForClipboardChange();
+        }
+
+        @Nullable @Override public String clipboardText() {
+            return com.termux.shared.interact.ShareUtils.getTextStringFromClipboardIfSet(
+                view.getContext(), true);
+        }
     }
 
     /** The keycode a character sits on, for the chords that need one. */

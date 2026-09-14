@@ -22,6 +22,8 @@ import org.robolectric.annotation.ConscryptMode;
 import java.util.ArrayList;
 import java.util.List;
 
+import juloo.keyboard2.KeyValue;
+
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
@@ -32,6 +34,35 @@ public class TerminalFindControllerTest {
         assertFalse(controller.isActive());
         assertFalse(controller.handleCodePoint('a', false));
         assertFalse(controller.handleKeyDown(KeyEvent.KEYCODE_A, down(KeyEvent.KEYCODE_A)));
+    }
+
+    @Test public void pasteInsertsTheClipboardTextIntoTheQuery() {
+        Recorder host = new Recorder();
+        List<TerminalFindModel.Line> lines = new ArrayList<>();
+        lines.add(new TerminalFindModel.Line(0, "hit one"));
+        TerminalFindController controller = new TerminalFindController(() -> "one\ntwo");
+        controller.begin(lines, host);
+
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("paste"), false, false, false));
+        assertEquals("one two", controller.model().query());
+
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("pasteAsPlainText"), false, false, false));
+        assertEquals("one twoone two", controller.model().query());
+    }
+
+    /** Copy, cut and select-all in the query stay unhandled: swallowed, and the query untouched. */
+    @Test public void copyCutAndSelectAllAreSwallowedWithoutEffect() {
+        Recorder host = new Recorder();
+        TerminalFindController controller = begin(host);
+        controller.handleCodePoint('h', false);
+
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("copy"), false, false, false));
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("selectAll"), false, false, false));
+        assertEquals("h", controller.model().query());
     }
 
     @Test public void everyStrokeIsSwallowedWhileTheStripIsUp() {

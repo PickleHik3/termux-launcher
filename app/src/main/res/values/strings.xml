@@ -93,6 +93,9 @@
     <string name="settings_adjust_keyboard_summary">Workaround for Android system keyboards: pads the layout so the terminal and key rows stay visible above the on-screen keyboard. Turn off if you see gaps or jumpy resizing.</string>
     <string name="settings_show_recents_title">Show in Recents when not the default launcher</string>
     <string name="settings_show_recents_summary">Keeps the launcher available from the Recents screen when another home app is active.</string>
+    <string name="settings_clipboard_header">Clipboard</string>
+    <string name="settings_osc52_clipboard_read_title">Let programs read the clipboard</string>
+    <string name="settings_osc52_clipboard_read_summary">Programs in the terminal can paste what you copied.</string>
     <string name="settings_sessions_panes_header">Sessions and panes</string>
     <string name="settings_split_pane_controls_title">Split-pane controls</string>
     <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>

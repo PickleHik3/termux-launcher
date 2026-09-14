@@ -94,6 +94,21 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
   only to X clients, which the host is not. The patch applies **after 0001** — it extends the same
   `nativeInit` block — and pairs with `LorieView.onCursorNameChanged` below; `FindMethodOrDie`
   kills the process if the Java method and the prebuilt ever disagree.
+- **`LorieView.setClipboardSyncActive(boolean)` (new)**, and with it the `clipboardSyncActive`
+  flag, the reduced `onWindowFocusChanged` and the relaxed test in `checkForClipboardChange`:
+  the Android → X announce is armed by the page, not by window focus. Upstream registers its
+  `OnPrimaryClipChangedListener` in `onWindowFocusChanged`, which the pane wall never fires — the
+  Display page is attached with `requestFocus()` inside a window whose focus does not change — so
+  text copied in Android was announced to X only by accident. `X11DisplayHostController` arms the
+  view while it is attached, connected and `clipboardEnable` is on (`DisplayClipboardPolicy`);
+  arming runs one `checkForClipboardChange()`, and the setter is idempotent so the listener can
+  never be registered twice. `onWindowFocusChanged` keeps only the re-check, so a focus loss
+  cannot silently disarm a page that says it is active, and `onDetachedFromWindow` disarms,
+  because the page can go without anyone saying so. `checkForClipboardChange` no longer demands
+  `getMimeTypeCount() == 1`: a browser copy carries text/plain *and* text/html, and upstream
+  drops it. Both it and `requestClipboard` return early when `connected()` is false, and
+  `connected()` itself now checks the pointer — a wall page is asked after it has left its
+  window, where upstream's view is already gone with its activity.
 - **`LorieView.onCursorNameChanged(String)` (new)** is the Java end of that event: it keeps the
   last name (`getCursorName()`) and forwards it to an optional `CursorNameListener`. Upstream has
   no such method, so a nightly merge must carry it forward with the native patch.

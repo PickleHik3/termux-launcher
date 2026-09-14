@@ -126,6 +126,7 @@ import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
@@ -471,7 +472,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private LauncherAppDataProvider mLauncherAppDataProvider;
     private LauncherConfigRepository mLauncherConfigRepository;
-    private final FolderRenameController mFolderRenameController = new FolderRenameController();
+    private final FolderRenameController mFolderRenameController =
+        new FolderRenameController(ClipboardText.forContext(this));
     /** Every surface over the terminal, innermost first; Back, keys, text and teardown derive from it. */
     private final com.termux.app.chrome.OverlayRegistry mOverlays = createOverlayRegistry();
     /** Anchored glass editor for session/window/pane renames; built on first rename. */
@@ -10944,6 +10946,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Paste where the in-app keyboard's paste key pastes — the display while it is showing, an
+     * overlay that has claimed typing, the terminal otherwise. False when there is no in-app
+     * keyboard at all, and the caller pastes into the terminal itself.
+     */
+    public boolean pasteThroughInAppKeyboard() {
+        return mInAppKeyboard != null && mInAppKeyboard.pasteThroughKeyboard();
+    }
+
+    /**
      * Bounds of one key of the in-app keyboard, named as a layout file names it. False when the
      * keyboard is down or the layout in front of the user does not carry that key, which is what
      * the tour's chord cards use to decide whether they have anything to glow.
@@ -11201,7 +11212,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public com.termux.app.terminal.rename.TerminalRenameCoordinator getRenameCoordinator() {
         if (mRenameCoordinator == null)
             mRenameCoordinator = new com.termux.app.terminal.rename.TerminalRenameCoordinator(
-                new TerminalRenameHost());
+                new TerminalRenameHost(), ClipboardText.forContext(this));
         return mRenameCoordinator;
     }
 
@@ -11262,7 +11273,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.terminal.find.TerminalFindCoordinator getFindCoordinator() {
         if (mFindCoordinator == null)
             mFindCoordinator = new com.termux.app.terminal.find.TerminalFindCoordinator(
-                new TerminalFindHost());
+                new TerminalFindHost(), ClipboardText.forContext(this));
         return mFindCoordinator;
     }
 

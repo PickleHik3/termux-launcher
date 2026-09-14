@@ -20,6 +20,8 @@ public abstract class TerminalTestCase extends TestCase {
 		final ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		public final List<ChangedTitle> titleChanges = new ArrayList<>();
 		public final List<String> clipboardPuts = new ArrayList<>();
+		/** What an OSC 52 read query ({@code ESC ] 52 ; c ; ?}) should answer with; null answers empty. */
+		public String clipboardContents = null;
 		public int bellsRung = 0;
 		public int colorsChanged = 0;
 		public final List<String[]> notifications = new ArrayList<>();
@@ -52,6 +54,11 @@ public abstract class TerminalTestCase extends TestCase {
 
         @Override
         public void onPasteTextFromClipboard() {
+        }
+
+        @Override
+        public String onReadTextFromClipboard() {
+            return clipboardContents;
         }
 
 		@Override

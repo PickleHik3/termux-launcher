@@ -54,6 +54,10 @@ The palette is the complete argument-free UI surface:
 | Appearance | Wallpaper picker/toggle, cursor-trail toggle, and Glass Lab |
 | App | Settings destinations, drawer controls, command palette, action sheet, and key inspector |
 
+Programs in the terminal — a Neovim or tmux clipboard provider, for example — can also read what
+you last copied on Android, through the OSC 52 escape sequence. Turn this off under
+**Settings → Terminal → Let programs read the clipboard** if you would rather they could not.
+
 The long-press **Terminal action sheet** remains deliberately short: command palette, URL picker,
 share transcript, wallpaper controls, Glass Lab, settings, reset terminal, and kill process. Use the
 palette for the full searchable surface.

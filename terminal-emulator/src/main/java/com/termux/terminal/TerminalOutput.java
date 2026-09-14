@@ -38,6 +38,15 @@ public abstract class TerminalOutput {
     public abstract void onPasteTextFromClipboard();
 
     /**
+     * Ask the terminal client for the text on the clipboard, for an OSC 52 query
+     * ({@code ESC ] 52 ; c ; ? BEL}). The default has no client to ask, so it answers as if the
+     * clipboard were empty rather than leaving the query unanswered.
+     */
+    public String onReadTextFromClipboard() {
+        return null;
+    }
+
+    /**
      * Notify the terminal client that a bell character (ASCII 7, bell, BEL, \a, ^G)) has been received.
      */
     public abstract void onBell();
