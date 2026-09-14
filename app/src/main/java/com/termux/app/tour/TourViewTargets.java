@@ -42,11 +42,14 @@ public final class TourViewTargets implements TourTargets {
         View findTourView(int viewId);
 
         /**
-         * The in-app keyboard's space bar, on screen, or false when there is no keyboard up. It
-         * is the one control the chrome measures per key rather than laying out as a view of its
-         * own, so it cannot be answered with a view id.
+         * One key of the in-app keyboard, on screen, or false when the keyboard is down or that
+         * layout does not carry the key. Keys are the one thing the chrome measures per cap
+         * rather than laying out as views of their own, so they cannot be answered with a view id.
+         *
+         * @param keyName the key as a layout file names it: "ctrl", "alt", "shift", "enter",
+         *     "space", or a letter
          */
-        boolean findTourSpaceBarRect(@NonNull Rect outOnScreen);
+        boolean findTourKeyRect(@NonNull String keyName, @NonNull Rect outOnScreen);
     }
 
     @NonNull private final ViewFinder mFinder;
@@ -97,11 +100,11 @@ public final class TourViewTargets implements TourTargets {
             // The row lives in the dock, above the content or down a side column, one at a time.
             case AZ_ROW:
                 return rectInOverlay(azRowView(), "the A-Z row is switched off or not on screen");
-            case SPACE_BAR:
-                return spaceBarRect();
             case NONE:
                 return miss("this card points at nothing");
             default:
+                String keyName = keyboardKeyName(targetId);
+                if (keyName != null) return keyRect(keyName);
                 return miss("no target is registered under \"" + targetId + "\"");
         }
     }
@@ -215,12 +218,26 @@ public final class TourViewTargets implements TourTargets {
         return null;
     }
 
-    /** The space bar, converted out of screen coordinates into the overlay's. */
+    /** The keyboard key each key target stands for, as the layout files name them. */
     @Nullable
-    private Rect spaceBarRect() {
+    private static String keyboardKeyName(@NonNull String targetId) {
+        switch (targetId) {
+            case CTRL_KEY: return "ctrl";
+            case ALT_KEY: return "alt";
+            case SHIFT_KEY: return "shift";
+            case ENTER_KEY: return "enter";
+            case C_KEY: return "c";
+            case SPACE_BAR: return "space";
+            default: return null;
+        }
+    }
+
+    /** One keyboard key, converted out of screen coordinates into the overlay's. */
+    @Nullable
+    private Rect keyRect(@NonNull String keyName) {
         Rect onScreen = new Rect();
-        if (!mFinder.findTourSpaceBarRect(onScreen) || onScreen.isEmpty())
-            return miss("the in-app keyboard is down, so there is no space bar");
+        if (!mFinder.findTourKeyRect(keyName, onScreen) || onScreen.isEmpty())
+            return miss("the in-app keyboard is down or carries no \"" + keyName + "\" key");
         // Screen coordinates on both sides: the keyboard measures its caps against the display,
         // not against this window, so the overlay has to be located the same way to subtract it.
         mOverlay.getLocationOnScreen(mLocation);

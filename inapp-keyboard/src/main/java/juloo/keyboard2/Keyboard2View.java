@@ -89,7 +89,7 @@ public class Keyboard2View extends View
   private OnKeyPaintListener _keyPaintListener;
   private String _lastPaintedKeyId;
   private float _launchWaveDensity;
-  private final int[] _spaceBarLocation = new int[2];
+  private final int[] _keyRectLocation = new int[2];
   private final Paint _trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -808,9 +808,28 @@ public class Keyboard2View extends View
    */
   public boolean getSpaceBarRectOnScreen(Rect out)
   {
-    if (_keyboard == null || _tc == null)
+    return getKeyRectOnScreen("space", out);
+  }
+
+  /**
+   * On-screen bounds of one key of the rendered layout, named the way a layout file names it
+   * ("ctrl", "alt", "shift", "enter", "space", "c"). Hosts that want to point at a key — the
+   * first-boot tour glowing a chord — cannot ask for it as a view: the keyboard lays its caps
+   * out itself and none of them is a child.
+   *
+   * <p>Only the cap at the middle of a key is matched, never one of its eight corner values: a
+   * corner is a swipe, not the key the host is naming.
+   *
+   * @return false when the layout has no such key, or has not been measured yet
+   */
+  public boolean getKeyRectOnScreen(String keyName, Rect out)
+  {
+    if (_keyboard == null || _tc == null || keyName == null)
       return false;
-    getLocationOnScreen(_spaceBarLocation);
+    KeyValue wanted = KeyValue.getKeyByName(keyName);
+    if (wanted == null)
+      return false;
+    getLocationOnScreen(_keyRectLocation);
     float y = getPaddingTop() + _tc.margin_top;
     for (KeyboardData.Row row : _keyboard.rows)
     {
@@ -821,12 +840,12 @@ public class Keyboard2View extends View
       {
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
-        if (isSpaceBar(k))
+        if (isKeyNamed(k, wanted))
         {
-          out.set(Math.round(_spaceBarLocation[0] + x),
-              Math.round(_spaceBarLocation[1] + y),
-              Math.round(_spaceBarLocation[0] + x + keyW),
-              Math.round(_spaceBarLocation[1] + y + keyH));
+          out.set(Math.round(_keyRectLocation[0] + x),
+              Math.round(_keyRectLocation[1] + y),
+              Math.round(_keyRectLocation[0] + x + keyW),
+              Math.round(_keyRectLocation[1] + y + keyH));
           return true;
         }
         x += _keyWidth * k.width;
@@ -837,6 +856,33 @@ public class Keyboard2View extends View
   }
 
   /**
+   * Whether a key's centre cap is the named one. Flags are deliberately out of the comparison —
+   * the same key carries different rendering flags depending on how a layout file spells it, and
+   * "the Alt key" is the same key either way — so kind and value decide.
+   */
+  private static boolean isKeyNamed(KeyboardData.Key key, KeyValue wanted)
+  {
+    if (isSpaceBar(wanted))
+      return isSpaceBar(key);
+    KeyValue center = key.keys[0];
+    if (center == null)
+      return false;
+    if (center.sameKey(wanted))
+      return true;
+    if (center.getKind() != wanted.getKind())
+      return false;
+    switch (center.getKind())
+    {
+      case Modifier: return center.getModifier() == wanted.getModifier();
+      case Keyevent: return center.getKeyevent() == wanted.getKeyevent();
+      case Char: return center.getChar() == wanted.getChar();
+      case Editing: return center.getEditing() == wanted.getEditing();
+      case Event: return center.getEvent() == wanted.getEvent();
+      default: return false;
+    }
+  }
+
+  /**
    * Space bar identity, matching {@code Pointers.swipeKeyName}: the role attribute, or the
    * center value for user layout files that predate it.
    */
@@ -844,9 +890,13 @@ public class Keyboard2View extends View
   {
     if (key.role == KeyboardData.Key.Role.Space_bar)
       return true;
-    KeyValue center = key.keys[0];
-    return center != null && center.getKind() == KeyValue.Kind.Editing
-      && center.getEditing() == KeyValue.Editing.SPACE_BAR;
+    return isSpaceBar(key.keys[0]);
+  }
+
+  private static boolean isSpaceBar(KeyValue value)
+  {
+    return value != null && value.getKind() == KeyValue.Kind.Editing
+      && value.getEditing() == KeyValue.Editing.SPACE_BAR;
   }
 
   /** @deprecated Use [resetInputState()]. */

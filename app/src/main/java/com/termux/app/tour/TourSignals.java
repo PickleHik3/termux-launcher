@@ -29,6 +29,15 @@ public interface TourSignals {
     String WINDOW_CLOSED = "window.closed";
     /** A split was asked for, from the extra keys row or anywhere else that dispatches it. */
     String PANE_SPLIT = "pane.split";
+    /** One more session than there was: the keyboard chapter's Ctrl+Alt+Shift+C. */
+    String SESSION_OPENED = "session.opened";
+    /**
+     * The session the keyboard chapter started in is the current one again. A state, not a swipe:
+     * the card is asking the user to get back, and a swipe that lands somewhere else has not.
+     */
+    String SESSION_RETURNED = "session.returned";
+    /** The window the keyboard chapter started in is the active one again; a state, as above. */
+    String WINDOW_RETURNED = "window.returned";
     /** A pane's corner menu was raised. */
     String PANE_CORNER_MENU = "pane.corner_menu";
     /** A pane's corner menu went away again. */

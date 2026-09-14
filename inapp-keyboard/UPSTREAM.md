@@ -157,6 +157,16 @@ fails when the catalogue has gone stale.
   keyboard's own background exactly as before, so nothing changes for a host
   that says nothing.
 - Stateful suggestion labels have no global provider and render empty.
+- Key rect probe (local addition): `Keyboard2View.getKeyRectOnScreen` and its
+  `getSpaceBarRectOnScreen` alias. The host has to be able to point at a key —
+  the first-boot tour glows the keys of a chord, and surfaces grow out of the
+  space bar — and a rendered cap is not a child view it could measure. The walk
+  mirrors `onDraw` exactly so the rect lands on the drawn cap rather than on its
+  cell, and only a key's centre value is matched, never one of its eight corner
+  values: a corner is a swipe, not the key being named. Kind and value decide
+  the match, with flags left out, because the same key carries different
+  rendering flags depending on how a layout file spells it. A layout that does
+  not carry the named key answers false, which is a normal answer.
 - Tap correction hook (local addition): `Keyboard2View.TapResolver` plus
   `setTapResolver`, and the new file `TapGeometry.java`. At `ACTION_DOWN` the
   view resolves the static grid as upstream does, then lets the host resolver

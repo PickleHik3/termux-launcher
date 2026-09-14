@@ -47,6 +47,15 @@ public final class TourStep {
      */
     public final boolean topAnchored;
 
+    /**
+     * Whether this card's targets are a keyboard chord rather than one target per stage.
+     *
+     * <p>A chord card has a single signal — the thing the chord does — and three or four keys to
+     * point at on the way there, so its glow cannot be indexed by the stage. It is indexed by what
+     * the keyboard has latched instead; {@link TourChordGlow} is the whole rule.
+     */
+    public final boolean chordGlow;
+
     public TourStep(String id, int copyRes, int secondLineRes, String targetId,
                     String[] signals, TourGesture[] gestures) {
         this(id, copyRes, secondLineRes, new String[] {targetId}, signals, gestures);
@@ -59,6 +68,12 @@ public final class TourStep {
 
     public TourStep(String id, int copyRes, int secondLineRes, String[] targetIds,
                     String[] signals, TourGesture[] gestures, boolean topAnchored) {
+        this(id, copyRes, secondLineRes, targetIds, signals, gestures, topAnchored, false);
+    }
+
+    public TourStep(String id, int copyRes, int secondLineRes, String[] targetIds,
+                    String[] signals, TourGesture[] gestures, boolean topAnchored,
+                    boolean chordGlow) {
         if (gestures.length < Math.max(1, signals.length))
             throw new IllegalArgumentException("step " + id + " has fewer gestures than signals");
         if (targetIds.length == 0)
@@ -71,6 +86,12 @@ public final class TourStep {
         this.signals = signals.clone();
         this.gestures = gestures.clone();
         this.topAnchored = topAnchored;
+        this.chordGlow = chordGlow;
+    }
+
+    /** How many controls this card names; past the end, the last one stands for the rest. */
+    public int targetCount() {
+        return targets.length;
     }
 
     /**

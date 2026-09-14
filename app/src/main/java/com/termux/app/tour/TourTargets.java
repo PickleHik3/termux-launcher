@@ -30,6 +30,18 @@ public interface TourTargets {
     String PANE_CORNER = "pane_corner";
     String DOCK = "dock";
     String AZ_ROW = "az_row";
+
+    /**
+     * Keys of the in-app keyboard, each measured on the layout the user actually has in front of
+     * them. A layout that carries no Shift row, or no Enter, answers null for that key and the
+     * card shows without a glow — which is the same answer the keyboard being down gives.
+     */
+    String CTRL_KEY = "ctrl_key";
+    String ALT_KEY = "alt_key";
+    String SHIFT_KEY = "shift_key";
+    String ENTER_KEY = "enter_key";
+    /** The letter the two "open a window" / "open a session" chords end on. */
+    String C_KEY = "c_key";
     String SPACE_BAR = "space_bar";
 
     /** @return the control's bounds in overlay coordinates, or null when it cannot be pointed at. */

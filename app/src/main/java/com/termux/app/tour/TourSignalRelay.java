@@ -20,6 +20,12 @@ public final class TourSignalRelay implements TourSignals {
     private Integer mWindowCount;
     private String mSelectedWindow;
     private Boolean mDrawerOpen;
+    private Integer mSessionCount;
+    private String mCurrentSession;
+    private String mActiveWindow;
+    /** The session and window the keyboard chapter began in, and so the ones it must end in. */
+    private String mChapterHomeSession;
+    private String mChapterHomeWindow;
 
     @Override
     public void setTourSignalListener(Listener listener) {
@@ -96,6 +102,55 @@ public final class TourSignalRelay implements TourSignals {
         mDrawerOpen = open;
         if (first || !userDriven) return;
         emit(open ? DRAWER_OPENED : DRAWER_CLOSED);
+    }
+
+    /**
+     * The sessions the launcher is holding, whenever the sessions list has just been rebuilt.
+     *
+     * <p>One more session than last time is the chapter's Ctrl+Alt+Shift+C. The current session
+     * coming back to the one the chapter began in is what the "return to your first session" card
+     * waits for, and it is deliberately the settled state rather than the swipe that asked for it:
+     * the space bar's corner swipes walk a ring, so a user two sessions along has swiped without
+     * arriving.
+     *
+     * @param count how many sessions there are, or -1 when the launcher has none to count yet
+     * @param currentSessionId the session that is current, or null when there is none
+     */
+    public void onSessionsSettled(int count, String currentSessionId) {
+        if (count >= 0) {
+            Integer previous = mSessionCount;
+            mSessionCount = count;
+            if (previous != null && count > previous) emit(SESSION_OPENED);
+        }
+        if (currentSessionId == null) return;
+        String previous = mCurrentSession;
+        mCurrentSession = currentSessionId;
+        if (previous == null || previous.equals(currentSessionId)) return;
+        if (currentSessionId.equals(mChapterHomeSession)) emit(SESSION_RETURNED);
+    }
+
+    /**
+     * The window the launcher is showing, whenever the active pane has settled on it. Like the
+     * session above, the card waits for the arrival and not for the swipe.
+     */
+    public void onActiveWindowSettled(String windowId) {
+        if (windowId == null) return;
+        String previous = mActiveWindow;
+        mActiveWindow = windowId;
+        if (previous == null || previous.equals(windowId)) return;
+        if (windowId.equals(mChapterHomeWindow)) emit(WINDOW_RETURNED);
+    }
+
+    /**
+     * Remembers where the keyboard chapter began, so its last two cards can ask for the way back.
+     *
+     * <p>Called when the chapter's first card is shown rather than when the run starts: the cards
+     * before it open and close a window of their own, and "your first window" means the one the
+     * chapter left the user on.
+     */
+    public void markKeyboardChapterHome() {
+        mChapterHomeSession = mCurrentSession;
+        mChapterHomeWindow = mActiveWindow;
     }
 
     /**

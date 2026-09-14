@@ -14,6 +14,10 @@ public enum TourGesture {
     SWIPE_LEFT,
     SWIPE_RIGHT,
     SWIPE_UP,
+    /** Down and to the left: one of the space bar's four corner swipes. */
+    SWIPE_DOWN_LEFT,
+    /** Up and to the left: one of the space bar's four corner swipes. */
+    SWIPE_UP_LEFT,
     DRAG_DOWN,
     DRAG_UP,
     /** Slide along a row, then lift away from it: the A–Z scrub. */
