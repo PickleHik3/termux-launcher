@@ -11,6 +11,7 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerZones;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
@@ -143,6 +144,121 @@ public class TerminalPaneControllerTest {
             TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 0f, 0f, 14f));
         assertFalse("a corner in another branch only lines up by accident",
             TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 499f, 900f, 14f));
+    }
+
+    /**
+     * A touch on the seam between two panes raises the tab out of the touched pane's own corner on
+     * the side the finger is on — the tab hangs off the edge the user is touching, never across the
+     * divider onto the neighbour and never at the pane's far edge.
+     */
+    @Test
+    public void dividerTouch_raisesTheTabAtTheCornerTheFingerIsOn() {
+        // A vertical seam at x = 500 between two side-by-side panes.
+        RectF left = new RectF(0f, 0f, 499f, 500f);
+        RectF right = new RectF(501f, 0f, 1000f, 500f);
+        assertEquals(CornerZones.TOP_RIGHT,
+            TerminalPaneController.cornerNearestPoint(left, 500f, 5f));
+        assertEquals(CornerZones.TOP_LEFT,
+            TerminalPaneController.cornerNearestPoint(right, 500f, 5f));
+        assertEquals(CornerZones.BOTTOM_RIGHT,
+            TerminalPaneController.cornerNearestPoint(left, 500f, 495f));
+        assertEquals(CornerZones.BOTTOM_LEFT,
+            TerminalPaneController.cornerNearestPoint(right, 500f, 495f));
+
+        // A horizontal seam at y = 250 between two stacked panes.
+        RectF top = new RectF(0f, 0f, 1000f, 249f);
+        RectF bottom = new RectF(0f, 251f, 1000f, 500f);
+        assertEquals(CornerZones.BOTTOM_LEFT,
+            TerminalPaneController.cornerNearestPoint(top, 5f, 250f));
+        assertEquals(CornerZones.TOP_LEFT,
+            TerminalPaneController.cornerNearestPoint(bottom, 5f, 250f));
+        assertEquals(CornerZones.BOTTOM_RIGHT,
+            TerminalPaneController.cornerNearestPoint(top, 995f, 250f));
+        assertEquals(CornerZones.TOP_RIGHT,
+            TerminalPaneController.cornerNearestPoint(bottom, 995f, 250f));
+    }
+
+    /**
+     * A pane dropped or swapped rather than touched puts its tab at the top corner nearest where
+     * the finger let go, and keeps the wall's default corner when it has no frame to measure.
+     */
+    @Test
+    public void droppedPane_takesTheTopCornerNearestTheDrop() {
+        RectF pane = new RectF(0f, 0f, 500f, 500f);
+        assertEquals(CornerZones.TOP_LEFT,
+            TerminalPaneController.dropCorner(pane, 10f, 480f, CornerZones.TOP_RIGHT));
+        assertEquals(CornerZones.TOP_RIGHT,
+            TerminalPaneController.dropCorner(pane, 490f, 480f, CornerZones.TOP_LEFT));
+        assertEquals("a drop is answered at the top whichever half of the pane it landed in",
+            CornerZones.TOP_RIGHT,
+            TerminalPaneController.dropCorner(pane, 490f, 10f, CornerZones.TOP_LEFT));
+        assertEquals("a pane with no frame keeps the wall's default corner",
+            CornerZones.TOP_RIGHT,
+            TerminalPaneController.dropCorner(null, 10f, 10f, CornerZones.TOP_RIGHT));
+    }
+
+    /**
+     * The inset the tab starts past is the pane's own corner arc: the glass radius when the panes
+     * are glass, the float radius when a plain pane is rounded because it shares the wall, and
+     * nothing at all for a square lone pane.
+     */
+    @Test
+    public void paneCornerInset_isThePanesOwnArcNotOnlyTheGlassOne() {
+        assertEquals(14f, TerminalPaneController.paneCornerInsetPx(true, 14f, true, 6f), .001f);
+        assertEquals(14f, TerminalPaneController.paneCornerInsetPx(true, 14f, false, 6f), .001f);
+        assertEquals("a split pane is rounded without glass too, and the tab has to clear it",
+            6f, TerminalPaneController.paneCornerInsetPx(false, 14f, true, 6f), .001f);
+        assertEquals(0f, TerminalPaneController.paneCornerInsetPx(false, 14f, false, 6f), .001f);
+        assertEquals("a negative radius is no arc, not a tab pushed outwards",
+            0f, TerminalPaneController.paneCornerInsetPx(false, 0f, true, -4f), .001f);
+    }
+
+    /**
+     * And the tab that corner produces lies inside the pane on both axes, its outer edge past the
+     * pane's own arc — which is what the old flush placement got wrong on a rounded split pane.
+     */
+    @Test
+    public void dividerTab_landsInsideThePaneMinusItsArc() {
+        RectF left = new RectF(0f, 0f, 499f, 500f);
+        RectF right = new RectF(501f, 0f, 1000f, 500f);
+        RectF top = new RectF(0f, 0f, 1000f, 249f);
+        RectF bottom = new RectF(0f, 251f, 1000f, 500f);
+        float arc = TerminalPaneController.paneCornerInsetPx(false, 14f, true, 6f);
+        assertTabInsidePane(left, TerminalPaneController.cornerNearestPoint(left, 500f, 5f), arc);
+        assertTabInsidePane(right,
+            TerminalPaneController.cornerNearestPoint(right, 500f, 495f), arc);
+        assertTabInsidePane(top, TerminalPaneController.cornerNearestPoint(top, 995f, 250f), arc);
+        assertTabInsidePane(bottom,
+            TerminalPaneController.cornerNearestPoint(bottom, 5f, 250f), arc);
+        // A glass pane's deeper arc pushes the tab further in, and it still fits.
+        assertTabInsidePane(left, CornerZones.TOP_RIGHT, 14f);
+        // A pane narrower than the tab asked for keeps it inside as well.
+        assertTabInsidePane(new RectF(0f, 0f, 60f, 500f), CornerZones.BOTTOM_LEFT, 6f);
+    }
+
+    /** The pane's tab at one corner, laid out the way the overlay lays it out, inside its pane. */
+    private static void assertTabInsidePane(RectF pane, int corner, float insetPx) {
+        float[] widths = {22.4f, 22.4f, 22.4f};
+        RectF tab = new RectF();
+        RectF[] buttons = {new RectF(), new RectF(), new RectF()};
+        CornerTabGeometry.layout(corner, pane, widths, 3, 0f, 2.4f, 24f, insetPx, 3f, 1f,
+            tab, buttons);
+        assertFalse("the tab has to exist to be inside anything", tab.isEmpty());
+        if (CornerZones.isLeft(corner)) {
+            assertEquals("the tab starts past the pane's own arc",
+                pane.left + insetPx, tab.left, .001f);
+        } else {
+            assertEquals("the tab starts past the pane's own arc",
+                pane.right - insetPx, tab.right, .001f);
+        }
+        assertTrue("never past the pane's sides",
+            tab.left >= pane.left - .001f && tab.right <= pane.right + .001f);
+        assertTrue("and never past its top or bottom once it is fully out",
+            tab.top >= pane.top - .001f && tab.bottom <= pane.bottom + .001f);
+        for (RectF button : buttons) {
+            assertTrue("every button sits in the tab",
+                button.left >= tab.left - .001f && button.right <= tab.right + .001f);
+        }
     }
 
     @Test
