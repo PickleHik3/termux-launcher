@@ -16210,6 +16210,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFirstBootTour != null) mFirstBootTour.onPaneCornerMenuOpened();
         }
 
+        @Override public void openSurfaceEditor() {
+            TermuxActivity.this.openSurfaceEditor();
+        }
+
         @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,
                                                                     @Nullable String cwd) {
             return createShellForCwd(cwd, name);

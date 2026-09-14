@@ -173,6 +173,8 @@ public class TerminalPaneController {
         default void onPanesRendered() {}
         /** A pane's corner controls — move, maximize, close — are now on screen. */
         default void onPaneControlsShown() {}
+        /** The lone pane's corner asked for the surface editor. */
+        default void openSurfaceEditor() {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
         /** Spawn a new shell carrying a session name; defaults to an unnamed shell. */
@@ -3006,8 +3008,22 @@ public class TerminalPaneController {
         return Math.max(min, Math.min(total - min, candidate));
     }
 
+    /**
+     * Whether the pane tree answers touches at its corners at all. A split does, for its seams
+     * and each pane's move/maximize/close tab; a maximized pane does, for its own tab; and a
+     * lone pane does too, for the one thing its corner offers — the surface editor.
+     */
     static boolean shouldShowInteractionOverlay(int paneCount, boolean maximized) {
-        return maximized || paneCount > 1;
+        return maximized || paneCount >= 1;
+    }
+
+    /**
+     * Whether the window is a single, unsplit pane. Its corner tab is a shortcut to the surface
+     * editor rather than the pane controls, which only mean something once there is a second pane
+     * to move against, cover or leave behind.
+     */
+    static boolean isLonePane(int paneCount, boolean maximized) {
+        return !maximized && paneCount == 1;
     }
 
     static float snapFirstWeightToCell(float total, float availablePixels,
@@ -3059,6 +3075,8 @@ public class TerminalPaneController {
         private static final int ACTION_MOVE_PANE = 0;
         private static final int ACTION_MAXIMIZE = 1;
         private static final int ACTION_CLOSE = 2;
+        /** The lone pane's only control: open the surface editor on this page. */
+        private static final int ACTION_SURFACE_EDITOR = 3;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -3280,6 +3298,9 @@ public class TerminalPaneController {
             } else if (action == ACTION_CLOSE) {
                 dismissControls();
                 leaf.session.finishIfRunning();
+            } else if (action == ACTION_SURFACE_EDITOR) {
+                dismissControls();
+                mHost.openSurfaceEditor();
             }
         }
 
@@ -3517,15 +3538,29 @@ public class TerminalPaneController {
                 return ACTION_NONE;
             }
             computeControlGeometry();
-            if (mMaximizedLeaf != null) {
-                if (mControlButtons[0].contains(x, y)) return ACTION_MAXIMIZE;
-                if (mControlButtons[1].contains(x, y)) return ACTION_CLOSE;
-            } else {
-                if (mControlButtons[0].contains(x, y)) return ACTION_MOVE_PANE;
-                if (mControlButtons[1].contains(x, y)) return ACTION_MAXIMIZE;
-                if (mControlButtons[2].contains(x, y)) return ACTION_CLOSE;
+            int count = controlCount();
+            for (int i = 0; i < count; i++) {
+                if (mControlButtons[i].contains(x, y)) return controlActionInSlot(i);
             }
             return ACTION_NONE;
+        }
+
+        private boolean isLonePane() {
+            return TerminalPaneController.isLonePane(
+                mActiveWindow == null ? 0 : leavesOf(mActiveWindow.root).size(),
+                mMaximizedLeaf != null);
+        }
+
+        /** How many buttons the tab holds: one for a lone pane, two maximized, three in a split. */
+        private int controlCount() {
+            if (isLonePane()) return 1;
+            return mMaximizedLeaf == null ? 3 : 2;
+        }
+
+        /** Which action sits in a slot of the tab, leading to trailing. */
+        private int controlActionInSlot(int slot) {
+            if (isLonePane()) return ACTION_SURFACE_EDITOR;
+            return mMaximizedLeaf == null ? slot : slot + 1;
         }
 
         private void computeControlGeometry() {
@@ -3534,7 +3569,7 @@ public class TerminalPaneController {
                 mControlRect.setEmpty();
                 return;
             }
-            int count = mMaximizedLeaf == null ? 3 : 2;
+            int count = controlCount();
             float button = dp(22.4f);
             float width = button * count + dp(4.8f);
             float right = pane.right - dp(3);
@@ -3750,9 +3785,9 @@ public class TerminalPaneController {
                 Math.round(225f * mControlProgress)));
             canvas.drawPath(mPath, mPaint);
 
-            int count = mMaximizedLeaf == null ? 3 : 2;
+            int count = controlCount();
             for (int i = 0; i < count; i++) {
-                int action = mMaximizedLeaf == null ? i : i + 1;
+                int action = controlActionInSlot(i);
                 RectF button = mControlButtons[i];
                 mPaint.setStyle(Paint.Style.STROKE);
                 mPaint.setStrokeCap(Paint.Cap.ROUND);
@@ -3774,6 +3809,9 @@ public class TerminalPaneController {
                         canvas.drawLine(cx - dp(5), cy + dp(2), cx - dp(2), cy + dp(5), mPaint);
                         canvas.drawLine(cx + dp(5), cy - dp(2), cx + dp(2), cy - dp(5), mPaint);
                     }
+                } else if (action == ACTION_SURFACE_EDITOR) {
+                    // Three sliders, knobs at different stops: the editor's own rows in miniature.
+                    drawSliderGlyph(canvas, cx, cy);
                 } else {
                     canvas.drawLine(cx - dp(4), cy - dp(4), cx + dp(4), cy + dp(4), mPaint);
                     canvas.drawLine(cx + dp(4), cy - dp(4), cx - dp(4), cy + dp(4), mPaint);
@@ -3782,6 +3820,20 @@ public class TerminalPaneController {
             mPaint.setStrokeCap(Paint.Cap.BUTT);
             mPaint.setStrokeJoin(Paint.Join.MITER);
             canvas.restoreToCount(canvasState);
+        }
+
+        private void drawSliderGlyph(Canvas canvas, float cx, float cy) {
+            float half = dp(4.5f);
+            float gap = dp(3);
+            float knob = dp(1.6f);
+            canvas.drawLine(cx - half, cy - gap, cx + half, cy - gap, mPaint);
+            canvas.drawLine(cx - half, cy, cx + half, cy, mPaint);
+            canvas.drawLine(cx - half, cy + gap, cx + half, cy + gap, mPaint);
+            mPaint.setStyle(Paint.Style.FILL);
+            canvas.drawCircle(cx - dp(1.5f), cy - gap, knob, mPaint);
+            canvas.drawCircle(cx + dp(2), cy, knob, mPaint);
+            canvas.drawCircle(cx - dp(2.5f), cy + gap, knob, mPaint);
+            mPaint.setStyle(Paint.Style.STROKE);
         }
 
         private void resetTouchState() {
