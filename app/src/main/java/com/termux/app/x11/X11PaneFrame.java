@@ -47,6 +47,7 @@ import com.termux.x11.LorieView;
 public final class X11PaneFrame extends PaneContentFrame {
 
     private static final int ACTION_HELP = 2;
+    private static final int ACTION_EDITOR = 3;
 
     /** What the page needs from the launcher. */
     public interface Host {
@@ -59,6 +60,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         /** The cog: open the display's settings. */
         default void openDisplaySettings() { }
         default void showHelpOverlay() {}
+        /** The sliders: open the surface editor on this place, as the terminal pane's tab does. */
+        default void openSurfaceEditor() {}
         /**
          * True when one of the launcher's own chords claimed this key, in which case X must not
          * see it. Everything else is the display's.
@@ -92,6 +95,8 @@ public final class X11PaneFrame extends PaneContentFrame {
     /** nf-fa-power_off and nf-fa-cog. */
     private static final String GLYPH_POWER = "\uf011";
     private static final String GLYPH_SETTINGS = "\uf013";
+    /** Sliders: the same idea as the terminal tab's editor button, in the page tab's font. */
+    private static final String GLYPH_EDITOR = "\uf1de";
 
     private final PaneRim mRim = new PaneRim();
     private final CornerBracket mBracket = new CornerBracket();
@@ -163,10 +168,12 @@ public final class X11PaneFrame extends PaneContentFrame {
         mControls = new PaneControlsView(getContext());
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, GLYPH_POWER),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
+            PaneControlsView.Action.glyph(ACTION_EDITOR, GLYPH_EDITOR),
             PaneControlsView.Action.label(ACTION_HELP, getContext().getString(R.string.help_button)));
         mControls.setListener(id -> {
             if (mHost == null) return;
             if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
+            else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });

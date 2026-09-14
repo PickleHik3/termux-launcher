@@ -13544,6 +13544,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (page == null) return;
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
+            @Override public void openSurfaceEditor() { TermuxActivity.this.openSurfaceEditor(); }
             @Override public void openWidgetGridSettings() {
                 ActivityUtils.startActivity(TermuxActivity.this,
                     com.termux.app.activities.SettingsActivity.createFragmentIntent(
@@ -13600,6 +13601,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (page == null) return;
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
+            @Override public void openSurfaceEditor() { TermuxActivity.this.openSurfaceEditor(); }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
             @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
             @Override public void toggleDisplayPower() {

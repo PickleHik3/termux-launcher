@@ -46,6 +46,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         /** The pencil: start editing the widgets, exactly as the long-press menu does. */
         void editWidgets();
         default void showHelpOverlay() {}
+        /** The sliders: open the surface editor on this place, as the terminal pane's tab does. */
+        default void openSurfaceEditor() {}
         /** The columns the grid is showing now. */
         int widgetGridColumns();
         /** The rows the grid is showing now. */
@@ -59,10 +61,13 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_EDIT = 1;
     private static final int ACTION_GRID_SIZE = 2;
     private static final int ACTION_HELP = 3;
+    private static final int ACTION_EDITOR = 4;
 
     /** nf-fa-cog and nf-fa-pencil. */
     private static final String GLYPH_SETTINGS = "";
     private static final String GLYPH_EDIT = "";
+    /** Sliders: the same idea as the terminal tab's editor button, in the page tab's font. */
+    private static final String GLYPH_EDITOR = "\uf1de";
 
     private final PaneRim mRim = new PaneRim();
     private final CornerBracket mBracket = new CornerBracket();
@@ -159,6 +164,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         if (mControls == null) return;
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
             PaneControlsView.Action.glyph(ACTION_EDIT, GLYPH_EDIT),
+            PaneControlsView.Action.glyph(ACTION_EDITOR, GLYPH_EDITOR),
             PaneControlsView.Action.label(ACTION_HELP, getContext().getString(R.string.help_button)));
     }
 
@@ -178,6 +184,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         }
         if (mHost == null) return;
         if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
+        else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
         else if (id == ACTION_SETTINGS) mHost.openWidgetGridSettings();
         else if (id == ACTION_EDIT) mHost.editWidgets();
     }
