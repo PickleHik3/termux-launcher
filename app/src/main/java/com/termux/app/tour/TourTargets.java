@@ -24,6 +24,8 @@ public interface TourTargets {
     String STATUS_BAR = "status_bar";
     String PLUS_BUTTON = "plus_button";
     String WINDOW_CHIP = "window_chip";
+    /** The x the selected chip reveals; only ever on screen once that chip has been tapped. */
+    String WINDOW_CLOSE = "window_close";
     String SPLIT_KEY = "split_key";
     String PANE_CORNER = "pane_corner";
     String DOCK = "dock";

@@ -170,4 +170,22 @@ public class TourCardPlacementTest {
         TourCardPlacement placement = place(new Rect(400, 200, 680, 260), W + 400, CARD_H);
         assertEquals(MARGIN, placement.left);
     }
+
+    @Test
+    public void aCardAnchoredAtTheTopSitsUnderTheStatusBarAndPointsAtNothing() {
+        TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
+            1000, 2000, 300, 200, 16, 16 + 60, 16 + 40);
+        assertEquals(16 + 60, placement.top);
+        assertEquals(350, placement.left);
+        assertFalse(placement.hasPointer());
+    }
+
+    @Test
+    public void aTallCardAtTheTopIsStillKeptOffTheGestureBar() {
+        // Taller than the window it is in: it starts at the top margin and is clamped no further.
+        TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
+            1000, 300, 300, 400, 16, 76, 56);
+        assertEquals(76, placement.top);
+        assertFalse(placement.hasPointer());
+    }
 }

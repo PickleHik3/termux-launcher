@@ -82,6 +82,9 @@ public final class TourViewTargets implements TourTargets {
             case WINDOW_CHIP:
                 return rectInOverlay(windowBarChild(false),
                     "no window chip is current on this place's row");
+            case WINDOW_CLOSE:
+                return rectInOverlay(closeButtonView(),
+                    "no chip is offering its x right now");
             case SPLIT_KEY:
                 return rectInOverlay(splitKeyView(),
                     "the extra keys row is down or is not carrying the split key");
@@ -119,6 +122,18 @@ public final class TourViewTargets implements TourTargets {
         if (!(bar instanceof TerminalWindowBar) || !isOnScreen(bar)) return null;
         TerminalWindowBar windowBar = (TerminalWindowBar) bar;
         return plus ? windowBar.createWindowButtonView() : windowBar.selectedTabView();
+    }
+
+    /**
+     * The x the selected chip reveals, which exists only between the tap that asks for it and the
+     * few seconds later when the bar takes it away again. Null the rest of the time, which is most
+     * of the time, and the card that points at it simply shows without a glow.
+     */
+    @Nullable
+    private View closeButtonView() {
+        View bar = mFinder.findTourView(R.id.terminal_window_bar);
+        if (!(bar instanceof TerminalWindowBar) || !isOnScreen(bar)) return null;
+        return ((TerminalWindowBar) bar).closeButtonView();
     }
 
     /**

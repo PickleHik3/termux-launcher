@@ -112,6 +112,15 @@ public final class TourSignalRelay implements TourSignals {
         emit(PANE_CORNER_MENU);
     }
 
+    /**
+     * A pane's corner menu went away. The pane view dismisses its controls from one place, for
+     * every way out of them — a tap anywhere else, a close, the surface editor — so like the
+     * raise above this is already the user's own edge and has nothing to compare against.
+     */
+    public void onPaneControlsDismissed() {
+        emit(PANE_CONTROLS_DISMISSED);
+    }
+
     /** An app was launched by the A–Z row's scrub, rather than by a tap anywhere else. */
     public void onAppLaunchedFromScrub() {
         emit(APP_LAUNCHED_FROM_SCRUB);

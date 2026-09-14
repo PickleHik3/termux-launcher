@@ -160,6 +160,17 @@ public class TourSignalRelayTest {
     }
 
     @Test
+    public void aPrimedDrawerReportsTheVeryFirstOpenTheUserPerforms() {
+        // The first device pass lost the drawer card to exactly this: the relay swallows the
+        // first call as the one that tells it where the plane rests, so the launcher primes it
+        // with the resting state up front and the user's own first pull is an open.
+        relay.onDrawerOpenSettled(false, false);
+        relay.onDrawerOpenSettled(true, true);
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.DRAWER_OPENED, signals.get(0));
+    }
+
+    @Test
     public void aDrawerThatStartsOpenReportsItsCloseFirst() {
         relay.onDrawerOpenSettled(true, true);
         relay.onDrawerOpenSettled(false, true);
@@ -182,16 +193,32 @@ public class TourSignalRelayTest {
     }
 
     @Test
-    public void theFourActionsAreTheirOwnEdge() {
+    public void theFiveActionsAreTheirOwnEdge() {
         relay.onPaneSplit();
         relay.onPaneCornerMenuOpened();
+        relay.onPaneControlsDismissed();
         relay.onAppLaunchedFromScrub();
         relay.onPaletteOpened();
-        assertEquals(4, signals.size());
+        assertEquals(5, signals.size());
         assertEquals(TourSignals.PANE_SPLIT, signals.get(0));
         assertEquals(TourSignals.PANE_CORNER_MENU, signals.get(1));
-        assertEquals(TourSignals.APP_LAUNCHED_FROM_SCRUB, signals.get(2));
-        assertEquals(TourSignals.PALETTE_OPENED, signals.get(3));
+        assertEquals(TourSignals.PANE_CONTROLS_DISMISSED, signals.get(2));
+        assertEquals(TourSignals.APP_LAUNCHED_FROM_SCRUB, signals.get(3));
+        assertEquals(TourSignals.PALETTE_OPENED, signals.get(4));
+    }
+
+    @Test
+    public void openingAndDismissingThePaneControlsAreTwoSeparateSignalsEveryTime() {
+        // The controls can be raised and dropped as often as the user likes, and the card asking
+        // for the way out of them has to hear every one of those: there is no state to compare
+        // against here, only the pane view's own two calls.
+        relay.onPaneCornerMenuOpened();
+        relay.onPaneControlsDismissed();
+        relay.onPaneCornerMenuOpened();
+        relay.onPaneControlsDismissed();
+        assertEquals(4, signals.size());
+        assertEquals(TourSignals.PANE_CORNER_MENU, signals.get(2));
+        assertEquals(TourSignals.PANE_CONTROLS_DISMISSED, signals.get(3));
     }
 
     @Test
@@ -205,6 +232,7 @@ public class TourSignalRelayTest {
         relay.onDrawerOpenSettled(true, true);
         relay.onPaneSplit();
         relay.onPaneCornerMenuOpened();
+        relay.onPaneControlsDismissed();
         relay.onAppLaunchedFromScrub();
         relay.onPaletteOpened();
         assertTrue(signals.isEmpty());

@@ -113,6 +113,27 @@ public final class TourCardPlacement {
         return new TourCardPlacement(left, top, pointerEdge, pointerCenterX);
     }
 
+    /**
+     * At the top of the overlay, under the status bar, centred across it and pointing at nothing.
+     *
+     * <p>Where a card goes when it must not sit on what it is about: the A-Z scrub, which fills
+     * the bottom of the screen with the thing the user is choosing, and any card still asking to
+     * close the full-plane surface it would otherwise be buried under.
+     */
+    @NonNull
+    public static TourCardPlacement placeUnderStatusBar(int overlayWidth, int overlayHeight,
+                                                        int cardWidth, int cardHeight,
+                                                        int sideMargin, int topMargin,
+                                                        int bottomMargin) {
+        if (overlayWidth <= 0 || overlayHeight <= 0 || cardWidth <= 0 || cardHeight <= 0)
+            return new TourCardPlacement(sideMargin, topMargin, POINTER_NONE, 0);
+        int maxLeft = Math.max(sideMargin, overlayWidth - sideMargin - cardWidth);
+        int maxTop = Math.max(topMargin, overlayHeight - bottomMargin - cardHeight);
+        return new TourCardPlacement(
+            clamp((overlayWidth - cardWidth) / 2, sideMargin, maxLeft),
+            clamp(topMargin, topMargin, maxTop), POINTER_NONE, 0);
+    }
+
     private static boolean fits(int top, int cardHeight, int overlayHeight,
                                 int topMargin, int bottomMargin) {
         return top >= topMargin && top + cardHeight <= overlayHeight - bottomMargin;

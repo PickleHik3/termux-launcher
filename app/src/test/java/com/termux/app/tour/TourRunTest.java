@@ -63,11 +63,35 @@ public class TourRunTest {
     }
 
     @Test
-    public void theWindowCardMovesItsGlowFromThePlusToTheChipItMade() {
+    public void theWindowCardWalksThePlusTheChipAndTheCloseItReveals() {
         TourStep window = TourRun.steps().get(2);
         assertEquals(TourTargets.PLUS_BUTTON, window.targetIdAt(0));
         assertEquals(TourTargets.WINDOW_CHIP, window.targetIdAt(1));
-        assertEquals(TourTargets.WINDOW_CHIP, window.targetIdAt(2));
+        // The chip's tap reveals a close button of its own, and that is what the last half of the
+        // card is asking the user to press.
+        assertEquals(TourTargets.WINDOW_CLOSE, window.targetIdAt(2));
+        assertEquals(TourSignals.WINDOW_OPENED, window.signalAt(0));
+        assertEquals(TourSignals.WINDOW_CHIP_SELECTED, window.signalAt(1));
+        assertEquals(TourSignals.WINDOW_CLOSED, window.signalAt(2));
+    }
+
+    @Test
+    public void thePaneCornerCardAsksForTheWayOutOfTheMenuItOpened() {
+        TourStep corner = TourRun.steps().get(4);
+        assertEquals(2, corner.signalCount());
+        assertEquals(TourTargets.PANE_CORNER, corner.targetIdAt(0));
+        assertEquals(TourSignals.PANE_CORNER_MENU, corner.signalAt(0));
+        // Nothing to glow for "tap anywhere else": the whole screen is the target.
+        assertEquals(TourTargets.NONE, corner.targetIdAt(1));
+        assertEquals(TourSignals.PANE_CONTROLS_DISMISSED, corner.signalAt(1));
+        assertTrue(corner.showsSecondLineAt(1));
+    }
+
+    @Test
+    public void onlyTheScrubCardRestsAtTheTopOfTheScreen() {
+        for (TourStep step : TourRun.steps())
+            assertEquals("top anchoring for " + step.id, "az_scrub".equals(step.id),
+                step.topAnchored);
     }
 
     @Test
