@@ -19,20 +19,20 @@ public class TourCardVisibilityTest {
     @Test
     public void withNothingInTheWayACardSitsAgainstItsControl() {
         assertEquals(TourCardVisibility.NORMAL,
-            TourCardVisibility.decide(false, false, NOTHING, TourSignals.DRAWER_OPENED));
+            TourCardVisibility.decide(false, NOTHING, TourSignals.DRAWER_OPENED));
     }
 
     @Test
     public void aCardThatAsksForTheTopOfTheScreenGetsItWithNothingInTheWay() {
         assertEquals(TourCardVisibility.COMPACT_TOP,
-            TourCardVisibility.decide(true, false, NOTHING, TourSignals.APP_LAUNCHED_FROM_SCRUB));
+            TourCardVisibility.decide(true, NOTHING, TourSignals.APP_LAUNCHED_FROM_SCRUB));
     }
 
     @Test
     public void everyFullPlaneSurfaceTakesTheCardOffTheScreen() {
         for (TourChrome chrome : TourChrome.values()) {
             assertEquals("a card still drawing over " + chrome, TourCardVisibility.HIDDEN,
-                TourCardVisibility.decide(false, false, EnumSet.of(chrome),
+                TourCardVisibility.decide(false, EnumSet.of(chrome),
                     TourSignals.APP_LAUNCHED_FROM_SCRUB));
         }
     }
@@ -41,41 +41,47 @@ public class TourCardVisibilityTest {
     public void aTopAnchoredCardIsHiddenByChromeLikeAnyOther() {
         // The A-Z card resting at the top is still a card drawing over an open drawer.
         assertEquals(TourCardVisibility.HIDDEN,
-            TourCardVisibility.decide(true, false, EnumSet.of(TourChrome.DRAWER),
+            TourCardVisibility.decide(true, EnumSet.of(TourChrome.DRAWER),
                 TourSignals.APP_LAUNCHED_FROM_SCRUB));
     }
 
     @Test
     public void theCardAskingToCloseTheDrawerStaysUpAtTheTopOfTheScreen() {
         assertEquals(TourCardVisibility.COMPACT_TOP,
-            TourCardVisibility.decide(false, false, EnumSet.of(TourChrome.DRAWER),
+            TourCardVisibility.decide(false, EnumSet.of(TourChrome.DRAWER),
                 TourSignals.DRAWER_CLOSED));
     }
 
     @Test
     public void thatOnlyHoldsForTheSurfaceTheCardIsActuallyAbout() {
         assertEquals(TourCardVisibility.HIDDEN,
-            TourCardVisibility.decide(false, false, EnumSet.of(TourChrome.PALETTE),
+            TourCardVisibility.decide(false, EnumSet.of(TourChrome.PALETTE),
                 TourSignals.DRAWER_CLOSED));
     }
 
     @Test
-    public void aScrubInProgressHidesEverything() {
-        assertEquals(TourCardVisibility.HIDDEN,
-            TourCardVisibility.decide(true, true, NOTHING,
-                TourSignals.APP_LAUNCHED_FROM_SCRUB));
-        assertEquals(TourCardVisibility.HIDDEN,
-            TourCardVisibility.decide(false, true, EnumSet.of(TourChrome.DRAWER),
-                TourSignals.DRAWER_CLOSED));
-    }
-
-    @Test
-    public void onlyTheDrawerHasACardThatAsksForItsClose() {
+    public void theDrawerAndThePaletteBothHaveACardThatAsksForTheirClose() {
         assertEquals(TourChrome.DRAWER,
             TourCardVisibility.chromeClosedBy(TourSignals.DRAWER_CLOSED));
+        assertEquals(TourChrome.PALETTE,
+            TourCardVisibility.chromeClosedBy(TourSignals.PALETTE_CLOSED));
         assertNull(TourCardVisibility.chromeClosedBy(TourSignals.DRAWER_OPENED));
         assertNull(TourCardVisibility.chromeClosedBy(TourSignals.PALETTE_OPENED));
         assertNull(TourCardVisibility.chromeClosedBy(null));
+    }
+
+    @Test
+    public void theCardAskingToCloseThePaletteStaysUpAtTheTopOfTheScreen() {
+        TourStep palette = step("palette");
+        Set<TourChrome> paletteUp = EnumSet.of(TourChrome.PALETTE);
+        // Stage 0 asks the user to open it, so a palette already up hides the card.
+        assertEquals(TourCardVisibility.HIDDEN,
+            TourCardVisibility.decide(palette, 0, paletteUp));
+        // Stage 1 asks them to close it, and has to be readable on top of it.
+        assertEquals(TourCardVisibility.COMPACT_TOP,
+            TourCardVisibility.decide(palette, 1, paletteUp));
+        assertEquals(TourCardVisibility.NORMAL,
+            TourCardVisibility.decide(palette, 0, NOTHING));
     }
 
     @Test
@@ -84,30 +90,33 @@ public class TourCardVisibilityTest {
         Set<TourChrome> drawerUp = EnumSet.of(TourChrome.DRAWER);
         // Stage 0 asks the user to pull the drawer down, so a drawer already down hides it.
         assertEquals(TourCardVisibility.HIDDEN,
-            TourCardVisibility.decide(drawer, 0, false, drawerUp));
+            TourCardVisibility.decide(drawer, 0, drawerUp));
         // Stage 1 asks them to close it, and has to be readable on top of it.
         assertEquals(TourCardVisibility.COMPACT_TOP,
-            TourCardVisibility.decide(drawer, 1, false, drawerUp));
+            TourCardVisibility.decide(drawer, 1, drawerUp));
         assertEquals(TourCardVisibility.NORMAL,
-            TourCardVisibility.decide(drawer, 0, false, NOTHING));
+            TourCardVisibility.decide(drawer, 0, NOTHING));
     }
 
     @Test
-    public void theScrubCardIsTheOneThatRestsAtTheTopAndGoesForTheScrubItself() {
+    public void theScrubCardStaysAtTheTopOfTheScreenWhileTheUserScrubs() {
+        // It used to go off the screen entirely while a finger was down on the letters, which on
+        // the third device pass read as the card vanishing the moment the user obeyed it. It sits
+        // at the top, clear of the icons and of the scrub's previews, until the app is launched.
         TourStep scrub = step("az_scrub");
         assertEquals(TourCardVisibility.COMPACT_TOP,
-            TourCardVisibility.decide(scrub, 0, false, NOTHING));
-        assertEquals(TourCardVisibility.HIDDEN,
-            TourCardVisibility.decide(scrub, 0, true, NOTHING));
+            TourCardVisibility.decide(scrub, 0, NOTHING));
+        assertEquals(TourCardVisibility.COMPACT_TOP,
+            TourCardVisibility.decide(true, NOTHING, TourSignals.APP_LAUNCHED_FROM_SCRUB));
     }
 
     @Test
     public void theClosingCardWaitsBehindThePaletteItsOwnCardOpened() {
         TourStep closing = step("closing");
         assertEquals(TourCardVisibility.HIDDEN,
-            TourCardVisibility.decide(closing, 0, false, EnumSet.of(TourChrome.PALETTE)));
+            TourCardVisibility.decide(closing, 0, EnumSet.of(TourChrome.PALETTE)));
         assertEquals(TourCardVisibility.NORMAL,
-            TourCardVisibility.decide(closing, 0, false, NOTHING));
+            TourCardVisibility.decide(closing, 0, NOTHING));
     }
 
     /** By id, not by position: the run gains and loses cards, and these three do not move. */
@@ -120,6 +129,6 @@ public class TourCardVisibilityTest {
     @Test
     public void noCardAtAllIsHidden() {
         assertEquals(TourCardVisibility.HIDDEN,
-            TourCardVisibility.decide(null, 0, false, NOTHING));
+            TourCardVisibility.decide(null, 0, NOTHING));
     }
 }

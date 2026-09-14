@@ -1684,10 +1684,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isSurfaceEditorUp() {
             return mSurfaceEditor.isActive();
         }
-
-        @Override public boolean isAzScrubInProgress() {
-            return mAzGesture.mode() != AzScrubGesture.Mode.IDLE;
-        }
     }
 
     @Override
@@ -7252,11 +7248,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 break;
         }
 
-        // A finger on the letters takes the run's card off the screen: the scrub filters the app
-        // icons and throws a preview up beside the finger, and the user has to be able to see
-        // what they are picking.
-        if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
-
         // Whose row the finger is on now, so the letter row ticks only while the letters are what
         // it is choosing; an icon in the row above ticks for itself, per icon.
         mAzScrubRowView.setLetterHapticTicksSuspended(
@@ -10911,8 +10902,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     public void setCommandPaletteInterceptorActive(boolean active) {
         // Ahead of the keyboard guard below: this is the one call both of the palette's open and
-        // both of its close paths make, so it is where the run hears that the palette moved.
-        if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
+        // both of its close paths make, so it is where the run hears that the palette moved — and
+        // where the card asking the user to close it again is cleared.
+        if (mFirstBootTour != null) {
+            if (!active) mFirstBootTour.onPaletteClosed();
+            mFirstBootTour.onChromeChanged();
+        }
         if (mInAppKeyboard == null)
             return;
         mInAppKeyboard.setKeyValueInterceptor(active ? getCommandPaletteController() : null);

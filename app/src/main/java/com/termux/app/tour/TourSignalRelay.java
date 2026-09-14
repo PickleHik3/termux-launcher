@@ -23,6 +23,8 @@ public final class TourSignalRelay implements TourSignals {
     private Integer mSessionCount;
     private String mCurrentSession;
     private String mActiveWindow;
+    /** Whether the palette is up as far as the run knows; null until it has ever seen it open. */
+    private Boolean mPaletteOpen;
     /** The session and window the keyboard chapter began in, and so the ones it must end in. */
     private String mChapterHomeSession;
     private String mChapterHomeWindow;
@@ -186,7 +188,20 @@ public final class TourSignalRelay implements TourSignals {
      * nothing downstream carries which one was used, so any open clears the card.
      */
     public void onPaletteOpened() {
+        mPaletteOpen = Boolean.TRUE;
         emit(PALETTE_OPENED);
+    }
+
+    /**
+     * The command palette went away. Edge-triggered against the open above rather than emitted
+     * from every call: the interceptor funnel this arrives from hands its slot back on pause, on a
+     * configuration change and on destroy too, and a close of a palette the run never saw open is
+     * not the gesture the card is asking for.
+     */
+    public void onPaletteClosed() {
+        if (!Boolean.TRUE.equals(mPaletteOpen)) return;
+        mPaletteOpen = Boolean.FALSE;
+        emit(PALETTE_CLOSED);
     }
 
     private void emit(String signalId) {

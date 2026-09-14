@@ -48,6 +48,29 @@ public final class TourCardPlacement {
     }
 
     /**
+     * The rect the card should stand against, given what the chrome could measure this pass.
+     *
+     * <p>A stage that names a control the chrome cannot measure right now is not the same thing as
+     * a stage that points at nothing. The × the window card asks for is revealed by a width
+     * animation that never walks the window's layout, so for the first frames after the chip is
+     * tapped the control exists and has no bounds — and a card that answered that by jumping to
+     * the middle of the overlay is exactly what the third device pass saw. It stays where the last
+     * stage put it until the control can be measured, and only a stage that genuinely points at
+     * nothing takes the middle.
+     *
+     * @param stageNamesAControl the stage names a control rather than {@link TourTargets#NONE}
+     * @param measured what the chrome answered for it this pass, or null
+     * @param lastMeasured the last rect this card was actually placed against, or null
+     */
+    @Nullable
+    public static Rect anchorRect(boolean stageNamesAControl, @Nullable Rect measured,
+                                  @Nullable Rect lastMeasured) {
+        if (measured != null && !measured.isEmpty()) return measured;
+        if (!stageNamesAControl) return null;
+        return lastMeasured != null && !lastMeasured.isEmpty() ? lastMeasured : null;
+    }
+
+    /**
      * Places a measured card against a measured target.
      *
      * @param target the control's bounds in overlay pixels, or null for a card that points at

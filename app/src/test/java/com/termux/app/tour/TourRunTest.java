@@ -108,6 +108,7 @@ public class TourRunTest {
             for (int stage = 0; stage < step.signalCount(); stage++) {
                 assertNotNull("no signal for " + step.id + ":" + stage, step.signalAt(stage));
                 assertNotNull("no gesture for " + step.id + ":" + stage, step.gestureAt(stage));
+                assertTrue("no copy for " + step.id + ":" + stage, step.copyResAt(stage) != 0);
             }
         }
     }
@@ -149,6 +150,48 @@ public class TourRunTest {
         assertEquals(TourSignals.WINDOW_OPENED, window.signalAt(0));
         assertEquals(TourSignals.WINDOW_CHIP_SELECTED, window.signalAt(1));
         assertEquals(TourSignals.WINDOW_CLOSED, window.signalAt(2));
+    }
+
+    @Test
+    public void theWindowCardSaysSomethingDifferentOnEveryOneOfItsThreeStages() {
+        TourStep window = step("window");
+        // Three controls, three taps, three sentences. A card still saying "tap the chip, then ×"
+        // while the × is the thing under the finger asks for a gesture already made.
+        assertTrue(window.copyResAt(0) != 0);
+        assertTrue(window.copyResAt(0) != window.copyResAt(1));
+        assertTrue(window.copyResAt(1) != window.copyResAt(2));
+        // Past the end the last sentence stands, like the targets do.
+        assertEquals(window.copyResAt(2), window.copyResAt(9));
+    }
+
+    @Test
+    public void aCardWithOneSentenceKeepsItForEveryStage() {
+        TourStep expand = step("status_expand");
+        assertEquals(expand.copyRes, expand.copyResAt(0));
+        assertEquals(expand.copyRes, expand.copyResAt(1));
+    }
+
+    @Test
+    public void thePaletteCardAsksForTheWayOutOfThePaletteItOpened() {
+        TourStep palette = step("palette");
+        assertEquals(2, palette.signalCount());
+        assertEquals(TourTargets.SPACE_BAR, palette.targetIdAt(0));
+        assertEquals(TourGesture.SWIPE_UP, palette.gestureAt(0));
+        assertEquals(TourSignals.PALETTE_OPENED, palette.signalAt(0));
+        // Nothing to glow once the palette covers the screen, and its own sentence for the way out.
+        assertEquals(TourTargets.NONE, palette.targetIdAt(1));
+        assertEquals(TourGesture.TAP, palette.gestureAt(1));
+        assertEquals(TourSignals.PALETTE_CLOSED, palette.signalAt(1));
+        assertTrue(palette.copyResAt(0) != palette.copyResAt(1));
+        // The closing card comes only once the palette is out of the way.
+        assertTrue(indexOf("palette") < indexOf("closing"));
+    }
+
+    @Test
+    public void thePaletteDismissStageIsTheOneThatMayDrawOverThePalette() {
+        TourStep palette = step("palette");
+        assertNull(TourCardVisibility.chromeClosedBy(palette.signalAt(0)));
+        assertEquals(TourChrome.PALETTE, TourCardVisibility.chromeClosedBy(palette.signalAt(1)));
     }
 
     @Test

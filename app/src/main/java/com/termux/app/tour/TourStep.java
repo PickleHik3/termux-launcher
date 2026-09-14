@@ -21,6 +21,13 @@ public final class TourStep {
     /** String resource for the follow-up sentence, or 0 when the step asks for one gesture. */
     public final int secondLineRes;
 
+    /**
+     * One sentence per stage, the first of which is {@link #copyRes}. A 0 in the list means "keep
+     * saying what the last stage said", which is what a step with one sentence and two gestures —
+     * "drag the status bar down, then up" — is.
+     */
+    private final int[] copyLines;
+
     /** The control the card glows while it is asking for its first gesture. */
     public final String targetId;
 
@@ -74,13 +81,27 @@ public final class TourStep {
     public TourStep(String id, int copyRes, int secondLineRes, String[] targetIds,
                     String[] signals, TourGesture[] gestures, boolean topAnchored,
                     boolean chordGlow) {
+        this(id, new int[] {copyRes, secondLineRes}, targetIds, signals, gestures, topAnchored,
+            chordGlow);
+    }
+
+    /**
+     * The general shape: a sentence per stage. A card that walks three controls — the +, the chip
+     * it made, the × the chip reveals — asks for one of them at a time, so it needs a sentence per
+     * stage rather than a first line and a second one.
+     */
+    public TourStep(String id, int[] copyLines, String[] targetIds, String[] signals,
+                    TourGesture[] gestures, boolean topAnchored, boolean chordGlow) {
         if (gestures.length < Math.max(1, signals.length))
             throw new IllegalArgumentException("step " + id + " has fewer gestures than signals");
         if (targetIds.length == 0)
             throw new IllegalArgumentException("step " + id + " has no target at all");
+        if (copyLines.length == 0 || copyLines[0] == 0)
+            throw new IllegalArgumentException("step " + id + " has no copy at all");
         this.id = id;
-        this.copyRes = copyRes;
-        this.secondLineRes = secondLineRes;
+        this.copyLines = copyLines.clone();
+        this.copyRes = copyLines[0];
+        this.secondLineRes = copyLines.length > 1 ? copyLines[1] : 0;
         this.targets = targetIds.clone();
         this.targetId = this.targets[0];
         this.signals = signals.clone();
@@ -122,6 +143,17 @@ public final class TourStep {
     /** Whether the follow-up sentence is the one to show at {@code stage}. */
     public boolean showsSecondLineAt(int stage) {
         return secondLineRes != 0 && stage > 0;
+    }
+
+    /**
+     * The sentence to show at {@code stage}: the last one this step names at or before it, so a
+     * step whose second half asks for another gesture over the same control keeps its one line.
+     */
+    public int copyResAt(int stage) {
+        int res = copyLines[0];
+        for (int i = 1; i <= stage && i < copyLines.length; i++)
+            if (copyLines[i] != 0) res = copyLines[i];
+        return res;
     }
 
     /** Whether the card at {@code stage} is the closing card, which ends on its own buttons. */

@@ -31,7 +31,7 @@ You can change this later in Settings." Buttons Turn on / Not now.
 |---|------|------|------------|
 | 1 | Swipe the status bar left or right. | Swipe back. | place changed; place returned |
 | 2 | Drag the status bar down, then up. | | status bar expanded; collapsed |
-| 3 | Tap + to open a window. | Tap the window chip, then × to close it. | window count +1; chip tapped; window closed |
+| 3 | Tap + to open a window. | Tap the window chip. → Tap × to close it. | window count +1; chip tapped; window closed |
 | 4 | Press Ctrl, Alt, then Enter to split the pane. | | pane.split action |
 | 5 | Press Ctrl, Alt, then C to open a window. | | window count +1 |
 | 6 | Press Ctrl, Alt, Shift, then C to open a session. | | session count +1 |
@@ -40,12 +40,16 @@ You can change this later in Settings." Buttons Turn on / Not now.
 | 9 | Tap a pane corner. | Tap anywhere else to close it. | pane corner menu opened; pane controls dismissed |
 | 10 | Pull down on the dock. | Swipe down to close the drawer. | drawer opened; drawer closed |
 | 11 | Slide along the A–Z row, drag up to an app and let go. | | app launched from scrub |
-| 12 | Swipe up on the space bar. | | palette opened |
+| 12 | Swipe up on the space bar to open the command palette. | Tap outside the palette to close it. | palette opened; palette closed |
 | 13 | Closing card, no gesture. Three sections, Copy all, Read the docs, Done. | | Done |
 
-Glow per stage: card 3 walks the + → the chip → the × the chip reveals; card 9 and card 10 point
-at nothing for their second half, because the thing they are asking about is "anywhere else" and
-"the plane covering the dock".
+Glow per stage: card 3 walks the + → the chip → the × the chip reveals; cards 9, 10 and 12 point
+at nothing for their second half, because the thing they are asking about is "anywhere else", "the
+plane covering the dock" and "outside the palette".
+
+Copy per stage, not one line and a second one: card 3 says something different on each of its three
+taps, because each of them is a different control. A card that names one sentence keeps it for
+every stage, which is what "drag the status bar down, then up" is.
 
 ## The keyboard chapter (cards 4–8)
 
@@ -94,16 +98,23 @@ nixpkgs with no repository to add, and carries no command. VAJ keeps `pkg`, like
   overlay and above it otherwise, with a pointer on the edge facing it. A card with no target
   keeps the middle of the overlay.
 - The overlay hides while the drawer, the command palette, a terminal sheet or the surface editor
-  is up. The exception is the card whose ask is to close that very surface: it shows compact at
-  the top of the screen, under the launcher's own top bar, with no glow. A card that falls due
-  behind chrome is shown when the chrome goes. `TourCardVisibility` is the whole rule, and is pure.
+  is up. The exception is the card whose ask is to close that very surface — the drawer's second
+  half and the palette's: it shows compact at the top of the screen, under the launcher's own top
+  bar, with no glow. A card that falls due behind chrome is shown when the chrome goes.
+  `TourCardVisibility` is the whole rule, and is pure.
+- A target that is not measurable this pass is not the same thing as a card that points at
+  nothing. A stage that names a control keeps asking for it for 1.5 s after it arrives, and stands
+  where the stage before it stood until the control can be measured; only a stage that names
+  `TourTargets.NONE` takes the middle of the overlay. The glow is never moved onto the stale
+  control — it appears when the real one does. `TourCardPlacement.anchorRect` is the rule.
 - "The top of the screen" is the launcher's own bar, not the top of the window. The overlay fills
   the window, and above the launcher's bar sit the system status bar and the camera cutout, so a
   compact card resting on the window's own margin draws behind both — which is what the phone
   showed. It rests below `terminal_window_bar_host` whenever that is up, and below the window's
   top system inset plus the card margin when it is not.
-- Nothing of the run draws while a finger is mid-scrub on the A–Z row: the scrub filters the app
-  icons and throws a preview up beside the finger, and the user has to see what they are picking.
+- The A–Z card stays at the top of the screen for the whole scrub. It used to go off the screen
+  while the finger was down; resting at the top already keeps it clear of the icons and of the
+  scrub's own previews, and a card that vanishes the moment the user obeys it reads as a bug.
 
 ## Corrections found on the first device pass (2026-09-14)
 
@@ -144,6 +155,36 @@ renumbered everything from card 4 on.
   the screen now, and goes off it entirely while the finger is down.
 - The closing card was three paragraphs with commands buried in the prose, which is not something
   anyone can act on from a phone. It is three sections with their own Copy buttons now.
+
+Still only reasoned, not seen on a device: every one of the above.
+
+## Third device pass (2026-09-14)
+
+- **The window card's × stage parked the card in the middle of the screen and never glowed.** Two
+  faults, one symptom. The × opens as a 180 ms *width* animation on a zero-width child of the chip
+  strip (`TerminalWindowBar.startCloseReveal` → `SelectionStrip.placeCloseSegment`), laid out by
+  hand and deliberately walking no layout pass — "only the segment's own pixels move". The
+  overlay's only "something moved" hook is `OnGlobalLayoutListener`, so the one pass it did hear
+  measured the × at zero width and nothing ever asked again. A stage that names a control now keeps
+  asking for it every 32 ms for 1.5 s (`TourOverlayView.armTargetRetry`), which covers the reveal
+  with room to spare and stops on its own. And a stage whose control cannot be measured keeps the
+  position the stage before it had (`TourCardPlacement.anchorRect`) instead of falling back to the
+  middle of the overlay — the glow still waits for the real control.
+  `isShown()` was never the problem: the × is VISIBLE with visible ancestors and is not faded in,
+  so only its width was ever zero.
+- **The × stage now has its own sentence.** "Tap the window chip, then × to close it." was shown
+  for both of the card's last two taps, so it asked for a gesture the user had already made. Copy
+  is per stage now (`TourStep.copyResAt`): "Tap the window chip." then "Tap × to close it."
+- **The A–Z card no longer disappears while the user scrubs.** See Rules.
+- **The palette card says what the gesture is for**, and has a second half asking for the way out
+  of the palette it opened, so the closing card no longer arrives behind it. The close is heard
+  from `TermuxActivity.setCommandPaletteInterceptorActive` — the one call every open and close path
+  makes — as `palette.closed`, edge-triggered against an open the run actually saw so that a pause
+  or a configuration change is not read as the user's tap.
+- The copy is "Tap outside the palette to close it.", not "swipe up on Esc": the shipped layout
+  (`inapp-keyboard/res/xml/termux_launcher_qwerty.xml`, mirrored in the examples file) has **no Esc
+  key at all**. Esc is the hidden south-east swipe on `q` (`se="loc esc"`) and `Fn`+`a`, so there is
+  no Esc key with an `n=` slot to swipe up on.
 
 Still only reasoned, not seen on a device: every one of the above.
 

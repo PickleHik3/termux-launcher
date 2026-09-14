@@ -33,13 +33,18 @@ public final class TourRun {
             new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.DRAG_UP}),
 
         // The + makes the window; everything after it happens on the chip the + just added, so
-        // the glow moves there rather than staying on a button the user has finished with.
-        new TourStep("window", R.string.tour_card_window, R.string.tour_card_window_then,
+        // the glow moves there rather than staying on a button the user has finished with. One
+        // sentence per stage: the × is a separate control and a separate tap, and a card still
+        // saying "tap the chip, then ×" while the × is the thing under the finger asks for the
+        // gesture the user has already made.
+        new TourStep("window",
+            new int[] {R.string.tour_card_window, R.string.tour_card_window_then,
+                R.string.tour_card_window_close},
             new String[] {TourTargets.PLUS_BUTTON, TourTargets.WINDOW_CHIP,
                 TourTargets.WINDOW_CLOSE},
             new String[] {TourSignals.WINDOW_OPENED, TourSignals.WINDOW_CHIP_SELECTED,
                 TourSignals.WINDOW_CLOSED},
-            new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.TAP}),
+            new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.TAP}, false, false),
 
         // The keyboard chapter. Five cards on the in-app keyboard, taught as the chords they
         // actually are: the glow walks Ctrl, then Alt, then the key, because the keyboard latches
@@ -95,9 +100,15 @@ public final class TourRun {
             new String[] {TourSignals.APP_LAUNCHED_FROM_SCRUB},
             new TourGesture[] {TourGesture.SCRUB}, true),
 
-        new TourStep("palette", R.string.tour_card_palette, 0, TourTargets.SPACE_BAR,
-            new String[] {TourSignals.PALETTE_OPENED},
-            new TourGesture[] {TourGesture.SWIPE_UP}),
+        // The palette is a full-plane surface, so the card that opened it would otherwise be the
+        // last thing the user sees before the closing card arrives over it. Its second half asks
+        // for the way out, points at nothing — the palette covers the screen — and is the card
+        // that closes that surface, so it stays readable compact at the top while it is up.
+        new TourStep("palette",
+            new int[] {R.string.tour_card_palette, R.string.tour_card_palette_close},
+            new String[] {TourTargets.SPACE_BAR, TourTargets.NONE},
+            new String[] {TourSignals.PALETTE_OPENED, TourSignals.PALETTE_CLOSED},
+            new TourGesture[] {TourGesture.SWIPE_UP, TourGesture.TAP}, false, false),
 
         // The only card with no target and no signal: it carries the three edition-aware lines
         // and ends on its own buttons.

@@ -2,6 +2,7 @@ package com.termux.app.tour;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.graphics.Rect;
@@ -225,5 +226,42 @@ public class TourCardPlacementTest {
         TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
             1000, 2000, 300, 200, 16, 16, 16, bar, GAP);
         assertEquals(2000 - 16 - 200, placement.top);
+    }
+
+    @Test
+    public void aMeasuredControlIsAlwaysWhatTheCardStandsAgainst() {
+        Rect chip = new Rect(100, 40, 200, 90);
+        Rect close = new Rect(200, 40, 240, 90);
+        assertEquals(close, TourCardPlacement.anchorRect(true, close, chip));
+    }
+
+    @Test
+    public void aStageWhoseControlIsStillArrivingKeepsTheOneBeforeIt() {
+        // The × on the window chip opens as a width animation that walks no layout, so for the
+        // first frames after the chip is tapped it exists and has no bounds. The card stays on the
+        // chip rather than jumping to the middle of the overlay, which is what the phone showed.
+        Rect chip = new Rect(100, 40, 200, 90);
+        assertEquals(chip, TourCardPlacement.anchorRect(true, null, chip));
+        assertEquals(chip, TourCardPlacement.anchorRect(true, new Rect(), chip));
+    }
+
+    @Test
+    public void aStageThatPointsAtNothingOnPurposeStillTakesTheMiddle() {
+        // "Tap anywhere else" and "close the plane covering the dock" name no control at all, and
+        // the middle of the overlay is where those have always gone.
+        Rect dock = new Rect(100, 2000, 900, 2100);
+        assertNull(TourCardPlacement.anchorRect(false, null, dock));
+        assertNull(TourCardPlacement.anchorRect(true, null, null));
+        assertNull(TourCardPlacement.anchorRect(true, null, new Rect()));
+    }
+
+    @Test
+    public void aCardKeptOnAStaleControlIsPlacedExactlyWhereItWas() {
+        Rect chip = new Rect(400, 60, 560, 120);
+        TourCardPlacement onTheChip = place(chip);
+        TourCardPlacement stillThere = place(TourCardPlacement.anchorRect(true, null, chip));
+        assertEquals(onTheChip.left, stillThere.left);
+        assertEquals(onTheChip.top, stillThere.top);
+        assertEquals(onTheChip.pointerEdge, stillThere.pointerEdge);
     }
 }
