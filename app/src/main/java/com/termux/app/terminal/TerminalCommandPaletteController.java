@@ -18,6 +18,7 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
@@ -110,6 +111,7 @@ public final class TerminalCommandPaletteController
     private final LauncherUsageStatsStore mAppUsageStats;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final float mDensity;
+    private final ClipboardText mClipboardSource;
 
     /**
      * The dock plank's 170/17 pair is tuned for a plank that tilts continuously under a finger; a
@@ -187,15 +189,28 @@ public final class TerminalCommandPaletteController
     private String mCrumb = "";
 
     public TerminalCommandPaletteController(@NonNull TermuxActivity activity) {
+        this(activity, ClipboardText.forContext(activity));
+    }
+
+    TerminalCommandPaletteController(@NonNull TermuxActivity activity,
+                                     @NonNull ClipboardText clipboardSource) {
         mActivity = activity;
         mStats = new CommandPaletteActionStats(activity);
         mAppProvider = LauncherAppDataProvider.getInstance(activity);
         mAppUsageStats = LauncherUsageStatsStore.getInstance(activity);
         mDensity = activity.getResources().getDisplayMetrics().density;
+        mClipboardSource = clipboardSource;
     }
 
     public boolean isOpen() {
         return mOpen;
+    }
+
+    /** The query line as typed so far. */
+    @VisibleForTesting
+    @NonNull
+    public String query() {
+        return mQuery;
     }
 
     /** Opens the palette, or collapses it when the same invocation arrives while it is up. */
@@ -733,6 +748,8 @@ public final class TerminalCommandPaletteController
                 switch (value.getEditing()) {
                     case SPACE_BAR: appendText(" "); break;
                     case BACKSPACE: backspace(); break;
+                    case PASTE:
+                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 return true;
@@ -817,6 +834,12 @@ public final class TerminalCommandPaletteController
             case KeyEvent.KEYCODE_BACK: collapse(); return true;
             default: return false;
         }
+    }
+
+    /** Inserts the clipboard text, sanitized for the single-line query, at the cursor. */
+    private void pasteClipboard() {
+        String text = mClipboardSource.read();
+        if (text != null && !text.isEmpty()) appendText(PasteText.sanitizeSingleLine(text));
     }
 
     private void appendText(@NonNull String text) {

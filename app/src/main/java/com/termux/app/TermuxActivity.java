@@ -126,6 +126,7 @@ import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
@@ -471,7 +472,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private LauncherAppDataProvider mLauncherAppDataProvider;
     private LauncherConfigRepository mLauncherConfigRepository;
-    private final FolderRenameController mFolderRenameController = new FolderRenameController();
+    private final FolderRenameController mFolderRenameController =
+        new FolderRenameController(ClipboardText.forContext(this));
     /** Every surface over the terminal, innermost first; Back, keys, text and teardown derive from it. */
     private final com.termux.app.chrome.OverlayRegistry mOverlays = createOverlayRegistry();
     /** Anchored glass editor for session/window/pane renames; built on first rename. */
@@ -11196,7 +11198,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public com.termux.app.terminal.rename.TerminalRenameCoordinator getRenameCoordinator() {
         if (mRenameCoordinator == null)
             mRenameCoordinator = new com.termux.app.terminal.rename.TerminalRenameCoordinator(
-                new TerminalRenameHost());
+                new TerminalRenameHost(), ClipboardText.forContext(this));
         return mRenameCoordinator;
     }
 
@@ -11257,7 +11259,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.terminal.find.TerminalFindCoordinator getFindCoordinator() {
         if (mFindCoordinator == null)
             mFindCoordinator = new com.termux.app.terminal.find.TerminalFindCoordinator(
-                new TerminalFindHost());
+                new TerminalFindHost(), ClipboardText.forContext(this));
         return mFindCoordinator;
     }
 

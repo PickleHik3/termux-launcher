@@ -17,9 +17,41 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
+import juloo.keyboard2.KeyValue;
+
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class InlineRenameControllerTest {
+
+    @Test
+    public void pasteAndPasteAsPlainTextInsertTheClipboardTextSanitizedToOneLine() {
+        Host host = new Host();
+        InlineRenameController controller = new InlineRenameController(() -> "one\r\ntwo");
+        controller.begin("", 32, host);
+
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("paste"), false, false, false));
+        assertEquals("one two", controller.model().text());
+
+        controller.begin("", 32, host);
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("pasteAsPlainText"), false, false, false));
+        assertEquals("one two", controller.model().text());
+    }
+
+    /** Copy and select-all in the draft stay unhandled: swallowed, and the draft untouched. */
+    @Test
+    public void copyAndSelectAllAreSwallowedWithoutEffect() {
+        Host host = new Host();
+        InlineRenameController controller = new InlineRenameController();
+        controller.begin("ab", 8, host);
+
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("copy"), false, false, false));
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("selectAll"), false, false, false));
+        assertEquals("ab", controller.model().text());
+    }
 
     @Test
     public void hardwareTypingBuildsTheDraftAndEnterCommitsIt() {

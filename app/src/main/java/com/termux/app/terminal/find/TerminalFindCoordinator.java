@@ -11,6 +11,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 import com.termux.terminal.TerminalBuffer;
 import com.termux.terminal.TerminalEmulator;
@@ -82,13 +83,14 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
     }
 
     @NonNull private final Host host;
-    @NonNull private final TerminalFindController controller = new TerminalFindController();
+    @NonNull private final TerminalFindController controller;
     @NonNull private final TerminalFindOverlay overlay = new TerminalFindOverlay();
     @Nullable private TerminalFindBarView bar;
     @Nullable private TerminalView pane;
 
-    public TerminalFindCoordinator(@NonNull Host host) {
+    public TerminalFindCoordinator(@NonNull Host host, @NonNull ClipboardText clipboardSource) {
         this.host = host;
+        this.controller = new TerminalFindController(clipboardSource);
     }
 
     public boolean isActive() {

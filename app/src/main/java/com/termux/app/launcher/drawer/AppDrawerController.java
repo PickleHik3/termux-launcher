@@ -30,6 +30,7 @@ import com.termux.app.launcher.data.LauncherCategoryPendingApps;
 import com.termux.app.launcher.data.LauncherCategorySortState;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -222,7 +223,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * frames, and the plane's bottom edge and the keyboard's top are the same edge to the eye.
      */
     private final Spring mReveal = new Spring(0f, STIFFNESS, DAMPING);
-    private final AppDrawerSearchController mSearch = new AppDrawerSearchController();
+    private final AppDrawerSearchController mSearch;
     private final AppDrawerCategoryNudgePolicy mCategoryNudge = new AppDrawerCategoryNudgePolicy();
     /** Read per open: the Android-keyboard search, through the content's own text field. */
     private boolean mTextFieldSearch;
@@ -305,6 +306,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     public AppDrawerController(@NonNull Host host) {
         mHost = host;
+        mSearch = new AppDrawerSearchController(ClipboardText.forContext(host.context()));
         mDensity = host.context().getResources().getDisplayMetrics().density;
         // Wired here rather than with the views: the three intake channels are routed through the
         // activity, which has no idea whether the plane has been built yet, and a search that only
