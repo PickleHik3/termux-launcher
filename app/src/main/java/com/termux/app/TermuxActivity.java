@@ -257,6 +257,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // sessions are not listed.
     /** Recursive pane-tree engine; source of truth for panes/windows. */
     private com.termux.app.terminal.TerminalPaneController mPaneController;
+    private com.termux.app.help.HelpOverlayView mHelpOverlay;
+
+    /** All corner tabs enter the help for the place the wall currently rests on. */
+    private void showHelpOverlay() {
+        ViewGroup content = findViewById(android.R.id.content);
+        if (content == null) return;
+        if (mPaneWallController != null) {
+            if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().dismissControls();
+            if (mPaneWallController.displayPage() != null) mPaneWallController.displayPage().dismissControls();
+        }
+        if (mHelpOverlay == null) {
+            mHelpOverlay = new com.termux.app.help.HelpOverlayView(this,
+                new com.termux.app.help.HelpTargets.ViewFinder() {
+                    @Override public View findHelpView(int id) { return findViewById(id); }
+                    @Override public View activePane() {
+                        return mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
+                    }
+                    @Override public int paneCount() {
+                        return mPaneController == null ? 1 : mPaneController.tiledPaneCount();
+                    }
+                    @Override public boolean keyRectOnScreen(String name, android.graphics.Rect out) {
+                        return getInAppKeyboardKeyRect(name, out);
+                    }
+                }, () -> {
+                    View pane = mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
+                    if (pane != null) pane.requestFocus();
+                });
+            content.addView(mHelpOverlay, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        mHelpOverlay.show(currentWallPlace());
+    }
+
+    private boolean dismissHelpOverlay() {
+        if (mHelpOverlay == null || !mHelpOverlay.isShowing()) return false;
+        mHelpOverlay.dismiss();
+        return true;
+    }
+
     @Nullable private Bundle mPendingPaneLayoutState;
     /** Focused shell of the current window (mirrors the controller's active pane session). */
     @Nullable private TerminalSession mCurrentTabPrimary;
@@ -1695,6 +1734,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onPause() {
+        dismissHelpOverlay();
         // Rename owns the in-app-keyboard interceptor only while this activity is visible.
         mFolderRenameController.onActivityPaused();
         if (mRenameCoordinator != null) mRenameCoordinator.onActivityPaused();
@@ -11064,6 +11104,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
+        registry.register(this::dismissHelpOverlay);
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 // Closing the chip discards the draft, unlike a tap outside.
@@ -13082,6 +13123,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Where the wall rests is where the home screen comes back to, across Home
                     // presses and across launches alike.
                     if (mPreferences != null) mPreferences.setWallLastPage(page.name());
+                    dismissHelpOverlay();
                     if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
@@ -13486,6 +13528,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.attachWidgetsPage(getLayoutInflater());
         if (page == null) return;
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
+            @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openWidgetGridSettings() {
                 ActivityUtils.startActivity(TermuxActivity.this,
                     com.termux.app.activities.SettingsActivity.createFragmentIntent(
@@ -13541,6 +13584,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.attachDisplayPage(getLayoutInflater());
         if (page == null) return;
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
+            @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
             @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
             @Override public void toggleDisplayPower() {
@@ -16323,6 +16367,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
             return createShellForCwd(cwd);
         }
+
+        @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
 
         @Override public void onPaneControlsShown() {
             if (mFirstBootTour != null) mFirstBootTour.onPaneCornerMenuOpened();

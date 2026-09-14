@@ -98,7 +98,8 @@ public final class HelpLeaderRouter {
                     float columnLeft = column == 0 ? band.left + gutter : band.cx() + gap / 2;
                     float columnRight = column == 0 ? band.cx() - gap / 2 : band.right - gutter;
                     if (t.cardWidth > columnRight - columnLeft || t.cardHeight > band.height()) continue;
-                    float x = column == 0 ? columnLeft : columnRight - t.cardWidth;
+                    float x = Math.max(columnLeft, Math.min(columnRight - t.cardWidth,
+                        t.box.cx() - t.cardWidth / 2));
                     for (float y = band.top; y + t.cardHeight <= band.bottom; y += Math.max(1, gap)) {
                         Box card = new Box(x, y, x + t.cardWidth, y + t.cardHeight);
                         int lane = t.side == Side.BELOW ? column : -1;
