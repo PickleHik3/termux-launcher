@@ -17,6 +17,10 @@ import androidx.annotation.Nullable;
  */
 public interface TourTargets {
 
+    /** A card that points at nothing: the closing card, and the halves performed on a full-screen
+     * surface that has already covered the control that opened it. */
+    String NONE = "";
+
     String STATUS_BAR = "status_bar";
     String PLUS_BUTTON = "plus_button";
     String WINDOW_CHIP = "window_chip";
@@ -29,4 +33,14 @@ public interface TourTargets {
     /** @return the control's bounds in overlay coordinates, or null when it cannot be pointed at. */
     @Nullable
     Rect rectFor(@NonNull String targetId);
+
+    /**
+     * Why the last {@link #rectFor} answered null, for the debug log. A card with no glow is the
+     * hardest thing to diagnose from a device pass — "the dock is not on screen" and "the dock has
+     * not been laid out yet" look identical on the phone — so the answer says which.
+     */
+    @NonNull
+    default String lastMissReason() {
+        return "unknown";
+    }
 }

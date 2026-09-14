@@ -1779,7 +1779,7 @@
     <string name="tour_card_status_expand">Drag the status bar down, then up.</string>
     <string name="tour_card_window">Tap + to open a window.</string>
     <string name="tour_card_window_then">Tap the window chip, then × to close it.</string>
-    <string name="tour_card_split">Swipe up on the split key.</string>
+    <string name="tour_card_split">Tap the split key.</string>
     <string name="tour_card_pane_corner">Tap a pane corner.</string>
     <string name="tour_card_drawer">Pull down on the dock.</string>
     <string name="tour_card_drawer_then">Swipe down to close the drawer.</string>

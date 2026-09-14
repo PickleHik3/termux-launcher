@@ -21,7 +21,7 @@ public final class TourStep {
     /** String resource for the follow-up sentence, or 0 when the step asks for one gesture. */
     public final int secondLineRes;
 
-    /** The control this card glows, as a {@link TourTargets} id. */
+    /** The control the card glows while it is asking for its first gesture. */
     public final String targetId;
 
     /** The signals that clear this step, in the order the user performs them. */
@@ -30,16 +30,40 @@ public final class TourStep {
     /** One gesture per signal, for the finger trace; a stepless card carries a single NONE. */
     private final TourGesture[] gestures;
 
+    /**
+     * One target per stage. A step whose two halves point at different controls — "tap +", then
+     * "tap the chip it made" — would otherwise glow the control the user has already used while
+     * asking about another one, which is worse than glowing nothing.
+     */
+    private final String[] targets;
+
     public TourStep(String id, int copyRes, int secondLineRes, String targetId,
+                    String[] signals, TourGesture[] gestures) {
+        this(id, copyRes, secondLineRes, new String[] {targetId}, signals, gestures);
+    }
+
+    public TourStep(String id, int copyRes, int secondLineRes, String[] targetIds,
                     String[] signals, TourGesture[] gestures) {
         if (gestures.length < Math.max(1, signals.length))
             throw new IllegalArgumentException("step " + id + " has fewer gestures than signals");
+        if (targetIds.length == 0)
+            throw new IllegalArgumentException("step " + id + " has no target at all");
         this.id = id;
         this.copyRes = copyRes;
         this.secondLineRes = secondLineRes;
-        this.targetId = targetId;
+        this.targets = targetIds.clone();
+        this.targetId = this.targets[0];
         this.signals = signals.clone();
         this.gestures = gestures.clone();
+    }
+
+    /**
+     * The control to glow at {@code stage}. A step that named one target keeps it for every stage;
+     * the last one named stands for anything past the end.
+     */
+    public String targetIdAt(int stage) {
+        if (stage < 0) return targets[0];
+        return stage < targets.length ? targets[stage] : targets[targets.length - 1];
     }
 
     /** How many signals clear this step; 0 for the closing card, which ends on its button. */

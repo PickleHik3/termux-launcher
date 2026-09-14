@@ -10703,8 +10703,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this;
         }
 
-        @Override public void onDrawerOpenSettled(boolean open) {
-            if (mFirstBootTour != null) mFirstBootTour.onDrawerOpenSettled(open);
+        @Override public void onDrawerOpenSettled(boolean open, boolean userDriven) {
+            if (mFirstBootTour != null) mFirstBootTour.onDrawerOpenSettled(open, userDriven);
         }
 
         @Nullable @Override public <T extends View> T findView(int viewId) {
@@ -14692,6 +14692,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new java.util.ArrayList<>();
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
         int selected = -1;
+        // Whether the chips below stand for this session's terminal windows at all. The row is
+        // shared with the other places, which fill it with something else entirely.
+        boolean terminalWindows = false;
         if (isDisplayPageShowing()) {
             // The display's apps, front one selected; the terminal's marks (busy, attention,
             // done) have no meaning for them.
@@ -14710,6 +14713,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // themselves.
             selected = -1;
         } else if (mCurrentWSession != null && mPaneController != null) {
+            terminalWindows = true;
             long now = android.os.SystemClock.uptimeMillis();
             selected = Math.max(0, Math.min(mCurrentWSession.current,
                 mCurrentWSession.windows.size() - 1));
@@ -14741,8 +14745,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         bar.setWindows(items, selected);
         // The row is rebuilt whenever anything about a window changes, so the count is the edge
-        // the tour reads: one more chip is the +, one fewer is a chip's ×.
-        if (mFirstBootTour != null) mFirstBootTour.onWindowCountSettled(items.size());
+        // the tour reads: one more chip is the +, one fewer is a chip's ×. Only on the terminal,
+        // though — the Display place fills the same row with its apps and the Widgets place empties
+        // it, and neither of those counts is a window opening or closing.
+        if (mFirstBootTour != null)
+            mFirstBootTour.onWindowCountSettled(terminalWindows ? items.size() : -1);
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);

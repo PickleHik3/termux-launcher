@@ -132,9 +132,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onWindowSelected(windowId);
     }
 
-    /** The app drawer's resting state, once it has settled. */
-    public void onDrawerOpenSettled(boolean open) {
-        mSignals.onDrawerOpenSettled(open);
+    /**
+     * The app drawer's resting state, once it has settled.
+     *
+     * @param userDriven false when the launcher closed the plane itself (HOME, a rotation, a
+     *     preference reload), which the run must not read as the user's swipe
+     */
+    public void onDrawerOpenSettled(boolean open, boolean userDriven) {
+        mSignals.onDrawerOpenSettled(open, userDriven);
     }
 
     /** A split was asked for. */
@@ -162,12 +167,23 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Override
     public void onTourStepShown(TourStep step, int stage) {
         TourOverlayView overlay = obtainOverlay();
-        if (overlay == null) return;
+        if (overlay == null) {
+            TourLog.d("card " + step.id + ":" + stage + " has nowhere to show: no content view");
+            return;
+        }
         overlay.showStep(step, stage);
+        if (TourLog.enabled()) {
+            android.graphics.Rect rect = overlay.currentTargetRect();
+            TourLog.d("card " + step.id + ":" + stage + " shown, target \""
+                + step.targetIdAt(stage) + "\" at " + TourLog.describe(rect)
+                + (rect == null ? " (" + overlay.currentMissReason() + ")" : "")
+                + ", waiting for " + describeWait(step, stage));
+        }
     }
 
     @Override
     public void onTourFinished(boolean skipped) {
+        TourLog.d("run finished, skipped=" + skipped);
         removeOverlay();
     }
 
@@ -175,12 +191,23 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     @Override
     public void onTourSkipTapped() {
+        TourStep step = mController.currentStep();
+        TourLog.d("skip tapped on card " + (step == null ? "none" : step.id)
+            + ":" + mController.currentStage());
         mController.skip();
     }
 
     @Override
     public void onTourFinishTapped() {
+        TourLog.d("done tapped on the closing card");
         mController.finish();
+    }
+
+    /** What the card that is up is waiting for, for the log. */
+    @NonNull
+    private static String describeWait(@NonNull TourStep step, int stage) {
+        String signal = step.signalAt(stage);
+        return signal == null ? "its own button" : signal;
     }
 
     @Override
@@ -198,7 +225,23 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     @Override
     public void onTourSignal(String signalId) {
+        if (!TourLog.enabled()) {
+            mController.onSignal(signalId);
+            return;
+        }
+        // Snapshotted around the call, because "did that clear the card" is the one question a
+        // device pass has to be able to answer and nothing downstream records it.
+        TourStep before = mController.currentStep();
+        int stageBefore = mController.currentStage();
         mController.onSignal(signalId);
+        TourStep after = mController.currentStep();
+        int stageAfter = mController.currentStage();
+        boolean moved = before != after || stageBefore != stageAfter;
+        TourLog.d("signal " + signalId + " while card "
+            + (before == null ? "none" : before.id + ":" + stageBefore)
+            + (moved ? " — cleared it, now " + (after == null ? "the run is over"
+                : after.id + ":" + stageAfter)
+            : " — ignored"));
     }
 
     // TourViewTargets.ViewFinder
@@ -231,10 +274,26 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mLayoutListener = overlay::refreshTarget;
         content.getViewTreeObserver().addOnGlobalLayoutListener(mLayoutListener);
         overlay.setOnApplyWindowInsetsListener((view, insets) -> {
+            applySystemBarInsets(overlay, insets);
             overlay.refreshTarget();
             return insets;
         });
+        android.view.WindowInsets current = overlay.getRootWindowInsets();
+        if (current != null) applySystemBarInsets(overlay, current);
         return overlay;
+    }
+
+    /**
+     * The system bars' keep-out, so a card with nothing to anchor to does not rest under the
+     * status bar or the gesture bar. The overlay is added to the content view, which on this
+     * launcher runs edge to edge.
+     */
+    private static void applySystemBarInsets(@NonNull TourOverlayView overlay,
+                                             @NonNull android.view.WindowInsets insets) {
+        androidx.core.graphics.Insets bars =
+            androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(insets, overlay)
+                .getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+        overlay.setSystemBarInsets(bars.top, bars.bottom);
     }
 
     private void removeOverlay() {

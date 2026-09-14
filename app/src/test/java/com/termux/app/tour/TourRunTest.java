@@ -63,6 +63,40 @@ public class TourRunTest {
     }
 
     @Test
+    public void theWindowCardMovesItsGlowFromThePlusToTheChipItMade() {
+        TourStep window = TourRun.steps().get(2);
+        assertEquals(TourTargets.PLUS_BUTTON, window.targetIdAt(0));
+        assertEquals(TourTargets.WINDOW_CHIP, window.targetIdAt(1));
+        assertEquals(TourTargets.WINDOW_CHIP, window.targetIdAt(2));
+    }
+
+    @Test
+    public void theDrawerCardStopsPointingAtTheDockOnceTheDrawerCoversIt() {
+        TourStep drawer = TourRun.steps().get(5);
+        assertEquals(TourTargets.DOCK, drawer.targetIdAt(0));
+        assertEquals(TourTargets.NONE, drawer.targetIdAt(1));
+    }
+
+    @Test
+    public void theSplitCardAsksForTheTapThatActuallySplits() {
+        // A swipe up on an extra key commits that key's secondary, which for the split key is
+        // "new window"; the split is the plain tap.
+        TourStep split = TourRun.steps().get(3);
+        assertEquals(TourTargets.SPLIT_KEY, split.targetIdAt(0));
+        assertEquals(TourGesture.TAP, split.gestureAt(0));
+        assertEquals(TourSignals.PANE_SPLIT, split.signalAt(0));
+    }
+
+    @Test
+    public void aCardThatNamedOneTargetKeepsItForEveryStage() {
+        TourStep expand = TourRun.steps().get(1);
+        assertEquals(TourTargets.STATUS_BAR, expand.targetIdAt(0));
+        assertEquals(TourTargets.STATUS_BAR, expand.targetIdAt(1));
+        assertEquals(TourTargets.STATUS_BAR, expand.targetIdAt(9));
+        assertEquals(TourTargets.STATUS_BAR, expand.targetIdAt(-1));
+    }
+
+    @Test
     public void theRunIsNotEditable() {
         List<TourStep> steps = TourRun.steps();
         try {

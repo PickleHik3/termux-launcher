@@ -127,36 +127,33 @@ public class TourSignalRelayTest {
     }
 
     @Test
-    public void onlyAMoveToADifferentWindowIsAChipTap() {
+    public void everyChipTapIsAChipTapIncludingTheFirstAndTheCurrentOne() {
+        // The status bar reports a chip only from its own tap listener, so unlike the count there
+        // is no rebuild to filter out — and re-tapping the current chip is how the x is revealed.
         relay.onWindowSelected("a");
-        assertTrue(signals.isEmpty());
         relay.onWindowSelected("a");
-        assertTrue(signals.isEmpty());
         relay.onWindowSelected("b");
-        relay.onWindowSelected("b");
-        relay.onWindowSelected("a");
-        assertEquals(2, signals.size());
+        assertEquals(3, signals.size());
         assertEquals(TourSignals.WINDOW_CHIP_SELECTED, signals.get(0));
         assertEquals(TourSignals.WINDOW_CHIP_SELECTED, signals.get(1));
+        assertEquals(TourSignals.WINDOW_CHIP_SELECTED, signals.get(2));
     }
 
     @Test
     public void aWindowThatIsNotThereYetIsNotASignal() {
-        relay.onWindowSelected(null);
-        relay.onWindowSelected("a");
         relay.onWindowSelected(null);
         assertTrue(signals.isEmpty());
     }
 
     @Test
     public void theDrawerSpeaksOnlyWhenItActuallyMoves() {
-        relay.onDrawerOpenSettled(false);
+        relay.onDrawerOpenSettled(false, true);
         assertTrue(signals.isEmpty());
-        relay.onDrawerOpenSettled(false);
+        relay.onDrawerOpenSettled(false, true);
         assertTrue(signals.isEmpty());
-        relay.onDrawerOpenSettled(true);
-        relay.onDrawerOpenSettled(true);
-        relay.onDrawerOpenSettled(false);
+        relay.onDrawerOpenSettled(true, true);
+        relay.onDrawerOpenSettled(true, true);
+        relay.onDrawerOpenSettled(false, true);
         assertEquals(2, signals.size());
         assertEquals(TourSignals.DRAWER_OPENED, signals.get(0));
         assertEquals(TourSignals.DRAWER_CLOSED, signals.get(1));
@@ -164,10 +161,24 @@ public class TourSignalRelayTest {
 
     @Test
     public void aDrawerThatStartsOpenReportsItsCloseFirst() {
-        relay.onDrawerOpenSettled(true);
-        relay.onDrawerOpenSettled(false);
+        relay.onDrawerOpenSettled(true, true);
+        relay.onDrawerOpenSettled(false, true);
         assertEquals(1, signals.size());
         assertEquals(TourSignals.DRAWER_CLOSED, signals.get(0));
+    }
+
+    @Test
+    public void aDrawerTheLauncherPutAwayItselfIsNotTheUsersSwipe() {
+        relay.onDrawerOpenSettled(false, true);
+        relay.onDrawerOpenSettled(true, true);
+        assertEquals(1, signals.size());
+        // HOME, a rotation and a preference reload all close the plane without a finger.
+        relay.onDrawerOpenSettled(false, false);
+        assertEquals(1, signals.size());
+        // And the state is still tracked, so the next real open is still an open.
+        relay.onDrawerOpenSettled(true, true);
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.DRAWER_OPENED, signals.get(1));
     }
 
     @Test
@@ -190,8 +201,8 @@ public class TourSignalRelayTest {
         relay.onWindowCountSettled(2);
         relay.onWindowSelected("a");
         relay.onWindowSelected("b");
-        relay.onDrawerOpenSettled(false);
-        relay.onDrawerOpenSettled(true);
+        relay.onDrawerOpenSettled(false, true);
+        relay.onDrawerOpenSettled(true, true);
         relay.onPaneSplit();
         relay.onPaneCornerMenuOpened();
         relay.onAppLaunchedFromScrub();

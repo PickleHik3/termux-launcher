@@ -105,8 +105,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         /** The launcher row the grid borrows icons, tint and launch ladder from; null before built. */
         @Nullable SuggestionBarView suggestionBar();
 
-        /** The plane has settled open, or has finished closing and been torn down. */
-        default void onDrawerOpenSettled(boolean open) {}
+        /**
+         * The plane has settled open, or has finished closing and been torn down.
+         *
+         * @param userDriven whether the finger did it. A close the launcher performed on its own —
+         *     HOME, {@code onStop}, a rotation, a preference reload — reaches here exactly like a
+         *     swipe does, and a listener that cannot tell them apart reads the user's trip to the
+         *     home screen as a gesture they never made.
+         */
+        default void onDrawerOpenSettled(boolean open, boolean userDriven) {}
 
         /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
         boolean applyWallpaperFrost(@NonNull ImageView frost);
@@ -443,7 +450,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mProgress.reset(0f);
         if (!mEngaged) return;
         applyFrame(0f);
-        onClosed();
+        onClosed(false);
     }
 
     private void settle(boolean open, float velocityPxPerSec) {
@@ -454,7 +461,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // typed into a drawer that is on its way out.
         applyContentOpenState();
         if (open) {
-            mHost.onDrawerOpenSettled(true);
+            mHost.onDrawerOpenSettled(true, true);
             requestSearchKeyboardOnOpenIfEnabled();
             nudgeCategorizationIfPending();
         } else {
@@ -667,7 +674,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mProgress.reset(0f);
             mReveal.reset(0f);
             applyFrame(0f);
-            onClosed();
+            // Reached only by a settle the finger asked for: a release, a cancelled drag, Back.
+            // The lifecycle's own teardown goes through closeImmediate() and says so.
+            onClosed(true);
             return;
         }
         if (moving || revealMoving || fxMoving || mTextFieldFocusPending) kick();
@@ -1455,8 +1464,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * {@code applyAccessoryGeometryIfNeeded} suppressed for the life of the activity — a dock that
      * silently stops responding to every style and height change.
      */
-    private void onClosed() {
-        mHost.onDrawerOpenSettled(false);
+    private void onClosed(boolean userDriven) {
+        mHost.onDrawerOpenSettled(false, userDriven);
         try {
             // First, and before anything that can throw: a full-screen grid left interactive and
             // VISIBLE over the terminal swallows every touch, and does it silently.
