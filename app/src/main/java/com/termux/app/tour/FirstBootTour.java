@@ -50,9 +50,6 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         boolean isTerminalSheetUp();
 
         boolean isSurfaceEditorUp();
-
-        /** Whether a finger is mid-scrub on the A-Z row, choosing an app. */
-        boolean isAzScrubInProgress();
     }
 
     @NonNull private final Activity mActivity;
@@ -234,9 +231,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onPaletteOpened();
     }
 
+    /** The command palette went away again, however it was dismissed. */
+    public void onPaletteClosed() {
+        mSignals.onPaletteClosed();
+    }
+
     /**
-     * Something that covers the home screen whole opened or closed, or a finger went down on or
-     * came off the A-Z row. Cheap, and safe to call on anything that might have moved one of them.
+     * Something that covers the home screen whole opened or closed. Cheap, and safe to call on
+     * anything that might have moved one of them.
      */
     public void onChromeChanged() {
         refreshCardVisibility();
@@ -250,15 +252,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         TourOverlayView overlay = mOverlay;
         if (overlay == null) return;
         TourStep step = mController.currentStep();
-        boolean scrubbing = mChromeProbe != null && mChromeProbe.isAzScrubInProgress();
         java.util.EnumSet<TourChrome> chrome = chromeUp();
-        int presentation = TourCardVisibility.decide(step, mController.currentStage(), scrubbing,
-            chrome);
+        int presentation = TourCardVisibility.decide(step, mController.currentStage(), chrome);
         if (presentation != mPresentation) {
             mPresentation = presentation;
             TourLog.d("card " + (step == null ? "none" : step.id + ":" + mController.currentStage())
-                + " is now " + describePresentation(presentation)
-                + " (chrome " + chrome + (scrubbing ? ", scrubbing" : "") + ")");
+                + " is now " + describePresentation(presentation) + " (chrome " + chrome + ")");
         }
         overlay.setPresentation(presentation);
     }

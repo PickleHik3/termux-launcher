@@ -50,6 +50,12 @@ public interface TourSignals {
     String APP_LAUNCHED_FROM_SCRUB = "launcher.scrub_launch";
     /** The command palette was opened by the space bar's swipe up. */
     String PALETTE_OPENED = "palette.opened";
+    /**
+     * The command palette went away again, however it was dismissed. Reported from the one call
+     * every close path makes — the interceptor funnel that hands the keyboard slot back — so an
+     * outside tap, Esc and a second invocation all count.
+     */
+    String PALETTE_CLOSED = "palette.closed";
 
     /** What a signal source talks to. */
     interface Listener {

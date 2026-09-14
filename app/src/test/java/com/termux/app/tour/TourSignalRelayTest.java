@@ -305,6 +305,33 @@ public class TourSignalRelayTest {
     }
 
     @Test
+    public void thePaletteClosesOnlyAfterAnOpenTheRunActuallySaw() {
+        // The funnel this arrives from hands its keyboard slot back on pause, on a configuration
+        // change and on destroy too, so a close of a palette that was never open says nothing.
+        relay.onPaletteClosed();
+        assertTrue(signals.isEmpty());
+        relay.onPaletteOpened();
+        relay.onPaletteClosed();
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.PALETTE_OPENED, signals.get(0));
+        assertEquals(TourSignals.PALETTE_CLOSED, signals.get(1));
+        // And a second close of the same palette is not another one.
+        relay.onPaletteClosed();
+        assertEquals(2, signals.size());
+    }
+
+    @Test
+    public void thePaletteCanBeOpenedAndClosedAsOftenAsTheUserLikes() {
+        relay.onPaletteOpened();
+        relay.onPaletteClosed();
+        relay.onPaletteOpened();
+        relay.onPaletteClosed();
+        assertEquals(4, signals.size());
+        assertEquals(TourSignals.PALETTE_OPENED, signals.get(2));
+        assertEquals(TourSignals.PALETTE_CLOSED, signals.get(3));
+    }
+
+    @Test
     public void openingAndDismissingThePaneControlsAreTwoSeparateSignalsEveryTime() {
         // The controls can be raised and dropped as often as the user likes, and the card asking
         // for the way out of them has to hear every one of those: there is no state to compare
@@ -332,6 +359,7 @@ public class TourSignalRelayTest {
         relay.onPaneControlsDismissed();
         relay.onAppLaunchedFromScrub();
         relay.onPaletteOpened();
+        relay.onPaletteClosed();
         assertTrue(signals.isEmpty());
     }
 }

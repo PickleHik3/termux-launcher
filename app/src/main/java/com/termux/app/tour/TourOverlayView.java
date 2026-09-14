@@ -76,6 +76,19 @@ public final class TourOverlayView extends FrameLayout {
     private static final float CARD_GAP_DP = 8f;
     private static final float POINTER_HEIGHT_DP = 7f;
     private static final float POINTER_HALF_WIDTH_DP = 9f;
+    /**
+     * How long a stage keeps asking for a control that could not be measured when it arrived.
+     *
+     * <p>The overlay re-measures on every global layout, which is enough for everything the
+     * chrome lays out — but not for a control revealed by an animation that deliberately walks no
+     * layout at all. The × on the window chip is exactly that: it opens as a 180 ms width
+     * animation that offsets pixels by hand, so between the tap that reveals it and its full width
+     * there is no layout pass for the overlay to hear. This window covers that open with room to
+     * spare, and ends whether or not the control ever turned up.
+     */
+    private static final long TARGET_RETRY_MS = 1500L;
+    /** How often the retry above asks again: often enough to follow a reveal, rarely enough. */
+    private static final long TARGET_RETRY_INTERVAL_MS = 32L;
     private static final float GLOW_PADDING_DP = 4f;
     private static final float GLOW_RADIUS_DP = 12f;
     private static final float FINGER_RADIUS_DP = 9f;
@@ -109,6 +122,12 @@ public final class TourOverlayView extends FrameLayout {
     @Nullable private TourTargets mTargets;
     @Nullable private TourStep mStep;
     @Nullable private Rect mTargetRect;
+    /**
+     * The last control this card was actually placed against, kept so a stage whose own control
+     * cannot be measured yet stays where the stage before it stood instead of jumping to the
+     * middle of the overlay. Cleared when a different card comes up.
+     */
+    @Nullable private Rect mLastAnchorRect;
     /** The launcher's own top bar, measured only while the card rests at the top of the screen. */
     @Nullable private Rect mTopBarRect;
     @Nullable private ValueAnimator mTrace;
@@ -126,6 +145,9 @@ public final class TourOverlayView extends FrameLayout {
     /** How tall the closing card's sections may grow before they start scrolling inside it. */
     private int mScrollMaxHeight = UNBOUNDED_PX;
     private int mPresentation = TourCardVisibility.NORMAL;
+    /** When the current stage stops asking again for a control it could not measure. */
+    private long mRetryUntil;
+    @Nullable private Runnable mRetry;
     /** The edition the sections on the card were built for, or null while it carries none. */
     @Nullable private TourEdition mSectionsEdition;
 
@@ -265,10 +287,13 @@ public final class TourOverlayView extends FrameLayout {
     /** Shows a card, and traces its gesture once. */
     public void showStep(@NonNull TourStep step, int stage) {
         boolean sameCard = mStep != null && mStep.id.equals(step.id) && mStage == stage;
+        // Only within one card: the position a card whose control is missing falls back to is the
+        // one the stage before it stood at, never wherever the card before it happened to be.
+        if (mStep == null || !mStep.id.equals(step.id)) mLastAnchorRect = null;
         mStep = step;
         mStage = stage;
         if (!sameCard) mChordGlowIndex = 0;
-        mCopy.setText(step.showsSecondLineAt(stage) ? step.secondLineRes : step.copyRes);
+        mCopy.setText(step.copyResAt(stage));
         boolean closing = step.isClosingCard();
         mButton.setText(closing ? R.string.tour_done : R.string.tour_skip);
         if (closing) showClosingSections();
@@ -278,6 +303,9 @@ public final class TourOverlayView extends FrameLayout {
         }
         applyPresentation();
         if (!sameCard && getVisibility() == VISIBLE) animateCardIn();
+        // Every stage starts a fresh window of asking for its control: the one the window card
+        // ends on is revealed by an animation that lands after the stage does.
+        armTargetRetry();
         refreshTarget();
         startTrace();
     }
@@ -295,6 +323,8 @@ public final class TourOverlayView extends FrameLayout {
             animateCardIn();
             startTrace();
         }
+        // A card coming back from behind chrome is a card whose control may still be arriving.
+        armTargetRetry();
         refreshTarget();
         requestLayout();
         invalidate();
@@ -302,7 +332,10 @@ public final class TourOverlayView extends FrameLayout {
 
     private void applyPresentation() {
         boolean hidden = mStep == null || mPresentation == TourCardVisibility.HIDDEN;
-        if (hidden) stopTrace();
+        if (hidden) {
+            stopTrace();
+            stopTargetRetry();
+        }
         setVisibility(hidden ? GONE : VISIBLE);
     }
 
@@ -328,6 +361,7 @@ public final class TourOverlayView extends FrameLayout {
         moved |= topBar == null ? mTopBarRect != null : !topBar.equals(mTopBarRect);
         boolean reasonChanged = !reason.equals(mMissReason);
         mTargetRect = updated;
+        if (updated != null && !updated.isEmpty()) mLastAnchorRect = new Rect(updated);
         mTopBarRect = topBar;
         mMissReason = reason;
         // Logged on the edge, not per layout pass: this runs on every global layout, and the
@@ -337,9 +371,58 @@ public final class TourOverlayView extends FrameLayout {
                 + "\": " + reason);
         }
         if (moved) {
-            requestLayout();
+            // The card's own size does not depend on the target, only its position does, so the
+            // card is laid out again here rather than through a window traversal: this is called
+            // on every frame of a reveal, and a requestLayout a frame is the per-frame work the
+            // chrome under the overlay goes out of its way not to do.
+            layoutCard();
             invalidate();
         }
+    }
+
+    /**
+     * Starts this stage asking again for a control the chrome could not measure yet.
+     *
+     * <p>Global layout is the overlay's usual "something moved" hook and is enough for everything
+     * the chrome lays out. It is not enough for a control revealed by an animation that walks no
+     * layout — the × on the window chip — so a stage that names a control keeps asking for a
+     * little while after it arrives, and stops as soon as the window is up.
+     */
+    private void armTargetRetry() {
+        mRetryUntil = android.os.SystemClock.uptimeMillis() + TARGET_RETRY_MS;
+        scheduleTargetRetry();
+    }
+
+    private void scheduleTargetRetry() {
+        if (mRetry != null) return;
+        if (mStep == null || mPresentation != TourCardVisibility.NORMAL) return;
+        if (TourTargets.NONE.equals(mStep.targetIdAt(glowIndex()))) return;
+        if (android.os.SystemClock.uptimeMillis() >= mRetryUntil) return;
+        mRetry = () -> {
+            mRetry = null;
+            refreshTarget();
+            scheduleTargetRetry();
+        };
+        postDelayed(mRetry, TARGET_RETRY_INTERVAL_MS);
+    }
+
+    private void stopTargetRetry() {
+        if (mRetry != null) removeCallbacks(mRetry);
+        mRetry = null;
+        mRetryUntil = 0L;
+    }
+
+    /**
+     * What the card stands against: the control this stage names when it can be measured, and
+     * otherwise the one the stage before it stood against, so a control that is still arriving
+     * does not send the card to the middle of the overlay. The glow is not moved with it —
+     * {@link #onDraw} draws only around a control that really was measured.
+     */
+    @Nullable
+    private Rect anchorRect() {
+        if (mStep == null) return null;
+        boolean namesAControl = !TourTargets.NONE.equals(mStep.targetIdAt(glowIndex()));
+        return TourCardPlacement.anchorRect(namesAControl, mTargetRect, mLastAnchorRect);
     }
 
     /** The control the card is glowing right now, for the log. Null when it has none. */
@@ -385,8 +468,10 @@ public final class TourOverlayView extends FrameLayout {
     /** Takes the card down and stops the trace. */
     public void dismiss() {
         stopTrace();
+        stopTargetRetry();
         mStep = null;
         mTargetRect = null;
+        mLastAnchorRect = null;
         mTopBarRect = null;
         mChordGlowIndex = 0;
         mPlacement = null;
@@ -482,7 +567,7 @@ public final class TourOverlayView extends FrameLayout {
                 margin, margin + mSystemInsetTop, margin + mSystemInsetBottom, mTopBarRect,
                 dp(CARD_GAP_DP))
             : TourCardPlacement.place(getWidth(), getHeight(),
-                width, height, mTargetRect, margin, margin + mSystemInsetTop,
+                width, height, anchorRect(), margin, margin + mSystemInsetTop,
                 margin + mSystemInsetBottom, dp(CARD_GAP_DP), dp(POINTER_HEIGHT_DP),
                 dp(POINTER_HALF_WIDTH_DP));
         mPlacement = placement;
@@ -721,6 +806,7 @@ public final class TourOverlayView extends FrameLayout {
     @Override
     protected void onDetachedFromWindow() {
         stopTrace();
+        stopTargetRetry();
         super.onDetachedFromWindow();
     }
 

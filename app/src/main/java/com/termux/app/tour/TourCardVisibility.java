@@ -17,6 +17,11 @@ import java.util.Set;
  * compact at the top of the screen, where the surface it is asking about is not. A card that falls
  * due behind chrome is not lost: it is simply shown when the chrome goes.
  *
+ * <p>What is deliberately not here any more: the A-Z card used to go off the screen entirely while
+ * a finger was down on the letters. On the third device pass that read as the card vanishing the
+ * moment the user did the thing it asked for, so the card stays where it is — at the top of the
+ * screen, clear of the icons and of the scrub's own previews — until the app is launched.
+ *
  * <p>Pure, so every combination below is a unit test rather than a phone.
  */
 public final class TourCardVisibility {
@@ -35,21 +40,18 @@ public final class TourCardVisibility {
     @Nullable
     public static TourChrome chromeClosedBy(@Nullable String signalId) {
         if (TourSignals.DRAWER_CLOSED.equals(signalId)) return TourChrome.DRAWER;
+        if (TourSignals.PALETTE_CLOSED.equals(signalId)) return TourChrome.PALETTE;
         return null;
     }
 
     /**
      * @param topAnchored the card asks to rest at the top of the screen whatever else is going on
-     * @param gestureInProgress a finger is mid-gesture on a control the run is teaching — the A-Z
-     *     scrub, which paints its own previews across the screen. Nothing of the run draws over
-     *     that: the user is choosing, and they have to be able to see what they are choosing.
      * @param chromeUp the full-plane surfaces in front of the user right now
      * @param awaitedSignal what the card that is up is waiting for, or null when it waits for its
      *     own button
      */
-    public static int decide(boolean topAnchored, boolean gestureInProgress,
-                             Set<TourChrome> chromeUp, @Nullable String awaitedSignal) {
-        if (gestureInProgress) return HIDDEN;
+    public static int decide(boolean topAnchored, Set<TourChrome> chromeUp,
+                             @Nullable String awaitedSignal) {
         if (chromeUp != null && !chromeUp.isEmpty()) {
             TourChrome closes = chromeClosedBy(awaitedSignal);
             return closes != null && chromeUp.contains(closes) ? COMPACT_TOP : HIDDEN;
@@ -58,10 +60,9 @@ public final class TourCardVisibility {
     }
 
     /** The same question for the card that is up, which knows its own stage. */
-    public static int decide(@Nullable TourStep step, int stage, boolean gestureInProgress,
-                             Set<TourChrome> chromeUp) {
+    public static int decide(@Nullable TourStep step, int stage, Set<TourChrome> chromeUp) {
         if (step == null) return HIDDEN;
-        return decide(step.topAnchored, gestureInProgress, chromeUp, step.signalAt(stage));
+        return decide(step.topAnchored, chromeUp, step.signalAt(stage));
     }
 
     private TourCardVisibility() {}
