@@ -549,6 +549,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
 
+        /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
+        public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
+        public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;
+
         /**
          * Defines the key for showing focused app names while scrubbing the dock.
          */

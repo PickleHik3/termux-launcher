@@ -21,6 +21,7 @@ import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
@@ -310,6 +311,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         String text = ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
         if (text != null)
             mHost.focusedView().mEmulator.paste(text);
+    }
+
+    /**
+     * Answer an OSC 52 clipboard read query ({@code ESC ] 52 ; c ; ? BEL}). Null (not the launcher
+     * being visible, the setting off, or nothing on the clipboard) reads as an empty clipboard to
+     * the caller, which still answers the query rather than leaving the program hanging.
+     */
+    @Override
+    public String onReadTextFromClipboard(@NonNull TerminalSession session) {
+        if (!mHost.isVisible())
+            return null;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
+        if (preferences == null || !preferences.isOsc52ClipboardReadEnabled())
+            return null;
+        return ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
     }
 
     @Override
