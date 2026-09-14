@@ -38,6 +38,7 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.DockPlankController;
 import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerZones;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
@@ -3092,6 +3093,8 @@ public class TerminalPaneController {
         private final Path mPath = new Path();
         private final RectF mControlRect = new RectF();
         private final RectF[] mControlButtons = {new RectF(), new RectF(), new RectF()};
+        /** Scratch for the button widths handed to {@link CornerTabGeometry}; never allocated per frame. */
+        private final float[] mControlWidths = new float[3];
 
         @Nullable private Split mXSplit;
         @Nullable private Split mYSplit;
@@ -3100,6 +3103,8 @@ public class TerminalPaneController {
         private int mPressedCorner = CornerZones.NONE;
         private final CornerBracket mBracket = new CornerBracket();
         @Nullable private Leaf mControlLeaf;
+        /** Which of that pane's corners the tab came out of — the one the finger asked at. */
+        private int mControlCorner = CornerZones.NONE;
         @Nullable private Leaf mMovingLeaf;
         @Nullable private Leaf mMoveTarget;
         private float mDownX;
@@ -3143,6 +3148,7 @@ public class TerminalPaneController {
                 && (mActiveWindow == null || findLeafIn(mActiveWindow.root,
                     mControlLeaf.session) == null)) {
                 mControlLeaf = null;
+                mControlCorner = CornerZones.NONE;
                 mControlsShown = false;
                 mControlProgress = 0f;
             }
@@ -3266,6 +3272,9 @@ public class TerminalPaneController {
                     }
                     if (mDraggingDivider || mCornerTapLeaf != null) {
                         Leaf leaf = mCornerTapLeaf;
+                        // Read before the reset clears it: the tab comes out of the corner the
+                        // finger actually asked at.
+                        int corner = mPressedCorner;
                         boolean resized = mDraggingDivider && mTouchMoved;
                         if (resized) {
                             snapSplitToCellGrid(mXSplit);
@@ -3273,7 +3282,7 @@ public class TerminalPaneController {
                         }
                         if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                         resetTouchState();
-                        showControls(leaf);
+                        showControls(leaf, corner);
                         if (resized) mHost.onTreesChanged();
                         return true;
                     }
@@ -3498,11 +3507,35 @@ public class TerminalPaneController {
             return location;
         }
 
+        /**
+         * The tab out of the pane's top-trailing corner, for the callers that are not a finger on
+         * a corner — a pane dropped somewhere new, or swapped with its neighbour.
+         */
         private void showControls(@Nullable Leaf leaf) {
+            showControls(leaf, defaultControlCorner());
+        }
+
+        /** Where a tab nobody aimed goes, the same corner every page on the wall defaults to. */
+        private int defaultControlCorner() {
+            return CornerZones.corner(true, false,
+                getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+        }
+
+        /**
+         * The tab out of one corner. It comes out of the corner the finger asked at, as the
+         * Widgets and Display pages' do, and one already out at another corner starts again from
+         * the new one rather than sliding across.
+         */
+        private void showControls(@Nullable Leaf leaf, int corner) {
             if (leaf == null || !shouldShowInteractionOverlay(
                 mActiveWindow == null ? 0 : leavesOf(mActiveWindow.root).size(),
                 mMaximizedLeaf != null)) return;
+            int target = corner == CornerZones.NONE ? defaultControlCorner() : corner;
+            if (mControlsShown && mControlLeaf == leaf && mControlCorner != target) {
+                mControlProgress = 0f;
+            }
             mControlLeaf = leaf;
+            mControlCorner = target;
             mControlsShown = true;
             animateControlProgress(1f, false);
             mHost.onPaneControlsShown();
@@ -3527,6 +3560,7 @@ public class TerminalPaneController {
                     if (clearOnEnd && mControlProgress <= 0f) {
                         mControlsShown = false;
                         mControlLeaf = null;
+                        mControlCorner = CornerZones.NONE;
                     }
                 }
             });
@@ -3563,26 +3597,31 @@ public class TerminalPaneController {
             return mMaximizedLeaf == null ? slot : slot + 1;
         }
 
+        /**
+         * The tab at the corner the finger asked at. The placement is
+         * {@link CornerTabGeometry}'s — the same rule the Widgets and Display pages follow, so a
+         * pane's tab never lands anywhere its neighbours' would not — and only the sizes here are
+         * the pane's own: a tighter 22.4dp button than a page's 30dp one, because a pane's tab
+         * sits inside chrome that already steadies the thumb.
+         */
         private void computeControlGeometry() {
             RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf, mGeometryPaneRect);
             if (pane == null) {
                 mControlRect.setEmpty();
+                for (RectF button : mControlButtons) button.setEmpty();
                 return;
             }
             int count = controlCount();
-            float button = dp(22.4f);
-            float width = button * count + dp(4.8f);
-            float right = pane.right - dp(3);
-            float left = Math.max(pane.left + dp(3), right - width);
-            float height = dp(24);
-            float top = pane.top - height * (1f - mControlProgress);
-            mControlRect.set(left, top, right, top + height);
-            for (int i = 0; i < mControlButtons.length; i++) mControlButtons[i].setEmpty();
-            float x = left + dp(2.4f);
-            for (int i = 0; i < count; i++) {
-                mControlButtons[i].set(x, top, x + button, top + dp(22));
-                x += button;
-            }
+            for (int i = 0; i < count; i++) mControlWidths[i] = dp(22.4f);
+            // The pane's own corner arc, so a glass pane's radius pushes the tab in past it.
+            float inset = paneGlassActive() ? paneGlassRadiusPx() : 0f;
+            CornerTabGeometry.layout(controlCorner(), pane, mControlWidths, count, 0f, dp(2.4f),
+                dp(24), inset, dp(3), mControlProgress, mControlRect, mControlButtons);
+        }
+
+        /** The corner the tab is out of, or the default when nothing has aimed one yet. */
+        private int controlCorner() {
+            return mControlCorner == CornerZones.NONE ? defaultControlCorner() : mControlCorner;
         }
 
         @Override
@@ -3744,22 +3783,27 @@ public class TerminalPaneController {
                 ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
             RectF pane = paneRect(mControlLeaf, mDrawPaneRect);
             if (pane == null) return;
-            float paneTop = pane.top;
+            boolean fromTop = CornerZones.isTop(controlCorner());
+            // The pane edge the tab is revealed through, and the tab's own far edge — the one
+            // carrying the rounded pair. Out of the top edge they are the pane's top and the tab's
+            // bottom; out of the bottom edge, the other way round.
+            float paneEdge = fromTop ? pane.top : pane.bottom;
+            float tabEdge = fromTop ? mControlRect.bottom : mControlRect.top;
+            // Which way the tab's far edge lies from the pane edge it came out of.
+            float dir = fromTop ? 1f : -1f;
             float radius = dp(4);
             int canvasState = canvas.save();
-            // The tab is revealed through the pane's top edge. Clipping here is what makes the
-            // closing motion disappear back into the frame instead of floating above the pane.
-            canvas.clipRect(pane.left, paneTop - dp(1), pane.right, pane.bottom);
+            // Clipping to the pane is what makes the closing motion disappear back into the frame
+            // instead of floating above it.
+            canvas.clipRect(pane.left, pane.top - dp(1), pane.right, pane.bottom + dp(1));
 
             mPath.reset();
-            mPath.moveTo(mControlRect.left, paneTop);
-            mPath.lineTo(mControlRect.right, paneTop);
-            mPath.lineTo(mControlRect.right, mControlRect.bottom - radius);
-            mPath.quadTo(mControlRect.right, mControlRect.bottom,
-                mControlRect.right - radius, mControlRect.bottom);
-            mPath.lineTo(mControlRect.left + radius, mControlRect.bottom);
-            mPath.quadTo(mControlRect.left, mControlRect.bottom,
-                mControlRect.left, mControlRect.bottom - radius);
+            mPath.moveTo(mControlRect.left, paneEdge);
+            mPath.lineTo(mControlRect.right, paneEdge);
+            mPath.lineTo(mControlRect.right, tabEdge - dir * radius);
+            mPath.quadTo(mControlRect.right, tabEdge, mControlRect.right - radius, tabEdge);
+            mPath.lineTo(mControlRect.left + radius, tabEdge);
+            mPath.quadTo(mControlRect.left, tabEdge, mControlRect.left, tabEdge - dir * radius);
             mPath.close();
             mPaint.setStyle(Paint.Style.FILL);
             mPaint.setColor(ColorUtils.setAlphaComponent(surface,
@@ -3767,16 +3811,14 @@ public class TerminalPaneController {
             canvas.drawPath(mPath, mPaint);
 
             mPath.reset();
-            mPath.moveTo(mControlRect.left - dp(5), paneTop);
-            mPath.lineTo(mControlRect.left, paneTop);
-            mPath.lineTo(mControlRect.left, mControlRect.bottom - radius);
-            mPath.quadTo(mControlRect.left, mControlRect.bottom,
-                mControlRect.left + radius, mControlRect.bottom);
-            mPath.lineTo(mControlRect.right - radius, mControlRect.bottom);
-            mPath.quadTo(mControlRect.right, mControlRect.bottom,
-                mControlRect.right, mControlRect.bottom - radius);
-            mPath.lineTo(mControlRect.right, paneTop);
-            mPath.lineTo(mControlRect.right + dp(5), paneTop);
+            mPath.moveTo(mControlRect.left - dp(5), paneEdge);
+            mPath.lineTo(mControlRect.left, paneEdge);
+            mPath.lineTo(mControlRect.left, tabEdge - dir * radius);
+            mPath.quadTo(mControlRect.left, tabEdge, mControlRect.left + radius, tabEdge);
+            mPath.lineTo(mControlRect.right - radius, tabEdge);
+            mPath.quadTo(mControlRect.right, tabEdge, mControlRect.right, tabEdge - dir * radius);
+            mPath.lineTo(mControlRect.right, paneEdge);
+            mPath.lineTo(mControlRect.right + dp(5), paneEdge);
             mPaint.setStyle(Paint.Style.STROKE);
             mPaint.setStrokeWidth(dp(1));
             mPaint.setStrokeCap(Paint.Cap.ROUND);

@@ -606,6 +606,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         // dressed while a display runs — the surface simply covers it — so the page has the glass
         // it should the moment the display stops, without a pass of its own to run then.
         PaneGlass.apply(style, this, mGlass, radiusPx);
+        // The tab starts past the corner arc, exactly as the Widgets page's does. Left at the flush
+        // 3dp the page's own corner mask paints the wall over the tab's outer corner, and the tab
+        // reads as hanging out past the rounded edge instead of sitting inside it.
+        if (mControls != null) mControls.setCornerInsetPx(radiusPx);
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
         // rounded outline, so a clipping frame cut away the very paint that rounds the surface,
         // which no clip reaches. The slab is square for the same reason and the mask rounds it,
