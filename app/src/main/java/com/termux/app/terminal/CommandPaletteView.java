@@ -600,12 +600,14 @@ public final class CommandPaletteView extends View {
         boolean showPlaceholder = mQuery.isEmpty();
         mMono.setColor(withBodyAlpha(showPlaceholder ? mMeta : mOnSurface, alpha));
         String queryText = showPlaceholder ? mQueryPlaceholder : mQuery;
-        canvas.drawText(ellipsizeStart(mMono, queryText, queryEnd - queryStart),
-            queryStart, promptBaseline, mMono);
-        if (!showPlaceholder) {
-            drawCaret(canvas, queryStart + Math.min(measureToCursor(mMono, mQuery),
-                queryEnd - queryStart), promptBaseline, alpha);
-        }
+        // An empty line still takes input: the caret sits where the first character will land
+        // and the placeholder reads after it, so the blink says "type here" before anything is.
+        float textStart = showPlaceholder ? queryStart + dp(CARET_W) + dp(5f) : queryStart;
+        canvas.drawText(ellipsizeStart(mMono, queryText, queryEnd - textStart),
+            textStart, promptBaseline, mMono);
+        drawCaret(canvas, showPlaceholder ? queryStart
+            : queryStart + Math.min(measureToCursor(mMono, mQuery), queryEnd - queryStart),
+            promptBaseline, alpha);
 
         float listBottom = listBottom();
         drawList(canvas, filterBottom, listBottom, alpha);

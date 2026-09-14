@@ -343,17 +343,17 @@ public final class TourOverlayView extends FrameLayout {
     public void refreshTarget() {
         if (mStep == null) return;
         boolean compact = mPresentation != TourCardVisibility.NORMAL;
-        String targetId = compact ? TourTargets.NONE : mStep.targetIdAt(glowIndex());
+        String targetId = mStep.targetIdAt(glowIndex());
         Rect updated = null;
         Rect topBar = null;
         String reason = "no targets host";
-        if (compact) {
-            // Measured even though this card glows nothing: it is the ceiling the card rests
-            // under, and it is asked for on the same pass as everything else so a keyboard, a
-            // rotation or a place change moves the card with it.
-            if (mTargets != null) topBar = mTargets.rectFor(TourTargets.STATUS_BAR);
-            reason = "the card is resting at the top of the screen";
-        } else if (mTargets != null) {
+        if (compact && mTargets != null) {
+            // The ceiling the card rests under, asked for on the same pass as everything else so
+            // a keyboard, a rotation or a place change moves the card with it. The card's own
+            // control is still measured below: resting at the top does not mean glowing nothing.
+            topBar = mTargets.rectFor(TourTargets.STATUS_BAR);
+        }
+        if (mTargets != null) {
             updated = mTargets.rectFor(targetId);
             reason = updated == null ? mTargets.lastMissReason() : "none";
         }
