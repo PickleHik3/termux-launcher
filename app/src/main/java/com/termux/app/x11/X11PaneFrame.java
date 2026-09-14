@@ -46,6 +46,8 @@ import com.termux.x11.LorieView;
  */
 public final class X11PaneFrame extends PaneContentFrame {
 
+    private static final int ACTION_HELP = 2;
+
     /** What the page needs from the launcher. */
     public interface Host {
         /** Run the configured start command — the page's "Start display" button. */
@@ -161,10 +163,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         mControls = new PaneControlsView(getContext());
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, GLYPH_POWER),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
-            PaneControlsView.Action.label(2, getContext().getString(R.string.help_button)));
+            PaneControlsView.Action.label(ACTION_HELP, getContext().getString(R.string.help_button)));
         mControls.setListener(id -> {
             if (mHost == null) return;
-            if (id == 2) { dismissControls(); mHost.showHelpOverlay(); }
+            if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });

@@ -792,6 +792,11 @@ public class TerminalPaneController {
         return mTouchMouseMode;
     }
 
+    /** Help also dismisses the maximised pane's normally persistent tab. */
+    public void dismissControlsForHelp() {
+        mInteractionOverlay.dismissControlsForHelp();
+    }
+
     @Nullable public TerminalView getActivePaneView() {
         TerminalSession s = getActiveSession();
         return s == null ? null : mPaneViews.get(s);
@@ -3132,7 +3137,7 @@ public class TerminalPaneController {
         private static final int ACTION_MOVE_PANE = 0;
         private static final int ACTION_MAXIMIZE = 1;
         private static final int ACTION_CLOSE = 2;
-        /** The lone pane's only control: open the surface editor on this page. */
+        /** Open the surface editor on this page. */
         private static final int ACTION_SURFACE_EDITOR = 3;
         private static final int ACTION_HELP = 4;
 
@@ -3363,7 +3368,7 @@ public class TerminalPaneController {
 
         private void performControlAction(int action, @NonNull Leaf leaf) {
             if (action == ACTION_HELP) {
-                dismissControls();
+                dismissControlsForHelp();
                 mHost.showHelpOverlay();
             } else if (action == ACTION_MAXIMIZE) {
                 mMaximizedLeaf = mMaximizedLeaf == null ? leaf : null;
@@ -3611,6 +3616,16 @@ public class TerminalPaneController {
             mHost.onPaneControlsShown();
         }
 
+        private void dismissControlsForHelp() {
+            if (mControlAnimator != null) mControlAnimator.cancel();
+            if (mControlsShown) mHost.onPaneControlsDismissed();
+            mControlsShown = false;
+            mControlProgress = 0f;
+            mControlLeaf = null;
+            mControlCorner = CornerZones.NONE;
+            invalidate();
+        }
+
         private void dismissControls() {
             if (mMaximizedLeaf != null) return;
             if (mControlsShown) mHost.onPaneControlsDismissed();
@@ -3656,7 +3671,7 @@ public class TerminalPaneController {
                 mMaximizedLeaf != null);
         }
 
-        /** How many buttons the tab holds: one for a lone pane, two maximized, three in a split. */
+        /** The pane actions plus Help: two alone, three maximised, four in a split. */
         private int controlCount() {
             if (isLonePane()) return 2;
             return mMaximizedLeaf == null ? 4 : 3;

@@ -263,6 +263,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showHelpOverlay() {
         ViewGroup content = findViewById(android.R.id.content);
         if (content == null) return;
+        if (mPaneController != null) mPaneController.dismissControlsForHelp();
         if (mPaneWallController != null) {
             if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().dismissControls();
             if (mPaneWallController.displayPage() != null) mPaneWallController.displayPage().dismissControls();
