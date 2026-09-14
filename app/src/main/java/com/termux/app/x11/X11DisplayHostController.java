@@ -143,6 +143,9 @@ public final class X11DisplayHostController {
      * settles on the Display page, because a hidden page detaches its surface.
      */
     public void attachView(@NonNull LorieView view) {
+        // A view that has left a window has dropped its clipboard listener with it, so every
+        // attach starts from off and the connection below arms it again.
+        clipboardSync.deactivate();
         this.view = view;
         host.setLorieView(view);
         // The server repeats the current cursor name when a host attaches, so the policy starts
