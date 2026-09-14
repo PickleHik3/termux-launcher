@@ -376,8 +376,6 @@ public final class X11PaneFrame extends PaneContentFrame {
     }
 
     /** Put the controls away, for a host that moved the wall on. */
-    public int helpCorner() { return mControls == null ? CornerZones.TOP_LEFT : mControls.corner(); }
-
     public void dismissControls() {
         if (mControls != null) mControls.dismiss();
         if (mRail != null) mRail.dismiss();

@@ -3,24 +3,19 @@ package com.termux.app.help;
 import android.content.Context;
 import android.graphics.Outline;
 import android.graphics.Rect;
-import android.graphics.RectF;
 import android.view.View;
 import android.view.ViewGroup;
 import com.termux.R;
 import com.termux.app.AzScrubRowView;
-import com.termux.app.chrome.CornerZones;
 import com.termux.app.launcher.widget.WidgetCellRect;
 import com.termux.app.launcher.widget.WidgetGridMetrics;
 import com.termux.app.launcher.widget.WidgetGridView;
-import com.termux.app.statusbar.StatusBarLensView;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.terminal.TerminalKeyBindingResolver;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WidgetPaneFrame;
 import com.termux.app.x11.DisplayScaleRailView;
 import com.termux.app.x11.DisplayTouchpadView;
-import com.termux.app.x11.X11PaneFrame;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import java.util.ArrayList;
@@ -77,43 +72,24 @@ public final class HelpTargets {
         if (place != PaneWallPage.WIDGETS) {
             if (bar instanceof TerminalWindowBar) {
                 TerminalWindowBar windows = (TerminalWindowBar) bar;
+                // The chips and the + are one box and one hint: the + is the chip strip's own
+                // trailing button, and a quick reference reads better as one line than two.
                 Rect chips = null;
                 ViewGroup strip = (ViewGroup) windows.chipStripView();
-                for (int i = 0; i < strip.getChildCount(); i++) {
-                    View child = strip.getChildAt(i);
-                    if (child == windows.createWindowButtonView()) continue;
-                    chips = union(chips, rect(child));
-                }
+                for (int i = 0; i < strip.getChildCount(); i++) chips = union(chips, rect(strip.getChildAt(i)));
                 add(s, "windows", chips, radius(strip), place == PaneWallPage.TERMINAL
                     ? copy(R.string.help_windows_title, R.string.help_windows_body)
                     : copy(R.string.help_display_apps_title, R.string.help_display_apps_body));
-                if (place == PaneWallPage.TERMINAL)
-                    add(s, "new-window", windows.createWindowButtonView(),
-                        copy(R.string.help_new_window_title, R.string.help_new_window_body));
             }
             stats(s);
         }
-        View lens = finder.findHelpView(R.id.terminal_status_lens);
-        Rect status = null;
-        if (lens instanceof StatusBarLensView) {
-            Rect local = ((StatusBarLensView) lens).helpAnchorBounds();
-            status = localRect(lens, local);
-        }
-        if (status == null) {
-            status = rect(finder.findHelpView(R.id.terminal_window_bar_host));
-            if (status != null) {
-                int size = Math.min(status.width(), status.height());
-                if (status.width() >= status.height()) status.left = status.right - size;
-                else status.top = status.bottom - size;
-            }
-        }
-        add(s, "status", status, radius(lens), copy(R.string.help_status_title, R.string.help_status_body));
+        // The whole bar, not the peeking place icon at its end: the gestures the hint names are
+        // made anywhere along it, and a box on one small icon read as being about that icon.
+        View host = finder.findHelpView(R.id.terminal_window_bar_host);
+        add(s, "status", rect(host), radius(host), copy(R.string.help_status_title, R.string.help_status_body));
         if (place == PaneWallPage.TERMINAL) {
             add(s, "sessions", finder.findHelpView(R.id.terminal_sessions_indicator),
                 copy(R.string.help_sessions_title, R.string.help_sessions_body));
-            corner(s, finder.activePane(), CornerZones.TOP_LEFT,
-                copy(R.string.help_corner_title, finder.paneCount() > 1
-                    ? R.string.help_corner_body : R.string.help_lone_corner_body));
             if (finder.paneCount() > 1) {
                 View divider = tagged(root);
                 add(s, "divider", divider, copy(R.string.help_divider_title, R.string.help_divider_body));
@@ -123,16 +99,16 @@ public final class HelpTargets {
                 dock != null && dock.getId() == R.id.dock_rail_scroll ? R.string.help_rail_body : R.string.help_dock_body));
             add(s, "az", firstOfType(root, AzScrubRowView.class), copy(R.string.help_az_title, R.string.help_az_body));
             extraKeys(root, s);
-            Rect ctrl = keyRect("ctrl"), alt = keyRect("alt");
-            String chords = chords();
-            if (ctrl != null && alt != null && !chords.isEmpty())
-                add(s, "chords", union(ctrl, alt), 0,
-                    new HelpCopy(context.getString(R.string.help_chords_title), chords));
-            add(s, "space", keyRect("space"), 0, copy(R.string.help_space_title, R.string.help_space_body));
+            // The keyboard's bottom row is one box and one hint: the chords and the space bar's
+            // swipes together, so the reference stays short.
+            Rect row = union(union(keyRect("ctrl"), keyRect("alt")), union(keyRect("space"), keyRect("enter")));
+            if (row != null) {
+                String chords = chords();
+                String space = context.getString(R.string.help_space_body);
+                add(s, "keyboard", row, 0, new HelpCopy(context.getString(R.string.help_keyboard_title),
+                    chords.isEmpty() ? space : chords + "\n" + space));
+            }
         } else if (place == PaneWallPage.DISPLAY) {
-            X11PaneFrame frame = firstOfType(root, X11PaneFrame.class);
-            corner(s, frame, frame == null ? CornerZones.TOP_LEFT : frame.helpCorner(),
-                copy(R.string.help_page_corner_title, R.string.help_display_corner_body));
             DisplayScaleRailView rail = firstOfType(root, DisplayScaleRailView.class);
             if (rail != null && rail.isRailShown()) add(s, "scale", localRect(rail, rail.helpBounds()),
                 radius(rail), copy(R.string.help_scale_title, R.string.help_scale_body));
@@ -140,9 +116,6 @@ public final class HelpTargets {
                 copy(R.string.help_pad_title, R.string.help_pad_one, R.string.help_pad_two, R.string.help_pad_three));
             add(s, "start", finder.findHelpView(R.id.x11_pane_start), copy(R.string.help_start_title, R.string.help_start_body));
         } else {
-            WidgetPaneFrame frame = firstOfType(root, WidgetPaneFrame.class);
-            corner(s, frame, frame == null ? CornerZones.TOP_LEFT : frame.helpCorner(),
-                copy(R.string.help_page_corner_title, R.string.help_widgets_corner_body));
             WidgetGridView grid = firstOfType(root, WidgetGridView.class);
             if (grid != null) {
                 for (int i = 0; i < grid.getChildCount(); i++) {
@@ -193,17 +166,6 @@ public final class HelpTargets {
         }
         add(s, "stats", bounds, radius(finder.findHelpView(R.id.terminal_status_stats_cluster)),
             new HelpCopy(title.toString(), context.getString(R.string.help_stats_body)));
-    }
-    private void corner(Snapshot s, View pane, int corner, HelpCopy copy) {
-        // Terminal content is inset inside its shaped frame; corners belong to that frame.
-        if (pane != null && pane.getParent() instanceof com.termux.app.terminal.PaneContentFrame)
-            pane = (View) pane.getParent();
-        Rect bounds = rect(pane);
-        if (bounds == null) return;
-        RectF r = new RectF();
-        CornerZones.cornerRect(corner, new RectF(bounds), CornerZones.sizePx(overlay.getResources().getDisplayMetrics().density), r);
-        Rect out = new Rect(); r.roundOut(out);
-        add(s, "corner", out, radius(pane), copy);
     }
     private void extraKeys(View view, Snapshot s) {
         if (rect(view) == null || view == overlay) return;

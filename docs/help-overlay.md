@@ -53,6 +53,14 @@ and the review page `.lavish/help-overlay-inventory.html` (sections "Help overla
 - **Out of scope.** Animation beyond a fade; gesture demonstrations; persistent state; a Settings
   entry; launcherctl tool.
 
+## Second pass (2026-09-14, from the phone)
+
+- No hint about the corner tab or the pane corners: the user reached the help through that tab.
+- The status bar box spans the whole bar, not the peeking place icon at its end.
+- A quick reference, not a manual: the windows chips and the + are one hint; the keyboard's
+  bottom row (chords and space-bar swipes) is one hint; every line is as short as it can be and
+  the cards are tighter. The tables below are superseded where they differ.
+
 ## Per place: boxes and copy
 
 Strings go in `strings.xml` under `help_…`. Titles bold, lines as given.

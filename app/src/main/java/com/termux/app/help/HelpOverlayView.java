@@ -223,8 +223,8 @@ public final class HelpOverlayView extends FrameLayout {
         SpannableString content = new SpannableString(copy.title+"\n"+copy.body);
         content.setSpan(new StyleSpan(Typeface.BOLD),0,copy.title.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         text.setText(content); text.setTextSize(12); text.setTextColor(dress.textColor);
-        text.setPadding(dp(10),dp(8),dp(10),dp(8));
-        text.setLineSpacing(dp(2),1);
+        text.setPadding(dp(8),dp(6),dp(8),dp(6));
+        text.setLineSpacing(dp(1),1);
         text.setBackground(dress.background(0));
         return text;
     }

@@ -150,8 +150,6 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         return mControls;
     }
 
-    public int helpCorner() { return mControls == null ? CornerZones.TOP_LEFT : mControls.corner(); }
-
     public void dismissControls() {
         dismissGridSizePopup();
         if (mControls != null) mControls.dismiss();
