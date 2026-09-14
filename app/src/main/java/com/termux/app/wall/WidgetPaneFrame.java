@@ -45,6 +45,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         void openWidgetGridSettings();
         /** The pencil: start editing the widgets, exactly as the long-press menu does. */
         void editWidgets();
+        default void showHelpOverlay() {}
         /** The columns the grid is showing now. */
         int widgetGridColumns();
         /** The rows the grid is showing now. */
@@ -57,6 +58,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_SETTINGS = 0;
     private static final int ACTION_EDIT = 1;
     private static final int ACTION_GRID_SIZE = 2;
+    private static final int ACTION_HELP = 3;
 
     /** nf-fa-cog and nf-fa-pencil. */
     private static final String GLYPH_SETTINGS = "";
@@ -148,6 +150,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         return mControls;
     }
 
+    public int helpCorner() { return mControls == null ? CornerZones.TOP_LEFT : mControls.corner(); }
+
     public void dismissControls() {
         dismissGridSizePopup();
         if (mControls != null) mControls.dismiss();
@@ -156,7 +160,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private void applyRestingActions() {
         if (mControls == null) return;
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
-            PaneControlsView.Action.glyph(ACTION_EDIT, GLYPH_EDIT));
+            PaneControlsView.Action.glyph(ACTION_EDIT, GLYPH_EDIT),
+            PaneControlsView.Action.label(ACTION_HELP, getContext().getString(R.string.help_button)));
     }
 
     /** The read-out on the editing tab: the columns and rows the grid is showing. */
@@ -164,7 +169,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         if (mControls == null || !mEditing || mHost == null) return;
         mControls.setActions(PaneControlsView.Action.label(ACTION_GRID_SIZE,
             getContext().getString(R.string.widget_grid_size_tab,
-                mHost.widgetGridColumns(), mHost.widgetGridRows())));
+                mHost.widgetGridColumns(), mHost.widgetGridRows())),
+            PaneControlsView.Action.label(ACTION_HELP, getContext().getString(R.string.help_button)));
     }
 
     private void runControl(int id) {
@@ -173,7 +179,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             return;
         }
         if (mHost == null) return;
-        if (id == ACTION_SETTINGS) mHost.openWidgetGridSettings();
+        if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
+        else if (id == ACTION_SETTINGS) mHost.openWidgetGridSettings();
         else if (id == ACTION_EDIT) mHost.editWidgets();
     }
 

@@ -56,6 +56,7 @@ public final class X11PaneFrame extends PaneContentFrame {
         default void toggleDisplayPower() { }
         /** The cog: open the display's settings. */
         default void openDisplaySettings() { }
+        default void showHelpOverlay() {}
         /**
          * True when one of the launcher's own chords claimed this key, in which case X must not
          * see it. Everything else is the display's.
@@ -159,10 +160,12 @@ public final class X11PaneFrame extends PaneContentFrame {
         // answers the taps, so the view never stands between a finger and X.
         mControls = new PaneControlsView(getContext());
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, GLYPH_POWER),
-            PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS));
+            PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
+            PaneControlsView.Action.label(2, getContext().getString(R.string.help_button)));
         mControls.setListener(id -> {
             if (mHost == null) return;
-            if (id == ACTION_POWER) mHost.toggleDisplayPower();
+            if (id == 2) { dismissControls(); mHost.showHelpOverlay(); }
+            else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });
         // The scale rail comes out with the tab, along the leading edge, while a display runs.
@@ -371,6 +374,8 @@ public final class X11PaneFrame extends PaneContentFrame {
     }
 
     /** Put the controls away, for a host that moved the wall on. */
+    public int helpCorner() { return mControls == null ? CornerZones.TOP_LEFT : mControls.corner(); }
+
     public void dismissControls() {
         if (mControls != null) mControls.dismiss();
         if (mRail != null) mRail.dismiss();

@@ -830,6 +830,15 @@ public final class ExtraKeysView extends GridLayout {
      * every key still answers for the ones it did build.
      */
     @Nullable
+    public ExtraKeyButton definitionForChild(int childIndex) {
+        if (mLoadedMatrix == null || childIndex < 0 || childIndex >= getChildCount()) return null;
+        int index = 0;
+        for (ExtraKeyButton[] row : mLoadedMatrix)
+            for (ExtraKeyButton key : row) if (index++ == childIndex) return key;
+        return null;
+    }
+
+    @Nullable
     public View buttonForKey(@NonNull String key) {
         if (mLoadedMatrix == null) return null;
         int index = 0;
