@@ -3058,6 +3058,44 @@ public class TerminalPaneController {
             && cornerOnOtherAxis <= extentEnd + threshold;
     }
 
+    /**
+     * How deep a pane's own corner arc runs — what a corner tab has to start past to sit inside the
+     * rounded outline instead of hanging across it. Glass rounds every pane at the slab's radius;
+     * without glass a pane rounds its corners at the float radius as soon as it shares the wall
+     * (a split, a maximized pane, a float) and is square only when it is alone on it.
+     */
+    static float paneCornerInsetPx(boolean glass, float glassRadiusPx, boolean rounded,
+                                   float roundedRadiusPx) {
+        float radius = glass ? glassRadiusPx : rounded ? roundedRadiusPx : 0f;
+        return Math.max(0f, radius);
+    }
+
+    /**
+     * The corner of {@code pane} a point belongs to: the nearer half in each axis. A touch on a
+     * divider raises the tab out of this corner, so it hangs off the pane edge the finger is
+     * actually on and never reaches back across the seam onto the neighbour.
+     *
+     * <p>The point may lie outside the pane — the empty pixels of a divider belong to the panes on
+     * either side of it — which is why this compares against the pane's middle rather than asking
+     * whether the pane contains it.
+     */
+    static int cornerNearestPoint(@NonNull RectF pane, float x, float y) {
+        boolean left = x <= pane.centerX();
+        if (y <= pane.centerY()) return left ? CornerZones.TOP_LEFT : CornerZones.TOP_RIGHT;
+        return left ? CornerZones.BOTTOM_LEFT : CornerZones.BOTTOM_RIGHT;
+    }
+
+    /**
+     * Where the tab goes on a pane nobody took by the corner — one dropped somewhere new, or
+     * swapped with its neighbour. It comes out of the top corner nearest the point the finger let
+     * go at, so it lands on the side of the pane the hand is already on, and falls back to
+     * {@code fallback} when the pane has no frame to measure.
+     */
+    static int dropCorner(@Nullable RectF pane, float x, float y, int fallback) {
+        if (pane == null || pane.width() <= 0f) return fallback;
+        return x <= pane.centerX() ? CornerZones.TOP_LEFT : CornerZones.TOP_RIGHT;
+    }
+
     private void setAllPaneSizeUpdatesPaused(boolean paused, boolean keepBottom) {
         if (paused) {
             for (TerminalView view : mPaneViews.values())
@@ -3090,6 +3128,8 @@ public class TerminalPaneController {
         private final RectF mGlowClipRect = new RectF();
         private final RectF mGlowBorderRect = new RectF();
         private final RectF mGeometryPaneRect = new RectF();
+        /** Scratch for the pane shape the control tab is clipped to. */
+        private final RectF mClipRect = new RectF();
         /** Scratch for pane rects read while hit-testing a touch stream. */
         private final RectF mHitPaneRect = new RectF();
         private final Path mPath = new Path();
@@ -3253,14 +3293,14 @@ public class TerminalPaneController {
                                 && retileDroppedPane(source, target, targetRect, x, y)) {
                                 mControlLeaf = source;
                                 render();
-                                showControls(source);
+                                showControls(source, x, y);
                                 mHost.onActivePaneChanged();
                                 mHost.onTreesChanged();
                             } else {
-                                swapPanePositions(source, target);
+                                swapPanePositions(source, target, x, y);
                             }
                         } else {
-                            showControls(source);
+                            showControls(source, x, y);
                         }
                         return true;
                     }
@@ -3284,6 +3324,10 @@ public class TerminalPaneController {
                         }
                         if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                         resetTouchState();
+                        if (corner == CornerZones.NONE && leaf != null) {
+                            RectF touched = paneRect(leaf, mHitPaneRect);
+                            if (touched != null) corner = cornerNearestPoint(touched, x, y);
+                        }
                         showControls(leaf, corner);
                         if (resized) mHost.onTreesChanged();
                         return true;
@@ -3315,14 +3359,15 @@ public class TerminalPaneController {
             }
         }
 
-        private void swapPanePositions(@NonNull Leaf source, @NonNull Leaf target) {
+        private void swapPanePositions(@NonNull Leaf source, @NonNull Leaf target,
+                                       float dropX, float dropY) {
             TerminalSession moved = source.session;
             source.session = target.session;
             target.session = moved;
             mActiveWindow.active = target;
             mControlLeaf = target;
             render();
-            showControls(target);
+            showControls(target, dropX, dropY);
             mHost.onActivePaneChanged();
             mHost.onTreesChanged();
         }
@@ -3510,11 +3555,14 @@ public class TerminalPaneController {
         }
 
         /**
-         * The tab out of the pane's top-trailing corner, for the callers that are not a finger on
-         * a corner — a pane dropped somewhere new, or swapped with its neighbour.
+         * The tab on a pane nobody took by the corner — one dropped somewhere new, or swapped with
+         * its neighbour. There is no touched corner to answer, so it comes out of the top corner
+         * nearest where the finger let go: the same {@link CornerTabGeometry} rule as every other
+         * tab, aimed at the side of the pane the hand is already on.
          */
-        private void showControls(@Nullable Leaf leaf) {
-            showControls(leaf, defaultControlCorner());
+        private void showControls(@Nullable Leaf leaf, float dropX, float dropY) {
+            RectF pane = leaf == null ? null : paneRect(leaf, mHitPaneRect);
+            showControls(leaf, dropCorner(pane, dropX, dropY, defaultControlCorner()));
         }
 
         /** Where a tab nobody aimed goes, the same corner every page on the wall defaults to. */
@@ -3616,10 +3664,23 @@ public class TerminalPaneController {
             }
             int count = controlCount();
             for (int i = 0; i < count; i++) mControlWidths[i] = dp(22.4f);
-            // The pane's own corner arc, so a glass pane's radius pushes the tab in past it.
-            float inset = paneGlassActive() ? paneGlassRadiusPx() : 0f;
+            float inset = controlCornerInsetPx();
             CornerTabGeometry.layout(controlCorner(), pane, mControlWidths, count, 0f, dp(2.4f),
                 dp(24), inset, dp(3), mControlProgress, mControlRect, mControlButtons);
+        }
+
+        /**
+         * The pane's own corner arc under the tab. Glass panes carry the slab's radius, but a pane
+         * without glass is rounded too as soon as it shares the wall with another — which is
+         * exactly when this tab exists — and a tab left flush against that edge hung its outer
+         * corner out past the arc.
+         */
+        private float controlCornerInsetPx() {
+            boolean rounded = tiledPaneCount() > 1 || mMaximizedLeaf != null
+                || (mActiveWindow != null && mControlLeaf != null
+                    && mActiveWindow.floating.contains(mControlLeaf));
+            return paneCornerInsetPx(paneGlassActive(), paneGlassRadiusPx(), rounded,
+                dp(FLOAT_CORNER_RADIUS_DP));
         }
 
         /** The corner the tab is out of, or the default when nothing has aimed one yet. */
@@ -3797,8 +3858,18 @@ public class TerminalPaneController {
             float radius = dp(4);
             int canvasState = canvas.save();
             // Clipping to the pane is what makes the closing motion disappear back into the frame
-            // instead of floating above it.
-            canvas.clipRect(pane.left, pane.top - dp(1), pane.right, pane.bottom + dp(1));
+            // instead of floating above it — and to the pane's *shape*, so the tab's outer corner
+            // and the small ears its outline throws past it cannot cross the rounded edge the pane
+            // paints. A square pane's arc is 0 and this is the plain rectangle it always was.
+            float arc = controlCornerInsetPx();
+            mClipRect.set(pane.left, pane.top - dp(1), pane.right, pane.bottom + dp(1));
+            if (arc > 0f) {
+                mPath.reset();
+                mPath.addRoundRect(mClipRect, arc, arc, Path.Direction.CW);
+                canvas.clipPath(mPath);
+            } else {
+                canvas.clipRect(mClipRect);
+            }
 
             mPath.reset();
             mPath.moveTo(mControlRect.left, paneEdge);
