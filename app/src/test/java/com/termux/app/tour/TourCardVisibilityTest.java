@@ -131,4 +131,48 @@ public class TourCardVisibilityTest {
         assertEquals(TourCardVisibility.HIDDEN,
             TourCardVisibility.decide(null, 0, NOTHING));
     }
+
+    @Test
+    public void aCardTaughtOnTheTerminalAsksForTheWayBackWhenTheWallIsElsewhere() {
+        // The run was started, or resumed, or wandered, onto the display place: the +, the
+        // keyboard and the panes it is about are not there, and a card left pointing at them stood
+        // wherever the last measured control had been.
+        for (String id : new String[] {"window", "kb_split", "kb_session_back", "pane_corner",
+                "drawer", "az_scrub", "palette"}) {
+            assertEquals(id + " away from the terminal", TourCardVisibility.AWAY,
+                TourCardVisibility.decide(step(id), 0, NOTHING, false));
+        }
+    }
+
+    @Test
+    public void theCardsAboutTheStatusBarAndTheClosingCardCanBeReadOnAnyPlace() {
+        assertEquals(TourCardVisibility.NORMAL,
+            TourCardVisibility.decide(step("status_place"), 0, NOTHING, false));
+        // Its second half is the one card that is off the terminal by design.
+        assertEquals(TourCardVisibility.NORMAL,
+            TourCardVisibility.decide(step("status_place"), 1, NOTHING, false));
+        assertEquals(TourCardVisibility.NORMAL,
+            TourCardVisibility.decide(step("status_expand"), 0, NOTHING, false));
+        assertEquals(TourCardVisibility.NORMAL,
+            TourCardVisibility.decide(step("closing"), 0, NOTHING, false));
+    }
+
+    @Test
+    public void chromeStillWinsOverBeingAwayFromTheTerminal() {
+        // A drawer pulled down over the display place covers the card like any other drawer.
+        assertEquals(TourCardVisibility.HIDDEN,
+            TourCardVisibility.decide(step("window"), 0, EnumSet.of(TourChrome.DRAWER), false));
+        assertEquals(TourCardVisibility.COMPACT_TOP,
+            TourCardVisibility.decide(step("drawer"), 1, EnumSet.of(TourChrome.DRAWER), false));
+    }
+
+    @Test
+    public void onTheTerminalNothingChanges() {
+        assertEquals(TourCardVisibility.NORMAL,
+            TourCardVisibility.decide(step("window"), 0, NOTHING, true));
+        assertEquals(TourCardVisibility.COMPACT_TOP,
+            TourCardVisibility.decide(step("az_scrub"), 0, NOTHING, true));
+        assertEquals(TourCardVisibility.HIDDEN,
+            TourCardVisibility.decide(null, 0, NOTHING, false));
+    }
 }

@@ -32,6 +32,14 @@ public final class TourCardVisibility {
     public static final int COMPACT_TOP = 1;
     /** Not drawn at all. */
     public static final int HIDDEN = 2;
+    /**
+     * Compact at the top of the screen, saying how to get back to the terminal and glowing
+     * nothing: the card is taught on the terminal place and the wall is resting on another one.
+     * The control it names is not on this place at all — no + on the display's row, no keyboard on
+     * the widgets — so a card left pointing at it would stand where the last one stood, over
+     * nothing, which is what "the tour falls out of place" looked like on the device.
+     */
+    public static final int AWAY = 3;
 
     /**
      * The surface a card asking for {@code signalId} is asking the user to close, or null when the
@@ -52,17 +60,36 @@ public final class TourCardVisibility {
      */
     public static int decide(boolean topAnchored, Set<TourChrome> chromeUp,
                              @Nullable String awaitedSignal) {
+        return decide(topAnchored, chromeUp, awaitedSignal, false, true);
+    }
+
+    /**
+     * @param taughtOnTerminal whether the card's control lives on the terminal place
+     * @param onTerminal whether the wall is resting on the terminal place. Chrome still wins: a
+     *     drawer pulled down over the display place hides the card like any other.
+     */
+    public static int decide(boolean topAnchored, Set<TourChrome> chromeUp,
+                             @Nullable String awaitedSignal, boolean taughtOnTerminal,
+                             boolean onTerminal) {
         if (chromeUp != null && !chromeUp.isEmpty()) {
             TourChrome closes = chromeClosedBy(awaitedSignal);
             return closes != null && chromeUp.contains(closes) ? COMPACT_TOP : HIDDEN;
         }
+        if (taughtOnTerminal && !onTerminal) return AWAY;
         return topAnchored ? COMPACT_TOP : NORMAL;
     }
 
     /** The same question for the card that is up, which knows its own stage. */
     public static int decide(@Nullable TourStep step, int stage, Set<TourChrome> chromeUp) {
+        return decide(step, stage, chromeUp, true);
+    }
+
+    /** As above, told whether the wall is resting on the terminal place. */
+    public static int decide(@Nullable TourStep step, int stage, Set<TourChrome> chromeUp,
+                             boolean onTerminal) {
         if (step == null) return HIDDEN;
-        return decide(step.topAnchored, chromeUp, step.signalAt(stage));
+        return decide(step.topAnchored, chromeUp, step.signalAt(stage),
+            step.taughtOnTheTerminal(), onTerminal);
     }
 
     private TourCardVisibility() {}

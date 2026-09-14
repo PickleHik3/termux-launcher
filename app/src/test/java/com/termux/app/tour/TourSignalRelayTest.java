@@ -1,6 +1,7 @@
 package com.termux.app.tour;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Before;
@@ -138,7 +139,10 @@ public class TourSignalRelayTest {
 
     @Test
     public void theHomePlaceCanBeSetUpFront() {
+        // The first settle only says where the wall is — the launcher primes the relay with it
+        // when the run is built — and the move after it is the swipe.
         relay.setHomePlace("TERMINAL");
+        relay.onPlaceSettled("TERMINAL");
         relay.onPlaceSettled("DISPLAY");
         assertEquals(1, signals.size());
         assertEquals(TourSignals.PLACE_CHANGED, signals.get(0));
@@ -147,6 +151,7 @@ public class TourSignalRelayTest {
     @Test
     public void everyOtherPlaceIsAChangeAndOnlyHomeIsAReturn() {
         relay.setHomePlace("TERMINAL");
+        relay.onPlaceSettled("TERMINAL");
         relay.onPlaceSettled("WIDGETS");
         relay.onPlaceSettled("DISPLAY");
         relay.onPlaceSettled("TERMINAL");
@@ -361,5 +366,39 @@ public class TourSignalRelayTest {
         relay.onPaletteOpened();
         relay.onPaletteClosed();
         assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void thePinnedHomePlaceIsTheOneToComeBackToWhereverTheWallWasFound() {
+        // Replay from Settings can find the wall resting on the display; the run is still taught
+        // on the terminal, so arriving there is the return and not the change.
+        relay.setHomePlace("TERMINAL");
+        relay.onPlaceSettled("DISPLAY");
+        assertTrue(signals.isEmpty());
+        assertFalse(relay.isOnHomePlace());
+        relay.onPlaceSettled("TERMINAL");
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.PLACE_RETURNED, signals.get(0));
+        assertTrue(relay.isOnHomePlace());
+        relay.onPlaceSettled("WIDGETS");
+        assertEquals(TourSignals.PLACE_CHANGED, signals.get(1));
+        assertFalse(relay.isOnHomePlace());
+    }
+
+    @Test
+    public void aPlaceSettlingWhereItAlreadyWasIsNotASwipe() {
+        // A rotation re-settles the place the wall is already on.
+        relay.setHomePlace("TERMINAL");
+        relay.onPlaceSettled("TERMINAL");
+        relay.onPlaceSettled("DISPLAY");
+        relay.onPlaceSettled("DISPLAY");
+        relay.onPlaceSettled("DISPLAY");
+        assertEquals(1, signals.size());
+    }
+
+    @Test
+    public void untilTheWallHasSaidWhereItIsTheRunIsAtHome() {
+        relay.setHomePlace("TERMINAL");
+        assertTrue(relay.isOnHomePlace());
     }
 }

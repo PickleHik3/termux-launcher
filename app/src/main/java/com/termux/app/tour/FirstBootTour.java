@@ -52,11 +52,25 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         boolean isSurfaceEditorUp();
     }
 
+    /**
+     * The wall, for the one thing the run does to it: a run that begins — first launch, Replay, a
+     * resume after a process death — begins on the terminal, because that is where every card but
+     * the first two is taught. Mid-run the run never moves the wall itself; a card whose control
+     * is on another place asks the user back instead.
+     */
+    public interface WallHost {
+        void returnToTerminal();
+    }
+
+    /** The place the run is taught on: the wall's own home page. */
+    public static final String HOME_PLACE = com.termux.app.wall.PaneWallPolicy.homePage().name();
+
     @NonNull private final Activity mActivity;
     @NonNull private final TourController mController;
     @NonNull private final TourSignalRelay mSignals = new TourSignalRelay();
     @Nullable private final KeyProbe mKeyProbe;
     @Nullable private ChromeProbe mChromeProbe;
+    @Nullable private WallHost mWallHost;
     /** What the in-app keyboard has latched, for the chord cards' walking glow. */
     private boolean mCtrlLatched;
     private boolean mAltLatched;
@@ -83,6 +97,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             SystemClock::uptimeMillis);
         mController.setListener(this);
         mSignals.setTourSignalListener(this);
+        mSignals.setHomePlace(HOME_PLACE);
     }
 
     /**
@@ -115,16 +130,24 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         onChromeChanged();
     }
 
+    /** The wall, for bringing the run home when it begins. */
+    public void setWallHost(@Nullable WallHost host) {
+        mWallHost = host;
+    }
+
     /**
      * Starts the run for someone who has just finished first launch. Does nothing for a user who
      * has already been through one, which is what keeps an upgrade silent.
      */
     public void startIfNeeded() {
+        if (mController.isFinished() || mController.isRunning()) return;
+        bringTheWallHome();
         mController.startIfNeeded();
     }
 
     /** Starts the run from card one, whatever came before: what Replay will ask for. */
     public void restart() {
+        bringTheWallHome();
         mController.start();
     }
 
@@ -134,7 +157,29 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
      * @return true when a run was actually resumed.
      */
     public boolean resumeIfInProgress() {
-        return mController.resumeIfInProgress();
+        boolean resumed = mController.resumeIfInProgress();
+        if (resumed) bringTheWallHome();
+        return resumed;
+    }
+
+    /**
+     * A run begins on the terminal. Settings hands the launcher back on whatever place it was
+     * left on, and a process death restores the wall to the place it last rested on; a card
+     * asking for the + or the keyboard from the display place asks for a control that is not
+     * there. The wall settles and reports the place through {@link #onPlaceSettled}, so the card
+     * that is up is re-decided the moment it lands.
+     */
+    private void bringTheWallHome() {
+        if (mSignals.isOnHomePlace()) return;
+        // Except for the card that is asking the user to swipe back themselves: a resume on the
+        // first card's second half is not helped by having the swipe made for it.
+        TourStep step = mController.currentStep();
+        if (step != null
+                && TourSignals.PLACE_RETURNED.equals(step.signalAt(mController.currentStage())))
+            return;
+        TourLog.d("the run begins on the " + HOME_PLACE.toLowerCase(java.util.Locale.ROOT)
+            + " place; bringing the wall back to it");
+        if (mWallHost != null) mWallHost.returnToTerminal();
     }
 
     /** Whether a card is up right now — for suppressing dialogs that would draw over it. */
@@ -142,9 +187,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         return mController.isRunning();
     }
 
-    /** The place the status bar is showing for, once it has settled there. */
+    /**
+     * The place the wall has settled on. Besides the first card's own signals this decides
+     * whether the card that is up can be taught here at all: the wall moved, so the card is
+     * re-decided on the spot rather than on the next layout pass.
+     */
     public void onPlaceSettled(@Nullable String placeId) {
         mSignals.onPlaceSettled(placeId);
+        refreshCardVisibility();
     }
 
     /** The status bar's resting state, once it has settled. */
@@ -253,7 +303,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         if (overlay == null) return;
         TourStep step = mController.currentStep();
         java.util.EnumSet<TourChrome> chrome = chromeUp();
-        int presentation = TourCardVisibility.decide(step, mController.currentStage(), chrome);
+        int presentation = TourCardVisibility.decide(step, mController.currentStage(), chrome,
+            mSignals.isOnHomePlace());
         if (presentation != mPresentation) {
             mPresentation = presentation;
             TourLog.d("card " + (step == null ? "none" : step.id + ":" + mController.currentStage())
@@ -278,6 +329,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     private static String describePresentation(int presentation) {
         if (presentation == TourCardVisibility.HIDDEN) return "hidden";
         if (presentation == TourCardVisibility.COMPACT_TOP) return "at the top of the screen";
+        if (presentation == TourCardVisibility.AWAY) return "asking for the way back to the terminal";
         return "against its control";
     }
 

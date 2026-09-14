@@ -16,6 +16,7 @@ public final class TourSignalRelay implements TourSignals {
 
     private Listener mListener;
     private String mHomePlace;
+    private String mPlace;
     private Boolean mStatusBarCollapsed;
     private Integer mWindowCount;
     private String mSelectedWindow;
@@ -35,21 +36,36 @@ public final class TourSignalRelay implements TourSignals {
     }
 
     /**
-     * The place the run started on. Everything else is "changed"; coming back to this one is
-     * "returned", which is what the second half of the first card waits for.
+     * The place the run is taught on. Everything else is "changed"; coming back to this one is
+     * "returned", which is what the second half of the first card waits for. Pinned by the
+     * launcher rather than read from wherever the wall happened to rest when the run was built:
+     * a replay from Settings, or a resume after a process death, can find the wall on the
+     * display, and a run that called that home asked for every terminal control from a place
+     * that has none of them.
      */
     public void setHomePlace(String placeId) {
         mHomePlace = placeId;
     }
 
-    /** The current place, when the status bar has settled on it. */
+    /**
+     * The current place, when the wall has settled on it. Edge-triggered on the place itself: a
+     * rotation re-settles the place the wall is already on, and that is not a swipe.
+     */
     public void onPlaceSettled(String placeId) {
         if (placeId == null) return;
-        if (mHomePlace == null) {
-            mHomePlace = placeId;
-            return;
-        }
+        if (mHomePlace == null) mHomePlace = placeId;
+        String previous = mPlace;
+        mPlace = placeId;
+        if (previous == null || previous.equals(placeId)) return;
         emit(mHomePlace.equals(placeId) ? PLACE_RETURNED : PLACE_CHANGED);
+    }
+
+    /**
+     * Whether the wall is resting on the place the run is taught on. True until the wall has
+     * ever said where it is: a launcher with no wall at all has only the terminal.
+     */
+    public boolean isOnHomePlace() {
+        return mPlace == null || mHomePlace == null || mHomePlace.equals(mPlace);
     }
 
     /** The status bar's resting state, once it has settled there. */

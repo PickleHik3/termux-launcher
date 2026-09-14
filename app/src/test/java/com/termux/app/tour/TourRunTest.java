@@ -239,4 +239,14 @@ public class TourRunTest {
             assertEquals(13, TourRun.steps().size());
         }
     }
+
+    @Test
+    public void everyCardButTheStatusBarsAndTheClosingOneIsTaughtOnTheTerminal() {
+        for (TourStep step : TourRun.steps()) {
+            boolean aboutTheStatusBarOrNothing = step.id.startsWith("status_")
+                || step.id.equals("closing");
+            assertEquals("card " + step.id, !aboutTheStatusBarOrNothing,
+                step.taughtOnTheTerminal());
+        }
+    }
 }

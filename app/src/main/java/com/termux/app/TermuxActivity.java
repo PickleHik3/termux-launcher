@@ -1647,6 +1647,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour = new com.termux.app.tour.FirstBootTour(this, mPreferences,
                 this::getInAppKeyboardKeyRect);
             mFirstBootTour.setChromeProbe(new TourChromeProbe());
+            // A run begins on the terminal, where its cards are taught; Replay and a resume after
+            // a process death can both find the wall resting on another place.
+            mFirstBootTour.setWallHost(() -> {
+                if (mPaneWallController != null) mPaneWallController.returnToTerminal(false);
+            });
             // Every state signal is edge-triggered, so the run starts knowing where the chrome
             // rests and a card is never cleared by a state the user did not put it in — nor, as
             // the drawer card was on the first device pass, by having its first real open eaten

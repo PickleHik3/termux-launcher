@@ -1793,6 +1793,7 @@
     <string name="tour_card_palette">Swipe up on the space bar to open the command palette.</string>
     <string name="tour_card_palette_close">Tap outside the palette to close it.</string>
     <string name="tour_card_closing">That is the tour. Enjoy the launcher.</string>
+    <string name="tour_card_return_to_terminal">Swipe the status bar back to the terminal to continue.</string>
     <string name="tour_copy">Copy</string>
     <string name="tour_copy_all">Copy all</string>
     <string name="tour_copied_commands">Copied</string>

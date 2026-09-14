@@ -156,6 +156,19 @@ public final class TourStep {
         return res;
     }
 
+    /**
+     * Whether this card's controls live on the terminal place. The status bar is on every place
+     * and a card pointing at nothing can be read anywhere; everything else — the window row's +,
+     * the keyboard, the panes, the dock — is the terminal's, and a card asking for it while the
+     * wall rests on the display or the widgets is asking for a control that is not there.
+     */
+    public boolean taughtOnTheTerminal() {
+        for (String target : targets)
+            if (!TourTargets.STATUS_BAR.equals(target) && !TourTargets.NONE.equals(target))
+                return true;
+        return false;
+    }
+
     /** Whether the card at {@code stage} is the closing card, which ends on its own buttons. */
     public boolean isClosingCard() {
         return signals.length == 0;

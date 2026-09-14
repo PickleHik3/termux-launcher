@@ -112,6 +112,17 @@ nixpkgs with no repository to add, and carries no command. VAJ keeps `pkg`, like
   compact card resting on the window's own margin draws behind both — which is what the phone
   showed. It rests below `terminal_window_bar_host` whenever that is up, and below the window's
   top system inset plus the card margin when it is not.
+- The run is taught on the terminal place, and knows it. Home is pinned to the wall's own home
+  page (`FirstBootTour.HOME_PLACE`), not read from wherever the wall rested when the run was
+  built; a run that begins — first launch, Replay, a resume after a process death — brings the
+  wall back there first (`FirstBootTour.WallHost`), except when the card it resumes on is the one
+  asking the user to swipe back themselves. Mid-run the run never moves the wall: a card whose
+  control lives on the terminal (`TourStep.taughtOnTheTerminal` — anything but the status bar and
+  "nothing"), shown while the wall rests on the display or the widgets, is presented `AWAY`:
+  compact at the top, glowing nothing, saying "Swipe the status bar back to the terminal to
+  continue." The two status-bar cards and the closing card read the same on any place. Chrome
+  still wins over being away. A place that re-settles where it already was — a rotation — is not a
+  swipe.
 - The A–Z card stays at the top of the screen for the whole scrub. It used to go off the screen
   while the finger was down; resting at the top already keeps it clear of the icons and of the
   scrub's own previews, and a card that vanishes the moment the user obeys it reads as a bug.
@@ -194,6 +205,22 @@ returns the touch to the terminal unless it lands in one of `CornerZones`' 32 dp
 (plus 6 dp of slop for the divider). With two panes there are eight of those squares and they
 cluster along the shared divider, so a tap anywhere near the split reads as a corner; that is what
 the pass saw, not a tap anywhere on the pane.
+
+## Fourth pass (2026-09-14): the run lives on the terminal place
+
+Reported from the device: the tour "falls out of place" when it is started on the Display page, or
+when the user leaves the terminal with the extra keys' place buttons instead of the status bar
+swipe the card asked for. Three faults behind one symptom:
+
+- The home place was whatever the wall rested on when the run was built. Replay from Settings, and
+  a resume after a process death, both restore the wall to its last page, so a run could call the
+  Display page home and then ask for the +, the keyboard and the panes from a place that has none.
+- A card whose control is on another place kept the position of the last control that could be
+  measured (the third pass's rule for a control that is still arriving), so it stood over nothing
+  with no glow and no way on.
+- The place signal fired on every settle, including a rotation's re-settle of the same place.
+
+All three are in the rule above. Still only reasoned, not seen on a device.
 
 ## Build plan
 

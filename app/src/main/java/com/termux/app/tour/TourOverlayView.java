@@ -293,7 +293,7 @@ public final class TourOverlayView extends FrameLayout {
         mStep = step;
         mStage = stage;
         if (!sameCard) mChordGlowIndex = 0;
-        mCopy.setText(step.copyResAt(stage));
+        applyCopy();
         boolean closing = step.isClosingCard();
         mButton.setText(closing ? R.string.tour_done : R.string.tour_skip);
         if (closing) showClosingSections();
@@ -330,7 +330,29 @@ public final class TourOverlayView extends FrameLayout {
         invalidate();
     }
 
+    /**
+     * The card's sentence: the stage's own, or the way back to the terminal when the card is
+     * being shown away from the place it is taught on.
+     */
+    private void applyCopy() {
+        if (mStep == null) return;
+        mCopy.setText(mPresentation == TourCardVisibility.AWAY
+            ? R.string.tour_card_return_to_terminal : mStep.copyResAt(mStage));
+    }
+
+    /**
+     * The control this card glows right now. Nothing while the card is away from the terminal:
+     * the control it names is on another place, and a stale rect for it is exactly the glow over
+     * nothing this presentation exists to avoid.
+     */
+    @NonNull
+    private String glowTargetId() {
+        if (mStep == null || mPresentation == TourCardVisibility.AWAY) return TourTargets.NONE;
+        return mStep.targetIdAt(glowIndex());
+    }
+
     private void applyPresentation() {
+        applyCopy();
         boolean hidden = mStep == null || mPresentation == TourCardVisibility.HIDDEN;
         if (hidden) {
             stopTrace();
@@ -343,7 +365,7 @@ public final class TourOverlayView extends FrameLayout {
     public void refreshTarget() {
         if (mStep == null) return;
         boolean compact = mPresentation != TourCardVisibility.NORMAL;
-        String targetId = mStep.targetIdAt(glowIndex());
+        String targetId = glowTargetId();
         Rect updated = null;
         Rect topBar = null;
         String reason = "no targets host";
@@ -396,7 +418,7 @@ public final class TourOverlayView extends FrameLayout {
     private void scheduleTargetRetry() {
         if (mRetry != null) return;
         if (mStep == null || mPresentation != TourCardVisibility.NORMAL) return;
-        if (TourTargets.NONE.equals(mStep.targetIdAt(glowIndex()))) return;
+        if (TourTargets.NONE.equals(glowTargetId())) return;
         if (android.os.SystemClock.uptimeMillis() >= mRetryUntil) return;
         mRetry = () -> {
             mRetry = null;
@@ -421,7 +443,7 @@ public final class TourOverlayView extends FrameLayout {
     @Nullable
     private Rect anchorRect() {
         if (mStep == null) return null;
-        boolean namesAControl = !TourTargets.NONE.equals(mStep.targetIdAt(glowIndex()));
+        boolean namesAControl = !TourTargets.NONE.equals(glowTargetId());
         return TourCardPlacement.anchorRect(namesAControl, mTargetRect, mLastAnchorRect);
     }
 
@@ -562,7 +584,9 @@ public final class TourOverlayView extends FrameLayout {
         int height = mCard.getMeasuredHeight();
         if (width <= 0 || height <= 0) return;
         int margin = dp(CARD_SIDE_MARGIN_DP);
-        TourCardPlacement placement = mPresentation == TourCardVisibility.COMPACT_TOP
+        boolean atTheTop = mPresentation == TourCardVisibility.COMPACT_TOP
+            || mPresentation == TourCardVisibility.AWAY;
+        TourCardPlacement placement = atTheTop
             ? TourCardPlacement.placeUnderStatusBar(getWidth(), getHeight(), width, height,
                 margin, margin + mSystemInsetTop, margin + mSystemInsetBottom, mTopBarRect,
                 dp(CARD_GAP_DP))
