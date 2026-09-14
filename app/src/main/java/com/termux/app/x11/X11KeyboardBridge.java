@@ -102,6 +102,9 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                 return sendEditing(view, value.getEditing(), ctrl, alt, shift);
             case Keyevent:
                 return sendModified(view, value.getKeyevent(), ctrl, alt, shift);
+            case Slider:
+                return sendSlider(view, value.getSlider(), value.getSliderRepeat(), ctrl, alt,
+                    shift);
             case Modifier:
                 // The keyboard tracks its own modifier state and tells us on the next value; a
                 // bare modifier press has nothing to send.
@@ -169,6 +172,47 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                 // Selection actions and Android's own context-menu entries mean nothing to X.
                 return true;
         }
+    }
+
+    /**
+     * A space-bar swipe: the cursor moves one arrow key per tick. The sign of {@code repeat} is
+     * the keyboard's — negative means the finger came back the other way — and the selection
+     * sliders hold Shift so an X text field extends its selection the way a desktop does.
+     */
+    private boolean sendSlider(@NonNull Sink view, @NonNull KeyValue.Slider slider, int repeat,
+                               boolean ctrl, boolean alt, boolean shift) {
+        if (repeat == 0) return true;
+        boolean reverse = repeat < 0;
+        int keyCode;
+        boolean selecting = false;
+        switch (slider) {
+            case Cursor_left:
+                keyCode = reverse ? KeyEvent.KEYCODE_DPAD_RIGHT : KeyEvent.KEYCODE_DPAD_LEFT;
+                break;
+            case Cursor_right:
+                keyCode = reverse ? KeyEvent.KEYCODE_DPAD_LEFT : KeyEvent.KEYCODE_DPAD_RIGHT;
+                break;
+            case Cursor_up:
+                keyCode = reverse ? KeyEvent.KEYCODE_DPAD_DOWN : KeyEvent.KEYCODE_DPAD_UP;
+                break;
+            case Cursor_down:
+                keyCode = reverse ? KeyEvent.KEYCODE_DPAD_UP : KeyEvent.KEYCODE_DPAD_DOWN;
+                break;
+            case Selection_cursor_left:
+                keyCode = reverse ? KeyEvent.KEYCODE_DPAD_RIGHT : KeyEvent.KEYCODE_DPAD_LEFT;
+                selecting = true;
+                break;
+            case Selection_cursor_right:
+                keyCode = reverse ? KeyEvent.KEYCODE_DPAD_LEFT : KeyEvent.KEYCODE_DPAD_RIGHT;
+                selecting = true;
+                break;
+            default:
+                return true;
+        }
+        int count = Math.abs(repeat);
+        for (int i = 0; i < count; i++)
+            sendModified(view, keyCode, ctrl, alt, shift || selecting);
+        return true;
     }
 
     private void sendText(@NonNull Sink view, @Nullable String text) {
