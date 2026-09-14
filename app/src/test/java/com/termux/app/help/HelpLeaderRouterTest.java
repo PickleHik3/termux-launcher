@@ -22,21 +22,50 @@ public class HelpLeaderRouterTest {
             assertFalse(p.card.overlaps(p.target.box));
             for (Segment line : p.lines) {
                 assertTrue(line.x1 == line.x2 || line.y1 == line.y2);
-                assertFalse(line.enters(p.card));
-                assertFalse(line.enters(p.target.box));
+                assertFalse(enters(line,p.card));
+                assertFalse(enters(line,p.target.box));
             }
             for (Placement q : result.placements) {
                 if (p == q || p.page != q.page) continue;
                 assertFalse(p.card.overlaps(q.card));
                 assertFalse(p.card.overlaps(q.target.box));
                 for (Segment line : p.lines) {
-                    assertFalse(line.enters(q.card));
-                    assertFalse(line.enters(q.target.box));
-                    for (Segment other : q.lines) assertFalse(line.intersects(other));
+                    assertFalse(enters(line,q.card));
+                    assertFalse(enters(line,q.target.box));
+                    for (Segment other : q.lines) assertFalse(crosses(line,other));
                 }
                 if (p.lane >= 0) assertNotEquals(p.lane, q.lane);
             }
         }
+    }
+    // Independent geometry oracle: tests do not reuse the router's collision helpers.
+    private boolean enters(Segment s, Box b) {
+        float l=Math.min(s.x1,s.x2), r=Math.max(s.x1,s.x2);
+        float t=Math.min(s.y1,s.y2), bottom=Math.max(s.y1,s.y2);
+        return s.x1==s.x2 ? l>b.left && l<b.right && bottom>b.top && t<b.bottom
+            : t>b.top && t<b.bottom && r>b.left && l<b.right;
+    }
+    private boolean crosses(Segment a,Segment b) {
+        if (a.x1==a.x2 && b.y1==b.y2)
+            return between(a.x1,b.x1,b.x2) && between(b.y1,a.y1,a.y2);
+        if (a.y1==a.y2 && b.x1==b.x2) return crosses(b,a);
+        if (a.x1==a.x2) return a.x1==b.x1 && overlap(a.y1,a.y2,b.y1,b.y2);
+        return a.y1==b.y1 && overlap(a.x1,a.x2,b.x1,b.x2);
+    }
+    private boolean between(float x,float a,float b) { return x>=Math.min(a,b) && x<=Math.max(a,b); }
+    private boolean overlap(float a,float b,float c,float d) {
+        return between(a,c,d)||between(b,c,d)||between(c,a,b)||between(d,a,b);
+    }
+    @Test public void flushRowsLeaveFromTheUpperEndCap() {
+        assertSafe(route(Arrays.asList(t("dock",0,620,400,660,Side.BELOW),
+            t("az",0,665,400,690,Side.BELOW))),2);
+    }
+    @Test public void landscapeSideControlsStayOrthogonal() {
+        Result result=HelpLeaderRouter.route(850,400,new Box(90,30,790,350),12,12,
+            Arrays.asList(t("rail",0,50,60,350,Side.LEFT),
+                t("column",800,80,850,340,Side.RIGHT),
+                t("status",300,0,480,24,Side.ABOVE)));
+        assertSafe(result,3);
     }
     @Test public void defaultTerminalPortrait() {
         assertSafe(route(Arrays.asList(

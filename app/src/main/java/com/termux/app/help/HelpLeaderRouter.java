@@ -129,7 +129,13 @@ public final class HelpLeaderRouter {
             float lane = column == 0 ? gutter / 2 : width - gutter / 2;
             float start = column == 0 ? b.left : b.right;
             float end = column == 0 ? c.left : c.right;
-            if (c.bottom <= b.top) paths.add(path(start, b.cy(), lane, b.cy(), lane, c.cy(), end, c.cy()));
+            if (c.bottom <= b.top) {
+                // A flush row can reach the screen edge. Leave its upper end cap directly,
+                // rather than taking a horizontal segment through the row's own interior.
+                if (lane >= b.left && lane <= b.right)
+                    paths.add(path(lane, b.top, lane, c.cy(), end, c.cy()));
+                else paths.add(path(start, b.cy(), lane, b.cy(), lane, c.cy(), end, c.cy()));
+            }
         } else {
             boolean left = b.cx() < c.cx();
             float start = left ? b.right : b.left, end = left ? c.left : c.right;
