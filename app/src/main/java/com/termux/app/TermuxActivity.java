@@ -126,6 +126,7 @@ import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
@@ -11196,7 +11197,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public com.termux.app.terminal.rename.TerminalRenameCoordinator getRenameCoordinator() {
         if (mRenameCoordinator == null)
             mRenameCoordinator = new com.termux.app.terminal.rename.TerminalRenameCoordinator(
-                new TerminalRenameHost());
+                new TerminalRenameHost(), ClipboardText.forContext(this));
         return mRenameCoordinator;
     }
 
@@ -11257,7 +11258,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.terminal.find.TerminalFindCoordinator getFindCoordinator() {
         if (mFindCoordinator == null)
             mFindCoordinator = new com.termux.app.terminal.find.TerminalFindCoordinator(
-                new TerminalFindHost());
+                new TerminalFindHost(), ClipboardText.forContext(this));
         return mFindCoordinator;
     }
 
