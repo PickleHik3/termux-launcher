@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -59,7 +60,10 @@ public final class TourOverlayView extends FrameLayout {
     private static final float CARD_RISE_DP = 8f;
     private static final float CARD_MAX_WIDTH_DP = 300f;
     private static final float CARD_SIDE_MARGIN_DP = 16f;
-    private static final float CARD_GAP_DP = 12f;
+    /** The gap between the control and the card's pointer. */
+    private static final float CARD_GAP_DP = 8f;
+    private static final float POINTER_HEIGHT_DP = 7f;
+    private static final float POINTER_HALF_WIDTH_DP = 9f;
     private static final float GLOW_PADDING_DP = 4f;
     private static final float GLOW_RADIUS_DP = 12f;
     private static final float FINGER_RADIUS_DP = 9f;
@@ -68,6 +72,9 @@ public final class TourOverlayView extends FrameLayout {
     private final float mDensity;
     private final TerminalDress mDress;
     private final Paint mFingerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mPointerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path mPointerFill = new Path();
+    private final Path mPointerEdges = new Path();
     private final RectF mGlowRect = new RectF();
     private final float[] mFingerPoint = new float[2];
     private final float[] mTrailPoint = new float[2];
@@ -84,6 +91,11 @@ public final class TourOverlayView extends FrameLayout {
     @Nullable private TourStep mStep;
     @Nullable private Rect mTargetRect;
     @Nullable private ValueAnimator mTrace;
+    @Nullable private TourCardPlacement mPlacement;
+    private int mSystemInsetTop;
+    private int mSystemInsetBottom;
+    /** Why the last measurement found no target, kept for the log rather than for the drawing. */
+    @NonNull private String mMissReason = "none";
 
     private int mStage;
     private int mAccent;
@@ -178,6 +190,19 @@ public final class TourOverlayView extends FrameLayout {
         mTargets = targets;
     }
 
+    /**
+     * The system bars' keep-out, so a card that has nothing to anchor to, or that is clamped to an
+     * end of the overlay, does not come to rest under the status bar or the gesture bar. The
+     * overlay fills the whole window, so without this the two ends of it are the wrong place.
+     */
+    public void setSystemBarInsets(int top, int bottom) {
+        if (mSystemInsetTop == top && mSystemInsetBottom == bottom) return;
+        mSystemInsetTop = Math.max(0, top);
+        mSystemInsetBottom = Math.max(0, bottom);
+        requestLayout();
+        invalidate();
+    }
+
     /** Shows a card, and traces its gesture once. */
     public void showStep(@NonNull TourStep step, int stage) {
         boolean sameCard = mStep != null && mStep.id.equals(step.id) && mStage == stage;
@@ -200,13 +225,39 @@ public final class TourOverlayView extends FrameLayout {
     /** Re-measures the control the card points at; cheap enough for every layout pass. */
     public void refreshTarget() {
         if (mStep == null) return;
-        Rect updated = mTargets == null ? null : mTargets.rectFor(mStep.targetId);
+        String targetId = mStep.targetIdAt(mStage);
+        Rect updated = null;
+        String reason = "no targets host";
+        if (mTargets != null) {
+            updated = mTargets.rectFor(targetId);
+            reason = updated == null ? mTargets.lastMissReason() : "none";
+        }
         boolean moved = updated == null ? mTargetRect != null : !updated.equals(mTargetRect);
+        boolean reasonChanged = !reason.equals(mMissReason);
         mTargetRect = updated;
+        mMissReason = reason;
+        // Logged on the edge, not per layout pass: this runs on every global layout, and the
+        // keyboard alone produces dozens of them.
+        if (updated == null && (moved || reasonChanged) && TourLog.enabled()) {
+            TourLog.d("card " + mStep.id + ":" + mStage + " has no glow — target \"" + targetId
+                + "\": " + reason);
+        }
         if (moved) {
             requestLayout();
             invalidate();
         }
+    }
+
+    /** The control the card is glowing right now, for the log. Null when it has none. */
+    @Nullable
+    Rect currentTargetRect() {
+        return mTargetRect;
+    }
+
+    /** Why {@link #currentTargetRect()} is null, for the log. */
+    @NonNull
+    String currentMissReason() {
+        return mMissReason;
     }
 
     /** Takes the card down and stops the trace. */
@@ -214,6 +265,8 @@ public final class TourOverlayView extends FrameLayout {
         stopTrace();
         mStep = null;
         mTargetRect = null;
+        mPlacement = null;
+        mMissReason = "none";
         setVisibility(GONE);
     }
 
@@ -237,7 +290,9 @@ public final class TourOverlayView extends FrameLayout {
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
-        if (mStep == null || mTargetRect == null || mTargetRect.isEmpty()) return;
+        if (mStep == null) return;
+        drawCardPointer(canvas);
+        if (mTargetRect == null || mTargetRect.isEmpty()) return;
         drawGlow(canvas);
         drawFinger(canvas);
     }
@@ -286,30 +341,70 @@ public final class TourOverlayView extends FrameLayout {
         canvas.drawCircle(mFingerPoint[0], mFingerPoint[1], radius, mFingerPaint);
     }
 
-    /** Below the control when it is up near the top, above it otherwise; never over it. */
+    /**
+     * Against the control: centred on it, below it when it is in the top half of the overlay and
+     * above it otherwise, flipped when that side has no room, and clamped inside the margins. The
+     * arithmetic is {@link TourCardPlacement}'s; this only applies the answer.
+     */
     private void layoutCard() {
         if (mStep == null || mCard.getVisibility() == GONE) return;
-        int margin = dp(CARD_SIDE_MARGIN_DP);
-        int gap = dp(CARD_GAP_DP);
         int width = mCard.getMeasuredWidth();
         int height = mCard.getMeasuredHeight();
         if (width <= 0 || height <= 0) return;
-        int left = Math.max(margin, (getWidth() - width) / 2);
-        int top;
-        if (mTargetRect == null) {
-            top = Math.max(margin, (getHeight() - height) / 2);
-        } else if (mTargetRect.centerY() < getHeight() / 2) {
-            // A card that a 1.3x font scale has made taller than the room under the control still
-            // has to sit on screen; being clamped is better than being off the bottom.
-            top = Math.max(margin, Math.min(getHeight() - height - margin, mTargetRect.bottom + gap));
-        } else {
-            top = Math.max(margin, mTargetRect.top - gap - height);
-        }
-        mCard.layout(left, top, left + width, top + height);
+        int margin = dp(CARD_SIDE_MARGIN_DP);
+        TourCardPlacement placement = TourCardPlacement.place(getWidth(), getHeight(),
+            width, height, mTargetRect, margin, margin + mSystemInsetTop,
+            margin + mSystemInsetBottom, dp(CARD_GAP_DP), dp(POINTER_HEIGHT_DP),
+            dp(POINTER_HALF_WIDTH_DP));
+        mPlacement = placement;
+        mCard.layout(placement.left, placement.top, placement.left + width,
+            placement.top + height);
         GradientDrawable background = mCard.getBackground() instanceof GradientDrawable
             ? (GradientDrawable) mCard.getBackground() : null;
         if (background != null)
             background.setCornerRadius(mDress.cornerRadiusPx(height));
+    }
+
+    /**
+     * The card's pointer: the same fill and the same hairline the card itself wears, its base
+     * tucked a pixel under the card so the two share no visible seam.
+     */
+    private void drawCardPointer(@NonNull Canvas canvas) {
+        TourCardPlacement placement = mPlacement;
+        if (placement == null || !placement.hasPointer() || mCard.getVisibility() == GONE) return;
+        float height = POINTER_HEIGHT_DP * mDensity;
+        float halfWidth = POINTER_HALF_WIDTH_DP * mDensity;
+        boolean up = placement.pointerEdge == TourCardPlacement.POINTER_TOP;
+        // The card rises into place; the pointer travels and fades with it rather than sitting
+        // detached under a card that has not arrived yet.
+        float offset = mCard.getTranslationY();
+        float alpha = mCard.getAlpha();
+        if (alpha <= 0.01f) return;
+        float base = (up ? mCard.getTop() + 1f : mCard.getBottom() - 1f) + offset;
+        float tip = up ? base - height : base + height;
+        float centerX = placement.pointerCenterX;
+
+        mPointerFill.reset();
+        mPointerFill.moveTo(centerX - halfWidth, base);
+        mPointerFill.lineTo(centerX, tip);
+        mPointerFill.lineTo(centerX + halfWidth, base);
+        mPointerFill.close();
+        mPointerPaint.setStyle(Paint.Style.FILL);
+        mPointerPaint.setColor(mDress.fillColor);
+        mPointerPaint.setAlpha(Math.round(Color.alpha(mDress.fillColor) * alpha));
+        canvas.drawPath(mPointerFill, mPointerPaint);
+
+        // Only the two slanted sides: the base is inside the card, where there is no edge to draw.
+        mPointerEdges.reset();
+        mPointerEdges.moveTo(centerX - halfWidth, base);
+        mPointerEdges.lineTo(centerX, tip);
+        mPointerEdges.lineTo(centerX + halfWidth, base);
+        mPointerPaint.setStyle(Paint.Style.STROKE);
+        mPointerPaint.setStrokeJoin(Paint.Join.ROUND);
+        mPointerPaint.setStrokeWidth(mDress.strokeWidthPx);
+        mPointerPaint.setColor(mDress.strokeColor);
+        mPointerPaint.setAlpha(Math.round(Color.alpha(mDress.strokeColor) * alpha));
+        canvas.drawPath(mPointerEdges, mPointerPaint);
     }
 
     @Override
@@ -332,8 +427,11 @@ public final class TourOverlayView extends FrameLayout {
         }
         mCard.setAlpha(0f);
         mCard.setTranslationY(-CARD_RISE_DP * mDensity);
+        // The pointer is drawn by this view, not by the card, so every frame of the card's rise
+        // has to be a frame of this view too or the two would arrive separately.
         mCard.animate().alpha(1f).translationY(0f).setDuration(CARD_IN_MS)
-            .setInterpolator(new PathInterpolator(0.05f, 0.7f, 0.1f, 1f)).withLayer().start();
+            .setInterpolator(new PathInterpolator(0.05f, 0.7f, 0.1f, 1f)).withLayer()
+            .setUpdateListener(animation -> invalidate()).start();
     }
 
     /** One pass of the gesture per card. Nothing here loops. */

@@ -26,22 +26,29 @@ public final class TourRun {
             new String[] {TourSignals.STATUS_BAR_EXPANDED, TourSignals.STATUS_BAR_COLLAPSED},
             new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.DRAG_UP}),
 
+        // The + makes the window; everything after it happens on the chip the + just added, so
+        // the glow moves there rather than staying on a button the user has finished with.
         new TourStep("window", R.string.tour_card_window, R.string.tour_card_window_then,
-            TourTargets.PLUS_BUTTON,
+            new String[] {TourTargets.PLUS_BUTTON, TourTargets.WINDOW_CHIP,
+                TourTargets.WINDOW_CHIP},
             new String[] {TourSignals.WINDOW_OPENED, TourSignals.WINDOW_CHIP_SELECTED,
                 TourSignals.WINDOW_CLOSED},
             new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.TAP}),
 
+        // A tap on the split key is what dispatches the split: the keys row spends a swipe up on
+        // the key's secondary, which for this one is "new window".
         new TourStep("split", R.string.tour_card_split, 0, TourTargets.SPLIT_KEY,
             new String[] {TourSignals.PANE_SPLIT},
-            new TourGesture[] {TourGesture.SWIPE_UP}),
+            new TourGesture[] {TourGesture.TAP}),
 
         new TourStep("pane_corner", R.string.tour_card_pane_corner, 0, TourTargets.PANE_CORNER,
             new String[] {TourSignals.PANE_CORNER_MENU},
             new TourGesture[] {TourGesture.TAP}),
 
+        // Once the drawer is open it covers the dock, so the second half points at nothing and the
+        // card falls back to the middle of the plane the gesture is performed on.
         new TourStep("drawer", R.string.tour_card_drawer, R.string.tour_card_drawer_then,
-            TourTargets.DOCK,
+            new String[] {TourTargets.DOCK, TourTargets.NONE},
             new String[] {TourSignals.DRAWER_OPENED, TourSignals.DRAWER_CLOSED},
             new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.DRAG_DOWN}),
 
@@ -55,7 +62,7 @@ public final class TourRun {
 
         // The only card with no target and no signal: it carries the three edition-aware lines
         // and ends on its own buttons.
-        new TourStep("closing", R.string.tour_card_closing, 0, "",
+        new TourStep("closing", R.string.tour_card_closing, 0, TourTargets.NONE,
             new String[] {},
             new TourGesture[] {TourGesture.NONE})
     ));

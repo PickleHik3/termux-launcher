@@ -28,7 +28,7 @@ import com.termux.shared.termux.extrakeys.ExtraKeysView;
  * there: the plus and the chips do not exist on the landscape rail, the split key is only on the
  * page of the extra keys row the user has configured it onto, and the space bar is gone whenever
  * the keyboard is down. The overlay draws the card without a glow rather than pointing somewhere
- * wrong.
+ * wrong, and {@link #lastMissReason()} says which of those it was.
  */
 public final class TourViewTargets implements TourTargets {
 
@@ -53,36 +53,60 @@ public final class TourViewTargets implements TourTargets {
     @NonNull private final View mOverlay;
     private final int[] mLocation = new int[2];
 
+    @NonNull private String mMissReason = "none";
+
     public TourViewTargets(@NonNull ViewFinder finder, @NonNull View overlay) {
         mFinder = finder;
         mOverlay = overlay;
     }
 
     @Override
+    @NonNull
+    public String lastMissReason() {
+        return mMissReason;
+    }
+
+    @Override
     @Nullable
     public Rect rectFor(@NonNull String targetId) {
+        mMissReason = "none";
+        if (mOverlay.getWidth() <= 0 || mOverlay.getHeight() <= 0)
+            return miss("the overlay has not been laid out yet");
         switch (targetId) {
             case STATUS_BAR:
-                return rectInOverlay(mFinder.findTourView(R.id.terminal_window_bar_host));
+                return rectInOverlay(mFinder.findTourView(R.id.terminal_window_bar_host),
+                    "the status bar is not on screen");
             case PLUS_BUTTON:
-                return rectInOverlay(windowBarChild(true));
+                return rectInOverlay(windowBarChild(true),
+                    "this place offers no + on its window row");
             case WINDOW_CHIP:
-                return rectInOverlay(windowBarChild(false));
+                return rectInOverlay(windowBarChild(false),
+                    "no window chip is current on this place's row");
             case SPLIT_KEY:
-                return rectInOverlay(splitKeyView());
+                return rectInOverlay(splitKeyView(),
+                    "the extra keys row is down or is not carrying the split key");
             case PANE_CORNER:
                 return paneCornerRect();
             // Both dock styles are the same view; landscape swaps it for the rail.
             case DOCK:
-                return rectInOverlay(firstShown(R.id.apps_bar_viewpager, R.id.dock_rail_scroll));
+                return rectInOverlay(firstShown(R.id.apps_bar_viewpager, R.id.dock_rail_scroll),
+                    "neither the dock nor the landscape rail is on screen");
             // The row lives in the dock, above the content or down a side column, one at a time.
             case AZ_ROW:
-                return rectInOverlay(azRowView());
+                return rectInOverlay(azRowView(), "the A-Z row is switched off or not on screen");
             case SPACE_BAR:
                 return spaceBarRect();
+            case NONE:
+                return miss("this card points at nothing");
             default:
-                return null;
+                return miss("no target is registered under \"" + targetId + "\"");
         }
+    }
+
+    @Nullable
+    private Rect miss(@NonNull String reason) {
+        mMissReason = reason;
+        return null;
     }
 
     /**
@@ -131,27 +155,41 @@ public final class TourViewTargets implements TourTargets {
      */
     @Nullable
     private Rect paneCornerRect() {
-        Rect pane = rectInOverlay(mFinder.findTourView(R.id.terminal_view));
+        Rect pane = rectInOverlay(mFinder.findTourView(R.id.terminal_view),
+            "no terminal pane is on screen");
         if (pane == null) return null;
         float density = mOverlay.getResources().getDisplayMetrics().density;
         int size = Math.round(CornerZones.clampSize(CornerZones.sizePx(density),
             pane.width(), pane.height()));
-        if (size <= 0) return null;
+        if (size <= 0) return miss("the pane is too small to have a corner zone");
         return new Rect(pane.left, pane.top, pane.left + size, pane.top + size);
     }
 
-    /** The A-Z row wherever it is installed, or null when the user has switched it off. */
+    /**
+     * The A-Z row wherever it is installed, or null when the user has switched it off.
+     *
+     * <p>The row is one view that moves between three hosts, so a host that is merely on screen is
+     * not the answer — the dock's host stays laid out while the row is living above the content.
+     * The host that actually contains the row wins, and an empty host is only ever a fallback.
+     */
     @Nullable
     private View azRowView() {
-        View host = firstShown(R.id.place_az_bar_top, R.id.place_az_bar_column,
-            R.id.apps_bar_az_row);
-        if (host instanceof AzScrubRowView) return host;
-        View row = firstDescendantOfType(host);
-        return row != null ? row : host;
+        int[] hostIds = {R.id.place_az_bar_top, R.id.place_az_bar_column, R.id.apps_bar_az_row};
+        View fallback = null;
+        for (int hostId : hostIds) {
+            View host = mFinder.findTourView(hostId);
+            if (!isOnScreen(host)) continue;
+            if (host instanceof AzScrubRowView) return host;
+            View row = firstDescendantOfType(host);
+            if (row != null) return row;
+            if (fallback == null) fallback = host;
+        }
+        return fallback;
     }
 
     @Nullable
     private static View firstDescendantOfType(@Nullable View view) {
+        if (!isOnScreen(view)) return null;
         if (view instanceof AzScrubRowView) return view;
         if (!(view instanceof ViewGroup)) return null;
         ViewGroup group = (ViewGroup) view;
@@ -166,8 +204,10 @@ public final class TourViewTargets implements TourTargets {
     @Nullable
     private Rect spaceBarRect() {
         Rect onScreen = new Rect();
-        if (!mFinder.findTourSpaceBarRect(onScreen) || onScreen.isEmpty()) return null;
-        if (mOverlay.getWidth() <= 0 || mOverlay.getHeight() <= 0) return null;
+        if (!mFinder.findTourSpaceBarRect(onScreen) || onScreen.isEmpty())
+            return miss("the in-app keyboard is down, so there is no space bar");
+        // Screen coordinates on both sides: the keyboard measures its caps against the display,
+        // not against this window, so the overlay has to be located the same way to subtract it.
         mOverlay.getLocationOnScreen(mLocation);
         onScreen.offset(-mLocation[0], -mLocation[1]);
         return onScreen;
@@ -194,9 +234,10 @@ public final class TourViewTargets implements TourTargets {
 
     /** A view's bounds in the overlay's space, or null while it is not on screen. */
     @Nullable
-    private Rect rectInOverlay(@Nullable View view) {
-        if (!isOnScreen(view) || mOverlay.getWidth() <= 0 || mOverlay.getHeight() <= 0)
-            return null;
+    private Rect rectInOverlay(@Nullable View view, @NonNull String missReason) {
+        if (!isOnScreen(view)) return miss(missReason);
+        // Window coordinates on both sides: the offset between them is what is wanted, and taking
+        // it in the window's space keeps the status bar inset out of the subtraction entirely.
         mOverlay.getLocationInWindow(mLocation);
         int overlayLeft = mLocation[0];
         int overlayTop = mLocation[1];

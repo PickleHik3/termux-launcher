@@ -32,7 +32,7 @@ You can change this later in Settings." Buttons Turn on / Not now.
 | 1 | Swipe the status bar left or right. | Swipe back. | place changed; place returned |
 | 2 | Drag the status bar down, then up. | | status bar expanded; collapsed |
 | 3 | Tap + to open a window. | Tap the window chip, then × to close it. | window count +1; chip selected; window closed |
-| 4 | Swipe up on the split key. | | pane.split action |
+| 4 | Tap the split key. | | pane.split action |
 | 5 | Tap a pane corner. | | pane corner menu opened |
 | 6 | Pull down on the dock. | Swipe down to close the drawer. | drawer opened; drawer closed |
 | 7 | Slide along the A–Z row, drag up to an app and let go. | | app launched from scrub |
@@ -57,6 +57,27 @@ Closing card body, three lines, edition aware (Nix edition has its own package l
 - Copy: one sentence, product voice, no mechanism.
 - Step 7 leaves the launcher; the run must not draw over the launched app and resumes on return.
 - No continuous animation except the finger trace while a card is live.
+- The card is anchored to its target: centred on it, below it when it is in the top half of the
+  overlay and above it otherwise, with a pointer on the edge facing it. A card with no target
+  keeps the middle of the overlay.
+
+## Corrections found on the first device pass (2026-09-14)
+
+- Card 4 asked for a swipe up on the split key. A swipe up on an extra key commits that key's
+  *secondary*, which for the split key is "new window"; the split is the plain tap. Copy and
+  gesture now say tap.
+- Cards 3 and 6 glowed one control for every half of the step. Targets are per stage now: the
+  window card moves from the + to the chip the + made, and the drawer card stops pointing at the
+  dock once the drawer covers it.
+- A chip tap is reported from the status bar's tap listener alone, so it is its own edge — the
+  relay no longer swallows the first one, nor a re-tap on the current chip, which is how the × is
+  revealed.
+- The window count is read only while the row is standing for the terminal's own windows. The
+  Display place fills the same row with its apps and the Widgets place empties it, so a place
+  swipe used to read as a window opening or closing.
+- A drawer the launcher put away itself (HOME, a rotation, a preference reload) is no longer the
+  user's swipe down.
+- Debug builds log every card, every signal and every unmeasurable target under `TermuxTour`.
 
 ## Build plan
 

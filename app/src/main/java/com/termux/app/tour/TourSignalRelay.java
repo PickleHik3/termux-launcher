@@ -57,6 +57,11 @@ public final class TourSignalRelay implements TourSignals {
      * How many windows the top row is showing, whenever it has just been rebuilt. One more than
      * last time is the + button; one fewer is the chip's ×. The row is rebuilt on a rename, a
      * theme change and a rotation too, so a count that did not move says nothing.
+     *
+     * @param count -1 while the row is standing for something other than the terminal's windows —
+     *     the display's apps, or the bare row the Widgets place shows. The count it carries there
+     *     has nothing to do with windows, and the last real one is kept so that coming back to the
+     *     terminal is not an open or a close.
      */
     public void onWindowCountSettled(int count) {
         if (count < 0) return;
@@ -67,24 +72,29 @@ public final class TourSignalRelay implements TourSignals {
     }
 
     /**
-     * The window the row is showing as current. Only a move to a different one is the user tapping
-     * a chip; the row re-applies its selection every time it is rebuilt, including right after the
-     * + button made a window current by creating it.
+     * A window chip was tapped. Unlike the count above this is already the user's own edge — the
+     * status bar reports a chip only from its tap listener, and never on a rebuild — so every call
+     * is the gesture the card is asking for, including the first one of the run and a tap on the
+     * chip that was already current, which is how the × is revealed.
      */
     public void onWindowSelected(String windowId) {
         if (windowId == null) return;
-        String previous = mSelectedWindow;
         mSelectedWindow = windowId;
-        if (previous == null || previous.equals(windowId)) return;
         emit(WINDOW_CHIP_SELECTED);
     }
 
-    /** The drawer's resting state, once it has settled there. */
-    public void onDrawerOpenSettled(boolean open) {
+    /**
+     * The drawer's resting state, once it has settled there.
+     *
+     * @param userDriven false when the launcher put the plane away itself — HOME, a rotation, a
+     *     preference reload — which is a close the user never performed and must not clear the
+     *     card that is asking them to perform it.
+     */
+    public void onDrawerOpenSettled(boolean open, boolean userDriven) {
         if (mDrawerOpen != null && mDrawerOpen == open) return;
         boolean first = mDrawerOpen == null;
         mDrawerOpen = open;
-        if (first) return;
+        if (first || !userDriven) return;
         emit(open ? DRAWER_OPENED : DRAWER_CLOSED);
     }
 
