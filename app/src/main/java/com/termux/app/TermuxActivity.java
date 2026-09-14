@@ -10939,6 +10939,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Paste where the in-app keyboard's paste key pastes — the display while it is showing, an
+     * overlay that has claimed typing, the terminal otherwise. False when there is no in-app
+     * keyboard at all, and the caller pastes into the terminal itself.
+     */
+    public boolean pasteThroughInAppKeyboard() {
+        return mInAppKeyboard != null && mInAppKeyboard.pasteThroughKeyboard();
+    }
+
+    /**
      * Bounds of one key of the in-app keyboard, named as a layout file names it. False when the
      * keyboard is down or the layout in front of the user does not carry that key, which is what
      * the tour's chord cards use to decide whether they have anything to glow.
