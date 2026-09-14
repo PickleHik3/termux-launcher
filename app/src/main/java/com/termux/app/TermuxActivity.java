@@ -472,7 +472,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private LauncherAppDataProvider mLauncherAppDataProvider;
     private LauncherConfigRepository mLauncherConfigRepository;
-    private final FolderRenameController mFolderRenameController = new FolderRenameController();
+    private final FolderRenameController mFolderRenameController =
+        new FolderRenameController(ClipboardText.forContext(this));
     /** Every surface over the terminal, innermost first; Back, keys, text and teardown derive from it. */
     private final com.termux.app.chrome.OverlayRegistry mOverlays = createOverlayRegistry();
     /** Anchored glass editor for session/window/pane renames; built on first rename. */

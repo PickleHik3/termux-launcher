@@ -7,7 +7,9 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.CommandPaletteSoftKeyDecision;
+import com.termux.app.terminal.PasteText;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import java.util.ArrayList;
@@ -79,12 +81,21 @@ public final class AppDrawerSearchController
     }
 
     private final AppDrawerSearchModel mModel = new AppDrawerSearchModel();
+    private final ClipboardText mClipboardSource;
 
     @NonNull private List<LauncherAppEntry> mCatalogue = Collections.emptyList();
     @NonNull private List<LauncherAppEntry> mResults = Collections.emptyList();
     @Nullable private Host mHost;
     @Nullable private ResultsListener mListener;
     private boolean mTextFieldOwnsInput;
+
+    public AppDrawerSearchController() {
+        this(() -> null);
+    }
+
+    public AppDrawerSearchController(@NonNull ClipboardText clipboardSource) {
+        mClipboardSource = clipboardSource;
+    }
 
     public void setHost(@Nullable Host host) {
         mHost = host;
@@ -217,6 +228,8 @@ public final class AppDrawerSearchController
                 switch (value.getEditing()) {
                     case SPACE_BAR: insert(" "); break;
                     case BACKSPACE: backspace(); break;
+                    case PASTE:
+                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 return true;
@@ -345,6 +358,11 @@ public final class AppDrawerSearchController
             default:
                 return false;
         }
+    }
+
+    private void pasteClipboard() {
+        String text = mClipboardSource.read();
+        if (text != null && !text.isEmpty()) insert(PasteText.sanitizeSingleLine(text));
     }
 
     private void insert(@NonNull String text) {
