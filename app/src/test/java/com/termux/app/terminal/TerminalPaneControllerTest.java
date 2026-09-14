@@ -74,10 +74,19 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
-    public void interactionOverlay_isAbsentForLonePaneButPersistsWhileMaximized() {
-        assertFalse(TerminalPaneController.shouldShowInteractionOverlay(1, false));
+    public void interactionOverlay_coversEveryPaneTreeButNotAnEmptyOne() {
+        assertFalse(TerminalPaneController.shouldShowInteractionOverlay(0, false));
+        assertTrue(TerminalPaneController.shouldShowInteractionOverlay(1, false));
         assertTrue(TerminalPaneController.shouldShowInteractionOverlay(2, false));
         assertTrue(TerminalPaneController.shouldShowInteractionOverlay(1, true));
+    }
+
+    @Test
+    public void lonePane_isOneUnsplitPaneOnly() {
+        assertTrue(TerminalPaneController.isLonePane(1, false));
+        assertFalse(TerminalPaneController.isLonePane(2, false));
+        assertFalse(TerminalPaneController.isLonePane(1, true));
+        assertFalse(TerminalPaneController.isLonePane(0, false));
     }
 
     @Test
