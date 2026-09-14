@@ -74,7 +74,8 @@ public class AppDrawerTextFieldSearchTest {
         ReflectionHelpers.callInstanceMethod(controller, "settle",
             ReflectionHelpers.ClassParameter.from(boolean.class, false),
             ReflectionHelpers.ClassParameter.from(float.class, 0f));
-        ReflectionHelpers.callInstanceMethod(controller, "onClosed");
+        ReflectionHelpers.callInstanceMethod(controller, "onClosed",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true));
 
         assertEquals(1, host.textFieldSearchEnds);
     }
