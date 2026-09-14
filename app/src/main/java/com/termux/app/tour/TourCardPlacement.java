@@ -114,24 +114,37 @@ public final class TourCardPlacement {
     }
 
     /**
-     * At the top of the overlay, under the status bar, centred across it and pointing at nothing.
+     * At the top of the overlay, under the launcher's own top bar, centred across it and pointing
+     * at nothing.
      *
      * <p>Where a card goes when it must not sit on what it is about: the A-Z scrub, which fills
      * the bottom of the screen with the thing the user is choosing, and any card still asking to
      * close the full-plane surface it would otherwise be buried under.
+     *
+     * <p>"The top of the overlay" is not the top of the screen the user sees. The overlay is the
+     * whole window, and above the launcher's own bar sit the system status bar and, on this
+     * phone, a camera cutout — so a card resting on {@code topMargin} alone draws behind both.
+     * The bar the launcher already draws for itself is the true ceiling whenever it is up; the
+     * system inset plus the side margin is the fallback for the places that carry no bar.
+     *
+     * @param topBar the launcher's own top bar in overlay pixels, or null when it is not up
+     * @param gap the gap the card keeps below that bar
      */
     @NonNull
     public static TourCardPlacement placeUnderStatusBar(int overlayWidth, int overlayHeight,
                                                         int cardWidth, int cardHeight,
                                                         int sideMargin, int topMargin,
-                                                        int bottomMargin) {
+                                                        int bottomMargin, @Nullable Rect topBar,
+                                                        int gap) {
         if (overlayWidth <= 0 || overlayHeight <= 0 || cardWidth <= 0 || cardHeight <= 0)
             return new TourCardPlacement(sideMargin, topMargin, POINTER_NONE, 0);
         int maxLeft = Math.max(sideMargin, overlayWidth - sideMargin - cardWidth);
         int maxTop = Math.max(topMargin, overlayHeight - bottomMargin - cardHeight);
+        int ceiling = topBar == null || topBar.isEmpty()
+            ? topMargin : Math.max(topMargin, topBar.bottom + gap);
         return new TourCardPlacement(
             clamp((overlayWidth - cardWidth) / 2, sideMargin, maxLeft),
-            clamp(topMargin, topMargin, maxTop), POINTER_NONE, 0);
+            clamp(ceiling, topMargin, maxTop), POINTER_NONE, 0);
     }
 
     private static boolean fits(int top, int cardHeight, int overlayHeight,

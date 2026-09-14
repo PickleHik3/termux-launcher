@@ -172,20 +172,58 @@ public class TourCardPlacementTest {
     }
 
     @Test
-    public void aCardAnchoredAtTheTopSitsUnderTheStatusBarAndPointsAtNothing() {
+    public void aCardAnchoredAtTheTopSitsUnderTheSystemInsetAndPointsAtNothing() {
+        // No launcher bar on this place: the system inset plus the margin is the ceiling.
         TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
-            1000, 2000, 300, 200, 16, 16 + 60, 16 + 40);
+            1000, 2000, 300, 200, 16, 16 + 60, 16 + 40, null, GAP);
         assertEquals(16 + 60, placement.top);
         assertEquals(350, placement.left);
         assertFalse(placement.hasPointer());
     }
 
     @Test
+    public void aCardAnchoredAtTheTopClearsTheLaunchersOwnBar() {
+        // The bar the launcher draws for itself starts below the cutout and the system status
+        // bar, so clearing it clears both — which is what the phone showed it was not doing.
+        Rect bar = new Rect(0, 60, 1000, 220);
+        TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
+            1000, 2000, 300, 200, 16, 16, 16, bar, GAP);
+        assertEquals(220 + GAP, placement.top);
+        assertFalse(placement.hasPointer());
+    }
+
+    @Test
+    public void theSystemInsetIsStillTheFloorWhenTheBarSitsAboveIt() {
+        // A bar measured behind the inset — mid-rotation, or a place that draws its own — never
+        // pulls the card up under the cutout.
+        Rect bar = new Rect(0, 0, 1000, 20);
+        TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
+            1000, 2000, 300, 200, 16, 16 + 90, 16, bar, GAP);
+        assertEquals(16 + 90, placement.top);
+    }
+
+    @Test
+    public void anEmptyBarRectIsTheSameAsNoBarAtAll() {
+        TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
+            1000, 2000, 300, 200, 16, 16 + 60, 16 + 40, new Rect(0, 200, 0, 200), GAP);
+        assertEquals(16 + 60, placement.top);
+    }
+
+    @Test
     public void aTallCardAtTheTopIsStillKeptOffTheGestureBar() {
         // Taller than the window it is in: it starts at the top margin and is clamped no further.
         TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
-            1000, 300, 300, 400, 16, 76, 56);
+            1000, 300, 300, 400, 16, 76, 56, null, GAP);
         assertEquals(76, placement.top);
         assertFalse(placement.hasPointer());
+    }
+
+    @Test
+    public void aBarThatWouldPushTheCardOffTheBottomIsClampedBackOnScreen() {
+        // A tall bar on a short window: the card still has to be on screen, so the ceiling gives.
+        Rect bar = new Rect(0, 0, 1000, 1900);
+        TourCardPlacement placement = TourCardPlacement.placeUnderStatusBar(
+            1000, 2000, 300, 200, 16, 16, 16, bar, GAP);
+        assertEquals(2000 - 16 - 200, placement.top);
     }
 }

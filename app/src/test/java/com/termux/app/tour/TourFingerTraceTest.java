@@ -37,6 +37,31 @@ public class TourFingerTraceTest {
     }
 
     @Test
+    public void theCornerSwipesLeaveTheCapDiagonallyAndDisagreeOnlyOnTheVertical() {
+        float centerX = (LEFT + RIGHT) / 2f;
+        float centerY = (TOP + BOTTOM) / 2f;
+
+        at(TourGesture.SWIPE_DOWN_LEFT, 0f);
+        assertEquals(centerX, point[0], 0.01f);
+        assertEquals(centerY, point[1], 0.01f);
+        at(TourGesture.SWIPE_DOWN_LEFT, 1f);
+        float downLeftX = point[0];
+        float downLeftY = point[1];
+        assertTrue("bottom-left must travel left", downLeftX < centerX);
+        assertTrue("bottom-left must travel down", downLeftY > centerY);
+
+        at(TourGesture.SWIPE_UP_LEFT, 0f);
+        assertEquals(centerX, point[0], 0.01f);
+        assertEquals(centerY, point[1], 0.01f);
+        at(TourGesture.SWIPE_UP_LEFT, 1f);
+        assertTrue("top-left must travel left", point[0] < centerX);
+        assertTrue("top-left must travel up", point[1] < centerY);
+        // The two are the same path mirrored, so a user reads them as one pair of corners.
+        assertEquals(downLeftX, point[0], 0.01f);
+        assertEquals(centerY - (downLeftY - centerY), point[1], 0.01f);
+    }
+
+    @Test
     public void aSwipeStaysInsideTheControlItPointsAt() {
         for (float progress = 0f; progress <= 1f; progress += 0.05f) {
             at(TourGesture.SWIPE_LEFT, progress);

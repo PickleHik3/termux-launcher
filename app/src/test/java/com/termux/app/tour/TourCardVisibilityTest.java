@@ -80,7 +80,7 @@ public class TourCardVisibilityTest {
 
     @Test
     public void theRunsOwnCardsAreJudgedByTheStageTheyAreOn() {
-        TourStep drawer = TourRun.steps().get(5);
+        TourStep drawer = step("drawer");
         Set<TourChrome> drawerUp = EnumSet.of(TourChrome.DRAWER);
         // Stage 0 asks the user to pull the drawer down, so a drawer already down hides it.
         assertEquals(TourCardVisibility.HIDDEN,
@@ -94,7 +94,7 @@ public class TourCardVisibilityTest {
 
     @Test
     public void theScrubCardIsTheOneThatRestsAtTheTopAndGoesForTheScrubItself() {
-        TourStep scrub = TourRun.steps().get(6);
+        TourStep scrub = step("az_scrub");
         assertEquals(TourCardVisibility.COMPACT_TOP,
             TourCardVisibility.decide(scrub, 0, false, NOTHING));
         assertEquals(TourCardVisibility.HIDDEN,
@@ -103,11 +103,18 @@ public class TourCardVisibilityTest {
 
     @Test
     public void theClosingCardWaitsBehindThePaletteItsOwnCardOpened() {
-        TourStep closing = TourRun.steps().get(8);
+        TourStep closing = step("closing");
         assertEquals(TourCardVisibility.HIDDEN,
             TourCardVisibility.decide(closing, 0, false, EnumSet.of(TourChrome.PALETTE)));
         assertEquals(TourCardVisibility.NORMAL,
             TourCardVisibility.decide(closing, 0, false, NOTHING));
+    }
+
+    /** By id, not by position: the run gains and loses cards, and these three do not move. */
+    private static TourStep step(String id) {
+        for (TourStep step : TourRun.steps())
+            if (step.id.equals(id)) return step;
+        throw new AssertionError("no card " + id + " in the run");
     }
 
     @Test

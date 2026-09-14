@@ -45,6 +45,16 @@ public final class TourFingerTrace {
                 out[0] = centerX;
                 out[1] = bottom - inset - (travel * eased);
                 break;
+            // The corner swipes leave from the middle of the cap rather than from an edge: on the
+            // space bar the edge they would start at is a different swipe's corner.
+            case SWIPE_DOWN_LEFT:
+                out[0] = centerX - (reach * eased);
+                out[1] = centerY + (travel * eased);
+                break;
+            case SWIPE_UP_LEFT:
+                out[0] = centerX - (reach * eased);
+                out[1] = centerY - (travel * eased);
+                break;
             case DRAG_DOWN:
                 out[0] = centerX;
                 out[1] = centerY + (travel * eased);

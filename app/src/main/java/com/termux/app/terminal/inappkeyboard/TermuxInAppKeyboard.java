@@ -822,8 +822,18 @@ public final class TermuxInAppKeyboard {
 
     /** On-screen bounds of the rendered space bar, or false when there is none to seed from. */
     public boolean getSpaceBarRectOnScreen(@NonNull Rect out) {
+        return getKeyRectOnScreen("space", out);
+    }
+
+    /**
+     * On-screen bounds of one key of the rendered layout, named the way a layout file names it
+     * ("ctrl", "alt", "shift", "enter", "c"). False while the keyboard is down, and false for a
+     * layout that does not carry that key at all — a tour card glowing the key it is naming has
+     * to be able to tell the difference between "there" and "not there", and both are normal.
+     */
+    public boolean getKeyRectOnScreen(@NonNull String keyName, @NonNull Rect out) {
         return mKeyboardView != null && isVisible()
-            && mKeyboardView.getSpaceBarRectOnScreen(out);
+            && mKeyboardView.getKeyRectOnScreen(keyName, out);
     }
 
     /**

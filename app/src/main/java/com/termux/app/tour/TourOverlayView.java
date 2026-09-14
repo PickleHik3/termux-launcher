@@ -109,6 +109,8 @@ public final class TourOverlayView extends FrameLayout {
     @Nullable private TourTargets mTargets;
     @Nullable private TourStep mStep;
     @Nullable private Rect mTargetRect;
+    /** The launcher's own top bar, measured only while the card rests at the top of the screen. */
+    @Nullable private Rect mTopBarRect;
     @Nullable private ValueAnimator mTrace;
     @Nullable private TourCardPlacement mPlacement;
     private int mSystemInsetTop;
@@ -119,6 +121,8 @@ public final class TourOverlayView extends FrameLayout {
     private int mStage;
     private int mAccent;
     private float mTraceProgress = 1f;
+    /** How far through its chord a chord card's glow has walked; ignored by every other card. */
+    private int mChordGlowIndex;
     /** How tall the closing card's sections may grow before they start scrolling inside it. */
     private int mScrollMaxHeight = UNBOUNDED_PX;
     private int mPresentation = TourCardVisibility.NORMAL;
@@ -263,6 +267,7 @@ public final class TourOverlayView extends FrameLayout {
         boolean sameCard = mStep != null && mStep.id.equals(step.id) && mStage == stage;
         mStep = step;
         mStage = stage;
+        if (!sameCard) mChordGlowIndex = 0;
         mCopy.setText(step.showsSecondLineAt(stage) ? step.secondLineRes : step.copyRes);
         boolean closing = step.isClosingCard();
         mButton.setText(closing ? R.string.tour_done : R.string.tour_skip);
@@ -305,18 +310,25 @@ public final class TourOverlayView extends FrameLayout {
     public void refreshTarget() {
         if (mStep == null) return;
         boolean compact = mPresentation != TourCardVisibility.NORMAL;
-        String targetId = compact ? TourTargets.NONE : mStep.targetIdAt(mStage);
+        String targetId = compact ? TourTargets.NONE : mStep.targetIdAt(glowIndex());
         Rect updated = null;
+        Rect topBar = null;
         String reason = "no targets host";
         if (compact) {
+            // Measured even though this card glows nothing: it is the ceiling the card rests
+            // under, and it is asked for on the same pass as everything else so a keyboard, a
+            // rotation or a place change moves the card with it.
+            if (mTargets != null) topBar = mTargets.rectFor(TourTargets.STATUS_BAR);
             reason = "the card is resting at the top of the screen";
         } else if (mTargets != null) {
             updated = mTargets.rectFor(targetId);
             reason = updated == null ? mTargets.lastMissReason() : "none";
         }
         boolean moved = updated == null ? mTargetRect != null : !updated.equals(mTargetRect);
+        moved |= topBar == null ? mTopBarRect != null : !topBar.equals(mTopBarRect);
         boolean reasonChanged = !reason.equals(mMissReason);
         mTargetRect = updated;
+        mTopBarRect = topBar;
         mMissReason = reason;
         // Logged on the edge, not per layout pass: this runs on every global layout, and the
         // keyboard alone produces dozens of them.
@@ -336,10 +348,38 @@ public final class TourOverlayView extends FrameLayout {
         return mTargetRect;
     }
 
+    /**
+     * The control the card is glowing, for the log. Not the step's first target: a chord card's
+     * glow is chosen by the keyboard, and the log is the only way to tell which key it landed on.
+     */
+    @NonNull
+    String currentTargetId() {
+        if (mStep == null) return TourTargets.NONE;
+        return mPresentation == TourCardVisibility.NORMAL
+            ? mStep.targetIdAt(glowIndex()) : TourTargets.NONE;
+    }
+
     /** Why {@link #currentTargetRect()} is null, for the log. */
     @NonNull
     String currentMissReason() {
         return mMissReason;
+    }
+
+    /**
+     * Which key of a chord card to glow. The chord cards walk Ctrl, then Alt, then the key itself
+     * as the user latches each modifier, so their glow is driven by the keyboard rather than by
+     * the stage — they have one signal and three or four keys to point at.
+     */
+    public void setChordGlowIndex(int index) {
+        int bounded = Math.max(0, index);
+        if (mChordGlowIndex == bounded) return;
+        mChordGlowIndex = bounded;
+        refreshTarget();
+    }
+
+    /** The target slot the card is glowing: the chord's key for a chord card, the stage otherwise. */
+    private int glowIndex() {
+        return mStep != null && mStep.chordGlow ? mChordGlowIndex : mStage;
     }
 
     /** Takes the card down and stops the trace. */
@@ -347,6 +387,8 @@ public final class TourOverlayView extends FrameLayout {
         stopTrace();
         mStep = null;
         mTargetRect = null;
+        mTopBarRect = null;
+        mChordGlowIndex = 0;
         mPlacement = null;
         mMissReason = "none";
         mPresentation = TourCardVisibility.NORMAL;
@@ -437,7 +479,8 @@ public final class TourOverlayView extends FrameLayout {
         int margin = dp(CARD_SIDE_MARGIN_DP);
         TourCardPlacement placement = mPresentation == TourCardVisibility.COMPACT_TOP
             ? TourCardPlacement.placeUnderStatusBar(getWidth(), getHeight(), width, height,
-                margin, margin + mSystemInsetTop, margin + mSystemInsetBottom)
+                margin, margin + mSystemInsetTop, margin + mSystemInsetBottom, mTopBarRect,
+                dp(CARD_GAP_DP))
             : TourCardPlacement.place(getWidth(), getHeight(),
                 width, height, mTargetRect, margin, margin + mSystemInsetTop,
                 margin + mSystemInsetBottom, dp(CARD_GAP_DP), dp(POINTER_HEIGHT_DP),

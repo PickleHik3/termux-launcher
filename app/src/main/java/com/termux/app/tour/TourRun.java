@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The run, as data: nine cards in the order the launcher teaches itself.
+ * The run, as data: thirteen cards in the order the launcher teaches itself.
  *
  * <p>Every card's signals are emitted by the chrome now, and every target but the closing card's
  * resolves to a control the overlay can glow. A card whose control is not in the layout in front
@@ -15,6 +15,12 @@ import java.util.List;
  * without a glow, and is still cleared by the gesture and still skippable.
  */
 public final class TourRun {
+
+    /**
+     * The card the keyboard chapter opens on. The run records the session and the window it is
+     * shown in, because the chapter's last two cards ask the user back to exactly those.
+     */
+    public static final String KEYBOARD_CHAPTER_FIRST_STEP = "kb_split";
 
     private static final List<TourStep> STEPS = Collections.unmodifiableList(Arrays.asList(
         new TourStep("status_place", R.string.tour_card_status_place,
@@ -35,11 +41,36 @@ public final class TourRun {
                 TourSignals.WINDOW_CLOSED},
             new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.TAP}),
 
-        // A tap on the split key is what dispatches the split: the keys row spends a swipe up on
-        // the key's secondary, which for this one is "new window".
-        new TourStep("split", R.string.tour_card_split, 0, TourTargets.SPLIT_KEY,
+        // The keyboard chapter. Five cards on the in-app keyboard, taught as the chords they
+        // actually are: the glow walks Ctrl, then Alt, then the key, because the keyboard latches
+        // a modifier on a tap and the user presses them one at a time.
+        new TourStep(KEYBOARD_CHAPTER_FIRST_STEP, R.string.tour_card_kb_split, 0,
+            new String[] {TourTargets.CTRL_KEY, TourTargets.ALT_KEY, TourTargets.ENTER_KEY},
             new String[] {TourSignals.PANE_SPLIT},
-            new TourGesture[] {TourGesture.TAP}),
+            new TourGesture[] {TourGesture.TAP}, false, true),
+
+        new TourStep("kb_window", R.string.tour_card_kb_window, 0,
+            new String[] {TourTargets.CTRL_KEY, TourTargets.ALT_KEY, TourTargets.C_KEY},
+            new String[] {TourSignals.WINDOW_OPENED},
+            new TourGesture[] {TourGesture.TAP}, false, true),
+
+        new TourStep("kb_session", R.string.tour_card_kb_session, 0,
+            new String[] {TourTargets.CTRL_KEY, TourTargets.ALT_KEY, TourTargets.SHIFT_KEY,
+                TourTargets.C_KEY},
+            new String[] {TourSignals.SESSION_OPENED},
+            new TourGesture[] {TourGesture.TAP}, false, true),
+
+        // The chapter opened a window and a session; these two put the user back where it found
+        // them, and they clear on arriving rather than on swiping.
+        new TourStep("kb_session_back", R.string.tour_card_kb_session_back, 0,
+            TourTargets.SPACE_BAR,
+            new String[] {TourSignals.SESSION_RETURNED},
+            new TourGesture[] {TourGesture.SWIPE_DOWN_LEFT}),
+
+        new TourStep("kb_window_back", R.string.tour_card_kb_window_back, 0,
+            TourTargets.SPACE_BAR,
+            new String[] {TourSignals.WINDOW_RETURNED},
+            new TourGesture[] {TourGesture.SWIPE_UP_LEFT}),
 
         // The corner controls are a menu, and the user is left inside it: the card asks for the
         // way out before it moves on, or the next card arrives over a menu that is still up.

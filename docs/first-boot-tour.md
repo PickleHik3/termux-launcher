@@ -32,16 +32,39 @@ You can change this later in Settings." Buttons Turn on / Not now.
 | 1 | Swipe the status bar left or right. | Swipe back. | place changed; place returned |
 | 2 | Drag the status bar down, then up. | | status bar expanded; collapsed |
 | 3 | Tap + to open a window. | Tap the window chip, then × to close it. | window count +1; chip tapped; window closed |
-| 4 | Tap the split key. | | pane.split action |
-| 5 | Tap a pane corner. | Tap anywhere else to close it. | pane corner menu opened; pane controls dismissed |
-| 6 | Pull down on the dock. | Swipe down to close the drawer. | drawer opened; drawer closed |
-| 7 | Slide along the A–Z row, drag up to an app and let go. | | app launched from scrub |
-| 8 | Swipe up on the space bar. | | palette opened |
-| 9 | Closing card, no gesture. Three sections, Copy all, Read the docs, Done. | | Done |
+| 4 | Press Ctrl, Alt, then Enter to split the pane. | | pane.split action |
+| 5 | Press Ctrl, Alt, then C to open a window. | | window count +1 |
+| 6 | Press Ctrl, Alt, Shift, then C to open a session. | | session count +1 |
+| 7 | Swipe the space bar toward the bottom-left to return to your first session. | | the current session is the chapter's again |
+| 8 | Swipe the space bar toward the top-left to return to your first window. | | the active window is the chapter's again |
+| 9 | Tap a pane corner. | Tap anywhere else to close it. | pane corner menu opened; pane controls dismissed |
+| 10 | Pull down on the dock. | Swipe down to close the drawer. | drawer opened; drawer closed |
+| 11 | Slide along the A–Z row, drag up to an app and let go. | | app launched from scrub |
+| 12 | Swipe up on the space bar. | | palette opened |
+| 13 | Closing card, no gesture. Three sections, Copy all, Read the docs, Done. | | Done |
 
-Glow per stage: card 3 walks the + → the chip → the × the chip reveals; card 5 and card 6 point
+Glow per stage: card 3 walks the + → the chip → the × the chip reveals; card 9 and card 10 point
 at nothing for their second half, because the thing they are asking about is "anywhere else" and
 "the plane covering the dock".
+
+## The keyboard chapter (cards 4–8)
+
+Five cards taught on the in-app keyboard, in one session holding one window, and ending on that
+same window. The three chord cards are the launcher's own defaults — `pane.split` is
+Ctrl+Alt+Enter, `window.new` is Ctrl+Alt+C and `session.new` is Ctrl+Alt+Shift+C, all with splits
+on — and the two after them are the space bar's south-west and north-west swipes
+(`tool:session.previous`, `tool:window.previous` in the shipped layout).
+
+The keyboard latches a modifier on a plain tap, so a chord is three or four separate presses and
+the card asks for them one at a time: the glow rests on the first key of the chord the keyboard
+has not latched yet and lands on the key the chord ends on once every modifier is down
+(`TourChordGlow`, driven by the keyboard's own `mods_changed`). A layout without one of those keys
+— no Shift row, no Enter — answers no rect for it, and the card simply shows without a glow.
+
+Cards 7 and 8 are cleared by arriving, never by swiping: the corner swipes walk a ring, so a user
+two sessions along has swiped without getting back. "Your first session" and "your first window"
+are the ones card 4 found the user in, recorded by identity when that card is shown, because the
+cards before it open and close a window of their own.
 
 Closing card body, three sections, each a heading, one sentence and — where there is something to
 run — the command on a monospace line with its own Copy button. Under them: Copy all, a Read the
@@ -72,16 +95,24 @@ nixpkgs with no repository to add, and carries no command. VAJ keeps `pkg`, like
   keeps the middle of the overlay.
 - The overlay hides while the drawer, the command palette, a terminal sheet or the surface editor
   is up. The exception is the card whose ask is to close that very surface: it shows compact at
-  the top of the screen, under the status bar, with no glow. A card that falls due behind chrome
-  is shown when the chrome goes. `TourCardVisibility` is the whole rule, and is pure.
+  the top of the screen, under the launcher's own top bar, with no glow. A card that falls due
+  behind chrome is shown when the chrome goes. `TourCardVisibility` is the whole rule, and is pure.
+- "The top of the screen" is the launcher's own bar, not the top of the window. The overlay fills
+  the window, and above the launcher's bar sit the system status bar and the camera cutout, so a
+  compact card resting on the window's own margin draws behind both — which is what the phone
+  showed. It rests below `terminal_window_bar_host` whenever that is up, and below the window's
+  top system inset plus the card margin when it is not.
 - Nothing of the run draws while a finger is mid-scrub on the A–Z row: the scrub filters the app
   icons and throws a preview up beside the finger, and the user has to see what they are picking.
 
 ## Corrections found on the first device pass (2026-09-14)
 
+Card numbers below are the nine-card run these passes were made against; the keyboard chapter
+renumbered everything from card 4 on.
+
 - Card 4 asked for a swipe up on the split key. A swipe up on an extra key commits that key's
   *secondary*, which for the split key is "new window"; the split is the plain tap. Copy and
-  gesture now say tap.
+  gesture now say tap. (That card is gone: the keyboard chapter teaches the split as its chord.)
 - Cards 3 and 6 glowed one control for every half of the step. Targets are per stage now: the
   window card moves from the + to the chip the + made, and the drawer card stops pointing at the
   dock once the drawer covers it.

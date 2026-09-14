@@ -40,6 +40,103 @@ public class TourSignalRelayTest {
     }
 
     @Test
+    public void oneMoreSessionThanLastTimeIsTheChaptersNewSession() {
+        relay.onSessionsSettled(1, "s1");
+        assertTrue(signals.isEmpty());
+        relay.onSessionsSettled(2, "s2");
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.SESSION_OPENED, signals.get(0));
+    }
+
+    @Test
+    public void aRebuildThatMovedNothingSaysNothing() {
+        relay.onSessionsSettled(1, "s1");
+        relay.onSessionsSettled(1, "s1");
+        relay.onSessionsSettled(1, "s1");
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void closingASessionIsNotAnOpening() {
+        relay.onSessionsSettled(2, "s1");
+        relay.onSessionsSettled(1, "s1");
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void onlyTheSessionTheChapterStartedInCountsAsComingBack() {
+        relay.onSessionsSettled(1, "s1");
+        relay.markKeyboardChapterHome();
+        relay.onSessionsSettled(2, "s2");
+        // Walking the ring past a third session is a swipe that has not arrived.
+        relay.onSessionsSettled(3, "s3");
+        signals.clear();
+        relay.onSessionsSettled(3, "s1");
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.SESSION_RETURNED, signals.get(0));
+    }
+
+    @Test
+    public void theChapterHomeIsWhereTheChapterStartedNotWhereTheRunDid() {
+        relay.onSessionsSettled(1, "s1");
+        relay.onSessionsSettled(2, "s2");
+        // The chapter opens on s2; s1 is somebody else's session now.
+        relay.markKeyboardChapterHome();
+        signals.clear();
+        relay.onSessionsSettled(2, "s1");
+        assertTrue(signals.isEmpty());
+        relay.onSessionsSettled(2, "s2");
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.SESSION_RETURNED, signals.get(0));
+    }
+
+    @Test
+    public void aSessionSwitchBeforeTheChapterStartedClearsNothing() {
+        relay.onSessionsSettled(1, "s1");
+        relay.onSessionsSettled(2, "s2");
+        relay.onSessionsSettled(2, "s1");
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.SESSION_OPENED, signals.get(0));
+    }
+
+    @Test
+    public void theWindowTheChapterStartedOnIsTheOneItAsksToComeBackTo() {
+        relay.onActiveWindowSettled("w1");
+        relay.markKeyboardChapterHome();
+        relay.onActiveWindowSettled("w2");
+        assertTrue(signals.isEmpty());
+        relay.onActiveWindowSettled("w3");
+        assertTrue(signals.isEmpty());
+        relay.onActiveWindowSettled("w1");
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.WINDOW_RETURNED, signals.get(0));
+    }
+
+    @Test
+    public void theWindowTheUserNeverLeftIsNotAnArrival() {
+        relay.onActiveWindowSettled("w1");
+        relay.markKeyboardChapterHome();
+        // A pane focus change inside the same window re-settles the same id.
+        relay.onActiveWindowSettled("w1");
+        relay.onActiveWindowSettled("w1");
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void theFirstWindowSeenIsOnlyPriming() {
+        relay.markKeyboardChapterHome();
+        relay.onActiveWindowSettled("w1");
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void aLauncherWithNothingToCountSaysNothing() {
+        relay.onSessionsSettled(-1, null);
+        relay.onActiveWindowSettled(null);
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
     public void theHomePlaceCanBeSetUpFront() {
         relay.setHomePlace("TERMINAL");
         relay.onPlaceSettled("DISPLAY");

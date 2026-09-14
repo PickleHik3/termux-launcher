@@ -27,11 +27,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     TourSignals.Listener, TourViewTargets.ViewFinder {
 
     /**
-     * The one control the tour points at that the chrome measures for itself: the in-app
-     * keyboard's space bar is a key inside a rendered keyboard, not a view with an id.
+     * The controls the tour points at that the chrome measures for itself: a key of the in-app
+     * keyboard is a cap inside a rendered keyboard, not a view with an id.
      */
-    public interface SpaceBarProbe {
-        boolean spaceBarRectOnScreen(@NonNull android.graphics.Rect out);
+    public interface KeyProbe {
+        boolean keyRectOnScreen(@NonNull String keyName, @NonNull android.graphics.Rect out);
     }
 
     /**
@@ -58,8 +58,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @NonNull private final Activity mActivity;
     @NonNull private final TourController mController;
     @NonNull private final TourSignalRelay mSignals = new TourSignalRelay();
-    @Nullable private final SpaceBarProbe mSpaceBarProbe;
+    @Nullable private final KeyProbe mKeyProbe;
     @Nullable private ChromeProbe mChromeProbe;
+    /** What the in-app keyboard has latched, for the chord cards' walking glow. */
+    private boolean mCtrlLatched;
+    private boolean mAltLatched;
+    private boolean mShiftLatched;
 
     @Nullable private TourOverlayView mOverlay;
     @Nullable private ViewGroup mOverlayHost;
@@ -74,9 +78,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     public FirstBootTour(@NonNull Activity activity,
                          @NonNull TermuxAppSharedPreferences preferences,
-                         @Nullable SpaceBarProbe spaceBarProbe) {
+                         @Nullable KeyProbe keyProbe) {
         mActivity = activity;
-        mSpaceBarProbe = spaceBarProbe;
+        mKeyProbe = keyProbe;
         migrateLegacyOnboardingCompletionIfNeeded(activity, preferences);
         mController = new TourController(TourRun.steps(), new TourPreferences(preferences),
             SystemClock::uptimeMillis);
@@ -171,6 +175,40 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onDrawerOpenSettled(open, userDriven);
     }
 
+    /**
+     * The sessions the launcher holds, each time the sessions list has been rebuilt.
+     *
+     * @param count how many there are, or -1 when there is nothing to count yet
+     * @param currentSessionId the one that is current, or null when there is none
+     */
+    public void onSessionsSettled(int count, @Nullable String currentSessionId) {
+        mSignals.onSessionsSettled(count, currentSessionId);
+    }
+
+    /** The window the launcher is showing, each time the active pane has settled on it. */
+    public void onActiveWindowSettled(@Nullable String windowId) {
+        mSignals.onActiveWindowSettled(windowId);
+    }
+
+    /**
+     * What the in-app keyboard has latched. The chord cards glow the key they are still waiting
+     * for, so the glow walks Ctrl, then Alt, then the key itself as the user taps each one.
+     */
+    public void onKeyboardModifiersChanged(boolean ctrl, boolean alt, boolean shift) {
+        if (mCtrlLatched == ctrl && mAltLatched == alt && mShiftLatched == shift) return;
+        mCtrlLatched = ctrl;
+        mAltLatched = alt;
+        mShiftLatched = shift;
+        applyChordGlow();
+    }
+
+    private void applyChordGlow() {
+        TourOverlayView overlay = mOverlay;
+        if (overlay == null) return;
+        overlay.setChordGlowIndex(TourChordGlow.indexFor(mController.currentStep(),
+            mCtrlLatched, mAltLatched, mShiftLatched));
+    }
+
     /** A split was asked for. */
     public void onPaneSplit() {
         mSignals.onPaneSplit();
@@ -253,12 +291,18 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             TourLog.d("card " + step.id + ":" + stage + " has nowhere to show: no content view");
             return;
         }
+        // The chapter's last two cards ask the user back to where its first card found them, so
+        // the way back is recorded here rather than when the run started: the cards before this
+        // one open and close a window of their own.
+        if (TourRun.KEYBOARD_CHAPTER_FIRST_STEP.equals(step.id) && stage == 0)
+            mSignals.markKeyboardChapterHome();
         overlay.showStep(step, stage);
+        applyChordGlow();
         refreshCardVisibility();
         if (TourLog.enabled()) {
             android.graphics.Rect rect = overlay.currentTargetRect();
             TourLog.d("card " + step.id + ":" + stage + " shown, target \""
-                + step.targetIdAt(stage) + "\" at " + TourLog.describe(rect)
+                + overlay.currentTargetId() + "\" at " + TourLog.describe(rect)
                 + (rect == null ? " (" + overlay.currentMissReason() + ")" : "")
                 + ", waiting for " + describeWait(step, stage));
         }
@@ -351,8 +395,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     @Override
-    public boolean findTourSpaceBarRect(@NonNull android.graphics.Rect outOnScreen) {
-        return mSpaceBarProbe != null && mSpaceBarProbe.spaceBarRectOnScreen(outOnScreen);
+    public boolean findTourKeyRect(@NonNull String keyName,
+                                   @NonNull android.graphics.Rect outOnScreen) {
+        return mKeyProbe != null && mKeyProbe.keyRectOnScreen(keyName, outOnScreen);
     }
 
     @Nullable

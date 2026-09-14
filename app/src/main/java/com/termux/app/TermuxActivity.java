@@ -1645,7 +1645,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.tour.FirstBootTour firstBootTour() {
         if (mFirstBootTour == null && mPreferences != null) {
             mFirstBootTour = new com.termux.app.tour.FirstBootTour(this, mPreferences,
-                this::getInAppKeyboardSpaceBarRect);
+                this::getInAppKeyboardKeyRect);
             mFirstBootTour.setChromeProbe(new TourChromeProbe());
             // Every state signal is edge-triggered, so the run starts knowing where the chrome
             // rests and a card is never cleared by a state the user did not put it in — nor, as
@@ -1655,6 +1655,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour.onDrawerOpenSettled(isAppDrawerOpen(), false);
             com.termux.app.wall.PaneWallPage place = currentWallPlace();
             mFirstBootTour.onPlaceSettled(place == null ? null : place.name());
+            mFirstBootTour.onSessionsSettled(sessionCountForTour(), currentSessionIdForTour());
+            mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
         }
         return mFirstBootTour;
     }
@@ -8711,6 +8713,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void onKeyboardModifiersChanged(com.termux.app.terminal.inappkeyboard.TerminalModifiers modifiers) {
+            // Ahead of the display guard: the tour's chord cards glow the key they are still
+            // waiting for, and a latch is a latch wherever the wall happens to be standing.
+            if (mFirstBootTour != null)
+                mFirstBootTour.onKeyboardModifiersChanged(modifiers.isCtrl(), modifiers.isAlt(),
+                    modifiers.isShift());
             // Over the display the modifiers are X's; the terminal's hint strip stays down.
             if (isDisplayPageShowing()) return;
             mKeybindHintPresenter.onInAppModifiersChanged(modifiers);
@@ -10933,7 +10940,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Seed rect for surfaces growing out of the space bar; false when the keyboard is hidden. */
     public boolean getInAppKeyboardSpaceBarRect(@NonNull Rect out) {
-        return mInAppKeyboard != null && mInAppKeyboard.getSpaceBarRectOnScreen(out);
+        return getInAppKeyboardKeyRect("space", out);
+    }
+
+    /**
+     * Bounds of one key of the in-app keyboard, named as a layout file names it. False when the
+     * keyboard is down or the layout in front of the user does not carry that key, which is what
+     * the tour's chord cards use to decide whether they have anything to glow.
+     */
+    public boolean getInAppKeyboardKeyRect(@NonNull String keyName, @NonNull Rect out) {
+        return mInAppKeyboard != null && mInAppKeyboard.getKeyRectOnScreen(keyName, out);
     }
 
     /**
@@ -12856,8 +12872,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mTermuxService != null)
             mTermuxService.setVisibleSessionCount(mDrawerSessions.size());
+        // The one funnel every structural change to the sessions and their windows already takes,
+        // so it is where the run reads them. Both are edge-triggered: a rebuild that moved neither
+        // says nothing.
+        if (mFirstBootTour != null) {
+            mFirstBootTour.onSessionsSettled(sessionCountForTour(), currentSessionIdForTour());
+            mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
+        }
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
+    }
+
+    /**
+     * How many sessions the tour should read, or -1 while there is nothing to count — before the
+     * first session exists, and after the last one goes. A zero counted during startup would read
+     * as a session closing, and the first real one as a session opening.
+     */
+    private int sessionCountForTour() {
+        return mCurrentWSession == null ? -1 : mWSessions.size();
+    }
+
+    /** The current session's stable id for the tour, or null when there is no session. */
+    @Nullable
+    private String currentSessionIdForTour() {
+        return mCurrentWSession == null ? null : String.valueOf(mCurrentWSession.id);
+    }
+
+    /** The visible window's stable id for the tour, or null when there is no window. */
+    @Nullable
+    private String currentWindowIdForTour() {
+        if (mCurrentWSession == null) return null;
+        int index = mCurrentWSession.current;
+        if (index < 0 || index >= mCurrentWSession.windows.size()) return null;
+        return String.valueOf(mCurrentWSession.windows.get(index).id);
     }
 
     /**
@@ -16344,6 +16391,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTermuxTerminalExtraKeys.setTerminalView(v);
             }
             mCurrentTabPrimary = mPaneController.getActiveSession();
+            // Every window switch lands here — the bar, the space bar's swipes, the browser — so
+            // it is where the run hears that a different window became the visible one.
+            if (mFirstBootTour != null)
+                mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
             refreshTerminalWindowBar();
         }
 
