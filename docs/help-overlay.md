@@ -67,8 +67,14 @@ Each hint has its own colour, shared by the dashed box on the control and the bo
 its card (`HelpPalette`: hues spread evenly from the place accent). That pairing is the whole link,
 so no leader lines are drawn and nothing can cross; cards flow down two columns of the wall band
 in screen order, each in the column nearer its control, yielding to the key labels, the footer
-and the boxes of controls inside the band unless nothing fits otherwise (`HelpLeaderRouter.pack`).
+and the boxes of controls inside the band unless nothing fits otherwise (`HelpLeaderRouter.arrange`).
 A second page starts only when both columns are full, which the default layouts never reach.
+
+From the phone, same day: leaders are back, drawn in the pair's colour (straight when the card
+faces its box, one elbow when beside it); cards sit where the eye looks for them (`HelpLeaderRouter.arrange`:
+under a control above the wall, over one below it, beside one inside it, cascading a little along
+an edge, sliding away from the control when the spot is taken); and the keyboard is two hints again, the prefix keys (Ctrl and Alt,
+with the chords they start) and the space bar (its swipes).
 
 ## Per place: boxes and copy
 

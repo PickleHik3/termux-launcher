@@ -135,7 +135,7 @@ public class HelpLeaderRouterTest {
         assertTrue(impossible.placements.isEmpty());
     }
 
-    // ---- The colour-paired layout: no leaders, so cards only have to avoid each other. ----
+    // ---- The colour-paired layout: cards where the eye looks for them, leaders in the pair colour. ----
 
     private static Box B(float l, float t, float r, float b) { return new Box(l, t, r, b); }
 
@@ -144,54 +144,98 @@ public class HelpLeaderRouterTest {
             t("sessions", 20, 20, 60, 44, Side.ABOVE), t("windows", 62, 20, 200, 44, Side.ABOVE),
             t("stats", 300, 20, 460, 44, Side.ABOVE), t("status", 0, 0, 480, 48, Side.ABOVE),
             t("divider", 238, 60, 242, 700, Side.INSIDE), t("dock", 0, 720, 480, 780, Side.BELOW),
-            t("az", 0, 782, 480, 800, Side.BELOW), t("keyboard", 0, 900, 480, 960, Side.BELOW));
+            t("az", 0, 782, 480, 800, Side.BELOW), t("prefix", 0, 900, 120, 960, Side.BELOW),
+            t("space", 130, 900, 330, 960, Side.BELOW));
     }
 
-    @Test public void packPutsTheWholeTerminalOnOnePage() {
-        Result r = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8, terminalTargets(),
+    @Test public void arrangePutsTheWholeTerminalOnOnePage() {
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 8, terminalTargets(),
             Collections.singletonList(B(12, 660, 468, 700)), Collections.singletonList(B(238, 60, 242, 700)));
         assertEquals(1, r.pages);
         assertTrue(r.unplaced.isEmpty());
-        assertEquals(8, r.placements.size());
+        assertEquals(9, r.placements.size());
         assertNoOverlap(r);
         for (Placement p : r.placements) {
-            assertTrue(p.lines.isEmpty());
+            assertFalse("no leader for " + p.target.id, p.lines.isEmpty());
             assertTrue(p.card.top >= 60 && p.card.bottom <= 700.5f);
             assertFalse("card over the footer", p.card.overlaps(B(12, 660, 468, 700)));
         }
     }
 
-    @Test public void packChoosesTheColumnNearerTheControl() {
-        Result r = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8,
+    @Test public void cardsSitWhereTheEyeLooksForThem() {
+        Box band = B(0, 60, 480, 700);
+        Result r = HelpLeaderRouter.arrange(band, 12, 12,
+            Arrays.asList(t("a", 0, 0, 100, 40, Side.ABOVE), t("b", 300, 0, 400, 40, Side.ABOVE),
+                t("c", 40, 800, 140, 840, Side.BELOW), t("d", 238, 200, 242, 500, Side.INSIDE)),
+            Collections.emptyList(), Collections.emptyList());
+        Placement a = placement(r, "a"), b = placement(r, "b"), c = placement(r, "c"), d = placement(r, "d");
+        // Under its control, at the top of the band; the next one along cascades a little lower.
+        assertEquals(60f, a.card.top, 0.01f);
+        assertEquals(12f, a.card.left, 0.01f);
+        assertTrue(b.card.top > a.card.top && b.card.top < a.card.bottom);
+        assertEquals(350f, b.card.cx(), 0.01f);
+        // Over its control, at the bottom of the band.
+        assertEquals(700f, c.card.bottom, 0.01f);
+        assertEquals(90f, c.card.cx(), 0.01f);
+        // Beside the divider, level with its middle.
+        assertEquals(254f, d.card.left, 0.01f);
+        assertEquals(350f, d.card.cy(), 0.01f);
+        assertNoOverlap(r);
+    }
+
+    @Test public void aTakenSpotSlidesTheCardAwayFromItsControl() {
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 12,
+            Arrays.asList(t("a", 0, 0, 100, 40, Side.ABOVE), t("b", 10, 0, 110, 40, Side.ABOVE)),
+            Collections.emptyList(), Collections.emptyList());
+        Placement a = placement(r, "a"), b = placement(r, "b");
+        assertEquals(a.card.bottom + 12, b.card.top, 0.01f);
+        assertEquals(a.card.left, b.card.left, 0.01f);
+    }
+
+    @Test public void leadersAreStraightWhenFacingAndElbowedWhenBeside() {
+        Target above = t("above", 100, 0, 200, 40, Side.ABOVE);
+        assertEquals(1, HelpLeaderRouter.leader(above, B(100, 100, 200, 160)).size());
+        assertEquals(3, HelpLeaderRouter.leader(above, B(300, 100, 400, 160)).size());
+        Target inside = t("inside", 238, 60, 242, 700, Side.INSIDE);
+        List<Segment> beside = HelpLeaderRouter.leader(inside, B(20, 300, 200, 360));
+        assertEquals(1, beside.size());
+        // From the card's edge to the box's.
+        assertEquals(200f, beside.get(0).x1, 0.01f);
+        assertEquals(238f, beside.get(0).x2, 0.01f);
+        assertTrue(HelpLeaderRouter.leader(inside, B(200, 300, 300, 360)).isEmpty());
+    }
+
+    @Test public void arrangeKeepsACardOnItsControlsSide() {
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 8,
             Arrays.asList(t("left", 0, 0, 100, 40, Side.ABOVE), t("right", 380, 0, 480, 40, Side.ABOVE)),
             Collections.emptyList(), Collections.emptyList());
         assertEquals(0, placement(r, "left").column);
         assertEquals(1, placement(r, "right").column);
     }
 
-    @Test public void packYieldsToInsideBoxesUnlessNothingFitsOtherwise() {
+    @Test public void arrangeYieldsToInsideBoxesUnlessNothingFitsOtherwise() {
         Box widget = B(0, 60, 480, 400);
-        Result r = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8,
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 8,
             Arrays.asList(t("widget", 0, 60, 480, 400, Side.INSIDE), t("status", 0, 0, 480, 48, Side.ABOVE)),
             Collections.emptyList(), Collections.singletonList(widget));
         assertEquals(1, r.pages);
         for (Placement p : r.placements) assertFalse(p.target.id, p.card.overlaps(widget));
         // A wall-sized soft box leaves no room; the card sits over the dimmed control instead of on a second page.
-        Result full = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8,
+        Result full = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 8,
             Arrays.asList(t("empty", 0, 60, 480, 700, Side.INSIDE)),
             Collections.emptyList(), Collections.singletonList(B(0, 60, 480, 700)));
         assertEquals(1, full.pages);
         assertTrue(full.unplaced.isEmpty());
     }
 
-    @Test public void packStartsASecondPageOnlyWhenBothColumnsAreFull() {
+    @Test public void arrangeStartsASecondPageOnlyWhenNothingFits() {
         List<Target> many = new java.util.ArrayList<>();
         for (int i = 0; i < 20; i++) many.add(new Target("t" + i, B(i * 20, 0, i * 20 + 10, 40), Side.ABOVE, 200, 100));
-        Result r = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8, many, Collections.emptyList(), Collections.emptyList());
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 8, many, Collections.emptyList(), Collections.emptyList());
         assertTrue(r.pages >= 2);
         assertTrue(r.unplaced.isEmpty());
         assertNoOverlap(r);
-        // Six cards of 100 fit each 640-tall column: page one holds twelve.
+        // Six cards of 100 fit each side of a 640-tall band: page one holds twelve.
         int onFirst = 0;
         for (Placement p : r.placements) if (p.page == 0) onFirst++;
         assertEquals(12, onFirst);

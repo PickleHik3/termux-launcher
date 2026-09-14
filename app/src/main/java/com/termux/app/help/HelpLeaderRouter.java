@@ -126,15 +126,20 @@ public final class HelpLeaderRouter {
     }
 
     /**
-     * The colour-paired layout: every card shares a colour with the box it explains, so no
-     * leader is drawn and no leader can cross. Cards flow down two columns of the band in the
-     * order their controls sit on the screen, each in the column nearer its control, and yield
-     * to obstacles: {@code hard} ones always (key labels, the footer pills), {@code soft} ones —
-     * the boxes of controls inside the band — unless nothing fits otherwise, because a card over
-     * a dimmed pane beats a second page. A new page starts only when both columns are full.
+     * The colour-paired layout. Every card shares a colour with the box it explains, so the
+     * layout's one job is to put each card where the eye looks for it: a control above the wall
+     * gets its card just under the top of the band, beneath the control; one below the wall gets
+     * its card just above the bottom, over the control; one inside or beside the wall gets its
+     * card next to the box. Cards of one edge cascade a little from left to right, so a row of
+     * them reads as a staircase the eye walks rather than a table. A card that would land on
+     * another card or an obstacle slides away from its control until it is clear, then tries the
+     * far side of the band; {@code hard} obstacles (key labels, the footer) always count,
+     * {@code soft} ones — the boxes of controls inside the band — yield when nothing fits
+     * otherwise, because a card over a dimmed pane beats a second page. A new page starts only
+     * when a card fits nowhere on the current one.
      */
-    public static Result pack(Box band, float gutter, float gap, List<Target> input,
-                              List<Box> hard, List<Box> soft) {
+    public static Result arrange(Box band, float gutter, float gap, List<Target> input,
+                                 List<Box> hard, List<Box> soft) {
         List<Target> targets = new ArrayList<>();
         for (Target t : input) if (t != null && t.box != null
                 && t.box.width() > 0 && t.box.height() > 0) targets.add(t);
@@ -144,16 +149,19 @@ public final class HelpLeaderRouter {
         List<Target> unplaced = new ArrayList<>();
         int page = 0, pages = 0;
         for (Target t : targets) {
-            Placement found = packOn(t, page, band, gutter, gap, placed, hard, soft);
+            Placement found = arrangeOn(t, page, band, gutter, gap, placed, hard, soft);
             if (found == null && pageHasCards(placed, page)) {
                 page++;
-                found = packOn(t, page, band, gutter, gap, placed, hard, soft);
+                found = arrangeOn(t, page, band, gutter, gap, placed, hard, soft);
             }
             if (found == null) { unplaced.add(t); continue; }
             placed.add(found);
             pages = Math.max(pages, found.page + 1);
         }
-        return new Result(placed, unplaced, pages);
+        List<Placement> out = new ArrayList<>();
+        for (Placement p : placed)
+            out.add(new Placement(p.target, p.card, leader(p.target, p.card), p.page, p.column, p.lane));
+        return new Result(out, unplaced, pages);
     }
 
     private static boolean pageHasCards(List<Placement> placed, int page) {
@@ -161,30 +169,87 @@ public final class HelpLeaderRouter {
         return false;
     }
 
-    private static Placement packOn(Target t, int page, Box band, float gutter, float gap,
-                                    List<Placement> placed, List<Box> hard, List<Box> soft) {
-        int preferred = t.box.cx() < band.cx() ? 0 : 1;
+    private static Placement arrangeOn(Target t, int page, Box band, float gutter, float gap,
+                                       List<Placement> placed, List<Box> hard, List<Box> soft) {
+        float left = band.left + gutter, right = band.right - gutter;
+        float w = t.cardWidth, h = t.cardHeight;
+        if (w > right - left + 0.5f || h > band.height() + 0.5f) return null;
+        // Where the eye looks for it.
+        float x = clamp(t.box.cx() - w / 2, left, right - w);
+        float y;
+        int away; // the direction that leads away from the control when the ideal spot is taken
+        // A three-step cascade along an edge, then back to the top of the step: enough for a row
+        // to read as a staircase, bounded so a long row does not walk down the whole band.
+        int sameEdge = 0;
+        for (Placement p : placed) if (p.page == page && p.target.side == t.side) sameEdge++;
+        float stagger = gap * 1.5f * (sameEdge % 3);
+        switch (t.side) {
+            case ABOVE: y = band.top + stagger; away = 1; break;
+            case BELOW: y = band.bottom - h - stagger; away = -1; break;
+            case LEFT: x = clamp(t.box.right + gap, left, right - w);
+                       y = clamp(t.box.cy() - h / 2, band.top, band.bottom - h); away = 1; break;
+            case RIGHT: x = clamp(t.box.left - gap - w, left, right - w);
+                        y = clamp(t.box.cy() - h / 2, band.top, band.bottom - h); away = 1; break;
+            default:
+                if (t.box.right + gap + w <= right) x = t.box.right + gap;
+                else if (t.box.left - gap - w >= left) x = t.box.left - gap - w;
+                y = clamp(t.box.cy() - h / 2, band.top, band.bottom - h); away = 1;
+        }
+        float farX = x + w / 2 < band.cx() ? right - w : left;
         for (int tier = 0; tier < 2; tier++) {
             List<Box> blocked = new ArrayList<>(hard);
             if (tier == 0) blocked.addAll(soft);
             for (Placement p : placed) if (p.page == page) blocked.add(p.card);
-            for (int attempt = 0; attempt < 2; attempt++) {
-                int column = attempt == 0 ? preferred : 1 - preferred;
-                float left = column == 0 ? band.left + gutter : band.cx() + gap / 2;
-                float right = column == 0 ? band.cx() - gap / 2 : band.right - gutter;
-                if (t.cardWidth > right - left + 0.5f || t.cardHeight > band.height()) continue;
-                float x = Math.max(left, Math.min(right - t.cardWidth, t.box.cx() - t.cardWidth / 2));
-                float y = band.top;
-                while (y + t.cardHeight <= band.bottom + 0.5f) {
-                    Box card = new Box(x, y, x + t.cardWidth, y + t.cardHeight);
-                    Box hit = null;
-                    for (Box b : blocked) if (card.overlaps(b) && (hit == null || b.bottom < hit.bottom)) hit = b;
-                    if (hit == null) return new Placement(t, card, Collections.emptyList(), page, column, -1);
-                    y = Math.max(y + 1, hit.bottom + gap);
+            for (float cx : new float[] {x, farX}) {
+                for (int pass = 0; pass < 2; pass++) {
+                    int d = pass == 0 ? away : -away;
+                    float yy = y;
+                    while (yy >= band.top - 0.5f && yy + h <= band.bottom + 0.5f) {
+                        Box card = new Box(cx, yy, cx + w, yy + h);
+                        Box hit = null;
+                        for (Box b : blocked) if (card.overlaps(b)) {
+                            if (hit == null) hit = b;
+                            else if (d > 0 ? b.bottom < hit.bottom : b.top > hit.top) hit = b;
+                        }
+                        if (hit == null) return new Placement(t, card, Collections.emptyList(), page,
+                            cx + w / 2 < band.cx() ? 0 : 1, -1);
+                        yy = d > 0 ? Math.max(yy + 1, hit.bottom + gap) : Math.min(yy - 1, hit.top - gap - h);
+                    }
                 }
             }
         }
         return null;
+    }
+
+    private static float clamp(float v, float lo, float hi) {
+        return hi < lo ? lo : Math.max(lo, Math.min(hi, v));
+    }
+
+    /**
+     * The line from a card to its box: straight when the card faces the box, one elbow when it
+     * sits beside it, nothing when the two touch. Colour pairs the ends, so a line that passes
+     * another card is legible; the layout only has to keep it short.
+     */
+    static List<Segment> leader(Target t, Box b) {
+        Box c = t.box;
+        if (c.overlaps(b)) return Collections.emptyList();
+        boolean above = c.bottom <= b.top, below = c.top >= b.bottom;
+        boolean left = c.right <= b.left, right = c.left >= b.right;
+        if (above || below) {
+            float y0 = above ? b.top : b.bottom, y1 = above ? c.bottom : c.top;
+            float x0 = b.cx(), x1 = Math.max(c.left, Math.min(c.right, x0));
+            if (x1 == x0) return path(x0, y0, x0, y1);
+            float mid = (y0 + y1) / 2;
+            return path(x0, y0, x0, mid, x1, mid, x1, y1);
+        }
+        if (left || right) {
+            float x0 = left ? b.left : b.right, x1 = left ? c.right : c.left;
+            float y0 = b.cy(), y1 = Math.max(c.top, Math.min(c.bottom, y0));
+            if (y1 == y0) return path(x0, y0, x1, y0);
+            float mid = (x0 + x1) / 2;
+            return path(x0, y0, mid, y0, mid, y1, x1, y1);
+        }
+        return Collections.emptyList();
     }
 
     private static List<List<Segment>> paths(Target t, Box c, int column, float width, float gutter) {

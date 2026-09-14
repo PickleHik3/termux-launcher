@@ -146,7 +146,7 @@ public class TerminalPaneController {
     /** Matches pane_active_border.xml's stroke width: the line a corner tab lines up against. */
     private static final float STOCK_PANE_BORDER_DP = 1f;
     /** How deep a pane's corner tab is once it is fully out. */
-    private static final float CONTROL_TAB_HEIGHT_DP = 24f;
+    private static final float CONTROL_TAB_HEIGHT_DP = 32f;
     /** How far the resize glow reaches in from the pane's edge. */
     private static final float GLOW_DEPTH_DP = 12f;
     /** Peak alpha of the glow body, at the edge itself. */
@@ -3687,9 +3687,9 @@ public class TerminalPaneController {
         /**
          * The tab at the corner the finger asked at. The placement is
          * {@link CornerTabGeometry}'s — the same rule the Widgets and Display pages follow, so a
-         * pane's tab never lands anywhere its neighbours' would not — and only the sizes here are
-         * the pane's own: a tighter 22.4dp button than a page's 30dp one, because a pane's tab
-         * sits inside chrome that already steadies the thumb.
+         * pane's tab never lands anywhere its neighbours' would not — and the sizes are the
+         * pages' too: 30dp buttons 8dp apart. They were tighter once, on the theory that a pane's
+         * chrome steadies the thumb, and the phone said otherwise.
          */
         private void computeControlGeometry() {
             RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf, mGeometryPaneRect);
@@ -3699,8 +3699,8 @@ public class TerminalPaneController {
                 return;
             }
             int count = controlCount();
-            for (int i = 0; i < count; i++) mControlWidths[i] = dp(22.4f);
-            CornerTabGeometry.layout(controlCorner(), pane, mControlWidths, count, 0f, dp(2.4f),
+            for (int i = 0; i < count; i++) mControlWidths[i] = dp(30f);
+            CornerTabGeometry.layout(controlCorner(), pane, mControlWidths, count, dp(8), dp(5),
                 dp(CONTROL_TAB_HEIGHT_DP), controlBorderStrokePx(), controlCornerInsetPx(), dp(3),
                 mControlProgress, mControlRect, mControlButtons);
         }

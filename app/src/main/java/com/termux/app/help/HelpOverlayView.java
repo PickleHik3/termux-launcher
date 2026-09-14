@@ -149,7 +149,7 @@ public final class HelpOverlayView extends FrameLayout {
         obstacles.add(new HelpLeaderRouter.Box(snapshot.wall.left + dp(12),
             snapshot.wall.bottom - footerHeight - dp(8), snapshot.wall.right - dp(12),
             snapshot.wall.bottom - dp(8)));
-        routed = HelpLeaderRouter.pack(box(band), dp(12), dp(8), inputs, obstacles, soft);
+        routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs, obstacles, soft);
         pageCount = Math.max(1, routed.pages + routed.unplaced.size());
         page = Math.min(page, pageCount - 1);
         for (HelpLeaderRouter.Target target : routed.unplaced)
@@ -263,14 +263,19 @@ public final class HelpOverlayView extends FrameLayout {
         if (!showing) return;
         canvas.drawColor(Color.argb(166,0,0,0));
         if (routed == null) return;
-        // Each box wears its card's colour; that pairing is the whole link, so no leader is drawn.
-        paint.setStrokeWidth(dp(1.5f)); paint.setStyle(Paint.Style.STROKE); paint.setPathEffect(dash);
+        // Each box, its leader and its card wear one colour, so a line that passes another card
+        // still reads as belonging to its own pair.
+        paint.setStrokeWidth(dp(1.5f)); paint.setStyle(Paint.Style.STROKE);
         for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == page) {
             HelpTargets.Target target = target(p.target.id);
-            RectF bounds = new RectF(target.rect); bounds.inset(dp(2),dp(2));
-            if (bounds.isEmpty()) continue;
             Integer color = boxColors.get(target.id);
             paint.setColor(color == null ? accent : color);
+            paint.setPathEffect(null);
+            for (HelpLeaderRouter.Segment line : p.lines)
+                canvas.drawLine(line.x1,line.y1,line.x2,line.y2,paint);
+            RectF bounds = new RectF(target.rect); bounds.inset(dp(2),dp(2));
+            if (bounds.isEmpty()) continue;
+            paint.setPathEffect(dash);
             float radius = Math.max(0,target.radius-dp(2));
             canvas.drawRoundRect(bounds,radius,radius,paint);
         }

@@ -99,15 +99,16 @@ public final class HelpTargets {
                 dock != null && dock.getId() == R.id.dock_rail_scroll ? R.string.help_rail_body : R.string.help_dock_body));
             add(s, "az", firstOfType(root, AzScrubRowView.class), copy(R.string.help_az_title, R.string.help_az_body));
             extraKeys(root, s);
-            // The keyboard's bottom row is one box and one hint: the chords and the space bar's
-            // swipes together, so the reference stays short.
-            Rect row = union(union(keyRect("ctrl"), keyRect("alt")), union(keyRect("space"), keyRect("enter")));
-            if (row != null) {
+            // Two keyboard hints: the prefix keys with the chords they start, and the space bar
+            // with its swipes. Each is boxed on the keys it is about.
+            Rect prefix = union(keyRect("ctrl"), keyRect("alt"));
+            if (prefix != null) {
                 String chords = chords();
-                String space = context.getString(R.string.help_space_body);
-                add(s, "keyboard", row, 0, new HelpCopy(context.getString(R.string.help_keyboard_title),
-                    chords.isEmpty() ? space : chords + "\n" + space));
+                String hold = context.getString(R.string.help_prefix_body);
+                add(s, "prefix", prefix, 0, new HelpCopy(context.getString(R.string.help_prefix_title),
+                    chords.isEmpty() ? hold : hold + "\n" + chords));
             }
+            add(s, "space", keyRect("space"), 0, copy(R.string.help_space_title, R.string.help_space_body));
         } else if (place == PaneWallPage.DISPLAY) {
             DisplayScaleRailView rail = firstOfType(root, DisplayScaleRailView.class);
             if (rail != null && rail.isRailShown()) add(s, "scale", localRect(rail, rail.helpBounds()),

@@ -255,10 +255,10 @@ public class TerminalPaneControllerTest {
 
     /** The pane's tab at one corner, laid out the way the overlay lays it out, inside its pane. */
     private static void assertTabInsidePane(RectF pane, int corner, float insetPx) {
-        float[] widths = {22.4f, 22.4f, 22.4f};
+        float[] widths = {30f, 30f, 30f};
         RectF tab = new RectF();
         RectF[] buttons = {new RectF(), new RectF(), new RectF()};
-        CornerTabGeometry.layout(corner, pane, widths, 3, 0f, 2.4f, 24f, 0f, insetPx, 3f, 1f,
+        CornerTabGeometry.layout(corner, pane, widths, 3, 8f, 5f, 32f, 0f, insetPx, 3f, 1f,
             tab, buttons);
         assertFalse("the tab has to exist to be inside anything", tab.isEmpty());
         if (CornerZones.isLeft(corner)) {

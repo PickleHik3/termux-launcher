@@ -1863,11 +1863,13 @@
     <string name="help_rail_body">Swipe off the rail for the app drawer.</string>
     <string name="help_az_title">A–Z row</string>
     <string name="help_az_body">Slide to filter, drag up to an app to launch it.</string>
-    <string name="help_keyboard_title">Keyboard</string>
+    <string name="help_prefix_title">Prefix keys</string>
+    <string name="help_prefix_body">Hold Ctrl and Alt to see what every key does.</string>
     <string name="help_split_chord">%1$s splits the pane.</string>
     <string name="help_window_chord">%1$s opens a window.</string>
     <string name="help_session_chord">%1$s opens a session.</string>
-    <string name="help_space_body">Swipe up on the space bar for the command palette, toward a corner for windows and sessions.</string>
+    <string name="help_space_title">Space bar</string>
+    <string name="help_space_body">Swipe up for the command palette, toward a corner for windows and sessions.</string>
     <string name="help_display_apps_title">Display apps</string>
     <string name="help_display_apps_body">Tap once to show its × button.</string>
     <string name="help_scale_title">Scale</string>
