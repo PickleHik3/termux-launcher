@@ -52,6 +52,13 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   showing, and a hardware keyboard is the display's entirely: every key and every chord goes to
   X, and the launcher's shortcuts and their hints stay out of the way. Leave the display by
   touch, by the place icons, or with Home.
+- **One clipboard.** Copy in an app on the display and the text is on the phone's clipboard,
+  ready to paste anywhere; copy anywhere on the phone and it is there for the display's apps.
+  The keyboard's copy, cut, paste, select all, undo and redo keys do on the display what they do
+  on a desktop, the paste key on the extra-keys row pastes into the display rather than behind
+  it, and **Fn** with the paste key types the text out instead, for an app that has its own idea
+  of what Ctrl+V means. The two sides share by default — Settings → **Display** → **Share the
+  clipboard** is the way to keep them apart.
 - **Switching apps.** The keyboard's window actions work on the display's apps: swipe the space
   bar from its top corners (**Next window** at the top right, **Previous window** at the top
   left) to step through the apps the status bar lists, in the same order as its chips. The same
