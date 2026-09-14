@@ -263,6 +263,9 @@ public final class TerminalCommandPaletteController
         mHost.setVisibility(View.VISIBLE);
         applyFrame();
         mActivity.setCommandPaletteInterceptorActive(true);
+        // The query line takes every key from here on, and a line with nothing blinking in it does
+        // not look like one that does.
+        mView.setCaretBlinking(true);
         kick();
     }
 
@@ -278,6 +281,8 @@ public final class TerminalCommandPaletteController
         mPendingEntry = null;
         mCrumb = "";
         mActivity.setCommandPaletteInterceptorActive(false);
+        // Nothing of the palette's may keep ticking behind a closed palette.
+        if (mView != null) mView.setCaretBlinking(false);
         mProgress.target = 0f;
         kick();
     }
@@ -289,6 +294,7 @@ public final class TerminalCommandPaletteController
         mCaptureStroke = "";
         mCaptureConflict = null;
         mActivity.setCommandPaletteInterceptorActive(false);
+        if (mView != null) mView.setCaretBlinking(false);
         mProgress.reset(0f);
         if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
         if (mHost != null) mHost.setVisibility(View.INVISIBLE);

@@ -4,6 +4,7 @@ import android.app.Application;
 import android.graphics.Canvas;
 import android.graphics.RectF;
 import android.os.Build;
+import android.provider.Settings;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -18,6 +19,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -83,6 +85,52 @@ public class CommandPaletteViewTest {
 
         view.setArgumentMode(true, "name", "");
         assertTrue(view.measuredContentHeight() > withRows);
+    }
+
+    /**
+     * The blink runs only while the palette is open. Legacy graphics cannot show whether a bar was
+     * painted, but this is the one thing in the view that would otherwise tick on forever, so what
+     * matters is that it is started and stopped at all — and that both halves still draw.
+     */
+    @Test
+    public void caretBlink_runsWhileOpenAndStopsWhenThePaletteCloses() {
+        CommandPaletteView view = palette();
+        view.setRows(shortList(), 1);
+
+        view.setCaretBlinking(true);
+        assertTrue(view.isCaretBlinking());
+        view.draw(new Canvas());
+
+        view.setCaretBlinking(false);
+        assertFalse("a closed palette leaves nothing posted", view.isCaretBlinking());
+        view.draw(new Canvas());
+
+        // Typing restarts the phase rather than letting an off half swallow the caret; it must not
+        // start one on a palette that is closed.
+        view.setQuery("wor", "search");
+        view.setQueryCursor(3);
+        assertFalse(view.isCaretBlinking());
+        view.draw(new Canvas());
+    }
+
+    /** With animations turned off the caret is shown steady instead of blinking. */
+    @Test
+    public void caretBlink_isSteadyWhenAnimationsAreOff() {
+        Settings.Global.putFloat(
+            ApplicationProvider.getApplicationContext().getContentResolver(),
+            Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        try {
+            CommandPaletteView view = palette();
+            view.setRows(shortList(), 1);
+
+            view.setCaretBlinking(true);
+            assertFalse("no motion nobody asked for", view.isCaretBlinking());
+            view.draw(new Canvas());
+        } finally {
+            Settings.Global.putFloat(
+                ApplicationProvider.getApplicationContext().getContentResolver(),
+                Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+        }
     }
 
     private static CommandPaletteView palette() {

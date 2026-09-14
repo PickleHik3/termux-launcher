@@ -143,6 +143,10 @@ public class TerminalPaneController {
      * agree. Also the radius a tiled pane wears while that stroke is its frame.
      */
     private static final int FLOAT_CORNER_RADIUS_DP = 6;
+    /** Matches pane_active_border.xml's stroke width: the line a corner tab lines up against. */
+    private static final float STOCK_PANE_BORDER_DP = 1f;
+    /** How deep a pane's corner tab is once it is fully out. */
+    private static final float CONTROL_TAB_HEIGHT_DP = 24f;
     /** How far the resize glow reaches in from the pane's edge. */
     private static final float GLOW_DEPTH_DP = 12f;
     /** Peak alpha of the glow body, at the edge itself. */
@@ -3059,15 +3063,25 @@ public class TerminalPaneController {
     }
 
     /**
-     * How deep a pane's own corner arc runs — what a corner tab has to start past to sit inside the
-     * rounded outline instead of hanging across it. Glass rounds every pane at the slab's radius;
-     * without glass a pane rounds its corners at the float radius as soon as it shares the wall
-     * (a split, a maximized pane, a float) and is square only when it is alone on it.
+     * The radius a pane is drawn at. Glass rounds every pane at the slab's radius; without glass a
+     * pane rounds its corners at the float radius as soon as it shares the wall (a split, a
+     * maximized pane, a float) and is square only when it is alone on it.
      */
-    static float paneCornerInsetPx(boolean glass, float glassRadiusPx, boolean rounded,
-                                   float roundedRadiusPx) {
+    static float paneCornerRadiusPx(boolean glass, float glassRadiusPx, boolean rounded,
+                                    float roundedRadiusPx) {
         float radius = glass ? glassRadiusPx : rounded ? roundedRadiusPx : 0f;
         return Math.max(0f, radius);
+    }
+
+    /**
+     * How wide the border a pane paints is — the line a corner tab lines up against, not the
+     * bounding box behind it. Glass wears {@link com.termux.app.GlassRimRenderer}'s rim; a plain
+     * pane that shares the wall wears {@code R.drawable.pane_active_border}, a 1dp stroke; a lone
+     * plain pane paints no border at all and there is nothing to line up against.
+     */
+    static float paneBorderStrokePx(boolean glass, boolean rounded, float density) {
+        if (glass) return com.termux.app.GlassRimRenderer.strokePx(density);
+        return rounded ? density * STOCK_PANE_BORDER_DP : 0f;
     }
 
     /**
@@ -3664,23 +3678,43 @@ public class TerminalPaneController {
             }
             int count = controlCount();
             for (int i = 0; i < count; i++) mControlWidths[i] = dp(22.4f);
-            float inset = controlCornerInsetPx();
             CornerTabGeometry.layout(controlCorner(), pane, mControlWidths, count, 0f, dp(2.4f),
-                dp(24), inset, dp(3), mControlProgress, mControlRect, mControlButtons);
+                dp(CONTROL_TAB_HEIGHT_DP), controlBorderStrokePx(), controlCornerInsetPx(), dp(3),
+                mControlProgress, mControlRect, mControlButtons);
+        }
+
+        /** Whether this pane paints a rounded border at all — a split, a maximized pane, a float. */
+        private boolean controlPaneRounded() {
+            return tiledPaneCount() > 1 || mMaximizedLeaf != null
+                || (mActiveWindow != null && mControlLeaf != null
+                    && mActiveWindow.floating.contains(mControlLeaf));
         }
 
         /**
-         * The pane's own corner arc under the tab. Glass panes carry the slab's radius, but a pane
-         * without glass is rounded too as soon as it shares the wall with another — which is
-         * exactly when this tab exists — and a tab left flush against that edge hung its outer
-         * corner out past the arc.
+         * The pane's own corner radius under the tab. Glass panes carry the slab's radius, but a
+         * pane without glass is rounded too as soon as it shares the wall with another — which is
+         * exactly when this tab exists.
+         */
+        private float controlCornerRadiusPx() {
+            return paneCornerRadiusPx(paneGlassActive(), paneGlassRadiusPx(), controlPaneRounded(),
+                dp(FLOAT_CORNER_RADIUS_DP));
+        }
+
+        /** The border the pane paints, which is the line the tab lines up inside. */
+        private float controlBorderStrokePx() {
+            return paneBorderStrokePx(paneGlassActive(), controlPaneRounded(),
+                getResources().getDisplayMetrics().density);
+        }
+
+        /**
+         * How far in from the border's inner edge the tab starts: clear of the arc the border
+         * turns at that corner, and clear again by half the tab's own outline, so nothing the tab
+         * paints lands across the line instead of inside it.
          */
         private float controlCornerInsetPx() {
-            boolean rounded = tiledPaneCount() > 1 || mMaximizedLeaf != null
-                || (mActiveWindow != null && mControlLeaf != null
-                    && mActiveWindow.floating.contains(mControlLeaf));
-            return paneCornerInsetPx(paneGlassActive(), paneGlassRadiusPx(), rounded,
-                dp(FLOAT_CORNER_RADIUS_DP));
+            return CornerTabGeometry.cornerInsetPx(controlCornerRadiusPx(),
+                controlBorderStrokePx(), dp(CONTROL_TAB_HEIGHT_DP),
+                dp(CornerTabGeometry.TAB_OUTLINE_DP));
         }
 
         /** The corner the tab is out of, or the default when nothing has aimed one yet. */
@@ -3848,21 +3882,29 @@ public class TerminalPaneController {
             RectF pane = paneRect(mControlLeaf, mDrawPaneRect);
             if (pane == null) return;
             boolean fromTop = CornerZones.isTop(controlCorner());
+            float border = controlBorderStrokePx();
             // The pane edge the tab is revealed through, and the tab's own far edge — the one
-            // carrying the rounded pair. Out of the top edge they are the pane's top and the tab's
+            // carrying the rounded pair. The edge is the border's *inner* line, not the bounding
+            // box: the tab comes out from behind the border the eye reads, not from behind the
+            // pixel column outside it. Out of the top edge that is the pane's top and the tab's
             // bottom; out of the bottom edge, the other way round.
-            float paneEdge = fromTop ? pane.top : pane.bottom;
+            float paneEdge = fromTop ? pane.top + border : pane.bottom - border;
             float tabEdge = fromTop ? mControlRect.bottom : mControlRect.top;
             // Which way the tab's far edge lies from the pane edge it came out of.
             float dir = fromTop ? 1f : -1f;
             float radius = dp(4);
+            // How far the outline may flare along that edge before it would run into the arc.
+            float ear = CornerTabGeometry.earReachPx(dp(CornerTabGeometry.TAB_EAR_DP),
+                controlCornerRadiusPx(), border, dp(CONTROL_TAB_HEIGHT_DP),
+                dp(CornerTabGeometry.TAB_OUTLINE_DP));
             int canvasState = canvas.save();
             // Clipping to the pane is what makes the closing motion disappear back into the frame
-            // instead of floating above it — and to the pane's *shape*, so the tab's outer corner
-            // and the small ears its outline throws past it cannot cross the rounded edge the pane
-            // paints. A square pane's arc is 0 and this is the plain rectangle it always was.
-            float arc = controlCornerInsetPx();
-            mClipRect.set(pane.left, pane.top - dp(1), pane.right, pane.bottom + dp(1));
+            // instead of floating above it — and to the shape the pane's border traces on its
+            // inside, so neither the tab's outer corner nor the ears its outline throws past it
+            // can land on the line. A pane with no border clips to its plain bounding box, which
+            // is what this always was.
+            float arc = CornerTabGeometry.innerRadiusPx(controlCornerRadiusPx(), border);
+            CornerTabGeometry.innerBounds(pane, border, mClipRect);
             if (arc > 0f) {
                 mPath.reset();
                 mPath.addRoundRect(mClipRect, arc, arc, Path.Direction.CW);
@@ -3871,9 +3913,12 @@ public class TerminalPaneController {
                 canvas.clipRect(mClipRect);
             }
 
+            // The fill runs a hair past the edge and is trimmed there by the clip, so no
+            // anti-aliased seam opens up between the tab and the border it comes out from behind.
+            float fillEdge = paneEdge - dir * dp(1);
             mPath.reset();
-            mPath.moveTo(mControlRect.left, paneEdge);
-            mPath.lineTo(mControlRect.right, paneEdge);
+            mPath.moveTo(mControlRect.left, fillEdge);
+            mPath.lineTo(mControlRect.right, fillEdge);
             mPath.lineTo(mControlRect.right, tabEdge - dir * radius);
             mPath.quadTo(mControlRect.right, tabEdge, mControlRect.right - radius, tabEdge);
             mPath.lineTo(mControlRect.left + radius, tabEdge);
@@ -3885,16 +3930,16 @@ public class TerminalPaneController {
             canvas.drawPath(mPath, mPaint);
 
             mPath.reset();
-            mPath.moveTo(mControlRect.left - dp(5), paneEdge);
+            mPath.moveTo(mControlRect.left - ear, paneEdge);
             mPath.lineTo(mControlRect.left, paneEdge);
             mPath.lineTo(mControlRect.left, tabEdge - dir * radius);
             mPath.quadTo(mControlRect.left, tabEdge, mControlRect.left + radius, tabEdge);
             mPath.lineTo(mControlRect.right - radius, tabEdge);
             mPath.quadTo(mControlRect.right, tabEdge, mControlRect.right, tabEdge - dir * radius);
             mPath.lineTo(mControlRect.right, paneEdge);
-            mPath.lineTo(mControlRect.right + dp(5), paneEdge);
+            mPath.lineTo(mControlRect.right + ear, paneEdge);
             mPaint.setStyle(Paint.Style.STROKE);
-            mPaint.setStrokeWidth(dp(1));
+            mPaint.setStrokeWidth(dp(CornerTabGeometry.TAB_OUTLINE_DP));
             mPaint.setStrokeCap(Paint.Cap.ROUND);
             mPaint.setStrokeJoin(Paint.Join.ROUND);
             mPaint.setColor(ColorUtils.setAlphaComponent(primary,
