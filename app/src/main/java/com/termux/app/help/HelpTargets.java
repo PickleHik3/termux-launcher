@@ -64,10 +64,9 @@ public final class HelpTargets {
     private final ViewFinder finder;
     private final View overlay;
     private final Context context;
-    private final float density;
+
     public HelpTargets(ViewFinder finder, View overlay) {
         this.finder = finder; this.overlay = overlay; this.context = overlay.getContext();
-        density = overlay.getResources().getDisplayMetrics().density;
     }
     public Snapshot measure(PaneWallPage place) {
         Rect wall = rect(finder.findHelpView(R.id.terminal_pane_wall));
@@ -196,10 +195,13 @@ public final class HelpTargets {
             new HelpCopy(title.toString(), context.getString(R.string.help_stats_body)));
     }
     private void corner(Snapshot s, View pane, int corner, HelpCopy copy) {
+        // Terminal content is inset inside its shaped frame; corners belong to that frame.
+        if (pane != null && pane.getParent() instanceof com.termux.app.terminal.PaneContentFrame)
+            pane = (View) pane.getParent();
         Rect bounds = rect(pane);
         if (bounds == null) return;
         RectF r = new RectF();
-        CornerZones.cornerRect(corner, new RectF(bounds), CornerZones.sizePx(density), r);
+        CornerZones.cornerRect(corner, new RectF(bounds), CornerZones.sizePx(overlay.getResources().getDisplayMetrics().density), r);
         Rect out = new Rect(); r.roundOut(out);
         add(s, "corner", out, radius(pane), copy);
     }

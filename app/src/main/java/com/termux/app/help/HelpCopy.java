@@ -22,7 +22,10 @@ public final class HelpCopy {
         String name = key.getKey();
         int label = 0;
         if (name.startsWith(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX)) {
-            switch (name.substring(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX.length())) {
+            String toolName = name.substring(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX.length());
+            int arguments = toolName.indexOf(':');
+            if (arguments > 0) toolName = toolName.substring(0, arguments);
+            switch (toolName) {
                 case "keyboard.cycle_form": label = R.string.help_key_form; break;
                 case "mouse.toggle": label = R.string.help_key_mouse; break;
                 case "wall.widgets": label = R.string.help_key_widgets; break;
@@ -33,6 +36,12 @@ public final class HelpCopy {
                 case "session.browser": label = R.string.help_key_sessions; break;
                 case "session.new": label = R.string.help_key_session; break;
                 case "keyboard.toggle": label = R.string.help_key_keyboard; break;
+            }
+            if (label == 0) {
+                com.termux.launcherctl.LauncherToolRegistry.ToolMetadata tool =
+                    com.termux.launcherctl.LauncherToolRegistry.getInstance().getTool(toolName);
+                if (tool != null && tool.titleRes != 0) label = tool.titleRes;
+                else if (name.equals(key.getDisplay())) label = R.string.help_key_action;
             }
         } else if ("KEYBOARD".equals(name)) label = R.string.help_key_keyboard;
         return label == 0 ? key.getDisplay() : context.getString(label);

@@ -33,8 +33,8 @@ import java.util.Map;
 public final class HelpOverlayView extends FrameLayout {
     private final HelpTargets targets;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final float density;
-    private final DashPathEffect dash;
+    private float density;
+    private DashPathEffect dash;
     private final ViewTreeObserver.OnGlobalLayoutListener layoutListener = this::refresh;
     private final Map<View, Rect> childBounds = new HashMap<>();
     private final List<View> cards = new ArrayList<>();
@@ -48,6 +48,7 @@ public final class HelpOverlayView extends FrameLayout {
     private int page;
     private int pageCount;
     private int accent;
+    private int footerHeight;
     private String signature = "";
     private boolean showing;
     private float downX, downY;
@@ -98,12 +99,22 @@ public final class HelpOverlayView extends FrameLayout {
     /** Child rebuilds only follow changed measurements; their own layout pass is a no-op here. */
     public void refresh() {
         if (!showing || getWidth() <= 0 || getHeight() <= 0) return;
+        float currentDensity = getResources().getDisplayMetrics().density;
+        if (currentDensity != density) {
+            density = currentDensity;
+            dash = new DashPathEffect(new float[]{dp(4), dp(3)}, 0);
+        }
+        TerminalDress currentDress = TerminalDress.stored(getContext());
+        int currentAccent = StatusBarLensView.accentFor(getContext(), place);
         HelpTargets.Snapshot measured = targets.measure(place);
         String next = getWidth() + ":" + getHeight() + ":"
-            + getResources().getConfiguration().fontScale + ":" + measured.signature();
+            + getResources().getConfiguration().fontScale + ":" + density + ":"
+            + currentDress.fillColor + ":" + currentDress.strokeColor + ":" + currentDress.textColor
+            + ":" + currentDress.terminalRadiusPx + ":" + currentAccent + ":" + measured.signature();
         if (signature.equals(next)) return;
         signature = next;
         snapshot = measured;
+        dress = currentDress; accent = currentAccent;
         cardViews.clear();
         int width = Math.max(1, (snapshot.wall.width() - dp(36)) / 2);
         List<HelpLeaderRouter.Target> inputs = new ArrayList<>();
@@ -117,8 +128,9 @@ public final class HelpOverlayView extends FrameLayout {
         }
         // Reserve the bottom of the wall for the close/paging pills, measured at this font scale.
         TextView close = pill(getContext().getString(R.string.help_close));
-        close.measure(MeasureSpec.makeMeasureSpec(Math.max(1,snapshot.wall.width()-dp(24)), MeasureSpec.AT_MOST),
+        close.measure(MeasureSpec.makeMeasureSpec(Math.max(1,(snapshot.wall.width()-dp(24))*2/3-dp(8)), MeasureSpec.AT_MOST),
             MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+        footerHeight = close.getMeasuredHeight();
         Rect band = new Rect(snapshot.wall);
         band.top += dp(8);
         band.bottom = Math.max(band.top, band.bottom - close.getMeasuredHeight() - dp(16));
@@ -153,12 +165,13 @@ public final class HelpOverlayView extends FrameLayout {
             if (card.getParent() instanceof ViewGroup) ((ViewGroup)card.getParent()).removeView(card);
             scroll.addView(card, new ScrollView.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
             Rect r = new Rect(snapshot.wall); r.inset(dp(16),dp(8));
-            r.bottom = Math.max(r.top+1,r.bottom-dp(72));
+            r.bottom = Math.max(r.top+1,r.bottom-footerHeight-dp(16));
             put(scroll,r); cards.add(scroll);
         }
         for (HelpTargets.KeyLabel key : snapshot.keys) {
             TextView label = pill(key.text);
             label.setPadding(dp(1),0,dp(1),0);
+            label.setMaxLines(2);
             label.setAutoSizeTextTypeUniformWithConfiguration(6,11,1,android.util.TypedValue.COMPLEX_UNIT_SP);
             label.setBackground(dress.background(key.rect.height()));
             put(label,new Rect(key.rect));

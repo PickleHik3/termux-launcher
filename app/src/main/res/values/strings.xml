@@ -1855,7 +1855,7 @@
     <string name="help_stat_cpu">CPU</string>
     <string name="help_stat_ram">RAM</string>
     <string name="help_stat_weather">Weather</string>
-    <string name="help_stat_separator"> · </string>
+    <string name="help_stat_separator">" · "</string>
     <string name="help_status_title">Status bar</string>
     <string name="help_status_body">Swipe along it to change place or drag down for the clock and notifications.</string>
     <string name="help_corner_title">Pane corners</string>
@@ -1891,6 +1891,7 @@
     <string name="help_widget_body">Long-press to move or resize it.</string>
     <string name="help_empty_title">Empty space</string>
     <string name="help_empty_body">Long-press to add a widget or another page.</string>
+    <string name="help_key_action">Action</string>
     <string name="help_key_form">form</string>
     <string name="help_key_mouse">Mouse</string>
     <string name="help_key_widgets">Widgets</string>
