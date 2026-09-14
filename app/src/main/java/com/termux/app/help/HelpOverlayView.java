@@ -11,6 +11,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.SpannableString;
 import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -39,6 +40,8 @@ public final class HelpOverlayView extends FrameLayout {
     private final Map<View, Rect> childBounds = new HashMap<>();
     private final List<View> cards = new ArrayList<>();
     private final Map<String, TextView> cardViews = new HashMap<>();
+    /** The colour each hint's box and card share, by target id. */
+    private final Map<String, Integer> boxColors = new HashMap<>();
     private final Runnable onDismiss;
     private HelpTargets.Snapshot snapshot;
     private HelpLeaderRouter.Result routed;
@@ -115,16 +118,23 @@ public final class HelpOverlayView extends FrameLayout {
         signature = next;
         snapshot = measured;
         dress = currentDress; accent = currentAccent;
-        cardViews.clear();
+        cardViews.clear(); boxColors.clear();
         int width = Math.max(1, (snapshot.wall.width() - dp(36)) / 2);
         List<HelpLeaderRouter.Target> inputs = new ArrayList<>();
-        for (HelpTargets.Target target : snapshot.targets) {
-            TextView card = card(target.copy);
+        List<HelpLeaderRouter.Box> soft = new ArrayList<>();
+        int count = snapshot.targets.size();
+        for (int i = 0; i < count; i++) {
+            HelpTargets.Target target = snapshot.targets.get(i);
+            boxColors.put(target.id, HelpPalette.boxColor(accent, i, count));
+            TextView card = card(target.copy, HelpPalette.titleColor(accent, i, count, dress.fillColor),
+                HelpPalette.boxColor(accent, i, count));
             card.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
             cardViews.put(target.id, card);
-            inputs.add(new HelpLeaderRouter.Target(target.id, box(target.rect), side(target.rect),
+            HelpLeaderRouter.Side side = side(target.rect);
+            inputs.add(new HelpLeaderRouter.Target(target.id, box(target.rect), side,
                 width, card.getMeasuredHeight()));
+            if (side == HelpLeaderRouter.Side.INSIDE) soft.add(box(target.rect));
         }
         // Reserve the bottom of the wall for the close/paging pills, measured at this font scale.
         TextView close = pill(getContext().getString(R.string.help_close));
@@ -139,7 +149,7 @@ public final class HelpOverlayView extends FrameLayout {
         obstacles.add(new HelpLeaderRouter.Box(snapshot.wall.left + dp(12),
             snapshot.wall.bottom - footerHeight - dp(8), snapshot.wall.right - dp(12),
             snapshot.wall.bottom - dp(8)));
-        routed = HelpLeaderRouter.route(getWidth(), getHeight(), box(band), dp(12), dp(12), inputs, obstacles);
+        routed = HelpLeaderRouter.pack(box(band), dp(12), dp(8), inputs, obstacles, soft);
         pageCount = Math.max(1, routed.pages + routed.unplaced.size());
         page = Math.min(page, pageCount - 1);
         for (HelpLeaderRouter.Target target : routed.unplaced)
@@ -206,7 +216,7 @@ public final class HelpOverlayView extends FrameLayout {
     private Rect keyLabelBounds(Rect cap) {
         Rect label = new Rect(cap);
         label.inset(dp(2), dp(2));
-        // Text stays on its measured cap, with the outer edge lanes left clear for leaders.
+        // Text stays on its measured cap, clear of the screen's edges.
         label.left = Math.max(label.left, dp(12));
         label.right = Math.min(label.right, getWidth() - dp(12));
         return label;
@@ -218,14 +228,19 @@ public final class HelpOverlayView extends FrameLayout {
         addView(view,new LayoutParams(Math.max(1,rect.width()),Math.max(1,rect.height())));
         childBounds.put(view,rect);
     }
-    private TextView card(HelpCopy copy) {
+    /** A card in its hint's colour: the title and the border match the box on the control. */
+    private TextView card(HelpCopy copy, int titleColor, int borderColor) {
         TextView text = new TextView(getContext());
         SpannableString content = new SpannableString(copy.title+"\n"+copy.body);
         content.setSpan(new StyleSpan(Typeface.BOLD),0,copy.title.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        content.setSpan(new ForegroundColorSpan(titleColor),0,copy.title.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         text.setText(content); text.setTextSize(12); text.setTextColor(dress.textColor);
         text.setPadding(dp(8),dp(6),dp(8),dp(6));
         text.setLineSpacing(dp(1),1);
-        text.setBackground(dress.background(0));
+        android.graphics.drawable.Drawable background = dress.background(0);
+        if (background instanceof GradientDrawable)
+            ((GradientDrawable) background).setStroke(dp(1.5f), borderColor);
+        text.setBackground(background);
         return text;
     }
     private TextView pill(String copy) {
@@ -248,15 +263,14 @@ public final class HelpOverlayView extends FrameLayout {
         if (!showing) return;
         canvas.drawColor(Color.argb(166,0,0,0));
         if (routed == null) return;
-        paint.setColor(accent); paint.setStrokeWidth(dp(1)); paint.setStyle(Paint.Style.STROKE);
+        // Each box wears its card's colour; that pairing is the whole link, so no leader is drawn.
+        paint.setStrokeWidth(dp(1.5f)); paint.setStyle(Paint.Style.STROKE); paint.setPathEffect(dash);
         for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == page) {
-            paint.setPathEffect(null);
-            for (HelpLeaderRouter.Segment line : p.lines)
-                canvas.drawLine(line.x1,line.y1,line.x2,line.y2,paint);
             HelpTargets.Target target = target(p.target.id);
             RectF bounds = new RectF(target.rect); bounds.inset(dp(2),dp(2));
             if (bounds.isEmpty()) continue;
-            paint.setPathEffect(dash);
+            Integer color = boxColors.get(target.id);
+            paint.setColor(color == null ? accent : color);
             float radius = Math.max(0,target.radius-dp(2));
             canvas.drawRoundRect(bounds,radius,radius,paint);
         }

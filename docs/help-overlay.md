@@ -61,6 +61,15 @@ and the review page `.lavish/help-overlay-inventory.html` (sections "Help overla
   bottom row (chords and space-bar swipes) is one hint; every line is as short as it can be and
   the cards are tighter. The tables below are superseded where they differ.
 
+## Third pass (2026-09-14): colour pairs, one page
+
+Each hint has its own colour, shared by the dashed box on the control and the border and title of
+its card (`HelpPalette`: hues spread evenly from the place accent). That pairing is the whole link,
+so no leader lines are drawn and nothing can cross; cards flow down two columns of the wall band
+in screen order, each in the column nearer its control, yielding to the key labels, the footer
+and the boxes of controls inside the band unless nothing fits otherwise (`HelpLeaderRouter.pack`).
+A second page starts only when both columns are full, which the default layouts never reach.
+
 ## Per place: boxes and copy
 
 Strings go in `strings.xml` under `help_…`. Titles bold, lines as given.

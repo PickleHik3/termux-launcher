@@ -3,6 +3,7 @@ package com.termux.app.help;
 import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import static org.junit.Assert.*;
 import static com.termux.app.help.HelpLeaderRouter.*;
@@ -132,5 +133,77 @@ public class HelpLeaderRouterTest {
         Result impossible=route(Arrays.asList(t("full",0,0,400,850,Side.INSIDE)));
         assertEquals(1,impossible.unplaced.size());
         assertTrue(impossible.placements.isEmpty());
+    }
+
+    // ---- The colour-paired layout: no leaders, so cards only have to avoid each other. ----
+
+    private static Box B(float l, float t, float r, float b) { return new Box(l, t, r, b); }
+
+    private List<Target> terminalTargets() {
+        return Arrays.asList(
+            t("sessions", 20, 20, 60, 44, Side.ABOVE), t("windows", 62, 20, 200, 44, Side.ABOVE),
+            t("stats", 300, 20, 460, 44, Side.ABOVE), t("status", 0, 0, 480, 48, Side.ABOVE),
+            t("divider", 238, 60, 242, 700, Side.INSIDE), t("dock", 0, 720, 480, 780, Side.BELOW),
+            t("az", 0, 782, 480, 800, Side.BELOW), t("keyboard", 0, 900, 480, 960, Side.BELOW));
+    }
+
+    @Test public void packPutsTheWholeTerminalOnOnePage() {
+        Result r = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8, terminalTargets(),
+            Collections.singletonList(B(12, 660, 468, 700)), Collections.singletonList(B(238, 60, 242, 700)));
+        assertEquals(1, r.pages);
+        assertTrue(r.unplaced.isEmpty());
+        assertEquals(8, r.placements.size());
+        assertNoOverlap(r);
+        for (Placement p : r.placements) {
+            assertTrue(p.lines.isEmpty());
+            assertTrue(p.card.top >= 60 && p.card.bottom <= 700.5f);
+            assertFalse("card over the footer", p.card.overlaps(B(12, 660, 468, 700)));
+        }
+    }
+
+    @Test public void packChoosesTheColumnNearerTheControl() {
+        Result r = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8,
+            Arrays.asList(t("left", 0, 0, 100, 40, Side.ABOVE), t("right", 380, 0, 480, 40, Side.ABOVE)),
+            Collections.emptyList(), Collections.emptyList());
+        assertEquals(0, placement(r, "left").column);
+        assertEquals(1, placement(r, "right").column);
+    }
+
+    @Test public void packYieldsToInsideBoxesUnlessNothingFitsOtherwise() {
+        Box widget = B(0, 60, 480, 400);
+        Result r = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8,
+            Arrays.asList(t("widget", 0, 60, 480, 400, Side.INSIDE), t("status", 0, 0, 480, 48, Side.ABOVE)),
+            Collections.emptyList(), Collections.singletonList(widget));
+        assertEquals(1, r.pages);
+        for (Placement p : r.placements) assertFalse(p.target.id, p.card.overlaps(widget));
+        // A wall-sized soft box leaves no room; the card sits over the dimmed control instead of on a second page.
+        Result full = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8,
+            Arrays.asList(t("empty", 0, 60, 480, 700, Side.INSIDE)),
+            Collections.emptyList(), Collections.singletonList(B(0, 60, 480, 700)));
+        assertEquals(1, full.pages);
+        assertTrue(full.unplaced.isEmpty());
+    }
+
+    @Test public void packStartsASecondPageOnlyWhenBothColumnsAreFull() {
+        List<Target> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 20; i++) many.add(new Target("t" + i, B(i * 20, 0, i * 20 + 10, 40), Side.ABOVE, 200, 100));
+        Result r = HelpLeaderRouter.pack(B(0, 60, 480, 700), 12, 8, many, Collections.emptyList(), Collections.emptyList());
+        assertTrue(r.pages >= 2);
+        assertTrue(r.unplaced.isEmpty());
+        assertNoOverlap(r);
+        // Six cards of 100 fit each 640-tall column: page one holds twelve.
+        int onFirst = 0;
+        for (Placement p : r.placements) if (p.page == 0) onFirst++;
+        assertEquals(12, onFirst);
+    }
+
+    private static Placement placement(Result r, String id) {
+        for (Placement p : r.placements) if (p.target.id.equals(id)) return p;
+        throw new AssertionError(id);
+    }
+
+    private static void assertNoOverlap(Result r) {
+        for (Placement a : r.placements) for (Placement b : r.placements)
+            if (a != b && a.page == b.page) assertFalse(a.target.id + " over " + b.target.id, a.card.overlaps(b.card));
     }
 }

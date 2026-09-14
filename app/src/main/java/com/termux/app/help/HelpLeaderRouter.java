@@ -125,6 +125,68 @@ public final class HelpLeaderRouter {
         return new Result(placed, unplaced, pages);
     }
 
+    /**
+     * The colour-paired layout: every card shares a colour with the box it explains, so no
+     * leader is drawn and no leader can cross. Cards flow down two columns of the band in the
+     * order their controls sit on the screen, each in the column nearer its control, and yield
+     * to obstacles: {@code hard} ones always (key labels, the footer pills), {@code soft} ones —
+     * the boxes of controls inside the band — unless nothing fits otherwise, because a card over
+     * a dimmed pane beats a second page. A new page starts only when both columns are full.
+     */
+    public static Result pack(Box band, float gutter, float gap, List<Target> input,
+                              List<Box> hard, List<Box> soft) {
+        List<Target> targets = new ArrayList<>();
+        for (Target t : input) if (t != null && t.box != null
+                && t.box.width() > 0 && t.box.height() > 0) targets.add(t);
+        targets.sort(Comparator.comparingDouble((Target t) -> t.box.top)
+            .thenComparingDouble(t -> t.box.left).thenComparing(t -> t.id));
+        List<Placement> placed = new ArrayList<>();
+        List<Target> unplaced = new ArrayList<>();
+        int page = 0, pages = 0;
+        for (Target t : targets) {
+            Placement found = packOn(t, page, band, gutter, gap, placed, hard, soft);
+            if (found == null && pageHasCards(placed, page)) {
+                page++;
+                found = packOn(t, page, band, gutter, gap, placed, hard, soft);
+            }
+            if (found == null) { unplaced.add(t); continue; }
+            placed.add(found);
+            pages = Math.max(pages, found.page + 1);
+        }
+        return new Result(placed, unplaced, pages);
+    }
+
+    private static boolean pageHasCards(List<Placement> placed, int page) {
+        for (Placement p : placed) if (p.page == page) return true;
+        return false;
+    }
+
+    private static Placement packOn(Target t, int page, Box band, float gutter, float gap,
+                                    List<Placement> placed, List<Box> hard, List<Box> soft) {
+        int preferred = t.box.cx() < band.cx() ? 0 : 1;
+        for (int tier = 0; tier < 2; tier++) {
+            List<Box> blocked = new ArrayList<>(hard);
+            if (tier == 0) blocked.addAll(soft);
+            for (Placement p : placed) if (p.page == page) blocked.add(p.card);
+            for (int attempt = 0; attempt < 2; attempt++) {
+                int column = attempt == 0 ? preferred : 1 - preferred;
+                float left = column == 0 ? band.left + gutter : band.cx() + gap / 2;
+                float right = column == 0 ? band.cx() - gap / 2 : band.right - gutter;
+                if (t.cardWidth > right - left + 0.5f || t.cardHeight > band.height()) continue;
+                float x = Math.max(left, Math.min(right - t.cardWidth, t.box.cx() - t.cardWidth / 2));
+                float y = band.top;
+                while (y + t.cardHeight <= band.bottom + 0.5f) {
+                    Box card = new Box(x, y, x + t.cardWidth, y + t.cardHeight);
+                    Box hit = null;
+                    for (Box b : blocked) if (card.overlaps(b) && (hit == null || b.bottom < hit.bottom)) hit = b;
+                    if (hit == null) return new Placement(t, card, Collections.emptyList(), page, column, -1);
+                    y = Math.max(y + 1, hit.bottom + gap);
+                }
+            }
+        }
+        return null;
+    }
+
     private static List<List<Segment>> paths(Target t, Box c, int column, float width, float gutter) {
         List<List<Segment>> paths = new ArrayList<>();
         Box b = t.box;
