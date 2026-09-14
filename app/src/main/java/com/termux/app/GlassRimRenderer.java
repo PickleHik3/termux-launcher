@@ -33,8 +33,17 @@ public final class GlassRimRenderer {
     private boolean shimmerShaderBuilt;
     private boolean mUniformLight;
 
+    /**
+     * How wide the rim's stroke is at this density. Painted just inside the bounds, so this is
+     * also how far in from a glass surface's bounding box its visible border line sits — which is
+     * what anything lining up against that border (a corner tab) has to start past.
+     */
+    public static float strokePx(float density) {
+        return Math.max(1f, 1.25f * density);
+    }
+
     public GlassRimRenderer(float density) {
-        strokePx = Math.max(1f, 1.25f * density);
+        strokePx = strokePx(density);
         basePaint.setStyle(Paint.Style.STROKE);
         basePaint.setStrokeWidth(strokePx);
         basePaint.setColor(BASE_COLOR);

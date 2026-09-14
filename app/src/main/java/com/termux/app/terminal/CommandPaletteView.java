@@ -26,6 +26,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.FocusOutlineRenderer;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 
 import java.util.ArrayList;
@@ -186,6 +187,13 @@ public final class CommandPaletteView extends View {
     private static final float SIZE_SHORTCUT = 10f;
     private static final float SIZE_CAP_GLYPH = 11f;
     private static final float SIZE_CAP_LABEL = 10.5f;
+    /**
+     * Half a blink. The platform's own text cursor is on for this long and off for this long, and
+     * the palette's has to read as the same thing: a line that is taking what you type.
+     */
+    private static final long CARET_BLINK_MS = 500L;
+    /** How wide the caret is. A hairline read as part of the glyph beside it. */
+    private static final float CARET_W = 2f;
 
     private final float mDensity;
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -236,6 +244,10 @@ public final class CommandPaletteView extends View {
     private String mQueryPlaceholder = "";
     /** Caret index into the active buffer (query or argument value); values past the end clamp. */
     private int mQueryCursor = Integer.MAX_VALUE;
+    /** Whether the caret is in its on half. Always true while it is not blinking at all. */
+    private boolean mCaretOn = true;
+    /** Whether the blink is running; nothing is posted while the palette is closed. */
+    private boolean mCaretBlinking;
     private boolean mArgumentMode;
     private String mArgumentPlaceholder = "";
     /** Prompt drawn at the head of the argument row; capture mode replaces the default. */
@@ -356,12 +368,26 @@ public final class CommandPaletteView extends View {
     public void setQuery(@NonNull String query, @NonNull String placeholder) {
         mQuery = query;
         mQueryPlaceholder = placeholder;
+        restartCaret();
         invalidate();
     }
 
     public void setQueryCursor(int cursor) {
         mQueryCursor = cursor;
+        restartCaret();
         invalidate();
+    }
+
+    /**
+     * Put the caret back in its on half and start the half-blink over, the way a text cursor stays
+     * solid while the keys are coming. Does nothing while the caret is not blinking, so a closed
+     * palette still posts nothing.
+     */
+    private void restartCaret() {
+        if (!mCaretBlinking) return;
+        removeCallbacks(mCaretBlink);
+        mCaretOn = true;
+        postDelayed(mCaretBlink, CARET_BLINK_MS);
     }
 
     /** Advance of the text before the caret, so the caret can sit mid-string. */
@@ -386,6 +412,7 @@ public final class CommandPaletteView extends View {
         mArgumentMode = argumentMode;
         mArgumentPlaceholder = placeholder;
         mArgumentValue = value;
+        restartCaret();
         invalidate();
     }
 
@@ -576,11 +603,8 @@ public final class CommandPaletteView extends View {
         canvas.drawText(ellipsizeStart(mMono, queryText, queryEnd - queryStart),
             queryStart, promptBaseline, mMono);
         if (!showPlaceholder) {
-            float caretX = queryStart + Math.min(measureToCursor(mMono, mQuery),
-                queryEnd - queryStart);
-            mFill.setColor(withBodyAlpha(mPrimary, alpha));
-            canvas.drawRect(caretX + dp(1f), promptBaseline - lineHeightOf(mMono) * 0.78f,
-                caretX + dp(1f) + mDensity, promptBaseline + dp(2f), mFill);
+            drawCaret(canvas, queryStart + Math.min(measureToCursor(mMono, mQuery),
+                queryEnd - queryStart), promptBaseline, alpha);
         }
 
         float listBottom = listBottom();
@@ -755,11 +779,8 @@ public final class CommandPaletteView extends View {
         canvas.drawText(ellipsizeStart(mMono, empty ? mArgumentPlaceholder : mArgumentValue,
             valueWidth), valueStart, argBaseline, mMono);
         if (!empty) {
-            float caretX = valueStart + Math.min(measureToCursor(mMono, mArgumentValue), valueWidth);
-            mFill.setShader(null);
-            mFill.setColor(withBodyAlpha(mPrimary, alpha));
-            canvas.drawRect(caretX + dp(1f), argBaseline - lineHeightOf(mMono) * 0.78f,
-                caretX + dp(1f) + mDensity, argBaseline + dp(2f), mFill);
+            drawCaret(canvas, valueStart
+                + Math.min(measureToCursor(mMono, mArgumentValue), valueWidth), argBaseline, alpha);
         }
         mMono.setColor(withBodyAlpha(mPrimary, alpha));
         canvas.drawText("⏎", mFrame.right - dp(ROW_PAD_RIGHT) - mMono.measureText("⏎"),
@@ -1004,6 +1025,49 @@ public final class CommandPaletteView extends View {
         removeCallbacks(mFlingStep);
     }
 
+    /** One half-blink, and the next one behind it. Nothing else keeps this Runnable alive. */
+    private final Runnable mCaretBlink = new Runnable() {
+        @Override
+        public void run() {
+            if (!mCaretBlinking) return;
+            mCaretOn = !mCaretOn;
+            postDelayed(this, CARET_BLINK_MS);
+            invalidate();
+        }
+    };
+
+    /**
+     * Start or stop the caret blinking. The palette turns this on as it opens and off as it
+     * closes, so a closed palette posts nothing at all. With animations turned off the caret is
+     * shown steady instead of blinking — it still says the line is taking input, without motion
+     * nobody asked for.
+     */
+    public void setCaretBlinking(boolean blinking) {
+        removeCallbacks(mCaretBlink);
+        mCaretBlinking = blinking && FocusOutlineRenderer.animationsEnabled(getContext());
+        // Steady and visible whenever it is not mid-blink: closed, or motion turned off.
+        mCaretOn = true;
+        if (mCaretBlinking) postDelayed(mCaretBlink, CARET_BLINK_MS);
+        invalidate();
+    }
+
+    /** Whether the caret is mid-blink. Steady — and false — while closed or while motion is off. */
+    boolean isCaretBlinking() {
+        return mCaretBlinking;
+    }
+
+    /**
+     * The caret at {@code caretX} on a text row: a 2dp bar the height of the line, in the accent
+     * the palette states focus with, drawn only in the on half of a blink.
+     */
+    private void drawCaret(@NonNull Canvas canvas, float caretX, float baseline, int alpha) {
+        if (!mCaretOn) return;
+        mFill.setShader(null);
+        mFill.setColor(withBodyAlpha(mPrimary, alpha));
+        canvas.drawRect(caretX + dp(1f), baseline - lineHeightOf(mMono) * 0.78f,
+            caretX + dp(1f) + dp(CARET_W), baseline + dp(2f), mFill);
+    }
+
     private void releaseVelocity() {
         if (mVelocity == null) return;
         mVelocity.recycle();
@@ -1014,6 +1078,7 @@ public final class CommandPaletteView extends View {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         abortFling();
+        setCaretBlinking(false);
         releaseVelocity();
     }
 

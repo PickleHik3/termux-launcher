@@ -52,6 +52,9 @@ public final class PaneControlsView extends View {
 
     public static final int ACTION_NONE = -1;
 
+    /** How deep the tab is once it is fully out. */
+    private static final float TAB_HEIGHT_DP = 32f;
+
     /** One button of the tab: an id the page knows, and either a glyph or a short label. */
     public static final class Action {
         final int id;
@@ -92,8 +95,10 @@ public final class PaneControlsView extends View {
     /** The ids drawn in the error colour rather than the primary one. */
     private final List<Integer> mAlerted = new ArrayList<>();
     @Nullable private ValueAnimator mAnimator;
-    /** How far in from the frame's own edge the tab starts; negative until a page says. */
-    private float mCornerInsetPx = -1f;
+    /** The radius the page is drawn at; 0 until a page says otherwise. */
+    private float mPaneRadiusPx;
+    /** The border the page paints — the line the tab lines up inside, 0 when it paints none. */
+    private float mPaneBorderPx;
     /** The corner it comes out of; {@link CornerZones#NONE} until a page or the default says. */
     private int mCorner = CornerZones.NONE;
     private float mProgress;
@@ -121,14 +126,31 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * How far in from the page's own edge the tab sits. A page that clips to its rounded shape has
-     * to keep the tab clear of the corner arc, or the arc cuts the tab's own corner off; a page
-     * that paints its corners instead leaves this alone.
+     * The shape the page draws itself with: the radius of its corners and the width of the border
+     * it paints on them. Everything the tab lines up against comes from these two — it sits inside
+     * the border's own line rather than against the bounding box behind it, and starts far enough
+     * along that edge that the corner arc never cuts it. A page that paints no border passes 0 and
+     * the tab lands on the bounding box, as a square page's always has.
      */
-    public void setCornerInsetPx(float insetPx) {
-        if (mCornerInsetPx == insetPx) return;
-        mCornerInsetPx = insetPx;
+    public void setPaneBorder(float radiusPx, float strokePx) {
+        float radius = Math.max(0f, radiusPx);
+        float stroke = Math.max(0f, strokePx);
+        if (mPaneRadiusPx == radius && mPaneBorderPx == stroke) return;
+        mPaneRadiusPx = radius;
+        mPaneBorderPx = stroke;
         invalidate();
+    }
+
+    /** How far in from the border's inner edge the tab starts. */
+    private float cornerInsetPx() {
+        return CornerTabGeometry.cornerInsetPx(mPaneRadiusPx, mPaneBorderPx, dp(TAB_HEIGHT_DP),
+            dp(CornerTabGeometry.TAB_OUTLINE_DP));
+    }
+
+    /** How far the outline may flare along the page's edge before it would run into the arc. */
+    private float earReachPx() {
+        return CornerTabGeometry.earReachPx(dp(CornerTabGeometry.TAB_EAR_DP), mPaneRadiusPx,
+            mPaneBorderPx, dp(TAB_HEIGHT_DP), dp(CornerTabGeometry.TAB_OUTLINE_DP));
     }
 
     /** The corner the tab is out of, or coming out of. */
@@ -279,13 +301,17 @@ public final class PaneControlsView extends View {
         }
         for (int i = 0; i < mActions.size(); i++) mWidths[i] = buttonWidth(mActions.get(i));
         mBounds.set(0f, 0f, getWidth(), getHeight());
-        CornerTabGeometry.layout(corner(), mBounds, mWidths, mActions.size(), dp(8), dp(5), dp(32),
-            mCornerInsetPx, dp(3), mProgress, mTab, mButtons);
+        CornerTabGeometry.layout(corner(), mBounds, mWidths, mActions.size(), dp(8), dp(5),
+            dp(TAB_HEIGHT_DP), mPaneBorderPx, cornerInsetPx(), dp(3), mProgress, mTab, mButtons);
     }
 
-    /** The frame edge the tab slides out of. */
+    /**
+     * The frame edge the tab slides out of: the border's inner line, not the bounding box, so the
+     * tab comes out from behind the edge the eye reads rather than from behind the pixel column
+     * outside it.
+     */
     private float edgeY() {
-        return CornerZones.isTop(corner()) ? 0f : getHeight();
+        return CornerZones.isTop(corner()) ? mPaneBorderPx : getHeight() - mPaneBorderPx;
     }
 
     /** The tab's own far edge, the one that carries the rounded pair. */
@@ -307,15 +333,30 @@ public final class PaneControlsView extends View {
         float radius = dp(4);
         float edge = edgeY();
         float inner = innerY();
+        float ear = earReachPx();
         // Which way the tab's far edge lies from the frame edge it came out of.
         float dir = CornerZones.isTop(corner()) ? 1f : -1f;
         int save = canvas.save();
-        // Revealed through the page's own edge, so the closing motion disappears into the frame.
-        canvas.clipRect(0f, -dp(1), getWidth(), getHeight() + dp(1));
+        // Revealed through the page's own border, and clipped to the shape that border traces on
+        // its inside, so neither the tab's outer corner nor its ears can land on the line. A page
+        // with no border clips to its plain bounding box, which is what this always was.
+        float arc = CornerTabGeometry.innerRadiusPx(mPaneRadiusPx, mPaneBorderPx);
+        mBounds.set(0f, 0f, getWidth(), getHeight());
+        CornerTabGeometry.innerBounds(mBounds, mPaneBorderPx, mBounds);
+        if (arc > 0f) {
+            mPath.reset();
+            mPath.addRoundRect(mBounds, arc, arc, Path.Direction.CW);
+            canvas.clipPath(mPath);
+        } else {
+            canvas.clipRect(mBounds);
+        }
 
+        // The fill runs a hair past the edge and is trimmed there by the clip, so no anti-aliased
+        // seam opens up between the tab and the border it comes out from behind.
+        float fillEdge = edge - dir * dp(1);
         mPath.reset();
-        mPath.moveTo(mTab.left, edge);
-        mPath.lineTo(mTab.right, edge);
+        mPath.moveTo(mTab.left, fillEdge);
+        mPath.lineTo(mTab.right, fillEdge);
         mPath.lineTo(mTab.right, inner - dir * radius);
         mPath.quadTo(mTab.right, inner, mTab.right - radius, inner);
         mPath.lineTo(mTab.left + radius, inner);
@@ -326,16 +367,16 @@ public final class PaneControlsView extends View {
         canvas.drawPath(mPath, mPaint);
 
         mPath.reset();
-        mPath.moveTo(mTab.left - dp(5), edge);
+        mPath.moveTo(mTab.left - ear, edge);
         mPath.lineTo(mTab.left, edge);
         mPath.lineTo(mTab.left, inner - dir * radius);
         mPath.quadTo(mTab.left, inner, mTab.left + radius, inner);
         mPath.lineTo(mTab.right - radius, inner);
         mPath.quadTo(mTab.right, inner, mTab.right, inner - dir * radius);
         mPath.lineTo(mTab.right, edge);
-        mPath.lineTo(mTab.right + dp(5), edge);
+        mPath.lineTo(mTab.right + ear, edge);
         mPaint.setStyle(Paint.Style.STROKE);
-        mPaint.setStrokeWidth(dp(1));
+        mPaint.setStrokeWidth(dp(CornerTabGeometry.TAB_OUTLINE_DP));
         mPaint.setStrokeCap(Paint.Cap.ROUND);
         mPaint.setStrokeJoin(Paint.Join.ROUND);
         mPaint.setColor(ColorUtils.setAlphaComponent(primary, Math.round(225f * mProgress)));

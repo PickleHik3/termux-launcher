@@ -198,19 +198,36 @@ public class TerminalPaneControllerTest {
     }
 
     /**
-     * The inset the tab starts past is the pane's own corner arc: the glass radius when the panes
-     * are glass, the float radius when a plain pane is rounded because it shares the wall, and
-     * nothing at all for a square lone pane.
+     * The radius the tab has to clear is the pane's own: the glass radius when the panes are
+     * glass, the float radius when a plain pane is rounded because it shares the wall, and nothing
+     * at all for a square lone pane.
      */
     @Test
-    public void paneCornerInset_isThePanesOwnArcNotOnlyTheGlassOne() {
-        assertEquals(14f, TerminalPaneController.paneCornerInsetPx(true, 14f, true, 6f), .001f);
-        assertEquals(14f, TerminalPaneController.paneCornerInsetPx(true, 14f, false, 6f), .001f);
+    public void paneCornerRadius_isThePanesOwnArcNotOnlyTheGlassOne() {
+        assertEquals(14f, TerminalPaneController.paneCornerRadiusPx(true, 14f, true, 6f), .001f);
+        assertEquals(14f, TerminalPaneController.paneCornerRadiusPx(true, 14f, false, 6f), .001f);
         assertEquals("a split pane is rounded without glass too, and the tab has to clear it",
-            6f, TerminalPaneController.paneCornerInsetPx(false, 14f, true, 6f), .001f);
-        assertEquals(0f, TerminalPaneController.paneCornerInsetPx(false, 14f, false, 6f), .001f);
+            6f, TerminalPaneController.paneCornerRadiusPx(false, 14f, true, 6f), .001f);
+        assertEquals(0f, TerminalPaneController.paneCornerRadiusPx(false, 14f, false, 6f), .001f);
         assertEquals("a negative radius is no arc, not a tab pushed outwards",
-            0f, TerminalPaneController.paneCornerInsetPx(false, 0f, true, -4f), .001f);
+            0f, TerminalPaneController.paneCornerRadiusPx(false, 0f, true, -4f), .001f);
+    }
+
+    /**
+     * And the border it lines up inside is the one that pane actually paints: the glass rim, the
+     * 1dp stroke a plain pane wears while it shares the wall, or nothing at all when it is alone
+     * and paints no border for the tab to line up against.
+     */
+    @Test
+    public void paneBorderStroke_isTheLineThePanePaints() {
+        assertEquals("the glass rim at 1x density",
+            1.25f, TerminalPaneController.paneBorderStrokePx(true, false, 1f), .001f);
+        assertEquals("and it never thins below a pixel",
+            1f, TerminalPaneController.paneBorderStrokePx(true, false, 0.5f), .001f);
+        assertEquals("a plain pane sharing the wall wears pane_active_border's 1dp",
+            2f, TerminalPaneController.paneBorderStrokePx(false, true, 2f), .001f);
+        assertEquals("a lone plain pane paints no border at all",
+            0f, TerminalPaneController.paneBorderStrokePx(false, false, 2f), .001f);
     }
 
     /**
@@ -223,7 +240,7 @@ public class TerminalPaneControllerTest {
         RectF right = new RectF(501f, 0f, 1000f, 500f);
         RectF top = new RectF(0f, 0f, 1000f, 249f);
         RectF bottom = new RectF(0f, 251f, 1000f, 500f);
-        float arc = TerminalPaneController.paneCornerInsetPx(false, 14f, true, 6f);
+        float arc = TerminalPaneController.paneCornerRadiusPx(false, 14f, true, 6f);
         assertTabInsidePane(left, TerminalPaneController.cornerNearestPoint(left, 500f, 5f), arc);
         assertTabInsidePane(right,
             TerminalPaneController.cornerNearestPoint(right, 500f, 495f), arc);
@@ -241,7 +258,7 @@ public class TerminalPaneControllerTest {
         float[] widths = {22.4f, 22.4f, 22.4f};
         RectF tab = new RectF();
         RectF[] buttons = {new RectF(), new RectF(), new RectF()};
-        CornerTabGeometry.layout(corner, pane, widths, 3, 0f, 2.4f, 24f, insetPx, 3f, 1f,
+        CornerTabGeometry.layout(corner, pane, widths, 3, 0f, 2.4f, 24f, 0f, insetPx, 3f, 1f,
             tab, buttons);
         assertFalse("the tab has to exist to be inside anything", tab.isEmpty());
         if (CornerZones.isLeft(corner)) {

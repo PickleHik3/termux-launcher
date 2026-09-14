@@ -325,9 +325,14 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         float requestedRadiusPx = PaneGlass.radiusPx(style,
             getResources().getDisplayMetrics().density);
         boolean glass = PaneGlass.apply(style, this, mGlass, requestedRadiusPx);
-        // The frame clips to its shape once the glass is on, so the tab is moved in past the
-        // corner arc - it starts where that edge goes straight, rather than being cut by it.
-        if (mControls != null) mControls.setCornerInsetPx(glass ? requestedRadiusPx : 0f);
+        // The tab lines up against the page's own border rather than its bounding box: it starts
+        // inside the rim's line and past the arc that line turns, so no radius can cut it and no
+        // stroke can sit across it. With the glass off there is neither, and it lands flush.
+        if (mControls != null) {
+            mControls.setPaneBorder(glass ? requestedRadiusPx : 0f, glass
+                ? com.termux.app.GlassRimRenderer.strokePx(
+                    getResources().getDisplayMetrics().density) : 0f);
+        }
         // A page is never a divided pane, so its radius is the surface's own; only the glass
         // shape clips, exactly as on a full-height terminal pane.
         setPaneShape(glass ? requestedRadiusPx : 0f, glass);
