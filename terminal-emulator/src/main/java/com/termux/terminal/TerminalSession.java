@@ -401,6 +401,11 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public String onReadTextFromClipboard() {
+        return mClient.onReadTextFromClipboard(this);
+    }
+
+    @Override
     public void onBell() {
         mClient.onBell(this);
     }
