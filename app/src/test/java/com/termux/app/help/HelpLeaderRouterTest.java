@@ -67,6 +67,16 @@ public class HelpLeaderRouterTest {
                 t("status",300,0,480,24,Side.ABOVE)));
         assertSafe(result,3);
     }
+    @Test public void fixedLabelsAndFooterAreObstaclesOnEveryPage() {
+        Box label = new Box(0,700,60,730);
+        Result result=HelpLeaderRouter.route(400,850,new Box(0,100,400,590),12,12,
+            Arrays.asList(t("chords",0,800,120,840,Side.BELOW)),Arrays.asList(label));
+        assertSafe(result,1);
+        for (Placement p : result.placements) {
+            assertFalse(p.card.overlaps(label));
+            for (Segment segment : p.lines) assertFalse(enters(segment,label));
+        }
+    }
     @Test public void defaultTerminalPortrait() {
         assertSafe(route(Arrays.asList(
             t("sessions", 12, 20, 52, 44, Side.ABOVE),

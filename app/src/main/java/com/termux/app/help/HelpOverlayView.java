@@ -134,8 +134,13 @@ public final class HelpOverlayView extends FrameLayout {
         Rect band = new Rect(snapshot.wall);
         band.top += dp(8);
         band.bottom = Math.max(band.top, band.bottom - close.getMeasuredHeight() - dp(16));
-        routed = HelpLeaderRouter.route(getWidth(), getHeight(), box(band), dp(12), dp(12), inputs);
-        pageCount = routed.pages + routed.unplaced.size();
+        List<HelpLeaderRouter.Box> obstacles = new ArrayList<>();
+        for (HelpTargets.KeyLabel key : snapshot.keys) obstacles.add(box(keyLabelBounds(key.rect)));
+        obstacles.add(new HelpLeaderRouter.Box(snapshot.wall.left + dp(12),
+            snapshot.wall.bottom - footerHeight - dp(8), snapshot.wall.right - dp(12),
+            snapshot.wall.bottom - dp(8)));
+        routed = HelpLeaderRouter.route(getWidth(), getHeight(), box(band), dp(12), dp(12), inputs, obstacles);
+        pageCount = Math.max(1, routed.pages + routed.unplaced.size());
         page = Math.min(page, pageCount - 1);
         for (HelpLeaderRouter.Target target : routed.unplaced)
             HelpLog.d("copy-only page for " + target.id + ": no collision-free slot");
@@ -155,7 +160,7 @@ public final class HelpOverlayView extends FrameLayout {
             TextView card = cardViews.get(p.target.id);
             put(card, rect(p.card)); cards.add(card);
         }
-        if (page >= routed.pages) {
+        if (page >= routed.pages && !routed.unplaced.isEmpty()) {
             // A wall-sized target cannot share that band with a card. Keep the explanation
             // reachable, scrollable, and honest: never draw an invented or crossing leader.
             HelpLeaderRouter.Target target = routed.unplaced.get(page - routed.pages);
@@ -174,7 +179,7 @@ public final class HelpOverlayView extends FrameLayout {
             label.setMaxLines(2);
             label.setAutoSizeTextTypeUniformWithConfiguration(6,11,1,android.util.TypedValue.COMPLEX_UNIT_SP);
             label.setBackground(dress.background(key.rect.height()));
-            put(label,new Rect(key.rect));
+            put(label,keyLabelBounds(key.rect));
         }
         TextView close = pill(getContext().getString(R.string.help_close));
         close.setOnClickListener(v -> dismiss());
@@ -198,6 +203,15 @@ public final class HelpOverlayView extends FrameLayout {
             x+close.getMeasuredWidth()+pagingWidth,y+h));
         requestLayout(); invalidate();
     }
+    private Rect keyLabelBounds(Rect cap) {
+        Rect label = new Rect(cap);
+        label.inset(dp(2), dp(2));
+        // Text stays on its measured cap, with the outer edge lanes left clear for leaders.
+        label.left = Math.max(label.left, dp(12));
+        label.right = Math.min(label.right, getWidth() - dp(12));
+        return label;
+    }
+
     private void put(View view, Rect rect) {
         // A card can move between its normal page and a copy-only scroll page on remeasurement.
         if (view.getParent() instanceof ViewGroup) ((ViewGroup)view.getParent()).removeView(view);

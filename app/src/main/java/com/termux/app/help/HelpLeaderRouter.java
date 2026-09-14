@@ -81,6 +81,12 @@ public final class HelpLeaderRouter {
 
     public static Result route(float width, float height, Box band, float gutter,
                                float gap, List<Target> input) {
+        return route(width, height, band, gutter, gap, input, Collections.emptyList());
+    }
+
+    /** Fixed labels and footer controls are obstacles on every page. */
+    public static Result route(float width, float height, Box band, float gutter,
+                               float gap, List<Target> input, List<Box> obstacles) {
         List<Target> targets = new ArrayList<>();
         for (Target t : input) if (t != null && t.box != null
                 && t.box.width() > 0 && t.box.height() > 0) targets.add(t);
@@ -88,7 +94,7 @@ public final class HelpLeaderRouter {
             .thenComparingDouble(t -> t.box.left).thenComparing(t -> t.id));
         List<Placement> placed = new ArrayList<>();
         List<Target> unplaced = new ArrayList<>();
-        int pages = 1;
+        int pages = 0;
         for (Target t : targets) {
             Placement found = null;
             for (int page = 0; page <= pages && found == null; page++) {
@@ -105,7 +111,7 @@ public final class HelpLeaderRouter {
                         int lane = t.side == Side.BELOW ? column : -1;
                         for (List<Segment> path : paths(t, card, column, width, gutter)) {
                             Placement p = new Placement(t, card, path, page, column, lane);
-                            if (valid(p, placed, width, height)) { found = p; break; }
+                            if (valid(p, placed, width, height, obstacles)) { found = p; break; }
                         }
                         if (found != null) break;
                     }
@@ -158,12 +164,17 @@ public final class HelpLeaderRouter {
         return lines;
     }
 
-    private static boolean valid(Placement p, List<Placement> placed, float width, float height) {
+    private static boolean valid(Placement p, List<Placement> placed, float width, float height,
+                                 List<Box> obstacles) {
         if (p.card.overlaps(p.target.box) || p.lines.isEmpty()) return false;
         for (Segment s : p.lines) {
             if (Math.min(s.x1, s.x2) < 0 || Math.max(s.x1, s.x2) > width
                 || Math.min(s.y1, s.y2) < 0 || Math.max(s.y1, s.y2) > height
                 || s.enters(p.target.box) || s.enters(p.card)) return false;
+        }
+        for (Box obstacle : obstacles) {
+            if (p.card.overlaps(obstacle)) return false;
+            for (Segment s : p.lines) if (s.enters(obstacle)) return false;
         }
         for (Placement other : placed) {
             if (other.page != p.page) continue;
