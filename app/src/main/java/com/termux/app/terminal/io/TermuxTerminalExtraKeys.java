@@ -109,8 +109,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             // extra-keys rows already carry, so it stays.
             com.termux.app.terminal.TerminalSessionBrowser.toggle(mActivity);
         } else if ("PASTE".equals(key)) {
-            if (mTermuxTerminalSessionActivityClient != null)
-                mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(null);
+            pasteWhereTheKeyboardPastes(mActivity);
         } else if ("SCROLL".equals(key)) {
             TerminalView terminalView = mActivity.getTerminalView();
             if (terminalView != null && terminalView.mEmulator != null)
@@ -120,6 +119,19 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
         } else {
             super.onTerminalExtraKeyButtonClick(view, key, ctrlDown, altDown, shiftDown, fnDown);
         }
+    }
+
+    /**
+     * The row's paste key goes wherever the keyboard's paste key goes: into the display while it
+     * is showing, into an overlay that has claimed typing, into the terminal otherwise. Pasting
+     * straight into the terminal from here wrote behind whatever the user was looking at.
+     */
+    static void pasteWhereTheKeyboardPastes(@NonNull TermuxActivity activity) {
+        if (activity.pasteThroughInAppKeyboard())
+            return;
+        TermuxTerminalSessionActivityClient client = activity.getTermuxTerminalSessionClient();
+        if (client != null)
+            client.onPasteTextFromClipboard(null);
     }
 
     /** Extra-keys entries prefixed with this run a registry tool instead of sending keys. */

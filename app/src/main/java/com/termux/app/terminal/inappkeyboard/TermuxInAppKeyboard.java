@@ -36,6 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import juloo.keyboard2.Config;
+import juloo.keyboard2.KeyValue;
 import juloo.keyboard2.Keyboard2View;
 import juloo.keyboard2.KeyboardData;
 import juloo.keyboard2.LayoutModifier;
@@ -818,6 +819,32 @@ public final class TermuxInAppKeyboard {
         mKeyValueInterceptor = interceptor;
         if (mKeyEventHandler != null)
             mKeyEventHandler.setKeyValueInterceptor(interceptor);
+    }
+
+    /**
+     * Paste where the keyboard's own paste key pastes.
+     *
+     * <p>The extra-keys row carries the same key for when the keyboard is down, and it used to
+     * write straight into the terminal — so on the Display place it pasted behind the display
+     * the user was looking at. Sending the value through the keyboard puts both keys on the one
+     * route: whatever is intercepting values takes it, and with nothing intercepting it is the
+     * terminal paste it always was.
+     *
+     * @return false when there is no keyboard to route through and the caller should paste itself
+     */
+    public boolean pasteThroughKeyboard() {
+        KeyValue paste = KeyValue.getKeyByName("paste");
+        if (paste == null)
+            return false;
+        TerminalKeyEventHandler handler = mKeyEventHandler;
+        if (handler != null) {
+            handler.dispatchKeyValue(paste);
+            return true;
+        }
+        // The keyboard has never been shown, so there is no handler — but an overlay or the
+        // Display place may still have claimed the slot, and the paste is theirs.
+        TerminalKeyEventHandler.KeyValueInterceptor interceptor = mKeyValueInterceptor;
+        return interceptor != null && interceptor.interceptKeyValue(paste, false, false, false);
     }
 
     /** On-screen bounds of the rendered space bar, or false when there is none to seed from. */

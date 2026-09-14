@@ -82,6 +82,26 @@ public class TermuxInAppKeyboardTest {
     }
 
     @Test
+    public void theRowsPasteKeyGoesWhereTheKeyboardsPasteKeyGoes() {
+        List<KeyValue> intercepted = new java.util.ArrayList<>();
+        mController.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        // The keyboard has never been shown, which is the case the extra-keys row exists for:
+        // the Display place has still claimed typing, so the paste is the display's.
+        assertTrue(mController.pasteThroughKeyboard());
+        assertEquals(1, intercepted.size());
+        assertEquals(KeyValue.Editing.PASTE, intercepted.get(0).getEditing());
+    }
+
+    @Test
+    public void withNothingClaimingTypingThePasteGoesBackToTheCaller() {
+        assertFalse(mController.pasteThroughKeyboard());
+    }
+
+    @Test
     public void enabledOnCreateDefaultsVisibleAndDisableRestoresLegacyOnce() {
         mPreferences.setInAppKeyboardEnabled(true);
         mActivity.getWindow().setSoftInputMode(

@@ -101,6 +101,15 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         mInterceptor = interceptor;
     }
 
+    /**
+     * Act on one value as though a key of the keyboard had produced it, held modifiers and all:
+     * the interceptor gets first refusal, then the terminal. It is how a control outside the
+     * keyboard — the extra-keys row's paste key — lands where the keyboard's own key would.
+     */
+    public void dispatchKeyValue(@NonNull KeyValue value) {
+        dispatch(value, mModifiers);
+    }
+
     /** Cancel asynchronous macro output, for hide, detach, layout, or session lifecycle changes. */
     public void cancelPendingMacros() {
         MacroTask task = mMacroTask;

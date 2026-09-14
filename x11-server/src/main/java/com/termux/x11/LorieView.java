@@ -327,6 +327,9 @@ public class LorieView extends SurfaceView implements InputStub {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        // The page can go without anyone telling us; a listener left on the clipboard manager
+        // would outlive the native context it announces into.
+        setClipboardSyncActive(false);
         nativeDestroy(mNativeContext);
         mNativeContext = 0;
     }
@@ -591,6 +594,30 @@ public class LorieView extends SurfaceView implements InputStub {
 
     ClipboardManager.OnPrimaryClipChangedListener clipboardListener = this::handleClipboardChange;
 
+    /**
+     * Whether this view is listening for Android clipboard changes. The page owns this, not
+     * window focus: the launcher's display is a page of the pane wall, which is attached with
+     * {@code requestFocus()} and never changes window focus, so upstream's registration in
+     * {@link #onWindowFocusChanged} never ran. See UPSTREAM.md.
+     */
+    private boolean clipboardSyncActive = false;
+
+    /**
+     * Start or stop announcing Android clipboard changes to X. Arming also checks the clipboard
+     * once, so text copied while the display was off screen is offered to X the moment the page
+     * settles. Idempotent — the listener can never be registered twice.
+     */
+    public void setClipboardSyncActive(boolean active) {
+        if (clipboardSyncActive == active)
+            return;
+        clipboardSyncActive = active;
+        if (active) {
+            clipboard.addPrimaryClipChangedListener(clipboardListener);
+            checkForClipboardChange();
+        } else
+            clipboard.removePrimaryClipChangedListener(clipboardListener);
+    }
+
     public void reloadPreferences(Prefs p) {
         String filtering = p.displayFilteringMode.get();
         setFiltering(mNativeContext, "nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR);
@@ -613,6 +640,9 @@ public class LorieView extends SurfaceView implements InputStub {
 
     /** @noinspection unused*/ // It is used in native code
     void requestClipboard() {
+        // Native calls take the context pointer, which is zero once the view has left its window.
+        if (!connected())
+            return;
         ClipDescription desc = clipboardSyncEnabled ? clipboard.getPrimaryClipDescription() : null;
         boolean isText = desc != null && (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) || desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML));
         CharSequence clip = isText ? clipboard.getText() : null;
@@ -630,12 +660,17 @@ public class LorieView extends SurfaceView implements InputStub {
     }
 
     public void checkForClipboardChange() {
+        // Nothing to announce to, and the announce takes the native context pointer, which is
+        // zero once the view has left its window.
+        if (!connected())
+            return;
         ClipDescription desc = clipboard.getPrimaryClipDescription();
         // Below API 26 the clipboard carries no timestamp, so every change looks like a new one.
         long timestamp = desc == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O ? lastClipboardTimestamp + 1 : desc.getTimestamp();
+        // Anything carrying text is offered to X. Upstream demands exactly one MIME type, which
+        // silently drops every copy from a browser (text/plain plus text/html).
         if (clipboardSyncEnabled && desc != null &&
                 lastClipboardTimestamp < timestamp &&
-                desc.getMimeTypeCount() == 1 &&
                 (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) ||
                         desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML))) {
             lastClipboardTimestamp = timestamp;
@@ -650,11 +685,11 @@ public class LorieView extends SurfaceView implements InputStub {
 
         requestFocus();
 
-        if (clipboardSyncEnabled && hasFocus) {
-            clipboard.addPrimaryClipChangedListener(clipboardListener);
+        // Registration belongs to the page (setClipboardSyncActive), so a window that loses and
+        // regains focus — the screen going off, a dialog over the wall — only re-checks what the
+        // clipboard holds now; it never arms or disarms the sync behind the page's back.
+        if (clipboardSyncActive && hasFocus)
             checkForClipboardChange();
-        } else
-            clipboard.removePrimaryClipChangedListener(clipboardListener);
 
         if (activity != null && activity.mInputHandler != null)
             activity.mInputHandler.refreshInputDevices();
@@ -742,7 +777,9 @@ public class LorieView extends SurfaceView implements InputStub {
     public void connect(int fd) { connect(mNativeContext, fd); }
     @FastNative private static native void connect(long ptr, int fd);
 
-    public boolean connected() { return connected(mNativeContext); }
+    // The zero check is the launcher's: a page of the pane wall is asked whether it is connected
+    // after it has left its window, where upstream's view would already be gone with its activity.
+    public boolean connected() { return mNativeContext != 0 && connected(mNativeContext); }
     @CriticalNative private static native boolean connected(long ptr);
 
     public void startLogcat(int fd) { startLogcat(mNativeContext, fd); }

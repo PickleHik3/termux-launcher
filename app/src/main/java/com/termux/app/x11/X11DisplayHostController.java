@@ -56,6 +56,13 @@ public final class X11DisplayHostController {
     /** The tap window's pending decision, so it can be dropped. */
     @Nullable private Runnable tapWindow;
 
+    /** Whether the view is announcing Android's clipboard to X, and when it starts and stops. */
+    @NonNull private final DisplayClipboardPolicy clipboardSync = new DisplayClipboardPolicy(
+        new DisplayClipboardPolicy.Sync() {
+            @Override public void activate() { setViewClipboardSync(true); }
+            @Override public void deactivate() { setViewClipboardSync(false); }
+        });
+
     @Nullable private LorieView view;
     @Nullable private Listener listener;
     /** The announcement, kept so a page that attaches later can still reach the server. */
@@ -136,6 +143,9 @@ public final class X11DisplayHostController {
      * settles on the Display page, because a hidden page detaches its surface.
      */
     public void attachView(@NonNull LorieView view) {
+        // A view that has left a window has dropped its clipboard listener with it, so every
+        // attach starts from off and the connection below arms it again.
+        clipboardSync.deactivate();
         this.view = view;
         host.setLorieView(view);
         // The server repeats the current cursor name when a host attaches, so the policy starts
@@ -150,6 +160,8 @@ public final class X11DisplayHostController {
     /** The page has gone: drop the view but leave the server and its clients alone. */
     public void detachView() {
         handler.removeCallbacks(connectRetry);
+        // Before the view goes, or the listener is left on Android's clipboard manager.
+        clipboardSync.deactivate();
         LorieView attached = view;
         if (attached != null) attached.setCursorNameListener(null);
         // The surface itself goes with the page (SurfaceView tears it down on its own); the X
@@ -171,6 +183,7 @@ public final class X11DisplayHostController {
             // Never registered, or already gone with the process.
         }
         X11DisplayReceiver.unregister(this);
+        clipboardSync.deactivate();
         LorieView attached = view;
         if (attached != null) attached.setCursorNameListener(null);
         textFocus.onPlaceLeft();
@@ -216,6 +229,7 @@ public final class X11DisplayHostController {
         if (destroyed) return;
         link.release();
         announcement = null;
+        clipboardSync.deactivate();
         LorieView live = view;
         if (live != null) live.connect(-1);
         setRunning(false);
@@ -248,6 +262,7 @@ public final class X11DisplayHostController {
         if (live == null) return;
         if (live.connected()) {
             handler.removeCallbacks(connectRetry);
+            syncClipboard();
             setRunning(true);
             return;
         }
@@ -267,6 +282,9 @@ public final class X11DisplayHostController {
             live.connect(fd.detachFd());
             live.triggerCallback();
             live.reloadPreferences(LorieHost.getPrefs());
+            // The view is only now worth announcing a clip to, and arming re-reads the clipboard
+            // so whatever was copied while the display was off screen reaches X.
+            syncClipboard();
             setRunning(true);
         } catch (Exception e) {
             Logger.logWarn(LOG_TAG, "Failed to take the X socket: " + e.getMessage());
@@ -299,7 +317,29 @@ public final class X11DisplayHostController {
         com.termux.x11.Prefs prefs = LorieHost.getPrefs();
         live.reloadPreferences(prefs);
         if (host.mInputHandler != null) host.mInputHandler.reloadPreferences(prefs);
+        // Clipboard sharing can be switched off and on while the page is showing.
+        syncClipboard();
         live.requestLayout();
+    }
+
+    /**
+     * Re-decide whether the view announces Android's clipboard to X: it does while the page is
+     * attached to a connected display and clipboard sharing is on. Only the transitions reach the
+     * view, so a preference broadcast on an unchanged answer announces nothing.
+     */
+    private void syncClipboard() {
+        LorieView live = view;
+        if (live == null || !live.connected()) {
+            clipboardSync.deactivate();
+            return;
+        }
+        clipboardSync.apply(true, true, LorieHost.getPrefs().clipboardEnable.get());
+    }
+
+    /** The sync's two ends, applied to whatever view is attached. */
+    private void setViewClipboardSync(boolean active) {
+        LorieView live = view;
+        if (live != null) live.setClipboardSyncActive(active);
     }
 
     /**

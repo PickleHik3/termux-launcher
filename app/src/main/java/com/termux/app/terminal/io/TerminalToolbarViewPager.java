@@ -73,9 +73,8 @@ public class TerminalToolbarViewPager {
 
                 final Button button = layout.findViewById(R.id.terminal_toolbar_text_input_button);
                 button.setText("\u2398");
-                button.setOnClickListener(v -> {
-                    mActivity.getTermuxTerminalSessionClient().onPasteTextFromClipboard(null);
-                });
+                button.setOnClickListener(v ->
+                    TermuxTerminalExtraKeys.pasteWhereTheKeyboardPastes(mActivity));
                 button.setOnLongClickListener(v -> {
                     ViewPager pager = mActivity.getTerminalToolbarViewPager();
                     pager.setCurrentItem(0, true);
