@@ -20,6 +20,14 @@ public interface TerminalSessionClient {
 
     void onPasteTextFromClipboard(@Nullable TerminalSession session);
 
+    /**
+     * Answer an OSC 52 clipboard read query. The default has nothing to offer, so it answers as
+     * if the clipboard were empty rather than leaving the query unanswered.
+     */
+    default String onReadTextFromClipboard(@NonNull TerminalSession session) {
+        return null;
+    }
+
     void onBell(@NonNull TerminalSession session);
 
     /**

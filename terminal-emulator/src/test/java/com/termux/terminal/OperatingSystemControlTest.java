@@ -1,8 +1,8 @@
 package com.termux.terminal;
 
-import android.util.Base64;
-
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Random;
 
@@ -201,9 +201,50 @@ public class OperatingSystemControlTest extends TerminalTestCase {
 		assertIndexColorsMatch(TerminalColors.COLOR_SCHEME.mDefaultColors);
 	}
 
-	public void disabledTestSetClipboard() {
-		// Cannot run this as a unit test since Base64 is a android.util class.
-		enterString("\033]52;c;" + Base64.encodeToString("Hello, world".getBytes(), 0) + "\007");
+	public void testSetClipboard() {
+		withTerminalSized(10, 10);
+		enterString("\033]52;c;" + Base64.getEncoder().encodeToString("Hello, world".getBytes(StandardCharsets.UTF_8)) + "\007");
+		assertEquals(1, mOutput.clipboardPuts.size());
+		assertEquals("Hello, world", mOutput.clipboardPuts.get(0));
+	}
+
+	public void testReadClipboard() {
+		withTerminalSized(10, 10);
+
+		// BEL-terminated query answered with a BEL-terminated reply.
+		mOutput.clipboardContents = "Hello, world";
+		assertEnteringStringGivesResponse("\033]52;c;?\007",
+			"\033]52;c;" + Base64.getEncoder().encodeToString("Hello, world".getBytes(StandardCharsets.UTF_8)) + "\007");
+
+		// ST-terminated query answered with an ST-terminated reply, same terminator style.
+		mOutput.clipboardContents = "Hello, world";
+		assertEnteringStringGivesResponse("\033]52;c;?\033\\",
+			"\033]52;c;" + Base64.getEncoder().encodeToString("Hello, world".getBytes(StandardCharsets.UTF_8)) + "\033\\");
+
+		// No clipboard text (client returns null, e.g. the setting is off): answered empty, not left hanging.
+		mOutput.clipboardContents = null;
+		assertEnteringStringGivesResponse("\033]52;c;?\007", "\033]52;c;\007");
+
+		// Empty clipboard text also answers empty.
+		mOutput.clipboardContents = "";
+		assertEnteringStringGivesResponse("\033]52;c;?\007", "\033]52;c;\007");
+
+		// Non-ASCII text round-trips through UTF-8 base64.
+		String nonAscii = "héllo — wörld 🎉";
+		mOutput.clipboardContents = nonAscii;
+		assertEnteringStringGivesResponse("\033]52;c;?\007",
+			"\033]52;c;" + Base64.getEncoder().encodeToString(nonAscii.getBytes(StandardCharsets.UTF_8)) + "\007");
+	}
+
+	public void testWriteStillSetsClipboardAfterRead() {
+		withTerminalSized(10, 10);
+		mOutput.clipboardContents = "existing";
+		enterString("\033]52;c;?\007");
+		mOutput.getOutputAndClear();
+
+		enterString("\033]52;c;" + Base64.getEncoder().encodeToString("new text".getBytes(StandardCharsets.UTF_8)) + "\007");
+		assertEquals(1, mOutput.clipboardPuts.size());
+		assertEquals("new text", mOutput.clipboardPuts.get(0));
 	}
 
 	public void testResettingTerminalResetsColor() throws Exception {

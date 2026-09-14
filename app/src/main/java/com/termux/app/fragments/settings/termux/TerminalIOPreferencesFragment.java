@@ -75,6 +75,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "compatibility_mode":
                 mPreferences.setCompatibilityModeEnabled(value);
                 break;
+            case "terminal_osc52_clipboard_read_enabled":
+                mPreferences.setOsc52ClipboardReadEnabled(value);
+                break;
             case "top_pane_clock_am_pm":
                 mPreferences.setTopPaneClockAmPmEnabled(value);
                 break;
@@ -121,6 +124,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware();
             case "compatibility_mode":
                 return mPreferences.isCompatibilityModeEnabled();
+            case "terminal_osc52_clipboard_read_enabled":
+                return mPreferences.isOsc52ClipboardReadEnabled();
             case "top_pane_clock_am_pm":
                 return mPreferences.isTopPaneClockAmPmEnabled();
             case "show_key_hints":
