@@ -568,6 +568,23 @@ public class TerminalKeyEventHandlerTest {
     }
 
     @Test
+    public void aSlidersFirstTickIsOfferedToTheInterceptorToo() {
+        // A space-bar swipe on the Display place must not leave its first arrow in the shell.
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_down(KeyValue.sliderKey(KeyValue.Slider.Cursor_left, 1), false);
+
+        assertEquals(1, intercepted.size());
+        assertEquals(KeyValue.Slider.Cursor_left, intercepted.get(0).getSlider());
+        assertEquals(1, intercepted.get(0).getSliderRepeat());
+        assertEquals(0, mTerminal.keyCodes.size());
+    }
+
+    @Test
     public void aDispatchedValueReachesTheTerminalWhenNothingClaimsIt() {
         mHandler.dispatchKeyValue(KeyValue.getKeyByName("paste"));
 

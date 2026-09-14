@@ -122,6 +122,50 @@ public class X11KeyboardBridgeTest {
         assertEquals(Collections.emptyList(), sink.events);
     }
 
+    @Test
+    public void aSpaceBarSwipeMovesTheCursorOneArrowPerTick() {
+        RecordingSink sink = new RecordingSink();
+        assertTrue(bridge(sink).interceptKeyValue(
+            KeyValue.sliderKey(KeyValue.Slider.Cursor_right, 3), false, false, false));
+        List<String> expected = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            expected.add("down " + KeyEvent.KEYCODE_DPAD_RIGHT);
+            expected.add("up " + KeyEvent.KEYCODE_DPAD_RIGHT);
+        }
+        assertEquals(expected, sink.events);
+    }
+
+    @Test
+    public void aSwipeThatComesBackReversesTheArrow() {
+        RecordingSink sink = new RecordingSink();
+        bridge(sink).interceptKeyValue(
+            KeyValue.sliderKey(KeyValue.Slider.Cursor_left, -2), false, false, false);
+        assertEquals(Arrays.asList(
+            "down " + KeyEvent.KEYCODE_DPAD_RIGHT, "up " + KeyEvent.KEYCODE_DPAD_RIGHT,
+            "down " + KeyEvent.KEYCODE_DPAD_RIGHT, "up " + KeyEvent.KEYCODE_DPAD_RIGHT),
+            sink.events);
+    }
+
+    @Test
+    public void theSelectionSliderHoldsShift() {
+        RecordingSink sink = new RecordingSink();
+        bridge(sink).interceptKeyValue(
+            KeyValue.sliderKey(KeyValue.Slider.Selection_cursor_right, 1), false, false, false);
+        assertEquals(Arrays.asList(
+            "down " + KeyEvent.KEYCODE_SHIFT_LEFT,
+            "down " + KeyEvent.KEYCODE_DPAD_RIGHT,
+            "up " + KeyEvent.KEYCODE_DPAD_RIGHT,
+            "up " + KeyEvent.KEYCODE_SHIFT_LEFT), sink.events);
+    }
+
+    @Test
+    public void aStillSliderSendsNothing() {
+        RecordingSink sink = new RecordingSink();
+        assertTrue(bridge(sink).interceptKeyValue(
+            KeyValue.sliderKey(KeyValue.Slider.Cursor_left, 0), false, false, false));
+        assertEquals(Collections.emptyList(), sink.events);
+    }
+
     // ---- helpers -------------------------------------------------------------------------
 
     private static X11KeyboardBridge bridge(@NonNull RecordingSink sink) {
