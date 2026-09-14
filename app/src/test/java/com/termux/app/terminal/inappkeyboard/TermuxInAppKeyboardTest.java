@@ -102,6 +102,24 @@ public class TermuxInAppKeyboardTest {
     }
 
     @Test
+    public void anOfferedValueIsClaimedByTheInterceptorAndNeverTyped() {
+        List<KeyValue> intercepted = new java.util.ArrayList<>();
+        mController.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        assertTrue(mController.offerToInterceptor(KeyValue.getKeyByName("esc"), false, false, false));
+        assertEquals(1, intercepted.size());
+        assertEquals(android.view.KeyEvent.KEYCODE_ESCAPE, intercepted.get(0).getKeyevent());
+    }
+
+    @Test
+    public void anOfferedValueNobodyClaimsIsHandedBack() {
+        assertFalse(mController.offerToInterceptor(KeyValue.getKeyByName("esc"), false, false, false));
+    }
+
+    @Test
     public void enabledOnCreateDefaultsVisibleAndDisableRestoresLegacyOnce() {
         mPreferences.setInAppKeyboardEnabled(true);
         mActivity.getWindow().setSoftInputMode(

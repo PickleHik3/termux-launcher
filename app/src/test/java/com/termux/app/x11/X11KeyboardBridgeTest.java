@@ -43,6 +43,14 @@ public class X11KeyboardBridgeTest {
     }
 
     @Test
+    public void macrosAndComposeStateGoBackToTheHandler() {
+        assertTrue(X11KeyboardBridge.isLauncherSide(KeyValue.makeMacro("M",
+            new KeyValue[] { KeyValue.getKeyByName("a") }, 0)));
+        assertTrue(X11KeyboardBridge.isLauncherSide(KeyValue.getKeyByName("compose")));
+        assertTrue(X11KeyboardBridge.isLauncherSide(KeyValue.getKeyByName("compose_cancel")));
+    }
+
+    @Test
     public void typingIsTheDisplays() {
         assertFalse(X11KeyboardBridge.isLauncherSide(KeyValue.getKeyByName("a")));
         assertFalse(X11KeyboardBridge.isLauncherSide(KeyValue.getKeyByName("space")));

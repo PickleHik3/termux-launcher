@@ -585,6 +585,16 @@ public class TerminalKeyEventHandlerTest {
     }
 
     @Test
+    public void anOfferedValueNeverReachesTheTerminal() {
+        assertFalse(mHandler.offerToInterceptor(KeyValue.getKeyByName("paste"), false, false, false));
+        assertEquals(0, mHost.pastes);
+
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> true);
+        assertTrue(mHandler.offerToInterceptor(KeyValue.getKeyByName("paste"), false, false, false));
+        assertEquals(0, mHost.pastes);
+    }
+
+    @Test
     public void aDispatchedValueReachesTheTerminalWhenNothingClaimsIt() {
         mHandler.dispatchKeyValue(KeyValue.getKeyByName("paste"));
 

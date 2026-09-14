@@ -3,6 +3,7 @@ package com.termux.app.terminal.io;
 import android.annotation.SuppressLint;
 import android.view.View;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import com.termux.app.TermuxActivity;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
@@ -13,6 +14,7 @@ import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import com.termux.view.TerminalView;
+import juloo.keyboard2.KeyValue;
 import org.json.JSONException;
 
 public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
@@ -117,8 +119,28 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
         } else if (key != null && key.startsWith(LAUNCHER_TOOL_KEY_PREFIX)) {
             runLauncherToolKey(key.substring(LAUNCHER_TOOL_KEY_PREFIX.length()));
         } else {
+            // The column stands beside the display too: Esc, Tab, the arrows and the rest go
+            // wherever the keyboard's keys go, and only an unclaimed key types into the terminal.
+            KeyValue value = key == null ? null : keyValueFor(key);
+            if (value != null && mActivity.offerToInAppKeyboardInterceptor(value, ctrlDown,
+                    altDown, shiftDown))
+                return;
             super.onTerminalExtraKeyButtonClick(view, key, ctrlDown, altDown, shiftDown, fnDown);
         }
+    }
+
+    /**
+     * The extra key as the in-app keyboard would have produced it: a named key by its key code,
+     * a single character as a character (so a held Ctrl still makes a chord of it), anything
+     * longer as text.
+     */
+    @Nullable
+    static KeyValue keyValueFor(@NonNull String key) {
+        Integer keyCode = ExtraKeysConstants.PRIMARY_KEY_CODES_FOR_STRINGS.get(key);
+        if (keyCode != null) return KeyValue.keyeventKey(key, keyCode, 0);
+        if (key.isEmpty()) return null;
+        if (key.length() == 1) return KeyValue.makeCharKey(key.charAt(0));
+        return KeyValue.makeStringKey(key);
     }
 
     /**

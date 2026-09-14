@@ -10955,6 +10955,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Offer a key value to whatever has claimed typing — the display while it is showing, an
+     * overlay — and say whether it was taken. The caller keeps its own terminal path for the
+     * unclaimed case; nothing here types into the terminal.
+     */
+    public boolean offerToInAppKeyboardInterceptor(@NonNull juloo.keyboard2.KeyValue value,
+                                                   boolean ctrl, boolean alt, boolean shift) {
+        return mInAppKeyboard != null && mInAppKeyboard.offerToInterceptor(value, ctrl, alt, shift);
+    }
+
+    /**
      * Bounds of one key of the in-app keyboard, named as a layout file names it. False when the
      * keyboard is down or the layout in front of the user does not carry that key, which is what
      * the tour's chord cards use to decide whether they have anything to glow.
@@ -11828,7 +11838,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (results == null) return;
             for (String result : results) {
                 if (result != null && !result.trim().isEmpty()) {
-                    target.write(result);
+                    // Spoken text goes where typing goes: into the display or an overlay when
+                    // one has claimed it, into the shell it was started from otherwise.
+                    if (!offerToInAppKeyboardInterceptor(
+                            juloo.keyboard2.KeyValue.makeStringKey(result), false, false, false))
+                        target.write(result);
                     break;
                 }
             }

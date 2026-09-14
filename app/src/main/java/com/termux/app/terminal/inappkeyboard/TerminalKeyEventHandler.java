@@ -119,6 +119,17 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         dispatch(value, mModifiers);
     }
 
+    /**
+     * Offer a value to whatever is intercepting typing — the Display place, an overlay — and
+     * say whether it was claimed. Nothing reaches the terminal from here: a caller with its own
+     * terminal path (the extra-keys column, voice typing) keeps it for the unclaimed case.
+     */
+    public boolean offerToInterceptor(@NonNull KeyValue value, boolean ctrl, boolean alt,
+                                      boolean shift) {
+        KeyValueInterceptor interceptor = mInterceptor;
+        return interceptor != null && interceptor.interceptKeyValue(value, ctrl, alt, shift);
+    }
+
     /** Cancel asynchronous macro output, for hide, detach, layout, or session lifecycle changes. */
     public void cancelPendingMacros() {
         MacroTask task = mMacroTask;

@@ -847,6 +847,19 @@ public final class TermuxInAppKeyboard {
         return interceptor != null && interceptor.interceptKeyValue(paste, false, false, false);
     }
 
+    /**
+     * Offer a value to whatever has claimed typing — the Display place, an overlay — without
+     * touching the terminal. False means nothing claimed it and the caller types it itself.
+     */
+    public boolean offerToInterceptor(@NonNull KeyValue value, boolean ctrl, boolean alt,
+                                      boolean shift) {
+        TerminalKeyEventHandler handler = mKeyEventHandler;
+        if (handler != null)
+            return handler.offerToInterceptor(value, ctrl, alt, shift);
+        TerminalKeyEventHandler.KeyValueInterceptor interceptor = mKeyValueInterceptor;
+        return interceptor != null && interceptor.interceptKeyValue(value, ctrl, alt, shift);
+    }
+
     /** On-screen bounds of the rendered space bar, or false when there is none to seed from. */
     public boolean getSpaceBarRectOnScreen(@NonNull Rect out) {
         return getKeyRectOnScreen("space", out);

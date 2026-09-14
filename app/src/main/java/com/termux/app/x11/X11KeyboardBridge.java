@@ -124,6 +124,12 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
         switch (value.getKind()) {
             case Launcher_tool:
                 return true;
+            // A macro is expanded by the handler, and each key it yields comes back through
+            // here; the compose values only move the host's compose indicator.
+            case Macro:
+            case Compose_pending:
+            case Placeholder:
+                return true;
             case Event:
                 return value.getEvent() != KeyValue.Event.ACTION;
             default:
