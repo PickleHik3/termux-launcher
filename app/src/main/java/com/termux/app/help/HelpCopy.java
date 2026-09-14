@@ -1,0 +1,40 @@
+package com.termux.app.help;
+
+import android.content.Context;
+import com.termux.R;
+import com.termux.shared.termux.extrakeys.ExtraKeyButton;
+import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
+
+/** Product copy for measured controls; tool identifiers never become labels. */
+public final class HelpCopy {
+    public final String title, body;
+    public HelpCopy(String title, String body) { this.title = title; this.body = body; }
+    public static HelpCopy of(Context context, int title, int... lines) {
+        StringBuilder body = new StringBuilder();
+        for (int line : lines) {
+            if (body.length() > 0) body.append('\n');
+            body.append(context.getString(line));
+        }
+        return new HelpCopy(context.getString(title), body.toString());
+    }
+    public static String keyLabel(Context context, ExtraKeyButton key) {
+        if (key == null) return "";
+        String name = key.getKey();
+        int label = 0;
+        if (name.startsWith(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX)) {
+            switch (name.substring(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX.length())) {
+                case "keyboard.cycle_form": label = R.string.help_key_form; break;
+                case "mouse.toggle": label = R.string.help_key_mouse; break;
+                case "wall.widgets": label = R.string.help_key_widgets; break;
+                case "wall.terminal": label = R.string.help_key_terminal; break;
+                case "wall.display": label = R.string.help_key_display; break;
+                case "pane.split": label = R.string.help_key_split; break;
+                case "window.new": label = R.string.help_key_window; break;
+                case "session.browser": label = R.string.help_key_sessions; break;
+                case "session.new": label = R.string.help_key_session; break;
+                case "keyboard.toggle": label = R.string.help_key_keyboard; break;
+            }
+        } else if ("KEYBOARD".equals(name)) label = R.string.help_key_keyboard;
+        return label == 0 ? key.getDisplay() : context.getString(label);
+    }
+}
