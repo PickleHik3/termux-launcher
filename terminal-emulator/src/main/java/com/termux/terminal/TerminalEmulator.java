@@ -3332,7 +3332,7 @@ public final class TerminalEmulator {
                     mSession.write("\033]52;" + clipboardSelection + ";" + encoded + bellOrStringTerminator);
                 } else {
                     try {
-                        String clipboardText = new String(Base64.getDecoder().decode(clipboardPayload), StandardCharsets.UTF_8);
+                        String clipboardText = new String(Base64.getMimeDecoder().decode(clipboardPayload), StandardCharsets.UTF_8);
                         mSession.onCopyTextToClipboard(clipboardText);
                     } catch (Exception e) {
                         Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "'");
