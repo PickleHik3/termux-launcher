@@ -18,6 +18,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerZones;
 import com.termux.shared.termux.font.NerdFontSpans;
 
@@ -82,8 +83,12 @@ public final class PaneControlsView extends View {
     private final Path mPath = new Path();
     private final RectF mTab = new RectF();
     private final List<Action> mActions = new ArrayList<>();
+    /** This view's own bounds, the frame the tab is laid out inside. */
+    private final RectF mBounds = new RectF();
     /** One hit rectangle per action, in this view's coordinates; recomputed with the geometry. */
-    private final List<RectF> mButtons = new ArrayList<>();
+    private RectF[] mButtons = new RectF[0];
+    /** Each action's asked-for width, in the order they are drawn. */
+    private float[] mWidths = new float[0];
     /** The ids drawn in the error colour rather than the primary one. */
     private final List<Integer> mAlerted = new ArrayList<>();
     @Nullable private ValueAnimator mAnimator;
@@ -147,8 +152,9 @@ public final class PaneControlsView extends View {
     public void setActions(@NonNull Action... actions) {
         mActions.clear();
         mActions.addAll(Arrays.asList(actions));
-        mButtons.clear();
-        for (int i = 0; i < mActions.size(); i++) mButtons.add(new RectF());
+        mButtons = new RectF[mActions.size()];
+        mWidths = new float[mActions.size()];
+        for (int i = 0; i < mActions.size(); i++) mButtons[i] = new RectF();
         for (int i = mAlerted.size() - 1; i >= 0; i--) {
             if (indexOf(mAlerted.get(i)) < 0) mAlerted.remove(i);
         }
@@ -215,8 +221,8 @@ public final class PaneControlsView extends View {
     public int actionAt(float x, float y) {
         if (!mShown || mProgress < .35f || mActions.isEmpty()) return ACTION_NONE;
         computeGeometry();
-        for (int i = 0; i < mButtons.size(); i++) {
-            if (mButtons.get(i).contains(x, y)) return mActions.get(i).id;
+        for (int i = 0; i < mButtons.length; i++) {
+            if (mButtons[i].contains(x, y)) return mActions.get(i).id;
         }
         return ACTION_NONE;
     }
@@ -262,47 +268,19 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * The tab at its corner: the buttons a finger's width apart in a 32dp tab, lined up with the
-     * side that corner is on and sliding out of the edge it is on.
-     *
-     * <p>Each button's hit rectangle takes half the gap to either side and the full tab height, so
-     * a thumb that lands between or just past the glyphs still counts — and the outermost two
-     * reach the tab's own edges.
+     * The tab at its corner: the buttons a finger's width apart in a 32dp tab. Where that lands is
+     * {@link CornerTabGeometry}'s to say — the same rule a terminal pane's tab follows — and this
+     * view brings only the sizes its own buttons wear.
      */
     private void computeGeometry() {
         if (mActions.isEmpty()) {
             mTab.setEmpty();
             return;
         }
-        float gap = dp(8);
-        float pad = dp(5);
-        float width = pad + pad + gap * (mActions.size() - 1);
-        for (Action action : mActions) width += buttonWidth(action);
-        float inset = Math.max(dp(3), mCornerInsetPx);
-        int corner = corner();
-        float left;
-        float right;
-        if (CornerZones.isLeft(corner)) {
-            left = inset;
-            right = Math.min(getWidth() - dp(3), left + width);
-        } else {
-            right = getWidth() - inset;
-            left = Math.max(dp(3), right - width);
-        }
-        float height = dp(32);
-        // Out of the edge its corner is on: down from a top corner, up from a bottom one.
-        float top = CornerZones.isTop(corner)
-            ? -height * (1f - mProgress)
-            : getHeight() - height * mProgress;
-        mTab.set(left, top, right, top + height);
-        float edge = left + pad;
-        for (int i = 0; i < mActions.size(); i++) {
-            float start = i == 0 ? left : edge - gap / 2f;
-            edge += buttonWidth(mActions.get(i));
-            float end = i == mActions.size() - 1 ? right : edge + gap / 2f;
-            mButtons.get(i).set(start, top, end, top + height);
-            edge += gap;
-        }
+        for (int i = 0; i < mActions.size(); i++) mWidths[i] = buttonWidth(mActions.get(i));
+        mBounds.set(0f, 0f, getWidth(), getHeight());
+        CornerTabGeometry.layout(corner(), mBounds, mWidths, mActions.size(), dp(8), dp(5), dp(32),
+            mCornerInsetPx, dp(3), mProgress, mTab, mButtons);
     }
 
     /** The frame edge the tab slides out of. */
@@ -367,7 +345,7 @@ public final class PaneControlsView extends View {
         for (int i = 0; i < mActions.size(); i++) {
             Action action = mActions.get(i);
             int tint = mAlerted.contains(action.id) ? error : primary;
-            drawText(canvas, mButtons.get(i), action,
+            drawText(canvas, mButtons[i], action,
                 ColorUtils.setAlphaComponent(tint, alpha));
         }
         canvas.restoreToCount(save);
