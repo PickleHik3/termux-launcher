@@ -1781,20 +1781,28 @@
     <string name="tour_card_window_then">Tap the window chip, then × to close it.</string>
     <string name="tour_card_split">Tap the split key.</string>
     <string name="tour_card_pane_corner">Tap a pane corner.</string>
+    <string name="tour_card_pane_corner_then">Tap anywhere else to close it.</string>
     <string name="tour_card_drawer">Pull down on the dock.</string>
     <string name="tour_card_drawer_then">Swipe down to close the drawer.</string>
     <string name="tour_card_az_scrub">Slide along the A–Z row, drag up to an app and let go.</string>
     <string name="tour_card_palette">Swipe up on the space bar.</string>
     <string name="tour_card_closing">That is the tour. Enjoy the launcher.</string>
-    <string name="tour_copy_commands">Copy commands</string>
+    <string name="tour_copy">Copy</string>
+    <string name="tour_copy_all">Copy all</string>
     <string name="tour_copied_commands">Copied</string>
-    <string name="tour_closing_hints">Hold Ctrl+Alt, or Ctrl+Alt+Shift, to see key hints.</string>
-    <string name="tour_closing_extras">Install extras from tlstore: fastfetch, sigye, Claude Code. For images in the terminal, pkg install timg.</string>
-    <string name="tour_closing_graphical">For graphical apps, pkg install x11-repo, then launch them from the drawer.</string>
-    <string name="tour_closing_extras_nix">Install extras from tlstore: fastfetch, sigye, Claude Code. For images in the terminal, nix profile install nixpkgs#timg.</string>
-    <string name="tour_closing_graphical_nix">For graphical apps, install them from nixpkgs and launch them from the drawer.</string>
-    <string name="tour_closing_commands">pkg install timg\npkg install x11-repo</string>
-    <string name="tour_closing_commands_nix">nix profile install nixpkgs#timg</string>
+    <string name="tour_copy_commands">Commands</string>
+    <string name="tour_read_the_docs">Read the docs</string>
+    <string name="tour_closing_hints_heading">Key hints</string>
+    <string name="tour_closing_hints_copy">Ctrl+Alt and Ctrl+Alt+Shift are your prefix keys. Hold either to see what every key does.</string>
+    <string name="tour_closing_extras_heading">Launcher extras</string>
+    <string name="tour_closing_extras_copy">Install the launcher\'s own extras.</string>
+    <string name="tour_closing_graphical_heading">Graphical apps</string>
+    <string name="tour_closing_graphical_copy">Add the X11 repository, then install graphical apps to launch them from the app drawer.</string>
+    <string name="tour_closing_graphical_copy_nix">Graphical apps come straight from nixpkgs here, with no repository to add first.</string>
+    <!-- Shell commands: never translated. -->
+    <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code</string>
+    <string name="tour_closing_graphical_command" translatable="false">pkg install x11-repo</string>
+    <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/#wiki</string>
 
     <!-- Settings: replay the first-boot tour -->
     <string name="tour_replay_title">Play the tour again</string>

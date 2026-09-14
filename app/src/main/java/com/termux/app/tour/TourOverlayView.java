@@ -13,10 +13,12 @@ import android.graphics.Typeface;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -26,6 +28,9 @@ import androidx.core.graphics.ColorUtils;
 import com.termux.R;
 import com.termux.app.FocusOutlineRenderer;
 import com.termux.app.notice.TerminalDress;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The run's only view: a glow around the control the card is about, a finger tracing the gesture
@@ -52,8 +57,15 @@ public final class TourOverlayView extends FrameLayout {
 
         void onTourFinishTapped();
 
-        /** The closing card's Copy commands: put its shell lines on the clipboard. */
-        void onTourCopyCommandsTapped();
+        /**
+         * A Copy button on the closing card.
+         *
+         * @param commandRes the single command that button stands beside, or 0 for Copy all
+         */
+        void onTourCopyCommandTapped(int commandRes);
+
+        /** The closing card's Read the docs link. */
+        void onTourDocsTapped();
     }
 
     private static final long CARD_IN_MS = 200L;
@@ -68,6 +80,8 @@ public final class TourOverlayView extends FrameLayout {
     private static final float GLOW_RADIUS_DP = 12f;
     private static final float FINGER_RADIUS_DP = 9f;
     private static final float FINGER_TRAIL_WIDTH_DP = 3f;
+    /** Stands in for "as tall as it likes": a measure spec carries no unbounded size of its own. */
+    private static final int UNBOUNDED_PX = 1 << 24;
 
     private final float mDensity;
     private final TerminalDress mDress;
@@ -81,10 +95,15 @@ public final class TourOverlayView extends FrameLayout {
 
     private final LinearLayout mCard;
     private final TextView mCopy;
-    private final TextView mBody;
+    private final ScrollView mBodyScroll;
+    private final LinearLayout mSections;
+    private final LinearLayout mClosingButtonRow;
+    private final TextView mCopyAll;
+    private final TextView mDocsLink;
     private final LinearLayout mButtonRow;
-    private final TextView mCopyCommands;
     private final TextView mButton;
+    /** Every Copy button on the card, so a rebuild takes their "Copied" acknowledgement back. */
+    private final List<TextView> mCopyButtons = new ArrayList<>();
 
     @Nullable private Callbacks mCallbacks;
     @Nullable private TourTargets mTargets;
@@ -100,6 +119,11 @@ public final class TourOverlayView extends FrameLayout {
     private int mStage;
     private int mAccent;
     private float mTraceProgress = 1f;
+    /** How tall the closing card's sections may grow before they start scrolling inside it. */
+    private int mScrollMaxHeight = UNBOUNDED_PX;
+    private int mPresentation = TourCardVisibility.NORMAL;
+    /** The edition the sections on the card were built for, or null while it carries none. */
+    @Nullable private TourEdition mSectionsEdition;
 
     public TourOverlayView(@NonNull Context context) {
         super(context);
@@ -130,28 +154,59 @@ public final class TourOverlayView extends FrameLayout {
         mCard.addView(mCopy, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // The closing card's three lines. Secondary to the sentence above them, and the only card
-        // that has any, so it is gone for the other eight rather than empty.
-        mBody = new TextView(context);
-        mBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        mBody.setTextColor(ColorUtils.setAlphaComponent(mDress.textColor, 204));
-        mBody.setLineSpacing(dp(2), 1f);
-        mBody.setVisibility(GONE);
+        // The closing card's sections. Only that card has any, so the whole column is gone for
+        // the other eight rather than empty, and it scrolls rather than growing off the screen:
+        // three headings, three sentences and two commands do not fit a short phone at 1.3x text
+        // with the keyboard up.
+        mSections = new LinearLayout(context);
+        mSections.setOrientation(LinearLayout.VERTICAL);
+        mBodyScroll = new ScrollView(context) {
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(
+                    Math.max(0, mScrollMaxHeight), MeasureSpec.AT_MOST));
+            }
+        };
+        mBodyScroll.setVerticalScrollBarEnabled(false);
+        mBodyScroll.setOverScrollMode(OVER_SCROLL_NEVER);
+        mBodyScroll.setClipToPadding(false);
+        mBodyScroll.setVisibility(GONE);
+        mBodyScroll.addView(mSections, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         bodyParams.topMargin = dp(8);
-        mCard.addView(mBody, bodyParams);
+        mCard.addView(mBodyScroll, bodyParams);
+
+        // Copy all and the docs link get their own row above Done: three text buttons side by side
+        // wrap onto each other on a narrow card long before 1.3x text.
+        mClosingButtonRow = new LinearLayout(context);
+        mClosingButtonRow.setOrientation(LinearLayout.HORIZONTAL);
+        mClosingButtonRow.setGravity(Gravity.END);
+        mClosingButtonRow.setVisibility(GONE);
+
+        mCopyAll = textButton(context, view -> onCopyTapped((TextView) view, 0));
+        LinearLayout.LayoutParams copyAllParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        copyAllParams.rightMargin = dp(6);
+        mClosingButtonRow.addView(mCopyAll, copyAllParams);
+
+        mDocsLink = textButton(context, view -> {
+            if (mCallbacks != null) mCallbacks.onTourDocsTapped();
+        });
+        mClosingButtonRow.addView(mDocsLink, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams closingRowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        closingRowParams.gravity = Gravity.END;
+        closingRowParams.topMargin = dp(6);
+        closingRowParams.rightMargin = -dp(4);
+        mCard.addView(mClosingButtonRow, closingRowParams);
 
         mButtonRow = new LinearLayout(context);
         mButtonRow.setOrientation(LinearLayout.HORIZONTAL);
         mButtonRow.setGravity(Gravity.END);
-
-        mCopyCommands = textButton(context, view -> onCopyCommandsTapped());
-        mCopyCommands.setVisibility(GONE);
-        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        copyParams.rightMargin = dp(6);
-        mButtonRow.addView(mCopyCommands, copyParams);
 
         mButton = textButton(context, view -> onButtonTapped());
         mButtonRow.addView(mButton, new LinearLayout.LayoutParams(
@@ -209,26 +264,53 @@ public final class TourOverlayView extends FrameLayout {
         mStep = step;
         mStage = stage;
         mCopy.setText(step.showsSecondLineAt(stage) ? step.secondLineRes : step.copyRes);
-        boolean closing = step.signalCount() == 0;
+        boolean closing = step.isClosingCard();
         mButton.setText(closing ? R.string.tour_done : R.string.tour_skip);
-        if (closing) showClosingBody();
+        if (closing) showClosingSections();
         else {
-            mBody.setVisibility(GONE);
-            mCopyCommands.setVisibility(GONE);
+            mBodyScroll.setVisibility(GONE);
+            mClosingButtonRow.setVisibility(GONE);
         }
-        setVisibility(VISIBLE);
-        if (!sameCard) animateCardIn();
+        applyPresentation();
+        if (!sameCard && getVisibility() == VISIBLE) animateCardIn();
         refreshTarget();
         startTrace();
+    }
+
+    /**
+     * Whether the card draws against its control, at the top of the screen, or not at all.
+     * {@link TourCardVisibility} decides; this applies the answer.
+     */
+    public void setPresentation(int presentation) {
+        if (mPresentation == presentation) return;
+        boolean wasHidden = mPresentation == TourCardVisibility.HIDDEN;
+        mPresentation = presentation;
+        applyPresentation();
+        if (wasHidden && getVisibility() == VISIBLE) {
+            animateCardIn();
+            startTrace();
+        }
+        refreshTarget();
+        requestLayout();
+        invalidate();
+    }
+
+    private void applyPresentation() {
+        boolean hidden = mStep == null || mPresentation == TourCardVisibility.HIDDEN;
+        if (hidden) stopTrace();
+        setVisibility(hidden ? GONE : VISIBLE);
     }
 
     /** Re-measures the control the card points at; cheap enough for every layout pass. */
     public void refreshTarget() {
         if (mStep == null) return;
-        String targetId = mStep.targetIdAt(mStage);
+        boolean compact = mPresentation != TourCardVisibility.NORMAL;
+        String targetId = compact ? TourTargets.NONE : mStep.targetIdAt(mStage);
         Rect updated = null;
         String reason = "no targets host";
-        if (mTargets != null) {
+        if (compact) {
+            reason = "the card is resting at the top of the screen";
+        } else if (mTargets != null) {
             updated = mTargets.rectFor(targetId);
             reason = updated == null ? mTargets.lastMissReason() : "none";
         }
@@ -267,6 +349,7 @@ public final class TourOverlayView extends FrameLayout {
         mTargetRect = null;
         mPlacement = null;
         mMissReason = "none";
+        mPresentation = TourCardVisibility.NORMAL;
         setVisibility(GONE);
     }
 
@@ -352,10 +435,13 @@ public final class TourOverlayView extends FrameLayout {
         int height = mCard.getMeasuredHeight();
         if (width <= 0 || height <= 0) return;
         int margin = dp(CARD_SIDE_MARGIN_DP);
-        TourCardPlacement placement = TourCardPlacement.place(getWidth(), getHeight(),
-            width, height, mTargetRect, margin, margin + mSystemInsetTop,
-            margin + mSystemInsetBottom, dp(CARD_GAP_DP), dp(POINTER_HEIGHT_DP),
-            dp(POINTER_HALF_WIDTH_DP));
+        TourCardPlacement placement = mPresentation == TourCardVisibility.COMPACT_TOP
+            ? TourCardPlacement.placeUnderStatusBar(getWidth(), getHeight(), width, height,
+                margin, margin + mSystemInsetTop, margin + mSystemInsetBottom)
+            : TourCardPlacement.place(getWidth(), getHeight(),
+                width, height, mTargetRect, margin, margin + mSystemInsetTop,
+                margin + mSystemInsetBottom, dp(CARD_GAP_DP), dp(POINTER_HEIGHT_DP),
+                dp(POINTER_HALF_WIDTH_DP));
         mPlacement = placement;
         mCard.layout(placement.left, placement.top, placement.left + width,
             placement.top + height);
@@ -410,12 +496,30 @@ public final class TourOverlayView extends FrameLayout {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        int available = MeasureSpec.getSize(widthMeasureSpec) - (2 * dp(CARD_SIDE_MARGIN_DP));
+        int margin = dp(CARD_SIDE_MARGIN_DP);
+        int available = MeasureSpec.getSize(widthMeasureSpec) - (2 * margin);
         int max = Math.min(dp(CARD_MAX_WIDTH_DP), Math.max(dp(120f), available));
-        measureChild(mCard,
-            MeasureSpec.makeMeasureSpec(max, MeasureSpec.AT_MOST),
-            MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(heightMeasureSpec),
-                MeasureSpec.AT_MOST));
+        // What is left of the window once the system bars and the card's own margins are out of
+        // it. Only the closing card ever wants more than this.
+        int budget = Math.max(dp(120f), MeasureSpec.getSize(heightMeasureSpec)
+            - mSystemInsetTop - mSystemInsetBottom - (2 * margin));
+        // Measured twice, and only ever to any effect on the closing card: once unbounded, for
+        // what the card would like to be, and again against the budget with the sections given
+        // exactly the height that is left over. A card that simply grew past the budget would be
+        // cut off by the layout below rather than scrolled.
+        mScrollMaxHeight = UNBOUNDED_PX;
+        measureCard(max, UNBOUNDED_PX, MeasureSpec.UNSPECIFIED);
+        int natural = mCard.getMeasuredHeight();
+        if (natural > budget && mBodyScroll.getVisibility() != GONE) {
+            mScrollMaxHeight = Math.max(dp(64f),
+                mBodyScroll.getMeasuredHeight() - (natural - budget));
+        }
+        measureCard(max, budget, MeasureSpec.AT_MOST);
+    }
+
+    private void measureCard(int maxWidth, int maxHeight, int heightMode) {
+        measureChild(mCard, MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.AT_MOST),
+            MeasureSpec.makeMeasureSpec(maxHeight, heightMode));
     }
 
     private void animateCardIn() {
@@ -461,30 +565,105 @@ public final class TourOverlayView extends FrameLayout {
         mTraceProgress = 1f;
     }
 
-    /** The three lines the running edition installs things with, plus their Copy button. */
-    private void showClosingBody() {
+    /** The running edition's three sections, built once and kept while the card is up. */
+    private void showClosingSections() {
         TourEdition edition = TourEdition.of(getContext().getPackageName());
-        StringBuilder text = new StringBuilder();
-        for (int line : TourClosingCard.bodyLines(edition)) {
-            if (text.length() > 0) text.append("\n\n");
-            text.append(getContext().getString(line));
-        }
-        mBody.setText(text);
-        mBody.setVisibility(VISIBLE);
-        mCopyCommands.setText(R.string.tour_copy_commands);
-        mCopyCommands.setVisibility(VISIBLE);
+        if (edition != mSectionsEdition) buildClosingSections(edition);
+        // Every Copy button back to offering rather than acknowledging: the card can be shown
+        // again after a resume, and a row of buttons all saying "Copied" says nothing.
+        for (TextView copyButton : mCopyButtons) copyButton.setText(R.string.tour_copy);
+        mCopyAll.setText(R.string.tour_copy_all);
+        mBodyScroll.setVisibility(VISIBLE);
+        mBodyScroll.scrollTo(0, 0);
+        mClosingButtonRow.setVisibility(VISIBLE);
     }
 
-    private void onCopyCommandsTapped() {
+    private void buildClosingSections(@NonNull TourEdition edition) {
+        mSections.removeAllViews();
+        mCopyButtons.clear();
+        boolean first = true;
+        for (TourClosingCard.Section section : TourClosingCard.sections(edition)) {
+            mSections.addView(sectionView(section, first));
+            first = false;
+        }
+        mCopyAll.setText(R.string.tour_copy_all);
+        mCopyButtons.add(mCopyAll);
+        mDocsLink.setText(R.string.tour_read_the_docs);
+        mSectionsEdition = edition;
+    }
+
+    /** One section: a heading, a sentence, and where there is one, the command and its Copy. */
+    @NonNull
+    private View sectionView(@NonNull TourClosingCard.Section section, boolean first) {
+        Context context = getContext();
+        LinearLayout block = new LinearLayout(context);
+        block.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (!first) blockParams.topMargin = dp(12);
+        block.setLayoutParams(blockParams);
+
+        TextView heading = new TextView(context);
+        heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+        heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        heading.setTextColor(mDress.textColor);
+        heading.setText(section.headingRes);
+        block.addView(heading, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView copy = new TextView(context);
+        copy.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+        copy.setTextColor(ColorUtils.setAlphaComponent(mDress.textColor, 204));
+        copy.setLineSpacing(dp(2), 1f);
+        copy.setText(section.copyRes);
+        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        copyParams.topMargin = dp(2);
+        block.addView(copy, copyParams);
+
+        if (!section.hasCommand()) return block;
+
+        LinearLayout commandRow = new LinearLayout(context);
+        commandRow.setOrientation(LinearLayout.HORIZONTAL);
+        commandRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView command = new TextView(context);
+        command.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+        command.setTypeface(Typeface.MONOSPACE);
+        command.setTextColor(mDress.textColor);
+        command.setText(section.commandRes);
+        command.setLineSpacing(dp(1), 1f);
+        LinearLayout.LayoutParams commandParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        commandRow.addView(command, commandParams);
+
+        TextView copyButton = textButton(context,
+            view -> onCopyTapped((TextView) view, section.commandRes));
+        copyButton.setText(R.string.tour_copy);
+        mCopyButtons.add(copyButton);
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        buttonParams.leftMargin = dp(6);
+        commandRow.addView(copyButton, buttonParams);
+
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.topMargin = dp(4);
+        block.addView(commandRow, rowParams);
+        return block;
+    }
+
+    /** @param commandRes the command this button stands beside, or 0 for Copy all */
+    private void onCopyTapped(@NonNull TextView button, int commandRes) {
         if (mCallbacks == null) return;
-        mCallbacks.onTourCopyCommandsTapped();
+        mCallbacks.onTourCopyCommandTapped(commandRes);
         // The run draws no toasts, so the button itself is the acknowledgement.
-        mCopyCommands.setText(R.string.tour_copied_commands);
+        button.setText(R.string.tour_copied_commands);
     }
 
     private void onButtonTapped() {
         if (mCallbacks == null || mStep == null) return;
-        if (mStep.signalCount() == 0) mCallbacks.onTourFinishTapped();
+        if (mStep.isClosingCard()) mCallbacks.onTourFinishTapped();
         else mCallbacks.onTourSkipTapped();
     }
 
@@ -518,8 +697,14 @@ public final class TourOverlayView extends FrameLayout {
         mAccent = FocusOutlineRenderer.resolveAccent(this);
         mButton.setTextColor(mAccent);
         mButton.setBackground(buttonBackground());
-        mCopyCommands.setTextColor(mAccent);
-        mCopyCommands.setBackground(buttonBackground());
+        mDocsLink.setTextColor(mAccent);
+        mDocsLink.setBackground(buttonBackground());
+        mCopyAll.setTextColor(mAccent);
+        mCopyAll.setBackground(buttonBackground());
+        for (TextView copyButton : mCopyButtons) {
+            copyButton.setTextColor(mAccent);
+            copyButton.setBackground(buttonBackground());
+        }
         invalidate();
     }
 }

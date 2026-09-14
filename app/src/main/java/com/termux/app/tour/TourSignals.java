@@ -31,6 +31,8 @@ public interface TourSignals {
     String PANE_SPLIT = "pane.split";
     /** A pane's corner menu was raised. */
     String PANE_CORNER_MENU = "pane.corner_menu";
+    /** A pane's corner menu went away again. */
+    String PANE_CONTROLS_DISMISSED = "pane.controls_dismissed";
     /** The app drawer settled open. */
     String DRAWER_OPENED = "drawer.opened";
     /** The app drawer settled closed again. */

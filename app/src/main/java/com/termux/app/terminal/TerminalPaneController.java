@@ -173,6 +173,8 @@ public class TerminalPaneController {
         default void onPanesRendered() {}
         /** A pane's corner controls — move, maximize, close — are now on screen. */
         default void onPaneControlsShown() {}
+        /** Those controls are going away again, however the user asked for that. */
+        default void onPaneControlsDismissed() {}
         /** The lone pane's corner asked for the surface editor. */
         default void openSurfaceEditor() {}
         /** Default working directory when a cwd can't be derived. */
@@ -3510,6 +3512,7 @@ public class TerminalPaneController {
 
         private void dismissControls() {
             if (mMaximizedLeaf != null) return;
+            if (mControlsShown) mHost.onPaneControlsDismissed();
             animateControlProgress(0f, true);
         }
 

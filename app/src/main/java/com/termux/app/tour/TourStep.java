@@ -37,6 +37,16 @@ public final class TourStep {
      */
     private final String[] targets;
 
+    /**
+     * Whether this card rests at the top of the screen instead of against its control.
+     *
+     * <p>For the one card whose gesture happens all over the screen: the A-Z scrub filters the app
+     * row and throws a preview up beside the finger, and a card anchored to the row it names sits
+     * exactly on top of both. A card the user cannot see past is worse than one they have to
+     * glance up at.
+     */
+    public final boolean topAnchored;
+
     public TourStep(String id, int copyRes, int secondLineRes, String targetId,
                     String[] signals, TourGesture[] gestures) {
         this(id, copyRes, secondLineRes, new String[] {targetId}, signals, gestures);
@@ -44,6 +54,11 @@ public final class TourStep {
 
     public TourStep(String id, int copyRes, int secondLineRes, String[] targetIds,
                     String[] signals, TourGesture[] gestures) {
+        this(id, copyRes, secondLineRes, targetIds, signals, gestures, false);
+    }
+
+    public TourStep(String id, int copyRes, int secondLineRes, String[] targetIds,
+                    String[] signals, TourGesture[] gestures, boolean topAnchored) {
         if (gestures.length < Math.max(1, signals.length))
             throw new IllegalArgumentException("step " + id + " has fewer gestures than signals");
         if (targetIds.length == 0)
@@ -55,6 +70,7 @@ public final class TourStep {
         this.targetId = this.targets[0];
         this.signals = signals.clone();
         this.gestures = gestures.clone();
+        this.topAnchored = topAnchored;
     }
 
     /**
@@ -85,5 +101,10 @@ public final class TourStep {
     /** Whether the follow-up sentence is the one to show at {@code stage}. */
     public boolean showsSecondLineAt(int stage) {
         return secondLineRes != 0 && stage > 0;
+    }
+
+    /** Whether the card at {@code stage} is the closing card, which ends on its own buttons. */
+    public boolean isClosingCard() {
+        return signals.length == 0;
     }
 }

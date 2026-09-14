@@ -31,21 +31,31 @@ You can change this later in Settings." Buttons Turn on / Not now.
 |---|------|------|------------|
 | 1 | Swipe the status bar left or right. | Swipe back. | place changed; place returned |
 | 2 | Drag the status bar down, then up. | | status bar expanded; collapsed |
-| 3 | Tap + to open a window. | Tap the window chip, then × to close it. | window count +1; chip selected; window closed |
+| 3 | Tap + to open a window. | Tap the window chip, then × to close it. | window count +1; chip tapped; window closed |
 | 4 | Tap the split key. | | pane.split action |
-| 5 | Tap a pane corner. | | pane corner menu opened |
+| 5 | Tap a pane corner. | Tap anywhere else to close it. | pane corner menu opened; pane controls dismissed |
 | 6 | Pull down on the dock. | Swipe down to close the drawer. | drawer opened; drawer closed |
 | 7 | Slide along the A–Z row, drag up to an app and let go. | | app launched from scrub |
 | 8 | Swipe up on the space bar. | | palette opened |
-| 9 | Closing card, no gesture. Buttons Copy commands / Done. | | Done |
+| 9 | Closing card, no gesture. Three sections, Copy all, Read the docs, Done. | | Done |
 
-Closing card body, three lines, edition aware (Nix edition has its own package line; VAJ keeps
-`pkg`):
+Glow per stage: card 3 walks the + → the chip → the × the chip reveals; card 5 and card 6 point
+at nothing for their second half, because the thing they are asking about is "anywhere else" and
+"the plane covering the dock".
 
-- Hold Ctrl+Alt, or Ctrl+Alt+Shift, to see key hints.
-- Install extras from tlstore: fastfetch, sigye, Claude Code. For images in the terminal,
-  `pkg install timg`.
-- For graphical apps, `pkg install x11-repo`, then launch them from the drawer.
+Closing card body, three sections, each a heading, one sentence and — where there is something to
+run — the command on a monospace line with its own Copy button. Under them: Copy all, a Read the
+docs link to `https://picklehik3.github.io/termux-launcher-site/#wiki`, and Done. The card scrolls
+rather than growing off a short screen at 1.3× text with the keyboard up.
+
+| Heading | Copy | Command |
+|---------|------|---------|
+| Key hints | Ctrl+Alt and Ctrl+Alt+Shift are your prefix keys. Hold either to see what every key does. | — |
+| Launcher extras | Install the launcher's own extras. | `tlstore install fastfetch sigye claude-code` |
+| Graphical apps | Add the X11 repository, then install graphical apps to launch them from the app drawer. | `pkg install x11-repo` |
+
+Edition aware in one row only: the Nix edition's graphical section says the apps come straight from
+nixpkgs with no repository to add, and carries no command. VAJ keeps `pkg`, like Termux.
 
 ## Rules
 
@@ -60,6 +70,12 @@ Closing card body, three lines, edition aware (Nix edition has its own package l
 - The card is anchored to its target: centred on it, below it when it is in the top half of the
   overlay and above it otherwise, with a pointer on the edge facing it. A card with no target
   keeps the middle of the overlay.
+- The overlay hides while the drawer, the command palette, a terminal sheet or the surface editor
+  is up. The exception is the card whose ask is to close that very surface: it shows compact at
+  the top of the screen, under the status bar, with no glow. A card that falls due behind chrome
+  is shown when the chrome goes. `TourCardVisibility` is the whole rule, and is pure.
+- Nothing of the run draws while a finger is mid-scrub on the A–Z row: the scrub filters the app
+  icons and throws a preview up beside the finger, and the user has to see what they are picking.
 
 ## Corrections found on the first device pass (2026-09-14)
 
@@ -78,6 +94,34 @@ Closing card body, three lines, edition aware (Nix edition has its own package l
 - A drawer the launcher put away itself (HOME, a rotation, a preference reload) is no longer the
   user's swipe down.
 - Debug builds log every card, every signal and every unmeasurable target under `TermuxTour`.
+
+## Second device pass (2026-09-14)
+
+- The × the window card asks for is revealed by a tap the selection listener never hears: a tap on
+  the already-selected chip is spent on the reveal. The bar reports every chip tap of its own now
+  (`OnChipTappedListener`), and stage 2 of the card glows the × itself (`TourTargets.WINDOW_CLOSE`,
+  `TerminalWindowBar.closeButtonView()`).
+- The pane corner card jumped to the drawer card with the corner menu still up. It has a second
+  half now, cleared by `TerminalPaneController.Host.onPaneControlsDismissed()` — the pane view's
+  one way out of those controls.
+- The drawer card never heard its open. The relay swallows the first call as the one that tells it
+  where the plane rests, and nothing had ever primed it, so the user's own first pull was eaten;
+  the launcher primes it with the resting state when it builds the run, like the status bar and
+  the place.
+- Cards drew over the open drawer and over the open palette. See the chrome rule under Rules.
+- The A–Z card covered the icons and the scrub popups it was talking about. It rests at the top of
+  the screen now, and goes off it entirely while the finger is down.
+- The closing card was three paragraphs with commands buried in the prose, which is not something
+  anyone can act on from a phone. It is three sections with their own Copy buttons now.
+
+Still only reasoned, not seen on a device: every one of the above.
+
+The corner-menu question the pass raised, answered from the code: a plain tap in the middle of a
+pane does **not** raise the corner controls — the pane view
+returns the touch to the terminal unless it lands in one of `CornerZones`' 32 dp corner squares
+(plus 6 dp of slop for the divider). With two panes there are eight of those squares and they
+cluster along the shared divider, so a tap anywhere near the split reads as a corner; that is what
+the pass saw, not a tap anywhere on the pane.
 
 ## Build plan
 

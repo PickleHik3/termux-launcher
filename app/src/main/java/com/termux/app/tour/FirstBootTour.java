@@ -34,14 +34,37 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         boolean spaceBarRectOnScreen(@NonNull android.graphics.Rect out);
     }
 
+    /**
+     * What else is in front of the user right now.
+     *
+     * <p>Asked rather than told, because these four surfaces open and close along a dozen paths
+     * each and a card left drawing over one of them is exactly what a missed path looks like. It
+     * is read on every layout pass — every one of them lays the window out — and again whenever
+     * the chrome says something moved.
+     */
+    public interface ChromeProbe {
+        boolean isAppDrawerUp();
+
+        boolean isCommandPaletteUp();
+
+        boolean isTerminalSheetUp();
+
+        boolean isSurfaceEditorUp();
+
+        /** Whether a finger is mid-scrub on the A-Z row, choosing an app. */
+        boolean isAzScrubInProgress();
+    }
+
     @NonNull private final Activity mActivity;
     @NonNull private final TourController mController;
     @NonNull private final TourSignalRelay mSignals = new TourSignalRelay();
     @Nullable private final SpaceBarProbe mSpaceBarProbe;
+    @Nullable private ChromeProbe mChromeProbe;
 
     @Nullable private TourOverlayView mOverlay;
     @Nullable private ViewGroup mOverlayHost;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mLayoutListener;
+    private int mPresentation = TourCardVisibility.NORMAL;
 
     /** The removed footage onboarding's own once-per-install preferences file and key. */
     private static final String LEGACY_ONBOARDING_PREFS_NAME = "termux_first_launch";
@@ -83,6 +106,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             preferences.setFirstRunChainDone(true);
         }
         preferences.setFirstBootTourLegacyOnboardingMigrated(true);
+    }
+
+    /** What else is covering the home screen, for the card visibility policy. */
+    public void setChromeProbe(@Nullable ChromeProbe probe) {
+        mChromeProbe = probe;
+        onChromeChanged();
     }
 
     /**
@@ -152,6 +181,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onPaneCornerMenuOpened();
     }
 
+    /** A pane's corner menu went away again. */
+    public void onPaneControlsDismissed() {
+        mSignals.onPaneControlsDismissed();
+    }
+
     /** The A-Z row's scrub launched an app. */
     public void onAppLaunchedFromScrub() {
         mSignals.onAppLaunchedFromScrub();
@@ -160,6 +194,54 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     /** The command palette came up. */
     public void onPaletteOpened() {
         mSignals.onPaletteOpened();
+    }
+
+    /**
+     * Something that covers the home screen whole opened or closed, or a finger went down on or
+     * came off the A-Z row. Cheap, and safe to call on anything that might have moved one of them.
+     */
+    public void onChromeChanged() {
+        refreshCardVisibility();
+    }
+
+    /**
+     * Where the card that is up may draw, given what is covering the home screen. The decision is
+     * {@link TourCardVisibility}'s; this reads the chrome and hands the answer to the overlay.
+     */
+    private void refreshCardVisibility() {
+        TourOverlayView overlay = mOverlay;
+        if (overlay == null) return;
+        TourStep step = mController.currentStep();
+        boolean scrubbing = mChromeProbe != null && mChromeProbe.isAzScrubInProgress();
+        java.util.EnumSet<TourChrome> chrome = chromeUp();
+        int presentation = TourCardVisibility.decide(step, mController.currentStage(), scrubbing,
+            chrome);
+        if (presentation != mPresentation) {
+            mPresentation = presentation;
+            TourLog.d("card " + (step == null ? "none" : step.id + ":" + mController.currentStage())
+                + " is now " + describePresentation(presentation)
+                + " (chrome " + chrome + (scrubbing ? ", scrubbing" : "") + ")");
+        }
+        overlay.setPresentation(presentation);
+    }
+
+    @NonNull
+    private java.util.EnumSet<TourChrome> chromeUp() {
+        java.util.EnumSet<TourChrome> up = java.util.EnumSet.noneOf(TourChrome.class);
+        ChromeProbe probe = mChromeProbe;
+        if (probe == null) return up;
+        if (probe.isAppDrawerUp()) up.add(TourChrome.DRAWER);
+        if (probe.isCommandPaletteUp()) up.add(TourChrome.PALETTE);
+        if (probe.isTerminalSheetUp()) up.add(TourChrome.TERMINAL_SHEET);
+        if (probe.isSurfaceEditorUp()) up.add(TourChrome.SURFACE_EDITOR);
+        return up;
+    }
+
+    @NonNull
+    private static String describePresentation(int presentation) {
+        if (presentation == TourCardVisibility.HIDDEN) return "hidden";
+        if (presentation == TourCardVisibility.COMPACT_TOP) return "at the top of the screen";
+        return "against its control";
     }
 
     // TourController.Listener
@@ -172,6 +254,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             return;
         }
         overlay.showStep(step, stage);
+        refreshCardVisibility();
         if (TourLog.enabled()) {
             android.graphics.Rect rect = overlay.currentTargetRect();
             TourLog.d("card " + step.id + ":" + stage + " shown, target \""
@@ -211,14 +294,29 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     @Override
-    public void onTourCopyCommandsTapped() {
+    public void onTourCopyCommandTapped(int commandRes) {
         android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
             mActivity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
         if (clipboard == null) return;
         TourEdition edition = TourEdition.of(mActivity.getPackageName());
+        String text = commandRes == 0
+            ? TourClosingCard.copyAllText(edition, mActivity::getString)
+            : mActivity.getString(commandRes);
+        if (text.isEmpty()) return;
         clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
-            mActivity.getString(R.string.tour_copy_commands),
-            mActivity.getString(TourClosingCard.commands(edition))));
+            mActivity.getString(R.string.tour_copy_commands), text));
+    }
+
+    @Override
+    public void onTourDocsTapped() {
+        String url = mActivity.getString(R.string.tour_docs_url);
+        try {
+            mActivity.startActivity(new android.content.Intent(
+                android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (android.content.ActivityNotFoundException notFound) {
+            TourLog.d("no browser to open " + url);
+        }
     }
 
     // TourSignals.Listener
@@ -271,7 +369,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         // Every layout pass, because that is what the keyboard, a rotation, a dock style and a
         // font scale all come through as; a cached rect is a glow around where a control used to
         // be.
-        mLayoutListener = overlay::refreshTarget;
+        mLayoutListener = () -> {
+            refreshCardVisibility();
+            overlay.refreshTarget();
+        };
         content.getViewTreeObserver().addOnGlobalLayoutListener(mLayoutListener);
         overlay.setOnApplyWindowInsetsListener((view, insets) -> {
             applySystemBarInsets(overlay, insets);

@@ -72,6 +72,18 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
+     * A chip was tapped, whatever the tap went on to mean.
+     *
+     * <p>Separate from {@link OnWindowSelectedListener}, which only hears the taps that change
+     * which window is current: the tap that asks the selected chip for its close button is spent
+     * on the reveal and never reaches that one. Anything that cares about the gesture rather than
+     * about the outcome listens here.
+     */
+    public interface OnChipTappedListener {
+        void onWindowChipTapped(int index);
+    }
+
+    /**
      * The chip strip has run out of scroll and the finger keeps going. The surplus distance is
      * streamed to the host so "scroll to the last chip, keep pulling, and the page beside the
      * terminal slides in" is one continuous gesture.
@@ -282,6 +294,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     private final SelectionStrip mTabs;
     @Nullable private OnWindowSelectedListener mSelectionListener;
+    @Nullable private OnChipTappedListener mChipTapListener;
     @Nullable private OnCreateWindowListener mCreateListener;
     @Nullable private OnWindowCloseRequestedListener mCloseListener;
     @Nullable private OnEdgeOverswipeListener mEdgeOverswipeListener;
@@ -630,6 +643,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * that is already selected asks for its × instead, and a second one takes it back.
      */
     private void onChipTapped(int index) {
+        if (mChipTapListener != null) mChipTapListener.onWindowChipTapped(index);
         boolean spentOnTheClose =
             mReveal.onChipTap(index, mSelectedIndex, SystemClock.uptimeMillis());
         applyReveal();
@@ -1190,7 +1204,23 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     @Nullable
     @androidx.annotation.VisibleForTesting
     public View revealedCloseView() {
+        return closeButtonView();
+    }
+
+    /**
+     * The close button a chip is offering right now, or null while no chip is offering one.
+     *
+     * <p>It is a child of the strip only between the tap that asks for it and the timeout that
+     * takes it away, so a caller that wants to point at it has to ask again every time it draws.
+     */
+    @Nullable
+    public View closeButtonView() {
         return mCloseButton != null && mCloseButton.getVisibility() == VISIBLE ? mCloseButton : null;
+    }
+
+    /** Told about every chip tap, including the one spent on revealing the close button. */
+    public void setOnChipTappedListener(@Nullable OnChipTappedListener listener) {
+        mChipTapListener = listener;
     }
 
     /** For tests: the surface the selected chip is standing on, × segment included. */

@@ -1646,13 +1646,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFirstBootTour == null && mPreferences != null) {
             mFirstBootTour = new com.termux.app.tour.FirstBootTour(this, mPreferences,
                 this::getInAppKeyboardSpaceBarRect);
-            // Both signals are edge-triggered, so the run starts knowing where the chrome rests
-            // and a card is never cleared by a state the user did not put it in.
+            mFirstBootTour.setChromeProbe(new TourChromeProbe());
+            // Every state signal is edge-triggered, so the run starts knowing where the chrome
+            // rests and a card is never cleared by a state the user did not put it in — nor, as
+            // the drawer card was on the first device pass, by having its first real open eaten
+            // as the priming call.
             mFirstBootTour.onStatusBarCollapsedSettled(isStatusBarCompact());
+            mFirstBootTour.onDrawerOpenSettled(isAppDrawerOpen(), false);
             com.termux.app.wall.PaneWallPage place = currentWallPlace();
             mFirstBootTour.onPlaceSettled(place == null ? null : place.name());
         }
         return mFirstBootTour;
+    }
+
+    /**
+     * What else is covering the home screen, for the run's card visibility policy. Read rather
+     * than pushed, because each of these surfaces opens and closes along a dozen paths and a card
+     * still drawing over one of them is what a missed path looks like.
+     */
+    private final class TourChromeProbe implements com.termux.app.tour.FirstBootTour.ChromeProbe {
+        @Override public boolean isAppDrawerUp() {
+            // Engaged rather than open: the plane covers the dock the whole way down and the
+            // whole way back, not only once it has settled.
+            return isAppDrawerEngaged();
+        }
+
+        @Override public boolean isCommandPaletteUp() {
+            return isCommandPaletteOpen();
+        }
+
+        @Override public boolean isTerminalSheetUp() {
+            return mTerminalSheet != null && mTerminalSheet.isOpen();
+        }
+
+        @Override public boolean isSurfaceEditorUp() {
+            return mSurfaceEditor.isActive();
+        }
+
+        @Override public boolean isAzScrubInProgress() {
+            return mAzGesture.mode() != AzScrubGesture.Mode.IDLE;
+        }
     }
 
     @Override
@@ -7217,6 +7250,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 break;
         }
 
+        // A finger on the letters takes the run's card off the screen: the scrub filters the app
+        // icons and throws a preview up beside the finger, and the user has to be able to see
+        // what they are picking.
+        if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
+
         // Whose row the finger is on now, so the letter row ticks only while the letters are what
         // it is choosing; an icon in the row above ticks for itself, per icon.
         mAzScrubRowView.setLetterHapticTicksSuspended(
@@ -7874,6 +7912,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (clearPreview && mSuggestionBarView != null) {
             mSuggestionBarView.clearAzPreview();
         }
+        // The finger is off the letters, whichever way the scrub ended; the card comes back.
+        if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
     }
 
     private float dpToPx(float dp) {
@@ -10704,7 +10744,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onDrawerOpenSettled(boolean open, boolean userDriven) {
-            if (mFirstBootTour != null) mFirstBootTour.onDrawerOpenSettled(open, userDriven);
+            if (mFirstBootTour == null) return;
+            mFirstBootTour.onDrawerOpenSettled(open, userDriven);
+            mFirstBootTour.onChromeChanged();
         }
 
         @Nullable @Override public <T extends View> T findView(int viewId) {
@@ -10861,6 +10903,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * </ul>
      */
     public void setCommandPaletteInterceptorActive(boolean active) {
+        // Ahead of the keyboard guard below: this is the one call both of the palette's open and
+        // both of its close paths make, so it is where the run hears that the palette moved.
+        if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
         if (mInAppKeyboard == null)
             return;
         mInAppKeyboard.setKeyValueInterceptor(active ? getCommandPaletteController() : null);
@@ -10874,6 +10919,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * behind a sheet the drawer itself never closed.
      */
     private void setTerminalSheetInterceptorActive(boolean active) {
+        // Ahead of the keyboard guard: this is the call every sheet makes on its way up and on
+        // its way down, so it is where the run hears that the plane moved.
+        if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
         if (mInAppKeyboard == null)
             return;
         if (active) {
@@ -14221,7 +14269,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mPaneController == null || mCurrentWSession == null
             || index < 0 || index >= mCurrentWSession.windows.size()) return;
-        if (mFirstBootTour != null) mFirstBootTour.onWindowSelected(String.valueOf(index));
         showWindowFromBar(index);
     }
 
@@ -14280,6 +14327,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setListener(this::selectWindowFromStatusBar);
         bar.setOnWindowSelectedListener(this::selectWindowFromStatusBar);
+        // Every chip tap, not only the ones that change which window is current: the tap that
+        // asks the selected chip for its close button is spent on that reveal and never reaches
+        // the selection listener, and it is exactly the tap the run's window card asks for.
+        bar.setOnChipTappedListener(index -> {
+            if (mFirstBootTour != null) mFirstBootTour.onWindowSelected(String.valueOf(index));
+        });
         bar.setOnWindowCloseRequestedListener(this::closeWindowFromStatusBar);
         bar.setOnCreateWindowListener(() -> {
             // On the Display place the chips are the display's apps, and the plus meant
@@ -16215,6 +16268,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onPaneControlsShown() {
             if (mFirstBootTour != null) mFirstBootTour.onPaneCornerMenuOpened();
+        }
+
+        @Override public void onPaneControlsDismissed() {
+            if (mFirstBootTour != null) mFirstBootTour.onPaneControlsDismissed();
         }
 
         @Override public void openSurfaceEditor() {

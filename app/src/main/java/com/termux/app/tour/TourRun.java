@@ -30,7 +30,7 @@ public final class TourRun {
         // the glow moves there rather than staying on a button the user has finished with.
         new TourStep("window", R.string.tour_card_window, R.string.tour_card_window_then,
             new String[] {TourTargets.PLUS_BUTTON, TourTargets.WINDOW_CHIP,
-                TourTargets.WINDOW_CHIP},
+                TourTargets.WINDOW_CLOSE},
             new String[] {TourSignals.WINDOW_OPENED, TourSignals.WINDOW_CHIP_SELECTED,
                 TourSignals.WINDOW_CLOSED},
             new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.TAP}),
@@ -41,9 +41,13 @@ public final class TourRun {
             new String[] {TourSignals.PANE_SPLIT},
             new TourGesture[] {TourGesture.TAP}),
 
-        new TourStep("pane_corner", R.string.tour_card_pane_corner, 0, TourTargets.PANE_CORNER,
-            new String[] {TourSignals.PANE_CORNER_MENU},
-            new TourGesture[] {TourGesture.TAP}),
+        // The corner controls are a menu, and the user is left inside it: the card asks for the
+        // way out before it moves on, or the next card arrives over a menu that is still up.
+        new TourStep("pane_corner", R.string.tour_card_pane_corner,
+            R.string.tour_card_pane_corner_then,
+            new String[] {TourTargets.PANE_CORNER, TourTargets.NONE},
+            new String[] {TourSignals.PANE_CORNER_MENU, TourSignals.PANE_CONTROLS_DISMISSED},
+            new TourGesture[] {TourGesture.TAP, TourGesture.TAP}),
 
         // Once the drawer is open it covers the dock, so the second half points at nothing and the
         // card falls back to the middle of the plane the gesture is performed on.
@@ -52,9 +56,13 @@ public final class TourRun {
             new String[] {TourSignals.DRAWER_OPENED, TourSignals.DRAWER_CLOSED},
             new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.DRAG_DOWN}),
 
-        new TourStep("az_scrub", R.string.tour_card_az_scrub, 0, TourTargets.AZ_ROW,
+        // Anchored at the top rather than against the row: the scrub filters the app icons just
+        // above the letters and throws a preview up beside the finger, and a card resting on the
+        // row covers both of the things the user is picking between.
+        new TourStep("az_scrub", R.string.tour_card_az_scrub, 0,
+            new String[] {TourTargets.AZ_ROW},
             new String[] {TourSignals.APP_LAUNCHED_FROM_SCRUB},
-            new TourGesture[] {TourGesture.SCRUB}),
+            new TourGesture[] {TourGesture.SCRUB}, true),
 
         new TourStep("palette", R.string.tour_card_palette, 0, TourTargets.SPACE_BAR,
             new String[] {TourSignals.PALETTE_OPENED},
