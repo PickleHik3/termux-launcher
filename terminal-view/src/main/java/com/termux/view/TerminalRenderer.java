@@ -19,7 +19,9 @@ import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Renderer of a {@link TerminalEmulator} into a {@link Canvas}.
@@ -285,8 +287,8 @@ public final class TerminalRenderer {
     private final int mSymbolMapsLastCodePoint;
 
     /**
-     * Whether the map at this index may be remembered as {@link #mLastSymbolMap}. Only a map no
-     * later map overlaps can be: the rule is that a later range wins, so a map some later one
+     * Whether the map at this index may be remembered as {@link #mLastSymbolMapIndex}. Only a map
+     * no later map overlaps can be: the rule is that a later range wins, so a map some later one
      * intersects may lose the next code point that lands in it, and answering from the memo would
      * silently draw the wrong font.
      */
@@ -297,7 +299,22 @@ public final class TerminalRenderer {
      * line is runs of icons from one map — so this turns the reverse scan into one range test for
      * every cell after the first.
      */
-    @Nullable private SymbolMap mLastSymbolMap;
+    private int mLastSymbolMapIndex = -1;
+
+    /** The distinct faces {@link #mSymbolMaps} draw from, and the one each map draws from. */
+    private final Typeface[] mSymbolFaces;
+    private final int[] mSymbolMapFaceIndex;
+
+    /** Memoized {@code hasGlyph} answers for {@link #mSymbolFaces}; null when nothing is mapped. */
+    @Nullable private final SymbolGlyphCache mSymbolGlyphs;
+
+    private final SymbolGlyphCache.Coverage mSymbolCoverage = new SymbolGlyphCache.Coverage() {
+        @Override
+        public boolean hasGlyph(int faceIndex, int codePoint) {
+            mCoveragePaint.setTypeface(mSymbolFaces[faceIndex]);
+            return mCoveragePaint.hasGlyph(new String(Character.toChars(codePoint)));
+        }
+    };
 
     /** Faces consulted, in configured order, for code points the primary face has no glyph for. */
     final Typeface[] mFallbackTypefaces;
@@ -700,6 +717,18 @@ public final class TerminalRenderer {
             }
             mSymbolMapIsExclusive[i] = !overlappedByALaterMap;
         }
+        mSymbolMapFaceIndex = new int[mSymbolMaps.length];
+        List<Typeface> symbolFaces = new ArrayList<>();
+        for (int i = 0; i < mSymbolMaps.length; i++) {
+            int index = symbolFaces.indexOf(mSymbolMaps[i].typeface);
+            if (index < 0) {
+                index = symbolFaces.size();
+                symbolFaces.add(mSymbolMaps[i].typeface);
+            }
+            mSymbolMapFaceIndex[i] = index;
+        }
+        mSymbolFaces = symbolFaces.toArray(new Typeface[0]);
+        mSymbolGlyphs = mSymbolMaps.length == 0 ? null : new SymbolGlyphCache();
         mLigaturePolicy = ligaturePolicy == null ? LigaturePolicy.NEVER : ligaturePolicy;
         mFontFeatures = fontFeatures == null ? FontFeatures.NONE : fontFeatures;
         mFontVariations = fontVariations == null ? FontVariations.NONE : fontVariations;
@@ -1253,7 +1282,7 @@ public final class TerminalRenderer {
                 startFreshRun = true;
                 continue;
             }
-            final SymbolMap symbolMap = symbolMapFor(codePoint);
+            final SymbolMap symbolMap = symbolMapWithGlyphFor(codePoint);
             final Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
             final String symbolFeatures = symbolFeaturesOf(symbolMap);
             final String symbolVariations = symbolVariationsOf(symbolMap);
@@ -2290,7 +2319,7 @@ public final class TerminalRenderer {
             boolean cellBold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
                 | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
             boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
-            SymbolMap symbolMap = symbolMapFor(codePoint);
+            SymbolMap symbolMap = symbolMapWithGlyphFor(codePoint);
             Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
             if (mBoxDrawingPolicy.synthesizes(codePoint)) {
                 // The overlay has to reach the same conclusion as the glyph pass. Drawing this cell
@@ -2483,20 +2512,43 @@ public final class TerminalRenderer {
      */
     @Nullable
     SymbolMap symbolMapFor(int codePoint) {
-        if (codePoint < mSymbolMapsFirstCodePoint || codePoint > mSymbolMapsLastCodePoint)
+        final int index = symbolMapIndexFor(codePoint);
+        return index < 0 ? null : mSymbolMaps[index];
+    }
+
+    /**
+     * The map that draws this code point, or null when the cell belongs to the normal chain.
+     *
+     * <p>A mapped range wider than its font's cmap is the common case — the app's own config maps
+     * the whole private-use area to one symbols face, and a Nerd Font's coverage of it is full of
+     * holes — so a map that matches but cannot draw hands the cell back instead of stamping a
+     * tofu on it. {@link #fallbackTypefaceFor} then gets its turn, as it would for any other cell.
+     */
+    @Nullable
+    SymbolMap symbolMapWithGlyphFor(int codePoint) {
+        final int index = symbolMapIndexFor(codePoint);
+        if (index < 0) return null;
+        if (mSymbolGlyphs != null
+            && !mSymbolGlyphs.covers(mSymbolMapFaceIndex[index], codePoint, mSymbolCoverage))
             return null;
-        final SymbolMap last = mLastSymbolMap;
-        if (last != null && codePoint >= last.firstCodePoint && codePoint <= last.lastCodePoint)
-            return last;
+        return mSymbolMaps[index];
+    }
+
+    private int symbolMapIndexFor(int codePoint) {
+        if (codePoint < mSymbolMapsFirstCodePoint || codePoint > mSymbolMapsLastCodePoint)
+            return -1;
+        final int last = mLastSymbolMapIndex;
+        if (last >= 0 && codePoint >= mSymbolMaps[last].firstCodePoint
+            && codePoint <= mSymbolMaps[last].lastCodePoint) return last;
         // Repeated directives are ordered; a later overlapping range wins.
         for (int i = mSymbolMaps.length - 1; i >= 0; i--) {
             SymbolMap map = mSymbolMaps[i];
             if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint) {
-                if (mSymbolMapIsExclusive[i]) mLastSymbolMap = map;
-                return map;
+                if (mSymbolMapIsExclusive[i]) mLastSymbolMapIndex = i;
+                return i;
             }
         }
-        return null;
+        return -1;
     }
 
     private static int resolveCellColor(int color, int[] palette) {
