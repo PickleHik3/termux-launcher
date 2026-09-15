@@ -108,7 +108,9 @@ final class LauncherIconPackPreferenceController {
         } else {
             preferences.setAppLauncherIconPackPackage(value);
         }
-        LauncherAppDataProvider.getInstance(context).invalidate();
+        // Not invalidate(): that resets catalogue state only, and the artwork the launcher is
+        // still holding is the previous pack's.
+        LauncherAppDataProvider.getInstance(context).invalidateIconArtwork();
         TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
     }
 

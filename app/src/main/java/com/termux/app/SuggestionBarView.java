@@ -484,6 +484,14 @@ public final class SuggestionBarView extends GridLayout
     private boolean pendingDrawerConfigRefresh;
     /** A catalogue swap that landed while the host was hidden; rows re-render on return. */
     private boolean pendingCatalogRefreshRender;
+    /**
+     * The icon pack changed somewhere this row cannot see — the settings screen. Drop what is
+     * held and repaint; the rendered caches live here, not in the provider.
+     */
+    private final LauncherAppDataProvider.IconArtworkListener iconArtworkListener = () -> {
+        invalidateIconArtwork();
+        scheduleCatalogRefreshRender();
+    };
     private final LauncherConfigRepository.Listener configListener = snapshot -> post(() -> {
         pinnedItems = new ArrayList<>(snapshot.dockItems);
         invalidateRenderedIconCaches();
@@ -624,6 +632,13 @@ public final class SuggestionBarView extends GridLayout
         }
         attachNotificationBadgeListener();
         if (configRepository != null) configRepository.addListener(configListener);
+        LauncherAppDataProvider.getInstance(getContext()).addIconArtworkListener(iconArtworkListener);
+        // A catalogue swap can land on a detached row; re-render on the way back in, since the
+        // views still hold whatever drawables they were last bound with.
+        if (pendingCatalogRefreshRender && hostVisible) {
+            pendingCatalogRefreshRender = false;
+            post(() -> reloadWithInput(lastInput, lastTerminalView));
+        }
     }
 
     @Override
@@ -640,6 +655,8 @@ public final class SuggestionBarView extends GridLayout
         LauncherNotificationBadgeStore.removeListener(notificationBadgeListener);
         notificationBadgeListener = null;
         if (configRepository != null) configRepository.removeListener(configListener);
+        LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
+        if (existing != null) existing.removeIconArtworkListener(iconArtworkListener);
     }
 
     @Override
@@ -752,6 +769,23 @@ public final class SuggestionBarView extends GridLayout
         LauncherAppDataProvider provider = appDataProvider != null
             ? appDataProvider : LauncherAppDataProvider.peekInstance();
         if (provider != null) iconCache.setIconPackIdentity(provider.iconPackIdentity());
+    }
+
+    /**
+     * Re-renders the rows once there is somewhere to render them, and never drops the request.
+     *
+     * <p>Every path that changes what the rows should draw ends here. The views keep the drawables
+     * they were last bound with, so a data change with no re-render leaves the dock showing the
+     * old artwork until an unrelated gesture happens to rebind it — which is exactly what made an
+     * icon-pack change look like it only took effect on a swipe.
+     */
+    private void scheduleCatalogRefreshRender() {
+        if (hostVisible && isAttachedToWindow()) {
+            pendingCatalogRefreshRender = false;
+            post(() -> reloadWithInput(lastInput, lastTerminalView));
+        } else {
+            pendingCatalogRefreshRender = true;
+        }
     }
 
     private void invalidateRenderedIconCaches() {
@@ -1162,6 +1196,10 @@ public final class SuggestionBarView extends GridLayout
         if (!appDataProvider.hasLoadedApps()) {
             appDataProvider.warmAsync(() -> {
                 if (!hostVisible || !isAttachedToWindow()) {
+                    // The catalogue arrived while the host was away. Ask for the render on the
+                    // way back in rather than dropping it: this is the branch an icon-pack
+                    // change lands in, because invalidating the provider cleared `loaded`.
+                    pendingCatalogRefreshRender = true;
                     return;
                 }
                 allApps = appDataProvider.getAllApps();
@@ -1199,7 +1237,17 @@ public final class SuggestionBarView extends GridLayout
     void refreshAllApps(@Nullable Set<String> changedPackages) {
         if (injectedSuggestionButtons != null
             || appDataProvider == null || !appDataProvider.hasLoadedApps()) {
+            if (changedPackages == null) {
+                // The branch an icon-pack change actually takes on the way back from settings:
+                // the provider was invalidated there, so `loaded` is already false and the
+                // refreshAsync path below — the only one that drops artwork — is skipped. Do the
+                // full-rebuild invalidation here too, or the reload re-renders the previous pack.
+                invalidateIconArtwork();
+                if (iconResolver != null) iconResolver.clearCache();
+                if (iconPackRepository != null) iconPackRepository.clearCache();
+            }
             reloadAllApps();
+            scheduleCatalogRefreshRender();
             return;
         }
         if (changedPackages != null && !changedPackages.isEmpty()) {
@@ -1230,13 +1278,9 @@ public final class SuggestionBarView extends GridLayout
             if (appCatalogChangedListener != null) {
                 appCatalogChangedListener.run();
             }
-            if (hostVisible && isAttachedToWindow()) {
-                reloadWithInput(lastInput, lastTerminalView);
-            } else {
-                // The swap landed while the host was away; re-render the rows on return, or the
-                // dock would keep showing the pre-change catalogue with no later signal to fix it.
-                pendingCatalogRefreshRender = true;
-            }
+            // Renders now when the host can show it, and on return when it cannot; either way the
+            // dock never keeps drawing the pre-change catalogue with no later signal to fix it.
+            scheduleCatalogRefreshRender();
         });
     }
 

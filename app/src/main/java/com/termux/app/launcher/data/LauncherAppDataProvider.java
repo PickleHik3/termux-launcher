@@ -27,6 +27,7 @@ import com.termux.app.launcher.icon.LauncherIconStore;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,6 +62,7 @@ public final class LauncherAppDataProvider {
     private final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
     private final Map<String, Long> cachedLastUpdateByPackage = new HashMap<>();
     private final List<Runnable> pendingRefreshCallbacks = new ArrayList<>();
+    private final List<WeakReference<IconArtworkListener>> artworkListeners = new ArrayList<>();
     private boolean loaded;
     private boolean loading;
     private boolean refreshing;
@@ -202,6 +204,58 @@ public final class LauncherAppDataProvider {
         letterBuckets.clear();
         cachedLastUpdateByPackage.clear();
         pendingRefreshCallbacks.clear();
+    }
+
+    /**
+     * Everything an icon-pack change makes stale, in one call: the catalogue, the raw artwork
+     * store, the parsed pack resources, and — through {@link IconArtworkListener} — the
+     * rendered-icon caches that live with the surfaces drawing them.
+     *
+     * <p>This exists because {@link #invalidate()} alone resets catalogue state and nothing else,
+     * while the settings screen that changes the pack has only the provider to talk to. The dock
+     * therefore kept drawing the previous pack until some unrelated gesture rebound its rows.
+     */
+    public void invalidateIconArtwork() {
+        iconStore.invalidateAll();
+        iconResolver.clearCache();
+        iconPackRepository.clearCache();
+        invalidate();
+        mainHandler.post(this::notifyIconArtworkInvalidated);
+    }
+
+    /**
+     * Something holding renders made from this provider's artwork — a dock row, a drawer — that
+     * has to be told when the artwork behind them changed. Registered weakly: a surface that has
+     * gone away is not a reason to keep it alive, and the provider outlives every view.
+     */
+    public interface IconArtworkListener {
+        void onIconArtworkInvalidated();
+    }
+
+    public synchronized void addIconArtworkListener(@NonNull IconArtworkListener listener) {
+        for (WeakReference<IconArtworkListener> held : artworkListeners) {
+            if (held.get() == listener) return;
+        }
+        artworkListeners.add(new WeakReference<>(listener));
+    }
+
+    public synchronized void removeIconArtworkListener(@NonNull IconArtworkListener listener) {
+        for (int i = artworkListeners.size() - 1; i >= 0; i--) {
+            IconArtworkListener held = artworkListeners.get(i).get();
+            if (held == null || held == listener) artworkListeners.remove(i);
+        }
+    }
+
+    private void notifyIconArtworkInvalidated() {
+        List<IconArtworkListener> live = new ArrayList<>();
+        synchronized (this) {
+            for (int i = artworkListeners.size() - 1; i >= 0; i--) {
+                IconArtworkListener held = artworkListeners.get(i).get();
+                if (held == null) artworkListeners.remove(i);
+                else live.add(held);
+            }
+        }
+        for (IconArtworkListener listener : live) listener.onIconArtworkInvalidated();
     }
 
     public synchronized boolean hasLoadedApps() {
