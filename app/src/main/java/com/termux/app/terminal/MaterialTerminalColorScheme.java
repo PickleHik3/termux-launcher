@@ -29,6 +29,26 @@ public final class MaterialTerminalColorScheme {
     private static final String MATERIAL_COLORS_PROPERTIES_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors.properties";
     private static final String MATERIAL_COLORS_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors.sh";
 
+    /**
+     * Canonical ANSI hues for slots 1–6 — red, green, yellow, blue, magenta, cyan — before
+     * harmonization. These are what makes a green read as green; the theme supplies everything else.
+     */
+    private static final double[] ANSI_HUE_ANCHORS = {25d, 145d, 85d, 255d, 330d, 195d};
+
+    /**
+     * How far the palette's chroma may travel. The floor keeps a near-grey wallpaper from producing
+     * six indistinguishable slots; the ceiling keeps a vivid one from producing the 2014-accent neon
+     * this replaced. Between them the slots are exactly as saturated as the theme is.
+     */
+    private static final double ANSI_CHROMA_MIN = 28d;
+    private static final double ANSI_CHROMA_MAX = 52d;
+
+    /** Neutral slots come off the neutral palette, so they carry the surface hue and almost no chroma. */
+    private static final double NEUTRAL_CHROMA_MAX = 6d;
+
+    /** Material's {@code Blend.harmonize} ceiling: never rotate a hue more than this far. */
+    private static final double HARMONIZE_MAX_ROTATION = 15d;
+
     private MaterialTerminalColorScheme() {}
 
     /**
@@ -45,27 +65,24 @@ public final class MaterialTerminalColorScheme {
     public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level) {
         Properties props = new Properties();
 
-        int background = materialColor(context, com.google.android.material.R.attr.colorSurface,
+        int surface = materialColor(context, com.google.android.material.R.attr.colorSurface,
             R.color.termux_surface_base);
         int foreground = materialColor(context, com.google.android.material.R.attr.colorOnSurface,
             R.color.termux_on_surface);
         int primary = materialColor(context, com.google.android.material.R.attr.colorPrimary,
             R.color.termux_primary);
-        int secondary = materialColor(context, com.google.android.material.R.attr.colorSecondary,
-            R.color.termux_secondary);
-        int tertiary = materialColor(context, com.google.android.material.R.attr.colorTertiary,
-            R.color.termux_primary);
-        int error = materialColor(context, com.google.android.material.R.attr.colorError,
-            R.color.termux_error);
-        int errorContainer = materialColor(context, com.google.android.material.R.attr.colorErrorContainer,
-            R.color.termux_error_container);
-        int neutral = materialColor(context, com.google.android.material.R.attr.colorSurfaceVariant,
-            R.color.termux_surface_panel);
-        int subtleText = materialColor(context, com.google.android.material.R.attr.colorOnSurfaceVariant,
-            R.color.termux_on_surface_variant);
+        // Raw, not materialColor: the anchor is only replaced when the theme really carries an error
+        // role. An app-resource fallback would be a colour of ours, not one of the theme's, and the
+        // whole point of the substitution is to keep red inside the theme's own tonal system.
+        int themeError = MaterialColors.getColor(context, com.google.android.material.R.attr.colorError, 0);
 
-        boolean dark = perceivedBrightness(background) < 128;
-        background = surfaceTone(background, level);
+        boolean dark = perceivedBrightness(surface) < 128;
+        // Read before the tone move so a surface pushed to tone 4 or 99 — where HCT cannot hold much
+        // chroma — still reports the neutral hue the rest of the theme was built from.
+        Hct surfaceHct = Hct.fromInt(surface);
+        Hct primaryHct = Hct.fromInt(primary);
+
+        int background = surfaceTone(surface, level);
 
         foreground = contrastTone(foreground, background, level.foregroundRatio);
         primary = contrastTone(primary, background, level.cursorRatio);
@@ -74,23 +91,9 @@ public final class MaterialTerminalColorScheme {
         props.setProperty("foreground", hex(foreground));
         props.setProperty("cursor", hex(primary));
 
-        props.setProperty("color0", hex(dark ? darken(neutral, 0.72f) : darken(subtleText, 0.38f)));
-        props.setProperty("color1", hex(tintToward(error, errorContainer, dark ? 0.12f : 0.18f)));
-        props.setProperty("color2", hex(materialAnsi("#5CF19E", "#00753B", secondary, dark)));
-        props.setProperty("color3", hex(materialAnsi("#FFD740", "#855000", tertiary, dark)));
-        props.setProperty("color4", hex(materialAnsi("#40C4FF", "#005FA8", primary, dark)));
-        props.setProperty("color5", hex(materialAnsi("#FF4081", "#9C2764", primary, dark)));
-        props.setProperty("color6", hex(materialAnsi("#64FCDA", "#00746C", secondary, dark)));
-        props.setProperty("color7", hex(dark ? lighten(neutral, 0.72f) : darken(neutral, 0.54f)));
-
-        props.setProperty("color8", hex(dark ? lighten(neutral, 0.34f) : darken(subtleText, 0.18f)));
-        props.setProperty("color9", hex(dark ? lighten(error, 0.22f) : lighten(error, 0.16f)));
-        props.setProperty("color10", hex(materialAnsi("#B9F6CA", "#00844A", secondary, dark)));
-        props.setProperty("color11", hex(materialAnsi("#FFE57F", "#956000", tertiary, dark)));
-        props.setProperty("color12", hex(materialAnsi("#80D8FF", "#006DAF", primary, dark)));
-        props.setProperty("color13", hex(materialAnsi("#FF80AB", "#AD3774", primary, dark)));
-        props.setProperty("color14", hex(materialAnsi("#A7FDEB", "#008078", secondary, dark)));
-        props.setProperty("color15", hex(foreground));
+        props.putAll(ansiSlots(primaryHct.getHue(), primaryHct.getChroma(),
+            themeError != 0 ? Hct.fromInt(themeError).getHue() : ANSI_HUE_ANCHORS[0],
+            surfaceHct.getHue(), surfaceHct.getChroma(), dark));
 
         for (int i = 0; i < 16; i++) {
             String key = "color" + i;
@@ -99,6 +102,70 @@ public final class MaterialTerminalColorScheme {
         }
 
         return props;
+    }
+
+    /**
+     * The sixteen ANSI slots as one Material 3 tonal system, with no {@code Context} in sight.
+     *
+     * <p>Every accent slot is the same colour three ways: the theme's own chroma, a tone band chosen
+     * by the background, and a hue that is the canonical ANSI anchor pulled toward the theme. That is
+     * what makes the set read as one palette rather than six borrowed accents — the older derivation
+     * blended fixed 2014 Material anchors toward the roles, which ignored the wallpaper's chroma
+     * entirely and left every terminal with the same neon green.
+     *
+     * <p>{@code redHue} is passed in rather than taken from {@link #ANSI_HUE_ANCHORS} so a theme that
+     * carries an error role can spend it here: red is the one ANSI slot Material already has an
+     * opinion about.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Properties ansiSlots(double sourceHue, double sourceChroma, double redHue,
+                                double neutralHue, double neutralChroma, boolean dark) {
+        Properties slots = new Properties();
+        double chroma = Math.max(ANSI_CHROMA_MIN, Math.min(ANSI_CHROMA_MAX, sourceChroma));
+        double normalTone = dark ? 80d : 40d;
+        double brightTone = dark ? 90d : 30d;
+        for (int slot = 1; slot <= 6; slot++) {
+            double hue = harmonizeHue(slot == 1 ? redHue : ANSI_HUE_ANCHORS[slot - 1], sourceHue);
+            slots.setProperty("color" + slot, hex(Hct.from(hue, chroma, normalTone).toInt()));
+            slots.setProperty("color" + (slot + 8), hex(Hct.from(hue, chroma, brightTone).toInt()));
+        }
+        double neutral = Math.min(neutralChroma, NEUTRAL_CHROMA_MAX);
+        slots.setProperty("color0", hex(Hct.from(neutralHue, neutral, 25d).toInt()));
+        slots.setProperty("color8", hex(Hct.from(neutralHue, neutral, dark ? 45d : 50d).toInt()));
+        slots.setProperty("color7", hex(Hct.from(neutralHue, neutral, dark ? 80d : 65d).toInt()));
+        slots.setProperty("color15", hex(Hct.from(neutralHue, neutral, dark ? 96d : 10d).toInt()));
+        return slots;
+    }
+
+    /**
+     * {@code anchor} rotated toward {@code source} by half the angle between them, at most 15°.
+     *
+     * <p>The rule and both numbers are Material's {@code Blend.harmonize}, applied to the hue alone:
+     * the slot keeps the chroma and tone this palette assigns it, and only its hue is pulled into the
+     * theme. Halving the distance is what makes the pull proportional — a hue already near the
+     * theme's barely moves, a hue on the far side moves the full 15° and no further, so a green stays
+     * a green.
+     */
+    @VisibleForTesting
+    static double harmonizeHue(double anchor, double source) {
+        double rotation = Math.min(differenceDegrees(anchor, source) * 0.5d, HARMONIZE_MAX_ROTATION);
+        return sanitizeDegrees(anchor + rotation * rotationDirection(anchor, source));
+    }
+
+    /** Shortest angle between two hues, 0–180. */
+    private static double differenceDegrees(double first, double second) {
+        return 180d - Math.abs(Math.abs(first - second) - 180d);
+    }
+
+    /** {@code +1} to reach {@code to} by increasing {@code from}, {@code -1} by decreasing it. */
+    private static double rotationDirection(double from, double to) {
+        return sanitizeDegrees(to - from) <= 180d ? 1d : -1d;
+    }
+
+    private static double sanitizeDegrees(double degrees) {
+        double wrapped = degrees % 360d;
+        return wrapped < 0d ? wrapped + 360d : wrapped;
     }
 
     /**
@@ -466,44 +533,6 @@ public final class MaterialTerminalColorScheme {
 
     private static String hex(@ColorInt int color) {
         return String.format("#%06X", color & 0x00FFFFFF);
-    }
-
-    @ColorInt
-    private static int materialAnsi(String darkBaseHex, String lightBaseHex, @ColorInt int materialColor, boolean dark) {
-        int semanticBase = Color.parseColor(dark ? darkBaseHex : lightBaseHex);
-        // Light palettes need the ANSI hue to remain distinct. A stronger
-        // Material blend makes greens, blues and cyans converge into gray.
-        return tintToward(semanticBase, materialColor, dark ? 0.42f : 0.18f);
-    }
-
-    @ColorInt
-    private static int tintToward(@ColorInt int base, @ColorInt int target, float amount) {
-        float[] baseHsv = new float[3];
-        float[] targetHsv = new float[3];
-        Color.colorToHSV(base, baseHsv);
-        Color.colorToHSV(target, targetHsv);
-        baseHsv[1] = Math.max(0f, Math.min(1f, baseHsv[1] * (1f - amount) + targetHsv[1] * amount));
-        baseHsv[2] = Math.max(0f, Math.min(1f, baseHsv[2] * (1f - amount) + targetHsv[2] * amount));
-        return blend(Color.HSVToColor(baseHsv), target, amount * 0.45f);
-    }
-
-    @ColorInt
-    private static int lighten(@ColorInt int color, float amount) {
-        return blend(color, Color.WHITE, amount);
-    }
-
-    @ColorInt
-    private static int darken(@ColorInt int color, float amount) {
-        return blend(color, Color.BLACK, amount);
-    }
-
-    @ColorInt
-    private static int blend(@ColorInt int from, @ColorInt int to, float amount) {
-        float clamped = Math.max(0f, Math.min(1f, amount));
-        int red = Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * clamped);
-        int green = Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * clamped);
-        int blue = Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * clamped);
-        return Color.rgb(red, green, blue);
     }
 
     private static int perceivedBrightness(@ColorInt int color) {

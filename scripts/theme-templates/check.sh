@@ -41,6 +41,14 @@ render_template() {
     "$PY" "$RENDER" "$FIXTURE" "$dir/$input"
 }
 
+# assert_no_colour_tokens <rendered-file>: fails if any `{{ colors.` survived. Weaker than
+# assert_no_stray_braces, and the only one a template may use when its own syntax is `{{ }}`
+# too - a malformed placeholder such as `{{colors.primary.hex}}` misses render.py's grammar
+# and would otherwise be copied through verbatim into a shipped prompt.
+assert_no_colour_tokens() {
+    ! grep -qE '\{\{[[:space:]]*colors\.' "$1"
+}
+
 # assert_no_stray_braces <rendered-file>: fails if `{{` remains anywhere.
 assert_no_stray_braces() {
     ! grep -q '{{' "$1"
@@ -94,6 +102,7 @@ test_starship() {
     local rendered="$WORK/starship.rendered"
     render_template "$dir" "starship.toml" >"$rendered" 2>"$WORK/starship.err" || { fail "render error: $(cat "$WORK/starship.err")"; return; }
     assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    assert_no_colour_tokens "$rendered" || { fail "unresolved {{ colors. token in rendered output"; return; }
     "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$rendered" 2>"$WORK/starship.tomlerr" || { fail "invalid TOML: $(cat "$WORK/starship.tomlerr")"; return; }
     note "starship: not installed on this machine - syntax validation only (TOML parse)"
 
@@ -452,6 +461,7 @@ test_ohmyposh() {
     local rendered="$WORK/ohmyposh.rendered"
     render_template "$dir" "launcher-material.omp.json" >"$rendered" 2>"$WORK/ohmyposh.err" || { fail "render error: $(cat "$WORK/ohmyposh.err")"; return; }
     "$PY" -c "import json,sys; json.load(open(sys.argv[1]))" "$rendered" 2>"$WORK/ohmyposh.jsonerr" || { fail "invalid JSON: $(cat "$WORK/ohmyposh.jsonerr")"; return; }
+    assert_no_colour_tokens "$rendered" || { fail "unresolved {{ colors. token in rendered output"; return; }
     if grep -q 'TERMUX_MATERIAL' "$rendered"; then
         fail "TERMUX_MATERIAL still present in rendered output"; return
     fi
@@ -459,7 +469,7 @@ test_ohmyposh() {
     input_count="$(grep -o '{{ \.' "$dir/launcher-material.omp.json" | wc -l)"
     rendered_count="$(grep -o '{{ \.' "$rendered" | wc -l)"
     [ "$input_count" = "$rendered_count" ] || { fail "Go-template {{ . count changed: input=$input_count rendered=$rendered_count"; return; }
-    note "ohmyposh: not installed - JSON parse, no TERMUX_MATERIAL left, {{ . (Go template) count preserved ($input_count occurrences)"
+    note "ohmyposh: not installed - JSON parse, no {{ colors. or TERMUX_MATERIAL left, {{ . (Go template) count preserved ($input_count occurrences)"
 
     local case
     for case in absent pre; do
