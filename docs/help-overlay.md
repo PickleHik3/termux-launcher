@@ -164,6 +164,11 @@ fourth pass's default-mode lines and every paging line above.
   `help_close`. Added: `help_close_glyph`, `help_close_action`, `help_topics_action`.
 - The tour is untouched: lesson 1 ("Close help to continue") is satisfied by the × or an outside
   tap, and `TourViewTargets` HELP_BUTTON still measures the corner tab's ?.
+- **Leaders never overlap or touch.** `HelpLeaderRouter.arrange` now picks the card position and
+  its leader together: every segment must clear every other leader on the page by the gap (12 dp),
+  parallel runs allowed, lanes stepped sideways across the card's and the box's own width, one
+  elbow when they differ. A control boxed in on every side keeps its card where the eye looks and
+  draws no line, the colour pairing carrying the link, rather than spilling a page.
 
 ## Per place: boxes and copy
 
