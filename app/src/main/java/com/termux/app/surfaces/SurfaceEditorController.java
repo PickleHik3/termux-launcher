@@ -304,17 +304,6 @@ public final class SurfaceEditorController {
     /** True while a toggle group is being restated in code, so a restate is not read as a pick. */
     private boolean mRestatingToggles;
 
-    // The editor's own keyboard-height drag state; adjust mode keeps a separate copy in the
-    // activity, and the two gestures can never run at once.
-    private float mInAppKeyboardHeightDragStartY;
-    private float mInAppKeyboardHeightDragStartScale;
-    private float mInAppKeyboardUnscaledDragHeight;
-    // The chin drag: where the finger went down, and the allowance it started from.
-    private float mInAppKeyboardChinDragStartY;
-    private int mInAppKeyboardChinDragStartDp;
-    // The dock's size drag, off its top-border pill.
-    private float mSurfaceTuningDockHeightDragStartY;
-    private float mSurfaceTuningDockHeightDragStartScale;
     private float mSurfaceTuningInsetDragStartX;
     private float mSurfaceTuningInsetDragStartY;
     private int mSurfaceTuningInsetDragStartDp;
@@ -340,14 +329,9 @@ public final class SurfaceEditorController {
      */
     private static final float SURFACE_EDITOR_MIN_BAND_DP = 120f;
     private static final float SURFACE_TUNING_INSET_DRAG_GAIN = 0.5f;
-    /** How far the capture groups reach above their surface so the border handle is inside. */
+    /** How far the capture groups reach above their surface, so its top edge is easy to grab. */
     private static final int SURFACE_TUNING_HANDLE_OVERHANG_DP = 14;
 
-    /** How far below the last key row the chin pill sits, where the glass under them allows it. */
-    private static final int KEYBOARD_CHIN_GRIP_DROP_DP = 10;
-
-    /** Finger travel that walks the dock's size across its whole range, smallest to largest. */
-    private static final float SURFACE_TUNING_DOCK_HEIGHT_DRAG_SPAN_DP = 40f;
     /**
      * The ring's stroke widths, and how far outside its surface the ring view reaches so the
      * strokes can be centred on the surface's own edge rather than pushed inside it.
@@ -1807,14 +1791,6 @@ public final class SurfaceEditorController {
         R.id.surface_editor_ring_keyboard,
         R.id.surface_editor_ring_canvas};
 
-    /** The keyboard's two edge pills: height on the top border, the chin allowance on the keys'. */
-    private static final int[] KEYBOARD_GRIP_IDS = {
-        R.id.surface_tuning_keyboard_height_grip,
-        R.id.surface_tuning_keyboard_chin_grip};
-
-    /** The dock's one pill: its size, on the top border. */
-    private static final int[] DOCK_GRIP_IDS = {R.id.surface_tuning_dock_height_grip};
-
     private static final SurfaceSlot[] RING_SLOTS = {
         SurfaceSlot.STATUS, SurfaceSlot.DOCK, SurfaceSlot.KEYBOARD, SurfaceSlot.CANVAS};
 
@@ -2029,24 +2005,11 @@ public final class SurfaceEditorController {
     }
 
     private void applyGlow(float phase) {
-        float breath = eased(phase);
-        float ringAlpha = mSelectedSlot == null ? 0.34f + 0.66f * breath : 1f;
+        float ringAlpha = mSelectedSlot == null ? 0.34f + 0.66f * eased(phase) : 1f;
         for (int ringId : RING_IDS) {
             View ring = mHost.findView(ringId);
             if (ring != null && ring.getVisibility() == View.VISIBLE)
                 ring.setAlpha(ringAlpha);
-        }
-        applyGripGlow(KEYBOARD_GRIP_IDS, SurfaceSlot.KEYBOARD, breath);
-        applyGripGlow(DOCK_GRIP_IDS, SurfaceSlot.DOCK, breath);
-    }
-
-    /** A surface's own pills breathe while it is the one being edited, and rest bright otherwise. */
-    private void applyGripGlow(@NonNull int[] gripIds, @NonNull SurfaceSlot slot, float breath) {
-        float alpha = mSelectedSlot == slot ? 0.7f + (0.3f * breath) : 1f;
-        for (int gripId : gripIds) {
-            View grip = mHost.findView(gripId);
-            if (grip != null)
-                grip.setAlpha(alpha);
         }
     }
 
@@ -2171,162 +2134,6 @@ public final class SurfaceEditorController {
         });
     }
 
-    /** Vertical drag on the keyboard's top-border pill, on the same 1:1 mapping as the old handle. */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningKeyboardHeightGesture() {
-        View handle = mHost.findView(R.id.surface_tuning_keyboard_height_handle);
-        if (handle == null)
-            return;
-        handle.setOnTouchListener((view, event) -> {
-            if (!mSurfaceEditorOpen || prefs() == null || keyboard() == null)
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mInAppKeyboardHeightDragStartY = event.getRawY();
-                    mInAppKeyboardHeightDragStartScale = keyboard().getHeightScale();
-                    int renderedHeight = mHost.attachedInAppKeyboardView() == null
-                        ? 0 : mHost.attachedInAppKeyboardView().getMeasuredHeight();
-                    mInAppKeyboardUnscaledDragHeight = Math.max(1f,
-                        renderedHeight / Math.max(0.01f, mInAppKeyboardHeightDragStartScale));
-                    if (mSelectedSlot != SurfaceSlot.KEYBOARD)
-                        selectTarget(SurfaceSlot.KEYBOARD, true);
-                    setPanelPeek(true);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float scale = TermuxInAppKeyboard.calculateHeightScaleForDrag(
-                        mInAppKeyboardHeightDragStartScale,
-                        event.getRawY() - mInAppKeyboardHeightDragStartY,
-                        mInAppKeyboardUnscaledDragHeight);
-                    keyboard().previewSurfaceEditorHeightScale(scale);
-                    setSurfaceTuningPeekReadout(
-                        getString(R.string.termux_surface_tuning_peek_keyboard_height),
-                        getString(R.string.termux_dock_tuning_value_percent,
-                            keyboardEditorProgress(keyboard().getHeightScale(),
-                                TermuxPreferenceConstants.TERMUX_APP
-                                    .MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                                TermuxPreferenceConstants.TERMUX_APP
-                                    .MAX_IN_APP_KEYBOARD_HEIGHT_SCALE)));
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    prefs().setInAppKeyboardHeightScale(keyboard().getHeightScale());
-                    syncDirtyActions();
-                    setPanelPeek(false);
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
-    /**
-     * Vertical drag on the dock's top-border pill: its size, across the same four presets the card's
-     * Size row offers, on the travel span the handle has always used. Up is bigger.
-     */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningDockHeightGesture() {
-        View handle = mHost.findView(R.id.surface_tuning_dock_height_handle);
-        if (handle == null)
-            return;
-        handle.setOnTouchListener((view, event) -> {
-            if (!mSurfaceEditorOpen || prefs() == null)
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mSurfaceTuningDockHeightDragStartY = event.getRawY();
-                    mSurfaceTuningDockHeightDragStartScale =
-                        prefs().getAppLauncherBarHeightScale();
-                    if (mSelectedSlot != SurfaceSlot.DOCK)
-                        selectTarget(SurfaceSlot.DOCK, true);
-                    setPanelPeek(true);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float minScale = DockLayoutPolicy.minSizePreset();
-                    float maxScale = DockLayoutPolicy.maxSizePreset();
-                    float travelDp = pxToDp(mSurfaceTuningDockHeightDragStartY - event.getRawY());
-                    float scale = mSurfaceTuningDockHeightDragStartScale
-                        + ((travelDp / SURFACE_TUNING_DOCK_HEIGHT_DRAG_SPAN_DP)
-                            * (maxScale - minScale));
-                    scale = Math.max(minScale, Math.min(maxScale, scale));
-                    if (Float.compare(scale, prefs().getAppLauncherBarHeightScale()) != 0) {
-                        prefs().setAppLauncherBarHeightScale(scale);
-                        // Preview only while the finger is down; the terminal resize settles once
-                        // on release rather than reflowing the shell on every travelled pixel.
-                        requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_ALL);
-                    }
-                    setSurfaceTuningPeekReadout(
-                        getString(R.string.termux_surface_tuning_peek_dock_size),
-                        dockSizePresetLabel(DockLayoutPolicy.nearestSizePresetIndex(scale)));
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_GEOMETRY_COMMIT);
-                    setPanelPeek(false);
-                    syncPanel();
-                    syncDirtyActions();
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
-    /**
-     * Vertical drag on the pill under the last key row: the space between the keys and the bottom of
-     * the screen, the same allowance the keyboard settings page owns. Up is more room, and the pill
-     * is re-parked on the key row's new bottom edge, so it stays where the finger left it.
-     */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningKeyboardChinGesture() {
-        View handle = mHost.findView(R.id.surface_tuning_keyboard_chin_handle);
-        if (handle == null)
-            return;
-        handle.setOnTouchListener((view, event) -> {
-            if (!mSurfaceEditorOpen || prefs() == null)
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mInAppKeyboardChinDragStartY = event.getRawY();
-                    mInAppKeyboardChinDragStartDp = prefs().getInAppKeyboardBottomPadding();
-                    if (mSelectedSlot != SurfaceSlot.KEYBOARD)
-                        selectTarget(SurfaceSlot.KEYBOARD, true);
-                    setPanelPeek(true);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    int paddingDp = TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(
-                        Math.round(mInAppKeyboardChinDragStartDp
-                            - pxToDp(event.getRawY() - mInAppKeyboardChinDragStartY)));
-                    if (paddingDp != prefs().getInAppKeyboardBottomPadding()) {
-                        prefs().setInAppKeyboardBottomPadding(paddingDp);
-                        // The keyboard surface pass is what places the allowance, and the glass
-                        // preview runs it. The terminal reflow it also implies waits for release.
-                        requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_GLASS);
-                    }
-                    setSurfaceTuningPeekReadout(
-                        getString(R.string.termux_surface_tuning_peek_keyboard_chin),
-                        getString(R.string.termux_dock_tuning_value_dp, paddingDp));
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    applySurfaceEditorStructuralPreview();
-                    syncDirtyActions();
-                    setPanelPeek(false);
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
     /**
      * The clock-face control: the live clock as a tap target, with a ▾ at its trailing edge as the
      * hint that it is one. The status bar's one control that is a look, not a number.
@@ -2344,9 +2151,6 @@ public final class SurfaceEditorController {
         bindSurfaceTouch(R.id.surface_tuning_keyboard_gesture_group, SurfaceSlot.KEYBOARD);
         bindSurfaceTouch(R.id.surface_tuning_status_gesture_group, SurfaceSlot.STATUS);
         bindSurfaceTouch(R.id.surface_tuning_canvas_gesture_group, SurfaceSlot.CANVAS);
-        bindSurfaceTuningDockHeightGesture();
-        bindSurfaceTuningKeyboardHeightGesture();
-        bindSurfaceTuningKeyboardChinGesture();
         bindClockHandle();
     }
 
@@ -2382,20 +2186,12 @@ public final class SurfaceEditorController {
         View statusSurface = mHost.findView(R.id.terminal_window_bar_host);
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_status_gesture_group, overlay,
             statusSurface);
-        SurfaceEditorScene scene = scene();
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_dock_gesture_group, overlay,
             anchorViewFor(SurfaceSlot.DOCK));
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_keyboard_gesture_group, overlay,
             anchorViewFor(SurfaceSlot.KEYBOARD));
         positionCanvasGestureGroup(overlay);
-        // The dock's size grip rides its top border and drags the height of the pinned apps row.
-        // With those apps in a rail there is no such height, so the grip is not offered.
-        setSurfaceTuningHandleVisible(R.id.surface_tuning_dock_height_handle,
-            scene.offersHandle(SurfaceEditorScene.Handle.DOCK_HEIGHT));
-        setSurfaceTuningHandleVisible(R.id.surface_tuning_keyboard_height_handle,
-            scene.offersHandle(SurfaceEditorScene.Handle.KEYBOARD_HEIGHT));
         positionClockHandle(statusSurface);
-        positionKeyboardChinHandle();
         positionSelectionRings(false);
     }
 
@@ -2463,86 +2259,6 @@ public final class SurfaceEditorController {
     /** The tap target never gets shorter than the ▾ glyph's old 28dp box. */
     private static final int CLOCK_HANDLE_MIN_HEIGHT_DP = 28;
 
-    /**
-     * Parks the chin pill on the glass just under the last key row — never on the surface's own
-     * bottom edge, which docked is the screen edge and floating is the capsule's rim. It drops
-     * {@link #KEYBOARD_CHIN_GRIP_DROP_DP} below the keys wherever the glass under them has that
-     * much room, and as far as the room goes where it does not, so the pill always clears the
-     * bottom key row and always lands on material.
-     *
-     * <p>The 28dp touch box stays inside the capture group, which clips its children and can be
-     * shorter than the drop asks for; the pill it draws is placed within that box instead, so the
-     * finger target never shrinks and the mark never lands half-drawn.
-     */
-    private void positionKeyboardChinHandle() {
-        View handle = mHost.findView(R.id.surface_tuning_keyboard_chin_handle);
-        View grip = mHost.findView(R.id.surface_tuning_keyboard_chin_grip);
-        if (handle == null || grip == null)
-            return;
-        View group = mHost.findView(R.id.surface_tuning_keyboard_gesture_group);
-        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
-        View surface = mHost.findView(R.id.inapp_keyboard_view_host);
-        View keys = mHost.attachedInAppKeyboardView();
-        boolean wanted = mSurfaceEditorOpen
-            && scene().offersHandle(SurfaceEditorScene.Handle.KEYBOARD_CHIN)
-            && group != null && group.getVisibility() == View.VISIBLE && overlay != null
-            && surface != null && surface.getHeight() > 0
-            && keys != null && keys.getHeight() > 0;
-        if (!wanted) {
-            if (handle.getVisibility() != View.GONE)
-                handle.setVisibility(View.GONE);
-            return;
-        }
-        int[] overlayLocation = new int[2];
-        int[] surfaceLocation = new int[2];
-        int[] keysLocation = new int[2];
-        overlay.getLocationInWindow(overlayLocation);
-        surface.getLocationInWindow(surfaceLocation);
-        keys.getLocationInWindow(keysLocation);
-        int size = dp(28);
-        int gripHeight = Math.max(1, dp(4));
-        // The group's box is recomputed from the surface, not read off the group: on the pass that
-        // reveals the overlay the group has only just been given its margins, and a pill that
-        // measured it there placed itself out of bounds and hid until the next touch moved
-        // something. The surface and the keys are laid out whenever the keyboard is up.
-        int surfaceTop = surfaceLocation[1] - overlayLocation[1];
-        int groupTop = surfaceGestureGroupTop(surfaceTop);
-        int groupHeight = Math.max(1, (surfaceTop + surface.getHeight()) - groupTop);
-        int keysBottom = ((keysLocation[1] - overlayLocation[1]) + keys.getHeight()) - groupTop;
-        // The glass left under the keys: the allowance, plus the capsule's inner padding floating.
-        int band = Math.max(0, groupHeight - keysBottom);
-        // No glass under the last key row is no chin: the pill would sit on the keys themselves
-        // and drag a number with nowhere to show, so it is not offered at all.
-        if (band < gripHeight) {
-            if (handle.getVisibility() != View.GONE)
-                handle.setVisibility(View.GONE);
-            return;
-        }
-        int drop = clamp(dp(KEYBOARD_CHIN_GRIP_DROP_DP), gripHeight / 2, band - gripHeight / 2);
-        int gripCenter = keysBottom + drop;
-        int top = clamp(gripCenter - size / 2, 0, Math.max(0, groupHeight - size));
-        ViewGroup.LayoutParams params = handle.getLayoutParams();
-        if (params instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
-            if (margins.topMargin != top || margins.height != size) {
-                margins.topMargin = top;
-                margins.height = size;
-                handle.setLayoutParams(margins);
-            }
-        }
-        int gripTop = clamp(gripCenter - gripHeight / 2 - top, 0, Math.max(0, size - gripHeight));
-        ViewGroup.LayoutParams gripParams = grip.getLayoutParams();
-        if (gripParams instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams gripMargins = (ViewGroup.MarginLayoutParams) gripParams;
-            if (gripMargins.topMargin != gripTop) {
-                gripMargins.topMargin = gripTop;
-                grip.setLayoutParams(gripMargins);
-            }
-        }
-        if (handle.getVisibility() != View.VISIBLE)
-            handle.setVisibility(View.VISIBLE);
-    }
-
     /** The canvas takes the whole free region, so a tap on the terminal selects the terminal. */
     private void positionCanvasGestureGroup(@NonNull View overlay) {
         View group = mHost.findView(R.id.surface_tuning_canvas_gesture_group);
@@ -2566,17 +2282,10 @@ public final class SurfaceEditorController {
         group.setVisibility(View.VISIBLE);
     }
 
-    /** A drag handle the arrangement leaves nothing for is taken off the surface, not drawn dead. */
-    private void setSurfaceTuningHandleVisible(int handleId, boolean visible) {
-        View handle = mHost.findView(handleId);
-        if (handle != null && (handle.getVisibility() == View.VISIBLE) != visible)
-            handle.setVisibility(visible ? View.VISIBLE : View.GONE);
-    }
-
     /**
      * Tracks one surface's measured rect with its capture group, reaching
-     * {@link #SURFACE_TUNING_HANDLE_OVERHANG_DP} further up so the pill centred on the top border
-     * still falls inside the group's hit area.
+     * {@link #SURFACE_TUNING_HANDLE_OVERHANG_DP} further up so a finger aimed at the surface's own
+     * top border still lands inside the group's hit area.
      */
     private void positionSurfaceTuningGestureGroup(int groupId, @NonNull View overlay,
                                                    @Nullable View surface) {
@@ -3696,9 +3405,6 @@ public final class SurfaceEditorController {
         View clockHandle = mHost.findView(R.id.surface_tuning_status_clock_handle);
         if (clockHandle != null)
             clockHandle.setVisibility(View.GONE);
-        View chinHandle = mHost.findView(R.id.surface_tuning_keyboard_chin_handle);
-        if (chinHandle != null)
-            chinHandle.setVisibility(View.GONE);
         if (mPanel != null)
             mPanel.host.setVisibility(View.GONE);
         restoreExpandedStatusAfterSurfaceEditor();

@@ -809,28 +809,7 @@
                 android:layout_gravity="top"
                 android:clickable="true"
                 android:focusable="false"
-                android:visibility="gone">
-
-                <!-- The dock's size, on its top border, exactly where the keyboard carries its own
-                     height pill. Clickable in its own right, so it takes the touch before the
-                     group's select-and-drag handler sees it. -->
-                <FrameLayout
-                    android:id="@+id/surface_tuning_dock_height_handle"
-                    android:layout_width="72dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="top|center_horizontal"
-                    android:clickable="true"
-                    android:contentDescription="@string/termux_surface_tuning_dock_height_handle"
-                    android:focusable="true">
-
-                    <View
-                        android:id="@+id/surface_tuning_dock_height_grip"
-                        android:layout_width="32dp"
-                        android:layout_height="4dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/surface_tuning_gesture_pill" />
-                </FrameLayout>
-            </FrameLayout>
+                android:visibility="gone" />
 
             <FrameLayout
                 android:id="@+id/surface_tuning_keyboard_gesture_group"
@@ -839,49 +818,7 @@
                 android:layout_gravity="top"
                 android:clickable="true"
                 android:focusable="false"
-                android:visibility="gone">
-
-                <FrameLayout
-                    android:id="@+id/surface_tuning_keyboard_height_handle"
-                    android:layout_width="72dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="top|center_horizontal"
-                    android:clickable="true"
-                    android:contentDescription="@string/termux_surface_tuning_keyboard_height_handle"
-                    android:focusable="true">
-
-                    <View
-                        android:id="@+id/surface_tuning_keyboard_height_grip"
-                        android:layout_width="32dp"
-                        android:layout_height="4dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/surface_tuning_gesture_pill" />
-                </FrameLayout>
-
-                <!-- The space under the keys, straddling the last key row's own bottom edge —
-                     parked there in code, because that edge is not the surface's: docked, the glass
-                     runs on past it to the screen edge. -->
-                <FrameLayout
-                    android:id="@+id/surface_tuning_keyboard_chin_handle"
-                    android:layout_width="72dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="top|center_horizontal"
-                    android:clickable="true"
-                    android:contentDescription="@string/termux_surface_tuning_keyboard_chin_handle"
-                    android:focusable="true"
-                    android:visibility="gone">
-
-                    <!-- Placed from the top of its box in code, not centred in it: the box is
-                         pinned inside the capture group, and the pill it draws is what has to land
-                         on the glass under the keys. -->
-                    <View
-                        android:id="@+id/surface_tuning_keyboard_chin_grip"
-                        android:layout_width="32dp"
-                        android:layout_height="4dp"
-                        android:layout_gravity="top|center_horizontal"
-                        android:background="@drawable/surface_tuning_gesture_pill" />
-                </FrameLayout>
-            </FrameLayout>
+                android:visibility="gone" />
 
             <!-- One outline per surface the editor can act on, positioned in code to that
                  surface's own rect — not to its capture group, which overhangs it, and a ring drawn

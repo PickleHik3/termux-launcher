@@ -24,23 +24,13 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
  * still a card, one measured to zero is not.
  *
  * <p>And the offer itself has to match the arrangement. A surface that is not on screen has no
- * card, and a handle that describes a shape the surface does not have — a height grip for a bar
- * with no height, pages of apps for a rail that scrolls — is not offered rather than offered dead.
+ * card, and a row that describes a shape the surface does not have — pages of apps for a rail that
+ * scrolls — is not offered rather than offered dead.
  *
  * <p>Pure: an arrangement and a few pixel counts in, booleans and pixel counts out, so every case
  * is testable without a window.
  */
 public final class SurfaceEditorScene {
-
-    /** A drag handle the gesture overlay carries, over and above the surface's own card. */
-    public enum Handle {
-        /** The dock's size, on its top border. */
-        DOCK_HEIGHT,
-        /** The keyboard's height, on its top border. */
-        KEYBOARD_HEIGHT,
-        /** The space under the last key row. */
-        KEYBOARD_CHIN
-    }
 
     @NonNull public final Edge statusBarEdge;
     /** Whether anything at all lands on the dock band, which is what decides it is drawn. */
@@ -128,20 +118,6 @@ public final class SurfaceEditorScene {
             || SurfaceEditorProperties.ID_APPS.equals(rowId))
             return appsRowShown;
         return true;
-    }
-
-    /** Whether the overlay carries one of the surfaces' own drag handles. */
-    public boolean offersHandle(@NonNull Handle handle) {
-        switch (handle) {
-            case DOCK_HEIGHT:
-                // The grip rides the dock's top border and drags the pinned apps row's height —
-                // the same number the card's size row carries. A rail has no such height.
-                return dockRowShown && appsRowShown;
-            case KEYBOARD_HEIGHT:
-            case KEYBOARD_CHIN:
-            default:
-                return keyboardShown;
-        }
     }
 
     /**
