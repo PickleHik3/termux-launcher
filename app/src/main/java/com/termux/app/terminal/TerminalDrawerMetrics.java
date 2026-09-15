@@ -1,5 +1,7 @@
 package com.termux.app.terminal;
 
+import android.graphics.Rect;
+
 import androidx.annotation.NonNull;
 
 /**
@@ -18,10 +20,11 @@ public final class TerminalDrawerMetrics {
      */
     public static final float MAX_WIDTH_DP = 340f;
     /**
-     * And the most of a narrow terminal it may take. The remaining fifth is what says the terminal
-     * is still there behind it — on a phone in portrait the dp cap alone would leave a sliver.
+     * And the most of a narrow terminal it may take: under half, so the terminal it sits over stays
+     * the larger thing on the screen. On a phone in portrait this is the binding limit, not the dp
+     * cap — at the earlier 78% the drawer read as a page that had replaced the terminal.
      */
-    public static final float AREA_WIDTH_SHARE = 0.78f;
+    public static final float AREA_WIDTH_SHARE = 0.45f;
 
     /** The scrim over the rest of the terminal area, as an alpha. */
     public static final int SCRIM_ALPHA = 71;   // 28% of 255
@@ -74,6 +77,28 @@ public final class TerminalDrawerMetrics {
      */
     public static float enterTranslationX(int widthPx, boolean rtl) {
         return rtl ? widthPx : -widthPx;
+    }
+
+    /**
+     * The part of a sliding drawer that is inside the terminal area, in the card's own coordinates.
+     *
+     * <p>A translated card is clipped by its plane, whose edge is the screen's, not the terminal's:
+     * with a side gap set, the drawer would otherwise appear in the gap first and slide the rest
+     * of the way in. Clipping at the resting edge keeps it out of sight until it crosses the
+     * terminal's border. The clip follows the card, so it is recomputed for every translation.
+     *
+     * @return false when nothing needs clipping, i.e. the card is at rest.
+     */
+    public static boolean slideClip(int widthPx, int heightPx, float translationX, boolean rtl,
+                                    @NonNull Rect out) {
+        int hidden = Math.max(0, Math.min(widthPx, Math.round(Math.abs(translationX))));
+        if (hidden == 0) {
+            out.set(0, 0, widthPx, heightPx);
+            return false;
+        }
+        if (rtl) out.set(0, 0, widthPx - hidden, heightPx);
+        else out.set(hidden, 0, widthPx, heightPx);
+        return true;
     }
 
     /**

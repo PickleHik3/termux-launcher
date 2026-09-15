@@ -42,6 +42,37 @@ import java.util.List;
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class SessionsDrawerViewTest {
 
+    /**
+     * The drawer is under half the terminal wide, so on a phone three actions no longer fit across
+     * a row; a strip that clipped its last one would lose Close. It stacks instead, and unstacks
+     * when it is given the room back.
+     */
+    @Test
+    public void anActionStripStacksItsButtonsWhenTheyDoNotFitAcross() {
+        SessionsDrawerView.ActionStrip strip =
+            new SessionsDrawerView.ActionStrip(RuntimeEnvironment.getApplication());
+        for (int i = 0; i < 3; i++) {
+            View button = new View(RuntimeEnvironment.getApplication());
+            button.setMinimumWidth(100);
+            button.setMinimumHeight(36);
+            strip.addView(button, new android.widget.LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        int height = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+
+        strip.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY), height);
+        assertFalse("three 100px buttons fit across 400px", strip.isStacked());
+
+        strip.measure(View.MeasureSpec.makeMeasureSpec(200, View.MeasureSpec.EXACTLY), height);
+        assertTrue("and stack once there is only 200px", strip.isStacked());
+        assertEquals("one under another, each as wide as the strip",
+            ViewGroup.LayoutParams.MATCH_PARENT, strip.getChildAt(1).getLayoutParams().width);
+        assertEquals(3 * 36, strip.getMeasuredHeight());
+
+        strip.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY), height);
+        assertFalse("and lie flat again when the room comes back", strip.isStacked());
+    }
+
     @Test
     public void theLiveHalfListsSessionsAndExpandsOneToItsWindows() {
         SessionsDrawerView drawer = drawer(new RecordingListener());

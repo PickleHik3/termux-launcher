@@ -736,12 +736,67 @@ public final class SessionsDrawerView extends LinearLayout
 
     @NonNull
     private LinearLayout actionStrip() {
-        LinearLayout strip = new LinearLayout(getContext());
-        strip.setOrientation(HORIZONTAL);
-        strip.setGravity(Gravity.END);
+        LinearLayout strip = new ActionStrip(getContext());
         strip.setBackground(rowSurface(false));
         strip.setPaddingRelative(dp(4), dp(2), dp(4), dp(2));
         return strip;
+    }
+
+    /**
+     * Actions side by side while they fit, one under another once they do not.
+     *
+     * <p>The drawer is under half the terminal wide, so on a phone three labels at a large font
+     * scale no longer fit across it; a row that clipped its last action would lose Close, the one
+     * the row was unfolded for. Same shape as AppCompat's button bar: measure flat, stack on
+     * overflow, unstack when there is room again.
+     */
+    static final class ActionStrip extends LinearLayout {
+        private int mLastWidthSize = -1;
+
+        ActionStrip(@NonNull Context context) {
+            super(context);
+            setOrientation(HORIZONTAL);
+            setGravity(Gravity.END);
+        }
+
+        boolean isStacked() {
+            return getOrientation() == VERTICAL;
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int widthSize = MeasureSpec.getSize(widthMeasureSpec);
+            if (isStacked() && widthSize > mLastWidthSize) setStacked(false);
+            mLastWidthSize = widthSize;
+            if (!isStacked() && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED
+                && naturalWidth() > widthSize) {
+                setStacked(true);
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
+
+        /** What the actions would take across, each at its own single-line width. */
+        private int naturalWidth() {
+            int unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+            int width = getPaddingLeft() + getPaddingRight();
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child.getVisibility() == GONE) continue;
+                child.measure(unspecified, unspecified);
+                LayoutParams params = (LayoutParams) child.getLayoutParams();
+                width += child.getMeasuredWidth() + params.leftMargin + params.rightMargin;
+            }
+            return width;
+        }
+
+        private void setStacked(boolean stacked) {
+            setOrientation(stacked ? VERTICAL : HORIZONTAL);
+            for (int i = 0; i < getChildCount(); i++) {
+                LayoutParams params = (LayoutParams) getChildAt(i).getLayoutParams();
+                params.width = stacked ? LayoutParams.MATCH_PARENT : LayoutParams.WRAP_CONTENT;
+                params.topMargin = stacked && i > 0 ? params.leftMargin : 0;
+            }
+        }
     }
 
     private void addAction(@NonNull LinearLayout strip, @NonNull CharSequence text,

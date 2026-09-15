@@ -327,7 +327,7 @@ public class TerminalSheetControllerTest {
         assertEquals(40, card.topMargin);
         assertEquals("every pane of the split, so it is the terminal's panel and not a pane's",
             520, card.height);
-        assertEquals("78% of a 384px area, which bites well before the 340dp cap", 300, card.width);
+        assertEquals("45% of a 384px area, which bites well before the 340dp cap", 173, card.width);
         assertEquals(Gravity.TOP | Gravity.START, card.gravity);
         assertTrue("a drawer travelling its own width has to be cut off by the plane",
             ((ViewGroup) host.findView(R.id.terminal_sheet_stack)).getClipChildren());
@@ -368,8 +368,8 @@ public class TerminalSheetControllerTest {
         FrameLayout.LayoutParams card =
             (FrameLayout.LayoutParams) sheet.topCard().getLayoutParams();
         assertEquals("flush with the area's right edge, which leads in RTL",
-            8 + 384 - 300, card.leftMargin);
-        assertEquals(300, card.width);
+            8 + 384 - 173, card.leftMargin);
+        assertEquals(173, card.width);
     }
 
     /** A drawer is a list first; it must not push the terminal around to open a keyboard. */
