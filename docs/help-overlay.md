@@ -125,7 +125,7 @@ From issue #36 (the revised onboarding review), landed on top of the third pass 
   overview keeps per-key labels on the extra keys row with no box round it, and no corner-tab card
   (the second pass dropped that hint because the reader reached help through that tab).
 - **Hands off to the tour.** The `corners` topic's lesson is `find_help`
-  (`TourRun.LESSON_FIND_HELP` — see `docs/first-boot-tour.md`), so "Try it" there and the tour's
+  (`TourRun.FIND_HELP` — see `docs/first-boot-tour.md`), so "Try it" there and the tour's
   own first lesson are the same three taps.
 
 ## Per place: boxes and copy

@@ -243,10 +243,6 @@ public final class HelpPresentationModel {
         return HelpPalette.boxColor(accent, entry.identityIndex, HelpTopics.sizeFor(entry.place));
     }
 
-    /**
-     * The section label for the page being read: the group of the first entry on it. Pages are
-     * geometric, so the entries are apportioned evenly over the count the renderer reported.
-     */
     /** The entries the overview boxes and cards: {@link #entries()} minus the chooser-only topics. */
     public List<HelpTopics.Entry> overviewEntries() {
         List<HelpTopics.Entry> out = new ArrayList<>();
@@ -256,6 +252,10 @@ public final class HelpPresentationModel {
         return Collections.unmodifiableList(out);
     }
 
+    /**
+     * The section label for the page being read: the group of the first entry on it. Pages are
+     * geometric, so the entries are apportioned evenly over the count the renderer reported.
+     */
     public int sectionLabelRes() {
         if (mode != Mode.OVERVIEW) return 0;
         List<HelpTopics.Entry> entries = overviewEntries();
