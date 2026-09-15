@@ -56,6 +56,12 @@ public final class TerminalFontConfig {
     private static final long MAX_INCLUDE_TOTAL_BYTES = 256 * 1024;
     private static final int MAX_INCLUDE_FILES = 16;
     private static final int MAX_LINES = 512;
+    /**
+     * kitty.conf is a whole terminal's configuration and kitty's own generated sample runs to
+     * thousands of lines, so it is bounded by its byte allowance rather than by the line count a
+     * file of font directives needs.
+     */
+    private static final int MAX_KITTY_LINES = 8192;
     private static final int MAX_LINE_CHARS = 4096;
     private static final int MAX_FAMILY_CHARS = 128;
     private static final int MAX_SYMBOL_MAPS = 256;
@@ -367,7 +373,7 @@ public final class TerminalFontConfig {
         Accumulator accumulator = new Accumulator();
         if (kittyConf != null && kittyConf.exists()) {
             String prefix = KITTY_FILE_NAME + ": ";
-            String kitty = read(kittyConf, prefix, accumulator.errors);
+            String kitty = read(kittyConf, prefix, MAX_KITTY_LINES, accumulator.errors);
             if (kitty != null) {
                 // A kitty.conf alone is an active configuration for the same reason a drop-in is:
                 // the loader still falls back for every face it leaves unset.
@@ -450,9 +456,15 @@ public final class TerminalFontConfig {
         return a.length - b.length;
     }
 
-    /** Reads one bounded config file; null means the file was skipped and errors explains why. */
     @Nullable
     private static String read(@NonNull File file, @NonNull String prefix,
+                               @NonNull List<String> errors) {
+        return read(file, prefix, MAX_LINES, errors);
+    }
+
+    /** Reads one bounded config file; null means the file was skipped and errors explains why. */
+    @Nullable
+    private static String read(@NonNull File file, @NonNull String prefix, int maxLines,
                                @NonNull List<String> errors) {
         if (!file.isFile()) {
             errors.add(prefix + file.getPath() + " is not a regular file");
@@ -468,8 +480,8 @@ public final class TerminalFontConfig {
             String line;
             int count = 0;
             while ((line = reader.readLine()) != null) {
-                if (++count > MAX_LINES) {
-                    errors.add(prefix + "font config exceeds " + MAX_LINES + " lines");
+                if (++count > maxLines) {
+                    errors.add(prefix + "font config exceeds " + maxLines + " lines");
                     return null;
                 }
                 if (line.length() > MAX_LINE_CHARS) {
@@ -880,7 +892,7 @@ public final class TerminalFontConfig {
             return;
         }
         String prefix = source.prefix + words.get(1) + ": ";
-        String content = read(target, prefix, errors);
+        String content = read(target, prefix, MAX_KITTY_LINES, errors);
         if (content == null) return;
         accumulator.includeBudget -= target.length();
         accumulator.includeCount++;
