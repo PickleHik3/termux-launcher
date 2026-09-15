@@ -302,10 +302,17 @@ public final class LayoutEditorController {
 
     /** The phone turned: the miniature goes with it, and so does what the next drop writes. */
     public void onPlaceOrientationChanged() {
-        if (mPlan == null)
+        Card card = mCard;
+        if (mPlan == null || card == null)
             return;
-        mPlan.onDeviceOrientationChanged(mHost.placeOrientation());
-        sync();
+        // A rotation is delivered before the window is re-laid out, so the display metrics the
+        // canvas is sized from are still the old orientation's until the next pass.
+        card.host.post(() -> {
+            if (mPlan == null)
+                return;
+            mPlan.onDeviceOrientationChanged(mHost.placeOrientation());
+            sync();
+        });
     }
 
     @VisibleForTesting

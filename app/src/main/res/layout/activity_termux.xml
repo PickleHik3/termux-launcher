@@ -1002,7 +1002,8 @@
 
         <!-- The Layout editor, the surface editor's sibling: a miniature of the place on screen,
              parked over the live place so the real thing stays visible behind it. The host fills
-             the region and is not clickable itself, so nothing outside the card is swallowed.
+             the region and takes the touches the card does not, so a drag aimed at the miniature
+             that lands beside it cannot reach the terminal underneath.
 
              Populated from layout_editor.xml on the editor's first open. -->
         <FrameLayout
@@ -1011,7 +1012,9 @@
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
             android:layout_alignParentBottom="true"
+            android:clickable="true"
             android:elevation="20dp"
+            android:focusable="true"
             android:visibility="gone" />
 
         <com.termux.app.LauncherAzGestureFxView
