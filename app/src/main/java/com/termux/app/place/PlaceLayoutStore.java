@@ -37,7 +37,7 @@ import java.util.Locale;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the scoped ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 2;
+    @VisibleForTesting static final int MIGRATION_VERSION = 3;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -53,6 +53,10 @@ public final class PlaceLayoutStore {
     private static final String KEY_WIDGET_COLUMNS = "widget_columns";
     private static final String KEY_WIDGET_ROWS = "widget_rows";
 
+    private static final String KEY_DOCK_HEIGHT = "dock_height";
+    private static final String KEY_KEYBOARD_HEIGHT = "keyboard_height";
+    private static final String KEY_KEYBOARD_CHIN = "keyboard_chin";
+
     private static final String KEY_STATUS_COMPACT = "status_compact";
     private static final String KEY_KEYBOARD_ON_ENTER = "keyboard_on_enter";
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
@@ -67,7 +71,8 @@ public final class PlaceLayoutStore {
 
     private static final String[] ARRANGEMENT_KEYS = {
         KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS, KEY_KEYBOARD_MODE,
-        KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS
+        KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS,
+        KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN
     };
 
     @NonNull private final TermuxAppSharedPreferences mPreferences;
@@ -284,6 +289,77 @@ public final class PlaceLayoutStore {
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS));
     }
 
+    // ---------------------------------------------------------------- the three sizes
+
+    /*
+     * How tall the dock, the keyboard and the air under its last key row stand. A size is layout,
+     * not look, so all three are the place's and the orientation's like every bar above — see
+     * docs/adr/0001-sizes-live-in-the-layout-store.md. They are not folded into PlaceLayout: that
+     * value is read on every chrome pass and these three move under a dragging finger, so they are
+     * asked for where they are used instead of retiring the cached arrangement per frame.
+     */
+
+    /** How tall the pinned apps row stands, as a multiple of its unscaled height. */
+    public float dockHeightScale(@NonNull PaneWallPage place,
+                                 @NonNull PlaceOrientation orientation) {
+        String key = arrangementKey(place, orientation, KEY_DOCK_HEIGHT);
+        float value = mStore != null && mStore.contains(key)
+            ? mStore.getFloat(key, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT)
+            : sharedDockHeightScale(place);
+        return TermuxAppSharedPreferences.clampAppLauncherBarHeightScale(value);
+    }
+
+    public void setDockHeightScale(@NonNull PaneWallPage place,
+                                   @NonNull PlaceOrientation orientation, float scale) {
+        writeFloat(arrangementKey(place, orientation, KEY_DOCK_HEIGHT),
+            TermuxAppSharedPreferences.clampAppLauncherBarHeightScale(scale));
+    }
+
+    /** How tall the in-app keyboard stands, as a multiple of its unscaled height. */
+    public float keyboardHeightScale(@NonNull PaneWallPage place,
+                                     @NonNull PlaceOrientation orientation) {
+        String key = arrangementKey(place, orientation, KEY_KEYBOARD_HEIGHT);
+        float value = mStore != null && mStore.contains(key)
+            ? mStore.getFloat(key, mPreferences.getDefaultInAppKeyboardHeightScale())
+            : mPreferences.getSharedInAppKeyboardHeightScale(
+                orientation == PlaceOrientation.LANDSCAPE);
+        return TermuxAppSharedPreferences.clampInAppKeyboardHeightScale(value);
+    }
+
+    public void setKeyboardHeightScale(@NonNull PaneWallPage place,
+                                       @NonNull PlaceOrientation orientation, float scale) {
+        writeFloat(arrangementKey(place, orientation, KEY_KEYBOARD_HEIGHT),
+            TermuxAppSharedPreferences.clampInAppKeyboardHeightScale(scale));
+    }
+
+    /** Extra air in dp under the last key row, inside the keyboard's own surface. */
+    public int keyboardChinDp(@NonNull PaneWallPage place,
+                              @NonNull PlaceOrientation orientation) {
+        String key = arrangementKey(place, orientation, KEY_KEYBOARD_CHIN);
+        int value = mStore != null && mStore.contains(key)
+            ? mStore.getInt(key, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING)
+            : mPreferences.getSharedInAppKeyboardBottomPadding();
+        return TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(value);
+    }
+
+    public void setKeyboardChinDp(@NonNull PaneWallPage place,
+                                  @NonNull PlaceOrientation orientation, int dp) {
+        writeInt(arrangementKey(place, orientation, KEY_KEYBOARD_CHIN),
+            TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(dp));
+    }
+
+    /**
+     * The dock height a place stood at before the size moved here: its own look override where it
+     * had taken one, and the shared value otherwise.
+     */
+    private float sharedDockHeightScale(@NonNull PaneWallPage place) {
+        String override = PlaceLookPreferences.lookKey(place,
+            TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
+        if (mStore != null && mStore.contains(override))
+            return mStore.getFloat(override, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
+        return mPreferences.getSharedAppLauncherBarHeightScale();
+    }
+
     /** Puts one place's orientation back to whatever the shared values and defaults say. */
     public void clear(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
         if (mStore == null) return;
@@ -478,9 +554,63 @@ public final class PlaceLayoutStore {
             }
         }
 
+        if (fromVersion < 3) {
+            // Dock height, keyboard height and the keyboard's chin became layout values. Each
+            // place and orientation is seeded with the number it was already resolving to, so an
+            // upgrade changes nothing on screen: the keyboard's height from the global for that
+            // orientation, the chin from the one global there was, and the dock's height from the
+            // place's own look override where it had taken one. A value nobody ever set is left
+            // unwritten — the read below still answers with the shipped default, and pinning it
+            // would freeze a default that still moves with the dock's style.
+            for (PaneWallPage place : PaneWallPage.values()) {
+                String dockOverride = PlaceLookPreferences.lookKey(place,
+                    TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
+                Float dock = storedFloat(dockOverride);
+                if (dock == null) dock = storedFloat(TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
+                for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                    if (dock != null) {
+                        editor.putFloat(arrangementKey(place, orientation, KEY_DOCK_HEIGHT),
+                            TermuxAppSharedPreferences.clampAppLauncherBarHeightScale(dock));
+                    }
+                    Float keyboard = storedKeyboardHeightScale(orientation);
+                    if (keyboard != null) {
+                        editor.putFloat(arrangementKey(place, orientation, KEY_KEYBOARD_HEIGHT),
+                            TermuxAppSharedPreferences.clampInAppKeyboardHeightScale(keyboard));
+                    }
+                    if (mStore.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING)) {
+                        editor.putInt(arrangementKey(place, orientation, KEY_KEYBOARD_CHIN),
+                            TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(
+                                mStore.getInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
+                                    TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING)));
+                    }
+                }
+                // Dock height has left the scopable look keys, so a place's old override has
+                // nothing left to answer and goes with them.
+                editor.remove(dockOverride);
+            }
+        }
+
         editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
         editor.apply();
         mRevision++;
+    }
+
+    /** The keyboard height stored for one orientation; landscape falls back to portrait's. */
+    @Nullable
+    private Float storedKeyboardHeightScale(@NonNull PlaceOrientation orientation) {
+        if (orientation == PlaceOrientation.LANDSCAPE) {
+            Float landscape = storedFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE);
+            if (landscape != null) return landscape;
+        }
+        return storedFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE);
+    }
+
+    /** A float the file actually holds, or null where it never held one. */
+    @Nullable
+    private Float storedFloat(@NonNull String key) {
+        if (mStore == null || !mStore.contains(key)) return null;
+        float value = mStore.getFloat(key, Float.NaN);
+        return Float.isNaN(value) || Float.isInfinite(value) ? null : value;
     }
 
     // ---------------------------------------------------------------- plumbing
@@ -522,6 +652,12 @@ public final class PlaceLayoutStore {
     private void writeInt(@NonNull String key, int value) {
         if (mStore == null) return;
         mStore.edit().putInt(key, value).apply();
+        mRevision++;
+    }
+
+    private void writeFloat(@NonNull String key, float value) {
+        if (mStore == null) return;
+        mStore.edit().putFloat(key, value).apply();
         mRevision++;
     }
 

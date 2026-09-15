@@ -347,6 +347,10 @@ public final class TermuxPreferenceConstants {
 
         public static final float DEFAULT_APP_LAUNCHER_BAR_HEIGHT = 2.18f;
 
+        public static final float MIN_APP_LAUNCHER_BAR_HEIGHT = 0.4f;
+
+        public static final float MAX_APP_LAUNCHER_BAR_HEIGHT = 3.0f;
+
         /**
          * Defines the visual surface style for the app launcher dock.
          */
