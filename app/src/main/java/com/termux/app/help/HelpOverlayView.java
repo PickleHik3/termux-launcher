@@ -301,8 +301,9 @@ public final class HelpOverlayView extends FrameLayout {
         scroll.setFillViewport(false);
         scroll.addView(list, new ScrollView.LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.WRAP_CONTENT));
+        // Weighted like the topic's text: a long list scrolls, the buttons under it stay whole.
         panel.addView(scroll, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT));
+            LayoutParams.WRAP_CONTENT, 1f));
         LinearLayout row = buttonRow();
         row.addView(button(getContext().getString(R.string.help_show_basics), !model.basicsOnly(),
             () -> command(model.showBasics())), weighted());
