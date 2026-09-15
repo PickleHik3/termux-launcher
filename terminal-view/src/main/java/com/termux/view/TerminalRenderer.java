@@ -2519,19 +2519,35 @@ public final class TerminalRenderer {
     /**
      * The map that draws this code point, or null when the cell belongs to the normal chain.
      *
-     * <p>A mapped range wider than its font's cmap is the common case — the app's own config maps
+     * <p>A mapped range wider than its font's cmap is the common case — the app's own drop-in maps
      * the whole private-use area to one symbols face, and a Nerd Font's coverage of it is full of
-     * holes — so a map that matches but cannot draw hands the cell back instead of stamping a
-     * tofu on it. {@link #fallbackTypefaceFor} then gets its turn, as it would for any other cell.
+     * holes — so the map that owns a range is not always the map that can draw it. The winner is
+     * the latest map whose range covers the code point <em>and</em> whose face has the glyph, so a
+     * narrow map declared under a broad one still draws its own icons. This is what makes
+     * precedence work as written: the broad drop-in outranks an earlier narrow map for every code
+     * point it can actually draw, and hands back the ones it cannot.
+     *
+     * <p>Only when no covering map can draw the code point does the cell go to
+     * {@link #fallbackTypefaceFor} and then to Android's own fallback, as any other cell would.
      */
     @Nullable
     SymbolMap symbolMapWithGlyphFor(int codePoint) {
         final int index = symbolMapIndexFor(codePoint);
         if (index < 0) return null;
-        if (mSymbolGlyphs != null
-            && !mSymbolGlyphs.covers(mSymbolMapFaceIndex[index], codePoint, mSymbolCoverage))
-            return null;
-        return mSymbolMaps[index];
+        if (drawable(index, codePoint)) return mSymbolMaps[index];
+        // Only reached for a code point the owning map has no glyph for, which used to be a tofu,
+        // so the scan back costs nothing that was previously being spent well.
+        for (int i = index - 1; i >= 0; i--) {
+            SymbolMap map = mSymbolMaps[i];
+            if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint
+                && drawable(i, codePoint)) return map;
+        }
+        return null;
+    }
+
+    private boolean drawable(int index, int codePoint) {
+        return mSymbolGlyphs == null
+            || mSymbolGlyphs.covers(mSymbolMapFaceIndex[index], codePoint, mSymbolCoverage);
     }
 
     private int symbolMapIndexFor(int codePoint) {

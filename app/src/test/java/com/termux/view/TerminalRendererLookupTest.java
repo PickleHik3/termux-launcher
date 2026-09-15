@@ -158,4 +158,36 @@ public class TerminalRendererLookupTest {
         // cannot draw, so those cells fall through.
         assertNull(renderer.symbolMapWithGlyphFor(0xE200));
     }
+
+    /**
+     * The phone's real stack: a kitty.conf icon map read first, then the app's own drop-in mapping
+     * the whole private-use area to the bundled symbols face. The drop-in wins the range and has
+     * no glyph in it, so the earlier map has to get the cell rather than the generic fallback.
+     */
+    @Test
+    @Config(shadows = ShadowFaceWithAHole.class)
+    public void anEarlierMapDrawsWhatTheLaterOneThatOutranksItCannot() {
+        TerminalRenderer.SymbolMap icons = map(0xE1A0, 0xE1B6, Typeface.MONOSPACE);
+        TerminalRenderer.SymbolMap managed = map(0xE000, 0xF8FF, Typeface.SERIF);
+        TerminalRenderer renderer = renderer(icons, managed);
+
+        // The later map still owns the range — that is the precedence the user configured.
+        assertSame(managed, renderer.symbolMapFor(0xE1A0));
+        assertSame(icons, renderer.symbolMapWithGlyphFor(0xE1A0));
+        assertSame(icons, renderer.symbolMapWithGlyphFor(0xE1B6));
+        // Outside the earlier map nothing can draw, so the cell goes to the generic fallback.
+        assertNull(renderer.symbolMapWithGlyphFor(0xE19F));
+        assertNull(renderer.symbolMapWithGlyphFor(0xF8FF));
+    }
+
+    @Test
+    @Config(shadows = ShadowFaceWithAHole.class)
+    public void theLaterMapStillWinsEveryCodePointItCanActuallyDraw() {
+        TerminalRenderer.SymbolMap icons = map(0xE1A0, 0xE1B6, Typeface.SANS_SERIF);
+        TerminalRenderer.SymbolMap managed = map(0xE000, 0xF8FF, Typeface.MONOSPACE);
+        TerminalRenderer renderer = renderer(icons, managed);
+
+        assertSame(managed, renderer.symbolMapWithGlyphFor(0xE1A0));
+        assertSame(managed, renderer.symbolMapWithGlyphFor(0xE500));
+    }
 }
