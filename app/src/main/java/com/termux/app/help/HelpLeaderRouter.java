@@ -39,12 +39,24 @@ public final class HelpLeaderRouter {
         Segment(float x1, float y1, float x2, float y2) {
             this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2;
         }
-        /** Boundary contact counts for lines, so collinear lanes cannot be shared. */
-        public boolean intersects(Segment s) {
-            return Math.max(Math.min(x1, x2), Math.min(s.x1, s.x2))
-                    <= Math.min(Math.max(x1, x2), Math.max(s.x1, s.x2))
-                && Math.max(Math.min(y1, y2), Math.min(s.y1, s.y2))
-                    <= Math.min(Math.max(y1, y2), Math.max(s.y1, s.y2));
+        /**
+         * Boundary contact counts for lines, so collinear lanes cannot be shared: a crossing, a
+         * shared endpoint and an overlapping run along one line are all the same conflict.
+         */
+        public boolean intersects(Segment s) { return separation(s) <= 0; }
+        /** Two lines in one lane must clear each other, not merely miss: parallel runs need room. */
+        public boolean tooClose(Segment s, float clearance) { return separation(s) < clearance; }
+        /**
+         * The distance between the two lines. Leaders are axis-aligned, so each segment is its
+         * own bounding box and the gap between those boxes is the exact distance; zero means they
+         * cross, touch or share a stretch of one line.
+         */
+        public float separation(Segment s) {
+            float dx = Math.max(0, Math.max(Math.min(x1, x2) - Math.max(s.x1, s.x2),
+                Math.min(s.x1, s.x2) - Math.max(x1, x2)));
+            float dy = Math.max(0, Math.max(Math.min(y1, y2) - Math.max(s.y1, s.y2),
+                Math.min(s.y1, s.y2) - Math.max(y1, y2)));
+            return dx == 0 ? dy : dy == 0 ? dx : (float) Math.hypot(dx, dy);
         }
         /** Endpoints may touch their own box/card boundary, never enter its interior. */
         public boolean enters(Box b) {
@@ -135,8 +147,13 @@ public final class HelpLeaderRouter {
      * another card or an obstacle slides away from its control until it is clear, then tries the
      * far side of the band; {@code hard} obstacles (key labels, the footer) always count,
      * {@code soft} ones — the boxes of controls inside the band — yield when nothing fits
-     * otherwise, because a card over a dimmed pane beats a second page. A new page starts only
-     * when a card fits nowhere on the current one.
+     * otherwise, because a card over a dimmed pane beats a second page.
+     * <p>No two leaders may touch: they cross nothing, share no lane, and keep {@code gap}
+     * between parallel runs, so a line always reads as belonging to one card. Where two straight
+     * leaders would coincide the later one takes another lane across its own card and box — one
+     * elbow is allowed — and only when no lane is left does the card itself move. A card whose
+     * leader cannot be kept off the other cards and boxes settles for a leader that only has to
+     * clear the other leaders. A new page starts only when a card fits nowhere on the current one.
      */
     public static Result arrange(Box band, float gutter, float gap, List<Target> input,
                                  List<Box> hard, List<Box> soft) {
@@ -149,19 +166,30 @@ public final class HelpLeaderRouter {
         List<Target> unplaced = new ArrayList<>();
         int page = 0, pages = 0;
         for (Target t : targets) {
-            Placement found = arrangeOn(t, page, band, gutter, gap, placed, hard, soft);
+            Placement found = onPage(t, page, band, gutter, gap, placed, hard, soft);
             if (found == null && pageHasCards(placed, page)) {
                 page++;
-                found = arrangeOn(t, page, band, gutter, gap, placed, hard, soft);
+                found = onPage(t, page, band, gutter, gap, placed, hard, soft);
             }
             if (found == null) { unplaced.add(t); continue; }
             placed.add(found);
             pages = Math.max(pages, found.page + 1);
         }
-        List<Placement> out = new ArrayList<>();
-        for (Placement p : placed)
-            out.add(new Placement(p.target, p.card, leader(p.target, p.card), p.page, p.column, p.lane));
-        return new Result(out, unplaced, pages);
+        return new Result(placed, unplaced, pages);
+    }
+
+    /**
+     * Clear of everything first; failing that, clear of the other leaders at least; failing that,
+     * the card goes where it belongs with no line at all, because the colour already pairs it with
+     * its control and a line that runs into another one says less than no line.
+     */
+    private static Placement onPage(Target t, int page, Box band, float gutter, float gap,
+                                    List<Placement> placed, List<Box> hard, List<Box> soft) {
+        for (int mode = 0; mode < 3; mode++) {
+            Placement found = arrangeOn(t, page, band, gutter, gap, placed, hard, soft, mode);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private static boolean pageHasCards(List<Placement> placed, int page) {
@@ -170,7 +198,8 @@ public final class HelpLeaderRouter {
     }
 
     private static Placement arrangeOn(Target t, int page, Box band, float gutter, float gap,
-                                       List<Placement> placed, List<Box> hard, List<Box> soft) {
+                                       List<Placement> placed, List<Box> hard, List<Box> soft,
+                                       int mode) {
         float left = band.left + gutter, right = band.right - gutter;
         float w = t.cardWidth, h = t.cardHeight;
         if (w > right - left + 0.5f || h > band.height() + 0.5f) return null;
@@ -196,6 +225,10 @@ public final class HelpLeaderRouter {
                 y = clamp(t.box.cy() - h / 2, band.top, band.bottom - h); away = 1;
         }
         float farX = x + w / 2 < band.cx() ? right - w : left;
+        List<Box> near = new ArrayList<>();
+        for (Placement p : placed) if (p.page == page) { near.add(p.card); near.add(p.target.box); }
+        // A leader that cannot be routed from here moves the card a little, never a hair.
+        float step = Math.max(Math.max(1, gap), h / 2);
         for (int tier = 0; tier < 2; tier++) {
             List<Box> blocked = new ArrayList<>(hard);
             if (tier == 0) blocked.addAll(soft);
@@ -211,14 +244,110 @@ public final class HelpLeaderRouter {
                             if (hit == null) hit = b;
                             else if (d > 0 ? b.bottom < hit.bottom : b.top > hit.top) hit = b;
                         }
-                        if (hit == null) return new Placement(t, card, Collections.emptyList(), page,
-                            cx + w / 2 < band.cx() ? 0 : 1, -1);
-                        yy = d > 0 ? Math.max(yy + 1, hit.bottom + gap) : Math.min(yy - 1, hit.top - gap - h);
+                        if (hit != null) {
+                            yy = d > 0 ? Math.max(yy + 1, hit.bottom + gap)
+                                       : Math.min(yy - 1, hit.top - gap - h);
+                            continue;
+                        }
+                        int column = cx + w / 2 < band.cx() ? 0 : 1;
+                        if (mode == 2) return new Placement(t, card, Collections.emptyList(),
+                            page, column, -1);
+                        for (List<Segment> path : leaders(t, card, gap, near))
+                            if (clears(t, card, path, placed, page, gap, mode == 0))
+                                return new Placement(t, card, path, page, column, -1);
+                        yy += d > 0 ? step : -step;
                     }
                 }
             }
         }
         return null;
+    }
+
+    /**
+     * Every leader worth trying for one card, the plain one first and then the ones that step
+     * aside: a lane across the card's own width, met by a lane across the box's, joined by one
+     * elbow when the two differ. Lanes that graze a neighbour's edge are offered too, because the
+     * only way past a card is along it.
+     */
+    private static List<List<Segment>> leaders(Target t, Box card, float gap, List<Box> near) {
+        List<List<Segment>> out = new ArrayList<>();
+        List<Segment> plain = leader(t, card);
+        out.add(plain);
+        Box b = t.box;
+        boolean vertical = b.bottom <= card.top || b.top >= card.bottom;
+        boolean beside = b.right <= card.left || b.left >= card.right;
+        if (plain.isEmpty() || !(vertical || beside)) return out;
+        boolean first = vertical ? b.bottom <= card.top : b.right <= card.left;
+        float cardEnd = vertical ? (first ? card.top : card.bottom) : (first ? card.left : card.right);
+        float boxEnd = vertical ? (first ? b.bottom : b.top) : (first ? b.right : b.left);
+        float cardLo = vertical ? card.left : card.top, cardHi = vertical ? card.right : card.bottom;
+        float boxLo = vertical ? b.left : b.top, boxHi = vertical ? b.right : b.bottom;
+        float ideal = vertical ? card.cx() : card.cy();
+        float idealBox = clamp(ideal, boxLo, boxHi);
+        List<Float> cardLanes = lanes(cardLo, cardHi, ideal, gap, near, vertical, 12);
+        List<Float> boxLanes = lanes(boxLo, boxHi, idealBox, gap, Collections.emptyList(), vertical, 6);
+        List<float[]> pairs = new ArrayList<>();
+        for (float u : cardLanes) for (float v : boxLanes)
+            if (u != ideal || v != idealBox) pairs.add(new float[] {u, v});
+        pairs.sort(Comparator
+            .comparingDouble((float[] p) -> Math.abs(p[0] - ideal) + Math.abs(p[1] - idealBox))
+            .thenComparingDouble(p -> p[0]).thenComparingDouble(p -> p[1]));
+        for (float[] p : pairs) out.add(connect(p[0], cardEnd, p[1], boxEnd, vertical));
+        return out;
+    }
+
+    /** From the card's edge to the box's, along one lane each, with an elbow halfway between. */
+    private static List<Segment> connect(float lane, float from, float boxLane, float to,
+                                         boolean vertical) {
+        if (lane == boxLane)
+            return vertical ? path(lane, from, lane, to) : path(from, lane, to, lane);
+        float mid = (from + to) / 2;
+        return vertical ? path(lane, from, lane, mid, boxLane, mid, boxLane, to)
+                        : path(from, lane, mid, lane, mid, boxLane, to, boxLane);
+    }
+
+    /** The lanes one leader may run in, nearest the natural one first. */
+    private static List<Float> lanes(float lo, float hi, float ideal, float gap, List<Box> near,
+                                     boolean vertical, int limit) {
+        List<Float> out = new ArrayList<>();
+        float step = Math.max(1, gap);
+        addLane(out, lo, hi, ideal);
+        for (int k = 1; k <= 3; k++) {
+            addLane(out, lo, hi, ideal + k * step);
+            addLane(out, lo, hi, ideal - k * step);
+        }
+        addLane(out, lo, hi, lo);
+        addLane(out, lo, hi, hi);
+        for (Box n : near) {
+            addLane(out, lo, hi, vertical ? n.left : n.top);
+            addLane(out, lo, hi, vertical ? n.right : n.bottom);
+        }
+        out.sort(Comparator.comparingDouble((Float v) -> Math.abs(v - ideal)));
+        return out.size() > limit ? new ArrayList<>(out.subList(0, limit)) : out;
+    }
+
+    private static void addLane(List<Float> out, float lo, float hi, float v) {
+        if (v >= lo && v <= hi && !out.contains(v)) out.add(v);
+    }
+
+    /**
+     * A leader belongs to one card: it leaves its own card and box at their edges, keeps the
+     * layout's gap from every other leader on the page, and — when it can — stays out of the
+     * other cards and boxes as well.
+     */
+    private static boolean clears(Target t, Box card, List<Segment> path, List<Placement> placed,
+                                  int page, float gap, boolean strict) {
+        for (Segment s : path) if (s.enters(card) || s.enters(t.box)) return false;
+        for (Placement p : placed) {
+            if (p.page != page) continue;
+            for (Segment s : path) {
+                for (Segment o : p.lines) if (s.tooClose(o, gap)) return false;
+                if (strict && (s.enters(p.card) || s.enters(p.target.box))) return false;
+            }
+            if (strict) for (Segment o : p.lines)
+                if (o.enters(card) || o.enters(t.box)) return false;
+        }
+        return true;
     }
 
     private static float clamp(float v, float lo, float hi) {
