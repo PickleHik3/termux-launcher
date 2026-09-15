@@ -304,6 +304,11 @@ public final class SurfaceEditorController {
     // ------------------------------------------------------------------------------ session state
 
     private boolean mSurfaceEditorOpen;
+    /**
+     * How much of the editor this session offers. Set on entry and held for the session, except
+     * that "More…" moves an arrange session on to the full editor without re-entering it.
+     */
+    @NonNull private SurfaceEditorMode mSurfaceEditorMode = SurfaceEditorMode.FULL;
     /** Whether the status pane was collapsed when the editor opened; restored on the way out. */
     private boolean mEntryStatusCollapsed;
     private boolean mHasEntryStatusCollapsed;
@@ -495,12 +500,31 @@ public final class SurfaceEditorController {
     }
 
     /**
+     * Opens the editor on one place with placement alone: the outlines and hold-to-move as ever,
+     * but the card asks only where the place's bars stand, and the shared layer stays behind the
+     * "More…" row until the user asks for it.
+     */
+    public void enterArrange(@Nullable PaneWallPage place) {
+        enter(null, place, SurfaceEditorMode.ARRANGE);
+    }
+
+    /**
      * Opens the editor on one place, or on the shared layer for a null place. On a place, every
      * scopable row reads and writes that place's own look and the wall is held there, so the live
      * preview is what the place will wear; the shared layer's own controls — Base, the material,
      * the presets — stay everyone's either way.
      */
     public void enter(@Nullable String initialSection, @Nullable PaneWallPage place) {
+        enter(initialSection, place, SurfaceEditorMode.FULL);
+    }
+
+    /**
+     * As above, in the mode asked for. A session already open only ever moves up: a full editor
+     * asked for while an arrange session rests opens the rest of it, and never the other way
+     * round, because the user has already been shown more than arrange offers.
+     */
+    public void enter(@Nullable String initialSection, @Nullable PaneWallPage place,
+                      @NonNull SurfaceEditorMode mode) {
         if (prefs() == null)
             return;
         Panel panel = panel();
@@ -517,6 +541,8 @@ public final class SurfaceEditorController {
             mHasEntryStatusCollapsed = true;
         }
         mSurfaceEditorOpen = true;
+        if (freshEditorSession || mode == SurfaceEditorMode.FULL)
+            mSurfaceEditorMode = mode;
         // A second intent can name a different place; the scope follows it, and the snapshot below
         // does not — it already holds every place's look, so it stays the thing Discard returns to.
         boolean scopeMoved = applyEditScope(place, freshEditorSession);
@@ -760,6 +786,7 @@ public final class SurfaceEditorController {
         // and still on screen — so it asks nothing; the unsaved gate belongs to leaving the editor.
         panel.close.setOnClickListener(view -> hideCard(true));
         panel.floatPalette.setOnClickListener(view -> selectTarget(null, true));
+        syncFloatPalette(panel);
 
         panel.shape.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked || mRestatingToggles || prefs() == null)
@@ -894,11 +921,23 @@ public final class SurfaceEditorController {
             .start();
     }
 
+    /**
+     * The palette on the resting pill, which is the only way to the shared layer: an arrange
+     * session keeps it, and everything the shared card holds, out of reach.
+     */
+    private void syncFloatPalette(@NonNull Panel panel) {
+        int wanted = SurfaceEditorCardPlan.paletteShown(mSurfaceEditorMode)
+            ? View.VISIBLE : View.GONE;
+        if (panel.floatPalette.getVisibility() != wanted)
+            panel.floatPalette.setVisibility(wanted);
+    }
+
     /** The floating pill: up while the card is down, and never both at once. */
     private void setFloatShown(boolean shown, boolean animate) {
         Panel panel = mPanel;
         if (panel == null)
             return;
+        syncFloatPalette(panel);
         View pill = panel.floatRoot;
         pill.animate().cancel();
         stopFloatBreath();
@@ -1026,6 +1065,7 @@ public final class SurfaceEditorController {
     /** The editable set behind the body, folded to one number so restates can skip a rebuild. */
     private long rowSignature() {
         long signature = mSelectedSlot == null ? -1 : mSelectedSlot.ordinal();
+        signature = signature * 31 + mSurfaceEditorMode.ordinal();
         for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot))
             signature = signature * 31 + (isAvailable(mSelectedSlot, control) ? 1 : 0);
         // The Place section leads the body, and every part of the question it asks can move under
@@ -1052,10 +1092,14 @@ public final class SurfaceEditorController {
         // Where the place's bars stand comes first: it is what the surface *is*, and the look rows
         // under it are what it is made of.
         addPlaceSection(mHost.context(), rows, syncs);
-        for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot)) {
-            if (isAvailable(mSelectedSlot, control))
-                addControlRow(mHost.context(), rows, control, mSelectedSlot, syncs);
+        if (SurfaceEditorCardPlan.lookRowsShown(mSurfaceEditorMode, mSelectedSlot)) {
+            for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot)) {
+                if (isAvailable(mSelectedSlot, control))
+                    addControlRow(mHost.context(), rows, control, mSelectedSlot, syncs);
+            }
         }
+        if (SurfaceEditorCardPlan.moreRowShown(mSurfaceEditorMode, mSelectedSlot))
+            addMoreRow(mHost.context(), rows);
         if (mRowsScroller != null)
             mRowsScroller.scrollTo(0, 0);
         applyRowsCap();
@@ -1104,6 +1148,41 @@ public final class SurfaceEditorController {
             return;
         mRowsMaxHeightPx = capped;
         mRowsScroller.requestLayout();
+    }
+
+    /**
+     * The row that ends an arrange card: the rest of the editor, one tap away, in the same shape
+     * as every other row that leaves for somewhere else.
+     */
+    private void addMoreRow(@NonNull Context context, @NonNull ViewGroup into) {
+        View action = LayoutInflater.from(context)
+            .inflate(R.layout.surface_editor_action_row, into, false);
+        ((TextView) action.findViewById(R.id.surface_editor_row_label))
+            .setText(R.string.termux_surface_editor_more);
+        action.setOnClickListener(view -> showFullEditor());
+        into.addView(action);
+    }
+
+    /**
+     * "More…": the same session, now the whole editor. Not a re-entry — the snapshot taken when
+     * the editor opened is what Discard still returns to, and re-entering would quietly adopt
+     * whatever has been arranged since as the thing to go back to.
+     */
+    private void showFullEditor() {
+        Panel panel = mPanel;
+        if (panel == null || !mSurfaceEditorOpen
+            || mSurfaceEditorMode == SurfaceEditorMode.FULL)
+            return;
+        mSurfaceEditorMode = SurfaceEditorMode.FULL;
+        syncFloatPalette(panel);
+        rebuildRows();
+        syncPanel();
+        // The card just grew by every look row the surface has: it is re-measured before it is
+        // parked, so it stands off its surface at the height it actually ended up.
+        panel.root.post(() -> {
+            applyRowsCap();
+            parkPanel(true);
+        });
     }
 
     /**
@@ -4371,6 +4450,7 @@ public final class SurfaceEditorController {
         mSelectedSlot = null;
         mCardShown = false;
         mSurfaceEditorOpen = false;
+        mSurfaceEditorMode = SurfaceEditorMode.FULL;
         PaneWallPage editedPlace = mEditPlace;
         mEditPlace = null;
         boolean scopeMoved = false;

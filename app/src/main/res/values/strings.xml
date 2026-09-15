@@ -1254,6 +1254,8 @@
                 <!-- The arrangement of the place the editor is open on: where its bars stand, on
                      the card of the surface each one belongs to. -->
                 <string name="termux_surface_editor_place_section">Place</string>
+                <!-- Opens the rest of the editor from a card that is showing placement only. -->
+                <string name="termux_surface_editor_more">More…</string>
                 <string name="termux_surface_editor_place_keyboard_type">Type</string>
                 <string name="termux_surface_editor_place_keyboard_on_enter">On enter</string>
                 <string name="termux_surface_editor_arrange_tray">Drop here to hide</string>
