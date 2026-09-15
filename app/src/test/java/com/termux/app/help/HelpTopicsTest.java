@@ -75,9 +75,12 @@ public class HelpTopicsTest {
         assertEquals(HelpTopics.LESSON_FIND_ACTION, HelpTopics.entry(PaneWallPage.TERMINAL, "space").lessonId);
         assertEquals(HelpTopics.LESSON_FIND_HELP, HelpTopics.entry(PaneWallPage.TERMINAL, "corners").lessonId);
         assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "keys").lessonId);
-        assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "prefix").lessonId);
         assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "sessions").lessonId);
         assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "divider").lessonId);
+        // The keyboard lesson shows and hides the keyboard; the prefix key and the chords are a
+        // different control, so neither hands practice to it.
+        assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "prefix").lessonId);
+        assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "shortcuts").lessonId);
     }
 
     @Test public void theTerminalKeepsEveryControlItMeasuresToday() {

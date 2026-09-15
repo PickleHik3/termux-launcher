@@ -135,13 +135,13 @@ public final class HelpTopics {
         terminal.add("keys", Group.KEYBOARD, R.string.help_topic_keys_title, R.string.help_topic_keys_purpose,
             R.string.help_topic_keys_action, R.string.help_topic_keys_reveal, LESSON_KEYBOARD, null);
         terminal.add("prefix", Group.KEYBOARD, R.string.help_prefix_title, R.string.help_topic_prefix_purpose,
-            R.string.help_topic_prefix_action, R.string.help_topic_prefix_reveal, LESSON_KEYBOARD, "shortcuts");
+            R.string.help_topic_prefix_action, R.string.help_topic_prefix_reveal, null, "shortcuts");
         terminal.add("space", Group.KEYBOARD, R.string.help_space_title, R.string.help_topic_space_purpose,
             R.string.help_topic_space_action, R.string.help_topic_space_reveal, LESSON_FIND_ACTION, null);
         terminal.add("divider", Group.MULTITASKING, R.string.help_divider_title, R.string.help_topic_divider_purpose,
             R.string.help_topic_divider_action, R.string.help_topic_divider_reveal, null, "shortcuts");
         terminal.add("shortcuts", Group.MULTITASKING, R.string.help_topic_shortcuts_title, R.string.help_topic_shortcuts_purpose,
-            R.string.help_topic_shortcuts_action, R.string.help_topic_shortcuts_reveal, LESSON_KEYBOARD, "prefix");
+            R.string.help_topic_shortcuts_action, R.string.help_topic_shortcuts_reveal, null, "prefix");
         map.put(PaneWallPage.TERMINAL, terminal.done());
 
         Builder display = new Builder(PaneWallPage.DISPLAY);
