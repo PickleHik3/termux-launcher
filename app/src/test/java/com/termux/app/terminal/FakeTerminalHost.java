@@ -824,6 +824,10 @@ class FakeTerminalHost implements TerminalHost {
         record("openSettings");
     }
 
+    @Override public void showHelpOverlay() {
+        record("showHelpOverlay");
+    }
+
     @Override public void openLookAndFeel() {
         record("openLookAndFeel");
     }

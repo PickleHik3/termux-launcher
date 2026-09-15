@@ -460,6 +460,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void openSettings();
 
+    /** Opens help for the place the wall is resting on — the same help the corner tabs open. */
+    void showHelpOverlay();
+
     void openLookAndFeel();
 
     void openAppsBar();

@@ -326,6 +326,13 @@ See the [Settings map](Launcher_Settings.md) for every top-level section and the
 Kitty graphics, and diagnostics. The focused user references are [Terminal fonts](Terminal_Fonts.md)
 and [Kitty protocols and compatibility](Terminal_Kitty_Protocols.md).
 
+## Get help
+
+Press any corner for its controls, then tap **?** to see what they do. The command palette and
+Settings also have a **Help** entry that opens the same thing. On the Terminal place it opens by
+topic — pick what you are stuck on, or tap **Show all** for the full reference. **Try it** on a
+topic closes help and walks you through that one action right away.
+
 ## Let terminal programs detect capabilities
 
 Each shell receives `TERM_PROGRAM=termux-launcher` and `TERM_PROGRAM_VERSION` set to the installed

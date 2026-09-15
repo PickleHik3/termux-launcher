@@ -1,12 +1,10 @@
 package com.termux.app.fragments.settings.termux;
 
-import android.app.role.RoleManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -51,6 +49,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
 
     private static final String KEY_STORAGE = "app_launcher_storage_access";
     private static final String KEY_REPLAY_TOUR = "app_launcher_replay_tour";
+    private static final String KEY_HELP = "app_launcher_help";
     private static final String KEY_NOTIFICATION_ACCESS = "app_launcher_notification_access";
     private static final String KEY_ACCESSIBILITY_LOCK = "app_launcher_accessibility_lock_access";
     private static final String KEY_NOTIFICATION_SETTINGS = "app_launcher_notification_settings";
@@ -67,6 +66,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         SettingsLayoutUtils.applyScreenLayout(this);
         configurePermissionActions(context);
         configureTourReplay(context);
+        configureHelp(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
 
@@ -239,6 +239,18 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         });
     }
 
+    /** Help, for a user who has not found the corner tabs yet: the launcher comes forward on it. */
+    private void configureHelp(@NonNull Context context) {
+        setClickListener(KEY_HELP, preference -> {
+            Intent intent = new Intent(context, TermuxActivity.class)
+                .putExtra(TermuxActivity.EXTRA_SHOW_HELP, true);
+            startActivity(intent);
+            // Settings gets out of the way: help is on the home screen behind it.
+            if (getActivity() != null) getActivity().finish();
+            return true;
+        });
+    }
+
     private void setClickListener(String key, Preference.OnPreferenceClickListener listener) {
         Preference preference = findPreference(key);
         if (preference != null) {
@@ -330,28 +342,9 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             .show();
     }
 
+    /** The same chooser the run's last card offers, so both doors behave the same way. */
     private void openHomeLauncherSettings(Context context) {
-        Intent intent = new Intent(Settings.ACTION_HOME_SETTINGS);
-        if (startSettingsIntent(context, intent)) {
-            return;
-        }
-
-        intent = new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS);
-        if (startSettingsIntent(context, intent)) {
-            return;
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            RoleManager roleManager = context.getSystemService(RoleManager.class);
-            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME) && !roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
-                intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME);
-                if (startSettingsIntent(context, intent)) {
-                    return;
-                }
-            }
-        }
-
-        AppNotice.show(context, R.string.termux_app_launcher_set_home_unavailable, false);
+        com.termux.app.HomeAppChooser.open(context);
     }
 
     private boolean startSettingsIntent(Context context, Intent intent) {

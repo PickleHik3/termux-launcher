@@ -5,6 +5,11 @@ lists where it sits, what gesture it takes, and whether the first-boot tour alre
 it (card numbers are the thirteen-card run in `TourRun.java`). Facts were read from the code on
 this date; file references are in the notes at the end.
 
+**2026-09-15:** `TourRun.java` no longer holds that thirteen-card run — issue #36's fourth/fifth
+passes (`docs/help-overlay.md`, `docs/first-boot-tour.md`) replaced it with four lessons, a
+home-choice card and a closing card. The "Tour" column below still describes the run this
+inventory was built against; read it as history, not as what `TourRun.java` demonstrates today.
+
 ## Screen anatomy, portrait, top → bottom
 
 | # | Band | Height | View | On which places |

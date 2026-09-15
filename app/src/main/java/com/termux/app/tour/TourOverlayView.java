@@ -51,11 +51,10 @@ import java.util.List;
  */
 public final class TourOverlayView extends FrameLayout {
 
-    /** The card's buttons. Every card but the last one carries Skip alone. */
+    /** The card's buttons: whichever ones the controller says this card offers. */
     public interface Callbacks {
-        void onTourSkipTapped();
-
-        void onTourFinishTapped();
+        /** One of the card's buttons was tapped; what it means is the controller's business. */
+        void onTourActionTapped(@NonNull TourAction action);
 
         /**
          * A Copy button on the closing card.
@@ -114,7 +113,10 @@ public final class TourOverlayView extends FrameLayout {
     private final TextView mCopyAll;
     private final TextView mDocsLink;
     private final LinearLayout mButtonRow;
-    private final TextView mButton;
+    /** The card's action buttons, rebuilt whenever the card offers a different set. */
+    private final List<TextView> mActionButtons = new ArrayList<>();
+    /** What the buttons currently on the card stand for, in the order they are read. */
+    private final List<TourAction> mActions = new ArrayList<>();
     /** Every Copy button on the card, so a rebuild takes their "Copied" acknowledgement back. */
     private final List<TextView> mCopyButtons = new ArrayList<>();
 
@@ -234,10 +236,6 @@ public final class TourOverlayView extends FrameLayout {
         mButtonRow.setOrientation(LinearLayout.HORIZONTAL);
         mButtonRow.setGravity(Gravity.END);
 
-        mButton = textButton(context, view -> onButtonTapped());
-        mButtonRow.addView(mButton, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         buttonParams.gravity = Gravity.END;
@@ -284,8 +282,17 @@ public final class TourOverlayView extends FrameLayout {
         invalidate();
     }
 
-    /** Shows a card, and traces its gesture once. */
+    /** Shows a card with the buttons its own kind offers. */
     public void showStep(@NonNull TourStep step, int stage) {
+        showStep(step, stage, step.actions());
+    }
+
+    /**
+     * Shows a card, with the buttons the controller says it offers, and traces its gesture once.
+     * The buttons are not read off the card: the same lesson practised from help offers the two
+     * that leave practice rather than the three that move the run.
+     */
+    public void showStep(@NonNull TourStep step, int stage, @NonNull List<TourAction> actions) {
         boolean sameCard = mStep != null && mStep.id.equals(step.id) && mStage == stage;
         // Only within one card: the position a card whose control is missing falls back to is the
         // one the stage before it stood at, never wherever the card before it happened to be.
@@ -294,8 +301,8 @@ public final class TourOverlayView extends FrameLayout {
         mStage = stage;
         if (!sameCard) mChordGlowIndex = 0;
         applyCopy();
+        applyActions(actions);
         boolean closing = step.isClosingCard();
-        mButton.setText(closing ? R.string.tour_done : R.string.tour_skip);
         if (closing) showClosingSections();
         else {
             mBodyScroll.setVisibility(GONE);
@@ -540,37 +547,9 @@ public final class TourOverlayView extends FrameLayout {
     private void drawFinger(@NonNull Canvas canvas) {
         TourGesture gesture = mStep.gestureAt(mStage);
         if (gesture == TourGesture.NONE || mTraceProgress >= 1f) return;
-        TourFingerTrace.pointAt(gesture, mTargetRect.left, mTargetRect.top, mTargetRect.right,
-            mTargetRect.bottom, mDensity, mTraceProgress, mFingerPoint);
-        float radius = FINGER_RADIUS_DP * mDensity;
-        int opaque = Color.rgb(Color.red(mAccent), Color.green(mAccent), Color.blue(mAccent));
-
-        if (gesture != TourGesture.TAP) {
-            TourFingerTrace.pointAt(gesture, mTargetRect.left, mTargetRect.top, mTargetRect.right,
-                mTargetRect.bottom, mDensity, 0f, mTrailPoint);
-            mFingerPaint.setStyle(Paint.Style.STROKE);
-            mFingerPaint.setStrokeCap(Paint.Cap.ROUND);
-            mFingerPaint.setStrokeWidth(FINGER_TRAIL_WIDTH_DP * mDensity);
-            mFingerPaint.setColor(ColorUtils.setAlphaComponent(opaque, 46));
-            canvas.drawLine(mTrailPoint[0], mTrailPoint[1], mFingerPoint[0], mFingerPoint[1],
-                mFingerPaint);
-        } else {
-            float pulse = TourFingerTrace.tapPulse(mTraceProgress);
-            mFingerPaint.setStyle(Paint.Style.STROKE);
-            mFingerPaint.setStrokeWidth(Math.max(1f, 1.5f * mDensity));
-            mFingerPaint.setColor(ColorUtils.setAlphaComponent(opaque,
-                Math.round(90f * (1f - pulse))));
-            canvas.drawCircle(mFingerPoint[0], mFingerPoint[1], radius + (radius * pulse),
-                mFingerPaint);
-        }
-
-        mFingerPaint.setStyle(Paint.Style.FILL);
-        mFingerPaint.setColor(ColorUtils.setAlphaComponent(opaque, 56));
-        canvas.drawCircle(mFingerPoint[0], mFingerPoint[1], radius, mFingerPaint);
-        mFingerPaint.setStyle(Paint.Style.STROKE);
-        mFingerPaint.setStrokeWidth(Math.max(1f, 1.5f * mDensity));
-        mFingerPaint.setColor(ColorUtils.setAlphaComponent(opaque, 199));
-        canvas.drawCircle(mFingerPoint[0], mFingerPoint[1], radius, mFingerPaint);
+        TourFingerPainter.draw(canvas, mFingerPaint, gesture, mTargetRect.left, mTargetRect.top,
+            mTargetRect.right, mTargetRect.bottom, mDensity, mTraceProgress, mAccent,
+            mFingerPoint, mTrailPoint);
     }
 
     /**
@@ -813,10 +792,31 @@ public final class TourOverlayView extends FrameLayout {
         button.setText(R.string.tour_copied_commands);
     }
 
-    private void onButtonTapped() {
-        if (mCallbacks == null || mStep == null) return;
-        if (mStep.isClosingCard()) mCallbacks.onTourFinishTapped();
-        else mCallbacks.onTourSkipTapped();
+    /** The card's buttons, rebuilt only when the set actually changed. */
+    private void applyActions(@NonNull List<TourAction> actions) {
+        if (!mActions.equals(actions)) {
+            mActions.clear();
+            mActions.addAll(actions);
+            mButtonRow.removeAllViews();
+            mActionButtons.clear();
+            for (TourAction action : mActions) {
+                TextView button = textButton(getContext(), view -> onActionTapped(action));
+                button.setText(action.labelRes);
+                button.setContentDescription(getContext().getString(action.labelRes));
+                button.setMinHeight(dp(48f));
+                button.setMinWidth(dp(48f));
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                params.leftMargin = dp(2f);
+                mButtonRow.addView(button, params);
+                mActionButtons.add(button);
+            }
+        }
+        mButtonRow.setVisibility(mActions.isEmpty() ? GONE : VISIBLE);
+    }
+
+    private void onActionTapped(@NonNull TourAction action) {
+        if (mCallbacks != null) mCallbacks.onTourActionTapped(action);
     }
 
     @NonNull
@@ -848,8 +848,10 @@ public final class TourOverlayView extends FrameLayout {
     /** Kept for the host, which re-resolves the accent when the theme changes under the run. */
     public void refreshAccent() {
         mAccent = FocusOutlineRenderer.resolveAccent(this);
-        mButton.setTextColor(mAccent);
-        mButton.setBackground(buttonBackground());
+        for (TextView button : mActionButtons) {
+            button.setTextColor(mAccent);
+            button.setBackground(buttonBackground());
+        }
         mDocsLink.setTextColor(mAccent);
         mDocsLink.setBackground(buttonBackground());
         mCopyAll.setTextColor(mAccent);

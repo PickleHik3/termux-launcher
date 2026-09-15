@@ -147,6 +147,7 @@ import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.theme.LauncherSchemeTheme;
+import com.termux.app.tour.FirstBootTour;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -244,6 +245,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Forces the first-launch experience for screenshots, product demos, and UI verification. */
     public static final String EXTRA_SHOW_ONBOARDING =
         "com.termux.app.extra.SHOW_ONBOARDING";
+    /** Opens help for the place the wall is on, from Settings. */
+    public static final String EXTRA_SHOW_HELP =
+        "com.termux.app.extra.SHOW_HELP";
 
     /**
      * The connection to the {@link TermuxService}. Requested in {@link #onCreate(Bundle)} with a call to
@@ -293,14 +297,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         return getInAppKeyboardKeyRect(name, out);
                     }
                 }, () -> {
+                    // The one path every dismissal takes, so the run hears about help going away
+                    // however it went: the Close button, a tap outside, Back, or onPause.
+                    if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(false);
                     if (holdDisplayKeyboardFocus()) return;
                     View pane = mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
                     if (pane != null) pane.requestFocus();
                 });
+            // "Try it" closes help first and hands the lesson over: the run's own card comes up
+            // on the control the user was just reading about.
+            mHelpOverlay.setPracticeListener(lessonId -> {
+                FirstBootTour tour = firstBootTour();
+                if (tour != null) tour.startPractice(lessonId);
+            });
             content.addView(mHelpOverlay, new android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
+        // A run that is partway through a lesson has nowhere to put a practice card, so help does
+        // not offer one.
+        mHelpOverlay.setPracticeAvailable(mFirstBootTour == null || mFirstBootTour.canStartPractice());
         mHelpOverlay.show(currentWallPlace());
+        if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(true);
+    }
+
+    /** Settings, and anything else that asks for help by intent rather than by a corner tab. */
+    private void handleShowHelpIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_SHOW_HELP, false)) return;
+        intent.removeExtra(EXTRA_SHOW_HELP);
+        View root = findViewById(android.R.id.content);
+        if (root != null) root.post(this::showHelpOverlay);
+        else showHelpOverlay();
+    }
+
+    /** The phone's home-app setting, from the run's last question. */
+    private void openHomeLauncherChooser() {
+        HomeAppChooser.open(this);
     }
 
     private boolean dismissHelpOverlay() {
@@ -401,7 +432,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Every place's arrangement and memory; built on the preferences the first time it is asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
     /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
-    @Nullable private com.termux.app.tour.FirstBootTour mFirstBootTour;
+    @Nullable private FirstBootTour mFirstBootTour;
 
     /**
      * The look layer sitting under {@link #mPreferences}: every surface value the chrome reads
@@ -1127,6 +1158,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleSurfaceEditorIntent(getIntent());
             handleLayoutEditorIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
+            handleShowHelpIntent(getIntent());
         }
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
         try {
@@ -1160,7 +1192,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // A run a process death interrupted picks back up on its own card, no permission
                 // chain involved — that already ran the first time this run started. Skipped for
                 // a forced replay, which always restarts from card one instead.
-                com.termux.app.tour.FirstBootTour tour = firstBootTour();
+                FirstBootTour tour = firstBootTour();
                 if (!forceOnboarding && tour != null && tour.resumeIfInProgress()) return;
                 // Otherwise this is either the first launch ever or Settings asking for the tour
                 // again from a cold start. The chain's own dialogs no-op for anyone who has
@@ -1168,7 +1200,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // tour starts (or restarts) only once it closes — registered first, because a
                 // chain with nothing left to ask closes inside the call below.
                 setFirstRunChainFinishedListener(() -> {
-                    com.termux.app.tour.FirstBootTour t = firstBootTour();
+                    FirstBootTour t = firstBootTour();
                     if (t == null) return;
                     if (forceOnboarding) t.restart();
                     else t.startIfNeeded();
@@ -1375,6 +1407,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleSurfaceEditorIntent(intent);
         handleLayoutEditorIntent(intent);
         handleEditExtraKeysIntent(intent);
+        handleShowHelpIntent(intent);
         handleReplayTourIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
@@ -1681,12 +1714,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
         }
 
+        // The arrival the "come back to Termux" lesson is waiting for, however the user made it.
+        if (mFirstBootTour != null) mFirstBootTour.onLauncherResumed();
+
         // Check if a crash happened on last run of the app or if a plugin crashed and show a
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
         // Step seven launches an app; the run is picked back up on the card it was on when the
         // launcher returns.
-        com.termux.app.tour.FirstBootTour tour = firstBootTour();
+        FirstBootTour tour = firstBootTour();
         if (tour != null) tour.resumeIfInProgress();
         mIsOnResumeAfterOnCreate = false;
     }
@@ -1702,22 +1738,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View contentView = findViewById(android.R.id.content);
         if (contentView == null) return;
         contentView.post(() -> {
-            com.termux.app.tour.FirstBootTour tour = firstBootTour();
+            FirstBootTour tour = firstBootTour();
             if (tour != null) tour.restart();
         });
     }
 
     /** The tour, built on the preferences the first time anything asks for it. */
     @Nullable
-    private com.termux.app.tour.FirstBootTour firstBootTour() {
+    private FirstBootTour firstBootTour() {
         if (mFirstBootTour == null && mPreferences != null) {
-            mFirstBootTour = new com.termux.app.tour.FirstBootTour(this, mPreferences,
+            mFirstBootTour = new FirstBootTour(this, mPreferences,
                 this::getInAppKeyboardKeyRect);
             mFirstBootTour.setChromeProbe(new TourChromeProbe());
             // A run begins on the terminal, where its cards are taught; Replay and a resume after
             // a process death can both find the wall resting on another place.
             mFirstBootTour.setWallHost(() -> {
                 if (mPaneWallController != null) mPaneWallController.returnToTerminal(false);
+            });
+            mFirstBootTour.setHomeHost(new FirstBootTour.HomeHost() {
+                @Override public boolean isLauncherHomeApp() { return isDefaultHomeApp(); }
+                @Override public void openHomeAppChooser() { openHomeLauncherChooser(); }
             });
             // Every state signal is edge-triggered, so the run starts knowing where the chrome
             // rests and a card is never cleared by a state the user did not put it in — nor, as
@@ -1729,6 +1769,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour.onPlaceSettled(place == null ? null : place.name());
             mFirstBootTour.onSessionsSettled(sessionCountForTour(), currentSessionIdForTour());
             mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
+            mFirstBootTour.onKeyboardShownSettled(isInAppKeyboardShown());
+            mFirstBootTour.onHelpShownSettled(mHelpOverlay != null && mHelpOverlay.isShowing());
         }
         return mFirstBootTour;
     }
@@ -1738,7 +1780,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * than pushed, because each of these surfaces opens and closes along a dozen paths and a card
      * still drawing over one of them is what a missed path looks like.
      */
-    private final class TourChromeProbe implements com.termux.app.tour.FirstBootTour.ChromeProbe {
+    private final class TourChromeProbe implements FirstBootTour.ChromeProbe {
         @Override public boolean isAppDrawerUp() {
             // Engaged rather than open: the plane covers the dock the whole way down and the
             // whole way back, not only once it has settled.
@@ -1755,6 +1797,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean isSurfaceEditorUp() {
             return mSurfaceEditor.isActive();
+        }
+
+        @Override public boolean isHelpUp() {
+            return mHelpOverlay != null && mHelpOverlay.isShowing();
+        }
+
+        @Override public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
+            return mPaneController != null && mPaneController.helpButtonRectOnScreen(out);
         }
     }
 
@@ -2841,13 +2891,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean isReducedMotionEnabled() {
-        try {
-            float scale = Settings.Global.getFloat(
-                getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
-            return scale == 0f;
-        } catch (Throwable t) {
-            return false;
-        }
+        return com.termux.app.ReducedMotion.isEnabled(this);
     }
 
     private void playAppLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
@@ -5044,7 +5088,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // top of one would fight it for attention. The first-run permission chain already asks
         // this same question before the tour starts, so a failed read while the tour is up means
         // the user declined it there — a later failed read re-arms this path once the run is done.
-        com.termux.app.tour.FirstBootTour tour = firstBootTour();
+        FirstBootTour tour = firstBootTour();
         if (tour != null && tour.isShowing()) {
             return;
         }
@@ -6532,7 +6576,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mInAppKeyboard.endExternalTextInput();
                 }
             });
-        mSuggestionBarView.setLaunchRippleListener(this::playAppLaunchRipple);
+        mSuggestionBarView.setLaunchRippleListener((packageName, icon, sourceView) -> {
+            // Every launch off the dock, the drawer and a folder comes through here.
+            if (mFirstBootTour != null) mFirstBootTour.onAppLaunched();
+            playAppLaunchRipple(packageName, icon, sourceView);
+        });
         mSuggestionBarView.setAppDrawerGestureListener(
             new SuggestionBarView.AppDrawerGestureListener() {
                 @Override
@@ -8797,6 +8845,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFloatingKeyboard != null)
                 mFloatingKeyboard.onKeyboardVisibilityRequested(visible);
             mKeyboardGeometry.onVisibilityRequested(visible);
+            // The one place the in-app keyboard's visibility is decided, whichever control asked.
+            if (mFirstBootTour != null) mFirstBootTour.onKeyboardShownSettled(visible);
         }
 
         @Override
@@ -17341,6 +17391,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openSettings() {
             TermuxActivity.this.openSettings();
+        }
+
+        @Override public void showHelpOverlay() {
+            TermuxActivity.this.showHelpOverlay();
         }
 
         @Override public void openLookAndFeel() {

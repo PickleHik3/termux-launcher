@@ -445,6 +445,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APPEARANCE_TOGGLE_CURSOR_TRAIL = "appearance.toggle_cursor_trail";
     public static final String TOOL_APPEARANCE_SURFACE_EDITOR = "appearance.surface_editor";
     public static final String TOOL_APP_OPEN_SETTINGS = "app.open_settings";
+    public static final String TOOL_APP_OPEN_HELP = "app.open_help";
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
@@ -1131,6 +1132,11 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_open_settings, R.string.tool_desc_app_open_settings, null);
+        addUi(map, TOOL_APP_OPEN_HELP,
+            "Open help for the place the wall is on.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_app_open_help, R.string.tool_desc_app_open_help, null);
         addUi(map, TOOL_APP_OPEN_LOOK_AND_FEEL,
             "Open the look and feel settings.",
             schemaEmpty(),

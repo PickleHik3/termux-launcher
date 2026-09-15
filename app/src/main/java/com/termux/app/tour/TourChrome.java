@@ -16,5 +16,11 @@ public enum TourChrome {
     /** A terminal sheet — the modal plane the terminal's own prompts live on. */
     TERMINAL_SHEET,
     /** The surface editor. */
-    SURFACE_EDITOR
+    SURFACE_EDITOR,
+    /**
+     * The help overlay. Unlike the four above, no card is ever the one asking the user to close
+     * it: help is where the run sends people, and a card drawn over the answer they went looking
+     * for is the one thing help must never have on top of it.
+     */
+    HELP
 }

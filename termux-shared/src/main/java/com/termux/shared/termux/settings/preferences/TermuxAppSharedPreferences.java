@@ -2661,6 +2661,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION, version, true);
     }
 
+    /** The version of the run an unfinished tour belongs to, or 0 for an older one. */
+    public int getFirstBootTourRunVersion() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_RUN_VERSION,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_RUN_VERSION);
+    }
+
+    public void setFirstBootTourRunVersion(int version) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_RUN_VERSION, version, true);
+    }
+
     /** The card an unfinished run is on, or -1. */
     public int getFirstBootTourStep() {
         return SharedPreferenceUtils.getInt(mSharedPreferences,

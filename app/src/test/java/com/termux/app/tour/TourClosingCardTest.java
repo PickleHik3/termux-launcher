@@ -5,6 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.R;
+
 import org.junit.Test;
 
 import java.util.List;
@@ -34,10 +36,10 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void everyEditionGetsThreeSectionsWithAHeadingAndASentence() {
+    public void everyEditionGetsFourSectionsWithAHeadingAndASentence() {
         for (TourEdition edition : TourEdition.values()) {
             List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
-            assertEquals("three sections for " + edition, 3, sections.size());
+            assertEquals("four sections for " + edition, 4, sections.size());
             for (TourClosingCard.Section section : sections) {
                 assertNotEquals("no heading for " + edition, 0, section.headingRes);
                 assertNotEquals("no copy for " + edition, 0, section.copyRes);
@@ -46,12 +48,35 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void theKeyHintsSectionIsTheSameOneEverywhereAndCarriesNoCommand() {
+    public void theMultitaskingSectionIsTheSameOneEverywhereAndCarriesNoCommand() {
+        // None of the four lessons opens a shell, a window or a session, so the model is told
+        // here and the rest is left to help.
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section hints = TourClosingCard.sections(edition).get(0);
-            assertEquals(TourClosingCard.sections(TourEdition.TERMUX).get(0).headingRes,
-                hints.headingRes);
-            assertFalse("key hints has nothing to run", hints.hasCommand());
+            TourClosingCard.Section multitasking = TourClosingCard.sections(edition).get(0);
+            assertEquals(R.string.tour_closing_multitasking_heading, multitasking.headingRes);
+            assertEquals(R.string.tour_closing_multitasking_copy, multitasking.copyRes);
+            assertFalse("multitasking has nothing to run", multitasking.hasCommand());
+        }
+    }
+
+    @Test
+    public void theLauncherExtrasAndGraphicalSectionsAreStillThere() {
+        for (TourEdition edition : TourEdition.values()) {
+            assertEquals(R.string.tour_closing_extras_heading,
+                TourClosingCard.sections(edition).get(2).headingRes);
+            assertEquals(R.string.tour_closing_graphical_heading,
+                TourClosingCard.sections(edition).get(3).headingRes);
+        }
+    }
+
+    @Test
+    public void customisationSitsBetweenMultitaskingAndTheExtrasAndCarriesNoCommand() {
+        // The run teaches no lesson about the editors, so the way to them is said here.
+        for (TourEdition edition : TourEdition.values()) {
+            TourClosingCard.Section customisation = TourClosingCard.sections(edition).get(1);
+            assertEquals(R.string.tour_closing_customisation_heading, customisation.headingRes);
+            assertEquals(R.string.tour_closing_customisation_copy, customisation.copyRes);
+            assertFalse("customisation has nothing to run", customisation.hasCommand());
         }
     }
 
@@ -62,8 +87,8 @@ public class TourClosingCardTest {
         assertEquals(TourClosingCard.commandResources(TourEdition.TERMUX),
             TourClosingCard.commandResources(TourEdition.VAJ));
 
-        TourClosingCard.Section termux = TourClosingCard.sections(TourEdition.TERMUX).get(2);
-        TourClosingCard.Section nix = TourClosingCard.sections(TourEdition.NIX).get(2);
+        TourClosingCard.Section termux = TourClosingCard.sections(TourEdition.TERMUX).get(3);
+        TourClosingCard.Section nix = TourClosingCard.sections(TourEdition.NIX).get(3);
         // Same heading, different sentence: nixpkgs has no x11-repo to add, which is a different
         // thing to say rather than a different package name.
         assertEquals(termux.headingRes, nix.headingRes);
@@ -75,7 +100,7 @@ public class TourClosingCardTest {
     @Test
     public void theExtrasSectionIsTheOneCommandEveryEditionOffers() {
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section extras = TourClosingCard.sections(edition).get(1);
+            TourClosingCard.Section extras = TourClosingCard.sections(edition).get(2);
             assertTrue("no extras command for " + edition, extras.hasCommand());
             assertTrue("extras missing from the copy-all list for " + edition,
                 TourClosingCard.commandResources(edition).contains(extras.commandRes));

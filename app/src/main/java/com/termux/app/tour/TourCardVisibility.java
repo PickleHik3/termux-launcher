@@ -22,6 +22,10 @@ import java.util.Set;
  * moment the user did the thing it asked for, so the card stays where it is — at the top of the
  * screen, clear of the icons and of the scrub's own previews — until the app is launched.
  *
+ * <p>Help is the one surface with no exception at all: nothing the run has to say is worth drawing
+ * over the page of answers it spent its first lesson teaching the user to reach, so every card,
+ * practice hints included, waits while help is up.
+ *
  * <p>Pure, so every combination below is a unit test rather than a phone.
  */
 public final class TourCardVisibility {
@@ -49,6 +53,10 @@ public final class TourCardVisibility {
     public static TourChrome chromeClosedBy(@Nullable String signalId) {
         if (TourSignals.DRAWER_CLOSED.equals(signalId)) return TourChrome.DRAWER;
         if (TourSignals.PALETTE_CLOSED.equals(signalId)) return TourChrome.PALETTE;
+        // Help is deliberately not here. The card asking the user to close help is the third
+        // stage of the first lesson, and it waits behind help like every other card: help is a
+        // page of answers the user went to read, and a card resting on top of it is in the way of
+        // the very thing the lesson sent them for.
         return null;
     }
 
@@ -71,6 +79,7 @@ public final class TourCardVisibility {
     public static int decide(boolean topAnchored, Set<TourChrome> chromeUp,
                              @Nullable String awaitedSignal, boolean taughtOnTerminal,
                              boolean onTerminal) {
+        if (chromeUp != null && chromeUp.contains(TourChrome.HELP)) return HIDDEN;
         if (chromeUp != null && !chromeUp.isEmpty()) {
             TourChrome closes = chromeClosedBy(awaitedSignal);
             return closes != null && chromeUp.contains(closes) ? COMPACT_TOP : HIDDEN;

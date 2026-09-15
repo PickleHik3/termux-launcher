@@ -65,8 +65,8 @@ public class LauncherToolRegistryTest {
         // then by the keyboard layout pair, then by the four keyboard-type and
         // keyboard-visibility tools, and finally by pane.layout, pane.move_to_edge and wall.go,
         // whose one enum argument the palette and the extra-keys picker both offer as a row per
-        // value rather than as a prompt.
-        assertEquals(79, registry.getUiTools().size());
+        // value rather than as a prompt, and by app.open_help, the command palette's door to help.
+        assertEquals(80, registry.getUiTools().size());
     }
 
     @Test

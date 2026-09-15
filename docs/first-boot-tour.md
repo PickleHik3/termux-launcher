@@ -27,6 +27,8 @@ You can change this later in Settings." Buttons Turn on / Not now.
 
 ## The run
 
+Version 2 (below, "Fifth pass") supersedes this thirteen-card run; kept here as history.
+
 | # | Card | Then | Cleared by |
 |---|------|------|------------|
 | 1 | Swipe the status bar left or right. | Swipe back. | place changed; place returned |
@@ -222,6 +224,77 @@ swipe the card asked for. Three faults behind one symptom:
 
 All three are in the rule above. Still only reasoned, not seen on a device.
 
+## Fifth pass (2026-09-15): four lessons
+
+From issue #36 (the revised onboarding review). Replaces the nine/thirteen-card run above with
+four short lessons, a home-screen question and a closing card — `TourRun.java`'s full rewrite,
+`TourController.RUN_VERSION` bumped to 2. Nothing here creates a shell, a window or a session.
+
+### The run
+
+| Step (kind) | Stage | Copy | Target | Gesture | Cleared by |
+|---|---|---|---|---|---|
+| 1 `find_help` (lesson) | 0 | Tap a pane corner. | Pane corner | tap | pane corner menu opened |
+| | 1 | Tap ? to see what the controls do. | Help button | tap | help opened |
+| | 2 | Close help to continue. | — | tap | help closed |
+| 2 `find_apps` (lesson) | 0 | Pull down on the dock. | Dock | drag down | drawer opened |
+| | 1 | Tap an app to open it. | — | tap | app launched |
+| | 2 | Press Home to come back. *(launcher is home)* / Switch back to Termux to continue. *(it is not)* | — | tap | launcher resumed |
+| 3 `keyboard` (lesson) | 0 | Tap the keyboard button to hide the keyboard. *(keyboard shown when the run was built)* / …to show the keyboard. *(hidden)* | Keyboard toggle key | tap | keyboard hidden / keyboard shown |
+| | 1 | Tap it again to bring the keyboard back. / …to hide it. | Keyboard toggle key | tap | keyboard shown / keyboard hidden |
+| 4 `find_action` (lesson) | 0 | Swipe up on the space bar to open the command palette. | Space bar | swipe up | palette opened |
+| | 1 | Find Settings or Help, then tap outside the palette to close it. | — | tap | palette closed |
+| 5 `home_choice` (choice) | — | Use Termux as your home screen? *(not home)* / Termux is your home screen. *(already home)* | — | none | answered by its own button, not a gesture |
+| 6 `closing` (closing) | — | That is the tour. Enjoy the launcher. | — | none | Start using Termux |
+
+`RunContext` (`launcherIsHome`, `keyboardShown`) is read once, when the run is built, and decides
+the copy above marked *(…)*: lesson 3's two stages swap order so the first ask always matches the
+keyboard's actual state, and lesson 2's return line and the home-choice card's question both read
+the phone's real home-app setting rather than assuming one.
+
+### Actions per card kind
+
+- **Lesson** (`TourStep.LESSON_ACTIONS`): Back, Skip step, End tour — every one of the four
+  lessons above. In practice (below) these are replaced by Done and End practice instead.
+- **Choice**: no default; a choice names its own. `home_choice` offers Continue alone when the
+  launcher already is the home app, or Use as home screen / Keep trying when it is not.
+- **Closing** (`TourStep.CLOSING_ACTIONS`): Start using Termux, alone.
+
+### Practice mode
+
+Help's "Try it" runs one lesson on its own: `TourController.startPractice(lessonId)`. It clears on
+that lesson's own signals exactly like a normal run and offers Done / End practice in place of the
+lesson's three buttons, but writes nothing to `Prefs` — not the completed version, not the step
+index or stage, not the skip flag — so practising a lesson can never finish, restart or skip the
+stored run. Only the four lesson ids (`TourRun.lessons()`: `find_help`, `find_apps`, `keyboard`,
+`find_action`) are legal practice targets; `home_choice` and `closing` are cards, not lessons, and
+cannot be practised.
+
+### Run version 2 and the version-1 mapping
+
+`TourController.RUN_VERSION` is 2. An unfinished run stored under an older version is not resumed
+on its own stored card — that card means something else now — it is mapped by
+`migratedLessonFor(index)` onto the lesson that covers the same control: the old run's keyboard
+chapter (cards 4–8, indices 3–7) → `keyboard`; the pane-corner card (index 8) → `find_help`; the
+drawer and A–Z-scrub cards (indices 9–10) → `find_apps`; the palette card (index 11) →
+`find_action`. The two status-bar cards and the old closing card (indices 0, 1, 2, 12) have no
+equivalent — the new run does not teach page swipes at all — so resuming there asks the user to
+pick up or start over (`Listener.onTourResumeOrRestart`, `TourAction.RESUME` / `RESTART`) instead
+of dropping them at an arbitrary lesson. A run already finished under any version still counts as
+finished; only an in-progress one is mapped.
+
+### The Help chrome rule
+
+`TourChrome` gained a `HELP` member. The drawer and the palette hide every card except the one
+asking the user to close them (`TourCardVisibility.chromeClosedBy`); help has no such exception —
+`TourCardVisibility.decide` returns `HIDDEN` whenever the chrome set contains `HELP`, checked
+before anything else, so even `find_help`'s own third stage (the card asking the user to close
+help) waits behind help like any other card. Help is where the first lesson sends people, and a
+card drawn over the answer is worse than one that waits. The activity's one show path and one
+dismiss path for help feed `TourSignalRelay.onHelpShownSettled(boolean)`, edge-triggered like the
+drawer and the status bar: the first call only primes the resting state, and a close of a help the
+run never saw open emits nothing.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |
@@ -233,3 +306,14 @@ All three are in the rule above. Still only reasoned, not seen on a device.
 
 Side queue: standard Back behaviour in the app drawer (close expanded category, then close the
 drawer). Branch `fix/drawer-back`, independent of the tour.
+
+### #36: help by topic and four lessons
+
+| Phase | Branch | Deliverable | Depends on |
+|-------|--------|-------------|------------|
+| A Model | feat/help-topics-model | `HelpTopics` catalogue and `HelpPresentationModel`, pure and tested. | — |
+| B Tour | feat/help-topics-tour | `TourStep` kinds and actions, the help/keyboard/app-launch tour signals, `TourRun`'s four lessons, `TourController` practice mode and the version-2 migration. | A |
+| C Wiring | feat/help-topics | `HelpOverlayView` rewired to `HelpPresentationModel` (chooser, overview paging, show gesture, try it), the activity's help show/dismiss paths feeding `TourSignalRelay`, the command palette and Settings entries, accessibility. Not yet branched. | A, B |
+| D Docs | feat/help-topics-docs | This spec and `docs/help-overlay.md` brought up to date. | A, B |
+
+A and B are merged into the integration branch `feat/help-topics`.

@@ -295,18 +295,20 @@ public class TourSignalRelayTest {
     }
 
     @Test
-    public void theFiveActionsAreTheirOwnEdge() {
+    public void theActionsAreTheirOwnEdge() {
         relay.onPaneSplit();
         relay.onPaneCornerMenuOpened();
         relay.onPaneControlsDismissed();
         relay.onAppLaunchedFromScrub();
         relay.onPaletteOpened();
-        assertEquals(5, signals.size());
+        // Six, not five: a scrub launch is both the scrub's own signal and an app launch.
+        assertEquals(6, signals.size());
         assertEquals(TourSignals.PANE_SPLIT, signals.get(0));
         assertEquals(TourSignals.PANE_CORNER_MENU, signals.get(1));
         assertEquals(TourSignals.PANE_CONTROLS_DISMISSED, signals.get(2));
         assertEquals(TourSignals.APP_LAUNCHED_FROM_SCRUB, signals.get(3));
-        assertEquals(TourSignals.PALETTE_OPENED, signals.get(4));
+        assertEquals(TourSignals.APP_LAUNCHED, signals.get(4));
+        assertEquals(TourSignals.PALETTE_OPENED, signals.get(5));
     }
 
     @Test
@@ -400,5 +402,98 @@ public class TourSignalRelayTest {
     public void untilTheWallHasSaidWhereItIsTheRunIsAtHome() {
         relay.setHomePlace("TERMINAL");
         assertTrue(relay.isOnHomePlace());
+    }
+
+    // Help, the keyboard, and the trip out to an Android app.
+
+    @Test
+    public void theFirstHelpStateSeenOnlySaysWhereHelpRests() {
+        relay.onHelpShownSettled(false);
+        assertTrue(signals.isEmpty());
+        relay.onHelpShownSettled(true);
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.HELP_OPENED, signals.get(0));
+        relay.onHelpShownSettled(false);
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.HELP_CLOSED, signals.get(1));
+    }
+
+    @Test
+    public void helpClosingWithoutHavingBeenSeenOpenIsNotASignal() {
+        // The launcher puts help away on a pause, a rotation and a destroy; a close of a help the
+        // run never saw open is not the gesture the lesson is asking for.
+        relay.onHelpShownSettled(false);
+        relay.onHelpShownSettled(false);
+        relay.onHelpShownSettled(false);
+        assertTrue(signals.isEmpty());
+        assertFalse(relay.isHelpShown());
+    }
+
+    @Test
+    public void helpRestatingWhereItAlreadyIsSaysNothing() {
+        relay.onHelpShownSettled(false);
+        relay.onHelpShownSettled(true);
+        relay.onHelpShownSettled(true);
+        relay.onHelpShownSettled(true);
+        assertEquals(1, signals.size());
+        assertTrue(relay.isHelpShown());
+    }
+
+    @Test
+    public void theFirstKeyboardStateSeenOnlySaysWhereTheKeyboardRests() {
+        relay.onKeyboardShownSettled(true);
+        assertTrue(signals.isEmpty());
+        assertTrue(relay.isKeyboardShown());
+        relay.onKeyboardShownSettled(false);
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.KEYBOARD_HIDDEN, signals.get(0));
+        relay.onKeyboardShownSettled(true);
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.KEYBOARD_SHOWN, signals.get(1));
+    }
+
+    @Test
+    public void aKeyboardReAppliedWithTheValueItAlreadyHadIsNotATap() {
+        // A rotation, a place change and every preference reload re-apply the keyboard.
+        relay.onKeyboardShownSettled(true);
+        relay.onKeyboardShownSettled(true);
+        relay.onKeyboardShownSettled(true);
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    public void anAppLaunchedByTheScrubIsAnAppLaunchedLikeAnyOther() {
+        relay.onAppLaunchedFromScrub();
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.APP_LAUNCHED_FROM_SCRUB, signals.get(0));
+        assertEquals(TourSignals.APP_LAUNCHED, signals.get(1));
+    }
+
+    @Test
+    public void anAppLaunchedFromTheDrawerIsOneSignalEveryTime() {
+        relay.onAppLaunched();
+        relay.onAppLaunched();
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.APP_LAUNCHED, signals.get(0));
+        assertEquals(TourSignals.APP_LAUNCHED, signals.get(1));
+    }
+
+    @Test
+    public void comingBackToTheLauncherIsItsOwnSignal() {
+        relay.onLauncherResumed();
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.LAUNCHER_RESUMED, signals.get(0));
+    }
+
+    @Test
+    public void noneOfTheNewInputsSpeakWithoutSomeoneListening() {
+        relay.setTourSignalListener(null);
+        relay.onHelpShownSettled(false);
+        relay.onHelpShownSettled(true);
+        relay.onKeyboardShownSettled(true);
+        relay.onKeyboardShownSettled(false);
+        relay.onAppLaunched();
+        relay.onLauncherResumed();
+        assertTrue(signals.isEmpty());
     }
 }
