@@ -386,10 +386,25 @@ public final class HelpOverlayView extends FrameLayout {
         announce(getContext().getString(R.string.help_header, placeName()), "overview" + page);
     }
 
+    /** The section the page being read belongs to, named by the first card the router put on it. */
+    private int currentSectionLabelRes() {
+        return model.sectionLabelResFor(firstIdOnPage());
+    }
+
+    /** The id of the first card on the page being read, or null when the router placed none. */
+    private String firstIdOnPage() {
+        if (routed == null) return null;
+        int page = model.page();
+        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == page) return p.target.id;
+        int copyOnly = page - routed.pages;
+        return copyOnly >= 0 && copyOnly < routed.unplaced.size()
+            ? routed.unplaced.get(copyOnly).id : null;
+    }
+
     /** The overview's own band: where the reader is, the way through, and the ways out. */
     private View overviewFooter(boolean hasPrevious, boolean hasNext) {
         LinearLayout panel = panel();
-        int sectionRes = model.sectionLabelRes();
+        int sectionRes = currentSectionLabelRes();
         if (sectionRes != 0) panel.addView(sectionLabel(getContext().getString(sectionRes)));
         LinearLayout paging = buttonRow();
         paging.addView(button(getContext().getString(R.string.help_previous), hasPrevious,

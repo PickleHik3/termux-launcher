@@ -216,6 +216,24 @@ public class HelpPresentationModelTest {
         assertTrue(labels.contains(HelpTopics.Group.MULTITASKING.labelRes));
     }
 
+    @Test public void theSectionLabelFollowsTheCardTheRouterActuallyPutFirst() {
+        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
+        model.showAll();
+        model.setPageCount(3);
+        // Pages are packed by collision, so page one can open on a Multitasking card.
+        assertEquals(HelpTopics.Group.MULTITASKING.labelRes, model.sectionLabelResFor("shortcuts"));
+        assertEquals(HelpTopics.Group.KEYBOARD.labelRes, model.sectionLabelResFor("space"));
+        // Nothing to go on falls back to the even split over the reported page count.
+        assertEquals(model.sectionLabelRes(), model.sectionLabelResFor(null));
+        assertEquals(model.sectionLabelRes(), model.sectionLabelResFor("no_such_topic"));
+    }
+
+    @Test public void theSectionLabelIsTheOverviewsAlone() {
+        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
+        model.selectTopic("dock");
+        assertEquals(0, model.sectionLabelResFor("shortcuts"));
+    }
+
     @Test public void showGestureAsksForADemonstrationAndLeavesHelpOpen() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
         model.selectTopic("dock");

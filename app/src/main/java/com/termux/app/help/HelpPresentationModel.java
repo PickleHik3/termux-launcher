@@ -264,6 +264,17 @@ public final class HelpPresentationModel {
         return entries.get(Math.min(first, entries.size() - 1)).group.labelRes;
     }
 
+    /**
+     * The section label for a page the renderer has actually packed: the group of the entry whose
+     * card sits first on it. Pages are filled by collision rather than by count, so the even split
+     * above is only the answer when the renderer cannot name that entry.
+     */
+    public int sectionLabelResFor(String firstEntryIdOnPage) {
+        if (mode != Mode.OVERVIEW) return 0;
+        HelpTopics.Entry entry = HelpTopics.entry(place, firstEntryIdOnPage);
+        return entry == null ? sectionLabelRes() : entry.group.labelRes;
+    }
+
     /** Show gesture belongs to a topic whose control is on screen. */
     public boolean canShowGesture() { return mode == Mode.TOPIC && selectedMeasurable(); }
 
