@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import android.content.Context;
 import android.graphics.Outline;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
@@ -30,6 +31,8 @@ public class PaneContentFrame extends FrameLayout {
     private float mRequestedRadiusPx;
     private boolean mClipToShape;
     private View mContent;
+    /** Set on a DOWN that landed in the clearance, so the rest of that gesture follows it. */
+    private boolean mForwardingToContent;
 
     /** Re-capped on every ask: a divider drag resizes the frame without re-dressing the pane. */
     private final ViewOutlineProvider mShapeOutline = new ViewOutlineProvider() {
@@ -113,5 +116,54 @@ public class PaneContentFrame extends FrameLayout {
             }
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
+    /**
+     * Hand a gesture that starts in the clearance to the content inside it.
+     *
+     * <p>The band the margin leaves belongs to no view — this frame is not clickable and the
+     * terminal is laid out inside it — so a press on the pane's outermost pixels reached nothing at
+     * all. It reads as terminal, being inside the pane's own edge, so the terminal is given it.
+     *
+     * <p>The coordinates are carried straight over into the child's space and left out of range on
+     * purpose: negative, or past the far edge, is how the terminal hears "the first column" and
+     * "the last row" ({@code TerminalEmulator.sendMouseEvent} pins a mouse report to the edge cell,
+     * and {@code TerminalView} floors its own mapping the same way). This is already what happens
+     * in a pane corner, where the interaction overlay forwards by the same offset-a-copy route;
+     * {@link android.view.TouchDelegate} could not do it, since it re-centres the event on the
+     * view it forwards to.
+     *
+     * <p>Only a gesture that <em>starts</em> in the clearance: one that starts on the child is
+     * dispatched normally and reaches it exactly once. The corner overlay sits above the panes and
+     * consumes the gestures it claims, so this never sees those either.
+     */
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN)
+            mForwardingToContent = isInClearance(event.getX(), event.getY());
+        if (!mForwardingToContent)
+            return super.dispatchTouchEvent(event);
+        MotionEvent copy = MotionEvent.obtain(event);
+        copy.offsetLocation(getScrollX() - mContent.getLeft(), getScrollY() - mContent.getTop());
+        try {
+            mContent.dispatchTouchEvent(copy);
+        } finally {
+            copy.recycle();
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+                mForwardingToContent = false;
+        }
+        // Kept whatever the terminal made of it: the clearance is the pane's own edge, and a press
+        // there must not fall through to whatever the pane is sitting on.
+        return true;
+    }
+
+    /** Whether a point inside this frame lies in the band the content is held off the edge by. */
+    private boolean isInClearance(float x, float y) {
+        if (mContent == null || mContent.getParent() != this
+            || mContent.getVisibility() == GONE)
+            return false;
+        return x < mContent.getLeft() || x >= mContent.getRight()
+            || y < mContent.getTop() || y >= mContent.getBottom();
     }
 }
