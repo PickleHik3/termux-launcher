@@ -797,6 +797,15 @@ public class TerminalPaneController {
         mInteractionOverlay.dismissControlsForHelp();
     }
 
+    /**
+     * The ? of the corner tab that is up, in screen coordinates, or false when no tab is showing.
+     * The tab draws its buttons rather than laying them out as views, so nothing outside this
+     * controller can find that one.
+     */
+    public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
+        return mInteractionOverlay.helpButtonRectOnScreen(out);
+    }
+
     @Nullable public TerminalView getActivePaneView() {
         TerminalSession s = getActiveSession();
         return s == null ? null : mPaneViews.get(s);
@@ -3663,6 +3672,18 @@ public class TerminalPaneController {
                 if (mControlButtons[i].contains(x, y)) return controlActionInSlot(i);
             }
             return ACTION_NONE;
+        }
+
+        /** The trailing button of the tab that is up — always the ? — in screen coordinates. */
+        boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
+            if (!mControlsShown || mControlLeaf == null) return false;
+            computeControlGeometry();
+            RectF button = mControlButtons[controlCount() - 1];
+            if (button.isEmpty()) return false;
+            int[] host = location(mHostView);
+            out.set(Math.round(button.left) + host[0], Math.round(button.top) + host[1],
+                Math.round(button.right) + host[0], Math.round(button.bottom) + host[1]);
+            return !out.isEmpty();
         }
 
         private boolean isLonePane() {

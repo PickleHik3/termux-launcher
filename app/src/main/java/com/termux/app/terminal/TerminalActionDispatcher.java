@@ -148,6 +148,7 @@ public final class TerminalActionDispatcher {
     /** Legacy alias from when the surface editor was called the glass lab; scripts may still call it. */
     public static final String TOOL_APPEARANCE_GLASS_LAB_LEGACY = "appearance.glass_lab";
     public static final String TOOL_APP_OPEN_SETTINGS = "app.open_settings";
+    public static final String TOOL_APP_OPEN_HELP = "app.open_help";
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
@@ -307,6 +308,7 @@ public final class TerminalActionDispatcher {
             case TOOL_APPEARANCE_SURFACE_EDITOR:
             case TOOL_APPEARANCE_GLASS_LAB_LEGACY:
             case TOOL_APP_OPEN_SETTINGS:
+            case TOOL_APP_OPEN_HELP:
             case TOOL_APP_OPEN_LOOK_AND_FEEL:
             case TOOL_APP_OPEN_APPS_BAR:
             case TOOL_APP_COMMAND_PALETTE:
@@ -879,6 +881,9 @@ public final class TerminalActionDispatcher {
                     return ok();
                 case TOOL_APP_OPEN_SETTINGS:
                     host.openSettings();
+                    return ok();
+                case TOOL_APP_OPEN_HELP:
+                    host.showHelpOverlay();
                     return ok();
                 case TOOL_APP_OPEN_LOOK_AND_FEEL:
                     host.openLookAndFeel();
