@@ -924,6 +924,32 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
     }
 
+    /**
+     * Push the "Trim trailing spaces on wrapped lines" preference into every live session's
+     * emulator, the same way {@link #resetAllSessionColors()} pushes a palette change: an
+     * emulator has no preferences access of its own, and a toggle should not need its shell
+     * reopened to take effect. Called for a newly shown session and again on the settings-return
+     * refresh.
+     */
+    public void applyTrimWrappedTrailingSpacesPreference() {
+        boolean enabled = mHost.preferences() == null
+            || mHost.preferences().isTrimWrappedTrailingSpacesEnabled();
+        TermuxService service = mHost.service();
+        if (service != null) {
+            for (TermuxSession termuxSession : service.getTermuxSessions()) {
+                TerminalSession session = termuxSession.getTerminalSession();
+                if (session != null && session.getEmulator() != null) {
+                    session.getEmulator().setTrimWrappedTrailingSpaces(enabled);
+                }
+            }
+            return;
+        }
+        TerminalSession session = mHost.currentSession();
+        if (session != null && session.getEmulator() != null) {
+            session.getEmulator().setTrimWrappedTrailingSpaces(enabled);
+        }
+    }
+
     public void updateBackgroundColor() {
         mHost.updateWindowBackgroundForCurrentSession();
     }

@@ -902,6 +902,23 @@ public final class TerminalEmulator {
         this.mCursorBlinkState = cursorBlinkState;
     }
 
+    /**
+     * Whether copying a selection that includes a wrapped row trims that row's trailing padding
+     * spaces the same way an unwrapped row is trimmed. Consulted by both {@link #mMainBuffer} and
+     * {@link #mAltBuffer}, which hold no preferences access of their own; the app pushes the
+     * "Trim trailing spaces on wrapped lines" setting here on every new session and again whenever
+     * the preference changes.
+     */
+    public void setTrimWrappedTrailingSpaces(boolean trimWrappedTrailingSpaces) {
+        mMainBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
+        mAltBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
+    }
+
+    /** @see #setTrimWrappedTrailingSpaces(boolean) */
+    public boolean isTrimWrappedTrailingSpaces() {
+        return mMainBuffer.isTrimWrappedTrailingSpaces();
+    }
+
     public boolean isKeypadApplicationMode() {
         return isDecsetInternalBitSet(DECSET_BIT_APPLICATION_KEYPAD);
     }
