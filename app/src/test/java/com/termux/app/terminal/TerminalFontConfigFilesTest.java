@@ -54,13 +54,13 @@ public class TerminalFontConfigFilesTest {
 
     @Test
     public void malformedDropInLineKeepsEveryOtherFileActive() throws Exception {
-        dropIn("10-bad.conf", "font_family relative.ttf\nbold_font family=good-bold\n");
+        dropIn("10-bad.conf", "font_family path=relative.ttf\nbold_font family=good-bold\n");
         dropIn("20-ok.conf", "italic_font family=good-italic\n");
 
         TerminalFontConfig.Result result = load();
 
         assertEquals(result.errors.toString(), 1, result.errors.size());
-        assertEquals("fonts.d/10-bad.conf: line 1: font source must start with path= or family=",
+        assertEquals("fonts.d/10-bad.conf: line 1: font paths must be absolute or start with ~/",
             result.errors.get(0));
         assertEquals("good-bold", result.face(TerminalFontConfig.Face.BOLD).value);
         assertEquals("good-italic", result.face(TerminalFontConfig.Face.ITALIC).value);
@@ -69,12 +69,12 @@ public class TerminalFontConfigFilesTest {
 
     @Test
     public void fontsConfErrorsKeepTheirUnprefixedFormat() throws Exception {
-        fontsConf("font_family relative.ttf\n");
+        fontsConf("font_family path=relative.ttf\n");
 
         TerminalFontConfig.Result result = load();
 
         assertEquals(result.errors.toString(), 1, result.errors.size());
-        assertEquals("line 1: font source must start with path= or family=",
+        assertEquals("line 1: font paths must be absolute or start with ~/",
             result.errors.get(0));
     }
 
@@ -174,8 +174,8 @@ public class TerminalFontConfigFilesTest {
         TerminalFontConfig.Result result = load();
 
         assertEquals(result.errors.toString(), 1, result.errors.size());
-        assertEquals("fonts.d/10-features.conf: line 1: font_features names undeclared symbol"
-            + " map 'ghost'", result.errors.get(0));
+        assertEquals("fonts.d/10-features.conf: line 1: font_features target 'ghost' matches no"
+            + " symbol map or configured family", result.errors.get(0));
         assertEquals("'calt' 1", result.symbolMaps.get(0).features);
     }
 

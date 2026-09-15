@@ -42,11 +42,13 @@ your hand-written configuration stay in place.
 The terminal resolves active directives in this order, from highest to lowest priority:
 
 1. `~/.termux/fonts.conf` — your hand-written overrides;
-2. `~/.termux/fonts.d/*.conf` — app and third-party fragments in filename order; and
-3. `~/.termux/font.ttf`, `font-italic.ttf`, Termux:Styling, or Android monospace.
+2. `~/.termux/fonts.d/*.conf` — app and third-party fragments in filename order;
+3. `~/.config/kitty/kitty.conf` — the font directives of your kitty configuration; and
+4. `~/.termux/font.ttf`, `font-italic.ttf`, Termux:Styling, or Android monospace.
 
-An active directive in `fonts.conf` overrides the same setting from every fragment. Unspecified
-settings still inherit from lower layers. A fully commented `fonts.conf` changes nothing.
+An active directive in `fonts.conf` overrides the same setting from every fragment, and both
+override `kitty.conf`. Unspecified settings still inherit from lower layers. A fully commented
+`fonts.conf` changes nothing.
 
 The app refreshes pristine, commented examples under:
 
@@ -66,6 +68,30 @@ Limits keep accidental configuration growth bounded:
 - at most 32 fragments;
 - at most 256 KiB across all fragments; and
 - a separate 64 KiB limit for `fonts.conf`.
+
+## Share a kitty configuration
+
+If you already keep a `~/.config/kitty/kitty.conf`, the terminal reads its font directives — and
+only those — before anything under `~/.termux`, so your own files always have the last word. Every
+other kitty setting in the file is ignored, and an `include` line one level deep is followed.
+
+The directives below take kitty's own spelling wherever you write them, so a line that works in
+kitty works here:
+
+```text
+symbol_map U+E1A0-U+E1B6 Herdr Agent Icons Max
+font_family Fira Code
+bold_font family="Fira Code" style=Bold wght=600
+italic_font auto
+font_features FiraCode-Retina +zero +onum
+modify_font cell_height -2px
+box_drawing_scale 0.001, 1, 1.5, 2
+```
+
+A family name is looked for in `~/.termux/fonts`, `~/.fonts` and `~/.local/share/fonts` before
+Android's own families, so a font you installed by copying the file into place is found by name.
+`auto` leaves a face to the terminal. A line is a comment only when it starts with `#`, and a line
+starting with `\` continues the one above it.
 
 ## Configure faces and fallback
 
@@ -94,7 +120,12 @@ font_features icons liga=0
 ```
 
 A named map lets `font_features` and `font_variations` target one map rather than every symbol font.
-Unnamed maps continue using the shared `symbols` target.
+Unnamed maps continue using the shared `symbols` target. You can also target a map or a face by the
+family name you gave it.
+
+A mapped range may be wider than the symbol font behind it. Where the symbol font has no glyph for a
+code point, that character is drawn from your text font or its fallbacks instead of appearing as an
+empty box.
 
 Symbol glyphs are scaled uniformly until they meet the cell box, never squeezed on one axis. Nerd
 Font glyphs are drawn on a full em square while a text cell is narrower than its em — Maple Mono's

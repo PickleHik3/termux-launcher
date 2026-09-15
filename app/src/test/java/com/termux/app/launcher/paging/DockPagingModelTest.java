@@ -228,6 +228,28 @@ public class DockPagingModelTest {
         assertEquals(0, DockPagingModel.commitPageDelta(-56f, 0f, 901f, commit, DENSITY));
     }
 
+    /** A lift that never moved is the commonest ACTION_UP of all, and it is not a page turn. */
+    @Test
+    public void aMotionlessLiftNeverCommits() {
+        assertEquals(0, DockPagingModel.commitPageDelta(0f, 0f, 0f, 216f, DENSITY));
+        assertEquals(0, DockPagingModel.commitPageDelta(0f, 0f, 4000f, 216f, DENSITY));
+    }
+
+    /** The dominance test applies to a fling too: a diagonal flick is not a page turn. */
+    @Test
+    public void aFlingThatIsNotDominantlyHorizontalNeverCommits() {
+        assertEquals(1, DockPagingModel.commitPageDelta(-60f, 40f, -901f, 216f, DENSITY));
+        assertEquals(0, DockPagingModel.commitPageDelta(-60f, 50f, -901f, 216f, DENSITY));
+    }
+
+    /** A row with no width yet still has the dp floor to clear, so a tap cannot page it. */
+    @Test
+    public void aRowWithNoWidthYetStillNeedsTheDpFloor() {
+        float commit = DockPagingModel.commitDistancePx(0f, DENSITY);
+        assertEquals(0, DockPagingModel.commitPageDelta(-84f, 0f, 0f, commit, DENSITY));
+        assertEquals(1, DockPagingModel.commitPageDelta(-85f, 0f, 0f, commit, DENSITY));
+    }
+
     @Test
     public void aDragThatIsNotDominantlyHorizontalNeverCommits() {
         float commit = 100f;

@@ -767,12 +767,16 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_icon_pack_package":
                 mPreferences.setAppLauncherIconPackPackage(value);
-                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).invalidate();
+                // Not invalidate(): that resets catalogue state only, and leaves every layer of
+                // held artwork on the previous pack.
+                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext)
+                    .invalidateIconArtwork();
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_pinned_icon_pack_package":
                 mPreferences.setAppLauncherPinnedIconPackPackage(value);
-                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).invalidate();
+                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext)
+                    .invalidateIconArtwork();
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "in_app_keyboard_theme":

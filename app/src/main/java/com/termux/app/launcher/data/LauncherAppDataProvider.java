@@ -27,6 +27,7 @@ import com.termux.app.launcher.icon.LauncherIconStore;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,7 +51,10 @@ public final class LauncherAppDataProvider {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = newIdleFriendlyExecutor();
     private final LauncherIconResolver iconResolver;
+    private final IconPackRepository iconPackRepository;
     private final LauncherIconStore iconStore;
+    /** Memoized {@link #iconPackIdentity()}; null means "ask the packages again". */
+    @Nullable private String iconPackIdentity;
     private List<LauncherAppEntry> cachedApps = Collections.emptyList();
     private final Map<String, LauncherAppEntry> cachedById = new LinkedHashMap<>();
     private final Map<String, LauncherAppEntry> cachedFirstByPackage = new HashMap<>();
@@ -58,6 +62,7 @@ public final class LauncherAppDataProvider {
     private final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
     private final Map<String, Long> cachedLastUpdateByPackage = new HashMap<>();
     private final List<Runnable> pendingRefreshCallbacks = new ArrayList<>();
+    private final List<WeakReference<IconArtworkListener>> artworkListeners = new ArrayList<>();
     private boolean loaded;
     private boolean loading;
     private boolean refreshing;
@@ -66,6 +71,7 @@ public final class LauncherAppDataProvider {
     private LauncherAppDataProvider(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.iconResolver = new LauncherIconResolver(this.context);
+        this.iconPackRepository = new IconPackRepository(this.context);
         this.iconStore = new LauncherIconStore(
             this.context.getResources(),
             DockIconCache.memoryClassMb(this.context),
@@ -133,6 +139,24 @@ public final class LauncherAppDataProvider {
     }
 
     /**
+     * The icon-pack configuration now in force, as a token that changes whenever the treatment
+     * does. Every cache of treated artwork keys on it — the store here, and the rendered-icon
+     * caches that live with their surfaces — so a pack switch cannot serve a render made under the
+     * previous pack. Read from the packages once and held until an invalidation.
+     */
+    @NonNull
+    public synchronized String iconPackIdentity() {
+        if (iconPackIdentity == null) {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+            iconPackIdentity = preferences == null ? "" : iconPackRepository.activeIconPackIdentity(
+                preferences.getAppLauncherIconPackPackage(),
+                preferences.getAppLauncherPinnedIconPackPackage());
+            iconStore.setIconPackIdentity(iconPackIdentity);
+        }
+        return iconPackIdentity;
+    }
+
+    /**
      * The provider if one has already been built, and null otherwise. Clearing a cache is not a
      * reason to construct the thing that owns it: there is nothing held to clear until something
      * has asked for artwork, and building a catalogue provider as a side effect of an invalidation
@@ -169,6 +193,7 @@ public final class LauncherAppDataProvider {
 
     public synchronized void invalidate() {
         refreshGeneration++;
+        iconPackIdentity = null;
         loading = false;
         loaded = false;
         refreshing = false;
@@ -179,6 +204,58 @@ public final class LauncherAppDataProvider {
         letterBuckets.clear();
         cachedLastUpdateByPackage.clear();
         pendingRefreshCallbacks.clear();
+    }
+
+    /**
+     * Everything an icon-pack change makes stale, in one call: the catalogue, the raw artwork
+     * store, the parsed pack resources, and — through {@link IconArtworkListener} — the
+     * rendered-icon caches that live with the surfaces drawing them.
+     *
+     * <p>This exists because {@link #invalidate()} alone resets catalogue state and nothing else,
+     * while the settings screen that changes the pack has only the provider to talk to. The dock
+     * therefore kept drawing the previous pack until some unrelated gesture rebound its rows.
+     */
+    public void invalidateIconArtwork() {
+        iconStore.invalidateAll();
+        iconResolver.clearCache();
+        iconPackRepository.clearCache();
+        invalidate();
+        mainHandler.post(this::notifyIconArtworkInvalidated);
+    }
+
+    /**
+     * Something holding renders made from this provider's artwork — a dock row, a drawer — that
+     * has to be told when the artwork behind them changed. Registered weakly: a surface that has
+     * gone away is not a reason to keep it alive, and the provider outlives every view.
+     */
+    public interface IconArtworkListener {
+        void onIconArtworkInvalidated();
+    }
+
+    public synchronized void addIconArtworkListener(@NonNull IconArtworkListener listener) {
+        for (WeakReference<IconArtworkListener> held : artworkListeners) {
+            if (held.get() == listener) return;
+        }
+        artworkListeners.add(new WeakReference<>(listener));
+    }
+
+    public synchronized void removeIconArtworkListener(@NonNull IconArtworkListener listener) {
+        for (int i = artworkListeners.size() - 1; i >= 0; i--) {
+            IconArtworkListener held = artworkListeners.get(i).get();
+            if (held == null || held == listener) artworkListeners.remove(i);
+        }
+    }
+
+    private void notifyIconArtworkInvalidated() {
+        List<IconArtworkListener> live = new ArrayList<>();
+        synchronized (this) {
+            for (int i = artworkListeners.size() - 1; i >= 0; i--) {
+                IconArtworkListener held = artworkListeners.get(i).get();
+                if (held == null) artworkListeners.remove(i);
+                else live.add(held);
+            }
+        }
+        for (IconArtworkListener listener : live) listener.onIconArtworkInvalidated();
     }
 
     public synchronized boolean hasLoadedApps() {

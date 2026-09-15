@@ -131,6 +131,7 @@ import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.DockPagingModel;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.view.TerminalView;
@@ -202,6 +203,12 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private static final String LOG_TAG = "SuggestionBarView";
+    /**
+     * Its own tag, because this traces one gesture end to end and would otherwise drown the row's
+     * ordinary logging. Silent unless the app's log level is Debug, which is where every other
+     * debug trace in this codebase sits.
+     */
+    private static final String PAGING_LOG_TAG = "DockPaging";
     private static final char[] AZ_ORDER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".toCharArray();
     private static final long APP_LAUNCH_TOUCH_DELAY_MS = 120L;
     private static final long PICKUP_DECISION_WINDOW_MS = 650L;
@@ -442,6 +449,13 @@ public final class SuggestionBarView extends GridLayout
     @NonNull private List<LauncherAppEntry> swipePreviewEntries = Collections.emptyList();
     @NonNull private List<PinnedItem> swipePreviewPinnedItems = Collections.emptyList();
     @NonNull private List<List<LauncherAppEntry>> swipePreviewFolderEntries = Collections.emptyList();
+    /**
+     * The two swipe-preview animations are kept apart on purpose. The settle commits a page; the
+     * rebound explicitly does not. They shared one field once, so any path that reassigned it
+     * while a settle was running defeated that settle's end-guard — the row played the whole
+     * slide and landed back on the page it came from.
+     */
+    @Nullable private ValueAnimator swipePreviewSettleAnimator;
     @Nullable private ValueAnimator swipePreviewReboundAnimator;
     private VelocityTracker swipeVelocityTracker;
     private boolean pageSwitchAnimating = false;
@@ -484,6 +498,14 @@ public final class SuggestionBarView extends GridLayout
     private boolean pendingDrawerConfigRefresh;
     /** A catalogue swap that landed while the host was hidden; rows re-render on return. */
     private boolean pendingCatalogRefreshRender;
+    /**
+     * The icon pack changed somewhere this row cannot see — the settings screen. Drop what is
+     * held and repaint; the rendered caches live here, not in the provider.
+     */
+    private final LauncherAppDataProvider.IconArtworkListener iconArtworkListener = () -> {
+        invalidateIconArtwork();
+        scheduleCatalogRefreshRender();
+    };
     private final LauncherConfigRepository.Listener configListener = snapshot -> post(() -> {
         pinnedItems = new ArrayList<>(snapshot.dockItems);
         invalidateRenderedIconCaches();
@@ -624,6 +646,13 @@ public final class SuggestionBarView extends GridLayout
         }
         attachNotificationBadgeListener();
         if (configRepository != null) configRepository.addListener(configListener);
+        LauncherAppDataProvider.getInstance(getContext()).addIconArtworkListener(iconArtworkListener);
+        // A catalogue swap can land on a detached row; re-render on the way back in, since the
+        // views still hold whatever drawables they were last bound with.
+        if (pendingCatalogRefreshRender && hostVisible) {
+            pendingCatalogRefreshRender = false;
+            post(() -> reloadWithInput(lastInput, lastTerminalView));
+        }
     }
 
     @Override
@@ -640,6 +669,8 @@ public final class SuggestionBarView extends GridLayout
         LauncherNotificationBadgeStore.removeListener(notificationBadgeListener);
         notificationBadgeListener = null;
         if (configRepository != null) configRepository.removeListener(configListener);
+        LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
+        if (existing != null) existing.removeIconArtworkListener(iconArtworkListener);
     }
 
     @Override
@@ -740,6 +771,35 @@ public final class SuggestionBarView extends GridLayout
         LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
         if (existing != null) existing.icons().invalidateAll();
         invalidateRenderedIconCaches();
+        syncIconPackIdentity();
+    }
+
+    /**
+     * Keeps the rendered-icon cache keyed to the icon packs now in force, so a render made under
+     * the previous pack is unreachable rather than merely unwanted. See
+     * {@link DockIconCache#setIconPackIdentity}.
+     */
+    private void syncIconPackIdentity() {
+        LauncherAppDataProvider provider = appDataProvider != null
+            ? appDataProvider : LauncherAppDataProvider.peekInstance();
+        if (provider != null) iconCache.setIconPackIdentity(provider.iconPackIdentity());
+    }
+
+    /**
+     * Re-renders the rows once there is somewhere to render them, and never drops the request.
+     *
+     * <p>Every path that changes what the rows should draw ends here. The views keep the drawables
+     * they were last bound with, so a data change with no re-render leaves the dock showing the
+     * old artwork until an unrelated gesture happens to rebind it — which is exactly what made an
+     * icon-pack change look like it only took effect on a swipe.
+     */
+    private void scheduleCatalogRefreshRender() {
+        if (hostVisible && isAttachedToWindow()) {
+            pendingCatalogRefreshRender = false;
+            post(() -> reloadWithInput(lastInput, lastTerminalView));
+        } else {
+            pendingCatalogRefreshRender = true;
+        }
     }
 
     private void invalidateRenderedIconCaches() {
@@ -1146,9 +1206,14 @@ public final class SuggestionBarView extends GridLayout
         if (iconPackRepository == null) {
             iconPackRepository = new IconPackRepository(getContext());
         }
+        syncIconPackIdentity();
         if (!appDataProvider.hasLoadedApps()) {
             appDataProvider.warmAsync(() -> {
                 if (!hostVisible || !isAttachedToWindow()) {
+                    // The catalogue arrived while the host was away. Ask for the render on the
+                    // way back in rather than dropping it: this is the branch an icon-pack
+                    // change lands in, because invalidating the provider cleared `loaded`.
+                    pendingCatalogRefreshRender = true;
                     return;
                 }
                 allApps = appDataProvider.getAllApps();
@@ -1186,7 +1251,17 @@ public final class SuggestionBarView extends GridLayout
     void refreshAllApps(@Nullable Set<String> changedPackages) {
         if (injectedSuggestionButtons != null
             || appDataProvider == null || !appDataProvider.hasLoadedApps()) {
+            if (changedPackages == null) {
+                // The branch an icon-pack change actually takes on the way back from settings:
+                // the provider was invalidated there, so `loaded` is already false and the
+                // refreshAsync path below — the only one that drops artwork — is skipped. Do the
+                // full-rebuild invalidation here too, or the reload re-renders the previous pack.
+                invalidateIconArtwork();
+                if (iconResolver != null) iconResolver.clearCache();
+                if (iconPackRepository != null) iconPackRepository.clearCache();
+            }
             reloadAllApps();
+            scheduleCatalogRefreshRender();
             return;
         }
         if (changedPackages != null && !changedPackages.isEmpty()) {
@@ -1217,13 +1292,9 @@ public final class SuggestionBarView extends GridLayout
             if (appCatalogChangedListener != null) {
                 appCatalogChangedListener.run();
             }
-            if (hostVisible && isAttachedToWindow()) {
-                reloadWithInput(lastInput, lastTerminalView);
-            } else {
-                // The swap landed while the host was away; re-render the rows on return, or the
-                // dock would keep showing the pre-change catalogue with no later signal to fix it.
-                pendingCatalogRefreshRender = true;
-            }
+            // Renders now when the host can show it, and on return when it cannot; either way the
+            // dock never keeps drawing the pre-change catalogue with no later signal to fix it.
+            scheduleCatalogRefreshRender();
         });
     }
 
@@ -2104,7 +2175,7 @@ public final class SuggestionBarView extends GridLayout
             }
             // Always normalize row transform at new gesture start to avoid stale offsets.
             animate().cancel();
-            cancelSwipePreviewRebound();
+            cancelSwipePreviewAnimations();
             setListenerSafe(null);
             pageSwitchAnimating = false;
             setTranslationX(0f);
@@ -2174,6 +2245,14 @@ public final class SuggestionBarView extends GridLayout
             float vx = swipeVelocityTracker == null ? 0f : swipeVelocityTracker.getXVelocity();
             int committedPageDelta = DockPagingModel.commitPageDelta(dx, dy, vx,
                 resolvePageSwipeCommitDistancePx(), density());
+            if (pagingLogEnabled()) {
+                logPaging("up dx=" + dx + " dy=" + dy + " vx=" + vx
+                    + " commit=" + committedPageDelta + " claim=" + claim
+                    + " pinnedPage=" + pinnedPageIndex + " previewPage=" + swipePreviewPageIndex
+                    + " animating=" + pageSwitchAnimating + " dragging=" + swipePageDragging
+                    + " commitDistancePx=" + resolvePageSwipeCommitDistancePx()
+                    + " width=" + getWidth());
+            }
             if (claim == GESTURE_CLAIM_PAGE_SWIPE && committedPageDelta != 0
                 && TextUtils.isEmpty(lastInput.trim())) {
                 int pageDelta = committedPageDelta;
@@ -2195,8 +2274,10 @@ public final class SuggestionBarView extends GridLayout
                     int totalPages = getPinnedPagesCount();
                     if (totalPages > 1) {
                         int next = DockPagingModel.wrap(pinnedPageIndex + pageDelta, totalPages);
-                        if (next != pinnedPageIndex) {
-                            animatePageSwitch(pageDelta, DockPagingModel.settleVelocityHint(dx, vx));
+                        // Consume the gesture only when the switch was actually taken: a drop
+                        // falls through to the drag-back below instead of looking committed.
+                        if (next != pinnedPageIndex
+                            && animatePageSwitch(pageDelta, DockPagingModel.settleVelocityHint(dx, vx))) {
                             if (swipeVelocityTracker != null) {
                                 swipeVelocityTracker.recycle();
                                 swipeVelocityTracker = null;
@@ -6291,12 +6372,29 @@ public final class SuggestionBarView extends GridLayout
         return Math.max(0f, Math.min(slots - 1, normalized * (slots - 1)));
     }
 
-    private void animatePageSwitch(int pageDelta, float velocityPxPerSec) {
-        if (pageSwitchAnimating) return;
+    /**
+     * Starts the pinned row's page switch, and reports whether it took the decision.
+     *
+     * <p>False means nothing will happen: a switch is already in flight, the row has a single
+     * page, or the target is the page already shown. It used to return void while the caller
+     * reported the gesture handled either way, which made a dropped page switch
+     * indistinguishable from a completed one both at the source and in any log.
+     */
+    private boolean animatePageSwitch(int pageDelta, float velocityPxPerSec) {
+        if (pageSwitchAnimating) {
+            logPaging("animatePageSwitch dropped: a switch is already animating");
+            return false;
+        }
         int totalPages = getPinnedPagesCount();
-        if (totalPages <= 1) return;
+        if (totalPages <= 1) {
+            logPaging("animatePageSwitch dropped: totalPages=" + totalPages);
+            return false;
+        }
         int targetPage = DockPagingModel.wrap(pinnedPageIndex + pageDelta, totalPages);
-        if (targetPage == pinnedPageIndex) return;
+        if (targetPage == pinnedPageIndex) {
+            logPaging("animatePageSwitch dropped: target is the current page " + targetPage);
+            return false;
+        }
 
         performPinnedPageTransitionHaptic(targetPage);
         pageSwitchAnimating = true;
@@ -6309,11 +6407,14 @@ public final class SuggestionBarView extends GridLayout
             reloadWithInput("", lastTerminalView);
         };
         if (swipePageDragging && swipePreviewPageIndex == targetPage) {
+            logPaging("animatePageSwitch settle to page " + targetPage + " (swipe preview)");
             runSwipePreviewPageSwitch(direction, duration, updateContent, null);
         } else {
+            logPaging("animatePageSwitch settle to page " + targetPage + " (unified bar)");
             final float travel = Math.max(dp(24), getWidth() * 0.24f);
             runUnifiedAppsBarPageSwitch(direction, travel, duration, updateContent, null);
         }
+        return true;
     }
 
     private void performPinnedPageTransitionHaptic(int targetPage) {
@@ -6385,7 +6486,7 @@ public final class SuggestionBarView extends GridLayout
             // Do not stage a fake neighbouring page at either end of the pinned row. The old edge
             // resistance translated the current page and then snapped it back, which looked like a
             // completed page scroll that mysteriously landed on the same content.
-            cancelSwipePreviewRebound();
+            cancelSwipePreviewAnimations();
             swipePageDragging = false;
             swipePagePosition = resolveCurrentSwipePagePosition();
             clearSwipePagePreview();
@@ -6680,6 +6781,15 @@ public final class SuggestionBarView extends GridLayout
         swipePreviewFolderEntries = Collections.emptyList();
     }
 
+    /** Whether the dock's page-gesture trace is on, so a call site can skip building its string. */
+    private static boolean pagingLogEnabled() {
+        return Logger.getLogLevel() >= Logger.LOG_LEVEL_DEBUG;
+    }
+
+    private static void logPaging(@NonNull String message) {
+        if (pagingLogEnabled()) Logger.logDebug(PAGING_LOG_TAG, message);
+    }
+
     /**
      * The page commit, wrapped so it runs exactly once from whichever path the switch animation
      * ends on — its own end, or a cancel.
@@ -6691,14 +6801,26 @@ public final class SuggestionBarView extends GridLayout
      * committed and then silently landed back on the page it came from — the ghost swipe. A
      * qualified swipe is a decision; the animation is only how it is shown.
      */
-    @NonNull
-    private static Runnable pageCommitOnce(@Nullable Runnable commit) {
-        final boolean[] done = {false};
-        return () -> {
-            if (done[0]) return;
-            done[0] = true;
+    private static final class PageCommitOnce {
+        @Nullable private final Runnable commit;
+        @NonNull private final String animation;
+        private boolean done;
+
+        PageCommitOnce(@Nullable Runnable commit, @NonNull String animation) {
+            this.commit = commit;
+            this.animation = animation;
+        }
+
+        /** Commits the page the first time it is asked, and records which listener asked. */
+        void runFrom(@NonNull String listener) {
+            if (done) {
+                logPaging(animation + ": commit already done, " + listener + " ignored");
+                return;
+            }
+            done = true;
+            logPaging(animation + ": commit fired from " + listener);
             if (commit != null) commit.run();
-        };
+        }
     }
 
     private void runSwipePreviewPageSwitch(
@@ -6707,7 +6829,7 @@ public final class SuggestionBarView extends GridLayout
         @Nullable Runnable updateContent,
         @Nullable Runnable onCompleted
     ) {
-        cancelSwipePreviewRebound();
+        cancelSwipePreviewAnimations();
         animate().cancel();
         setListenerSafe(null);
         setTranslationX(0f);
@@ -6718,9 +6840,9 @@ public final class SuggestionBarView extends GridLayout
         final float distanceRatio = clamp01(Math.abs(targetOffset - startOffset) / Math.max(1f, getWidth()));
         final long settleDuration = clamp(Math.round(duration * (0.72f + (0.28f * distanceRatio))), 240, 420);
         swipePageDragging = true;
-        final Runnable commit = pageCommitOnce(updateContent);
+        final PageCommitOnce commit = new PageCommitOnce(updateContent, "swipe-preview");
         ValueAnimator settle = ValueAnimator.ofFloat(startOffset, targetOffset);
-        swipePreviewReboundAnimator = settle;
+        swipePreviewSettleAnimator = settle;
         settle.setDuration(settleDuration);
         settle.setInterpolator(pageSettleInterpolator());
         settle.addUpdateListener(animation -> {
@@ -6729,13 +6851,16 @@ public final class SuggestionBarView extends GridLayout
             invalidate();
         });
         settle.addListener(new AnimatorListenerAdapter() {
+            private boolean cancelled;
+
             @Override
             public void onAnimationEnd(Animator animation) {
-                if (swipePreviewReboundAnimator != animation) {
-                    return;
-                }
-                swipePreviewReboundAnimator = null;
-                commit.run();
+                // Guarded on this listener's own state, not on a field anything else can
+                // reassign: cancelSwipePreviewAnimations() nulls the field before it cancels, so
+                // an identity check here would skip the whole teardown on every cancel.
+                if (cancelled) return;
+                if (swipePreviewSettleAnimator == animation) swipePreviewSettleAnimator = null;
+                commit.runFrom("settle end");
                 pageSwitchAnimating = false;
                 swipePageDragging = false;
                 swipePagePosition = resolveCurrentSwipePagePosition();
@@ -6749,19 +6874,28 @@ public final class SuggestionBarView extends GridLayout
 
             @Override
             public void onAnimationCancel(Animator animation) {
-                if (swipePreviewReboundAnimator == animation) {
-                    swipePreviewReboundAnimator = null;
-                }
+                cancelled = true;
+                if (swipePreviewSettleAnimator == animation) swipePreviewSettleAnimator = null;
                 // Whoever cancelled owns the visual state that follows (a new gesture, a reset);
-                // the page the swipe asked for is committed here either way.
-                commit.run();
+                // the page the swipe asked for is committed here either way. The in-flight latch
+                // is not visual state, though — no switch is in flight once this animator is
+                // cancelled, and leaving it set made the next qualified swipe get consumed at
+                // ACTION_UP and then dropped with no animation at all.
+                commit.runFrom("settle cancel");
+                pageSwitchAnimating = false;
                 swipePagePosition = resolveCurrentSwipePagePosition();
             }
         });
         settle.start();
     }
 
-    private void cancelSwipePreviewRebound() {
+    /** Stops whichever swipe-preview animation is running: the settle, the rebound, or both. */
+    private void cancelSwipePreviewAnimations() {
+        if (swipePreviewSettleAnimator != null) {
+            ValueAnimator animator = swipePreviewSettleAnimator;
+            swipePreviewSettleAnimator = null;
+            animator.cancel();
+        }
         if (swipePreviewReboundAnimator != null) {
             ValueAnimator animator = swipePreviewReboundAnimator;
             swipePreviewReboundAnimator = null;
@@ -6783,7 +6917,7 @@ public final class SuggestionBarView extends GridLayout
         animate().cancel();
         setListenerSafe(null);
         final float startOffset = swipeVisualOffsetX;
-        cancelSwipePreviewRebound();
+        cancelSwipePreviewAnimations();
         swipePreviewReboundAnimator = ValueAnimator.ofFloat(startOffset, 0f);
         long reboundDuration = clamp(Math.round(150f + (70f * clamp01(Math.abs(startOffset) / Math.max(1f, getWidth() * 0.38f)))), 150, 220);
         swipePreviewReboundAnimator.setDuration(reboundDuration);
@@ -6862,7 +6996,7 @@ public final class SuggestionBarView extends GridLayout
         final Interpolator settleInterpolator = pageSettleInterpolator();
         final long outgoingDuration = Math.max(92L, Math.round(duration * 0.44f));
         final long incomingDuration = Math.max(118L, duration - outgoingDuration);
-        final Runnable commit = pageCommitOnce(updateContent);
+        final PageCommitOnce commit = new PageCommitOnce(updateContent, "unified bar");
 
         animate()
             .translationX(-direction * (travel * 0.78f))
@@ -6878,7 +7012,7 @@ public final class SuggestionBarView extends GridLayout
                     cancelled = true;
                     // Commit before the reset: the page is the swipe's decision, and the incoming
                     // half that would otherwise have carried it is not going to run.
-                    commit.run();
+                    commit.runFrom("outgoing cancel");
                     finish(false);
                 }
 
@@ -6888,7 +7022,7 @@ public final class SuggestionBarView extends GridLayout
                         return;
                     }
                     completed = true;
-                    commit.run();
+                    commit.runFrom("outgoing end");
                     setTranslationX(direction * travel);
                     setAlpha(0f);
                     animate()
@@ -7155,7 +7289,7 @@ public final class SuggestionBarView extends GridLayout
             return;
         }
         animate().cancel();
-        cancelSwipePreviewRebound();
+        cancelSwipePreviewAnimations();
         swipePageDragging = false;
         swipePagePosition = resolveCurrentSwipePagePosition();
         clearSwipePagePreview();

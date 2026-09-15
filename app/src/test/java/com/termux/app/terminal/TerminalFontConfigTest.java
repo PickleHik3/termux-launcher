@@ -15,7 +15,7 @@ public class TerminalFontConfigTest {
             "font_family path=~/.termux/font.ttf\n"
                 + "bold_font path=/data/local/bold.ttf\n"
                 + "italic_font family=\"Roboto Mono Italic\"\n"
-                + "bold_italic_font 'family=Roboto Mono Bold Italic' # comment\n", true);
+                + "bold_italic_font 'family=Roboto Mono Bold Italic'\n", true);
 
         assertTrue(result.errors.toString(), result.errors.isEmpty());
         assertEquals(TerminalFontConfig.SourceType.PATH,
@@ -179,9 +179,9 @@ public class TerminalFontConfigTest {
                 + "symbol_map U+E200-U+E100 family=bad\n"
                 + "symbol_map U+D800-U+DFFF family=bad\n"
                 + "symbol_map U+110000 family=bad\n"
-                + "symbol_map U+E300 relative.ttf\n", true);
+                + "symbol_map U+E300\n", true);
 
-        assertEquals(5, result.errors.size());
+        assertEquals(result.errors.toString(), 5, result.errors.size());
         assertEquals(1, result.symbolMaps.size());
         assertEquals(0xE000, result.symbolMaps.get(0).ranges.get(0).first);
     }
@@ -189,13 +189,13 @@ public class TerminalFontConfigTest {
     @Test
     public void invalidLinesDoNotDiscardValidFaces() {
         TerminalFontConfig.Result result = TerminalFontConfig.parse(
-            "font_family relative.ttf\n"
+            "font_family\n"
                 + "bold_font path=relative.ttf\n"
                 + "unknown family=nope\n"
                 + "italic_font path=/valid.ttf\n"
                 + "bold_italic_font family=\"unterminated\n", true);
 
-        assertEquals(4, result.errors.size());
+        assertEquals(result.errors.toString(), 4, result.errors.size());
         assertNull(result.face(TerminalFontConfig.Face.REGULAR));
         assertNull(result.face(TerminalFontConfig.Face.BOLD));
         assertEquals("/valid.ttf", result.face(TerminalFontConfig.Face.ITALIC).value);
@@ -267,10 +267,12 @@ public class TerminalFontConfigTest {
                 + "font_features 'bad name' +liga\n", true);
 
         assertEquals(result.errors.toString(), 3, result.errors.size());
-        assertEquals("line 3: font_features names undeclared symbol map 'ghost'",
-            result.errors.get(1));
-        assertEquals("line 4: font_variations names undeclared symbol map 'ghost'",
-            result.errors.get(2));
+        assertEquals("line 3: font_features target 'ghost' matches no symbol map or configured"
+            + " family", result.errors.get(0));
+        assertEquals("line 5: font_features target 'bad name' matches no symbol map or configured"
+            + " family", result.errors.get(1));
+        assertEquals("line 4: font_variations target 'ghost' matches no symbol map or configured"
+            + " family", result.errors.get(2));
         assertNull(result.namedFeatures("ghost"));
         assertNull(result.namedVariations("ghost"));
         assertEquals("'liga' 1", result.symbolMaps.get(0).features);
