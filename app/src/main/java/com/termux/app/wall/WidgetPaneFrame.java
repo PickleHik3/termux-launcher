@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
@@ -62,12 +63,6 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_GRID_SIZE = 2;
     private static final int ACTION_HELP = 3;
     private static final int ACTION_EDITOR = 4;
-
-    /** nf-fa-cog and nf-fa-pencil. */
-    private static final String GLYPH_SETTINGS = "";
-    private static final String GLYPH_EDIT = "";
-    /** Sliders: the same idea as the terminal tab's editor button, in the page tab's font. */
-    private static final String GLYPH_EDITOR = "\uf1de";
 
     private final PaneRim mRim = new PaneRim();
     private final CornerBracket mBracket = new CornerBracket();
@@ -162,10 +157,10 @@ public final class WidgetPaneFrame extends PaneContentFrame {
 
     private void applyRestingActions() {
         if (mControls == null) return;
-        mControls.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
-            PaneControlsView.Action.glyph(ACTION_EDIT, GLYPH_EDIT),
-            PaneControlsView.Action.glyph(ACTION_EDITOR, GLYPH_EDITOR),
-            PaneControlsView.Action.label(ACTION_HELP, getContext().getString(R.string.help_button)));
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
+            PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT),
+            PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
     }
 
     /** The read-out on the editing tab: the columns and rows the grid is showing. */
@@ -174,7 +169,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         mControls.setActions(PaneControlsView.Action.label(ACTION_GRID_SIZE,
             getContext().getString(R.string.widget_grid_size_tab,
                 mHost.widgetGridColumns(), mHost.widgetGridRows())),
-            PaneControlsView.Action.label(ACTION_HELP, getContext().getString(R.string.help_button)));
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
     }
 
     private void runControl(int id) {

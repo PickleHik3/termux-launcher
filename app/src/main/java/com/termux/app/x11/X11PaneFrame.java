@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
@@ -92,12 +93,6 @@ public final class X11PaneFrame extends PaneContentFrame {
     private static final int ACTION_POWER = 0;
     private static final int ACTION_SETTINGS = 1;
 
-    /** nf-fa-power_off and nf-fa-cog. */
-    private static final String GLYPH_POWER = "\uf011";
-    private static final String GLYPH_SETTINGS = "\uf013";
-    /** Sliders: the same idea as the terminal tab's editor button, in the page tab's font. */
-    private static final String GLYPH_EDITOR = "\uf1de";
-
     private final PaneRim mRim = new PaneRim();
     private final CornerBracket mBracket = new CornerBracket();
     private final RectF mBracketBounds = new RectF();
@@ -166,10 +161,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         // The controls tab sits above everything, drawn only while shown; the frame itself
         // answers the taps, so the view never stands between a finger and X.
         mControls = new PaneControlsView(getContext());
-        mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, GLYPH_POWER),
-            PaneControlsView.Action.glyph(ACTION_SETTINGS, GLYPH_SETTINGS),
-            PaneControlsView.Action.glyph(ACTION_EDITOR, GLYPH_EDITOR),
-            PaneControlsView.Action.label(ACTION_HELP, getContext().getString(R.string.help_button)));
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, CornerTabGlyphs.POWER),
+            PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
+            PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
         mControls.setListener(id -> {
             if (mHost == null) return;
             if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
