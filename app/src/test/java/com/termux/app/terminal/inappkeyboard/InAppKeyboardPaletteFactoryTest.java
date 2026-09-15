@@ -63,9 +63,27 @@ public class InAppKeyboardPaletteFactoryTest {
             assertTrue(variant + " locked label contrast",
                 ColorUtils.calculateContrast(palette.lockedModifierColor,
                     palette.activatedKeyBackground) >= 4.5d);
-            assertEquals(variant + " one-dp border",
-                context.getResources().getDisplayMetrics().density,
-                palette.borderWidth, 0.001f);
+            assertTrue(variant + " borders are disabled", !palette.borderEnabled);
+            assertTrue(variant + " corner radius is Material-medium sized",
+                palette.borderRadius >= 8f * context.getResources().getDisplayMetrics().density);
+            assertTrue(variant + " function label contrast",
+                ColorUtils.calculateContrast(palette.functionLabelColor,
+                    palette.functionKeyBackground) >= 4.5d);
+        }
+    }
+
+    @Test
+    public void functionKeysReadOneToneBelowLetterKeysAndActionIsPrimary() {
+        for (String variant : new String[] {"system", "light", "dark"}) {
+            Theme.Palette palette = InAppKeyboardPaletteFactory.create(context, variant);
+
+            assertNotEquals(variant + " function bg differs from letter key bg",
+                palette.keyBackground, palette.functionKeyBackground);
+            assertNotEquals(variant + " function bg differs from keyboard tray",
+                palette.keyboardBackground, palette.functionKeyBackground);
+            // The space bar shares the letter keys' tone rather than the action role's.
+            assertEquals(variant + " space bar matches letter key tone",
+                palette.keyBackground, palette.spaceBarBackground);
         }
     }
 
@@ -120,11 +138,19 @@ public class InAppKeyboardPaletteFactoryTest {
     }
 
     @Test
-    public void materialVariantsKeepActionLabelsAlignedWithPrimaryLabels() {
-        Theme.Palette palette = InAppKeyboardPaletteFactory.create(context, "dark");
-        assertEquals(palette.labelColor, palette.actionLabelColor);
-        assertEquals(palette.subLabelColor, palette.actionSubLabelColor);
-        assertNull(palette.indicatorColors);
+    public void actionKeyIsAFilledMaterialButtonDistinctFromLetterLabels() {
+        // The enter/action key is now a filled primary chip with an onPrimary label — no
+        // longer the plain label shared by every other key, which is what function keys use.
+        for (String variant : new String[] {"system", "light", "dark"}) {
+            Theme.Palette palette = InAppKeyboardPaletteFactory.create(context, variant);
+            assertNotEquals(variant + " action bg differs from letter key bg",
+                palette.keyBackground, palette.actionKeyBackground);
+            assertNotEquals(variant + " action label differs from the plain label",
+                palette.labelColor, palette.actionLabelColor);
+            assertEquals(variant + " action label matches its sub-label",
+                palette.actionLabelColor, palette.actionSubLabelColor);
+        }
+        assertNull(InAppKeyboardPaletteFactory.create(context, "dark").indicatorColors);
     }
 
     @Test
