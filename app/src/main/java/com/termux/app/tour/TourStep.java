@@ -1,5 +1,9 @@
 package com.termux.app.tour;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * One card of the first-boot tour: what it says, what it points at, and which gestures clear it.
  *
@@ -12,8 +16,28 @@ package com.termux.app.tour;
  */
 public final class TourStep {
 
+    /** What kind of card this is, which is what decides the buttons it offers. */
+    public enum Kind {
+        /** A lesson: one control, one gesture per stage, cleared by watching the user do it. */
+        LESSON,
+        /** A question with an answer per button and no gesture at all. */
+        CHOICE,
+        /** The last card, which ends the run on its own action. */
+        CLOSING
+    }
+
+    /** The buttons a lesson always offers. */
+    private static final TourAction[] LESSON_ACTIONS =
+        {TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR};
+
+    /** The closing card's one action. */
+    private static final TourAction[] CLOSING_ACTIONS = {TourAction.START_USING};
+
     /** Stable id, used by prefs and by the tests; never shown. */
     public final String id;
+
+    /** Which kind of card this is. */
+    public final Kind kind;
 
     /** String resource for the card's sentence. */
     public final int copyRes;
@@ -63,6 +87,9 @@ public final class TourStep {
      */
     public final boolean chordGlow;
 
+    /** The buttons this card offers, in the order they are read. */
+    private final List<TourAction> actions;
+
     public TourStep(String id, int copyRes, int secondLineRes, String targetId,
                     String[] signals, TourGesture[] gestures) {
         this(id, copyRes, secondLineRes, new String[] {targetId}, signals, gestures);
@@ -92,6 +119,18 @@ public final class TourStep {
      */
     public TourStep(String id, int[] copyLines, String[] targetIds, String[] signals,
                     TourGesture[] gestures, boolean topAnchored, boolean chordGlow) {
+        this(id, signals.length == 0 ? Kind.CLOSING : Kind.LESSON, copyLines, targetIds, signals,
+            gestures, topAnchored, chordGlow, null);
+    }
+
+    /**
+     * The whole shape: a kind, a sentence per stage, and the buttons the card offers. A card that
+     * names no buttons takes the ones its kind always offers; a choice has to name its own,
+     * because its answers are the card.
+     */
+    public TourStep(String id, Kind kind, int[] copyLines, String[] targetIds, String[] signals,
+                    TourGesture[] gestures, boolean topAnchored, boolean chordGlow,
+                    TourAction[] actions) {
         if (gestures.length < Math.max(1, signals.length))
             throw new IllegalArgumentException("step " + id + " has fewer gestures than signals");
         if (targetIds.length == 0)
@@ -108,6 +147,27 @@ public final class TourStep {
         this.gestures = gestures.clone();
         this.topAnchored = topAnchored;
         this.chordGlow = chordGlow;
+        if (kind == Kind.CHOICE && signals.length != 0)
+            throw new IllegalArgumentException("choice " + id + " is cleared by a button, not a"
+                + " gesture");
+        TourAction[] offered = actions != null ? actions : defaultActions(kind);
+        if (offered.length == 0)
+            throw new IllegalArgumentException("card " + id + " offers no way on");
+        this.kind = kind;
+        this.actions = Collections.unmodifiableList(Arrays.asList(offered.clone()));
+    }
+
+    private static TourAction[] defaultActions(Kind kind) {
+        switch (kind) {
+            case CLOSING: return CLOSING_ACTIONS;
+            case LESSON: return LESSON_ACTIONS;
+            default: return new TourAction[0];
+        }
+    }
+
+    /** The buttons this card offers, in order. */
+    public List<TourAction> actions() {
+        return actions;
     }
 
     /** How many controls this card names; past the end, the last one stands for the rest. */
@@ -169,8 +229,13 @@ public final class TourStep {
         return false;
     }
 
-    /** Whether the card at {@code stage} is the closing card, which ends on its own buttons. */
+    /** Whether this is the closing card, which ends the run on its own action. */
     public boolean isClosingCard() {
-        return signals.length == 0;
+        return kind == Kind.CLOSING;
+    }
+
+    /** Whether this card is a question the user answers with one of its buttons. */
+    public boolean isChoiceCard() {
+        return kind == Kind.CHOICE;
     }
 }
