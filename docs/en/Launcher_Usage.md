@@ -103,7 +103,7 @@ widget takes the nearest free spot instead, as before. A tap on the page's edge 
 holding the grid's settings and an edit button. While you are editing, every widget on the page is
 outlined and a tap on any of them picks it up to move or resize, and that tab reads out the grid's
 size; tapping it gives you two numbers to drag — columns and rows — which the widgets rearrange to
-as you drag. The same two numbers are sliders on the Layout settings page. The in-app
+as you drag. The same two numbers are sliders in the Layout editor for Home. The in-app
 keyboard goes away while you are on Widgets — nothing there takes typing — and comes back with the
 terminal.
 
@@ -126,8 +126,8 @@ the pinned row, most-used page, notification dots, and icon browsing behavior.
 ### A–Z index
 
 Scrub horizontally across the A–Z row to jump to installed apps beginning with a letter. The index is
-a browsing control, not a text field. It can be hidden under **Settings → Layout →
-Alphabets row**.
+a browsing control, not a text field. It can be hidden from **Settings → Layout**, on the place
+you want it hidden for.
 
 ### Search from the shell prompt
 

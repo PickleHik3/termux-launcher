@@ -9,15 +9,17 @@ want but not where it lives. Search indexes the preferences inside every destina
 
 ## Layout
 
-Use this section to arrange what each place shows and where. A place is Home (the widget grid),
-Terminal, or Display (once the Linux display is on); tabs at the top pick which one the rows below
-describe, and a Portrait/Landscape pill picks the orientation, since an arrangement can differ
-between the two. A miniature shows the result, and tapping a part of it jumps to that row.
+Three doors, **Home**, **Terminal** and **Display**, each opening the Layout editor on that place —
+the same editor a corner tab or the long-press menu opens. A Portrait/Landscape toggle above the
+place's miniature switches which orientation you are arranging; the real screen behind the editor
+follows what you change only for the orientation you are actually holding the phone in. Done and
+Discard let you keep or throw away everything you changed in that visit.
 
-- **Status bar** and **Apps row**: which edge the row stands on, or hidden. **Alphabets row** shows
-  or hides the A–Z index below the pinned apps, and only while the apps row is along the bottom.
-  **Extra keys**: where the terminal's extra keys stand, or hidden. A column down the left or the
-  right is a landscape arrangement; in portrait the rows stand along the bottom or not at all.
+- **Status bar** and **Apps row**: drag either on the miniature to the edge you want it on, or into
+  the hide tray to hide it. **Alphabets row** shows or hides the A–Z index below the pinned apps,
+  and only while the apps row is along the bottom. **Extra keys**: drag to where the terminal's
+  extra keys should stand, or into the tray to hide them. A column down the left or the right is a
+  landscape arrangement; in portrait the rows stand along the bottom or not at all.
 
 The status bar can stand on the top or the bottom in portrait, and on any of the four edges in
 landscape; it is never hidden, so the swipe that moves between places always has somewhere to live.
@@ -30,6 +32,9 @@ bottom, up and down on a column, where Home is above Terminal and Display below 
 across the bar opens and closes it. A column shares its edge with the pinned apps and the extra
 keys when those stand there too: the status bar takes the top of that edge and the rest follows
 underneath.
+- **Dock height** and **Keyboard height**: how tall the dock and the built-in keyboard stand, and
+  **Keyboard bottom padding** for the clearance it leaves below the keyboard, each set separately
+  per place and per orientation; upgrading carries your current values over unchanged.
 - **Keyboard on enter**: whether the on-screen keyboard comes back the way you left it, opens, or
   stays closed when you switch to this place. Remembered per place, the same in both orientations.
   On Home the keyboard opens over the page rather than shrinking it, so the widgets keep their
@@ -46,10 +51,10 @@ underneath.
 
 Use this section for visible surfaces and colors:
 
-- **Surface editor:** tune the dock, keyboard, status panel, and terminal while looking at the real
+- **Appearance:** tune the dock, keyboard, status panel, and terminal while looking at the real
   home screen. Tap the floating palette to style every surface at once, or tap a surface to style
   it on its own. This edits the shared look every place starts from; a look that differs between
-  Home, Terminal and Display is edited by opening **Surface editor** from the long-press menu while
+  Home, Terminal and Display is edited by opening **Appearance** from the long-press menu while
   on that place.
   The keyboard's **BG opacity** applies to the keyboard docked under the terminal — a floating,
   split, or overlaying keyboard is a solid panel and ignores it — while its **Edges** apply to
@@ -69,10 +74,10 @@ Use this section for visible surfaces and colors:
 - **Wallpaper:** show or hide the system wallpaper behind launcher surfaces.
 - **Icon appearance:** monochrome icons, system or custom icon pack, and pinned-app icon behavior.
 - **Keyboard look:** **Theme**, **Keyboard colors**, and **Typeface** for the built-in keyboard,
-  **Bottom padding** to lift its bottom key row away from the edge of the screen (the surface editor
-  sets the same padding by dragging the pill under the last key row), and **Customize keyboard
-  appearance** for live size, spacing, radius, and color tuning. These rows are only enabled while
-  the built-in keyboard is the chosen input method on the **Keyboard** page.
+  **Bottom padding** to lift its bottom key row away from the edge of the screen (Layout sets the
+  same padding per place and orientation), and **Customize keyboard appearance** for live size,
+  spacing, radius, and color tuning. These rows are only enabled while the built-in keyboard is the
+  chosen input method on the **Keyboard** page.
 
 The font picker writes its managed selection to `~/.termux/fonts.d/10-launcher.conf`. **Use font.ttf
 / Termux:Styling** removes that one managed config; it does not delete your own `fonts.conf` or
@@ -191,7 +196,7 @@ wrong — a clock that stops updating, a status reading that freezes, a rim that
 ## Status bar
 
 Use this section for the top row's clock and readouts. Its surface — blur, opacity, grain, and
-radius — is tuned per place in the surface editor, opened from the long-press menu on that place.
+radius — is tuned per place in Appearance, opened from the long-press menu on that place.
 
 - **Clock style**, **Clock alignment**, and **Use 12-hour time**.
 - **CPU usage**, **Memory usage**, and **Weather** status cards.
@@ -219,12 +224,12 @@ Open-Meteo attribution.
   punctuation are ever moved; Enter, Backspace, Ctrl and the other action keys are not. **Forget
   learned taps** clears what it has learned. It stores per-key averages only, never what you typed.
 - **Keyboard type:** docked, floating or split, on every place at once, for the orientation you
-  are holding the phone in. The **Layout** page is where one place is given a type of its own, and
+  are holding the phone in. The **Layout** editor is where one place is given a type of its own, and
   this row shows no choice while the places disagree.
 - **Floating keyboard width**, **Floating keyboard height** and **Split keyboard gap**: how much
   of the screen a floating keyboard takes, how tall it is, and how far apart the halves of a split
   one sit. All three are set separately for portrait and landscape; which type a place uses is
-  chosen on the **Layout** page. A floating keyboard can also be resized in place by dragging the
+  chosen in the **Layout** editor. A floating keyboard can also be resized in place by dragging the
   handle in its bottom-left corner: out to the left makes it wider, up makes its rows taller, and
   the edges you are not holding stay where they are. It writes the same two values.
 - **Layout documentation** and **Supported key values**.
@@ -258,9 +263,9 @@ built-in one. Keyboard height is remembered separately for portrait and landscap
   screen behind Settings.
 - **Double tap A–Z Row to lock screen:** choose and configure the available lock backend.
 
-Where the pinned apps stand, the alphabets row, and the widget grid's size are all on the **Layout**
-page now, one place and orientation at a time, and its dock look is tuned in the surface editor,
-opened from the long-press menu on that place.
+Where the pinned apps stand, the alphabets row, and the widget grid's size are all in the **Layout**
+editor now, one place and orientation at a time, and its dock look is tuned in Appearance, opened
+from the long-press menu on that place.
 
 ## Linux display
 
@@ -272,8 +277,8 @@ resolution, text size, clipboard sharing, whether Linux apps are listed in the a
 the window manager started with the display, the mark on the Display place's badge in the status
 bar, starting the display with the launcher, the start command, pointing new shells at the
 display, two compatibility switches, and what your GPU can do for Linux apps. Where the extra keys
-stand while the display is showing, and everything else about its arrangement, lives on the
-**Layout** page's Display tab once the switch above is on. To have the phone try every graphics
+stand while the display is showing, and everything else about its arrangement, lives in
+**Settings → Layout → Display** once the switch above is on. To have the phone try every graphics
 profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 
 ## Services & permissions

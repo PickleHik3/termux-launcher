@@ -19,7 +19,8 @@ this date; file references are in the notes at the end.
 | 8 | Extra keys row | 37.5 dp | `terminal_toolbar_view_pager` | all, default bottom |
 | 9 | In-app keyboard | keyboard | `inapp_keyboard_view_host` | terminal; hidden on entering Display and Widgets unless the place asks for it |
 
-Full-bleed layers over everything: app drawer, command palette, floating keyboard, surface editor.
+Full-bleed layers over everything: app drawer, command palette, floating keyboard, the Appearance
+editor, the Layout editor.
 
 Every corner tab on every place carries the same two doors, and so does the terminal's long-press
 menu: **Appearance** changes how this screen looks, **Layout** changes where things sit on it.
