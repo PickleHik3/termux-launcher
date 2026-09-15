@@ -1305,6 +1305,9 @@
                 <string name="termux_layout_editor_title">Layout</string>
                 <string name="termux_layout_editor_revert">Undo changes</string>
                 <string name="termux_layout_editor_unsaved_message">Discard them and put everything back where it was when you opened the editor, or save and close?</string>
+                <!-- The dock's and the keyboard's height rows. The heading above each one says
+                     which is which, so the label column only has to say what it sets. -->
+                <string name="termux_layout_editor_height">Height</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
 
