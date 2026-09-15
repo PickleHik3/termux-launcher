@@ -104,6 +104,8 @@ public final class SessionsDrawerView extends LinearLayout
 
     private static final float TITLE_SP = 14f;
     private static final float SUBTITLE_SP = 10.5f;
+    /** The counts under a row's name: small, because across a narrow drawer they were cut short. */
+    private static final float COUNTS_SP = 9f;
     private static final float ACTION_SP = 12.5f;
     private static final int ROW_HEIGHT_DP = 44;
     private static final int WINDOW_ROW_HEIGHT_DP = 36;
@@ -406,20 +408,15 @@ public final class SessionsDrawerView extends LinearLayout
         });
         row.addView(chevron, new LayoutParams(dp(22), LayoutParams.MATCH_PARENT));
 
-        // The dot does two jobs, because they never collide: it marks the session you are in, and
-        // takes the agent's colour when a pane in it is running one — a blocked agent is findable
-        // without opening the session it is in.
-        TextView dot = label(12f, dotColor(session));
-        dot.setText(session.current || session.agentState != null ? "●" : "");
-        dot.setGravity(Gravity.CENTER);
-        row.addView(dot, new LayoutParams(dp(14), LayoutParams.MATCH_PARENT));
-
+        // The session you are in is the bold one on the filled row; a session with an agent in it
+        // wears the agent's colour on its name, so a blocked agent is findable without opening the
+        // session it is in. A separate marker for either was a column the narrow drawer cannot spare.
         LinearLayout text = textBlock();
-        TextView title = label(TITLE_SP, mDress.textColor);
+        TextView title = label(TITLE_SP, agentTint(session));
         title.setText(NerdFontSpans.span(getContext(), sessionTitle(session)));
         title.setTypeface(Typeface.create("sans-serif-medium",
             session.current ? Typeface.BOLD : Typeface.NORMAL));
-        TextView subtitle = label(SUBTITLE_SP, mDress.subTextColor);
+        TextView subtitle = label(COUNTS_SP, mDress.subTextColor);
         subtitle.setText(counts(session));
         text.addView(title);
         text.addView(subtitle);
@@ -507,7 +504,7 @@ public final class SessionsDrawerView extends LinearLayout
         title.setText(NerdFontSpans.span(getContext(), windowTitle(window)));
         title.setTypeface(Typeface.create("sans-serif-medium",
             focused ? Typeface.BOLD : Typeface.NORMAL));
-        TextView subtitle = label(SUBTITLE_SP, mDress.subTextColor);
+        TextView subtitle = label(COUNTS_SP, mDress.subTextColor);
         subtitle.setText(getResources().getQuantityString(R.plurals.session_browser_pane_count,
             window.panes.size(), window.panes.size()));
         text.addView(title);
@@ -537,7 +534,7 @@ public final class SessionsDrawerView extends LinearLayout
         LinearLayout text = textBlock();
         TextView title = label(TITLE_SP, mDress.textColor);
         title.setText(workspace.name);
-        TextView subtitle = label(SUBTITLE_SP, mDress.subTextColor);
+        TextView subtitle = label(COUNTS_SP, mDress.subTextColor);
         subtitle.setText(savedSubtitle(workspace));
         text.addView(title);
         text.addView(subtitle);
@@ -934,7 +931,8 @@ public final class SessionsDrawerView extends LinearLayout
             System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS);
     }
 
-    private int dotColor(@NonNull SessionBrowserModel.Session session) {
+    /** The colour a session's name wears: the agent's while one is running in it, else the text's. */
+    private int agentTint(@NonNull SessionBrowserModel.Session session) {
         Context context = getContext();
         if (session.agentState == AgentStatus.State.BLOCKED) {
             return MaterialColors.getColor(context, com.google.android.material.R.attr.colorError,
@@ -945,7 +943,7 @@ public final class SessionsDrawerView extends LinearLayout
                 com.google.android.material.R.attr.colorTertiary,
                 ContextCompat.getColor(context, R.color.termux_primary));
         }
-        return session.current ? mDress.textColor : mDress.subTextColor;
+        return mDress.textColor;
     }
 
     @Nullable
