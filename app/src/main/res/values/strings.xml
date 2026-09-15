@@ -199,6 +199,22 @@
     <string name="settings_extra_keys_sheet_swipe_label">Swipe-up label</string>
     <string name="settings_extra_keys_sheet_swipe_label_hint">Small label above the key</string>
     <string name="settings_extra_keys_sheet_clear_swipe_up">Remove swipe-up action</string>
+    <string name="settings_extra_keys_color">Colour</string>
+    <string name="settings_extra_keys_color_title">Key colour</string>
+    <string name="settings_extra_keys_color_default">Default</string>
+    <string-array name="extra_keys_color_role_names">
+        <item>Primary</item>
+        <item>Secondary</item>
+        <item>Tertiary</item>
+        <item>Error</item>
+        <item>Primary container</item>
+        <item>Secondary container</item>
+        <item>Tertiary container</item>
+        <item>Error container</item>
+        <item>Surface variant</item>
+        <item>Black</item>
+        <item>White</item>
+    </string-array>
     <string name="settings_extra_keys_sheet_remove">Remove key</string>
     <string name="settings_extra_keys_sheet_done">Done</string>
     <string name="settings_extra_keys_action_macro_title">Macro: %1$s</string>

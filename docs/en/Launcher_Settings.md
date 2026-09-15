@@ -220,9 +220,23 @@ Open-Meteo attribution.
 - **Hide the on-screen keyboard:** hide it while a physical keyboard is connected.
 - **Edit extra keys:** the terminal key row, previewed as it will look. Add common keys
   such as CTRL with one tap, search for any other key or launcher action, drag keys to
-  reorder them, give a key a swipe-up action and a label, and start from presets including
-  the classic Termux row. Page two of the row is edited on the same screen. **Go to Widgets**,
-  **Go to Terminal**, **Go to Display** and **Mouse mode** are among the actions a key can carry.
+  reorder them, give a key a swipe-up action, a label and a colour, and start from presets
+  including the classic Termux row. Page two of the row is edited on the same screen. **Go to
+  Widgets**, **Go to Terminal**, **Go to Display** and **Mouse mode** are among the actions a key
+  can carry.
+- **Key colours:** a key can be given one of eleven colours, or left with the row's own styling.
+  Nine of them follow your theme, so they change with dark mode and with the colours the launcher
+  takes from your wallpaper; black and white stay as they are. Pick a colour in the key editor, or
+  open the Appearance editor, touch the keyboard, and tap the key itself. Out of the box the three
+  place keys are coloured, so Widgets, Terminal and Display are easy to tell apart.
+- **Keys that do nothing where you are get dimmed.** The key row follows you between Widgets,
+  Terminal and Display, and a key with nothing to act on goes faint and stops responding until you
+  move somewhere it works. Nothing is removed or rearranged, so the row always looks the same. On
+  **Terminal** every key works. On **Display** everything works except keys that manage panes,
+  windows and sessions. On **Widgets** you keep the place keys, the keyboard key, the sessions key
+  and anything belonging to the launcher itself — settings, help, the command palette, the layout
+  and appearance editors, the wallpaper, launching an app — while typing keys, modifiers, Paste,
+  Scroll and the terminal's own tools are dimmed.
 - **Extra keys:** choose editing and navigation keys shown on the built-in layout.
 - **Custom layout:** load `~/.termux/keyboard/layout.xml`.
 - **Learn where you tap:** off by default. The keyboard learns where your taps land on each key
