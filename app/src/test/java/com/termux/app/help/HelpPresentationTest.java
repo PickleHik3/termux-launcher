@@ -66,6 +66,21 @@ public class HelpPresentationTest {
     private void open(PaneWallPage place) {
         overlay.show(place); layout(); overlay.refresh(); layout();
     }
+    /** The guide, then the catalogue button: where the topic chooser now lives. */
+    private void openTopics(PaneWallPage place) {
+        open(place);
+        described("Help topics").performClick();
+        layout();
+    }
+    /** One of the overlay's own floating buttons, by the name a reader hears. */
+    private View described(String description) {
+        for (int i = 0; i < overlay.getChildCount(); i++) {
+            View view = overlay.getChildAt(i);
+            CharSequence had = view.getContentDescription();
+            if (had != null && description.contentEquals(had)) return view;
+        }
+        return null;
+    }
     private void tap(float x,float y) {
         MotionEvent down = MotionEvent.obtain(0,0,MotionEvent.ACTION_DOWN,x,y,0);
         MotionEvent up = MotionEvent.obtain(0,1,MotionEvent.ACTION_UP,x,y,0);
@@ -103,29 +118,82 @@ public class HelpPresentationTest {
         return new Rect(left, top, left + view.getWidth(), top + view.getHeight());
     }
 
-    @Test public void terminalOpensOnTheChooserAndHomeOnTheOverview() {
-        open(PaneWallPage.TERMINAL);
-        assertNotNull(exactly("Show all"));
-        assertNotNull(startingWith("Pane corners\n"));
-        assertNull(exactly("Previous"));
-        overlay.dismiss();
-        open(PaneWallPage.WIDGETS);
-        assertNotNull(exactly("Previous"));
-        assertNotNull(exactly("Show topics"));
-        assertNull(exactly("Show all"));
+    @Test public void everyPlaceOpensOnTheGuideWithTwoGlyphsAndNoPanel() {
+        for (PaneWallPage place : PaneWallPage.values()) {
+            open(place);
+            assertNotNull(place.name(), startingWith("Status bar\n"));
+            assertNotNull(place.name(), described("Close help"));
+            assertNotNull(place.name(), described("Help topics"));
+            assertNull(place.name(), exactly("Show all"));
+            assertNull(place.name(), exactly("Show basics"));
+            assertNull(place.name(), exactly("Back to topics"));
+            assertNull(place.name(), exactly("Previous"));
+            assertNull(place.name(), exactly("Next"));
+            assertNull(place.name(), exactly("Show topics"));
+            overlay.dismiss();
+        }
     }
 
-    @Test public void closeDismissesHelp() {
+    @Test public void theGuideFitsOnOnePage() {
+        open(PaneWallPage.TERMINAL);
+        assertEquals(java.util.Collections.emptyList(), overlay.unplacedGuideIds());
+    }
+
+    @Test public void theCloseGlyphDismissesHelpOnce() {
         open(PaneWallPage.WIDGETS);
-        TextView close = exactly("Close");
+        View close = described("Close help");
         assertNotNull(close);
         close.performClick();
         assertFalse(overlay.isShowing());
         assertEquals(1, dismissed);
     }
 
-    @Test public void aTopicChipChangesWhatIsReadAndLeavesHelpOpen() {
+    @Test public void theCatalogueGlyphOpensTheChooserAndPutsItAwayAgain() {
         open(PaneWallPage.TERMINAL);
+        described("Help topics").performClick();
+        layout();
+        assertTrue(overlay.isShowing());
+        assertNotNull(exactly("Show all"));
+        assertNotNull(startingWith("Pane corners\n"));
+        described("Help topics").performClick();
+        layout();
+        assertNull(exactly("Show all"));
+        assertNotNull(startingWith("Status bar\n"));
+        assertEquals(0, dismissed);
+    }
+
+    @Test public void showAllFromTheChooserReturnsToTheGuide() {
+        openTopics(PaneWallPage.TERMINAL);
+        exactly("Show all").performClick();
+        layout();
+        assertTrue(overlay.isShowing());
+        assertNull(exactly("Show all"));
+        assertNull(exactly("Show basics"));
+        assertNotNull(startingWith("Status bar\n"));
+        assertNotNull(described("Close help"));
+        assertEquals(0, dismissed);
+    }
+
+    @Test public void aGlyphTapIsConsumedAndReachesNoLauncherControl() {
+        open(PaneWallPage.TERMINAL);
+        View catalogue = described("Help topics");
+        assertNotNull(catalogue);
+        tap(catalogue.getLeft() + catalogue.getWidth() / 2f,
+            catalogue.getTop() + catalogue.getHeight() / 2f);
+        assertTrue(overlay.isShowing());
+        assertEquals(0, dismissed);
+    }
+
+    @Test public void anOutsideTapDismissesTheChooserToo() {
+        openTopics(PaneWallPage.TERMINAL);
+        assertNotNull(exactly("Show all"));
+        tap(200, 770);
+        assertFalse(overlay.isShowing());
+        assertEquals(1, dismissed);
+    }
+
+    @Test public void aTopicChipChangesWhatIsReadAndLeavesHelpOpen() {
+        openTopics(PaneWallPage.TERMINAL);
         TextView chip = startingWith("Pane corners\n");
         assertNotNull(chip);
         chip.performClick();
@@ -138,7 +206,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void showGestureDemonstratesAndLeavesHelpOpen() {
-        open(PaneWallPage.TERMINAL);
+        openTopics(PaneWallPage.TERMINAL);
         startingWith("Pane corners\n").performClick();
         layout();
         TextView gesture = exactly("Show gesture");
@@ -151,7 +219,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void tryItClosesHelpAndNamesTheLesson() {
-        open(PaneWallPage.TERMINAL);
+        openTopics(PaneWallPage.TERMINAL);
         startingWith("Pane corners\n").performClick();
         layout();
         TextView tryIt = exactly("Try it");
@@ -164,7 +232,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void aTopicsSentencesScrollAndItsButtonsDoNot() {
-        open(PaneWallPage.TERMINAL);
+        openTopics(PaneWallPage.TERMINAL);
         startingWith("Pane corners\n").performClick();
         layout();
         assertTrue(inScrollView(startingWith("Every pane corner holds")));
@@ -182,18 +250,18 @@ public class HelpPresentationTest {
         return false;
     }
 
-    @Test public void aTopicOffersOneCloseAndItIsTheHeaders() {
-        open(PaneWallPage.TERMINAL);
+    @Test public void thePopupCarriesNoCloseOfItsOwn() {
+        openTopics(PaneWallPage.TERMINAL);
+        assertNull(exactly("Close"));
         startingWith("Pane corners\n").performClick();
         layout();
-        int closes = 0;
-        for (TextView view : texts()) if ("Close".contentEquals(view.getText())) closes++;
-        assertEquals(1, closes);
+        assertNull(exactly("Close"));
+        assertNotNull(described("Close help"));
     }
 
     @Test public void tryItIsNotOfferedWhileTheLauncherCannotTakeOne() {
         overlay.setPracticeAvailable(false);
-        open(PaneWallPage.TERMINAL);
+        openTopics(PaneWallPage.TERMINAL);
         startingWith("Pane corners\n").performClick();
         layout();
         TextView tryIt = exactly("Try it");
@@ -233,7 +301,7 @@ public class HelpPresentationTest {
     @Test public void outsideTapConsumesAndDismissesOnlyOnce() {
         open(PaneWallPage.WIDGETS);
         assertTrue(overlay.isShowing());
-        tap(200,760);
+        tap(200,770);
         assertFalse(overlay.isShowing());
         overlay.dismiss();
         assertEquals(1,dismissed);

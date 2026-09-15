@@ -11,6 +11,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -24,16 +25,23 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import androidx.annotation.VisibleForTesting;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.ReducedMotion;
+import com.termux.app.chrome.CornerTabGeometry;
+import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.notice.TerminalDress;
 import com.termux.app.statusbar.StatusBarLensView;
 import com.termux.app.tour.TourFingerPainter;
 import com.termux.app.tour.TourFingerTrace;
 import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.font.NerdFontSpans;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,7 +49,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Help, drawn: the topic chooser, one topic, or the all-controls overview.
+ * Help, drawn: the guide over every control of the place, the topic chooser, or one topic.
+ *
+ * <p>Help opens on the guide, with nothing round it but two floating buttons beside where the ?
+ * was — a × that closes, and a book that opens the catalogue and closes it again. The guide is one
+ * page and carries no chrome of its own, so the boxes, the cards and the leaders have the whole
+ * wall between them.
  *
  * <p>What is showing and what a button does is {@link HelpPresentationModel}'s; this measures the
  * controls, renders the answer and carries out what the model asks for. No persistence, no tour
@@ -80,9 +93,11 @@ public final class HelpOverlayView extends FrameLayout {
     private HelpLeaderRouter.Result routed;
     private TerminalDress dress;
     private PaneWallPage place;
-    private int pageCount = 1;
     private int accent;
-    private int footerHeight;
+    /** Where the ? the user pressed was, in screen coordinates; null when nothing named it. */
+    private Rect anchorOnScreen;
+    /** Guide entries the router could not fit on the one page; kept for the log and a test. */
+    private final List<String> unplaced = new ArrayList<>();
     private String signature = "";
     private boolean showing;
     /** Set by {@link #show}, cleared by the first measurement that can open the model. */
@@ -130,7 +145,17 @@ public final class HelpOverlayView extends FrameLayout {
     }
 
     public void show(PaneWallPage place) {
+        show(place, null);
+    }
+
+    /**
+     * Open help for a place, told where the ? that opened it was so the floating buttons can sit
+     * beside it. A null anchor — Settings, the palette, a tab already gone — falls back to the
+     * corner the tab comes out of.
+     */
+    public void show(PaneWallPage place, Rect anchorOnScreen) {
         this.place = place;
+        this.anchorOnScreen = anchorOnScreen == null ? null : new Rect(anchorOnScreen);
         signature = "";
         announced = null;
         pendingOpen = true;
@@ -156,6 +181,7 @@ public final class HelpOverlayView extends FrameLayout {
         removeAllViews();
         cards.clear(); childBounds.clear(); cardViews.clear();
         snapshot = null; routed = null; signature = ""; announced = null;
+        anchorOnScreen = null; unplaced.clear();
         setVisibility(GONE);
         HelpLog.d("dismiss " + place);
         onDismiss.run();
@@ -195,7 +221,6 @@ public final class HelpOverlayView extends FrameLayout {
         } else {
             model.remeasure(measurableIds());
         }
-        model.setPageCount(pageCount);
         render();
     }
 
@@ -228,24 +253,28 @@ public final class HelpOverlayView extends FrameLayout {
                 width, card.getMeasuredHeight()));
             if (side == HelpLeaderRouter.Side.INSIDE) soft.add(box(target.rect));
         }
-        // Reserve the bottom of the wall for the footer, measured at this font scale.
-        View footer = overviewFooter(true, true);
-        footer.measure(MeasureSpec.makeMeasureSpec(panelWidth(), MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
-        footerHeight = footer.getMeasuredHeight();
+        // The whole band is the cards': the guide reserves nothing at the bottom, which is the
+        // room that used to push a hint onto a second page.
         Rect band = new Rect(snapshot.wall);
         band.top += dp(8);
-        band.bottom = Math.max(band.top, band.bottom - footerHeight - dp(16));
+        band.bottom = Math.max(band.top, band.bottom - dp(8));
         List<HelpLeaderRouter.Box> obstacles = new ArrayList<>();
         for (HelpTargets.KeyLabel key : snapshot.keys) obstacles.add(box(keyLabelBounds(key.rect)));
-        obstacles.add(new HelpLeaderRouter.Box(snapshot.wall.left + dp(12),
-            snapshot.wall.bottom - footerHeight - dp(8), snapshot.wall.right - dp(12),
-            snapshot.wall.bottom - dp(8)));
         routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs, obstacles, soft);
-        pageCount = Math.max(1, routed.pages + routed.unplaced.size());
-        for (HelpLeaderRouter.Target target : routed.unplaced)
-            HelpLog.d("copy-only page for " + target.id + ": no collision-free slot");
-        HelpLog.d("layout " + place + ": " + snapshot.targets.size() + " targets, " + pageCount + " pages");
+        // One page, always: a hint with no room on it is left out of the guide and said so in the
+        // log, and its topic is still there in the catalogue.
+        unplaced.clear();
+        for (HelpLeaderRouter.Target target : routed.unplaced) unplaced.add(target.id);
+        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page > 0) unplaced.add(p.target.id);
+        for (String id : unplaced) HelpLog.d("left out of the guide: " + id + ", no room on the page");
+        HelpLog.d("layout " + place + ": " + snapshot.targets.size() + " targets, "
+            + unplaced.size() + " left out");
+    }
+
+    /** What the guide could not fit; empty on every layout the launcher ships. */
+    @VisibleForTesting
+    List<String> unplacedGuideIds() {
+        return Collections.unmodifiableList(new ArrayList<>(unplaced));
     }
 
     /** A control's colour comes from its identity in the catalogue, not from what else is up. */
@@ -277,8 +306,9 @@ public final class HelpOverlayView extends FrameLayout {
         switch (model.mode()) {
             case TOPICS: renderTopics(); break;
             case TOPIC: renderTopic(); break;
-            default: renderOverview(); break;
+            default: renderGuide(); break;
         }
+        placeGlyphs();
         requestLayout(); invalidate();
     }
 
@@ -307,6 +337,7 @@ public final class HelpOverlayView extends FrameLayout {
         LinearLayout row = buttonRow();
         row.addView(button(getContext().getString(R.string.help_show_basics), !model.basicsOnly(),
             () -> command(model.showBasics())), weighted());
+        // Show all puts the popup away and leaves the guide standing, which is where help began.
         row.addView(button(getContext().getString(R.string.help_show_all), true,
             () -> command(model.showAll())), weighted());
         panel.addView(row, rowParams(dp(8)));
@@ -342,7 +373,6 @@ public final class HelpOverlayView extends FrameLayout {
         // scroll and never out of the buttons under it.
         panel.addView(scroll, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.WRAP_CONTENT, 1f));
-        // Close is the header's, once: a second one in the button row is the same way out twice.
         LinearLayout first = buttonRow();
         first.addView(button(getContext().getString(R.string.help_back_to_topics), true,
             () -> command(model.backToTopics())), weighted());
@@ -357,26 +387,12 @@ public final class HelpOverlayView extends FrameLayout {
         announce(title + " " + getContext().getString(entry.purposeRes), entry.id);
     }
 
-    /** The all-controls reference, page by page, with the way back to the chooser. */
-    private void renderOverview() {
+    /** The guide: every control of the place boxed, with its hint, on one page and nothing else. */
+    private void renderGuide() {
         if (routed == null) return;
-        int page = model.page();
-        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == page) {
+        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == 0) {
             TextView card = cardViews.get(p.target.id);
             put(card, rect(p.card)); cards.add(card);
-        }
-        if (page >= routed.pages && !routed.unplaced.isEmpty()) {
-            // A wall-sized target cannot share that band with a card. Keep the explanation
-            // reachable, scrollable, and honest: never draw an invented or crossing leader.
-            HelpLeaderRouter.Target target = routed.unplaced.get(page - routed.pages);
-            TextView card = cardViews.get(target.id);
-            ScrollView scroll = new ScrollView(getContext());
-            scroll.setFillViewport(false);
-            if (card.getParent() instanceof ViewGroup) ((ViewGroup) card.getParent()).removeView(card);
-            scroll.addView(card, new ScrollView.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
-            Rect r = new Rect(snapshot.wall); r.inset(dp(16), dp(8));
-            r.bottom = Math.max(r.top + 1, r.bottom - footerHeight - dp(16));
-            put(scroll, r); cards.add(scroll);
         }
         for (HelpTargets.KeyLabel key : snapshot.keys) {
             TextView label = pill(key.text);
@@ -386,54 +402,93 @@ public final class HelpOverlayView extends FrameLayout {
             label.setBackground(dress.background(key.rect.height()));
             put(label, keyLabelBounds(key.rect));
         }
-        View footer = overviewFooter(page > 0, page < pageCount - 1);
-        int width = panelWidth();
-        footer.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
-        int left = snapshot.wall.centerX() - width / 2;
-        int top = snapshot.wall.bottom - footer.getMeasuredHeight() - dp(8);
-        put(footer, new Rect(left, top, left + width, top + footer.getMeasuredHeight()));
-        cards.add(footer);
-        // Where the reader has landed, not that this is still help: the section, and the page of it.
-        int sectionRes = currentSectionLabelRes();
-        String section = sectionRes == 0 ? placeName() : getContext().getString(sectionRes);
-        announce(getContext().getString(R.string.help_overview_page, section, page + 1, pageCount),
-            "overview" + page);
+        announce(getContext().getString(R.string.help_header, placeName()), "guide");
     }
 
-    /** The section the page being read belongs to, named by the first card the router put on it. */
-    private int currentSectionLabelRes() {
-        return model.sectionLabelResFor(firstIdOnPage());
+    // ---- the two floating buttons ---------------------------------------------------------
+
+    /**
+     * The × and the catalogue, beside where the ? the user pressed was: help's own chrome, the same
+     * size and glass a corner tab's buttons wear, in every mode.
+     */
+    private void placeGlyphs() {
+        if (snapshot == null) return;
+        Rect anchor = anchorBounds();
+        int size = dp(48);
+        int gap = dp(8);
+        int width = size * 2 + gap;
+        int left = clamp(anchor.centerX() - width / 2, dp(4), getWidth() - width - dp(4));
+        // Below the anchor when it sits in the top half of the screen, above it when below, so the
+        // pair never lands off the edge the tab came out of.
+        int top = anchor.centerY() < getHeight() / 2 ? anchor.bottom + gap : anchor.top - gap - size;
+        top = clamp(top, dp(4), getHeight() - size - dp(4));
+        TextView close = glyphButton(getContext().getString(R.string.help_close_glyph), false,
+            getContext().getString(R.string.help_close_action), () -> command(model.close()));
+        TextView catalogue = glyphButton(CornerTabGlyphs.CATALOGUE, true,
+            getContext().getString(R.string.help_topics_action), this::toggleCatalogue);
+        put(close, new Rect(left, top, left + size, top + size));
+        put(catalogue, new Rect(left + size + gap, top, left + width, top + size));
+        cards.add(close);
+        cards.add(catalogue);
     }
 
-    /** The id of the first card on the page being read, or null when the router placed none. */
-    private String firstIdOnPage() {
-        if (routed == null) return null;
-        int page = model.page();
-        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == page) return p.target.id;
-        int copyOnly = page - routed.pages;
-        return copyOnly >= 0 && copyOnly < routed.unplaced.size()
-            ? routed.unplaced.get(copyOnly).id : null;
+    /** The catalogue button both ways: it opens the chooser, and it puts it away again. */
+    private void toggleCatalogue() {
+        command(model.mode() == HelpPresentationModel.Mode.OVERVIEW
+            ? model.backToTopics() : model.showAll());
     }
 
-    /** The overview's own band: where the reader is, the way through, and the ways out. */
-    private View overviewFooter(boolean hasPrevious, boolean hasNext) {
-        LinearLayout panel = panel();
-        int sectionRes = currentSectionLabelRes();
-        if (sectionRes != 0) panel.addView(sectionLabel(getContext().getString(sectionRes)));
-        LinearLayout paging = buttonRow();
-        paging.addView(button(getContext().getString(R.string.help_previous), hasPrevious,
-            () -> command(model.previous())), weighted());
-        paging.addView(button(getContext().getString(R.string.help_next), hasNext,
-            () -> command(model.next())), weighted());
-        panel.addView(paging, rowParams(dp(6)));
-        LinearLayout ways = buttonRow();
-        ways.addView(button(getContext().getString(R.string.help_show_topics), true,
-            () -> command(model.backToTopics())), weighted());
-        ways.addView(button(getContext().getString(R.string.help_close), true,
-            () -> command(model.close())), weighted());
-        panel.addView(ways, rowParams(dp(6)));
-        return panel;
+    /**
+     * Where the buttons hang off: the ? the user pressed, or — for help opened from Settings or the
+     * palette — the corner a tab would have come out of.
+     */
+    private Rect anchorBounds() {
+        if (anchorOnScreen != null) {
+            int[] origin = new int[2];
+            getLocationOnScreen(origin);
+            Rect local = new Rect(anchorOnScreen);
+            local.offset(-origin[0], -origin[1]);
+            if (!local.isEmpty()) return local;
+        }
+        Rect corner = targetRect("corners");
+        if (corner != null) return new Rect(corner);
+        Rect wall = snapshot.wall;
+        int size = dp(32);
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        int left = rtl ? wall.left : wall.right - size;
+        return new Rect(left, wall.top, left + size, wall.top + size);
+    }
+
+    /** One floating button: the corner tab's own glass and tint, round, inside a thumb's square. */
+    private TextView glyphButton(String glyph, boolean symbols, String description, Runnable onClick) {
+        Context context = getContext();
+        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        int surface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
+            ContextCompat.getColor(context, R.color.termux_surface_panel));
+        TextView view = new TextView(context);
+        view.setText(glyph);
+        view.setContentDescription(description);
+        view.setGravity(Gravity.CENTER);
+        view.setTypeface(symbols ? NerdFontSpans.typeface(context) : Typeface.DEFAULT_BOLD);
+        // In dp, not sp: these are marks on a button the size of the tab's, not text to read.
+        view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, symbols ? 14 : 18);
+        view.setTextColor(primary);
+        GradientDrawable shape = new GradientDrawable();
+        shape.setShape(GradientDrawable.OVAL);
+        shape.setColor(ColorUtils.setAlphaComponent(surface, 232));
+        shape.setStroke(dp(CornerTabGeometry.TAB_OUTLINE_DP),
+            ColorUtils.setAlphaComponent(primary, 225));
+        // The circle is a tab button's 30dp; the square around it is the 48dp a thumb asks for.
+        view.setBackground(new InsetDrawable(shape, dp(9)));
+        view.setClickable(true);
+        view.setFocusable(true);
+        view.setOnClickListener(v -> onClick.run());
+        return view;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(Math.max(min, max), value));
     }
 
     /** Whatever the model asked for, done. Reading help asks for nothing. */
@@ -531,20 +586,14 @@ public final class HelpOverlayView extends FrameLayout {
         return panel;
     }
 
-    /** The panel's own row: the title, and the Close that is never further than one tap. */
+    /** The panel's own row: the title alone — the × beside it is help's one way out. */
     private View header(String title) {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
         TextView text = new TextView(getContext());
         text.setText(title);
         text.setTextSize(14);
         text.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         text.setTextColor(dress.textColor);
-        row.addView(text, new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(button(getContext().getString(R.string.help_close), true,
-            () -> command(model.close())));
-        return row;
+        return text;
     }
 
     private TextView sectionLabel(String text) {
@@ -723,7 +772,7 @@ public final class HelpOverlayView extends FrameLayout {
         if (!showing || snapshot == null) return;
         canvas.drawColor(Color.argb(166, 0, 0, 0));
         paint.setStrokeWidth(dp(1.5f)); paint.setStyle(Paint.Style.STROKE);
-        if (model.mode() == HelpPresentationModel.Mode.OVERVIEW) drawOverview(canvas);
+        if (model.mode() == HelpPresentationModel.Mode.OVERVIEW) drawGuide(canvas);
         else if (model.mode() == HelpPresentationModel.Mode.TOPIC) drawTopic(canvas);
         paint.setPathEffect(null);
         drawGesture(canvas);
@@ -741,10 +790,9 @@ public final class HelpOverlayView extends FrameLayout {
      * Each box, its leader and its card wear one colour, so a line that passes another card still
      * reads as belonging to its own pair.
      */
-    private void drawOverview(Canvas canvas) {
+    private void drawGuide(Canvas canvas) {
         if (routed == null) return;
-        int page = model.page();
-        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == page) {
+        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == 0) {
             HelpTargets.Target target = target(p.target.id);
             Integer color = boxColors.get(target.id);
             paint.setColor(color == null ? accent : color);

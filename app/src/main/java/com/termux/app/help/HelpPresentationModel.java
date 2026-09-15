@@ -18,15 +18,8 @@ import java.util.Set;
  */
 public final class HelpPresentationModel {
 
-    /** Choosing a topic, reading one, or the all-controls overview. */
+    /** The guide every place opens on, the chooser, or one topic read out of it. */
     public enum Mode { TOPICS, TOPIC, OVERVIEW }
-
-    /** Terminal has enough controls that a chooser is kinder than all of them at once. */
-    public static final Mode TERMINAL_DEFAULT_MODE = Mode.TOPICS;
-    /** Home is small: the overview is the whole of it. */
-    public static final Mode WIDGETS_DEFAULT_MODE = Mode.OVERVIEW;
-    /** Display's default, to be flipped after the screen check the spec asks for. */
-    public static final Mode DISPLAY_DEFAULT_MODE = Mode.OVERVIEW;
 
     /** What the renderer is being asked to do, if anything. */
     public enum EffectKind { NONE, DEMONSTRATE, CLOSE, CLOSE_AND_PRACTICE }
@@ -72,34 +65,24 @@ public final class HelpPresentationModel {
     }
 
     private PaneWallPage place = PaneWallPage.TERMINAL;
-    private Mode mode = TERMINAL_DEFAULT_MODE;
+    private Mode mode = Mode.OVERVIEW;
     private String selectedId;
     private boolean basicsOnly;
     private boolean open;
-    private int page;
-    private int pageCount = 1;
     private Set<String> measurable = Collections.emptySet();
-
-    /** The mode a place opens in. One constant each, so a screen check can flip one. */
-    public static Mode defaultMode(PaneWallPage place) {
-        switch (place) {
-            case WIDGETS: return WIDGETS_DEFAULT_MODE;
-            case DISPLAY: return DISPLAY_DEFAULT_MODE;
-            default: return TERMINAL_DEFAULT_MODE;
-        }
-    }
 
     // ---- commands -------------------------------------------------------------------------
 
-    /** Open help for a place, with the controls the caller could measure this pass. */
+    /**
+     * Open help for a place, with the controls the caller could measure this pass. Every place
+     * lands on the guide: the catalogue is a second question, asked only by the reader who wants it.
+     */
     public Effect open(PaneWallPage place, Collection<String> measurableIds) {
         this.place = place == null ? PaneWallPage.TERMINAL : place;
-        this.mode = defaultMode(this.place);
+        this.mode = Mode.OVERVIEW;
         this.selectedId = null;
         this.basicsOnly = false;
         this.open = true;
-        this.page = 0;
-        this.pageCount = 1;
         this.measurable = copy(measurableIds);
         return Effect.NONE;
     }
@@ -124,35 +107,14 @@ public final class HelpPresentationModel {
         basicsOnly = true;
         selectedId = null;
         mode = Mode.TOPICS;
-        page = 0;
         return Effect.NONE;
     }
 
-    /** The all-controls overview, from the first page. */
+    /** Back to the guide, the whole of it. */
     public Effect showAll() {
         basicsOnly = false;
         selectedId = null;
         mode = Mode.OVERVIEW;
-        page = 0;
-        return Effect.NONE;
-    }
-
-    /** The page before this one; the first page stays the first page. */
-    public Effect previous() {
-        page = Math.max(0, page - 1);
-        return Effect.NONE;
-    }
-
-    /** The page after this one; the last page stays the last page. */
-    public Effect next() {
-        page = Math.min(pageCount - 1, page + 1);
-        return Effect.NONE;
-    }
-
-    /** How many pages the layout needed; the reader is brought back inside a shorter run. */
-    public Effect setPageCount(int count) {
-        pageCount = Math.max(1, count);
-        page = Math.min(page, pageCount - 1);
         return Effect.NONE;
     }
 
@@ -188,8 +150,6 @@ public final class HelpPresentationModel {
     public String selectedId() { return selectedId; }
     public boolean basicsOnly() { return basicsOnly; }
     public boolean isOpen() { return open; }
-    public int page() { return page; }
-    public int pageCount() { return pageCount; }
 
     /**
      * The topics to list: this place's catalogue, everyday only when the basics filter is on. A
@@ -250,29 +210,6 @@ public final class HelpPresentationModel {
             if (!HelpTopics.topicOnly(entry.id)) out.add(entry);
         }
         return Collections.unmodifiableList(out);
-    }
-
-    /**
-     * The section label for the page being read: the group of the first entry on it. Pages are
-     * geometric, so the entries are apportioned evenly over the count the renderer reported.
-     */
-    public int sectionLabelRes() {
-        if (mode != Mode.OVERVIEW) return 0;
-        List<HelpTopics.Entry> entries = overviewEntries();
-        if (entries.isEmpty()) return 0;
-        int first = (int) ((long) page * entries.size() / Math.max(1, pageCount));
-        return entries.get(Math.min(first, entries.size() - 1)).group.labelRes;
-    }
-
-    /**
-     * The section label for a page the renderer has actually packed: the group of the entry whose
-     * card sits first on it. Pages are filled by collision rather than by count, so the even split
-     * above is only the answer when the renderer cannot name that entry.
-     */
-    public int sectionLabelResFor(String firstEntryIdOnPage) {
-        if (mode != Mode.OVERVIEW) return 0;
-        HelpTopics.Entry entry = HelpTopics.entry(place, firstEntryIdOnPage);
-        return entry == null ? sectionLabelRes() : entry.group.labelRes;
     }
 
     /** Show gesture belongs to a topic whose control is on screen. */

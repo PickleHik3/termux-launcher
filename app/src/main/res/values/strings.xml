@@ -1846,8 +1846,10 @@
 
     <!-- On-demand help. -->
     <string name="help_button">?</string>
+    <string name="help_close_glyph">×</string>
     <string name="help_accessibility">Help</string>
-    <string name="help_close">Close</string>
+    <string name="help_close_action">Close help</string>
+    <string name="help_topics_action">Help topics</string>
     <string name="help_sessions_title">Sessions</string>
     <string name="help_sessions_body">Tap to switch.</string>
     <string name="help_windows_title">Windows</string>
@@ -1957,18 +1959,14 @@
     <string name="help_topic_empty_action">Long-press it to add a widget or another page.</string>
     <string name="help_topic_empty_reveal">Move a widget aside to make room.</string>
     <string name="help_header">Help · %1$s</string>
-    <string name="help_overview_page">%1$s, page %2$d of %3$d</string>
     <string name="help_place_home">Home</string>
     <string name="help_place_terminal">Terminal</string>
     <string name="help_place_display">Display</string>
     <string name="help_show_basics">Show basics</string>
     <string name="help_show_all">Show all</string>
-    <string name="help_show_topics">Show topics</string>
     <string name="help_back_to_topics">Back to topics</string>
     <string name="help_show_gesture">Show gesture</string>
     <string name="help_try_it">Try it</string>
-    <string name="help_previous">Previous</string>
-    <string name="help_next">Next</string>
     <string name="help_settings_title">Help</string>
     <string name="help_settings_summary">Open help for the place you are on.</string>
     <string name="help_topic_stats_title">Status widgets</string>
