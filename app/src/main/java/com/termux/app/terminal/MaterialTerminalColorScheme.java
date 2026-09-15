@@ -95,13 +95,38 @@ public final class MaterialTerminalColorScheme {
             themeError != 0 ? Hct.fromInt(themeError).getHue() : ANSI_HUE_ANCHORS[0],
             surfaceHct.getHue(), surfaceHct.getChroma(), dark));
 
-        for (int i = 0; i < 16; i++) {
-            String key = "color" + i;
-            int value = Color.parseColor(props.getProperty(key));
-            props.setProperty(key, hex(contrastTone(value, background, level.ansiRatio)));
-        }
+        applyAnsiContrastFloor(props, background, level);
 
         return props;
+    }
+
+    /**
+     * The legibility floor, per slot.
+     *
+     * <p>Not every ANSI slot is text. Black and white are what a TUI fills a panel with, and a floor
+     * that treats them as glyph colours lifts both to the same mid tone as everything else — which is
+     * how ANSI black stopped being dark and started matching bright black. So slots 0 and 7 are
+     * exempt; slot 8 keeps a fixed 3.0:1 because it really is text — dim text, the one thing the
+     * level must not be allowed to brighten into ordinary text; the rest take the level's ratio.
+     */
+    @VisibleForTesting
+    static double ansiFloor(int slot, @NonNull TerminalContrastLevel level) {
+        if (slot == 0 || slot == 7) return 0d;
+        if (slot == 8) return 3.0d;
+        return level.ansiRatio;
+    }
+
+    /** {@link #ansiFloor} over all sixteen slots, in place. */
+    @VisibleForTesting
+    static void applyAnsiContrastFloor(@NonNull Properties props, @ColorInt int background,
+                                       @NonNull TerminalContrastLevel level) {
+        for (int slot = 0; slot < 16; slot++) {
+            double floor = ansiFloor(slot, level);
+            if (floor <= 0d) continue;
+            String key = "color" + slot;
+            props.setProperty(key,
+                hex(contrastTone(Color.parseColor(props.getProperty(key)), background, floor)));
+        }
     }
 
     /**
@@ -442,7 +467,8 @@ public final class MaterialTerminalColorScheme {
     }
 
     @ColorInt
-    private static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
+    @VisibleForTesting
+    static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
         boolean dark = perceivedBrightness(color) < 128;
         Hct source = Hct.fromInt(color);
         double tone;

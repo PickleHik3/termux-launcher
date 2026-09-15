@@ -41,9 +41,12 @@ public class MaterialTerminalColorSchemeTest {
             assertTrue(MaterialTerminalColorScheme.contrastRatio(
                 color(palette, "cursor"), background) + .01 >= level.cursorRatio);
             for (int i = 0; i < 16; i++) {
+                // Per slot, not per level: 0 and 7 are panel fills and take no floor at all, 8 is
+                // dim text and takes a fixed one. See MaterialTerminalColorScheme.ansiFloor.
+                double floor = MaterialTerminalColorScheme.ansiFloor(i, level);
                 assertTrue("ANSI " + i + " at " + level.value,
                     MaterialTerminalColorScheme.contrastRatio(
-                        color(palette, "color" + i), background) + .01 >= level.ansiRatio);
+                        color(palette, "color" + i), background) + .01 >= floor);
             }
         }
     }
@@ -375,6 +378,54 @@ public class MaterialTerminalColorSchemeTest {
 
     private static double angleBetween(double first, double second) {
         return 180d - Math.abs(Math.abs(first - second) - 180d);
+    }
+
+    /**
+     * The floor used to be the level's ratio for all sixteen, which lifted ANSI black and bright
+     * black to the same mid tone — "black" was not dark, and a TUI that fills a panel with it drew
+     * the panel in the same grey as its dim text. The neutrals have to stay a ladder at every level.
+     */
+    @Test
+    public void theNeutralLadderSurvivesTheContrastFloor() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties dark = flooredNeutrals(true, level);
+            assertTrue("dark color0 must stay darker than color8 at " + level.value,
+                tone(dark, "color0") < tone(dark, "color8"));
+            assertTrue("dark color8 must stay darker than color7 at " + level.value,
+                tone(dark, "color8") < tone(dark, "color7"));
+
+            Properties light = flooredNeutrals(false, level);
+            assertTrue("light color7 must stay lighter than color8 at " + level.value,
+                tone(light, "color7") > tone(light, "color8"));
+            assertTrue("light color8 must stay lighter than color0 at " + level.value,
+                tone(light, "color8") > tone(light, "color0"));
+        }
+    }
+
+    /** The exemptions are the rule, so state them once and let the ladder test prove the effect. */
+    @Test
+    public void onlyTheTextSlotsCarryAFloor() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            assertEquals("color0 at " + level.value, 0d,
+                MaterialTerminalColorScheme.ansiFloor(0, level), 0d);
+            assertEquals("color7 at " + level.value, 0d,
+                MaterialTerminalColorScheme.ansiFloor(7, level), 0d);
+            assertEquals("color8 at " + level.value, 3.0d,
+                MaterialTerminalColorScheme.ansiFloor(8, level), 0d);
+            for (int slot : new int[] {1, 6, 9, 15}) {
+                assertEquals("color" + slot + " at " + level.value, level.ansiRatio,
+                    MaterialTerminalColorScheme.ansiFloor(slot, level), 0d);
+            }
+        }
+    }
+
+    /** The slots as {@code create} would leave them, for a background of the given mode and level. */
+    private static Properties flooredNeutrals(boolean dark, TerminalContrastLevel level) {
+        Properties palette = MaterialTerminalColorScheme.ansiSlots(220d, 40d, 25d, 260d, 4d, dark);
+        int background = MaterialTerminalColorScheme.surfaceTone(
+            Hct.from(260d, 4d, dark ? 10d : 90d).toInt(), level);
+        MaterialTerminalColorScheme.applyAnsiContrastFloor(palette, background, level);
+        return palette;
     }
 
     private static int color(Properties properties, String key) {
