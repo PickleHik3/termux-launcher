@@ -1919,6 +1919,9 @@
     <string name="help_topic_corners_purpose">Every pane corner holds the controls for that pane, including this help.</string>
     <string name="help_topic_corners_action">Hold a corner, then tap the ? button.</string>
     <string name="help_topic_corners_reveal">Hold any corner of a pane to see its controls.</string>
+    <string name="help_topic_terminal_purpose">The terminal is where your shell runs.</string>
+    <string name="help_topic_terminal_action">Hold to see where you are pointing. Lift to click, drag to drag, or tap with a second finger to select text.</string>
+    <string name="help_topic_terminal_reveal">Open a window to see a terminal.</string>
     <string name="help_topic_sessions_purpose">Sessions group your windows.</string>
     <string name="help_topic_sessions_action">Tap the badge to switch.</string>
     <string name="help_topic_sessions_reveal">Show the status bar in the Layout editor to see the badge.</string>
@@ -1973,4 +1976,6 @@
     <string name="help_topic_corners_title">Pane corners</string>
     <string name="help_topic_keys_title">Extra keys</string>
     <string name="help_topic_shortcuts_title">Key chords</string>
+    <string name="help_topic_terminal_title">Terminal</string>
+    <string name="hold_select_hint">Tap with another finger to select text.</string>
 </resources>

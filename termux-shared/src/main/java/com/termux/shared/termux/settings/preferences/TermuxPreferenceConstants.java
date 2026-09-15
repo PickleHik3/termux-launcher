@@ -1353,6 +1353,17 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED =
             "first_boot_tour_legacy_onboarding_migrated";
         public static final boolean DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED = false;
+
+        /**
+         * How many times a second finger has opened text selection from a hold on the terminal.
+         * The hint under the loupe stops for good once the user has done it
+         * {@link #HOLD_SELECT_HINT_USES_BEFORE_SILENCE} times; Replay the tour puts it back.
+         */
+        public static final String KEY_HOLD_SELECT_HINT_USES = "hold_select_hint_uses";
+        public static final int DEFAULT_HOLD_SELECT_HINT_USES = 0;
+
+        /** How many times the hint is worth showing before the user plainly knows the gesture. */
+        public static final int HOLD_SELECT_HINT_USES_BEFORE_SILENCE = 3;
     }
 
     /**

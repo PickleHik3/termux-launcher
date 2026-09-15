@@ -29,10 +29,20 @@ shell prompts:
 - **Drag scrolls, always.** Inside mouse-aware apps the drag becomes scroll-wheel events, so lists
   in `htop`, lazygit, or vim scroll naturally.
 - **Tap sends a mouse click** when the running app tracks the mouse.
-- **Press and hold briefly, then drag, to hold the mouse button down.** A small haptic marks the
-  moment your finger becomes a held mouse drag — from there you can select text in vim, drag tmux
-  splits, or resize TUI panes exactly like a desktop mouse would.
-- **A quick long-press without moving** still starts ordinary text selection with the copy toolbar.
+- **Hold a still finger to see where you are pointing.** In a mouse-aware app the *loupe* — a
+  magnified strip of the row under your fingertip, with the cell you are on outlined — opens
+  almost immediately, so your thumb is never covering the answer. A moment later a small haptic
+  says the hold is recognised, and the loupe stays for as long as you keep holding.
+- **After the hold, your finger decides what happens.** Lift and the cell in the loupe is clicked.
+  Drag and, if the app asked for motion, the mouse button is held down and dragged with you — a
+  second haptic marks the moment — so you can select in vim, move tmux splits, or resize TUI panes
+  exactly like a desktop mouse. If it did not ask for motion, dragging just carries the aim along
+  and the lift clicks wherever you let go.
+- **Tap with a second finger during a hold to select text.** The copy toolbar opens at the cell
+  the loupe was showing. A second finger that moves instead is a two-finger scroll or pinch, as
+  usual.
+- **In a plain shell there is no loupe:** the same hold starts ordinary text selection with the
+  copy toolbar, and a drag before it scrolls.
 - **Pinch to zoom** changes the focused pane's font size, with jitter filtering so two-finger
   scrolling does not zoom by accident.
 

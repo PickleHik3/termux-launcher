@@ -68,7 +68,24 @@ public class AimStateTest {
     }
 
     @Test
-    public void theLongPressTakesTheAimAway() {
+    public void theLoupeOutlivesTheHold() {
+        // The hold is recognised on the view's own timer and takes nothing away: the loupe opens
+        // before it, stays open through it, follows the finger and is still what the lift clicks.
+        AimState aim = held();
+        assertTrue(aim.delayElapsed());
+        HoldGesture hold = new HoldGesture();
+        hold.down(100f, 200f, SLOP, true);
+        assertEquals(HoldGesture.Outcome.HOLD_AIMED, hold.holdElapsed(true, false));
+        assertTrue(aim.isAiming());
+        assertTrue(aim.move(140f, 260f));
+        assertTrue(aim.isAiming());
+        assertTrue(aim.lift());
+        assertEquals(140f, aim.aimX(), 0.001f);
+        assertEquals(260f, aim.aimY(), 0.001f);
+    }
+
+    @Test
+    public void aSecondFingerTakesTheAimAway() {
         AimState aim = held();
         aim.delayElapsed();
         aim.cancel();

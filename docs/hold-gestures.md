@@ -79,6 +79,14 @@ Gates: `./gradlew testDebugUnitTest` green on the branch after each phase (compa
 lists against a clean worktree, never counts); then the device checks on pong before the merge is
 proposed. The emulator cannot judge hold timing or haptics.
 
+## Status
+
+2026-09-15: Phases 0, 1 and 2 are on `feat/hold-gestures` (677ce3da, 413da10a and the Phase 2
+commit); every module's unit suite is green (4,665 tests). Also landed beyond the plan: the tour
+glow and the help box use the pane's 40 dp square; in Mouse mode the touchpad press is deferred
+while a corner may still claim the touch (`MouseModePress`), so a corner hold no longer clicks.
+Owed: the device checks below on pong, then the developer's cue before merging into dev.
+
 ## Device checks on pong
 
 1. tmux: tap the clock at a pane's bottom-right. Nothing opens; tmux gets the click.

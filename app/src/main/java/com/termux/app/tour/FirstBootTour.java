@@ -97,6 +97,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     public static final String HOME_PLACE = com.termux.app.wall.PaneWallPolicy.homePage().name();
 
     @NonNull private final Activity mActivity;
+    @NonNull private final TermuxAppSharedPreferences mPreferences;
     @NonNull private final TourController mController;
     @NonNull private final TourSignalRelay mSignals = new TourSignalRelay();
     @Nullable private final KeyProbe mKeyProbe;
@@ -125,6 +126,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
                          @NonNull TermuxAppSharedPreferences preferences,
                          @Nullable KeyProbe keyProbe) {
         mActivity = activity;
+        mPreferences = preferences;
         mKeyProbe = keyProbe;
         migrateLegacyOnboardingCompletionIfNeeded(activity, preferences);
         // The two facts the run varies on are read from the phone when the run is wired up; until
@@ -191,6 +193,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     /** Starts the run from card one, whatever came before: what Replay will ask for. */
     public void restart() {
         if (waitForHelpToClose(this::restart)) return;
+        // Replay puts the launcher back the way a new user meets it, hints included.
+        mPreferences.setHoldSelectHintUses(0);
         rebuildRunForThisPhone();
         bringTheWallHome();
         mController.start();
