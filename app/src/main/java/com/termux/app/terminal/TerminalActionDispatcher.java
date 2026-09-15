@@ -1149,7 +1149,9 @@ public final class TerminalActionDispatcher {
                         return error(400, "bad_request", "'source' must be manual or focus");
                     boolean fromFocus = "focus".equals(source);
                     boolean show = TOOL_KEYBOARD_SHOW.equals(toolName);
-                    if (!host.isInAppKeyboardEnabled())
+                    // The Display place can be typed into with the phone's own keyboard, which is
+                    // there to answer whether or not the in-app keyboard is switched on.
+                    if (!host.isInAppKeyboardEnabled() && !host.displayTakesSystemKeyboard())
                         return error(409, "unavailable", "The in-app keyboard is not enabled");
                     boolean applied = show
                         ? host.showInAppKeyboard(fromFocus) : host.hideInAppKeyboard(fromFocus);

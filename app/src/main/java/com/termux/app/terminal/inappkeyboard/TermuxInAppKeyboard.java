@@ -125,6 +125,8 @@ public final class TermuxInAppKeyboard {
     private boolean mExternalTextInputActive;
     /** The place on screen carries its own text fields, so it holds the system IME while down. */
     private boolean mPlaceOwnsSystemIme;
+    /** Whether that place keeps the IME even with this keyboard on screen for something else. */
+    private boolean mPlaceKeepsSystemImeWhileVisible;
     /** Whether the place actually has it right now — what was last applied to the window. */
     private boolean mPlaceHoldsSystemIme;
     private float mHeightScale = 1f;
@@ -395,8 +397,10 @@ public final class TermuxInAppKeyboard {
         boolean wasVisible = mVisible;
         mLastShowReason = Objects.requireNonNull(reason, "reason");
         mVisible = true;
-        // Shown, this keyboard is the one typing: the place gives the IME back.
-        mPlaceHoldsSystemIme = false;
+        // Shown, this keyboard is the one typing: the place gives the IME back — unless the place
+        // keeps it while this keyboard is up, in which case the suppression below is a no-op.
+        if (!(mPlaceOwnsSystemIme && mPlaceKeepsSystemImeWhileVisible))
+            mPlaceHoldsSystemIme = false;
         suppressSystemIme();
         showInternal();
         if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
@@ -922,7 +926,18 @@ public final class TermuxInAppKeyboard {
      * keyboard, from the extra keys or anywhere else, takes the IME straight back.
      */
     public void setPlaceOwnsSystemIme(boolean owns) {
+        setPlaceOwnsSystemIme(owns, false);
+    }
+
+    /**
+     * The same, for a place that keeps the IME even while this keyboard is on screen. The Display
+     * place does when it is typed into with the phone's own keyboard: mouse mode's touchpad
+     * stands in this keyboard's frame, so the keyboard is up for the pad's sake and not because
+     * anything is being typed on it.
+     */
+    public void setPlaceOwnsSystemIme(boolean owns, boolean keptWhileVisible) {
         mPlaceOwnsSystemIme = owns;
+        mPlaceKeepsSystemImeWhileVisible = keptWhileVisible;
         syncPlaceSystemIme();
     }
 
@@ -931,7 +946,8 @@ public final class TermuxInAppKeyboard {
      * visibility. Cheap to call on every pass: it acts only when the answer changes.
      */
     private void syncPlaceSystemIme() {
-        boolean holds = mPlaceOwnsSystemIme && !mVisible && !mExternalTextInputActive;
+        boolean holds = mPlaceOwnsSystemIme && !mExternalTextInputActive
+            && (mPlaceKeepsSystemImeWhileVisible || !mVisible);
         if (mPlaceHoldsSystemIme == holds) return;
         mPlaceHoldsSystemIme = holds;
         if (holds) releaseSystemImeToPlace();

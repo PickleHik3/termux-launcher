@@ -479,6 +479,14 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      */
     boolean toggleDisplayFrameKeyboard();
 
+    /**
+     * True while the Display place is typed into with the phone's own keyboard. That keyboard
+     * answers a request there whether or not the launcher's own keyboard is switched on.
+     */
+    default boolean displayTakesSystemKeyboard() {
+        return false;
+    }
+
     /** Toggles the key inspector, answering whether it is now open. */
     boolean toggleKeyInspector();
 

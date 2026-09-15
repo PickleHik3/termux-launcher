@@ -228,6 +228,41 @@ public class TerminalActionDispatcherTest {
         assertTrue(host.calls.contains("hideInAppKeyboard:focus"));
     }
 
+    /**
+     * The Display place typed into with the phone's own keyboard has a keyboard to show even
+     * where the launcher's own is switched off, so the 409 above is not the answer there.
+     */
+    @Test
+    public void showAndHideAnswerOnTheDisplayPlaceWithoutTheInAppKeyboard() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = false;
+        host.displayTakesSystemKeyboard = true;
+
+        JSONObject shown = dispatcher.execute("keyboard.show", new JSONObject());
+        assertTrue(shown.getBoolean("ok"));
+        assertTrue(shown.getBoolean("keyboardShown"));
+        assertTrue(host.calls.contains("showInAppKeyboard:manual"));
+
+        JSONObject hidden = dispatcher.execute("keyboard.hide", new JSONObject());
+        assertTrue(hidden.getBoolean("ok"));
+        assertFalse(hidden.getBoolean("keyboardShown"));
+        assertTrue(host.calls.contains("hideInAppKeyboard:manual"));
+    }
+
+    /** The form tools are the in-app keyboard's own and stay refused there. */
+    @Test
+    public void theFormToolsStayRefusedOnTheDisplayPlace() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = false;
+        host.displayTakesSystemKeyboard = true;
+
+        JSONObject cycled = dispatcher.execute("keyboard.cycle_form", new JSONObject());
+        assertEquals(409, cycled.getInt("_statusCode"));
+        JSONObject set = dispatcher.execute("keyboard.set_form",
+            new JSONObject().put("form", "floating"));
+        assertEquals(409, set.getInt("_statusCode"));
+    }
+
     @Test
     public void anUnknownSourceIsRefused() throws Exception {
         FakeTerminalHost host = attach();
