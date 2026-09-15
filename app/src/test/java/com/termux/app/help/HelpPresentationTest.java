@@ -163,6 +163,15 @@ public class HelpPresentationTest {
         assertEquals("find_help", practised);
     }
 
+    @Test public void aTopicOffersOneCloseAndItIsTheHeaders() {
+        open(PaneWallPage.TERMINAL);
+        startingWith("Pane corners\n").performClick();
+        layout();
+        int closes = 0;
+        for (TextView view : texts()) if ("Close".contentEquals(view.getText())) closes++;
+        assertEquals(1, closes);
+    }
+
     @Test public void tryItIsNotOfferedWhileTheLauncherCannotTakeOne() {
         overlay.setPracticeAvailable(false);
         open(PaneWallPage.TERMINAL);

@@ -330,11 +330,10 @@ public final class HelpOverlayView extends FrameLayout {
                 ColorUtils.setAlphaComponent(dress.textColor, 199)), rowParams(dp(6)));
         HelpTopics.Entry related = HelpTopics.entry(place, model.relatedTopicId());
         if (related != null) panel.addView(chip(related), rowParams(dp(8)));
+        // Close is the header's, once: a second one in the button row is the same way out twice.
         LinearLayout first = buttonRow();
         first.addView(button(getContext().getString(R.string.help_back_to_topics), true,
             () -> command(model.backToTopics())), weighted());
-        first.addView(button(getContext().getString(R.string.help_close), true,
-            () -> command(model.close())), weighted());
         panel.addView(first, rowParams(dp(10)));
         LinearLayout second = buttonRow();
         second.addView(button(getContext().getString(R.string.help_show_gesture),
