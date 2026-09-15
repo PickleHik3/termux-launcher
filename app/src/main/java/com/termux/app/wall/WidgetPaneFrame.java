@@ -1,8 +1,8 @@
 package com.termux.app.wall;
 
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.RectF;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
@@ -13,7 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
@@ -21,6 +21,7 @@ import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
+import com.termux.view.HoldTiming;
 
 /**
  * The wall's Widgets page: the app-widget grid wearing a terminal pane's dress. It is a
@@ -31,9 +32,9 @@ import com.termux.app.terminal.PaneSurfaceStyle;
  * <p>The grid view is moved in rather than inflated: there is one widget grid in the app, and it
  * keeps its app-widget host views across the move.
  *
- * <p>A tap on one of the page's four corners drops the same tab the Display page's corners drop,
- * with the page's own buttons: its settings, the pencil that starts editing the widgets, and the
- * two doors every place carries — Appearance and Layout.
+ * <p>A <em>hold</em> on one of the page's four corners drops the same tab the Display page's
+ * corners drop, with the page's own buttons: its settings, the pencil that starts editing the
+ * widgets, and the two doors every place carries — Appearance and Layout.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
  * While a widget is being edited that pair is replaced by the grid's size, which opens the wheels
  * that change it. Everything between the corners is the widgets': a grid that reaches the rim is
@@ -69,8 +70,6 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_LAYOUT = 5;
 
     private final PaneRim mRim = new PaneRim();
-    private final CornerBracket mBracket = new CornerBracket();
-    private final RectF mBracketBounds = new RectF();
     @Nullable private PaneGlassBackdropView mGlass;
     @Nullable private View mGrid;
     @Nullable private PaneSurfaceStyle mStyle;
@@ -79,11 +78,19 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     @Nullable private com.termux.app.launcher.widget.WidgetGridSizePopup mGridSizePopup;
     private boolean mEditing;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
-    /** The corner the finger is holding, from its landing to its lift. */
+    /** The corner the finger landed in, from its landing to its lift, held or not. */
     private int mPressedCorner = CornerZones.NONE;
-    /** Whether the tab was out when the finger landed: a corner tap puts it away, or moves it. */
+    /** Who owns a finger down in a corner square: the widgets under it, or this corner. */
+    private final CornerHold mHold = new CornerHold();
+    /**
+     * Its own handler rather than {@link View#postDelayed}: a detached view queues those until it
+     * is attached, and the hold has to fire whether or not this page is on screen yet.
+     */
+    private final Handler mHoldHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mHoldElapsed = this::onHoldElapsed;
+    /** Whether the tab was out when the finger landed: a corner hold puts it away, or moves it. */
     private boolean mShownAtDown;
-    /** And which corner it was out of, so a tap on another corner moves it rather than closing it. */
+    /** And which corner it was out of, so a hold on another corner moves it rather than closing it. */
     private int mShownCornerAtDown = CornerZones.NONE;
     private boolean mTouchMoved;
     private float mDownX, mDownY;
@@ -227,17 +234,33 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     }
 
     /**
-     * A tap on one of the page's corners drops the controls out of it, as a tap on a pane's corner
-     * does; a tap on one of them runs it, and a tap anywhere else puts them away and goes on to
-     * the grid. Only those touches are taken from the widgets: the edges between the corners, and
-     * anything the edit chrome wants, belong to whatever is drawn there.
+     * A hold on one of the page's corners drops the controls out of it, as a hold on a pane's
+     * corner does; a tap on one of them runs it, and a touch anywhere else puts them away and goes
+     * on to the grid.
+     *
+     * <p>A corner square is not a button. The finger that lands in one is the widgets' until it
+     * has rested for {@link HoldTiming#holdTimeoutMs()}, so a tap, a drag and a widget's own
+     * controls all reach the grid as if the square were not there; only when the hold fires does
+     * this frame take the gesture, which is where the child is told to forget it.
      */
     @Override
     public boolean onInterceptTouchEvent(@NonNull MotionEvent event) {
-        if (event.getActionMasked() != MotionEvent.ACTION_DOWN) {
-            return mPressedAction != PaneControlsView.ACTION_NONE
-                || mPressedCorner != CornerZones.NONE;
-        }
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) return onFrameDown(event);
+        // Read before the event is played: the hold is claimed by its timer rather than by a
+        // touch, so an event arriving after it is the first the grid must not see.
+        boolean claimed = mHold.isClaimed();
+        onHoldEvent(event);
+        return mPressedAction != PaneControlsView.ACTION_NONE || claimed;
+    }
+
+    /**
+     * The finger landed. The tab's own buttons are taken at once — the tab is a control, and it is
+     * tapped — and a corner only starts its timer, leaving the gesture with the grid.
+     *
+     * @return whether this frame takes the touch from the widgets.
+     */
+    private boolean onFrameDown(@NonNull MotionEvent event) {
+        cancelHold();
         mPressedAction = PaneControlsView.ACTION_NONE;
         mPressedCorner = CornerZones.NONE;
         mTouchMoved = false;
@@ -256,24 +279,77 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         }
         int corner = claimedCorner(mDownX, mDownY, getWidth(), getHeight(),
             getResources().getDisplayMetrics().density, editChromeWantsPoint(mDownX, mDownY));
-        if (corner != CornerZones.NONE) {
-            mPressedCorner = corner;
-            invalidate();
-            return true;
-        }
+        if (corner == CornerZones.NONE) return false;
+        mPressedCorner = corner;
+        float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        mHold.down(mDownX, mDownY, slop, slop, false);
+        mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
         return false;
     }
 
     /**
-     * Which corner a touch down takes for the page, or {@link CornerZones#NONE} when it belongs to
-     * whatever the page is holding. The edit chrome comes first: a widget's own remove chip and
-     * resize handles are inside the page's corners, and they are the widget's.
+     * One event of a gesture that started in a corner square. It arrives here from
+     * {@link #onInterceptTouchEvent} while the grid is holding the gesture and from
+     * {@link #onTouchEvent} once nothing else wants it — never both, since a frame that is
+     * intercepting has no child left to dispatch to.
+     */
+    private void onHoldEvent(@NonNull MotionEvent event) {
+        if (!mHold.isTracking()) return;
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (mHold.move(event.getX(), event.getY()) == CornerHold.Move.ABANDONED)
+                    mHoldHandler.removeCallbacks(mHoldElapsed);
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                // Two fingers on a page are a scroll or a pinch, never a hold.
+                if (mHold.secondFinger()) mHoldHandler.removeCallbacks(mHoldElapsed);
+                break;
+            case MotionEvent.ACTION_UP:
+                mHoldHandler.removeCallbacks(mHoldElapsed);
+                if (mHold.lift() == CornerHold.Lift.OPEN_TAB) openHeldCornerTab();
+                mPressedCorner = CornerZones.NONE;
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                cancelHold();
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * The hold time passed with the finger still in the square. The corner takes the gesture from
+     * here: the hand is told the hold was heard, and every event from now on is this frame's.
+     */
+    private void onHoldElapsed() {
+        if (!mHold.holdElapsed()) return;
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+    }
+
+    /** Out of the corner that was held; the corner it is already out of puts it away again. */
+    private void openHeldCornerTab() {
+        if (mControls == null || mPressedCorner == CornerZones.NONE) return;
+        if (!mShownAtDown || mShownCornerAtDown != mPressedCorner) mControls.show(mPressedCorner);
+        else dismissControls();
+    }
+
+    private void cancelHold() {
+        mHoldHandler.removeCallbacks(mHoldElapsed);
+        mHold.reset();
+        mPressedCorner = CornerZones.NONE;
+    }
+
+    /**
+     * Which corner a touch down may be held at for the page, or {@link CornerZones#NONE} when the
+     * point is none of them. The edit chrome comes first: a widget's own remove chip and resize
+     * handles are inside the page's corners, and they are the widget's whatever the finger does.
      */
     @androidx.annotation.VisibleForTesting
     static int claimedCorner(float x, float y, int width, int height, float density,
                              boolean editChromeWantsPoint) {
         if (editChromeWantsPoint) return CornerZones.NONE;
-        return CornerZones.cornerAt(x, y, width, height, CornerZones.sizePx(density));
+        return CornerZones.cornerAt(x, y, width, height, CornerZones.paneSizePx(density));
     }
 
     /**
@@ -291,11 +367,21 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         return pane.widgetEditWantsPoint(x - pane.getLeft(), y - pane.getTop());
     }
 
+    /**
+     * What a gesture the grid did not want does next. The tab's buttons are pressed and released
+     * here as they always were; a corner is only ever the hold's, and its events are played into
+     * the same state machine {@link #onInterceptTouchEvent} feeds.
+     */
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
-        if (mPressedAction == PaneControlsView.ACTION_NONE
-            && mPressedCorner == CornerZones.NONE) {
+        if (mPressedAction == PaneControlsView.ACTION_NONE && !mHold.isTracking()) {
             return super.onTouchEvent(event);
+        }
+        // The down was read in onInterceptTouchEvent, which every gesture passes through first.
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) return true;
+        if (mPressedAction == PaneControlsView.ACTION_NONE) {
+            onHoldEvent(event);
+            return true;
         }
         float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
         switch (event.getActionMasked()) {
@@ -303,49 +389,23 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                 if (Math.hypot(event.getX() - mDownX, event.getY() - mDownY) > slop) mTouchMoved = true;
                 return true;
             case MotionEvent.ACTION_UP:
-                if (mControls != null && !mTouchMoved) {
-                    if (mPressedAction != PaneControlsView.ACTION_NONE) {
-                        if (mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
-                            performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                            // The wheels hang off the tab, so that one leaves it out; help reads
-                            // the ? off it, so it runs while the tab is still out and puts the tab
-                            // away itself.
-                            if (mPressedAction != ACTION_GRID_SIZE && mPressedAction != ACTION_HELP)
-                                mControls.dismiss();
-                            mControls.activate(mPressedAction);
-                        }
-                    } else if (mPressedCorner != CornerZones.NONE) {
-                        performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                        // Out of the corner that was touched; the corner it is already out of
-                        // is the one that puts it away again.
-                        if (!mShownAtDown) mControls.show(mPressedCorner);
-                        else if (mShownCornerAtDown != mPressedCorner)
-                            mControls.show(mPressedCorner);
-                        else dismissControls();
-                    }
+                if (mControls != null && !mTouchMoved
+                    && mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
+                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                    // The wheels hang off the tab, so that one leaves it out; help reads the ? off
+                    // it, so it runs while the tab is still out and puts the tab away itself.
+                    if (mPressedAction != ACTION_GRID_SIZE && mPressedAction != ACTION_HELP)
+                        mControls.dismiss();
+                    mControls.activate(mPressedAction);
                 }
                 mPressedAction = PaneControlsView.ACTION_NONE;
-                mPressedCorner = CornerZones.NONE;
-                invalidate();
                 return true;
             case MotionEvent.ACTION_CANCEL:
                 mPressedAction = PaneControlsView.ACTION_NONE;
-                mPressedCorner = CornerZones.NONE;
-                invalidate();
                 return true;
             default:
                 return true;
         }
-    }
-
-    /** The corner under the finger is marked for as long as the finger is on it, never at rest. */
-    @Override
-    protected void dispatchDraw(@NonNull Canvas canvas) {
-        super.dispatchDraw(canvas);
-        if (mPressedCorner == CornerZones.NONE) return;
-        mBracketBounds.set(0f, 0f, getWidth(), getHeight());
-        mBracket.draw(canvas, mPressedCorner, mBracketBounds,
-            getResources().getDisplayMetrics().density, CornerBracket.color(getContext()));
     }
 
     /**
@@ -378,6 +438,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        cancelHold();
         dismissGridSizePopup();
         mRim.cancel();
     }

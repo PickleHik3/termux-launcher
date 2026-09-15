@@ -1,8 +1,8 @@
 package com.termux.app.x11;
 
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.RectF;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -10,7 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
@@ -19,6 +19,7 @@ import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.app.wall.PaneControlsView;
+import com.termux.view.HoldTiming;
 import com.termux.x11.LorieView;
 
 /**
@@ -39,8 +40,8 @@ import com.termux.x11.LorieView;
  * window meets the same corners the panes have.
  *
  * <p>While no server is running the page shows its empty state, which is where a home screen
- * rests: the launcher never starts a display on its own. A tap on one of the page's four corners
- * drops the same tab a pane's corner does, out of the corner that was touched: power, the
+ * rests: the launcher never starts a display on its own. A hold on one of the page's four corners
+ * drops the same tab a pane's corner does, out of the corner that was held: power, the
  * display's settings, and the Appearance and Layout doors every place carries — and, while a
  * display runs, the scale rail along the page's leading
  * edge, which is out only while that tab is. Between the corners the edges are X's: a maximised
@@ -100,18 +101,24 @@ public final class X11PaneFrame extends PaneContentFrame {
     private static final int ACTION_SETTINGS = 1;
 
     private final PaneRim mRim = new PaneRim();
-    private final CornerBracket mBracket = new CornerBracket();
-    private final RectF mBracketBounds = new RectF();
     @Nullable private PaneControlsView mControls;
     @Nullable private DisplayScaleRailView mRail;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
     /** A finger on the rail's thumb, from its landing to its lift. */
     private boolean mRailPressed;
-    /** The corner the finger is holding, from its landing to its lift. */
+    /** The corner the finger landed in, from its landing to its lift, held or not. */
     private int mPressedCorner = CornerZones.NONE;
-    /** Whether the tab was out when the finger landed: a corner tap puts it away, or moves it. */
+    /** Who owns a finger down in a corner square: the display under it, or this corner. */
+    private final CornerHold mHold = new CornerHold();
+    /**
+     * Its own handler rather than {@link View#postDelayed}: a detached view queues those until it
+     * is attached, and the hold has to fire whether or not this page is on screen yet.
+     */
+    private final Handler mHoldHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mHoldElapsed = this::onHoldElapsed;
+    /** Whether the tab was out when the finger landed: a corner hold puts it away, or moves it. */
     private boolean mShownAtDown;
-    /** And which corner it was out of, so a tap on another corner moves it rather than closing it. */
+    /** And which corner it was out of, so a hold on another corner moves it rather than closing it. */
     private int mShownCornerAtDown = CornerZones.NONE;
     private boolean mTouchMoved;
     private float mDownX, mDownY;
@@ -190,23 +197,40 @@ public final class X11PaneFrame extends PaneContentFrame {
     }
 
     /**
-     * A tap on one of the page's corners drops the controls out of it, as a tap on a pane's corner
-     * does; a tap on one of them runs it, and a tap anywhere else puts them away and goes on to X.
-     * Only those touches are taken from the display: the edges between the corners are X's.
+     * A hold on one of the page's corners drops the controls out of it, as a hold on a pane's
+     * corner does; a tap on one of them runs it, and a touch anywhere else puts them away and goes
+     * on to X.
+     *
+     * <p>A corner square is not a button. The finger that lands in one is X's until it has rested
+     * for {@link HoldTiming#holdTimeoutMs()}, so a maximised window's own corner controls answer a
+     * tap there; only when the hold fires does this frame take the gesture, which is where X is
+     * told to forget it.
      */
     @Override
     public boolean onInterceptTouchEvent(@NonNull android.view.MotionEvent event) {
-        if (event.getActionMasked() != android.view.MotionEvent.ACTION_DOWN) {
-            return mPressedAction != PaneControlsView.ACTION_NONE
-                || mPressedCorner != CornerZones.NONE || mRailPressed;
-        }
+        if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN)
+            return onFrameDown(event);
+        // Read before the event is played: the hold is claimed by its timer rather than by a
+        // touch, so an event arriving after it is the first X must not see.
+        boolean claimed = mHold.isClaimed();
+        onHoldEvent(event);
+        return mPressedAction != PaneControlsView.ACTION_NONE || claimed || mRailPressed;
+    }
+
+    /**
+     * The finger landed. The rail and the tab's own buttons are taken at once — both are controls,
+     * and both are tapped — and a corner only starts its timer, leaving the gesture with X.
+     *
+     * @return whether this frame takes the touch from the display.
+     */
+    private boolean onFrameDown(@NonNull android.view.MotionEvent event) {
+        cancelHold();
         mPressedAction = PaneControlsView.ACTION_NONE;
-        mPressedCorner = CornerZones.NONE;
         mRailPressed = false;
         mTouchMoved = false;
         mDownX = event.getX();
         mDownY = event.getY();
-        // The rail counts as out too: a tap anywhere else puts it away with the tab, and a tap
+        // The rail counts as out too: a touch anywhere else puts it away with the tab, and a tap
         // on the tab alone must not leave it standing.
         mShownAtDown = (mControls != null && mControls.isControlsShown())
             || (mRail != null && mRail.isRailShown());
@@ -226,26 +250,89 @@ public final class X11PaneFrame extends PaneContentFrame {
             dismissControls();
         }
         int corner = cornerAt(mDownX, mDownY);
-        if (corner != CornerZones.NONE) {
-            mPressedCorner = corner;
-            invalidate();
-            return true;
-        }
+        if (corner == CornerZones.NONE) return false;
+        mPressedCorner = corner;
+        float slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        mHold.down(mDownX, mDownY, slop, slop, false);
+        mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
         return false;
     }
 
-    /** The corner a touch lands in, or {@link CornerZones#NONE} when it is the display's. */
-    private int cornerAt(float x, float y) {
-        return CornerZones.cornerAt(x, y, getWidth(), getHeight(),
-            CornerZones.sizePx(getResources().getDisplayMetrics().density));
+    /**
+     * One event of a gesture that started in a corner square. It arrives here from
+     * {@link #onInterceptTouchEvent} while X is holding the gesture and from
+     * {@link #onTouchEvent} once nothing else wants it — never both, since a frame that is
+     * intercepting has no child left to dispatch to.
+     */
+    private void onHoldEvent(@NonNull android.view.MotionEvent event) {
+        if (!mHold.isTracking()) return;
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (mHold.move(event.getX(), event.getY()) == CornerHold.Move.ABANDONED)
+                    mHoldHandler.removeCallbacks(mHoldElapsed);
+                break;
+            case android.view.MotionEvent.ACTION_POINTER_DOWN:
+                // Two fingers on a page are a scroll or a pinch, never a hold.
+                if (mHold.secondFinger()) mHoldHandler.removeCallbacks(mHoldElapsed);
+                break;
+            case android.view.MotionEvent.ACTION_UP:
+                mHoldHandler.removeCallbacks(mHoldElapsed);
+                if (mHold.lift() == CornerHold.Lift.OPEN_TAB) openHeldCornerTab();
+                mPressedCorner = CornerZones.NONE;
+                break;
+            case android.view.MotionEvent.ACTION_CANCEL:
+                cancelHold();
+                break;
+            default:
+                break;
+        }
     }
 
+    /**
+     * The hold time passed with the finger still in the square. The corner takes the gesture from
+     * here: the hand is told the hold was heard, and every event from now on is this frame's.
+     */
+    private void onHoldElapsed() {
+        if (!mHold.holdElapsed()) return;
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+    }
+
+    /** Out of the corner that was held; the corner it is already out of puts it away again. */
+    private void openHeldCornerTab() {
+        if (mControls == null || mPressedCorner == CornerZones.NONE) return;
+        if (!mShownAtDown || mShownCornerAtDown != mPressedCorner) showControls(mPressedCorner);
+        else dismissControls();
+    }
+
+    private void cancelHold() {
+        mHoldHandler.removeCallbacks(mHoldElapsed);
+        mHold.reset();
+        mPressedCorner = CornerZones.NONE;
+    }
+
+    /** The square a touch may be held in, or {@link CornerZones#NONE} when it is the display's. */
+    private int cornerAt(float x, float y) {
+        return CornerZones.cornerAt(x, y, getWidth(), getHeight(),
+            CornerZones.paneSizePx(getResources().getDisplayMetrics().density));
+    }
+
+    /**
+     * What a gesture X did not want does next. The rail and the tab's buttons are pressed and
+     * released here as they always were; a corner is only ever the hold's, and its events are
+     * played into the same state machine {@link #onInterceptTouchEvent} feeds.
+     */
     @Override
     public boolean onTouchEvent(@NonNull android.view.MotionEvent event) {
         if (mRailPressed) return onRailTouch(event);
-        if (mPressedAction == PaneControlsView.ACTION_NONE
-            && mPressedCorner == CornerZones.NONE) {
+        if (mPressedAction == PaneControlsView.ACTION_NONE && !mHold.isTracking()) {
             return super.onTouchEvent(event);
+        }
+        // The down was read in onInterceptTouchEvent, which every gesture passes through first.
+        if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) return true;
+        if (mPressedAction == PaneControlsView.ACTION_NONE) {
+            onHoldEvent(event);
+            return true;
         }
         float slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
         switch (event.getActionMasked()) {
@@ -253,32 +340,18 @@ public final class X11PaneFrame extends PaneContentFrame {
                 if (Math.hypot(event.getX() - mDownX, event.getY() - mDownY) > slop) mTouchMoved = true;
                 return true;
             case android.view.MotionEvent.ACTION_UP:
-                if (mControls != null && !mTouchMoved) {
-                    if (mPressedAction != PaneControlsView.ACTION_NONE) {
-                        if (mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
-                            performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
-                            // Help runs while the tab is still out — it reads the ? to hang its
-                            // own buttons beside it — and puts the tab away itself.
-                            if (mPressedAction != ACTION_HELP) dismissControls();
-                            mControls.activate(mPressedAction);
-                        }
-                    } else if (mPressedCorner != CornerZones.NONE) {
-                        performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
-                        // Out of the corner that was touched; the corner it is already out of
-                        // is the one that puts it away again.
-                        if (!mShownAtDown || mShownCornerAtDown != mPressedCorner)
-                            showControls(mPressedCorner);
-                        else dismissControls();
-                    }
+                if (mControls != null && !mTouchMoved
+                    && mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
+                    performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+                    // Help runs while the tab is still out — it reads the ? to hang its own
+                    // buttons beside it — and puts the tab away itself.
+                    if (mPressedAction != ACTION_HELP) dismissControls();
+                    mControls.activate(mPressedAction);
                 }
                 mPressedAction = PaneControlsView.ACTION_NONE;
-                mPressedCorner = CornerZones.NONE;
-                invalidate();
                 return true;
             case android.view.MotionEvent.ACTION_CANCEL:
                 mPressedAction = PaneControlsView.ACTION_NONE;
-                mPressedCorner = CornerZones.NONE;
-                invalidate();
                 return true;
             default:
                 return true;
@@ -351,16 +424,6 @@ public final class X11PaneFrame extends PaneContentFrame {
         } catch (IllegalStateException e) {
             return null;
         }
-    }
-
-    /** The corner under the finger is marked for as long as the finger is on it, never at rest. */
-    @Override
-    protected void dispatchDraw(@NonNull Canvas canvas) {
-        super.dispatchDraw(canvas);
-        if (mPressedCorner == CornerZones.NONE) return;
-        mBracketBounds.set(0f, 0f, getWidth(), getHeight());
-        mBracket.draw(canvas, mPressedCorner, mBracketBounds,
-            getResources().getDisplayMetrics().density, CornerBracket.color(getContext()));
     }
 
     /** Whether the border tab is out (or coming out). */
@@ -700,6 +763,7 @@ public final class X11PaneFrame extends PaneContentFrame {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        cancelHold();
         mRim.cancel();
     }
 }

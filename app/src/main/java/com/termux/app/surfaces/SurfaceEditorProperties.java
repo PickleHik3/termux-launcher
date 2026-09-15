@@ -241,15 +241,14 @@ public final class SurfaceEditorProperties {
             prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN),
             (prefs, value) -> prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, value),
             PREVIEW_GLASS | PREVIEW_SURFACES | PREVIEW_KEYBOARD),
-        // Docked rounds the terminal by its own knob, so the shared radius has to carry it there
-        // too or "round everything" would leave one square hole in the middle of the screen.
-        // Floating derives the terminal's shape from the dock capsule, which this already moved.
+        // The terminal rounds by its own knob in either style, and every pane in it reads that
+        // knob, so the shared radius has to carry it too — otherwise "round everything" leaves one
+        // square hole in the middle of the screen.
         own(ID_ALL_CORNERS, R.string.termux_dock_tuning_radius, Kind.SLIDER, Unit.DP, 40,
             prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS),
             (prefs, value) -> {
                 prefs.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, value);
-                if (!floating(prefs))
-                    prefs.setTerminalCornerRadius(value);
+                prefs.setTerminalCornerRadius(value);
             },
             PREVIEW_ALL_BUT_BLUR),
         // One number for all the air on screen. Docked surfaces are flush with the screen edges by

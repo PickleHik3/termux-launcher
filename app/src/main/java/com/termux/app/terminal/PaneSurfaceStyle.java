@@ -32,6 +32,13 @@ public interface PaneSurfaceStyle {
     int paneGlassGrainStrength();
     /** Corner radius of a pane slab, in px. */
     float paneGlassCornerRadiusPx();
+    /**
+     * The terminal's own corner radius knob in dp, which is the shape every pane wears — glass or
+     * not, docked or floating, alone or split. Below 0 is the shared "follow the style" sentinel,
+     * and the pane falls back to {@link #paneGlassCornerRadiusPx()}; a style with no knob to
+     * report says so by leaving it there.
+     */
+    default int paneCornerRadiusDp() { return -1; }
     /** Gap between tiled panes, in dp — the surface editor's Inner padding. */
     int paneGapDp();
 

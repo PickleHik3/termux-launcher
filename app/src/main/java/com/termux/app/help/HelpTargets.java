@@ -143,8 +143,7 @@ public final class HelpTargets {
     /**
      * One corner zone of the pane the user is on: the square a corner hold has to land in, so the
      * box is where the gesture is made rather than a guess at it. It is not a hit area - a tap
-     * there goes through to the program, and only the hold belongs to the corner - and it is the
-     * pane's own larger square, not the 32 dp one the other places use.
+     * there goes through to the program, and only the hold belongs to the corner.
      */
     private void paneCorner(Snapshot s) {
         Rect pane = rect(finder.activePane());

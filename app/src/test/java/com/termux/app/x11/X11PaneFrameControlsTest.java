@@ -17,6 +17,7 @@ import com.termux.R;
 
 import com.termux.app.wall.PaneControlsView;
 import com.termux.app.terminal.PaneGlassBackdropView;
+import com.termux.view.HoldTiming;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -87,10 +88,17 @@ public class X11PaneFrameControlsTest {
         ShadowLooper.idleMainLooper(400, TimeUnit.MILLISECONDS);
     }
 
-    /** A tap on a corner brings the tab out of it and, with a display running, the rail. */
+    /** A finger held still in a corner square until it claims the gesture, then lifted. */
+    private static void holdCorner(X11PaneFrame page) {
+        touch(page, MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        ShadowLooper.idleMainLooper(HoldTiming.holdTimeoutMs() + 50L, TimeUnit.MILLISECONDS);
+        touch(page, MotionEvent.ACTION_UP, WIDTH - 2f, 2f);
+    }
+
+    /** A hold on a corner brings the tab out of it and, with a display running, the rail. */
     private static X11PaneFrame pageWithControlsOut() {
         X11PaneFrame page = page();
-        tap(page, WIDTH - 2f, 2f);
+        holdCorner(page);
         settle();
         assertTrue(page.isControlsTabShown());
         assertTrue(page.isScaleRailShown());
@@ -120,7 +128,7 @@ public class X11PaneFrameControlsTest {
     @Test
     public void theRailIsOutOnlyWhileTheTabIs() {
         X11PaneFrame page = pageWithControlsOut();
-        tap(page, WIDTH - 2f, 2f);
+        holdCorner(page);
         settle();
         assertFalse("the tab went away", page.isControlsTabShown());
         assertFalse("and took the rail with it", page.isScaleRailShown());
@@ -174,7 +182,7 @@ public class X11PaneFrameControlsTest {
         assertFalse(page.isControlsTabShown());
         assertFalse(page.isScaleRailShown());
 
-        tap(page, WIDTH - 2f, 2f);
+        holdCorner(page);
         settle();
         tapAction(page, X11PaneFrame.ACTION_LAYOUT);
         assertEquals(Arrays.asList("appearance", "layout"), log);

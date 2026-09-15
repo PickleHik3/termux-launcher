@@ -2311,13 +2311,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public float paneGlassCornerRadiusPx() {
-                if (isRoundedDockStyle())
-                    return terminalEdgeCornerRadiusPx();
-                // Docked: the glass slabs are the terminal's edge, so they round by the terminal's
-                // own knob. Its default 0 keeps the 4dp softening the slabs always had — a glass
-                // pane with literally square corners reads as a torn rectangle, not a slab.
-                float radiusPx = dockedTerminalCornerRadiusPx();
-                return radiusPx > 0f ? radiusPx : dpToPx(4);
+                // What a pane follows while its own radius is on the sentinel: the shape the style
+                // gives the terminal's edge, which is the dock capsule's while Floating.
+                return terminalEdgeCornerRadiusPx();
+            }
+
+            @Override public int paneCornerRadiusDp() {
+                // The knob the user turns, and the pane's whole answer — every mode wears it, and
+                // a stored 0 is square corners rather than "no opinion".
+                return mPreferences == null
+                    ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS
+                    : mPreferences.getTerminalCornerRadius();
             }
 
             @Override public int paneGapDp() {

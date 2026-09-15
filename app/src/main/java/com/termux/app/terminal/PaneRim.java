@@ -2,6 +2,7 @@ package com.termux.app.terminal;
 
 import android.animation.ValueAnimator;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.widget.FrameLayout;
 
@@ -76,7 +77,9 @@ public final class PaneRim {
         // which pane has the keyboard.
         int focusedTint = 0;
         int unfocusedTint = 0;
-        float radius = 0f;
+        // The stroke traces the pane's own corners too — it is drawn over the same clip — so both
+        // rims take the radius, not just the glass one.
+        float radius = Math.max(0f, radiusPx);
         if (glass) {
             focusedTint = MaterialColors.getColor(frame.getContext(),
                 com.google.android.material.R.attr.colorPrimary,
@@ -84,16 +87,14 @@ public final class PaneRim {
             unfocusedTint = MaterialColors.getColor(frame.getContext(),
                 com.google.android.material.R.attr.colorOutline,
                 ContextCompat.getColor(frame.getContext(), R.color.termux_outline_variant));
-            radius = radiusPx;
         }
 
         // Reuse the live drawable when nothing but focus can have changed. A focus flip then
         // crossfades it in place, and an unchanged re-application (every render calls this) leaves
         // a mid-flight crossfade running instead of stamping the end state over it.
         boolean reusable = mDrawable != null && mGlass == glass
-            && frame.getForeground() == mDrawable
-            && (!glass || (mFocusedTint == focusedTint && mUnfocusedTint == unfocusedTint
-                && mRadiusPx == radius));
+            && frame.getForeground() == mDrawable && mRadiusPx == radius
+            && (!glass || (mFocusedTint == focusedTint && mUnfocusedTint == unfocusedTint));
         if (reusable) {
             if (mActive != active) {
                 mActive = active;
@@ -118,6 +119,11 @@ public final class PaneRim {
                 R.drawable.pane_active_border);
             if (border != null) {
                 border = border.mutate();
+                // The drawable carries the stroke and the theme colour; its corners come from the
+                // pane, so the stroke rounds exactly where the frame's clip does rather than at
+                // the shape's own fixed radius.
+                if (border instanceof GradientDrawable)
+                    ((GradientDrawable) border).setCornerRadius(radius);
                 border.setAlpha(active ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
             }
             mDrawable = border;

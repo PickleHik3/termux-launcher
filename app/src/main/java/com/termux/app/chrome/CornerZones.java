@@ -26,13 +26,17 @@ public final class CornerZones {
     public static final int BOTTOM_RIGHT = 2;
     public static final int BOTTOM_LEFT = 3;
 
-    /** The square's side. A thumb, not a cursor. */
+    /**
+     * The square's side where a corner is taken on the touch itself: the floating keyboard's card,
+     * which is dragged from its top corners. A thumb, not a cursor — and no bigger, because every
+     * pixel of it is taken from whatever is underneath.
+     */
     public static final float SIZE_DP = 32f;
 
     /**
-     * The square's side on a terminal pane. Bigger than the rest, because it is the only one that
-     * is held rather than tapped: the program underneath keeps every touch that does not rest
-     * there, so the square costs the program nothing and can afford the room a slow thumb needs.
+     * The square's side on a pane or a page, which is <em>held</em> rather than tapped. Bigger,
+     * because the content underneath keeps every touch that does not rest there, so the square
+     * costs it nothing and can afford the room a slow thumb needs.
      */
     public static final float PANE_SIZE_DP = 40f;
 
@@ -43,7 +47,7 @@ public final class CornerZones {
         return SIZE_DP * density;
     }
 
-    /** {@link #PANE_SIZE_DP} in pixels: the held square a terminal pane keeps at each corner. */
+    /** {@link #PANE_SIZE_DP} in pixels: the held square a pane or a page keeps at each corner. */
     public static float paneSizePx(float density) {
         return PANE_SIZE_DP * density;
     }

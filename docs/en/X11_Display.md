@@ -71,9 +71,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   squeezing it, so the picture keeps the size it was given and nothing on it moves as you type. In
   portrait the display makes room for the keyboard instead. Either orientation can be set the other
   way from **Settings → Layout → Display**, after switching to the orientation you want it for.
-- **The controls.** Tap the display's edge and two buttons drop from its top corner, as they do
-  on a terminal pane: power starts, stops or turns on the display, and the cog opens its
-  settings. Tap anywhere else to put them away.
+- **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
+  terminal pane: power starts, stops or turns on the display, and the cog opens its settings. A
+  tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap
+  anywhere else to put them away.
 - **Touch.** Settings → **Display** → **Touch** says what a finger on the display does.
   **Touchscreen** is the tablet: fingers are touches, so a page scrolls, pinches, drags and
   long-presses where you put them, and an app written for a touchscreen behaves as it would on

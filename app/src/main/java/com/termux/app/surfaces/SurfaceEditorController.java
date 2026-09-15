@@ -1296,9 +1296,9 @@ public final class SurfaceEditorController {
      * Whether a row can act at all right now, and therefore whether it renders.
      *
      * <p>Docked surfaces are flush with the screen edges by definition, so their margin has no
-     * number to give; the terminal's own corner radius is the Docked frame's, since Floating takes
-     * the dock capsule's shape instead; and the terminal's glass has nothing to live inside until
-     * its frame is on. A row the state makes inert is dropped rather than drawn dead — a dead slider
+     * number to give; and the terminal's glass has nothing to live inside until its frame is on.
+     * The terminal's corner radius is not one of these: every pane reads it in either style now, so
+     * it shows in both. A row the state makes inert is dropped rather than drawn dead — a dead slider
      * is clutter, not signage — and the control that brings it back (the shared layer's style pill,
      * the terminal's own Frame switch) is one tap away.
      */
@@ -1313,8 +1313,6 @@ public final class SurfaceEditorController {
             return mHost.isFloatingDock();
         if (slot != SurfaceSlot.CANVAS)
             return true;
-        if (SurfaceEditorProperties.ID_CORNERS.equals(control.id))
-            return !mHost.isFloatingDock();
         if (SurfaceEditorProperties.ID_BLUR.equals(control.id)
             || SurfaceEditorProperties.ID_GRAIN.equals(control.id))
             return prefs() != null && prefs().isTerminalBorderEnabled();
