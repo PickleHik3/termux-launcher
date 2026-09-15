@@ -237,14 +237,30 @@ public class TourControllerTest {
     }
 
     @Test
-    public void endTourFinishesTheRunAsSkipped() {
+    public void endTourLeavesTheLessonsButStillAsksAboutTheHomeScreen() {
         controller.start();
+        controller.endTour();
+        assertTrue(controller.isRunning());
+        assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
+        assertTrue(prefs.skipped);
+        assertTrue(listener.finished.isEmpty());
+        controller.choose(TourController.Choice.KEEP_TRYING);
+        assertEquals(TourRun.CLOSING, controller.currentStep().id);
+        controller.finish();
+        assertFalse(controller.isRunning());
+        assertTrue(controller.isFinished());
+        assertEquals(TourController.RUN_VERSION, prefs.completedVersion);
+        assertEquals(-1, prefs.stepIndex);
+        assertEquals(Arrays.asList(Boolean.TRUE), listener.finished);
+    }
+
+    @Test
+    public void endTourWithNoChoiceCardAheadEndsTheRunAsSkipped() {
+        controller.startAt(TourRun.CLOSING);
         controller.endTour();
         assertFalse(controller.isRunning());
         assertNull(controller.currentStep());
         assertTrue(controller.isFinished());
-        assertEquals(TourController.RUN_VERSION, prefs.completedVersion);
-        assertEquals(-1, prefs.stepIndex);
         assertEquals(Arrays.asList(Boolean.TRUE), listener.finished);
     }
 

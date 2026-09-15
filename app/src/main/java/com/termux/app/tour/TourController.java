@@ -374,7 +374,11 @@ public final class TourController {
         advance();
     }
 
-    /** The End tour button: the rest of the run is not wanted, and the run counts as skipped. */
+    /**
+     * The End tour button: the lessons are not wanted and the run counts as skipped, but the way
+     * out still passes the home-screen question and the closing card, so leaving early never
+     * costs the one card an experienced user came for. A run with no choice card left ahead ends.
+     */
     public void endTour() {
         if (!mRunning) return;
         if (mPracticing) {
@@ -382,6 +386,11 @@ public final class TourController {
             return;
         }
         mPrefs.setTourSkipped(true);
+        int choice = indexOf(TourRun.HOME_CHOICE);
+        if (choice > mStepIndex) {
+            moveTo(choice);
+            return;
+        }
         end();
     }
 

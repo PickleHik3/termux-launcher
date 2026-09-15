@@ -255,7 +255,10 @@ the phone's real home-app setting rather than assuming one.
 ### Actions per card kind
 
 - **Lesson** (`TourStep.LESSON_ACTIONS`): Back, Skip step, End tour — every one of the four
-  lessons above. In practice (below) these are replaced by Done and End practice instead.
+  lessons above. End tour marks the run skipped and jumps to `home_choice`, so leaving the lessons
+  early still passes the home-screen question and the closing card (story 43 of #36); the run
+  only ends outright when no choice card lies ahead. In practice (below) these are replaced by
+  Done and End practice instead.
 - **Choice**: no default; a choice names its own. `home_choice` offers Continue alone when the
   launcher already is the home app, or Use as home screen / Keep trying when it is not.
 - **Closing** (`TourStep.CLOSING_ACTIONS`): Start using Termux, alone.
