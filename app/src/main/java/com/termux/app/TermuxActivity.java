@@ -12959,15 +12959,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSurfaceEditor.enter(null, currentWallPlace());
     }
 
-    /**
-     * The corner tab of a place that is not the terminal: the editor opens on the arrangement of
-     * the place the user is looking at, with the rest of it one tap away on the card.
-     */
-    void openSurfaceEditorArrange() {
-        if (mLayoutEditor.isActive()) return;
-        mSurfaceEditor.enterArrange(currentWallPlace());
-    }
-
     void openSettings() {
         openSettingsHome();
     }

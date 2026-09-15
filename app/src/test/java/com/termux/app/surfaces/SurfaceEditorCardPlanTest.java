@@ -8,55 +8,25 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
 import org.junit.Test;
 
 /**
- * What an arrange session shows and what it holds back. The point of the mode is that everything
- * shared — the presets, the style pills, the global numbers — is unreachable until the user asks
- * for it, and that the card is never left with nothing but a header.
+ * What a card carries now that the editor only edits how a place looks: its surface's look rows,
+ * and the shared strip only where the card is the shared layer's.
  */
 public class SurfaceEditorCardPlanTest {
 
     @Test
-    public void theFullEditorOffersThePaletteAndTheArrangeSessionDoesNot() {
-        assertTrue(SurfaceEditorCardPlan.paletteShown(SurfaceEditorMode.FULL));
-        assertFalse(SurfaceEditorCardPlan.paletteShown(SurfaceEditorMode.ARRANGE));
+    public void theSharedLayersCardCarriesTheSharedStrip() {
+        assertTrue(SurfaceEditorCardPlan.sharedStripShown(null));
     }
 
     @Test
-    public void everySurfaceCardCarriesItsLookRowsInTheFullEditor() {
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            assertTrue(slot.name(),
-                SurfaceEditorCardPlan.lookRowsShown(SurfaceEditorMode.FULL, slot));
-            assertFalse(slot.name(),
-                SurfaceEditorCardPlan.moreRowShown(SurfaceEditorMode.FULL, slot));
-        }
+    public void aSurfacesCardCarriesNoneOfIt() {
+        for (SurfaceSlot slot : SurfaceSlot.values())
+            assertFalse(slot.name(), SurfaceEditorCardPlan.sharedStripShown(slot));
     }
 
     @Test
-    public void anArrangeCardHoldsTheLookRowsBackAndOffersMoreInstead() {
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            assertFalse(slot.name(),
-                SurfaceEditorCardPlan.lookRowsShown(SurfaceEditorMode.ARRANGE, slot));
-            assertTrue(slot.name(),
-                SurfaceEditorCardPlan.moreRowShown(SurfaceEditorMode.ARRANGE, slot));
-        }
-    }
-
-    @Test
-    public void theSharedLayerIsAlwaysTheFullCard() {
-        // It is not a place, so it has nothing to arrange and no reduced card to offer.
-        assertTrue(SurfaceEditorCardPlan.lookRowsShown(SurfaceEditorMode.ARRANGE, null));
-        assertFalse(SurfaceEditorCardPlan.moreRowShown(SurfaceEditorMode.ARRANGE, null));
-        assertTrue(SurfaceEditorCardPlan.lookRowsShown(SurfaceEditorMode.FULL, null));
-        assertFalse(SurfaceEditorCardPlan.moreRowShown(SurfaceEditorMode.FULL, null));
-    }
-
-    @Test
-    public void aCardNeverOffersBothTheLookRowsAndTheWayToThem() {
-        for (SurfaceEditorMode mode : SurfaceEditorMode.values()) {
-            for (SurfaceSlot slot : SurfaceSlot.values()) {
-                assertFalse(mode + " " + slot,
-                    SurfaceEditorCardPlan.lookRowsShown(mode, slot)
-                        == SurfaceEditorCardPlan.moreRowShown(mode, slot));
-            }
-        }
+    public void everySurfaceCardHasLookRowsToCarry() {
+        for (SurfaceSlot slot : SurfaceSlot.values())
+            assertFalse(slot.name(), SurfaceEditorProperties.rowsFor(slot).isEmpty());
     }
 }
