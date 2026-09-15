@@ -247,6 +247,11 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_FORCE_BGRA:
                     launcher.setX11ForceBgraEnabled(value);
                     break;
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_ANDROID_KEYBOARD:
+                    launcher.setX11AndroidKeyboardEnabled(value);
+                    // Same reason as the row below: the Display place reads it while it is up.
+                    notifyDisplay(key);
+                    break;
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT:
                     launcher.setX11KeyboardFollowsTextEnabled(value);
                     // The launcher's own key, but the display's page reads it, so it goes out on
@@ -279,6 +284,8 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                     return launcher.isX11LegacyDrawingEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_FORCE_BGRA:
                     return launcher.isX11ForceBgraEnabled();
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_ANDROID_KEYBOARD:
+                    return launcher.isX11AndroidKeyboardEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT:
                     return launcher.isX11KeyboardFollowsTextEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:

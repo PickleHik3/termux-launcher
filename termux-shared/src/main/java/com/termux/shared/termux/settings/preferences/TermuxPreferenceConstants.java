@@ -226,6 +226,14 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_KEYBOARD_FOLLOWS_TEXT = true;
 
+        /**
+         * Type into the display with the phone's own keyboard instead of the launcher's. Read on
+         * the Display place only; the terminal keeps the launcher's keyboard either way.
+         */
+        public static final String KEY_X11_ANDROID_KEYBOARD = "x11_android_keyboard";
+
+        public static final boolean DEFAULT_X11_ANDROID_KEYBOARD = false;
+
         /** Pass {@code -legacy-drawing} when the launcher starts the server. */
         public static final String KEY_X11_LEGACY_DRAWING = "x11_legacy_drawing";
 
