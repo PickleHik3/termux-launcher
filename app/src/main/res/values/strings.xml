@@ -1956,7 +1956,7 @@
     <string name="help_topic_touchpad_purpose">The touchpad moves the pointer on the display.</string>
     <string name="help_topic_touchpad_action">One finger moves and taps, two fingers scroll, three fingers switch windows.</string>
     <string name="help_topic_touchpad_reveal">Turn Mouse mode on to see the touchpad.</string>
-    <string name="help_topic_widget_purpose">A widget shows information from an app on your Home place.</string>
+    <string name="help_topic_widget_purpose">A widget shows information from an app right on Home.</string>
     <string name="help_topic_widget_action">Long-press it to move or resize it.</string>
     <string name="help_topic_widget_reveal">Long-press an empty cell to add your first widget.</string>
     <string name="help_topic_empty_purpose">Empty space is where a new widget goes.</string>
