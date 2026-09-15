@@ -74,6 +74,30 @@ public final class IconPackRepository {
         return sorted;
     }
 
+    /**
+     * Identity of one installed pack: its package and the version code its resources came from —
+     * the same pair {@link #loadIconPack} already compares to decide whether a parsed pack is
+     * still current. Empty for "no pack", so it reads as a stable token for the system default.
+     */
+    @NonNull
+    public String packIdentity(@Nullable String packageName) {
+        if (packageName == null || packageName.trim().isEmpty()) return "";
+        String trimmed = packageName.trim();
+        IconPackInfo info = buildInfo(trimmed, false);
+        return info == null ? trimmed : trimmed + ":" + info.versionCode;
+    }
+
+    /**
+     * Identity of the whole icon-pack configuration now in force — the global pack and the pinned
+     * one. Anything that caches treated artwork keys on this, so replacing a pack, or upgrading
+     * one in place, can never hand back a render made under the previous resources.
+     */
+    @NonNull
+    public String activeIconPackIdentity(@Nullable String globalPackPackage,
+                                         @Nullable String pinnedPackPackage) {
+        return packIdentity(globalPackPackage) + "/" + packIdentity(pinnedPackPackage);
+    }
+
     @Nullable
     public IconPack loadIconPack(@Nullable String packageName) {
         if (packageName == null || packageName.trim().isEmpty()) return null;

@@ -71,6 +71,76 @@ public class TerminalFontLoaderTest {
         assertSame(first.regular, second.regular);
     }
 
+    /**
+     * kitty resolves a family name through fontconfig, which finds files people dropped into
+     * ~/.fonts; Android would answer the same name with its default face and draw tofu.
+     */
+    @Test
+    public void aFamilyNameResolvesToAnInstalledFileBeforeAndroidIsAsked() throws Exception {
+        File directory = temporary.newFolder("fonts");
+        File font = new File(directory, "HerdrAgentIconsMax-Regular.ttf");
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(font)) {
+            out.write(new byte[64]);
+        }
+        TerminalFontConfig.Result byFamily = TerminalFontConfig.parse(
+            "symbol_map U+E1A0-U+E1B6 Herdr Agent Icons Max\n", true);
+        TerminalFontConfig.Result byPath = TerminalFontConfig.parse(
+            "symbol_map U+E1A0-U+E1B6 path=" + font.getAbsolutePath() + "\n", true);
+        assertTrue(byFamily.errors.toString(), byFamily.errors.isEmpty());
+
+        TerminalFontLoader.Faces faces = TerminalFontLoader.load(byFamily,
+            FontFamilyIndex.of(java.util.Collections.singletonList(directory)));
+
+        assertTrue(faces.errors.toString(), faces.errors.isEmpty());
+        assertEquals(1, faces.symbolMaps.length);
+        assertSame(TerminalFontLoader.load(byPath).symbolMaps[0].typeface,
+            faces.symbolMaps[0].typeface);
+    }
+
+    /**
+     * Android's answer for a family it does not have: the same default face it returns for no
+     * family at all. Robolectric hands out a fresh instance per call, so the real behaviour this
+     * check rests on has to be stated here.
+     */
+    private static final class Platform implements TerminalFontLoader.PlatformFamilies {
+        private final Typeface mDefault = Typeface.DEFAULT;
+
+        @Override
+        public Typeface create(String family, int style) {
+            return "installed mono".equals(family) ? Typeface.MONOSPACE : mDefault;
+        }
+    }
+
+    @Test
+    public void aFamilyNoDirectoryAndNoPlatformFaceHasIsReportedRatherThanSilentlyDefaulted() {
+        TerminalFontConfig.Result config = TerminalFontConfig.parse(
+            "font_family Fira Code\n", true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+
+        TerminalFontLoader.Faces faces = TerminalFontLoader.load(config, FontFamilyIndex.EMPTY,
+            new Platform());
+
+        assertEquals(faces.errors.toString(), 1, faces.errors.size());
+        assertEquals("font_family: family 'Fira Code' is not installed", faces.errors.get(0));
+        // Exactly what a missing path= does: the face is unset and the old chain finishes the job.
+        if (!TermuxConstants.TERMUX_FONT_FILE.isFile())
+            assertSame(Typeface.MONOSPACE, faces.regular);
+    }
+
+    @Test
+    public void anExplicitGenericFamilyIsHonouredEvenThoughItIsTheDefaultFace() {
+        TerminalFontConfig.Result config = TerminalFontConfig.parse(
+            "font_family family=sans-serif\nbold_font family=\"installed mono\"\n", true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+
+        TerminalFontLoader.Faces faces = TerminalFontLoader.load(config, FontFamilyIndex.EMPTY,
+            new Platform());
+
+        assertTrue(faces.errors.toString(), faces.errors.isEmpty());
+        assertSame(Typeface.DEFAULT, faces.regular);
+        assertSame(Typeface.MONOSPACE, faces.bold);
+    }
+
     @Test
     public void resolvesTheFallbackChainInOrderAndDropsBrokenEntries() {
         TerminalFontConfig.Result config = TerminalFontConfig.parse(

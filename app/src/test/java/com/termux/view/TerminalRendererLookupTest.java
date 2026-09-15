@@ -1,6 +1,7 @@
 package com.termux.view;
 
 import android.app.Application;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.os.Build;
 
@@ -8,8 +9,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
+import org.robolectric.annotation.RealObject;
+import org.robolectric.shadows.ShadowPaint;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
@@ -102,5 +108,86 @@ public class TerminalRendererLookupTest {
         assertSame(icons, renderer.symbolMapFor(0xE050));
         assertNull(renderer.symbolMapFor('x'));
         assertNull(renderer.symbolMapFor(0xE100));
+    }
+
+    /**
+     * A symbol face with a hole in its coverage, standing in for every Nerd Font build: their
+     * cmaps skip whole stretches of the private-use area the app's own config maps to them.
+     */
+    @Implements(Paint.class)
+    public static final class ShadowFaceWithAHole extends ShadowPaint {
+        @RealObject private Paint mPaint;
+
+        @Implementation
+        protected boolean hasGlyph(String string) {
+            return mPaint.getTypeface() != Typeface.SERIF;
+        }
+    }
+
+    @Test
+    @Config(shadows = ShadowFaceWithAHole.class)
+    public void aMappedCodePointTheSymbolFaceCannotDrawGoesBackToTheNormalChain() {
+        TerminalRenderer.SymbolMap hole = map(0xE000, 0xF8FF, Typeface.SERIF);
+        TerminalRenderer renderer = renderer(hole);
+
+        // The map still owns the range — that is what the user configured.
+        assertSame(hole, renderer.symbolMapFor(0xE1A0));
+        // It just cannot draw this one, so the cell is handed back rather than stamped with tofu.
+        assertNull(renderer.symbolMapWithGlyphFor(0xE1A0));
+    }
+
+    @Test
+    @Config(shadows = ShadowFaceWithAHole.class)
+    public void aSymbolFaceThatHasTheGlyphStillClaimsTheCell() {
+        TerminalRenderer.SymbolMap icons = map(0xE000, 0xF8FF, Typeface.MONOSPACE);
+        TerminalRenderer renderer = renderer(icons);
+
+        assertNotNull(renderer.symbolMapWithGlyphFor(0xE1A0));
+        assertSame(icons, renderer.symbolMapWithGlyphFor(0xE1A0));
+    }
+
+    @Test
+    @Config(shadows = ShadowFaceWithAHole.class)
+    public void theFaceThatCanDrawTheCodePointWinsOverTheOneThatCannot() {
+        TerminalRenderer.SymbolMap hole = map(0xE000, 0xF8FF, Typeface.SERIF);
+        TerminalRenderer.SymbolMap covering = map(0xE1A0, 0xE1B6, Typeface.MONOSPACE);
+        TerminalRenderer renderer = renderer(hole, covering);
+
+        assertSame(covering, renderer.symbolMapWithGlyphFor(0xE1A0));
+        // Outside the covering map's range the wider one is still the only candidate, and still
+        // cannot draw, so those cells fall through.
+        assertNull(renderer.symbolMapWithGlyphFor(0xE200));
+    }
+
+    /**
+     * The phone's real stack: a kitty.conf icon map read first, then the app's own drop-in mapping
+     * the whole private-use area to the bundled symbols face. The drop-in wins the range and has
+     * no glyph in it, so the earlier map has to get the cell rather than the generic fallback.
+     */
+    @Test
+    @Config(shadows = ShadowFaceWithAHole.class)
+    public void anEarlierMapDrawsWhatTheLaterOneThatOutranksItCannot() {
+        TerminalRenderer.SymbolMap icons = map(0xE1A0, 0xE1B6, Typeface.MONOSPACE);
+        TerminalRenderer.SymbolMap managed = map(0xE000, 0xF8FF, Typeface.SERIF);
+        TerminalRenderer renderer = renderer(icons, managed);
+
+        // The later map still owns the range — that is the precedence the user configured.
+        assertSame(managed, renderer.symbolMapFor(0xE1A0));
+        assertSame(icons, renderer.symbolMapWithGlyphFor(0xE1A0));
+        assertSame(icons, renderer.symbolMapWithGlyphFor(0xE1B6));
+        // Outside the earlier map nothing can draw, so the cell goes to the generic fallback.
+        assertNull(renderer.symbolMapWithGlyphFor(0xE19F));
+        assertNull(renderer.symbolMapWithGlyphFor(0xF8FF));
+    }
+
+    @Test
+    @Config(shadows = ShadowFaceWithAHole.class)
+    public void theLaterMapStillWinsEveryCodePointItCanActuallyDraw() {
+        TerminalRenderer.SymbolMap icons = map(0xE1A0, 0xE1B6, Typeface.SANS_SERIF);
+        TerminalRenderer.SymbolMap managed = map(0xE000, 0xF8FF, Typeface.MONOSPACE);
+        TerminalRenderer renderer = renderer(icons, managed);
+
+        assertSame(managed, renderer.symbolMapWithGlyphFor(0xE1A0));
+        assertSame(managed, renderer.symbolMapWithGlyphFor(0xE500));
     }
 }

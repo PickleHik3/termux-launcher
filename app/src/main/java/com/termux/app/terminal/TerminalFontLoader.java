@@ -12,11 +12,13 @@ import com.termux.view.TerminalRenderer;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,6 +28,31 @@ public final class TerminalFontLoader {
     private static final long MAX_FONT_FILE_BYTES = 64L * 1024L * 1024L;
     private static final int MAX_SYMBOL_FONTS = 64;
     private static final int MAX_FALLBACK_FONTS = 8;
+    /**
+     * Where a {@code family=} name is looked for before Android is asked, in this order: the
+     * app's own installs, then the two directories fontconfig — and so kitty — already scans.
+     */
+    private static final String[] FAMILY_DIRECTORIES = {
+        "/.termux/fonts", "/.fonts", "/.local/share/fonts"
+    };
+    /**
+     * Android's own generic family names. These legitimately resolve to a platform default face,
+     * so they are the one case where getting the default back is the right answer and not a miss.
+     */
+    private static final Set<String> GENERIC_FAMILIES = new HashSet<>(Arrays.asList(
+        "monospace", "serif", "serif-monospace", "sans-serif", "sans-serif-condensed",
+        "sans-serif-light", "sans-serif-medium", "sans-serif-black", "sans-serif-thin",
+        "sans-serif-smallcaps", "casual", "cursive"));
+
+    /**
+     * Android's family lookup, behind an interface because the miss is only detectable by
+     * comparing two of its answers and Robolectric does not model that.
+     */
+    interface PlatformFamilies {
+        @Nullable Typeface create(@Nullable String family, int style);
+    }
+
+    private static final PlatformFamilies ANDROID = (family, style) -> Typeface.create(family, style);
 
     public static final class Faces {
         @NonNull public final Typeface regular;
@@ -76,29 +103,42 @@ public final class TerminalFontLoader {
 
     @NonNull
     public static Faces load(@NonNull TerminalFontConfig.Result config) {
+        return load(config, familyIndex(config), ANDROID);
+    }
+
+    @NonNull
+    static Faces load(@NonNull TerminalFontConfig.Result config,
+                      @NonNull FontFamilyIndex families) {
+        return load(config, families, ANDROID);
+    }
+
+    @NonNull
+    static Faces load(@NonNull TerminalFontConfig.Result config,
+                      @NonNull FontFamilyIndex families,
+                      @NonNull PlatformFamilies platform) {
         List<String> errors = new ArrayList<>(config.errors);
         Typeface regular = loadConfigured(config.face(TerminalFontConfig.Face.REGULAR),
-            Typeface.NORMAL, "font_family", errors);
+            Typeface.NORMAL, "font_family", families, platform, errors);
         if (regular == null)
             regular = loadLegacy(TermuxConstants.TERMUX_FONT_FILE, Typeface.MONOSPACE,
                 "font.ttf", errors);
 
         Typeface bold = loadConfigured(config.face(TerminalFontConfig.Face.BOLD),
-            Typeface.BOLD, "bold_font", errors);
+            Typeface.BOLD, "bold_font", families, platform, errors);
         Typeface italic = loadConfigured(config.face(TerminalFontConfig.Face.ITALIC),
-            Typeface.ITALIC, "italic_font", errors);
+            Typeface.ITALIC, "italic_font", families, platform, errors);
         if (italic == null && TermuxConstants.TERMUX_ITALIC_FONT_FILE.isFile())
             italic = loadPath(TermuxConstants.TERMUX_ITALIC_FONT_FILE,
                 "font-italic.ttf", errors);
         Typeface boldItalic = loadConfigured(config.face(TerminalFontConfig.Face.BOLD_ITALIC),
-            Typeface.BOLD_ITALIC, "bold_italic_font", errors);
+            Typeface.BOLD_ITALIC, "bold_italic_font", families, platform, errors);
         // One memo for every (face, axes) check the symbol path makes, so a setting inherited by
         // several maps from the shared symbols target is validated — and reported — once.
         Map<String, Boolean> variationChecks = new HashMap<>();
         String sharedSymbolVariations = config.variations(TerminalFontConfig.FontTarget.SYMBOLS);
         TerminalRenderer.SymbolMap[] symbolMaps = loadSymbolMaps(config.symbolMaps,
-            sharedSymbolVariations, errors, variationChecks);
-        List<Typeface> fallbackFonts = loadFallbackFonts(config.fallbackFonts, errors);
+            sharedSymbolVariations, families, platform, errors, variationChecks);
+        List<Typeface> fallbackFonts = loadFallbackFonts(config.fallbackFonts, families, platform, errors);
         TerminalRenderer.LigaturePolicy ligaturePolicy = TerminalRenderer.LigaturePolicy.valueOf(
             config.ligaturePolicy.name());
         TerminalRenderer.FontFeatures fontFeatures = new TerminalRenderer.FontFeatures(
@@ -175,10 +215,35 @@ public final class TerminalFontLoader {
         return new TerminalRenderer.SymbolExpansion(first, last, cells);
     }
 
+    /**
+     * The directory index this config needs, or an empty one when no line names a family.
+     *
+     * <p>Scanning is worth a config load's time only when something will ask it a question.
+     */
+    @NonNull
+    private static FontFamilyIndex familyIndex(@NonNull TerminalFontConfig.Result config) {
+        if (!namesAFamily(config)) return FontFamilyIndex.EMPTY;
+        List<File> roots = new ArrayList<>(FAMILY_DIRECTORIES.length);
+        for (String directory : FAMILY_DIRECTORIES)
+            roots.add(new File(TermuxConstants.TERMUX_HOME_DIR_PATH + directory));
+        return FontFamilyIndex.of(roots);
+    }
+
+    private static boolean namesAFamily(@NonNull TerminalFontConfig.Result config) {
+        for (TerminalFontConfig.FaceSpec spec : config.faces.values())
+            if (spec.type == TerminalFontConfig.SourceType.FAMILY) return true;
+        for (TerminalFontConfig.SymbolMapSpec map : config.symbolMaps)
+            if (map.font.type == TerminalFontConfig.SourceType.FAMILY) return true;
+        for (TerminalFontConfig.FaceSpec spec : config.fallbackFonts)
+            if (spec.type == TerminalFontConfig.SourceType.FAMILY) return true;
+        return false;
+    }
+
     /** Resolves the fallback chain in order, dropping only the entries Android cannot load. */
     @NonNull
     private static List<Typeface> loadFallbackFonts(
-        @NonNull List<TerminalFontConfig.FaceSpec> specs, @NonNull List<String> errors) {
+        @NonNull List<TerminalFontConfig.FaceSpec> specs, @NonNull FontFamilyIndex families,
+        @NonNull PlatformFamilies platform, @NonNull List<String> errors) {
         List<Typeface> result = new ArrayList<>();
         for (TerminalFontConfig.FaceSpec spec : specs) {
             if (result.size() >= MAX_FALLBACK_FONTS) {
@@ -186,7 +251,7 @@ public final class TerminalFontLoader {
                 break;
             }
             Typeface typeface = loadConfigured(spec, Typeface.NORMAL,
-                "fallback_font " + sourceDescription(spec), errors);
+                "fallback_font " + sourceDescription(spec), families, platform, errors);
             if (typeface != null) result.add(typeface);
         }
         return result;
@@ -270,6 +335,8 @@ public final class TerminalFontLoader {
     private static TerminalRenderer.SymbolMap[] loadSymbolMaps(
         @NonNull List<TerminalFontConfig.SymbolMapSpec> specs,
         @Nullable String sharedVariations,
+        @NonNull FontFamilyIndex families,
+        @NonNull PlatformFamilies platform,
         @NonNull List<String> errors,
         @NonNull Map<String, Boolean> variationChecks) {
         List<TerminalRenderer.SymbolMap> result = new ArrayList<>();
@@ -284,7 +351,7 @@ public final class TerminalFontLoader {
                     break;
                 }
                 typeface = loadConfigured(spec.font, Typeface.NORMAL,
-                    "symbol_map " + sourceDescription(spec.font), errors);
+                    "symbol_map " + sourceDescription(spec.font), families, platform, errors);
                 if (typeface == null) failed.add(key);
                 else loaded.put(key, typeface);
             }
@@ -312,21 +379,58 @@ public final class TerminalFontLoader {
             ? "path=" + spec.value : "family='" + spec.value + "'";
     }
 
+    /**
+     * A configured face, from its file or — for a family Android knows — from the platform.
+     *
+     * <p>A family is looked for on disk first. A file that matches the name but that Android
+     * rejects is reported and then left behind, so the platform still gets its turn.
+     */
     @Nullable
     private static Typeface loadConfigured(@Nullable TerminalFontConfig.FaceSpec spec, int style,
                                            @NonNull String label,
+                                           @NonNull FontFamilyIndex families,
+                                           @NonNull PlatformFamilies platform,
                                            @NonNull List<String> errors) {
         if (spec == null) return null;
         if (spec.type == TerminalFontConfig.SourceType.FAMILY) {
+            File installed = families.find(spec.value, style);
+            if (installed != null) {
+                Typeface typeface = loadPath(installed, label, errors);
+                if (typeface != null) return typeface;
+            }
+            Typeface fromPlatform;
             try {
-                return Typeface.create(spec.value, style);
+                fromPlatform = platformFamily(spec.value, style, platform);
             } catch (RuntimeException e) {
                 errors.add(label + ": cannot resolve family '" + spec.value + "': "
                     + safeMessage(e));
                 return null;
             }
+            if (fromPlatform != null) return fromPlatform;
+            // Falling back the way a missing path= does is the honest outcome: a kitty.conf synced
+            // from a desktop names fonts this phone has never had, and silently turning the
+            // terminal proportional is worse than saying so and keeping the face it had.
+            errors.add(label + ": family '" + spec.value + "' is not installed");
+            return null;
         }
         return loadPath(new File(TerminalFontConfig.expandPath(spec.value)), label, errors);
+    }
+
+    /**
+     * The platform's face for a family name, or null when the platform does not have that family.
+     *
+     * <p>{@code Typeface.create} answers every name: one it does not know comes back as the
+     * default face rather than as a failure, which is exactly what {@code create(null, style)}
+     * returns, so that is what the miss is recognised by. A generic family name is the one case
+     * where that same face is the right answer, so those are named rather than probed.
+     */
+    @Nullable
+    private static Typeface platformFamily(@NonNull String family, int style,
+                                           @NonNull PlatformFamilies platform) {
+        Typeface resolved = platform.create(family, style);
+        if (resolved == null) return null;
+        if (GENERIC_FAMILIES.contains(family.toLowerCase(Locale.US))) return resolved;
+        return resolved == platform.create(null, style) ? null : resolved;
     }
 
     @NonNull

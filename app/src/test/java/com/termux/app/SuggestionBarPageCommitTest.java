@@ -2,6 +2,7 @@ package com.termux.app;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import android.animation.ValueAnimator;
 import android.app.Application;
@@ -93,7 +94,9 @@ public class SuggestionBarPageCommitTest {
     public void aTouchThatInterruptsTheSettleStillLandsOnTheSwipedPage() {
         swipeLeft();
         // Mid-settle, without idling: the slide is running and the page is not committed yet.
-        assertNotNull(ReflectionHelpers.getField(row, "swipePreviewReboundAnimator"));
+        // The settle has its own field, apart from the drag-back rebound that commits nothing.
+        assertNotNull(ReflectionHelpers.getField(row, "swipePreviewSettleAnimator"));
+        assertNull(ReflectionHelpers.getField(row, "swipePreviewReboundAnimator"));
         assertEquals(0, page());
 
         dispatch(MotionEvent.ACTION_DOWN, 100f, 80f);
