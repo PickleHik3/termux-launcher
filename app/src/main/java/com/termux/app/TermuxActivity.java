@@ -9475,6 +9475,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean lookChanged = mLookPreferences != null
             && mLookPreferences.setRenderPlace(currentWallPlace())
             && mLookPreferences.hasAnyOverrides();
+        // The dock's height, the keyboard's height and its chin are the place's and the
+        // orientation's, so a wall settling on a place sized differently — or a turn of the screen
+        // — has to re-read them even where no look was ever overridden.
+        lookChanged |= applyPlaceSizes();
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
@@ -9503,6 +9507,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
         if (lookChanged) applyPlaceLook();
+    }
+
+    /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
+    private float mAppliedDockHeightScale = Float.NaN;
+    private float mAppliedKeyboardHeightScale = Float.NaN;
+    private int mAppliedKeyboardChinDp = -1;
+
+    /** Whether the sizes the place and orientation on screen ask for have moved since. */
+    private boolean applyPlaceSizes() {
+        if (mPreferences == null) return false;
+        float dock = mPreferences.getAppLauncherBarHeightScale();
+        float keyboard = mPreferences.getInAppKeyboardHeightScale();
+        int chin = mPreferences.getInAppKeyboardBottomPadding();
+        boolean moved = Float.compare(dock, mAppliedDockHeightScale) != 0
+            || Float.compare(keyboard, mAppliedKeyboardHeightScale) != 0
+            || chin != mAppliedKeyboardChinDp;
+        mAppliedDockHeightScale = dock;
+        mAppliedKeyboardHeightScale = keyboard;
+        mAppliedKeyboardChinDp = chin;
+        return moved;
     }
 
     /**
