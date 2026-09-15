@@ -100,6 +100,14 @@ public final class HelpTopics {
     /** How many entries the place has, measurable or not — the count colours are spread over. */
     public static int sizeFor(PaneWallPage place) { return forPlace(place).size(); }
 
+    /**
+     * Topics the chooser offers but the overview leaves out: the extra keys row keeps its per-key
+     * labels and no box of its own, and the corner tab is the thing the reader opened help from.
+     */
+    public static boolean topicOnly(String id) {
+        return "keys".equals(id) || "corners".equals(id);
+    }
+
     /** Every entry of every place. */
     public static List<Entry> all() {
         List<Entry> all = new ArrayList<>();

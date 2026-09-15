@@ -197,6 +197,7 @@ public final class HelpOverlayView extends FrameLayout {
         int count = snapshot.targets.size();
         for (int i = 0; i < count; i++) {
             HelpTargets.Target target = snapshot.targets.get(i);
+            if (HelpTopics.topicOnly(target.id)) continue;
             int color = overviewColor(target.id, i, count);
             boxColors.put(target.id, color);
             TextView card = card(target.copy, titleColor(target.id, i, count), color);

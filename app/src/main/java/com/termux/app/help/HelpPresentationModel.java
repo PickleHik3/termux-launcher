@@ -247,9 +247,18 @@ public final class HelpPresentationModel {
      * The section label for the page being read: the group of the first entry on it. Pages are
      * geometric, so the entries are apportioned evenly over the count the renderer reported.
      */
+    /** The entries the overview boxes and cards: {@link #entries()} minus the chooser-only topics. */
+    public List<HelpTopics.Entry> overviewEntries() {
+        List<HelpTopics.Entry> out = new ArrayList<>();
+        for (HelpTopics.Entry entry : entries()) {
+            if (!HelpTopics.topicOnly(entry.id)) out.add(entry);
+        }
+        return Collections.unmodifiableList(out);
+    }
+
     public int sectionLabelRes() {
         if (mode != Mode.OVERVIEW) return 0;
-        List<HelpTopics.Entry> entries = entries();
+        List<HelpTopics.Entry> entries = overviewEntries();
         if (entries.isEmpty()) return 0;
         int first = (int) ((long) page * entries.size() / Math.max(1, pageCount));
         return entries.get(Math.min(first, entries.size() - 1)).group.labelRes;

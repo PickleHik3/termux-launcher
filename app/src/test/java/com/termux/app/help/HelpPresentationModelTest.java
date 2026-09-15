@@ -11,6 +11,7 @@ import android.graphics.Color;
 
 import com.termux.app.wall.PaneWallPage;
 
+import java.util.ArrayList;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -138,6 +139,17 @@ public class HelpPresentationModelTest {
         assertTrue(model.entries().size() < HelpTopics.sizeFor(PaneWallPage.TERMINAL));
     }
 
+    @Test public void theOverviewLeavesTheChooserOnlyTopicsToTheChooser() {
+        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
+        model.showAll();
+        List<String> ids = new ArrayList<>();
+        for (HelpTopics.Entry entry : model.overviewEntries()) ids.add(entry.id);
+        assertFalse(ids.contains("keys"));
+        assertFalse(ids.contains("corners"));
+        assertTrue(ids.contains("dock"));
+        assertEquals(HelpTopics.sizeFor(PaneWallPage.TERMINAL) - 2, ids.size());
+    }
+
     @Test public void showAllOpensTheWholeCatalogueOnTheFirstOverviewPage() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
         model.showBasics();
@@ -192,7 +204,7 @@ public class HelpPresentationModelTest {
     @Test public void theSectionLabelNamesTheGroupOnThePage() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
         model.showAll();
-        List<HelpTopics.Entry> entries = model.entries();
+        List<HelpTopics.Entry> entries = model.overviewEntries();
         model.setPageCount(entries.size());
         Set<Integer> labels = new HashSet<>();
         for (int i = 0; i < entries.size(); i++) {
