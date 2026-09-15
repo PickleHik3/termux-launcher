@@ -17,13 +17,12 @@ import java.util.List;
 /**
  * What one element of a place's arrangement offers, for one orientation, and what a pick writes.
  * Pure: it builds descriptions and writers, draws nothing and holds no view, so the Place section
- * on the surface editor's cards is only the rendering of this and both are testable on their own.
+ * on the surface editor's cards and the rows under the Layout editor's miniature are only two
+ * renderings of this, and all three are testable on their own.
  *
- * <p>The Layout page asks the same questions of the same store through
- * {@code LayoutChooserModel}, which answers for both orientations at once because its rows show
- * both. The editor is standing on the live screen, so it only ever offers the orientation that is
- * on it — hence a model of its own, with the value sets and labels held against the page's by
- * {@code PlaceArrangeModelTest} so the two cannot drift.
+ * <p>One orientation at a time is the whole point: both editors stand on a picture of a single
+ * orientation — the live screen, or the miniature — so a row offers what that one holds and a pick
+ * writes only its key.
  */
 public final class PlaceArrangeModel {
 

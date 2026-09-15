@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The door into the Layout editor: one row per place, each closing Settings and opening the
-     launcher on that place with its layout editor up. The element rows below are the older
-     chooser page, still here until they move into the editor. -->
+<!-- The door into the Layout editor, and nothing else: one row per place, each closing Settings
+     and opening the launcher on that place with its layout editor up. Everything a place's layout
+     holds — where its bars stand, how its keyboard opens, how many cells its grid has — is picked
+     in the editor, beside the picture of the place it belongs to. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -19,36 +20,5 @@
         app:key="layout_place_display"
         app:persistent="false"
         app:title="@string/settings_layout_tab_display" />
-
-    <com.termux.app.fragments.settings.LayoutElementRowPreference
-        app:key="layout_row_status_bar"
-        app:persistent="false"
-        app:title="@string/settings_layout_status_bar_title" />
-
-    <com.termux.app.fragments.settings.LayoutElementRowPreference
-        app:key="layout_row_pinned_apps"
-        app:persistent="false"
-        app:title="@string/settings_show_pinned_apps_title" />
-
-    <com.termux.app.fragments.settings.LayoutElementRowPreference
-        app:key="layout_row_az_index"
-        app:persistent="false"
-        app:title="@string/settings_layout_miniature_alphabets" />
-
-    <com.termux.app.fragments.settings.LayoutElementRowPreference
-        app:key="layout_row_extra_keys"
-        app:persistent="false"
-        app:title="@string/settings_layout_miniature_keys" />
-
-    <com.termux.app.fragments.settings.LayoutElementRowPreference
-        app:key="layout_row_keyboard"
-        app:persistent="false"
-        app:title="@string/settings_layout_keyboard_title" />
-
-    <com.termux.app.fragments.settings.LayoutElementRowPreference
-        app:key="layout_row_widget_grid"
-        app:persistent="false"
-        app:title="@string/settings_layout_widget_grid_title" />
-
 
 </PreferenceScreen>
