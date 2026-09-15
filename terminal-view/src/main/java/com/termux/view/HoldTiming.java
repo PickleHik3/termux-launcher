@@ -40,4 +40,26 @@ public final class HoldTiming {
     public static long holdTimeoutMs() {
         return holdTimeoutMs(ViewConfiguration.getLongPressTimeout());
     }
+
+    /** The second stage is twice the system long press, felt as holding further rather than waiting. */
+    static final int SELECT_MULTIPLIER = 2;
+
+    /**
+     * How long a finger that has already held must keep holding before the hold becomes text
+     * selection. Always past {@link #holdTimeoutMs(long)} by at least {@link #MIN_HOLD_MS}, so the
+     * first stage has room to be read as its own answer, and it follows the accessibility setting
+     * the same way: 800 ms on a default phone, 2000 ms at Long.
+     *
+     * @param systemLongPressMs {@link ViewConfiguration#getLongPressTimeout()} or its stand-in.
+     * @return the select time in milliseconds, always longer than the hold time.
+     */
+    public static long selectTimeoutMs(long systemLongPressMs) {
+        return Math.max(holdTimeoutMs(systemLongPressMs) + MIN_HOLD_MS,
+            systemLongPressMs * SELECT_MULTIPLIER);
+    }
+
+    /** The select time on this device right now, read per gesture like the hold time. */
+    public static long selectTimeoutMs() {
+        return selectTimeoutMs(ViewConfiguration.getLongPressTimeout());
+    }
 }

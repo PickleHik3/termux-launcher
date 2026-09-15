@@ -38,11 +38,12 @@ shell prompts:
   second haptic marks the moment — so you can select in vim, move tmux splits, or resize TUI panes
   exactly like a desktop mouse. If it did not ask for motion, dragging just carries the aim along
   and the lift clicks wherever you let go.
-- **Tap with a second finger during a hold to select text.** The copy toolbar opens at the cell
-  the loupe was showing. A second finger that moves instead is a two-finger scroll or pinch, as
-  usual.
+- **Keep holding to select text.** Stay still a moment longer and a different haptic says the hold
+  has gone further: the loupe closes and Copy · Paste · More opens on the cell it was showing, with
+  More leading to the rest of the actions. A second finger at any point is a two-finger scroll or
+  pinch, as usual.
 - **In a plain shell there is no loupe:** the same hold starts ordinary text selection with the
-  copy toolbar, and a drag before it scrolls.
+  copy toolbar at the first haptic, and a drag before it scrolls.
 - **Pinch to zoom** changes the focused pane's font size, with jitter filtering so two-finger
   scrolling does not zoom by accident.
 

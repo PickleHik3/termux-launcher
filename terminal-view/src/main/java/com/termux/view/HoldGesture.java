@@ -7,9 +7,10 @@ package com.termux.view;
  *
  * <p>On a terminal that is tracking the mouse the hold keeps the loupe ({@link AimState}) open and
  * the lift clicks the cell it is showing; a drag is a button-held mouse drag when the program asked
- * for motion and otherwise just carries the aim along; a second finger that taps opens text
- * selection, and one that moves hands both fingers back to the wheel or the pinch. On a plain shell
- * there is nothing to aim at, so the hold is text selection, as Termux has always been.
+ * for motion and otherwise just carries the aim along; keeping still for longer again takes the
+ * hold to its second stage and selects text. A second finger hands both fingers back to the wheel
+ * or the pinch, before or after the hold. On a plain shell there is nothing to aim at, so the hold
+ * is text selection at the first stage, as Termux has always been.
  *
  * <p>Pure by design — it is fed a touch stream and answers with what the view owes the user, so
  * every row of that grammar is a unit test rather than a thumb on a phone.
@@ -25,8 +26,6 @@ final class HoldGesture {
         HELD,
         /** The finger committed to a drag the program is being told about. */
         DRAGGING,
-        /** A second finger is down after the hold, still either a tap or a scroll. */
-        SECOND_FINGER,
         /** This gesture is over as far as the hold is concerned, whoever ended up with it. */
         DONE
     }
@@ -37,7 +36,10 @@ final class HoldGesture {
         NOTHING,
         /** The hold is recognised on a mouse-tracking terminal: buzz, and the loupe stays. */
         HOLD_AIMED,
-        /** The hold is recognised on a plain shell: buzz, and select text where the finger is. */
+        /**
+         * The hold is text selection: on a plain shell that is the first stage, and on a
+         * mouse-tracking one it is a finger that kept holding past the second.
+         */
         HOLD_SELECTED,
         /** A drag the program does not want reported: the aim follows the finger. */
         AIM_MOVED,
@@ -49,8 +51,6 @@ final class HoldGesture {
         DRAG_ENDED,
         /** The lift clicks the cell the hold was aiming at. */
         CLICK,
-        /** A second finger tapped: select text at the aimed cell. */
-        SELECT_AT_AIM,
         /** The hold is given up; the fingers belong to the wheel, the pinch or the scroll again. */
         ABANDONED
     }
@@ -62,8 +62,6 @@ final class HoldGesture {
 
     /** Where the finger is now. */
     private float mX, mY;
-
-    private float mSecondX, mSecondY;
 
     private float mSlop;
 
@@ -123,52 +121,36 @@ final class HoldGesture {
                 return Outcome.DRAG_STARTED;
             case DRAGGING:
                 return Outcome.DRAG_MOVED;
-            case SECOND_FINGER:
-                if (!travelled)
-                    return Outcome.NOTHING;
-                // Two fingers that are both moving were never a tap: this is a scroll or a pinch.
-                mPhase = Phase.DONE;
-                return Outcome.ABANDONED;
             default:
                 return Outcome.NOTHING;
         }
     }
 
-    /** The second finger moved, which is the difference between selecting text and scrolling. */
-    Outcome secondFingerMove(float x, float y) {
-        if (mPhase != Phase.SECOND_FINGER || !travelledFrom(mSecondX, mSecondY, x, y))
+    /**
+     * The select time elapsed. Only a finger that has held and then stayed exactly where it was
+     * gets the second stage: once it is dragging it has already said what it wanted.
+     */
+    Outcome selectElapsed() {
+        if (!showsHint())
             return Outcome.NOTHING;
+        // The selection owns the gesture from here, as it does on a plain shell.
         mPhase = Phase.DONE;
-        return Outcome.ABANDONED;
+        return Outcome.HOLD_SELECTED;
     }
 
-    /** A second finger landed. */
-    Outcome pointerDown(float x, float y) {
+    /** A second finger landed: the wheel or the pinch, whether or not the hold was recognised. */
+    Outcome pointerDown() {
         switch (mPhase) {
             case PENDING:
-                // Two fingers before the hold are the wheel or the pinch, as they always were.
+            case HELD:
                 mPhase = Phase.DONE;
                 return Outcome.ABANDONED;
-            case HELD:
-                mSecondX = x;
-                mSecondY = y;
-                mTravelled = true;
-                mPhase = Phase.SECOND_FINGER;
-                return Outcome.NOTHING;
             case DRAGGING:
                 mPhase = Phase.DONE;
                 return Outcome.DRAG_ENDED;
             default:
                 return Outcome.NOTHING;
         }
-    }
-
-    /** A finger lifted while another is still down, which is the tap that selects text. */
-    Outcome pointerUp() {
-        if (mPhase != Phase.SECOND_FINGER)
-            return Outcome.NOTHING;
-        mPhase = Phase.DONE;
-        return Outcome.SELECT_AT_AIM;
     }
 
     /** The last finger lifted, ending the gesture whatever it turned out to be. */
@@ -180,8 +162,6 @@ final class HoldGesture {
                 return Outcome.CLICK;
             case DRAGGING:
                 return Outcome.DRAG_ENDED;
-            case SECOND_FINGER:
-                return Outcome.ABANDONED;
             default:
                 return Outcome.NOTHING;
         }
@@ -208,15 +188,23 @@ final class HoldGesture {
 
     /** Whether the hold was recognised and this gesture is the view's rather than the scroll's. */
     boolean isHeld() {
-        return mPhase == Phase.HELD || mPhase == Phase.DRAGGING || mPhase == Phase.SECOND_FINGER;
+        return mPhase == Phase.HELD || mPhase == Phase.DRAGGING;
     }
 
     /**
-     * Whether the hint under the loupe still applies: the hold is recognised and the finger has
-     * neither moved nor been joined, so a second finger is still the thing to say.
+     * Whether the hint under the loupe still applies: the hold is recognised and the finger has not
+     * moved, so holding on for the second stage is still the thing to say.
      */
     boolean showsHint() {
         return mPhase == Phase.HELD && !mTravelled;
+    }
+
+    /**
+     * Whether the second stage is still reachable: the finger is on its way to the hold, or has
+     * held and stayed put. Anything else - a drag, a lift, a second finger - has answered already.
+     */
+    boolean reachesSelect() {
+        return mPhase == Phase.PENDING || showsHint();
     }
 
     Phase phase() {

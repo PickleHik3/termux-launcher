@@ -34,6 +34,20 @@ public class HoldTimingTest {
     }
 
     @Test
+    public void theSecondStageIsTwiceTheSystemLongPress() {
+        assertEquals(800L, HoldTiming.selectTimeoutMs(400L));
+        assertEquals(2000L, HoldTiming.selectTimeoutMs(1000L));
+    }
+
+    @Test
+    public void theSecondStageAlwaysComesAfterTheFirst() {
+        for (long system = -50L; system <= 2000L; system += 10L) {
+            assertTrue("system " + system,
+                HoldTiming.selectTimeoutMs(system) > HoldTiming.holdTimeoutMs(system));
+        }
+    }
+
+    @Test
     public void theFloorStaysClearOfASlowTap() {
         assertTrue(HoldTiming.MIN_HOLD_MS >= 250L);
     }

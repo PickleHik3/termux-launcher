@@ -33,32 +33,37 @@ before/after figures and the hint mock: `.lavish/hold-gestures.html`.
 - **T_hold: three quarters of `ViewConfiguration.getLongPressTimeout()`, floor 250 ms.** 300 ms on a
   default phone; 750 / 1125 ms when Android's Touch & hold delay is Medium / Long. One constant,
   `HoldTiming` in terminal-view, shared by the corner hold and the terminal hold.
-- **Terminal hold: one decision point, then the finger decides.** The loupe at 150 ms is a preview
-  and is never taken away by time. At T_hold the hold is recognised from the view's own timer (the
+- **Terminal hold: a hold that only ever moves forward.** The loupe at 150 ms is a preview and is
+  never taken away by time. At T_hold the hold is recognised from the view's own timer (the
   `GestureDetector` long press no longer decides this path), one buzz, loupe stays. Then:
   lift → click the aimed cell; drag → button-held mouse drag if the program wants motion (tick on
   the first reported move, loupe rides along), otherwise the aim moves and lift clicks; a second
-  finger that taps → text selection at the aimed cell; a second finger that moves → hold abandoned,
-  wheel or pinch as today; keep holding → nothing changes, ever. Plain shell: the buzz at T_hold
-  starts text selection as Termux always has; a drag before T_hold scrolls everywhere.
-- **Selection door in mouse programs: hold, then tap a second finger.** The action sheet keeps its
+  finger → hold abandoned, wheel or pinch as today; still until T_select → a second, different buzz
+  and text selection at the aimed cell with Copy · Paste · More. Plain shell: the buzz at T_hold
+  starts text selection as Termux always has, no second stage; a drag before T_hold scrolls
+  everywhere.
+- **T_select: twice `ViewConfiguration.getLongPressTimeout()`.** 800 ms on a default phone,
+  2000 / 3000 ms at Medium / Long, so the two buzzes are always at least half a second apart.
+  `HoldTiming.selectTimeoutMs`.
+- **Selection door in mouse programs: the long press, as everywhere on Android.** Revised on pong
+  2026-09-15 from "hold, then tap a second finger", which nobody expects. The action sheet keeps its
   two doors and gains no gesture.
-- **Hint for the second finger.** When the hold is recognised and the loupe is open, one line under
-  the strip: "Tap with another finger to select text." It leaves with the loupe (lift, drag, second
-  finger). Drawn on the loupe's far side from the finger, flipping above when near the pane bottom;
-  takes no touches; single line, ellipsised; no fade under reduced motion. Stops for good after
-  three second-finger selections (`hold_select_hint_uses`, default 0, in
+- **Hint for the wait.** When the hold is recognised and the loupe is open, one line under the
+  strip: "Keep holding to select text." It leaves with the loupe (lift, drag, second finger,
+  selection). Drawn on the loupe's far side from the finger, flipping above when near the pane
+  bottom; takes no touches; single line, ellipsised; no fade under reduced motion. Stops for good
+  after three selections opened from the hold (`hold_select_hint_uses`, default 0, in
   `TermuxAppSharedPreferences`); Replay the tour resets it. Never in a plain shell. The Help topic
   for the terminal keeps the sentence permanently.
-- **Haptics, one vocabulary.** Hold recognised (corner or terminal): `LONG_PRESS`. Drag committed
-  (mouse drag, seam resize): `CONTEXT_CLICK`. Corner tab button tapped: `CONTEXT_CLICK`. Loupe open:
-  none.
+- **Haptics, one vocabulary.** Hold recognised (corner or terminal): `LONG_PRESS`. Selection from
+  the hold: `CONFIRM` (API 30+, else `LONG_PRESS`). Drag committed (mouse drag, seam resize):
+  `CONTEXT_CLICK`. Corner tab button tapped: `CONTEXT_CLICK`. Loupe open: none.
 - **Copy.** The word is *hold*; "press" and "tap" leave the corner strings.
   `tour_card_find_help_corner` → "Hold a pane corner." Help topic Pane corners action → "Hold a
   corner, then tap the ? button.", reveal → "Hold any corner of a pane to see its controls." Tour
   closing card → "Hold a pane corner for the Appearance and Layout editors to make the launcher
   yours." New Help line for the terminal surface: "Hold to see where you are pointing. Lift to
-  click, drag to drag, or tap with a second finger to select text." `docs/en/Launcher_Usage.md`
+  click, drag to drag, or keep holding to select text." `docs/en/Launcher_Usage.md`
   24–47 rewritten to this grammar and names the loupe.
 - **Out of scope.** A Settings entry for any timing; the Mouse mode toggle; the Display page's
   touchpad and its long press; the floating toolbar's auto-hide; the Display and Widgets frames'
@@ -73,7 +78,7 @@ only on the developer's confirmation.
 |-------|-------------|------------|
 | 0 | `HoldTiming` (terminal-view, pure Java) with unit tests | — |
 | 1 | `PaneInteractionOverlay` hold-through: pass-through until T_hold, cancel to the terminal, tab on lift, seam resize / tab drag after the hold, 40 dp squares, haptics; `TerminalView` hold-exempt hook; copy changes. Tests: `TerminalPaneCornerTabTapTest` gains tap-passes-through and hold-opens; a pure state-machine test for the overlay gesture in the style of `AimStateTest` | 0 |
-| 2 | `TerminalView` / `AimState`: loupe outlives the long press, hold recognised at T_hold, branch by motion, second-finger selection, plain-shell selection at T_hold, mouse-drag arm folded into the hold state, hint pill with its counter. Tests: `AimStateTest` extended; new `HoldGestureTest` driving every row of the grammar | 0 |
+| 2 | `TerminalView` / `AimState`: loupe outlives the long press, hold recognised at T_hold, branch by motion, selection at T_select, plain-shell selection at T_hold, mouse-drag arm folded into the hold state, hint pill with its counter. Tests: `AimStateTest` extended; new `HoldGestureTest` driving every row of the grammar | 0 |
 
 Gates: `./gradlew testDebugUnitTest` green on the branch after each phase (compare failing-name
 lists against a clean worktree, never counts); then the device checks on pong before the merge is
@@ -85,6 +90,8 @@ proposed. The emulator cannot judge hold timing or haptics.
 commit); every module's unit suite is green (4,665 tests). Also landed beyond the plan: the tour
 glow and the help box use the pane's 40 dp square; in Mouse mode the touchpad press is deferred
 while a corner may still claim the touch (`MouseModePress`), so a corner hold no longer clicks.
+First feel on pong 2026-09-15: the corner bracket outlived the touch (removed, a956ec7e) and the
+second-finger selection was too far from what users expect (replaced by the T_select stage above).
 Owed: the device checks below on pong, then the developer's cue before merging into dev.
 
 ## Device checks on pong
@@ -98,10 +105,10 @@ Owed: the device checks below on pong, then the developer's cue before merging i
    lands on the word.
 6. vim with `set mouse=a`: hold, then drag. Tick on the first move, visual selection follows, the
    loupe rides along.
-7. vim: hold, then tap a second finger. Selection handles at the aimed cell; Copy · Paste · More;
-   More opens the action sheet.
-8. The hint shows under the loupe on the first three second-finger selections and not on the
-   fourth. Replay the tour, hold again: it is back.
+7. vim: hold and keep holding. Second buzz at about 0.8 s, selection handles at the aimed cell;
+   Copy · Paste · More; More opens the action sheet.
+8. The hint shows under the loupe on the first three selections opened from the hold and not on
+   the fourth. Replay the tour, hold again: it is back.
 9. Plain shell: hold → selection after one buzz; a fast drag still scrolls.
 10. Two-finger scroll and pinch still work in vim and the shell, including with one finger already
     resting.
@@ -112,8 +119,8 @@ Owed: the device checks below on pong, then the developer's cue before merging i
 
 - `ACTION_CANCEL` into the terminal must read as "nothing happened" in `TapPrecision` and the wheel
   path, never as a click (Phase 1 test).
-- A still second finger (select) vs a moving one (scroll) after the hold uses the view's existing
-  slop; a two-finger scroll that begins with one finger already resting is the case to test.
+- A second finger after the hold abandons it and hands both fingers to the wheel or pinch; a
+  two-finger scroll that begins with one finger already resting is the case to test.
 - Programs that want clicks but not motion (tmux default): after T_hold a drag moves the aim and
   lift clicks. Confirm it reads well on the phone.
 - If the hold proves undiscoverable, fix it in the tour and help, not with an always-on mark: the

@@ -330,6 +330,15 @@ public final class TerminalView extends View {
         }
     };
 
+    /** The hold's second stage: a finger that never moved goes on to select text. */
+    private final Runnable mHoldSelectRunnable = new Runnable() {
+
+        @Override
+        public void run() {
+            applyHoldOutcome(mHoldGesture.selectElapsed());
+        }
+    };
+
     /**
      * If non-zero, this is the last unicode code point received if that was a combining character.
      */
@@ -1675,7 +1684,7 @@ public final class TerminalView extends View {
         mHoldExempt = exempt;
         if (exempt) {
             cancelAim();
-            removeCallbacks(mHoldRunnable);
+            cancelHoldTimers();
             applyHoldOutcome(mHoldGesture.cancel());
         }
     }
@@ -1756,37 +1765,37 @@ public final class TerminalView extends View {
             case MotionEvent.ACTION_DOWN:
                 mHoldConsumedGesture = false;
                 mHoldSelectHint = null;
-                removeCallbacks(mHoldRunnable);
+                cancelHoldTimers();
                 releaseHoldDownEvent();
                 mHoldGesture.reset();
                 mHoldGesture.down(event.getX(), event.getY(), mTouchSlop, isHoldAvailable(event));
                 if (mHoldGesture.isPending()) {
                     mHoldDownEvent = MotionEvent.obtain(event);
+                    // Both stages are timed from the landing, so the second is not lengthened by
+                    // however long the first took to be recognised.
                     postDelayed(mHoldRunnable, HoldTiming.holdTimeoutMs());
+                    postDelayed(mHoldSelectRunnable, HoldTiming.selectTimeoutMs());
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
                 applyHoldOutcome(mHoldGesture.move(event.getX(), event.getY()));
-                if (event.getPointerCount() > 1)
-                    applyHoldOutcome(mHoldGesture.secondFingerMove(event.getX(1), event.getY(1)));
                 if (!mHoldGesture.isPending())
                     removeCallbacks(mHoldRunnable);
+                // A finger that has travelled has said what it wanted; only a still one goes on.
+                if (!mHoldGesture.reachesSelect())
+                    removeCallbacks(mHoldSelectRunnable);
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                removeCallbacks(mHoldRunnable);
-                int index = event.getActionIndex();
-                applyHoldOutcome(mHoldGesture.pointerDown(event.getX(index), event.getY(index)));
-                break;
-            case MotionEvent.ACTION_POINTER_UP:
-                applyHoldOutcome(mHoldGesture.pointerUp());
+                cancelHoldTimers();
+                applyHoldOutcome(mHoldGesture.pointerDown());
                 break;
             case MotionEvent.ACTION_UP:
-                removeCallbacks(mHoldRunnable);
+                cancelHoldTimers();
                 applyHoldOutcome(mHoldGesture.up());
                 releaseHoldDownEvent();
                 break;
             case MotionEvent.ACTION_CANCEL:
-                removeCallbacks(mHoldRunnable);
+                cancelHoldTimers();
                 applyHoldOutcome(mHoldGesture.cancel());
                 mHoldSelectHint = null;
                 releaseHoldDownEvent();
@@ -1797,22 +1806,30 @@ public final class TerminalView extends View {
     /** Do what one touch event meant to the hold. */
     private void applyHoldOutcome(HoldGesture.Outcome outcome) {
         switch (outcome) {
-            case HOLD_AIMED:
             case HOLD_SELECTED:
-                mHoldConsumedGesture = true;
-                if (mHoldDownEvent == null || mClient.onLongPress(mHoldDownEvent)) {
-                    // The client took this hold for itself; the finger is no longer ours to read.
-                    mHoldGesture.cancel();
+                if (mHoldConsumedGesture) {
+                    // The second stage: a finger that already held and kept holding. Its own
+                    // haptic, so going further is felt as an answer and not as the first buzz
+                    // again, and the selection lands on the cell the loupe was showing.
+                    mHoldSelectHint = null;
+                    cancelAim();
+                    performHapticFeedback(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        ? HapticFeedbackConstants.CONFIRM : HapticFeedbackConstants.LONG_PRESS);
+                    startTextSelectionAt(holdSelectionX(), holdSelectionY());
+                    mClient.onHoldSelectUsed();
                     break;
                 }
-                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                if (outcome == HoldGesture.Outcome.HOLD_SELECTED) {
-                    if (!isSelectingText())
-                        startTextSelectionMode(mHoldDownEvent);
-                } else {
-                    mHoldSelectHint = mClient.holdSelectHint();
-                    invalidate();
-                }
+                // A plain shell has nothing to aim at, so the first stage is the selection.
+                if (!recogniseHold())
+                    break;
+                if (!isSelectingText())
+                    startTextSelectionMode(mHoldDownEvent);
+                break;
+            case HOLD_AIMED:
+                if (!recogniseHold())
+                    break;
+                mHoldSelectHint = mClient.holdSelectHint();
+                invalidate();
                 break;
             case DRAG_STARTED:
                 mHoldSelectHint = null;
@@ -1847,12 +1864,6 @@ public final class TerminalView extends View {
                 if (!mAimConsumedGesture && mEmulator != null && mEmulator.isMouseTrackingActive())
                     sendClickAt(getColumnForX(mHoldGesture.x()), getRowForY(mHoldGesture.y()));
                 break;
-            case SELECT_AT_AIM:
-                mHoldSelectHint = null;
-                cancelAim();
-                startTextSelectionAt(holdSelectionX(), holdSelectionY());
-                mClient.onHoldSelectUsed();
-                break;
             case ABANDONED:
                 // The hold gives the gesture back rather than keeping it: two fingers that are both
                 // moving are the wheel or the pinch, and those need the scroll path again.
@@ -1866,7 +1877,23 @@ public final class TerminalView extends View {
         }
     }
 
-    /** Where a second finger's tap selects: the cell the loupe was showing, else where the hold is. */
+    /**
+     * The hold is recognised: it owns this gesture, the client gets the point its action sheet
+     * opens at, and the user is told with one buzz.
+     *
+     * @return false when the client took the hold for itself and the finger is no longer ours.
+     */
+    private boolean recogniseHold() {
+        mHoldConsumedGesture = true;
+        if (mHoldDownEvent == null || mClient.onLongPress(mHoldDownEvent)) {
+            mHoldGesture.cancel();
+            return false;
+        }
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        return true;
+    }
+
+    /** Where the second stage selects: the cell the loupe was showing, else where the hold is. */
     private float holdSelectionX() {
         return mAimState.phase() == AimState.Phase.IDLE ? mHoldGesture.x() : mAimState.aimX();
     }
@@ -1896,6 +1923,12 @@ public final class TerminalView extends View {
         mTouchMouseDragLastCol = column;
         mTouchMouseDragLastRow = row;
         sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, column, row, true);
+    }
+
+    /** Neither stage of the hold is owed any longer. */
+    private void cancelHoldTimers() {
+        removeCallbacks(mHoldRunnable);
+        removeCallbacks(mHoldSelectRunnable);
     }
 
     private void releaseHoldDownEvent() {
@@ -3350,7 +3383,7 @@ public final class TerminalView extends View {
         super.onDetachedFromWindow();
         removeCallbacks(mAimOpenRunnable);
         mAimState.reset();
-        removeCallbacks(mHoldRunnable);
+        cancelHoldTimers();
         mHoldGesture.reset();
         mHoldSelectHint = null;
         releaseHoldDownEvent();
