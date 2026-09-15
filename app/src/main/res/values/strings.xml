@@ -1823,6 +1823,8 @@
     <string name="tour_read_the_docs">Read the docs</string>
     <string name="tour_closing_multitasking_heading">Multitasking</string>
     <string name="tour_closing_multitasking_copy">A session groups your windows. A window holds panes, and each pane runs a shell. Help has the full reference for every key and gesture.</string>
+    <string name="tour_closing_customisation_heading">Customisation</string>
+    <string name="tour_closing_customisation_copy">Press a corner tab for the Appearance and Layout editors to make the launcher yours.</string>
     <string name="tour_closing_extras_heading">Launcher extras</string>
     <string name="tour_closing_extras_copy">Install the launcher\'s own extras.</string>
     <string name="tour_closing_graphical_heading">Graphical apps</string>

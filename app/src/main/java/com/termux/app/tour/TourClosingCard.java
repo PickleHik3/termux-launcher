@@ -14,15 +14,18 @@ import java.util.List;
 /**
  * The last card's three sections, and what its Copy buttons put on the clipboard.
  *
- * <p>Three things are worth knowing on the way out — how the launcher stacks sessions, windows and
- * panes, the launcher's own extras, and graphical apps — and the first device pass showed that a
- * paragraph carrying two commands inside the prose is not a thing anyone can act on from a phone.
- * So each section is a heading, one sentence, and where there is something to run, the command on
- * its own line with its own Copy button.
+ * <p>Four things are worth knowing on the way out — how the launcher stacks sessions, windows and
+ * panes, where the launcher is made the user's own, the launcher's own extras, and graphical apps
+ * — and the first device pass showed that a paragraph carrying two commands inside the prose is
+ * not a thing anyone can act on from a phone. So each section is a heading, one sentence, and
+ * where there is something to run, the command on its own line with its own Copy button.
  *
  * <p>The multitasking section is the one the run no longer teaches by hand: none of the four
  * lessons opens a shell, a window or a session, so the model is told here in three sentences and
  * the rest is left to help, which the first lesson has just taught the user to reach.
+ *
+ * <p>The customisation section is the one the run never teaches: nothing in it is a lesson, and a
+ * newcomer who does not know the editors exist will not go looking for them.
  *
  * <p>The graphical section is the one that differs by edition: nixpkgs has no {@code x11-repo} to
  * add, so that edition gets a different sentence and no command at all. That is a different thing
@@ -60,6 +63,8 @@ public final class TourClosingCard {
 
     private static final Section MULTITASKING = new Section(
         R.string.tour_closing_multitasking_heading, R.string.tour_closing_multitasking_copy, 0);
+    private static final Section CUSTOMISATION = new Section(
+        R.string.tour_closing_customisation_heading, R.string.tour_closing_customisation_copy, 0);
     private static final Section EXTRAS = new Section(R.string.tour_closing_extras_heading,
         R.string.tour_closing_extras_copy, R.string.tour_closing_extras_command);
     private static final Section GRAPHICAL = new Section(R.string.tour_closing_graphical_heading,
@@ -67,10 +72,10 @@ public final class TourClosingCard {
     private static final Section GRAPHICAL_NIX = new Section(
         R.string.tour_closing_graphical_heading, R.string.tour_closing_graphical_copy_nix, 0);
 
-    private static final List<Section> PKG_SECTIONS =
-        Collections.unmodifiableList(Arrays.asList(MULTITASKING, EXTRAS, GRAPHICAL));
-    private static final List<Section> NIX_SECTIONS =
-        Collections.unmodifiableList(Arrays.asList(MULTITASKING, EXTRAS, GRAPHICAL_NIX));
+    private static final List<Section> PKG_SECTIONS = Collections.unmodifiableList(
+        Arrays.asList(MULTITASKING, CUSTOMISATION, EXTRAS, GRAPHICAL));
+    private static final List<Section> NIX_SECTIONS = Collections.unmodifiableList(
+        Arrays.asList(MULTITASKING, CUSTOMISATION, EXTRAS, GRAPHICAL_NIX));
 
     /** The card's sections, in order, for the edition that is running. */
     @NonNull
