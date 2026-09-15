@@ -12,7 +12,6 @@ import android.graphics.drawable.Drawable;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
@@ -39,7 +38,9 @@ import com.termux.R;
 import com.termux.app.DockPlankController;
 import com.termux.app.chrome.CornerBracket;
 import com.termux.app.chrome.CornerTabGeometry;
+import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TextStyle;
@@ -145,8 +146,6 @@ public class TerminalPaneController {
     private static final int FLOAT_CORNER_RADIUS_DP = 6;
     /** Matches pane_active_border.xml's stroke width: the line a corner tab lines up against. */
     private static final float STOCK_PANE_BORDER_DP = 1f;
-    /** How deep a pane's corner tab is once it is fully out. */
-    private static final float CONTROL_TAB_HEIGHT_DP = 32f;
     /** How far the resize glow reaches in from the pane's edge. */
     private static final float GLOW_DEPTH_DP = 12f;
     /** Peak alpha of the glow body, at the edge itself. */
@@ -2092,9 +2091,18 @@ public class TerminalPaneController {
         if (mInteractionOverlay.getParent() instanceof ViewGroup) {
             ((ViewGroup) mInteractionOverlay.getParent()).removeView(mInteractionOverlay);
         }
+        View controls = mInteractionOverlay.controlsView();
+        if (controls.getParent() instanceof ViewGroup) {
+            ((ViewGroup) controls.getParent()).removeView(controls);
+        }
         int paneCount = leavesOf(mActiveWindow.root).size();
         if (shouldShowInteractionOverlay(paneCount, mMaximizedLeaf != null)) {
             mHostView.addView(mInteractionOverlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            // Straight above the overlay, where the tab has always been drawn: over the panes and
+            // under the floats. It is never clickable, so the overlay below still gets every
+            // touch and remains the one thing deciding what a finger on a pane meant.
+            mHostView.addView(controls, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             mInteractionOverlay.onTreeRendered();
         }
@@ -3130,10 +3138,18 @@ public class TerminalPaneController {
         }
     }
 
-    /** Transparent interaction layer: generous border hit targets without thick layout dividers. */
+    /**
+     * Transparent interaction layer: generous border hit targets without thick layout dividers.
+     *
+     * <p>The corner tab itself is not drawn here. It is a {@link PaneControlsView}, the same view
+     * the Widgets and Display pages carry, told where the tapped pane is by a frame source; this
+     * overlay keeps the touches, as those pages keep theirs, and asks the view which button a
+     * finger landed on. That is what lets the tab hold a list of buttons of any length instead of
+     * the four slots it used to have, and scale them down on a narrow pane the way the pages' do.
+     */
     private final class PaneInteractionOverlay extends View {
 
-        private static final int ACTION_NONE = -1;
+        private static final int ACTION_NONE = PaneControlsView.ACTION_NONE;
         private static final int ACTION_MOVE_PANE = 0;
         private static final int ACTION_MAXIMIZE = 1;
         private static final int ACTION_CLOSE = 2;
@@ -3144,21 +3160,17 @@ public class TerminalPaneController {
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
         private final RectF mHandleRect = new RectF();
-        /** Scratch for pane rects read while drawing, and one for the control-tab geometry pass. */
+        /** Scratch for pane rects read while drawing. */
         private final RectF mDrawPaneRect = new RectF();
         private final RectF mDrawDropHalfRect = new RectF();
         private final RectF mGlowClipRect = new RectF();
         private final RectF mGlowBorderRect = new RectF();
+        /** Scratch for the pane rect the tab's frame source answers with. */
         private final RectF mGeometryPaneRect = new RectF();
-        /** Scratch for the pane shape the control tab is clipped to. */
-        private final RectF mClipRect = new RectF();
         /** Scratch for pane rects read while hit-testing a touch stream. */
         private final RectF mHitPaneRect = new RectF();
-        private final Path mPath = new Path();
-        private final RectF mControlRect = new RectF();
-        private final RectF[] mControlButtons = {new RectF(), new RectF(), new RectF(), new RectF()};
-        /** Scratch for the button widths handed to {@link CornerTabGeometry}; never allocated per frame. */
-        private final float[] mControlWidths = new float[4];
+        /** The tab itself, laid over the whole host and pointed at whichever pane was tapped. */
+        private final PaneControlsView mControls;
 
         @Nullable private Split mXSplit;
         @Nullable private Split mYSplit;
@@ -3167,8 +3179,6 @@ public class TerminalPaneController {
         private int mPressedCorner = CornerZones.NONE;
         private final CornerBracket mBracket = new CornerBracket();
         @Nullable private Leaf mControlLeaf;
-        /** Which of that pane's corners the tab came out of — the one the finger asked at. */
-        private int mControlCorner = CornerZones.NONE;
         @Nullable private Leaf mMovingLeaf;
         @Nullable private Leaf mMoveTarget;
         private float mDownX;
@@ -3179,13 +3189,10 @@ public class TerminalPaneController {
         private float mXWeightB;
         private float mYWeightA;
         private float mYWeightB;
-        private float mControlProgress;
         private boolean mDraggingDivider;
         private boolean mCornerPressed;
         private boolean mTouchMoved;
-        private boolean mControlsShown;
         private int mPressedControlAction = ACTION_NONE;
-        @Nullable private ValueAnimator mControlAnimator;
 
         PaneInteractionOverlay() {
             super(mHostView.getContext());
@@ -3194,27 +3201,107 @@ public class TerminalPaneController {
             setFocusable(false);
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
             setContentDescription("Pane resize and controls");
+            mControls = new PaneControlsView(mHostView.getContext());
+            mControls.setListener(this::runControlAction);
+            // The tab hangs off the pane the finger asked at, not off this overlay, and the pane
+            // may move or be shaped again under a tab already out — so it is read afresh rather
+            // than pushed in.
+            mControls.setFrameSource(frame -> {
+                RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf, mGeometryPaneRect);
+                if (pane == null) return false;
+                frame.bounds.set(pane);
+                frame.radiusPx = controlCornerRadiusPx();
+                frame.borderPx = controlBorderStrokePx();
+                return true;
+            });
+            applyControlActions();
+        }
+
+        /** The tab, so the controller can hang it off the host beside this overlay. */
+        @NonNull
+        PaneControlsView controlsView() {
+            return mControls;
+        }
+
+        /**
+         * A pane's own tab always redraws with the overlay: the two are one picture, and the pane
+         * under the tab moves while this overlay is the thing being dragged.
+         */
+        @Override
+        public void invalidate() {
+            super.invalidate();
+            if (mControls != null) mControls.invalidate();
+        }
+
+        /**
+         * What the tab carries, for the pane it is out on. Alone, a pane has nothing to move,
+         * maximise or close, so it offers the editor instead; maximised, it has no neighbour to
+         * swap with. Help closes every one of them.
+         */
+        private void applyControlActions() {
+            List<PaneControlsView.Action> actions = new ArrayList<>(4);
+            if (isLonePane()) {
+                actions.add(PaneControlsView.Action.glyph(ACTION_SURFACE_EDITOR,
+                    CornerTabGlyphs.APPEARANCE));
+            } else {
+                if (mMaximizedLeaf == null) {
+                    actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE, this::drawMoveMark,
+                        PaneControlsView.TINT_TERTIARY));
+                }
+                actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE, this::drawMaximizeMark));
+                actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE, this::drawCloseMark,
+                    PaneControlsView.TINT_ERROR));
+            }
+            actions.add(PaneControlsView.Action.label(ACTION_HELP,
+                CornerTabGlyphs.help(getContext())));
+            mControls.setActions(actions);
+        }
+
+        /** The grip: two rules, the handle a pane is dragged onto another by. */
+        private void drawMoveMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                  @NonNull Paint paint, float density) {
+            float cx = button.centerX();
+            float cy = button.centerY();
+            canvas.drawLine(cx - dp(4), cy - dp(2.5f), cx + dp(4), cy - dp(2.5f), paint);
+            canvas.drawLine(cx - dp(4), cy + dp(2.5f), cx + dp(4), cy + dp(2.5f), paint);
+        }
+
+        /** The box, with the two arrows folding it back in once the pane is maximised. */
+        private void drawMaximizeMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                      @NonNull Paint paint, float density) {
+            float cx = button.centerX();
+            float cy = button.centerY();
+            float inset = mMaximizedLeaf == null ? dp(4) : dp(3.5f);
+            canvas.drawRect(cx - inset, cy - inset, cx + inset, cy + inset, paint);
+            if (mMaximizedLeaf != null) {
+                canvas.drawLine(cx - dp(5), cy + dp(2), cx - dp(2), cy + dp(5), paint);
+                canvas.drawLine(cx + dp(5), cy - dp(2), cx + dp(2), cy - dp(5), paint);
+            }
+        }
+
+        private void drawCloseMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                   @NonNull Paint paint, float density) {
+            float cx = button.centerX();
+            float cy = button.centerY();
+            canvas.drawLine(cx - dp(4), cy - dp(4), cx + dp(4), cy + dp(4), paint);
+            canvas.drawLine(cx + dp(4), cy - dp(4), cx - dp(4), cy + dp(4), paint);
         }
 
         void onTreeRendered() {
             resetTouchState();
-            // A dismiss still in flight would overwrite whatever is assigned below on its next
-            // frame, fading the controls off a pane that has just been maximized.
-            if (mControlAnimator != null) {
-                mControlAnimator.cancel();
-                mControlAnimator = null;
-            }
+            // What the tab carries follows the tree: a pane that has just been split has a
+            // neighbour to move onto, and a maximized one has none.
+            applyControlActions();
             if (mMaximizedLeaf != null) {
                 mControlLeaf = mMaximizedLeaf;
-                mControlsShown = true;
-                mControlProgress = 1f;
+                // A dismiss still in flight would fade the tab off a pane that has just been
+                // maximized, so this is the state asserted rather than animated towards.
+                mControls.showNow(mControls.corner());
             } else if (mControlLeaf != null
                 && (mActiveWindow == null || findLeafIn(mActiveWindow.root,
                     mControlLeaf.session) == null)) {
                 mControlLeaf = null;
-                mControlCorner = CornerZones.NONE;
-                mControlsShown = false;
-                mControlProgress = 0f;
+                mControls.dismissNow();
             }
             invalidate();
         }
@@ -3239,7 +3326,7 @@ public class TerminalPaneController {
                         return true;
                     }
 
-                    if (mControlsShown && mMaximizedLeaf == null) dismissControls();
+                    if (mControls.isControlsShown() && mMaximizedLeaf == null) dismissControls();
                     // A pane is taken hold of by its corners, never by an edge: the edges are the
                     // terminal's own, down to the last column. Ownership is resolved from the
                     // corner the finger is actually in, which matters for the original pane —
@@ -3328,10 +3415,9 @@ public class TerminalPaneController {
                     }
                     if (mPressedControlAction != ACTION_NONE) {
                         int action = mPressedControlAction;
-                        Leaf leaf = mControlLeaf;
                         boolean activate = !mTouchMoved && controlActionAt(x, y) == action;
                         resetTouchState();
-                        if (activate && leaf != null) performControlAction(action, leaf);
+                        if (activate) mControls.activate(action);
                         return true;
                     }
                     if (mDraggingDivider || mCornerTapLeaf != null) {
@@ -3366,7 +3452,10 @@ public class TerminalPaneController {
             }
         }
 
-        private void performControlAction(int action, @NonNull Leaf leaf) {
+        /** One button run, told to us by the tab the way every page on the wall is told. */
+        private void runControlAction(int action) {
+            Leaf leaf = mControlLeaf;
+            if (leaf == null) return;
             if (action == ACTION_HELP) {
                 dismissControlsForHelp();
                 mHost.showHelpOverlay();
@@ -3605,104 +3694,34 @@ public class TerminalPaneController {
             if (leaf == null || !shouldShowInteractionOverlay(
                 mActiveWindow == null ? 0 : leavesOf(mActiveWindow.root).size(),
                 mMaximizedLeaf != null)) return;
-            int target = corner == CornerZones.NONE ? defaultControlCorner() : corner;
-            if (mControlsShown && mControlLeaf == leaf && mControlCorner != target) {
-                mControlProgress = 0f;
-            }
             mControlLeaf = leaf;
-            mControlCorner = target;
-            mControlsShown = true;
-            animateControlProgress(1f, false);
+            applyControlActions();
+            mControls.show(corner == CornerZones.NONE ? defaultControlCorner() : corner);
             mHost.onPaneControlsShown();
         }
 
         private void dismissControlsForHelp() {
-            if (mControlAnimator != null) mControlAnimator.cancel();
-            if (mControlsShown) mHost.onPaneControlsDismissed();
-            mControlsShown = false;
-            mControlProgress = 0f;
+            if (mControls.isControlsShown()) mHost.onPaneControlsDismissed();
             mControlLeaf = null;
-            mControlCorner = CornerZones.NONE;
+            mControls.dismissNow();
             invalidate();
         }
 
         private void dismissControls() {
             if (mMaximizedLeaf != null) return;
-            if (mControlsShown) mHost.onPaneControlsDismissed();
-            animateControlProgress(0f, true);
-        }
-
-        private void animateControlProgress(float target, boolean clearOnEnd) {
-            if (mControlAnimator != null) mControlAnimator.cancel();
-            mControlAnimator = ValueAnimator.ofFloat(mControlProgress, target);
-            mControlAnimator.setDuration(190L);
-            mControlAnimator.setInterpolator(new DecelerateInterpolator(1.8f));
-            mControlAnimator.addUpdateListener(animation -> {
-                mControlProgress = (Float) animation.getAnimatedValue();
-                invalidate();
-            });
-            mControlAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator animation) {
-                    if (clearOnEnd && mControlProgress <= 0f) {
-                        mControlsShown = false;
-                        mControlLeaf = null;
-                        mControlCorner = CornerZones.NONE;
-                    }
-                }
-            });
-            mControlAnimator.start();
+            if (mControls.isControlsShown()) mHost.onPaneControlsDismissed();
+            mControls.dismiss();
         }
 
         private int controlActionAt(float x, float y) {
-            if (!mControlsShown || mControlLeaf == null || mControlProgress < .35f) {
-                return ACTION_NONE;
-            }
-            computeControlGeometry();
-            int count = controlCount();
-            for (int i = 0; i < count; i++) {
-                if (mControlButtons[i].contains(x, y)) return controlActionInSlot(i);
-            }
-            return ACTION_NONE;
+            if (mControlLeaf == null) return ACTION_NONE;
+            return mControls.actionAt(x, y);
         }
 
         private boolean isLonePane() {
             return TerminalPaneController.isLonePane(
                 mActiveWindow == null ? 0 : leavesOf(mActiveWindow.root).size(),
                 mMaximizedLeaf != null);
-        }
-
-        /** The pane actions plus Help: two alone, three maximised, four in a split. */
-        private int controlCount() {
-            if (isLonePane()) return 2;
-            return mMaximizedLeaf == null ? 4 : 3;
-        }
-
-        /** Which action sits in a slot of the tab, leading to trailing. */
-        private int controlActionInSlot(int slot) {
-            if (slot == controlCount() - 1) return ACTION_HELP;
-            if (isLonePane()) return ACTION_SURFACE_EDITOR;
-            return mMaximizedLeaf == null ? slot : slot + 1;
-        }
-
-        /**
-         * The tab at the corner the finger asked at. The placement is
-         * {@link CornerTabGeometry}'s — the same rule the Widgets and Display pages follow, so a
-         * pane's tab never lands anywhere its neighbours' would not — and the sizes are the
-         * pages' too: 30dp buttons 8dp apart. They were tighter once, on the theory that a pane's
-         * chrome steadies the thumb, and the phone said otherwise.
-         */
-        private void computeControlGeometry() {
-            RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf, mGeometryPaneRect);
-            if (pane == null) {
-                mControlRect.setEmpty();
-                for (RectF button : mControlButtons) button.setEmpty();
-                return;
-            }
-            int count = controlCount();
-            for (int i = 0; i < count; i++) mControlWidths[i] = dp(30f);
-            CornerTabGeometry.layout(controlCorner(), pane, mControlWidths, count, dp(8), dp(5),
-                dp(CONTROL_TAB_HEIGHT_DP), controlBorderStrokePx(), controlCornerInsetPx(), dp(3),
-                mControlProgress, mControlRect, mControlButtons);
         }
 
         /** Whether this pane paints a rounded border at all — a split, a maximized pane, a float. */
@@ -3728,27 +3747,10 @@ public class TerminalPaneController {
                 getResources().getDisplayMetrics().density);
         }
 
-        /**
-         * How far in from the border's inner edge the tab starts: clear of the arc the border
-         * turns at that corner, and clear again by half the tab's own outline, so nothing the tab
-         * paints lands across the line instead of inside it.
-         */
-        private float controlCornerInsetPx() {
-            return CornerTabGeometry.cornerInsetPx(controlCornerRadiusPx(),
-                controlBorderStrokePx(), dp(CONTROL_TAB_HEIGHT_DP),
-                dp(CornerTabGeometry.TAB_OUTLINE_DP));
-        }
-
-        /** The corner the tab is out of, or the default when nothing has aimed one yet. */
-        private int controlCorner() {
-            return mControlCorner == CornerZones.NONE ? defaultControlCorner() : mControlCorner;
-        }
-
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (!mDraggingDivider && !mCornerPressed && mMovingLeaf == null
-                && !(mControlsShown && mControlLeaf != null && mControlProgress > 0f)) {
+            if (!mDraggingDivider && !mCornerPressed && mMovingLeaf == null) {
                 // Nothing of ours to draw. Resolving theme colours before this check meant an overlay
                 // that draws nothing still did two theme lookups on every pass.
                 return;
@@ -3811,9 +3813,6 @@ public class TerminalPaneController {
                         canvas.drawRect(target, mPaint);
                     }
                 }
-            }
-            if (mControlsShown && mControlLeaf != null && mControlProgress > 0f) {
-                drawControls(canvas, primary, tertiary);
             }
         }
 
@@ -3893,136 +3892,6 @@ public class TerminalPaneController {
             mPaint.setColor(ColorUtils.setAlphaComponent(color, 235));
             canvas.drawRoundRect(mGlowBorderRect, radius, radius, mPaint);
             canvas.restoreToCount(saved);
-        }
-
-        private void drawControls(Canvas canvas, int primary, int tertiary) {
-            computeControlGeometry();
-            if (mControlRect.isEmpty()) return;
-            int surface = MaterialColors.getColor(getContext(),
-                com.termux.shared.R.attr.termuxColorSurfacePanel,
-                ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
-            RectF pane = paneRect(mControlLeaf, mDrawPaneRect);
-            if (pane == null) return;
-            boolean fromTop = CornerZones.isTop(controlCorner());
-            float border = controlBorderStrokePx();
-            // The pane edge the tab is revealed through, and the tab's own far edge — the one
-            // carrying the rounded pair. The edge is the border's *inner* line, not the bounding
-            // box: the tab comes out from behind the border the eye reads, not from behind the
-            // pixel column outside it. Out of the top edge that is the pane's top and the tab's
-            // bottom; out of the bottom edge, the other way round.
-            float paneEdge = fromTop ? pane.top + border : pane.bottom - border;
-            float tabEdge = fromTop ? mControlRect.bottom : mControlRect.top;
-            // Which way the tab's far edge lies from the pane edge it came out of.
-            float dir = fromTop ? 1f : -1f;
-            float radius = dp(4);
-            // How far the outline may flare along that edge before it would run into the arc.
-            float ear = CornerTabGeometry.earReachPx(dp(CornerTabGeometry.TAB_EAR_DP),
-                controlCornerRadiusPx(), border, dp(CONTROL_TAB_HEIGHT_DP),
-                dp(CornerTabGeometry.TAB_OUTLINE_DP));
-            int canvasState = canvas.save();
-            // Clipping to the pane is what makes the closing motion disappear back into the frame
-            // instead of floating above it — and to the shape the pane's border traces on its
-            // inside, so neither the tab's outer corner nor the ears its outline throws past it
-            // can land on the line. A pane with no border clips to its plain bounding box, which
-            // is what this always was.
-            float arc = CornerTabGeometry.innerRadiusPx(controlCornerRadiusPx(), border);
-            CornerTabGeometry.innerBounds(pane, border, mClipRect);
-            if (arc > 0f) {
-                mPath.reset();
-                mPath.addRoundRect(mClipRect, arc, arc, Path.Direction.CW);
-                canvas.clipPath(mPath);
-            } else {
-                canvas.clipRect(mClipRect);
-            }
-
-            // The fill runs a hair past the edge and is trimmed there by the clip, so no
-            // anti-aliased seam opens up between the tab and the border it comes out from behind.
-            float fillEdge = paneEdge - dir * dp(1);
-            mPath.reset();
-            mPath.moveTo(mControlRect.left, fillEdge);
-            mPath.lineTo(mControlRect.right, fillEdge);
-            mPath.lineTo(mControlRect.right, tabEdge - dir * radius);
-            mPath.quadTo(mControlRect.right, tabEdge, mControlRect.right - radius, tabEdge);
-            mPath.lineTo(mControlRect.left + radius, tabEdge);
-            mPath.quadTo(mControlRect.left, tabEdge, mControlRect.left, tabEdge - dir * radius);
-            mPath.close();
-            mPaint.setStyle(Paint.Style.FILL);
-            mPaint.setColor(ColorUtils.setAlphaComponent(surface,
-                Math.round(232f * mControlProgress)));
-            canvas.drawPath(mPath, mPaint);
-
-            mPath.reset();
-            mPath.moveTo(mControlRect.left - ear, paneEdge);
-            mPath.lineTo(mControlRect.left, paneEdge);
-            mPath.lineTo(mControlRect.left, tabEdge - dir * radius);
-            mPath.quadTo(mControlRect.left, tabEdge, mControlRect.left + radius, tabEdge);
-            mPath.lineTo(mControlRect.right - radius, tabEdge);
-            mPath.quadTo(mControlRect.right, tabEdge, mControlRect.right, tabEdge - dir * radius);
-            mPath.lineTo(mControlRect.right, paneEdge);
-            mPath.lineTo(mControlRect.right + ear, paneEdge);
-            mPaint.setStyle(Paint.Style.STROKE);
-            mPaint.setStrokeWidth(dp(CornerTabGeometry.TAB_OUTLINE_DP));
-            mPaint.setStrokeCap(Paint.Cap.ROUND);
-            mPaint.setStrokeJoin(Paint.Join.ROUND);
-            mPaint.setColor(ColorUtils.setAlphaComponent(primary,
-                Math.round(225f * mControlProgress)));
-            canvas.drawPath(mPath, mPaint);
-
-            int count = controlCount();
-            for (int i = 0; i < count; i++) {
-                int action = controlActionInSlot(i);
-                RectF button = mControlButtons[i];
-                mPaint.setStyle(Paint.Style.STROKE);
-                mPaint.setStrokeCap(Paint.Cap.ROUND);
-                mPaint.setStrokeWidth(dp(1.35f));
-                mPaint.setColor(ColorUtils.setAlphaComponent(
-                    action == ACTION_MOVE_PANE ? tertiary : action == ACTION_CLOSE
-                        ? MaterialColors.getColor(getContext(),
-                            com.termux.shared.R.attr.termuxColorError, Color.RED) : primary,
-                    Math.round(255f * mControlProgress)));
-                float cx = button.centerX();
-                float cy = button.centerY();
-                if (action == ACTION_MOVE_PANE) {
-                    canvas.drawLine(cx - dp(4), cy - dp(2.5f), cx + dp(4), cy - dp(2.5f), mPaint);
-                    canvas.drawLine(cx - dp(4), cy + dp(2.5f), cx + dp(4), cy + dp(2.5f), mPaint);
-                } else if (action == ACTION_MAXIMIZE) {
-                    float inset = mMaximizedLeaf == null ? dp(4) : dp(3.5f);
-                    canvas.drawRect(cx - inset, cy - inset, cx + inset, cy + inset, mPaint);
-                    if (mMaximizedLeaf != null) {
-                        canvas.drawLine(cx - dp(5), cy + dp(2), cx - dp(2), cy + dp(5), mPaint);
-                        canvas.drawLine(cx + dp(5), cy - dp(2), cx + dp(2), cy - dp(5), mPaint);
-                    }
-                } else if (action == ACTION_HELP) {
-                    mPaint.setStyle(Paint.Style.FILL);
-                    mPaint.setTextSize(dp(16));
-                    mPaint.setTextAlign(Paint.Align.CENTER);
-                    canvas.drawText(getContext().getString(com.termux.R.string.help_button), cx,
-                        cy - (mPaint.ascent() + mPaint.descent()) / 2, mPaint);
-                } else if (action == ACTION_SURFACE_EDITOR) {
-                    // Three sliders, knobs at different stops: the editor's own rows in miniature.
-                    drawSliderGlyph(canvas, cx, cy);
-                } else {
-                    canvas.drawLine(cx - dp(4), cy - dp(4), cx + dp(4), cy + dp(4), mPaint);
-                    canvas.drawLine(cx + dp(4), cy - dp(4), cx - dp(4), cy + dp(4), mPaint);
-                }
-            }
-            mPaint.setStrokeCap(Paint.Cap.BUTT);
-            mPaint.setStrokeJoin(Paint.Join.MITER);
-            canvas.restoreToCount(canvasState);
-        }
-
-        private void drawSliderGlyph(Canvas canvas, float cx, float cy) {
-            float half = dp(4.5f);
-            float gap = dp(3);
-            float knob = dp(1.6f);
-            canvas.drawLine(cx - half, cy - gap, cx + half, cy - gap, mPaint);
-            canvas.drawLine(cx - half, cy, cx + half, cy, mPaint);
-            canvas.drawLine(cx - half, cy + gap, cx + half, cy + gap, mPaint);
-            mPaint.setStyle(Paint.Style.FILL);
-            canvas.drawCircle(cx - dp(1.5f), cy - gap, knob, mPaint);
-            canvas.drawCircle(cx + dp(2), cy, knob, mPaint);
-            canvas.drawCircle(cx - dp(2.5f), cy + gap, knob, mPaint);
-            mPaint.setStyle(Paint.Style.STROKE);
         }
 
         private void resetTouchState() {
