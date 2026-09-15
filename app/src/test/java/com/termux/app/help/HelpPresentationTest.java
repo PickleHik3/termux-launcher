@@ -10,6 +10,7 @@ import android.widget.TextView;
 import com.termux.R;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.launcher.widget.WidgetGridView;
+import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import org.junit.Before;
@@ -28,7 +29,9 @@ public class HelpPresentationTest {
     private View wall;
     private View status;
     private HelpOverlayView overlay;
+    private HelpTargets.ViewFinder finder;
     private int dismissed;
+    private String practised;
 
     @Before public void setUp() {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -39,14 +42,16 @@ public class HelpPresentationTest {
         root.addView(wall, new FrameLayout.LayoutParams(400,500));
         status = new View(activity); status.setId(R.id.terminal_window_bar_host);
         root.addView(status, new FrameLayout.LayoutParams(400,40));
-        overlay = new HelpOverlayView(activity, new HelpTargets.ViewFinder() {
+        finder = new HelpTargets.ViewFinder() {
             @Override public View findHelpView(int id) {
                 return id == android.R.id.content ? root : root.findViewById(id);
             }
             @Override public View activePane() { return wall; }
             @Override public int paneCount() { return 1; }
             @Override public boolean keyRectOnScreen(String name,Rect out) { return false; }
-        }, () -> dismissed++);
+        };
+        overlay = new HelpOverlayView(activity, finder, () -> dismissed++);
+        overlay.setPracticeListener(lessonId -> practised = lessonId);
         root.addView(overlay,new FrameLayout.LayoutParams(400,800));
         layout();
     }
@@ -68,6 +73,122 @@ public class HelpPresentationTest {
         assertTrue(overlay.dispatchTouchEvent(up));
         down.recycle(); up.recycle();
     }
+
+    /** Every text view under the overlay, in the order they were added. */
+    private java.util.List<TextView> texts() {
+        java.util.List<TextView> found = new java.util.ArrayList<>();
+        collect(overlay, found);
+        return found;
+    }
+    private void collect(View view, java.util.List<TextView> out) {
+        if (view instanceof TextView) out.add((TextView) view);
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) collect(group.getChildAt(i), out);
+        }
+    }
+    private TextView exactly(String text) {
+        for (TextView view : texts()) if (text.contentEquals(view.getText())) return view;
+        return null;
+    }
+    private TextView startingWith(String prefix) {
+        for (TextView view : texts()) if (view.getText().toString().startsWith(prefix)) return view;
+        return null;
+    }
+    private Rect onOverlay(View view) {
+        int[] source = new int[2], origin = new int[2];
+        view.getLocationOnScreen(source);
+        overlay.getLocationOnScreen(origin);
+        int left = source[0] - origin[0], top = source[1] - origin[1];
+        return new Rect(left, top, left + view.getWidth(), top + view.getHeight());
+    }
+
+    @Test public void terminalOpensOnTheChooserAndHomeOnTheOverview() {
+        open(PaneWallPage.TERMINAL);
+        assertNotNull(exactly("Show all"));
+        assertNotNull(startingWith("Pane corners\n"));
+        assertNull(exactly("Previous"));
+        overlay.dismiss();
+        open(PaneWallPage.WIDGETS);
+        assertNotNull(exactly("Previous"));
+        assertNotNull(exactly("Show topics"));
+        assertNull(exactly("Show all"));
+    }
+
+    @Test public void closeDismissesHelp() {
+        open(PaneWallPage.WIDGETS);
+        TextView close = exactly("Close");
+        assertNotNull(close);
+        close.performClick();
+        assertFalse(overlay.isShowing());
+        assertEquals(1, dismissed);
+    }
+
+    @Test public void aTopicChipChangesWhatIsReadAndLeavesHelpOpen() {
+        open(PaneWallPage.TERMINAL);
+        TextView chip = startingWith("Pane corners\n");
+        assertNotNull(chip);
+        chip.performClick();
+        layout();
+        assertTrue(overlay.isShowing());
+        assertNotNull(exactly("Back to topics"));
+        assertNotNull(startingWith("Every pane corner holds"));
+        assertNull(exactly("Show all"));
+        assertEquals(0, dismissed);
+    }
+
+    @Test public void showGestureDemonstratesAndLeavesHelpOpen() {
+        open(PaneWallPage.TERMINAL);
+        startingWith("Pane corners\n").performClick();
+        layout();
+        TextView gesture = exactly("Show gesture");
+        assertNotNull(gesture);
+        assertTrue(gesture.isEnabled());
+        gesture.performClick();
+        assertTrue(overlay.isShowing());
+        assertTrue(overlay.isShowingGesture());
+        assertEquals(0, dismissed);
+    }
+
+    @Test public void tryItClosesHelpAndNamesTheLesson() {
+        open(PaneWallPage.TERMINAL);
+        startingWith("Pane corners\n").performClick();
+        layout();
+        TextView tryIt = exactly("Try it");
+        assertNotNull(tryIt);
+        assertTrue(tryIt.isEnabled());
+        tryIt.performClick();
+        assertFalse(overlay.isShowing());
+        assertEquals(1, dismissed);
+        assertEquals("find_help", practised);
+    }
+
+    @Test public void theWindowsBoxCoversTheChipsAndThePlus() {
+        TerminalWindowBar bar = new TerminalWindowBar(activity, null);
+        bar.setId(R.id.terminal_window_bar);
+        root.addView(bar, new FrameLayout.LayoutParams(300, 40));
+        bar.setWindows(java.util.Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("zbook", "zbook")), 0);
+        layout();
+        // Well inside the test window: a rect past its frame is clipped away and measures as
+        // "not on screen", which is not what this test is about.
+        bar.measure(View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(40, View.MeasureSpec.EXACTLY));
+        bar.layout(0, 100, 300, 140);
+        android.view.ViewGroup strip = (android.view.ViewGroup) bar.chipStripView();
+        View plus = bar.createWindowButtonView();
+        assertNotNull(plus);
+        Rect windows = null;
+        for (HelpTargets.Target target : new HelpTargets(finder, overlay)
+                .measure(PaneWallPage.TERMINAL).targets) {
+            if ("windows".equals(target.id)) windows = target.rect;
+        }
+        assertNotNull(windows);
+        assertTrue(windows.contains(onOverlay(strip.getChildAt(0))));
+        assertTrue(windows.contains(onOverlay(plus)));
+    }
+
     @Test public void outsideTapConsumesAndDismissesOnlyOnce() {
         open(PaneWallPage.WIDGETS);
         assertTrue(overlay.isShowing());

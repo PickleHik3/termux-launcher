@@ -1614,6 +1614,8 @@
     <string name="tool_desc_terminal_jump_next_prompt">Scroll to the next shell prompt. Needs shell integration.</string>
     <string name="tool_desc_appearance_surface_editor">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
     <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
+    <string name="tool_app_open_help">Help</string>
+    <string name="tool_desc_app_open_help">Open help for the place you are on.</string>
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
     <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
@@ -1811,6 +1813,7 @@
     <string name="tour_card_find_action_close">Find Settings or Help, then tap outside the palette to close it.</string>
     <string name="tour_card_home_choice">Use Termux as your home screen?</string>
     <string name="tour_card_home_choice_already">Termux is your home screen.</string>
+    <string name="tour_card_resume_or_restart">Termux has a new, shorter introduction.</string>
     <string name="tour_card_closing">That is the tour. Enjoy the launcher.</string>
     <string name="tour_card_return_to_terminal">Swipe the status bar back to the terminal to continue.</string>
     <string name="tour_copy">Copy</string>
@@ -1859,8 +1862,7 @@
     <!-- On-demand help. -->
     <string name="help_button">?</string>
     <string name="help_accessibility">Help</string>
-    <string name="help_close">Tap anywhere to close</string>
-    <string name="help_page">%1$d / %2$d</string>
+    <string name="help_close">Close</string>
     <string name="help_sessions_title">Sessions</string>
     <string name="help_sessions_body">Tap to switch.</string>
     <string name="help_windows_title">Windows</string>
@@ -1969,4 +1971,22 @@
     <string name="help_topic_empty_purpose">Empty space is where a new widget goes.</string>
     <string name="help_topic_empty_action">Long-press it to add a widget or another page.</string>
     <string name="help_topic_empty_reveal">Move a widget aside to make room.</string>
+    <string name="help_header">Help · %1$s</string>
+    <string name="help_place_home">Home</string>
+    <string name="help_place_terminal">Terminal</string>
+    <string name="help_place_display">Display</string>
+    <string name="help_show_basics">Show basics</string>
+    <string name="help_show_all">Show all</string>
+    <string name="help_show_topics">Show topics</string>
+    <string name="help_back_to_topics">Back to topics</string>
+    <string name="help_show_gesture">Show gesture</string>
+    <string name="help_try_it">Try it</string>
+    <string name="help_previous">Previous</string>
+    <string name="help_next">Next</string>
+    <string name="help_settings_title">Help</string>
+    <string name="help_settings_summary">Open help for the place you are on.</string>
+    <string name="help_topic_stats_title">Status widgets</string>
+    <string name="help_topic_corners_title">Pane corners</string>
+    <string name="help_topic_keys_title">Extra keys</string>
+    <string name="help_topic_shortcuts_title">Key chords</string>
 </resources>

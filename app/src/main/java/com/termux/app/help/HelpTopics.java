@@ -50,6 +50,8 @@ public final class HelpTopics {
         public final String id;
         public final PaneWallPage place;
         public final Group group;
+        /** The control's name, the same in the chooser and on its card whatever else is on screen. */
+        public final int titleRes;
         /** What the thing is, before any gesture. */
         public final int purposeRes;
         /** How to use it. */
@@ -63,11 +65,12 @@ public final class HelpTopics {
         /** This entry's place in its place's full catalogue, so its colour never moves. */
         public final int identityIndex;
 
-        Entry(String id, PaneWallPage place, Group group, int purposeRes, int actionRes,
-              int revealRes, String lessonId, String relatedId, int identityIndex) {
+        Entry(String id, PaneWallPage place, Group group, int titleRes, int purposeRes,
+              int actionRes, int revealRes, String lessonId, String relatedId, int identityIndex) {
             this.id = id;
             this.place = place;
             this.group = group;
+            this.titleRes = titleRes;
             this.purposeRes = purposeRes;
             this.actionRes = actionRes;
             this.revealRes = revealRes;
@@ -107,53 +110,53 @@ public final class HelpTopics {
     private static Map<PaneWallPage, List<Entry>> build() {
         Map<PaneWallPage, List<Entry>> map = new EnumMap<>(PaneWallPage.class);
         Builder terminal = new Builder(PaneWallPage.TERMINAL);
-        terminal.add("dock", Group.EVERYDAY, R.string.help_topic_dock_purpose,
+        terminal.add("dock", Group.EVERYDAY, R.string.help_dock_title, R.string.help_topic_dock_purpose,
             R.string.help_topic_dock_action, R.string.help_topic_dock_reveal, LESSON_FIND_APPS, null);
-        terminal.add("az", Group.EVERYDAY, R.string.help_topic_az_purpose,
+        terminal.add("az", Group.EVERYDAY, R.string.help_az_title, R.string.help_topic_az_purpose,
             R.string.help_topic_az_action, R.string.help_topic_az_reveal, null, "dock");
-        terminal.add("status", Group.EVERYDAY, R.string.help_topic_status_purpose,
+        terminal.add("status", Group.EVERYDAY, R.string.help_status_title, R.string.help_topic_status_purpose,
             R.string.help_topic_status_action, R.string.help_topic_status_reveal, null, null);
-        terminal.add("stats", Group.EVERYDAY, R.string.help_topic_stats_purpose,
+        terminal.add("stats", Group.EVERYDAY, R.string.help_topic_stats_title, R.string.help_topic_stats_purpose,
             R.string.help_topic_stats_action, R.string.help_topic_stats_reveal, null, null);
-        terminal.add("corners", Group.EVERYDAY, R.string.help_topic_corners_purpose,
+        terminal.add("corners", Group.EVERYDAY, R.string.help_topic_corners_title, R.string.help_topic_corners_purpose,
             R.string.help_topic_corners_action, R.string.help_topic_corners_reveal, LESSON_FIND_HELP, null);
-        terminal.add("sessions", Group.EVERYDAY, R.string.help_topic_sessions_purpose,
+        terminal.add("sessions", Group.EVERYDAY, R.string.help_sessions_title, R.string.help_topic_sessions_purpose,
             R.string.help_topic_sessions_action, R.string.help_topic_sessions_reveal, null, "windows");
-        terminal.add("windows", Group.EVERYDAY, R.string.help_topic_windows_purpose,
+        terminal.add("windows", Group.EVERYDAY, R.string.help_windows_title, R.string.help_topic_windows_purpose,
             R.string.help_topic_windows_action, R.string.help_topic_windows_reveal, null, "sessions");
-        terminal.add("keys", Group.KEYBOARD, R.string.help_topic_keys_purpose,
+        terminal.add("keys", Group.KEYBOARD, R.string.help_topic_keys_title, R.string.help_topic_keys_purpose,
             R.string.help_topic_keys_action, R.string.help_topic_keys_reveal, LESSON_KEYBOARD, null);
-        terminal.add("prefix", Group.KEYBOARD, R.string.help_topic_prefix_purpose,
+        terminal.add("prefix", Group.KEYBOARD, R.string.help_prefix_title, R.string.help_topic_prefix_purpose,
             R.string.help_topic_prefix_action, R.string.help_topic_prefix_reveal, LESSON_KEYBOARD, "shortcuts");
-        terminal.add("space", Group.KEYBOARD, R.string.help_topic_space_purpose,
+        terminal.add("space", Group.KEYBOARD, R.string.help_space_title, R.string.help_topic_space_purpose,
             R.string.help_topic_space_action, R.string.help_topic_space_reveal, LESSON_FIND_ACTION, null);
-        terminal.add("divider", Group.MULTITASKING, R.string.help_topic_divider_purpose,
+        terminal.add("divider", Group.MULTITASKING, R.string.help_divider_title, R.string.help_topic_divider_purpose,
             R.string.help_topic_divider_action, R.string.help_topic_divider_reveal, null, "shortcuts");
-        terminal.add("shortcuts", Group.MULTITASKING, R.string.help_topic_shortcuts_purpose,
+        terminal.add("shortcuts", Group.MULTITASKING, R.string.help_topic_shortcuts_title, R.string.help_topic_shortcuts_purpose,
             R.string.help_topic_shortcuts_action, R.string.help_topic_shortcuts_reveal, LESSON_KEYBOARD, "prefix");
         map.put(PaneWallPage.TERMINAL, terminal.done());
 
         Builder display = new Builder(PaneWallPage.DISPLAY);
-        display.add("status", Group.EVERYDAY, R.string.help_topic_status_purpose,
+        display.add("status", Group.EVERYDAY, R.string.help_status_title, R.string.help_topic_status_purpose,
             R.string.help_topic_status_action, R.string.help_topic_status_reveal, null, null);
-        display.add("stats", Group.EVERYDAY, R.string.help_topic_stats_purpose,
+        display.add("stats", Group.EVERYDAY, R.string.help_topic_stats_title, R.string.help_topic_stats_purpose,
             R.string.help_topic_stats_action, R.string.help_topic_stats_reveal, null, null);
-        display.add("windows", Group.EVERYDAY, R.string.help_topic_display_apps_purpose,
+        display.add("windows", Group.EVERYDAY, R.string.help_display_apps_title, R.string.help_topic_display_apps_purpose,
             R.string.help_topic_display_apps_action, R.string.help_topic_display_apps_reveal, null, "start");
-        display.add("start", Group.EVERYDAY, R.string.help_topic_start_purpose,
+        display.add("start", Group.EVERYDAY, R.string.help_start_title, R.string.help_topic_start_purpose,
             R.string.help_topic_start_action, R.string.help_topic_start_reveal, null, "windows");
-        display.add("scale", Group.EVERYDAY, R.string.help_topic_scale_purpose,
+        display.add("scale", Group.EVERYDAY, R.string.help_scale_title, R.string.help_topic_scale_purpose,
             R.string.help_topic_scale_action, R.string.help_topic_scale_reveal, null, "start");
-        display.add("touchpad", Group.EVERYDAY, R.string.help_topic_touchpad_purpose,
+        display.add("touchpad", Group.EVERYDAY, R.string.help_pad_title, R.string.help_topic_touchpad_purpose,
             R.string.help_topic_touchpad_action, R.string.help_topic_touchpad_reveal, null, null);
         map.put(PaneWallPage.DISPLAY, display.done());
 
         Builder home = new Builder(PaneWallPage.WIDGETS);
-        home.add("status", Group.EVERYDAY, R.string.help_topic_status_purpose,
+        home.add("status", Group.EVERYDAY, R.string.help_status_title, R.string.help_topic_status_purpose,
             R.string.help_topic_status_action, R.string.help_topic_status_reveal, null, null);
-        home.add("widget", Group.EVERYDAY, R.string.help_topic_widget_purpose,
+        home.add("widget", Group.EVERYDAY, R.string.help_widget_title, R.string.help_topic_widget_purpose,
             R.string.help_topic_widget_action, R.string.help_topic_widget_reveal, null, "empty");
-        home.add("empty", Group.EVERYDAY, R.string.help_topic_empty_purpose,
+        home.add("empty", Group.EVERYDAY, R.string.help_empty_title, R.string.help_topic_empty_purpose,
             R.string.help_topic_empty_action, R.string.help_topic_empty_reveal, null, "widget");
         map.put(PaneWallPage.WIDGETS, home.done());
         return Collections.unmodifiableMap(map);
@@ -163,9 +166,9 @@ public final class HelpTopics {
         private final PaneWallPage place;
         private final List<Entry> entries = new ArrayList<>();
         Builder(PaneWallPage place) { this.place = place; }
-        void add(String id, Group group, int purpose, int action, int reveal,
+        void add(String id, Group group, int title, int purpose, int action, int reveal,
                  String lessonId, String relatedId) {
-            entries.add(new Entry(id, place, group, purpose, action, reveal,
+            entries.add(new Entry(id, place, group, title, purpose, action, reveal,
                 lessonId, relatedId, entries.size()));
         }
         List<Entry> done() { return Collections.unmodifiableList(entries); }
