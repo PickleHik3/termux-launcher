@@ -216,6 +216,14 @@ public final class TerminalView extends View {
      * it is on, and it all comes back when it is off.
      */
     private boolean mTouchMouseMode;
+
+    /**
+     * Set by the chrome above this view while a finger that landed in one of its pane corner
+     * squares is down: that hold belongs to the corner and opens its tab, so the view starts
+     * neither its aim nor its own hold for it. Taps and drags there still reach the view as usual.
+     * See {@link HoldTiming} for why the two holds must never race.
+     */
+    private boolean mHoldExempt;
     private boolean mTouchMouseModePressed;
     private int mTouchMouseModeLastCol, mTouchMouseModeLastRow;
     /** Two fingers are down and their travel is the wheel. */
@@ -518,6 +526,9 @@ public final class TerminalView extends View {
 
             @Override
             public void onLongPress(MotionEvent event) {
+                // A hold that landed in a pane corner belongs to the corner's tab, never to us.
+                if (mHoldExempt)
+                    return;
                 // A hold long enough to select text was never an aim: hand the gesture over.
                 cancelAim();
                 if (mGestureRecognizer.isInProgress())
@@ -1619,7 +1630,23 @@ public final class TerminalView extends View {
     private boolean isAimAvailable(MotionEvent event) {
         return mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingActive()
             && !mTouchMouseMode && !event.isFromSource(InputDevice.SOURCE_MOUSE)
-            && !isSelectingText();
+            && !isSelectingText() && !mHoldExempt;
+    }
+
+    /**
+     * Tell the view whether the finger now down belongs to a pane corner. The pane chrome calls this
+     * with {@code true} before forwarding a corner square's {@code ACTION_DOWN} and with
+     * {@code false} once that finger lifts or the corner has claimed it, so the view never opens its
+     * aim or recognises a hold for a touch the corner will take at {@link HoldTiming#holdTimeoutMs()}.
+     */
+    public void setHoldExempt(boolean exempt) {
+        mHoldExempt = exempt;
+        if (exempt) cancelAim();
+    }
+
+    /** Whether the finger now down belongs to a pane corner rather than to this view's holds. */
+    public boolean isHoldExempt() {
+        return mHoldExempt;
     }
 
     /**
