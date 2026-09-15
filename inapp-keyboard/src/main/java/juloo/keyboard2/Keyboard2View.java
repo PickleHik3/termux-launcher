@@ -531,6 +531,19 @@ public class Keyboard2View extends View
     return (rowIndex << 16) | (keyIndex & 0xFFFF);
   }
 
+  /**
+   * Tells the actual enter/editor-action key apart from the rest of the Action role — upstream
+   * layouts give shift, ctrl, backspace, arrows, layout switch and config the same role as
+   * enter (see bottom_row.xml), so the theme distinction between "the action key" and "a
+   * function key" is made here, from the key's own value, rather than from its role.
+   */
+  private static boolean isEnterKey(KeyboardData.Key k)
+  {
+    KeyValue v = k.keys[0];
+    return v != null && v.getKind() == KeyValue.Kind.Keyevent
+        && v.getKeyevent() == KeyEvent.KEYCODE_ENTER;
+  }
+
   private static int parseKeyId(String keyId)
   {
     int colon = keyId.indexOf(':');
@@ -1464,7 +1477,7 @@ public class Keyboard2View extends View
         else
           switch (k.role)
           {
-            case Action: tc_key = _tc.key_action; break;
+            case Action: tc_key = isEnterKey(k) ? _tc.key_action : _tc.key_function; break;
             case Space_bar: tc_key = _tc.key_space_bar; break;
             case Suggestion: tc_key = _tc.key_suggestion; break;
             default:
