@@ -428,6 +428,7 @@ public final class TerminalSheetController
     private int mLeadingCards;
     private final Rect mKeyboardBounds = new Rect();
     private final Rect mTerminalBounds = new Rect();
+    private final Rect mSlideClip = new Rect();
     /** The terminal area in plane coordinates, recomputed rather than reallocated per pass. */
     private final Rect mAreaBounds = new Rect();
     private final int[] mPlaneOnScreen = new int[2];
@@ -1106,9 +1107,15 @@ public final class TerminalSheetController
                         card.getViewTreeObserver().removeOnPreDrawListener(this);
                         card.setTranslationX(TerminalDrawerMetrics.enterTranslationX(
                             card.getWidth(), isRtl()));
+                        clipSlidingDrawer(card);
                         card.animate().translationX(0f).setDuration(DRAWER_ENTER_DURATION_MS)
                             .setInterpolator(EMPHASIZED_DECELERATE)
-                            .withEndAction(TerminalSheetController.this::restLiveBlur)
+                            .setUpdateListener(animation -> clipSlidingDrawer(card))
+                            .withEndAction(() -> {
+                                card.animate().setUpdateListener(null);
+                                card.setClipBounds(null);
+                                restLiveBlur();
+                            })
                             .start();
                         return true;
                     }
@@ -1170,7 +1177,9 @@ public final class TerminalSheetController
                 .translationX(TerminalDrawerMetrics.enterTranslationX(card.getWidth(), isRtl()))
                 .setDuration(DRAWER_EXIT_DURATION_MS)
                 .setInterpolator(EMPHASIZED_DECELERATE)
+                .setUpdateListener(animation -> clipSlidingDrawer(card))
                 .withEndAction(() -> {
+                    card.animate().setUpdateListener(null);
                     stack.removeView(card);
                     onCardRemoved(false, true);
                 })
@@ -1192,6 +1201,20 @@ public final class TerminalSheetController
             .setDuration(EXIT_DURATION_MS)
             .withEndAction(() -> stack.removeView(card))
             .start();
+    }
+
+    /**
+     * Cuts a sliding drawer off at the terminal's leading edge rather than the screen's.
+     *
+     * <p>The plane clips at its own bounds, which with a side gap set are wider than the terminal,
+     * so an unclipped drawer would surface in the gap and slide the rest of the way in. Clip bounds
+     * travel with the view, so this runs on every frame of the slide; see
+     * {@link TerminalDrawerMetrics#slideClip}.
+     */
+    private void clipSlidingDrawer(@NonNull View card) {
+        boolean clipped = TerminalDrawerMetrics.slideClip(card.getWidth(), card.getHeight(),
+            card.getTranslationX(), isRtl(), mSlideClip);
+        card.setClipBounds(clipped ? mSlideClip : null);
     }
 
     /** A card has actually left the plane, so the insets it was holding can be given back. */
