@@ -11,7 +11,11 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
+import com.termux.app.place.KeyboardOnEnter;
+import com.termux.app.place.PlaceArrangeModel;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
@@ -26,10 +30,14 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * The Layout editor's decisions, without a window: which orientation the miniature shows and which
- * one a drop writes, what a drop does to the live place, when the session is dirty, and what the
- * revert puts back.
+ * one a drop writes, which rows stand beneath it on each place, what a drop or a pick does to the
+ * live place, when the session is dirty, and what the revert puts back.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -52,6 +60,29 @@ public class LayoutEditorPlanTest {
 
     private LayoutEditorPlan enterOnTerminalInPortrait() {
         return LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+    }
+
+    /** Every row's label, in the order the card stands them in. */
+    private static List<String> labels(LayoutEditorPlan plan) {
+        List<String> names = new ArrayList<>();
+        for (LayoutEditorPlan.Row row : plan.rows())
+            names.add(RuntimeEnvironment.getApplication().getString(row.group.labelRes));
+        return names;
+    }
+
+    /** The one row a label names, so a test can pick on it. */
+    private static LayoutEditorPlan.Row row(LayoutEditorPlan plan, String label) {
+        for (LayoutEditorPlan.Row row : plan.rows()) {
+            if (label.equals(RuntimeEnvironment.getApplication().getString(row.group.labelRes)))
+                return row;
+        }
+        throw new AssertionError("no row labelled " + label + " in " + labels(plan));
+    }
+
+    private static void pick(LayoutEditorPlan plan, String label, String value) {
+        LayoutEditorPlan.Row row = row(plan, label);
+        assertTrue(label + " is a pill row", row.group instanceof PlaceArrangeModel.Pills);
+        ((PlaceArrangeModel.Pills) row.group).writer.write(value);
     }
 
     @Test
@@ -183,6 +214,119 @@ public class LayoutEditorPlanTest {
         assertFalse(plan.isDirty());
         assertEquals("the place the editor opened on is back too",
             RowPlacement.BOTTOM, places.extraKeys(PaneWallPage.TERMINAL, PORTRAIT));
+    }
+
+    // ------------------------------------------------------------ the rows beneath the miniature
+
+    @Test
+    public void homeOffersTheKeyboardsFormAndOnEnterAndTheGridsTwoCounts() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+
+        assertEquals("Type, On enter, Grid columns, Grid rows",
+            labels(plan), Arrays.asList("Type", "On enter", "Grid columns", "Grid rows"));
+        assertTrue("the grid's counts are counters",
+            row(plan, "Grid columns").group instanceof PlaceArrangeModel.Counter);
+    }
+
+    @Test
+    public void theTerminalHasNoGridToCountAndNoKeyboardModeToPick() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+
+        assertEquals(labels(plan), Arrays.asList("Type", "On enter"));
+    }
+
+    @Test
+    public void onlyTheDisplayOffersTheKeyboardMode() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.DISPLAY, PORTRAIT);
+
+        assertEquals(labels(plan), Arrays.asList("Type", "On enter", "Keyboard mode"));
+    }
+
+    @Test
+    public void aPickOnARowWritesTheOrientationOnTheToggleAlone() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+
+        pick(plan, "Type", "floating");
+        assertEquals(KeyboardForm.FLOATING, places.keyboardForm(PaneWallPage.TERMINAL, PORTRAIT));
+        assertNull("landscape untouched",
+            prefs.getString("place.terminal.landscape.keyboard_form", null));
+
+        plan.showOrientation(LANDSCAPE);
+        assertEquals("the row re-reads itself for the orientation now shown",
+            "docked", ((PlaceArrangeModel.Pills) row(plan, "Type").group).selected);
+        pick(plan, "Type", "split");
+        assertEquals(KeyboardForm.SPLIT, places.keyboardForm(PaneWallPage.TERMINAL, LANDSCAPE));
+        assertEquals("portrait keeps what it was given",
+            KeyboardForm.FLOATING, places.keyboardForm(PaneWallPage.TERMINAL, PORTRAIT));
+    }
+
+    @Test
+    public void theOnEnterRowIsThePlacesOwnAndNotAnOrientationsOf() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+
+        pick(plan, "On enter", "closed");
+        assertEquals(KeyboardOnEnter.CLOSED, places.keyboardOnEnter(PaneWallPage.TERMINAL));
+        assertEquals("one key for the place, not one per orientation",
+            "closed", prefs.getString("place.terminal.keyboard_on_enter", null));
+
+        plan.showOrientation(LANDSCAPE);
+        assertEquals("so the other orientation shows the same answer",
+            "closed", ((PlaceArrangeModel.Pills) row(plan, "On enter").group).selected);
+    }
+
+    @Test
+    public void theDisplaysKeyboardModeIsPerOrientationLikeItsForm() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.DISPLAY, LANDSCAPE);
+
+        pick(plan, "Keyboard mode", "overlay");
+        assertEquals(KeyboardMode.OVERLAY, places.keyboardMode(PaneWallPage.DISPLAY, LANDSCAPE));
+        assertNull("portrait untouched",
+            prefs.getString("place.display.portrait.keyboard_mode", null));
+    }
+
+    @Test
+    public void aGridCountWritesTheOrientationOnTheToggleAlone() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, LANDSCAPE);
+
+        ((PlaceArrangeModel.Counter) row(plan, "Grid columns").group).writer.write(6);
+        assertEquals(6, places.widgetColumns(PaneWallPage.WIDGETS, LANDSCAPE));
+        assertNull("portrait untouched",
+            prefs.getString("place.home.portrait.widget_columns", null));
+    }
+
+    @Test
+    public void aRowPickIsAnUnsavedChangeAndTheRevertPutsItBack() {
+        places.setKeyboardForm(PaneWallPage.TERMINAL, PORTRAIT, KeyboardForm.DOCKED);
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        assertFalse("nothing picked yet", plan.isDirty());
+
+        pick(plan, "Type", "split");
+        assertTrue("a row is as unsaved as a moved bar", plan.isDirty());
+
+        pick(plan, "On enter", "open");
+        assertTrue(plan.isDirty());
+
+        plan.revert();
+        assertFalse(plan.isDirty());
+        assertEquals(KeyboardForm.DOCKED, places.keyboardForm(PaneWallPage.TERMINAL, PORTRAIT));
+        assertEquals(KeyboardOnEnter.AS_LEFT, places.keyboardOnEnter(PaneWallPage.TERMINAL));
+    }
+
+    @Test
+    public void theRowsFollowTheSecondDoorToItsPlace() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        assertEquals(2, plan.rows().size());
+
+        plan.showPlace(PaneWallPage.WIDGETS);
+        assertEquals("home's grid counts join the card", 4, plan.rows().size());
+    }
+
+    @Test
+    public void theRowsSectionKeepsWhateverTheCanvasLeavesAndNeverLessThanItsFloor() {
+        assertEquals("the room left under the canvas",
+            400, LayoutEditorPlan.rowsHeightCapPx(2400, 1800, 200, 120));
+        assertEquals("a canvas that took it all still leaves a list to scroll in",
+            120, LayoutEditorPlan.rowsHeightCapPx(2400, 2300, 200, 120));
     }
 
     @Test

@@ -13719,14 +13719,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
             }
             @Override public void openWidgetGridSettings() {
-                ActivityUtils.startActivity(TermuxActivity.this,
-                    com.termux.app.activities.SettingsActivity.createFragmentIntent(
-                        TermuxActivity.this,
-                        com.termux.app.fragments.settings.termux.LayoutPreferencesFragment.class,
-                        R.string.settings_destination_layout,
-                        com.termux.app.wall.PaneWallPage.WIDGETS.toolName(),
-                        com.termux.app.fragments.settings.termux.LayoutPreferencesFragment
-                            .KEY_WIDGET_GRID));
+                // The grid's two counts are rows in the Layout editor now, beside a picture of the
+                // place they lay out.
+                openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
             }
             @Override public void editWidgets() {
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();

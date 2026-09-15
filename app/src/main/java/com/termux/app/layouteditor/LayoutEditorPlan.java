@@ -5,11 +5,16 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
+import com.termux.app.place.PlaceArrangeModel;
+import com.termux.app.place.PlaceArrangeModel.Element;
 import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * One Layout editor session, as decisions rather than views: which orientation the miniature is
@@ -22,6 +27,11 @@ import com.termux.app.wall.PaneWallPage;
  * agree. Editing the other orientation therefore changes the miniature and nothing else until the
  * phone is turned.
  *
+ * <p>The rows beneath the miniature are the same question asked of the same store: what this place
+ * offers that no bar can be dragged into — how its keyboard stands, whether it opens on entry, and
+ * how many cells its grid has. They come from {@link PlaceArrangeModel}, which already answers for
+ * one orientation at a time, so the toggle moves the rows exactly as it moves the picture.
+ *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
  * {@link LayoutEditorController} is the shell that draws it.
  */
@@ -29,6 +39,12 @@ public final class LayoutEditorPlan {
 
     /** How much of the screen's height the portrait miniature's phone frame stands in. */
     public static final float PORTRAIT_FRAME_SCREEN_FRACTION = 0.55f;
+
+    /**
+     * What the rows stand for, in the order they stand in. Everything else about a place's
+     * arrangement is a bar, and a bar is moved on the picture rather than picked from a row.
+     */
+    private static final Element[] ROW_ELEMENTS = {Element.KEYBOARD, Element.WIDGET_GRID};
 
     /** What one drop on the miniature did. */
     public enum Drop {
@@ -38,6 +54,24 @@ public final class LayoutEditorPlan {
         MINIATURE,
         /** Written for the orientation on screen: the live place follows it. */
         LIVE
+    }
+
+    /**
+     * One row beneath the miniature. The element and the place it takes among that element's own
+     * groups are what the row is; the group is only what it says right now, so a row that has just
+     * been picked on — or that a rotation has moved — is re-read through {@link #row} rather than
+     * trusted.
+     */
+    public static final class Row {
+        @NonNull public final Element element;
+        public final int index;
+        @NonNull public final PlaceArrangeModel.Group group;
+
+        Row(@NonNull Element element, int index, @NonNull PlaceArrangeModel.Group group) {
+            this.element = element;
+            this.index = index;
+            this.group = group;
+        }
     }
 
     @NonNull private final PlaceLayoutStore mPlaces;
@@ -94,6 +128,31 @@ public final class LayoutEditorPlan {
     @NonNull
     public PlaceLayout shownLayout() {
         return mPlaces.resolve(mPlace, mShownOrientation);
+    }
+
+    /**
+     * The rows beneath the miniature: this place's keyboard, and on Home its grid, for the
+     * orientation on the toggle. A pick writes through the group's own writer, the same way a drop
+     * writes through the picture.
+     */
+    @NonNull
+    public List<Row> rows() {
+        List<Row> rows = new ArrayList<>(5);
+        for (Element element : ROW_ELEMENTS) {
+            List<PlaceArrangeModel.Group> groups =
+                PlaceArrangeModel.groups(mPlaces, mPlace, mShownOrientation, element);
+            for (int index = 0; index < groups.size(); index++)
+                rows.add(new Row(element, index, groups.get(index)));
+        }
+        return rows;
+    }
+
+    /** One row's answer, read fresh, or null where the place no longer offers it. */
+    @Nullable
+    public PlaceArrangeModel.Group row(@NonNull Element element, int index) {
+        List<PlaceArrangeModel.Group> groups =
+            PlaceArrangeModel.groups(mPlaces, mPlace, mShownOrientation, element);
+        return index < 0 || index >= groups.size() ? null : groups.get(index);
     }
 
     /**
@@ -156,5 +215,15 @@ public final class LayoutEditorPlan {
             ? screenWidthPx / Math.max(frameAspect, 0.01f)
             : PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx;
         return Math.round(frameHeight) + reservedPx;
+    }
+
+    /**
+     * How tall the rows may grow before they scroll inside their own room: what the card has left
+     * once the canvas and the chrome around it have taken theirs, and never less than
+     * {@code minPx}, so a canvas that fills the screen still leaves a list rather than a sliver.
+     */
+    public static int rowsHeightCapPx(int screenHeightPx, int miniatureHeightPx, int chromePx,
+                                      int minPx) {
+        return Math.max(minPx, screenHeightPx - miniatureHeightPx - chromePx);
     }
 }
