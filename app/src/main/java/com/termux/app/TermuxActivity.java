@@ -805,6 +805,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
 
+    private static final int CONTEXT_MENU_LAYOUT_EDITOR_ID = 12;
+
     /** One row of the long-press action dialog. */
     private static final class TerminalActionItem {
         final int id;
@@ -10637,6 +10639,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_SURFACE_EDITOR_ID:
                 openSurfaceEditor();
                 return true;
+            case CONTEXT_MENU_LAYOUT_EDITOR_ID:
+                openLayoutEditor(null);
+                return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
                 com.termux.app.terminal.TerminalCommandPalette.show(this);
                 return true;
@@ -10739,7 +10744,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? R.string.action_disable_background_image
                 : R.string.action_enable_background_image)
         ));
-        items.add(new TerminalActionItem(CONTEXT_MENU_SURFACE_EDITOR_ID, getString(R.string.action_surface_editor)));
+        // The two doors the corner tabs carry, for anyone who never found a corner: how the place
+        // looks, and where its things sit.
+        items.add(new TerminalActionItem(CONTEXT_MENU_SURFACE_EDITOR_ID, getString(R.string.action_appearance_editor)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_LAYOUT_EDITOR_ID, getString(R.string.action_layout_editor)));
         // Only when the companion is installed: a row that opens the Appearance settings under the
         // name of a plugin the device does not have is a broken promise, not a shortcut.
         if (isTerminalStylingAvailable()) {
