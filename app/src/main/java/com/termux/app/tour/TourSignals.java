@@ -48,6 +48,20 @@ public interface TourSignals {
     String DRAWER_CLOSED = "drawer.closed";
     /** The A-Z row's scrub launched an app. */
     String APP_LAUNCHED_FROM_SCRUB = "launcher.scrub_launch";
+    /** An Android app was launched from the launcher, however the user found it. */
+    String APP_LAUNCHED = "launcher.app_launched";
+    /** The launcher is in front of the user again after an app was launched from it. */
+    String LAUNCHER_RESUMED = "launcher.resumed";
+
+    /** Help came up, from the corner tab or from anywhere else that opens it. */
+    String HELP_OPENED = "help.opened";
+    /** Help went away again, however it was dismissed. */
+    String HELP_CLOSED = "help.closed";
+
+    /** The keyboard settled showing. */
+    String KEYBOARD_SHOWN = "keyboard.shown";
+    /** The keyboard settled hidden. */
+    String KEYBOARD_HIDDEN = "keyboard.hidden";
     /** The command palette was opened by the space bar's swipe up. */
     String PALETTE_OPENED = "palette.opened";
     /**

@@ -26,6 +26,10 @@ public final class TourSignalRelay implements TourSignals {
     private String mActiveWindow;
     /** Whether the palette is up as far as the run knows; null until it has ever seen it open. */
     private Boolean mPaletteOpen;
+    /** Whether help is up; null until the launcher has said where it rests. */
+    private Boolean mHelpShown;
+    /** Whether the keyboard is showing; null until the launcher has said where it rests. */
+    private Boolean mKeyboardShown;
     /** The session and window the keyboard chapter began in, and so the ones it must end in. */
     private String mChapterHomeSession;
     private String mChapterHomeWindow;
@@ -194,9 +198,69 @@ public final class TourSignalRelay implements TourSignals {
         emit(PANE_CONTROLS_DISMISSED);
     }
 
-    /** An app was launched by the A–Z row's scrub, rather than by a tap anywhere else. */
+    /**
+     * An app was launched by the A–Z row's scrub, rather than by a tap anywhere else. It is both
+     * signals: the scrub is one of the ways to an app, and the lesson that asks the user to open
+     * one does not care which way they found.
+     */
     public void onAppLaunchedFromScrub() {
         emit(APP_LAUNCHED_FROM_SCRUB);
+        emit(APP_LAUNCHED);
+    }
+
+    /**
+     * An Android app was launched from the launcher. An action the user took, like the split
+     * above, so there is no state to compare against.
+     */
+    public void onAppLaunched() {
+        emit(APP_LAUNCHED);
+    }
+
+    /**
+     * The launcher is in front of the user again. Reported when the launcher resumes, which is
+     * the arrival the "come back" stage is waiting for however the user made it — the Home button
+     * on a phone this launcher is the home app of, the task switcher anywhere else.
+     */
+    public void onLauncherResumed() {
+        emit(LAUNCHER_RESUMED);
+    }
+
+    /**
+     * Whether help is up, once it has settled either way. Edge-triggered like the status bar: the
+     * launcher reports the resting state when it builds the run and on every path that puts help
+     * away, so the first call only says where help rests, and a close of a help the run never saw
+     * open is not a signal.
+     */
+    public void onHelpShownSettled(boolean shown) {
+        if (mHelpShown != null && mHelpShown == shown) return;
+        boolean first = mHelpShown == null;
+        mHelpShown = shown;
+        if (first) return;
+        emit(shown ? HELP_OPENED : HELP_CLOSED);
+    }
+
+    /** Whether help is up as far as the run knows. */
+    public boolean isHelpShown() {
+        return Boolean.TRUE.equals(mHelpShown);
+    }
+
+    /**
+     * Whether the keyboard is showing, once it has settled either way. Primed and edge-triggered
+     * like help above: the keyboard is re-applied on a rotation, on a place change and on every
+     * preference reload with the value it already had, and the keyboard lesson is cleared by the
+     * user's own tap on the keyboard button, not by the chrome restating itself.
+     */
+    public void onKeyboardShownSettled(boolean shown) {
+        if (mKeyboardShown != null && mKeyboardShown == shown) return;
+        boolean first = mKeyboardShown == null;
+        mKeyboardShown = shown;
+        if (first) return;
+        emit(shown ? KEYBOARD_SHOWN : KEYBOARD_HIDDEN);
+    }
+
+    /** Whether the keyboard is showing as far as the run knows. */
+    public boolean isKeyboardShown() {
+        return Boolean.TRUE.equals(mKeyboardShown);
     }
 
     /**

@@ -27,6 +27,14 @@ public interface TourTargets {
     /** The x the selected chip reveals; only ever on screen once that chip has been tapped. */
     String WINDOW_CLOSE = "window_close";
     String SPLIT_KEY = "split_key";
+    /**
+     * The ? on the corner tab, which is the whole point of the first lesson. The corner tab draws
+     * its buttons rather than laying them out as views, so this one is measured by the chrome
+     * itself.
+     */
+    String HELP_BUTTON = "help_button";
+    /** The keyboard button of the extra keys row: the one control that shows and hides the keyboard. */
+    String KEYBOARD_TOGGLE_KEY = "keyboard_toggle_key";
     String PANE_CORNER = "pane_corner";
     String DOCK = "dock";
     String AZ_ROW = "az_row";

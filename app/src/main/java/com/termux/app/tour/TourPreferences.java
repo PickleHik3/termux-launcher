@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
-/** The run's four values, in the app's own store, so Settings can offer a replay later. */
+/** The run's five values, in the app's own store, so Settings can offer a replay later. */
 public final class TourPreferences implements TourController.Prefs {
 
     @NonNull private final TermuxAppSharedPreferences mPreferences;
@@ -21,6 +21,16 @@ public final class TourPreferences implements TourController.Prefs {
     @Override
     public void setTourCompletedVersion(int version) {
         mPreferences.setFirstBootTourCompletedVersion(version);
+    }
+
+    @Override
+    public int getTourRunVersion() {
+        return mPreferences.getFirstBootTourRunVersion();
+    }
+
+    @Override
+    public void setTourRunVersion(int version) {
+        mPreferences.setFirstBootTourRunVersion(version);
     }
 
     @Override

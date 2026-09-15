@@ -1330,6 +1330,14 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION = 0;
 
         /**
+         * The version of the run an unfinished tour belongs to, or 0 for one started before the
+         * version was recorded. The card number alone says nothing across an update: card 3 of
+         * one run and card 3 of the next are different lessons.
+         */
+        public static final String KEY_FIRST_BOOT_TOUR_RUN_VERSION = "first_boot_tour_run_version";
+        public static final int DEFAULT_FIRST_BOOT_TOUR_RUN_VERSION = 0;
+
+        /**
          * The card an unfinished run is on, or -1. The launcher is the home screen and is killed
          * and restarted under the user constantly, so the run is written through on every move and
          * resumes where it was rather than starting over.

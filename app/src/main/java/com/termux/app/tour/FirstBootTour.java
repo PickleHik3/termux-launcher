@@ -93,8 +93,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mActivity = activity;
         mKeyProbe = keyProbe;
         migrateLegacyOnboardingCompletionIfNeeded(activity, preferences);
-        mController = new TourController(TourRun.steps(), new TourPreferences(preferences),
-            SystemClock::uptimeMillis);
+        // The two facts the run varies on are read from the phone when the run is wired up; until
+        // then the run is built for a launcher that is not the home app with the keyboard down.
+        mController = new TourController(TourRun.steps(new TourRun.RunContext(false, false)),
+            new TourPreferences(preferences), SystemClock::uptimeMillis);
         mController.setListener(this);
         mSignals.setTourSignalListener(this);
         mSignals.setHomePlace(HOME_PLACE);
@@ -342,11 +344,6 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             TourLog.d("card " + step.id + ":" + stage + " has nowhere to show: no content view");
             return;
         }
-        // The chapter's last two cards ask the user back to where its first card found them, so
-        // the way back is recorded here rather than when the run started: the cards before this
-        // one open and close a window of their own.
-        if (TourRun.KEYBOARD_CHAPTER_FIRST_STEP.equals(step.id) && stage == 0)
-            mSignals.markKeyboardChapterHome();
         overlay.showStep(step, stage);
         applyChordGlow();
         refreshCardVisibility();

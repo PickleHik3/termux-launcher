@@ -36,6 +36,9 @@ public final class TourViewTargets implements TourTargets {
     private static final String SPLIT_KEY_NAME =
         TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX + TerminalActionDispatcher.TOOL_PANE_SPLIT;
 
+    /** The extra key that shows and hides the keyboard, as the keys row names it. */
+    private static final String KEYBOARD_TOGGLE_KEY_NAME = "KEYBOARD";
+
     /** The seams the tour needs into the activity's view tree. */
     public interface ViewFinder {
         @Nullable
@@ -89,8 +92,15 @@ public final class TourViewTargets implements TourTargets {
                 return rectInOverlay(closeButtonView(),
                     "no chip is offering its x right now");
             case SPLIT_KEY:
-                return rectInOverlay(splitKeyView(),
+                return rectInOverlay(extraKeyView(SPLIT_KEY_NAME),
                     "the extra keys row is down or is not carrying the split key");
+            case KEYBOARD_TOGGLE_KEY:
+                return rectInOverlay(extraKeyView(KEYBOARD_TOGGLE_KEY_NAME),
+                    "the extra keys row is down or is not carrying the keyboard key");
+            // Drawn by the pane's own corner tab rather than laid out as a view, so the chrome
+            // measures it; until it does, the card shows without a glow like any other.
+            case HELP_BUTTON:
+                return miss("the corner tab's help button is not measured yet");
             case PANE_CORNER:
                 return paneCornerRect();
             // Both dock styles are the same view; landscape swaps it for the rail.
@@ -140,27 +150,27 @@ public final class TourViewTargets implements TourTargets {
     }
 
     /**
-     * The split key on whichever page of the extra keys row is up. Null when the row is hidden or
+     * One key of the extra keys row, on whichever page of it is up. Null when the row is hidden or
      * when the user has taken that key off their layout, both of which are ordinary.
      */
     @Nullable
-    private View splitKeyView() {
+    private View extraKeyView(@NonNull String keyName) {
         View pager = mFinder.findTourView(R.id.terminal_toolbar_view_pager);
         if (!isOnScreen(pager)) return null;
-        return splitKeyIn(pager);
+        return extraKeyIn(pager, keyName);
     }
 
     @Nullable
-    private View splitKeyIn(@Nullable View view) {
+    private View extraKeyIn(@Nullable View view, @NonNull String keyName) {
         if (!isOnScreen(view)) return null;
         if (view instanceof ExtraKeysView) {
-            View key = ((ExtraKeysView) view).buttonForKey(SPLIT_KEY_NAME);
+            View key = ((ExtraKeysView) view).buttonForKey(keyName);
             return isOnScreen(key) ? key : null;
         }
         if (!(view instanceof ViewGroup)) return null;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
-            View found = splitKeyIn(group.getChildAt(i));
+            View found = extraKeyIn(group.getChildAt(i), keyName);
             if (found != null) return found;
         }
         return null;
