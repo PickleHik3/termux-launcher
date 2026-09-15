@@ -221,10 +221,12 @@ public final class InAppKeyboardPaletteFactory {
         boolean night = isNightMode(context);
         int glassBase = resolveDockGlassBaseColor(context);
 
-        int key = ColorUtils.setAlphaComponent(base.keyBackground, night ? 128 : 165);
-        int action = ColorUtils.setAlphaComponent(base.actionKeyBackground, night ? 110 : 140);
-        int function = ColorUtils.setAlphaComponent(base.functionKeyBackground, night ? 110 : 140);
-        int space = ColorUtils.setAlphaComponent(base.spaceBarBackground, night ? 110 : 140);
+        // Glass keeps the Material tiers legible: letters are the most solid chip, function keys
+        // let more glass through so they sit one tone lower, and Enter stays a filled accent button.
+        int key = ColorUtils.setAlphaComponent(base.keyBackground, night ? 150 : 180);
+        int action = ColorUtils.setAlphaComponent(base.actionKeyBackground, night ? 228 : 236);
+        int function = ColorUtils.setAlphaComponent(base.functionKeyBackground, night ? 96 : 124);
+        int space = ColorUtils.setAlphaComponent(base.spaceBarBackground, night ? 150 : 180);
         int activated = ColorUtils.setAlphaComponent(base.activatedKeyBackground, 216);
 
         int keyOnBase = ColorUtils.compositeColors(key, glassBase);
