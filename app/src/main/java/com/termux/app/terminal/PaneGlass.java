@@ -15,7 +15,7 @@ import androidx.annotation.Nullable;
  */
 public final class PaneGlass {
 
-    /** Radius a slab takes when the style has no opinion. */
+    /** Radius a pane takes while no style is attached to ask. */
     private static final int DEFAULT_RADIUS_DP = 10;
 
     private PaneGlass() {}
@@ -25,10 +25,18 @@ public final class PaneGlass {
         return style != null && style.isPaneGlassActive();
     }
 
-    /** The slab radius the style asks for, in px, falling back to the built-in default. */
+    /**
+     * The radius a pane is drawn at, in px — the slab's and the frame's alike, so a page of the
+     * wall rounds exactly as a terminal pane does.
+     *
+     * <p>The built-in default answers one thing only: no style attached yet. It used to answer a
+     * style reporting 0 as well, which read the user's square corners as no answer at all and
+     * charged a pane at radius 0 the arc clearance anyway.
+     */
     public static float radiusPx(@Nullable PaneSurfaceStyle style, float density) {
-        float radius = style != null ? style.paneGlassCornerRadiusPx() : 0f;
-        return radius > 0f ? radius : density * DEFAULT_RADIUS_DP;
+        if (style == null)
+            return density * DEFAULT_RADIUS_DP;
+        return PaneCornerRadius.radiusPx(style.paneCornerRadiusDp(), style.paneGlassCornerRadiusPx(), density);
     }
 
     /** The gap between tiled panes in dp, or {@code fallbackDp} while no style is attached. */

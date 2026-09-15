@@ -145,11 +145,6 @@ public class TerminalPaneController {
     private static final int FLOAT_PILL_BUTTON_DP = 44;
     /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
     private static final int FLOAT_ELEVATION_DP = 4;
-    /**
-     * Matches pane_active_border.xml's corner radius, so the content clip and its border ring
-     * agree. Also the radius a tiled pane wears while that stroke is its frame.
-     */
-    private static final int FLOAT_CORNER_RADIUS_DP = 6;
     /** Matches pane_active_border.xml's stroke width: the line a corner tab lines up against. */
     private static final float STOCK_PANE_BORDER_DP = 1f;
     /** How far the resize glow reaches in from the pane's edge. */
@@ -2535,7 +2530,7 @@ public class TerminalPaneController {
         int rim = MaterialColors.getColor(mHostView.getContext(),
             com.google.android.material.R.attr.colorOutlineVariant,
             ContextCompat.getColor(mHostView.getContext(), R.color.termux_outline_variant));
-        mMotionOverlay.ghostPane(bounds, paneGlassRadiusPx(), fill, rim);
+        mMotionOverlay.ghostPane(bounds, paneRadiusPx(), fill, rim);
     }
 
     /**
@@ -2782,9 +2777,17 @@ public class TerminalPaneController {
         return PaneGlass.gapDp(mSurfaceStyle, DIVIDER_DP);
     }
 
-    private float paneGlassRadiusPx() {
-        return PaneGlass.radiusPx(mSurfaceStyle,
-            mHostView.getResources().getDisplayMetrics().density);
+    /**
+     * The radius every pane in this window wears: the terminal's own corner radius, glass or not,
+     * floating or docked, alone or split (see {@link PaneCornerRadius}). One number, so the slab,
+     * the frame's clip, the rim, the drag glow and the corner tab cannot round differently.
+     */
+    private float paneRadiusPx() {
+        float density = mHostView.getResources().getDisplayMetrics().density;
+        if (mSurfaceStyle == null)
+            return PaneGlass.radiusPx(null, density);
+        return PaneCornerRadius.radiusPx(mSurfaceStyle.paneCornerRadiusDp(),
+            mSurfaceStyle.paneGlassCornerRadiusPx(), density);
     }
 
     private boolean paneGlassActive() {
@@ -2802,7 +2805,7 @@ public class TerminalPaneController {
      * tick and on every frost refresh.
      */
     public void applyPaneGlass() {
-        float radiusPx = paneGlassRadiusPx();
+        float radiusPx = paneRadiusPx();
         boolean active = paneGlassActive();
         // NaN and -1: the first pass always shapes the panes, whatever the style turns out to be.
         for (FrameLayout frame : mPaneFrames.values()) {
@@ -3005,14 +3008,13 @@ public class TerminalPaneController {
             PaneContentFrame frame = mPaneFrames.get(paneSession);
             if (frame == null) continue;
             boolean floating = floatingSessions.contains(paneSession);
-            // The pane's shape, and with it the clearance the terminal is laid out inside: the
-            // glass slab's radius, the float's card, or the focus stroke's own arc. Only glass
-            // clips here — a float clips on its own wrapper and a stroke does not clip at all —
-            // but all three round the same corners over the same cells.
+            // The pane's shape, and with it the clearance the terminal is laid out inside. One
+            // radius for every pane, whatever is edging it — the glass slab, the float's card, the
+            // focus stroke's own arc — since all of them round the same corners over the same
+            // cells. Only glass clips here: a float clips on its own wrapper and a stroke does not
+            // clip at all.
             boolean glassShape = paneGlassActive();
-            float shapeRadiusPx = glassShape ? paneGlassRadiusPx()
-                : (floating || split || mMaximizedLeaf != null) ? dp(FLOAT_CORNER_RADIUS_DP) : 0f;
-            frame.setPaneShape(shapeRadiusPx, glassShape);
+            frame.setPaneShape(paneRadiusPx(), glassShape);
             if (!split && mMaximizedLeaf == null && !floating && !glassShape) {
                 PaneRim gone = mBorderStates.remove(paneSession);
                 if (gone != null) gone.clear(frame);
@@ -3025,7 +3027,7 @@ public class TerminalPaneController {
             // outline over frost reads as a box sitting on the material.
             PaneRim rim = mBorderStates.get(paneSession);
             if (rim == null) rim = new PaneRim();
-            if (rim.apply(frame, glassShape, paneGlassRadiusPx(), paneSession == activeSession))
+            if (rim.apply(frame, glassShape, paneRadiusPx(), paneSession == activeSession))
                 mBorderStates.put(paneSession, rim);
             else
                 mBorderStates.remove(paneSession);
@@ -3092,17 +3094,6 @@ public class TerminalPaneController {
         return Math.abs(cornerOnSeamAxis - seam) <= threshold
             && cornerOnOtherAxis >= extentStart - threshold
             && cornerOnOtherAxis <= extentEnd + threshold;
-    }
-
-    /**
-     * The radius a pane is drawn at. Glass rounds every pane at the slab's radius; without glass a
-     * pane rounds its corners at the float radius as soon as it shares the wall (a split, a
-     * maximized pane, a float) and is square only when it is alone on it.
-     */
-    static float paneCornerRadiusPx(boolean glass, float glassRadiusPx, boolean rounded,
-                                    float roundedRadiusPx) {
-        float radius = glass ? glassRadiusPx : rounded ? roundedRadiusPx : 0f;
-        return Math.max(0f, radius);
     }
 
     /**
@@ -3913,14 +3904,9 @@ public class TerminalPaneController {
                     && mActiveWindow.floating.contains(mControlLeaf));
         }
 
-        /**
-         * The pane's own corner radius under the tab. Glass panes carry the slab's radius, but a
-         * pane without glass is rounded too as soon as it shares the wall with another — which is
-         * exactly when this tab exists.
-         */
+        /** The pane's own corner radius under the tab — the one radius every pane wears. */
         private float controlCornerRadiusPx() {
-            return paneCornerRadiusPx(paneGlassActive(), paneGlassRadiusPx(), controlPaneRounded(),
-                dp(FLOAT_CORNER_RADIUS_DP));
+            return paneRadiusPx();
         }
 
         /** The border the pane paints, which is the line the tab lines up inside. */
@@ -4030,10 +4016,10 @@ public class TerminalPaneController {
         private void drawEdgeGlow(Canvas canvas, @NonNull RectF pane, int color,
                                   @Nullable RectF clip) {
             float depth = dp(GLOW_DEPTH_DP);
-            // The glow must trace the ring the pane already draws. With glass on that ring is the
-            // rim at the glass radius (up to 14dp); drawing the glow at the stock 6dp put a second
-            // arc inside every corner — a visible double border for the whole grab and drag.
-            float radius = paneGlassActive() ? paneGlassRadiusPx() : dp(FLOAT_CORNER_RADIUS_DP);
+            // The glow must trace the ring the pane already draws: drawing it at a radius of its
+            // own put a second arc inside every corner — a visible double border for the whole
+            // grab and drag.
+            float radius = paneRadiusPx();
             int saved = canvas.save();
             // Clip to the pane so the blur falls off inward only: light spilling across the seam
             // would read as the neighbour lighting up too.
@@ -4146,8 +4132,7 @@ public class TerminalPaneController {
             }
             // pane_active_border is a foreground stroke, not a clip — without this the terminal's
             // own rectangular cell-background fill pokes a black triangle past each rounded corner.
-            final float cornerRadiusPx = paneGlassActive()
-                ? paneGlassRadiusPx() : dp(FLOAT_CORNER_RADIUS_DP);
+            final float cornerRadiusPx = paneRadiusPx();
             content.setClipToOutline(true);
             content.setOutlineProvider(new ViewOutlineProvider() {
                 @Override public void getOutline(View view, Outline outline) {
