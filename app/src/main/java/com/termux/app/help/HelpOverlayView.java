@@ -59,6 +59,8 @@ public final class HelpOverlayView extends FrameLayout {
     private final HelpPresentationModel model = new HelpPresentationModel();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path arrowPath = new Path();
+    /** The box being drawn, reused: onDraw runs a frame at a time and allocates nothing. */
+    private final RectF boxBounds = new RectF();
     private final float[] fingerPoint = new float[2];
     private final float[] trailPoint = new float[2];
     private float density;
@@ -91,6 +93,8 @@ public final class HelpOverlayView extends FrameLayout {
     private TourGesture gesture = TourGesture.NONE;
     private Rect gestureRect;
     private float gestureProgress = 1f;
+    /** Read once when the gesture starts: a setting is not something onDraw asks about. */
+    private boolean gestureReducedMotion;
 
     public HelpOverlayView(Context context, HelpTargets.ViewFinder finder, Runnable onDismiss) {
         super(context);
@@ -416,7 +420,8 @@ public final class HelpOverlayView extends FrameLayout {
         if (rect == null) return;
         gestureRect = new Rect(rect);
         gesture = gestureFor(targetId);
-        if (ReducedMotion.isEnabled(getContext())) {
+        gestureReducedMotion = ReducedMotion.isEnabled(getContext());
+        if (gestureReducedMotion) {
             // No animation at all on this phone: the cue is drawn where the gesture starts and
             // where it ends, and stays there while help is up.
             gestureProgress = 1f;
@@ -706,18 +711,18 @@ public final class HelpOverlayView extends FrameLayout {
     }
 
     private void drawBox(Canvas canvas, Rect rect, float radius) {
-        RectF bounds = new RectF(rect); bounds.inset(dp(2), dp(2));
-        if (bounds.isEmpty()) return;
+        boxBounds.set(rect); boxBounds.inset(dp(2), dp(2));
+        if (boxBounds.isEmpty()) return;
         paint.setPathEffect(dash);
         float corner = Math.max(0, radius - dp(2));
-        canvas.drawRoundRect(bounds, corner, corner, paint);
+        canvas.drawRoundRect(boxBounds, corner, corner, paint);
         paint.setPathEffect(null);
     }
 
     private void drawGesture(Canvas canvas) {
         Rect rect = gestureRect;
         if (rect == null || gesture == TourGesture.NONE) return;
-        if (ReducedMotion.isEnabled(getContext())) {
+        if (gestureReducedMotion) {
             TourFingerPainter.drawStaticCue(canvas, paint, arrowPath, gesture, rect.left, rect.top,
                 rect.right, rect.bottom, density, accent, fingerPoint, trailPoint);
             return;
