@@ -3202,7 +3202,6 @@ public class TerminalPaneController {
         @Nullable private Leaf mCornerTapLeaf;
         /** Which of that leaf's corners the finger is on, or {@link CornerZones#NONE}. */
         private int mPressedCorner = CornerZones.NONE;
-        private final CornerBracket mBracket = new CornerBracket();
         @Nullable private Leaf mControlLeaf;
         @Nullable private Leaf mMovingLeaf;
         @Nullable private Leaf mMoveTarget;
@@ -3963,17 +3962,8 @@ public class TerminalPaneController {
                     canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 }
             }
-            if (mCornerPressed && mCornerTapLeaf != null && !mDraggingDivider) {
-                RectF corner = paneRect(mCornerTapLeaf, mDrawPaneRect);
-                if (corner != null) {
-                    // Held but not yet moved: the corner itself is marked, which says both which
-                    // pane answered and which of its corners the finger has, where a glow around
-                    // the whole border said only the first.
-                    mBracket.draw(canvas, mPressedCorner, corner,
-                        getResources().getDisplayMetrics().density,
-                        CornerBracket.color(getContext()));
-                }
-            }
+            // A held corner draws nothing of its own: the buzz says the hold took, and the tab that
+            // follows says which corner. A bracket here outlived the touch and read as a smudge.
             if (mMovingLeaf != null && mMoveTarget != null && mMoveTarget != mMovingLeaf) {
                 RectF target = paneRect(mMoveTarget, mDrawPaneRect);
                 if (target != null) {

@@ -24,11 +24,11 @@ before/after figures and the hint mock: `.lavish/hold-gestures.html`.
   to 40 dp. On `ACTION_DOWN` in a square the overlay lets the event through and starts one timer;
   until it fires everything is forwarded, so taps, scrolls and drags reach the program as if the
   square were not there. When it fires the overlay sends the terminal `ACTION_CANCEL`, buzzes
-  (`LONG_PRESS`), draws the bracket and owns the gesture: lift opens the tab, a drag at a seam
+  (`LONG_PRESS`) and owns the gesture: lift opens the tab, a drag at a seam
   resizes (tick on the first move), a drag at an outer corner drags the tab out. A second finger
   before the timer abandons the hold and both fingers go to the terminal. `TerminalView` gains a
   hold-exempt hook (rect per pane, or a flag on the down) so its own hold never races the overlay's.
-  Nothing is drawn at rest. Chrome-band and gutter placements were dropped: the bands carry their
+  Nothing is drawn, at rest or during the hold: the buzz says the hold took, the tab says which corner (the bracket outlived the touch on pong and was removed). Chrome-band and gutter placements were dropped: the bands carry their
   own controls and are not always there, a split has nothing outside its inner corners.
 - **T_hold: three quarters of `ViewConfiguration.getLongPressTimeout()`, floor 250 ms.** 300 ms on a
   default phone; 750 / 1125 ms when Android's Touch & hold delay is Medium / Long. One constant,
