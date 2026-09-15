@@ -28,9 +28,10 @@ import java.util.List;
  * phone is turned.
  *
  * <p>The rows beneath the miniature are the same question asked of the same store: what this place
- * offers that no bar can be dragged into — how its keyboard stands, whether it opens on entry, and
- * how many cells its grid has. They come from {@link PlaceArrangeModel}, which already answers for
- * one orientation at a time, so the toggle moves the rows exactly as it moves the picture.
+ * offers that no bar can be dragged into — how its keyboard stands, whether it opens on entry, how
+ * many cells its grid has, and how tall its dock and its keyboard stand. They come from
+ * {@link PlaceArrangeModel}, which already answers for one orientation at a time, so the toggle
+ * moves the rows exactly as it moves the picture.
  *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
  * {@link LayoutEditorController} is the shell that draws it.
@@ -41,10 +42,24 @@ public final class LayoutEditorPlan {
     public static final float PORTRAIT_FRAME_SCREEN_FRACTION = 0.55f;
 
     /**
-     * What the rows stand for, in the order they stand in. Everything else about a place's
-     * arrangement is a bar, and a bar is moved on the picture rather than picked from a row.
+     * The headings the rows stand under, in the order they stand in, and whether that element's
+     * own choices stand there too. Everything else about a place's arrangement is a bar, and a bar
+     * is moved on the picture rather than picked from a row — which is why the Dock heading carries
+     * nothing but its height: where the dock stands is a drag on the miniature.
      */
-    private static final Element[] ROW_ELEMENTS = {Element.KEYBOARD, Element.WIDGET_GRID};
+    private enum Section {
+        DOCK(Element.PINNED_APPS, false),
+        KEYBOARD(Element.KEYBOARD, true),
+        WIDGET_GRID(Element.WIDGET_GRID, true);
+
+        @NonNull final Element element;
+        final boolean offersChoices;
+
+        Section(@NonNull Element element, boolean offersChoices) {
+            this.element = element;
+            this.offersChoices = offersChoices;
+        }
+    }
 
     /** What one drop on the miniature did. */
     public enum Drop {
@@ -131,18 +146,17 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * The rows beneath the miniature: this place's keyboard, and on Home its grid, for the
-     * orientation on the toggle. A pick writes through the group's own writer, the same way a drop
-     * writes through the picture.
+     * The rows beneath the miniature: this place's dock height, its keyboard, and on Home its grid,
+     * for the orientation on the toggle. A pick or a drag writes through the group's own writer,
+     * the same way a drop writes through the picture.
      */
     @NonNull
     public List<Row> rows() {
-        List<Row> rows = new ArrayList<>(5);
-        for (Element element : ROW_ELEMENTS) {
-            List<PlaceArrangeModel.Group> groups =
-                PlaceArrangeModel.groups(mPlaces, mPlace, mShownOrientation, element);
+        List<Row> rows = new ArrayList<>(8);
+        for (Section section : Section.values()) {
+            List<PlaceArrangeModel.Group> groups = groupsOf(section);
             for (int index = 0; index < groups.size(); index++)
-                rows.add(new Row(element, index, groups.get(index)));
+                rows.add(new Row(section.element, index, groups.get(index)));
         }
         return rows;
     }
@@ -150,9 +164,24 @@ public final class LayoutEditorPlan {
     /** One row's answer, read fresh, or null where the place no longer offers it. */
     @Nullable
     public PlaceArrangeModel.Group row(@NonNull Element element, int index) {
-        List<PlaceArrangeModel.Group> groups =
-            PlaceArrangeModel.groups(mPlaces, mPlace, mShownOrientation, element);
-        return index < 0 || index >= groups.size() ? null : groups.get(index);
+        for (Section section : Section.values()) {
+            if (section.element != element)
+                continue;
+            List<PlaceArrangeModel.Group> groups = groupsOf(section);
+            return index < 0 || index >= groups.size() ? null : groups.get(index);
+        }
+        return null;
+    }
+
+    /** Everything under one heading: what that element offers, then how big it stands. */
+    @NonNull
+    private List<PlaceArrangeModel.Group> groupsOf(@NonNull Section section) {
+        List<PlaceArrangeModel.Group> groups = new ArrayList<>(4);
+        if (section.offersChoices)
+            groups.addAll(
+                PlaceArrangeModel.groups(mPlaces, mPlace, mShownOrientation, section.element));
+        groups.addAll(PlaceArrangeModel.sizes(mPlaces, mPlace, mShownOrientation, section.element));
+        return groups;
     }
 
     /**
