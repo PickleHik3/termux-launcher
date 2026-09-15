@@ -77,6 +77,46 @@ public class FontFamilyIndexTest {
         assertTrue(found.getPath(), found.getPath().contains(".termux"));
     }
 
+    /** herdr-radar's real install: a build hash where a style name usually sits. */
+    @Test
+    public void aBuildHashSuffixStillAnswersToTheFamilyName() throws Exception {
+        font(".local/share/fonts", "HerdrAgentIconsMax-d77910ea.ttf");
+
+        FontFamilyIndex index = index();
+
+        assertEquals("HerdrAgentIconsMax-d77910ea.ttf",
+            index.find("Herdr Agent Icons Max", FontFamilyIndex.REGULAR).getName());
+        // A hash says nothing about which face the file is, so it stands in for every style.
+        assertEquals("HerdrAgentIconsMax-d77910ea.ttf",
+            index.find("Herdr Agent Icons Max", FontFamilyIndex.BOLD).getName());
+        assertEquals("HerdrAgentIconsMax-d77910ea.ttf",
+            index.find("HerdrAgentIconsMax-d77910ea", FontFamilyIndex.REGULAR).getName());
+    }
+
+    @Test
+    public void onlyOneTokenThatDoesNotNameAFaceIsEverDropped() throws Exception {
+        font(".fonts", "IosevkaTerm-Curly-Regular.ttf");
+
+        FontFamilyIndex index = index();
+
+        // The style token is free, and one more may go after it.
+        assertEquals("IosevkaTerm-Curly-Regular.ttf",
+            index.find("IosevkaTerm Curly", FontFamilyIndex.REGULAR).getName());
+        assertEquals("IosevkaTerm-Curly-Regular.ttf",
+            index.find("IosevkaTerm", FontFamilyIndex.REGULAR).getName());
+        // Shedding a second one would let a plain Iosevka request land on a Term build.
+        assertNull(index.find("Iosevka", FontFamilyIndex.REGULAR));
+    }
+
+    @Test
+    public void aFileThatSpellsTheFamilyOutInFullBeatsOneThatHadToBeShortened() throws Exception {
+        font(".fonts", "Iosevka-Term-Regular.ttf");
+        font(".fonts", "Iosevka.ttf");
+
+        // 'Iosevka-Term-Regular.ttf' sorts first, so only the two-pass build gets this right.
+        assertEquals("Iosevka.ttf", index().find("Iosevka", FontFamilyIndex.REGULAR).getName());
+    }
+
     @Test
     public void anEmptyIndexAnswersNothing() {
         assertTrue(FontFamilyIndex.EMPTY.isEmpty());

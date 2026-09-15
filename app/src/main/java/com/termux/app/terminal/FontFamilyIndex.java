@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -18,10 +19,17 @@ import java.util.Map;
  * kitty user installed by dropping a file into {@code ~/.fonts} comes back as the default sans
  * face and draws tofu. kitty reaches the same name through fontconfig, which scans {@code ~/.fonts}
  * and {@code ~/.local/share/fonts}; this scans those, and the app's own {@code ~/.termux/fonts},
- * and matches a name against the file names it finds with their style suffix removed —
- * {@code HerdrAgentIconsMax-Regular.ttf} answers to {@code Herdr Agent Icons Max}. Reading the
- * name table out of every file would be exact and would cost a font parse per file per config
- * load; file names are what installers write and what people already match on.
+ * and matches a name against the file names it finds with their trailing tokens removed —
+ * {@code HerdrAgentIconsMax-Regular.ttf} and {@code HerdrAgentIconsMax-d77910ea.ttf} both answer
+ * to {@code Herdr Agent Icons Max}. Reading the name table out of every file would be exact and
+ * would cost a font parse per file per config load; file names are what installers write and what
+ * people already match on.
+ *
+ * <p>A file is registered under its full name first and under its shortened names afterwards, so
+ * a file that spells a family out in full always beats one that only matched after a token was
+ * dropped. At most one token that is not a face name is dropped: a build hash or a version says
+ * nothing about which face a file is, and dropping them without limit would let {@code Iosevka}
+ * quietly resolve to an Iosevka Term build.
  *
  * <p>Built once per config load and bounded in every direction: how deep it walks, how many files
  * it will look at and how many families it will remember.
@@ -46,6 +54,7 @@ final class FontFamilyIndex {
     private static final String[] STYLE_SUFFIXES = {
         "boldoblique", "bolditalic", "italicbold", "oblique", "italic", "bold", "regular"
     };
+    private static final String SEPARATORS = "-_ .";
 
     private final Map<String, File[]> mFamilies;
 
@@ -56,9 +65,12 @@ final class FontFamilyIndex {
     /** Scans the given directories in order; the first file to claim a name keeps it. */
     @NonNull
     static FontFamilyIndex of(@NonNull List<File> roots) {
-        Map<String, File[]> families = new LinkedHashMap<>();
+        List<File> files = new ArrayList<>();
         int budget = MAX_FILES;
-        for (File root : roots) budget = scan(root, 0, budget, families);
+        for (File root : roots) budget = scan(root, 0, budget, files);
+        Map<String, File[]> families = new LinkedHashMap<>();
+        for (File file : files) addFullName(families, file);
+        for (File file : files) addShortenedNames(families, file);
         return families.isEmpty() ? EMPTY : new FontFamilyIndex(families);
     }
 
@@ -85,7 +97,7 @@ final class FontFamilyIndex {
     }
 
     private static int scan(@NonNull File dir, int depth, int budget,
-                            @NonNull Map<String, File[]> families) {
+                            @NonNull List<File> files) {
         if (budget <= 0 || depth > MAX_DEPTH || !dir.isDirectory()) return budget;
         File[] entries = dir.listFiles();
         if (entries == null) return budget;
@@ -93,7 +105,7 @@ final class FontFamilyIndex {
         for (File entry : entries) {
             if (budget <= 0) break;
             if (entry.isDirectory()) {
-                budget = scan(entry, depth + 1, budget, families);
+                budget = scan(entry, depth + 1, budget, files);
                 continue;
             }
             String name = entry.getName();
@@ -101,19 +113,64 @@ final class FontFamilyIndex {
             if (dot <= 0 || !FONT_SUFFIXES.contains(name.substring(dot).toLowerCase(Locale.US)))
                 continue;
             budget--;
-            add(families, name.substring(0, dot), entry);
+            files.add(entry);
         }
         return budget;
     }
 
-    private static void add(@NonNull Map<String, File[]> families, @NonNull String base,
-                            @NonNull File file) {
+    private static void addFullName(@NonNull Map<String, File[]> families, @NonNull File file) {
+        String normalized = normalize(baseName(file));
+        put(families, normalized, styleOf(normalized), file);
+    }
+
+    /**
+     * The names a file answers to once its trailing tokens are dropped, one segment at a time.
+     *
+     * <p>{@code MapleMono-NF-Bold} answers to {@code MapleMono NF} as the bold face, because the
+     * token dropped named that face. {@code HerdrAgentIconsMax-d77910ea} answers to
+     * {@code Herdr Agent Icons Max} as the regular face, because a build hash says nothing about
+     * which face the file holds — and the walk stops there, so one unknown token is all a name may
+     * shed.
+     */
+    private static void addShortenedNames(@NonNull Map<String, File[]> families,
+                                          @NonNull File file) {
+        String base = baseName(file);
         String normalized = normalize(base);
         int style = styleOf(normalized);
-        put(families, normalized, style, file);
-        // MapleMono-NF-Bold answers to "MapleMono NF" as well as to its own full name.
+        // A name with no separator at all still sheds a style it spelled in camel case.
         String stripped = stripStyle(normalized);
         if (!stripped.equals(normalized)) put(families, stripped, style, file);
+        String remaining = base;
+        while (true) {
+            int separator = lastSeparator(remaining);
+            if (separator <= 0) return;
+            String token = remaining.substring(separator + 1);
+            remaining = remaining.substring(0, separator);
+            String key = normalize(remaining);
+            if (key.isEmpty()) return;
+            boolean namesAFace = isStyleToken(token);
+            put(families, key, namesAFace ? style : REGULAR, file);
+            if (!namesAFace) return;
+        }
+    }
+
+    @NonNull
+    private static String baseName(@NonNull File file) {
+        String name = file.getName();
+        int dot = name.lastIndexOf('.');
+        return dot <= 0 ? name : name.substring(0, dot);
+    }
+
+    private static int lastSeparator(@NonNull String value) {
+        for (int i = value.length() - 1; i >= 0; i--)
+            if (SEPARATORS.indexOf(value.charAt(i)) >= 0) return i;
+        return -1;
+    }
+
+    private static boolean isStyleToken(@NonNull String token) {
+        String normalized = normalize(token);
+        for (String suffix : STYLE_SUFFIXES) if (suffix.equals(normalized)) return true;
+        return false;
     }
 
     private static void put(@NonNull Map<String, File[]> families, @NonNull String key, int style,
