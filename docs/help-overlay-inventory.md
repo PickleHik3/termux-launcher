@@ -83,7 +83,7 @@ Gestures on the bar, on every place:
 |------|------|---------|----------|------|
 | X display surface | The embedded X server's picture; edges belong to X | all touches between the corners go to X | fills the page | — |
 | Empty state | "No display" message with **Start display** (or a turn-on prompt while the setting is off) | tap the button | centred | — |
-| Page corners → tab | **Power** (start or stop the display), **cog** (display settings), **sliders** (Appearance for this place), **grid** (Layout for this place), **?** (help) | tap a corner, then a button | any of the page's four corners | — |
+| Page corners → tab | **Power** (start or stop the display), **cog** (display settings), **sliders** (Appearance for this place), **grid** (Layout for this place), **?** (help) | hold a corner, then tap a button | any of the page's four corners | — |
 | Scale rail | Vertical slider with a read-out; only while the corner tab is out and a display runs | drag the thumb | along the leading edge, 16 dp in | — |
 | Touchpad | 1 finger moves and taps, 2 fingers scroll, pinch, right-click, 3 fingers middle-click, switch windows, bring the keyboard back; scroll strip on its trailing edge; arrow in its bottom-left restores the keyboard | mouse mode on | takes the keyboard's place; over a split keyboard it stands in the gap | — |
 | Status bar chips | The display's app windows, front one selected | tap raises that window | the terminal chips' slot | — |
@@ -101,7 +101,7 @@ keys row are the way back to the terminal without the status bar.
 | Empty hint | "Add a widget" message | — | centred | — |
 | Page dots | More than one widget page | sideways swipe pages | bottom centre | — |
 | Long-press menu | Add widget · Edit widgets · Add page · Remove page | long-press empty grid | popup at the touch point | — |
-| Page corners → tab | **Cog** (layout settings at the widget grid), **pencil** (edit widgets), **sliders** (Appearance for this place), **grid** (Layout for this place), **?** (help); while editing, a grid-size read-out and ? | tap a corner, then a button | any of the page's four corners | — |
+| Page corners → tab | **Cog** (layout settings at the widget grid), **pencil** (edit widgets), **sliders** (Appearance for this place), **grid** (Layout for this place), **?** (help); while editing, a grid-size read-out and ? | hold a corner, then tap a button | any of the page's four corners | — |
 | Edit mode | Move widgets by whole cells, resize by edge handles | long-press a widget, drag; drag a handle | on the grid | — |
 | Status bar | Bare: no badge, no chips; stats centred and reversed | — | — | — |
 | Keyboard | Closed on entering by default | — | — | — |

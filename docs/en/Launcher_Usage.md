@@ -334,7 +334,7 @@ and [Kitty protocols and compatibility](Terminal_Kitty_Protocols.md).
 
 ## Get help
 
-Press any corner for its controls, then tap **?** to see what they do. The command palette and
+Hold any corner for its controls, then tap **?** to see what they do. The command palette and
 Settings also have a **Help** entry that opens the same thing. On the Terminal place it opens by
 topic — pick what you are stuck on, or tap **Show all** for the full reference. **Try it** on a
 topic closes help and walks you through that one action right away.

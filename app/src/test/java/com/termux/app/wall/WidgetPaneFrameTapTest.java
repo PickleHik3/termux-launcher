@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
 import android.app.Application;
+import android.content.Context;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Looper;
@@ -14,11 +15,13 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.widget.FrameLayout;
 
 import com.termux.R;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.launcher.widget.WidgetEditOverlayView;
 import com.termux.app.launcher.widget.WidgetPaneView;
+import com.termux.view.HoldTiming;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -34,9 +37,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Which touches the Widgets page keeps for itself. Its four corners drop the page's own tab,
- * exactly as the Display page's do — and everything between them stays the widgets' and the edit
- * overlay's, so a widget that reaches the frame's edge answers to its last pixel.
+ * Which touches the Widgets page keeps for itself. Its four corners are <em>held</em> to drop the
+ * page's own tab, exactly as a pane's are — so a tap, a drag and a widget's own controls all reach
+ * the grid, and only a finger that rests in a corner square belongs to the page.
  *
  * <p>Whether the tab is out is asked the only way a finger can ask it: by tapping where one of
  * its buttons would be and seeing whether the page ran it.
@@ -47,8 +50,8 @@ public class WidgetPaneFrameTapTest {
 
     private static final int WIDTH = 600;
     private static final int HEIGHT = 800;
-    /** The square each corner keeps. */
-    private static final float CORNER_DP = CornerZones.SIZE_DP;
+    /** The square each corner keeps, the same one a terminal pane holds. */
+    private static final float CORNER_DP = CornerZones.PANE_SIZE_DP;
     /** The tab: five 30dp buttons 8dp apart, 5dp of padding, 3dp in from the trailing edge. */
     private static final float TAB_WIDTH_DP = 192f;
     private static final float TAB_INSET_DP = 3f;
@@ -126,27 +129,56 @@ public class WidgetPaneFrameTapTest {
         event.recycle();
     }
 
+    /** Let the tab's 190 ms reveal or retract land, since nothing on it answers mid-motion. */
+    private static void settle() {
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
+    }
+
+    /** A finger down, still until the corner claims it, then up: the gesture the corners answer. */
+    private static void hold(WidgetPaneFrame page, float x, float y) {
+        touch(page, MotionEvent.ACTION_DOWN, x, y);
+        Shadows.shadowOf(Looper.getMainLooper())
+            .idleFor(HoldTiming.holdTimeoutMs() + 50L, TimeUnit.MILLISECONDS);
+        touch(page, MotionEvent.ACTION_UP, x, y);
+        settle();
+    }
+
+    /** A hold on the page's top-trailing corner, which is where the tab has always come out. */
+    private static void holdCorner(WidgetPaneFrame page) {
+        hold(page, WIDTH - 2f, 2f);
+    }
+
+    /** A child that keeps every gesture it is offered and remembers what it was sent. */
+    private static class Recorder extends View {
+        final List<Integer> actions = new ArrayList<>();
+
+        Recorder(Context context) {
+            super(context);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            actions.add(event.getActionMasked());
+            return true;
+        }
+    }
+
+    /** A page whose whole area is a child taking touches, so the grid's side of this is visible. */
+    private static Recorder recordingChild(WidgetPaneFrame page) {
+        Recorder recorder = new Recorder(page.getContext());
+        page.addView(recorder, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        page.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        page.layout(0, 0, WIDTH, HEIGHT);
+        return recorder;
+    }
+
     /** A finger down and up in the same spot, with the tab's motion allowed to finish. */
     private static void tap(WidgetPaneFrame page, float x, float y) {
         touch(page, MotionEvent.ACTION_DOWN, x, y);
         touch(page, MotionEvent.ACTION_UP, x, y);
-        // The tab's reveal and retract are 190 ms, and nothing on it answers mid-motion.
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
-    }
-
-    /** A tap on the page's top-trailing corner, which is where the tab has always come out. */
-    private static void tapCorner(WidgetPaneFrame page) {
-        tap(page, WIDTH - 2f, 2f);
-    }
-
-    private static boolean intercepts(WidgetPaneFrame page, float x, float y) {
-        MotionEvent down = event(MotionEvent.ACTION_DOWN, x, y);
-        boolean claimed = page.onInterceptTouchEvent(down);
-        down.recycle();
-        MotionEvent cancel = event(MotionEvent.ACTION_CANCEL, x, y);
-        page.onTouchEvent(cancel);
-        cancel.recycle();
-        return claimed;
+        settle();
     }
 
     /**
@@ -170,6 +202,7 @@ public class WidgetPaneFrameTapTest {
         overlay.show(new Rect(pad, pad, Math.round(200 * density), Math.round(120 * density)),
             true, true);
         page.applyWidgetEditing(true);
+        settle();
 
         // The top of the chip, where a thumb reaching for it lands: inside the band, and the
         // overlay's own hit test says it is the chip's.
@@ -180,28 +213,82 @@ public class WidgetPaneFrameTapTest {
             CornerZones.cornerAt(chipX, chipY, WIDTH, HEIGHT, CORNER_DP * density));
         assertTrue("precondition: the overlay claims this point",
             overlay.wantsPoint(chipX - pane.getLeft(), chipY - pane.getTop()));
-        assertFalse("the remove chip belongs to the widget", intercepts(page, chipX, chipY));
-        assertTrue("a corner the edit chrome does not want is still the page's",
-            intercepts(page, WIDTH - 2f, HEIGHT - 2f));
+
+        int restingCorner = page.controlsTab().corner();
+        hold(page, chipX, chipY);
+        assertEquals("the remove chip belongs to the widget, however long it is held",
+            restingCorner, page.controlsTab().corner());
+
+        hold(page, WIDTH - 2f, HEIGHT - 2f);
+        assertEquals("a corner the edit chrome does not want is still the page's",
+            CornerZones.BOTTOM_RIGHT, page.controlsTab().corner());
     }
 
+    /** A hold opens the tab at each of the four corners, and nowhere between them. */
     @Test
     public void theCornersBelongToThePage_theEdgesBelongToTheWidgets() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        WidgetPaneFrame page = page(activity);
         float corner = CORNER_DP * density(activity);
 
-        assertTrue("top-leading", intercepts(page, 1f, 1f));
-        assertTrue("top-trailing", intercepts(page, WIDTH - 1f, 1f));
-        assertTrue("bottom-trailing", intercepts(page, WIDTH - 1f, HEIGHT - 1f));
-        assertTrue("bottom-leading", intercepts(page, 1f, HEIGHT - 1f));
-        assertTrue("the last pixel of the square", intercepts(page, corner, corner));
+        assertEquals("top-leading", CornerZones.TOP_LEFT, cornerHeldAt(activity, 1f, 1f));
+        assertEquals("top-trailing", CornerZones.TOP_RIGHT,
+            cornerHeldAt(activity, WIDTH - 1f, 1f));
+        assertEquals("bottom-trailing", CornerZones.BOTTOM_RIGHT,
+            cornerHeldAt(activity, WIDTH - 1f, HEIGHT - 1f));
+        assertEquals("bottom-leading", CornerZones.BOTTOM_LEFT,
+            cornerHeldAt(activity, 1f, HEIGHT - 1f));
+        assertEquals("the last pixel of the square", CornerZones.TOP_LEFT,
+            cornerHeldAt(activity, corner, corner));
 
-        assertFalse("one pixel past it", intercepts(page, corner + 1f, corner + 1f));
-        assertFalse("the middle of the leading edge", intercepts(page, 1f, HEIGHT / 2f));
-        assertFalse("the middle of the top edge", intercepts(page, WIDTH / 2f, 1f));
-        assertFalse("the middle of the bottom edge", intercepts(page, WIDTH / 2f, HEIGHT - 1f));
-        assertFalse("the middle of the grid", intercepts(page, WIDTH / 2f, HEIGHT / 2f));
+        assertEquals("one pixel past it", CornerZones.NONE,
+            cornerHeldAt(activity, corner + 1f, corner + 1f));
+        assertEquals("the middle of the leading edge", CornerZones.NONE,
+            cornerHeldAt(activity, 1f, HEIGHT / 2f));
+        assertEquals("the middle of the top edge", CornerZones.NONE,
+            cornerHeldAt(activity, WIDTH / 2f, 1f));
+        assertEquals("the middle of the bottom edge", CornerZones.NONE,
+            cornerHeldAt(activity, WIDTH / 2f, HEIGHT - 1f));
+        assertEquals("the middle of the grid", CornerZones.NONE,
+            cornerHeldAt(activity, WIDTH / 2f, HEIGHT / 2f));
+    }
+
+    /** The corner a hold at this point brings the tab out of, or NONE when it brings out none. */
+    private static int cornerHeldAt(Activity activity, float x, float y) {
+        WidgetPaneFrame page = page(activity);
+        page.setHost(new Calls());
+        hold(page, x, y);
+        return page.isControlsTabShown() ? page.controlsTab().corner() : CornerZones.NONE;
+    }
+
+    /** A tap in a corner square is the grid's: it reaches the child whole and opens nothing. */
+    @Test
+    public void aTapInACornerReachesTheWidgetsAndOpensNothing() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        page.setHost(new Calls());
+        Recorder child = recordingChild(page);
+
+        tap(page, WIDTH - 2f, 2f);
+
+        assertEquals("the child saw the whole tap",
+            Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP), child.actions);
+        assertFalse("no tab came out", page.isControlsTabShown());
+    }
+
+    /** Held past the timer, the corner takes the gesture and the child is told to forget it. */
+    @Test
+    public void aHoldTakesTheGestureFromTheWidgetsAndOpensTheTab() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        page.setHost(new Calls());
+        Recorder child = recordingChild(page);
+
+        hold(page, WIDTH - 2f, 2f);
+
+        assertTrue("the tab came out of the held corner", page.isControlsTabShown());
+        assertEquals(CornerZones.TOP_RIGHT, page.controlsTab().corner());
+        assertEquals("the child saw a cancel, never the lift",
+            Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_CANCEL), child.actions);
     }
 
     /** The pure rule the frame asks on every touch down. */
@@ -217,26 +304,26 @@ public class WidgetPaneFrameTapTest {
     }
 
     @Test
-    public void theTabComesOutOfTheCornerThatWasTapped() {
+    public void theTabComesOutOfTheCornerThatWasHeld() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         page.setHost(new Calls());
         RectF tab = new RectF();
 
-        tap(page, 2f, HEIGHT - 2f);
+        hold(page, 2f, HEIGHT - 2f);
         page.controlsTab().tabBounds(tab);
         assertTrue("out of the leading side", tab.left < WIDTH / 2f);
         assertEquals("resting on the bottom edge", HEIGHT, tab.bottom, 1f);
 
         // Another corner moves it rather than putting it away.
-        tap(page, WIDTH - 2f, 2f);
+        hold(page, WIDTH - 2f, 2f);
         assertTrue("still out", page.isControlsTabShown());
         page.controlsTab().tabBounds(tab);
         assertTrue("out of the trailing side", tab.right > WIDTH / 2f);
         assertEquals("hanging from the top edge", 0f, tab.top, 1f);
 
         // The corner it is out of is the one that puts it away.
-        tap(page, WIDTH - 2f, 2f);
+        hold(page, WIDTH - 2f, 2f);
         assertFalse(page.isControlsTabShown());
     }
 
@@ -251,13 +338,13 @@ public class WidgetPaneFrameTapTest {
         tap(page, cogX(activity), tabCentreY(activity));
         assertEquals(Collections.emptyList(), calls.log);
 
-        tapCorner(page);
+        holdCorner(page);
         tap(page, cogX(activity), tabCentreY(activity));
         assertEquals(Collections.singletonList("settings"), calls.log);
 
         // Out, and away again: the corner goes quiet.
-        tapCorner(page);
-        tapCorner(page);
+        holdCorner(page);
+        holdCorner(page);
         tap(page, cogX(activity), tabCentreY(activity));
         assertEquals(Collections.singletonList("settings"), calls.log);
     }
@@ -269,9 +356,9 @@ public class WidgetPaneFrameTapTest {
         Calls calls = new Calls();
         page.setHost(calls);
 
-        tapCorner(page);
+        holdCorner(page);
         tap(page, cogX(activity), tabCentreY(activity));
-        tapCorner(page);
+        holdCorner(page);
         tap(page, pencilX(activity), tabCentreY(activity));
 
         assertEquals(Arrays.asList("settings", "edit"), calls.log);
@@ -283,7 +370,7 @@ public class WidgetPaneFrameTapTest {
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
         page.setHost(calls);
-        tapCorner(page);
+        holdCorner(page);
         tapHelp(page, activity);
         assertEquals(Collections.singletonList("help"), calls.log);
         assertFalse(page.isControlsTabShown());
@@ -305,14 +392,14 @@ public class WidgetPaneFrameTapTest {
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
         page.setHost(calls);
-        tapCorner(page);
+        holdCorner(page);
         RectF bounds = new RectF();
         page.controlsTab().tabBounds(bounds);
         tap(page, slidersX(activity), bounds.centerY());
         assertEquals(Collections.singletonList("appearance"), calls.log);
         assertFalse(page.isControlsTabShown());
 
-        tapCorner(page);
+        holdCorner(page);
         tap(page, layoutX(activity), bounds.centerY());
         assertEquals(Arrays.asList("appearance", "layout"), calls.log);
         assertFalse(page.isControlsTabShown());
@@ -342,7 +429,7 @@ public class WidgetPaneFrameTapTest {
         };
         page.setHost(calls);
 
-        tapCorner(page);
+        holdCorner(page);
         tap(page, pencilX(activity), tabCentreY(activity));
         assertEquals(Collections.singletonList("edit"), calls.log);
         assertTrue("the grid tab is on its way out, not retracting with the pair",
@@ -376,25 +463,49 @@ public class WidgetPaneFrameTapTest {
         tap(page, cogX(activity), tabCentreY(activity));
         assertEquals("the editing tab retracted", Collections.emptyList(), calls.log);
 
-        tapCorner(page);
+        holdCorner(page);
         tap(page, cogX(activity), tabCentreY(activity));
         assertEquals(Collections.singletonList("settings"), calls.log);
     }
 
+    /** Out of the square before the timer: the gesture stays the grid's and nothing opens. */
     @Test
-    public void aDragFromACornerIsNotACornerTap() {
+    public void aDragOutOfTheSquareBeforeTheTimerOpensNothing() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
         page.setHost(calls);
+        Recorder child = recordingChild(page);
         float slop = ViewConfiguration.get(activity).getScaledTouchSlop();
 
         touch(page, MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
         touch(page, MotionEvent.ACTION_MOVE, WIDTH - 2f - slop * 4f, 2f);
+        Shadows.shadowOf(Looper.getMainLooper())
+            .idleFor(HoldTiming.holdTimeoutMs() + 50L, TimeUnit.MILLISECONDS);
         touch(page, MotionEvent.ACTION_UP, WIDTH - 2f - slop * 4f, 2f);
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
+        settle();
 
+        assertFalse("a drag never brought the tab out", page.isControlsTabShown());
+        assertFalse("and the grid kept the whole gesture",
+            child.actions.contains(MotionEvent.ACTION_CANCEL));
         tap(page, cogX(activity), tabCentreY(activity));
-        assertEquals("a drag never brought the tab out", Collections.emptyList(), calls.log);
+        assertEquals(Collections.emptyList(), calls.log);
+    }
+
+    /** A second finger before the timer gives the gesture up: two fingers are never a hold. */
+    @Test
+    public void aSecondFingerBeforeTheTimerOpensNothing() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        page.setHost(new Calls());
+
+        touch(page, MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        touch(page, MotionEvent.ACTION_POINTER_DOWN, WIDTH / 2f, HEIGHT / 2f);
+        Shadows.shadowOf(Looper.getMainLooper())
+            .idleFor(HoldTiming.holdTimeoutMs() + 50L, TimeUnit.MILLISECONDS);
+        touch(page, MotionEvent.ACTION_UP, WIDTH - 2f, 2f);
+        settle();
+
+        assertFalse(page.isControlsTabShown());
     }
 }

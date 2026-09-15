@@ -69,8 +69,12 @@ before/after figures and the hint mock: `.lavish/hold-gestures.html`.
   drag to drag. Keep holding to select text." `docs/en/Launcher_Usage.md` 24–47 rewritten to this
   grammar.
 - **Out of scope.** A Settings entry for any timing; the Mouse mode toggle; the Display page's
-  touchpad and its long press; the floating toolbar's auto-hide; the Display and Widgets frames'
-  tap-to-open corners (follow-up if the hold proves right on the terminal).
+  touchpad and its long press; the floating toolbar's auto-hide.
+- **Widgets and Display corners hold too** (2026-09-15, after the terminal's hold proved right on
+  pong): `WidgetPaneFrame` and `X11PaneFrame` stop intercepting a corner square on DOWN; the child
+  gets the gesture, a still hold of T_hold buzzes and claims it (the child sees `ACTION_CANCEL`), the
+  tab opens on lift. Same 40 dp square, no bracket, same haptics. A Widgets long-press on an empty
+  cell inside a corner square now loses to the corner hold.
 
 ## Build plan
 
@@ -98,7 +102,10 @@ second-finger selection was too far from what users expect (replaced by the T_se
 Third feel: the loupe kept colliding with T_select and was removed (see "The loupe is gone").
 Fourth feel: one-column border resizes missed the 8 dp slop and fell into selection; after the
 buzz one cell of travel now starts the drag.
-Owed: the device checks below on pong, then the developer's cue before merging into dev.
+Merged to dev b8423175 (2026-09-15). Follow-ups on `fix/pane-corner-radius-and-edge-touch`: the
+pane frame forwards clearance touches (44ff1f2c), one pane corner radius rule (538404eb), and the
+Widgets/Display corners hold like the terminal's (see "Widgets and Display corners hold too").
+Evidence for the first two: `docs/research/2026-09-15-corner-touch-targets.md`.
 
 ## Device checks on pong
 

@@ -3153,7 +3153,8 @@ public class TerminalPaneController {
      * own program draws into its corners, so a touch that lands in a square is handed straight to
      * the pane's {@link TerminalView} and only becomes this overlay's once the finger has rested
      * for {@link HoldTiming#holdTimeoutMs()}; see {@link CornerHold}. The Widgets and Display
-     * frames still open on a tap, and their squares stay the smaller {@link CornerZones#SIZE_DP}.
+     * frames hold their corners the same way, on squares of the same
+     * {@link CornerZones#PANE_SIZE_DP}.
      *
      * <p>The corner tab itself is not drawn here. It is a {@link PaneControlsView}, the same view
      * the Widgets and Display pages carry, told where the held pane is by a frame source; this
