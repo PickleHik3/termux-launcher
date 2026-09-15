@@ -40,15 +40,19 @@ import com.termux.x11.LorieView;
  *
  * <p>While no server is running the page shows its empty state, which is where a home screen
  * rests: the launcher never starts a display on its own. A tap on one of the page's four corners
- * drops the same two-button tab a pane's corner does, out of the corner that was touched: power,
- * and the display's settings — and, while a display runs, the scale rail along the page's leading
+ * drops the same tab a pane's corner does, out of the corner that was touched: power, the
+ * display's settings, and the Appearance and Layout doors every place carries — and, while a
+ * display runs, the scale rail along the page's leading
  * edge, which is out only while that tab is. Between the corners the edges are X's: a maximised
  * window is touchable to its rim.
  */
 public final class X11PaneFrame extends PaneContentFrame {
 
     private static final int ACTION_HELP = 2;
-    private static final int ACTION_EDITOR = 3;
+    /** The sliders, which open Appearance; package-private so a test can find the button. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_EDITOR = 3;
+    /** The grid beside them, which opens Layout. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_LAYOUT = 4;
 
     /** What the page needs from the launcher. */
     public interface Host {
@@ -61,8 +65,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         /** The cog: open the display's settings. */
         default void openDisplaySettings() { }
         default void showHelpOverlay() {}
-        /** The sliders: open the surface editor on this place, as the terminal pane's tab does. */
+        /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
+        /** The grid: open the Layout editor on this place, as every corner tab does. */
+        default void openLayoutEditor() {}
         /**
          * True when one of the launcher's own chords claimed this key, in which case X must not
          * see it. Everything else is the display's.
@@ -89,7 +95,7 @@ public final class X11PaneFrame extends PaneContentFrame {
         if (mWatchIsDisplays && mTapListener != null) mTapListener.onDisplayDrag();
     }
 
-    /** The buttons the page's border tab carries: power, and the display's settings. */
+    /** The rest of the buttons the page's border tab carries. */
     private static final int ACTION_POWER = 0;
     private static final int ACTION_SETTINGS = 1;
 
@@ -164,11 +170,13 @@ public final class X11PaneFrame extends PaneContentFrame {
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, CornerTabGlyphs.POWER),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
+            PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
         mControls.setListener(id -> {
             if (mHost == null) return;
             if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
             else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
+            else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });

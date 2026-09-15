@@ -49,8 +49,8 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps. */
     private static final float CORNER_DP = CornerZones.SIZE_DP;
-    /** The tab: four 30dp buttons 8dp apart, 5dp of padding, 3dp in from the trailing edge. */
-    private static final float TAB_WIDTH_DP = 154f;
+    /** The tab: five 30dp buttons 8dp apart, 5dp of padding, 3dp in from the trailing edge. */
+    private static final float TAB_WIDTH_DP = 192f;
     private static final float TAB_INSET_DP = 3f;
     /** The middle of the gap between Settings and Edit. */
     private static final float TAB_SPLIT_DP = 39f;
@@ -63,7 +63,8 @@ public class WidgetPaneFrameTapTest {
         @Override public void openWidgetGridSettings() { log.add("settings"); }
         @Override public void editWidgets() { log.add("edit"); }
         @Override public void showHelpOverlay() { log.add("help"); }
-        @Override public void openSurfaceEditor() { log.add("editor"); }
+        @Override public void openSurfaceEditor() { log.add("appearance"); }
+        @Override public void openLayoutEditor() { log.add("layout"); }
         @Override public int widgetGridColumns() { return columns; }
         @Override public int widgetGridRows() { return rows; }
         @Override public void setWidgetGrid(int newColumns, int newRows) {
@@ -99,10 +100,16 @@ public class WidgetPaneFrameTapTest {
         return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + (TAB_SPLIT_DP + 8f) * density;
     }
 
-    /** The third button: the sliders that open the surface editor, centred at 96dp into the tab. */
+    /** The third button: the sliders that open Appearance, centred 96dp into the tab. */
     private static float slidersX(Activity activity) {
         float density = density(activity);
         return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + 96f * density;
+    }
+
+    /** The fourth button: the grid that opens Layout, one button and gap further along. */
+    private static float layoutX(Activity activity) {
+        float density = density(activity);
+        return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + 134f * density;
     }
 
     private static float tabCentreY(Activity activity) {
@@ -288,8 +295,12 @@ public class WidgetPaneFrameTapTest {
         assertFalse(page.isControlsTabShown());
     }
 
+    /**
+     * The page's two editor doors, side by side: the sliders open Appearance, the grid beside
+     * them opens Layout, and either one puts the tab away behind it.
+     */
     @Test
-    public void theSlidersOpenTheSurfaceEditorAndPutTheTabAway() {
+    public void theSlidersOpenAppearanceAndTheGridOpensLayout() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -298,7 +309,12 @@ public class WidgetPaneFrameTapTest {
         RectF bounds = new RectF();
         page.controlsTab().tabBounds(bounds);
         tap(page, slidersX(activity), bounds.centerY());
-        assertEquals(Collections.singletonList("editor"), calls.log);
+        assertEquals(Collections.singletonList("appearance"), calls.log);
+        assertFalse(page.isControlsTabShown());
+
+        tapCorner(page);
+        tap(page, layoutX(activity), bounds.centerY());
+        assertEquals(Arrays.asList("appearance", "layout"), calls.log);
         assertFalse(page.isControlsTabShown());
     }
 

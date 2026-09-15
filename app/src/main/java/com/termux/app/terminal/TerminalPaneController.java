@@ -179,8 +179,10 @@ public class TerminalPaneController {
         default void showHelpOverlay() {}
         /** Those controls are going away again, however the user asked for that. */
         default void onPaneControlsDismissed() {}
-        /** The lone pane's corner asked for the surface editor. */
+        /** The lone pane's corner asked for the Appearance editor. */
         default void openSurfaceEditor() {}
+        /** The lone pane's corner asked for the Layout editor. */
+        default void openLayoutEditor() {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
         /** Spawn a new shell carrying a session name; defaults to an unnamed shell. */
@@ -3152,9 +3154,11 @@ public class TerminalPaneController {
         private static final int ACTION_MOVE_PANE = 0;
         private static final int ACTION_MAXIMIZE = 1;
         private static final int ACTION_CLOSE = 2;
-        /** Open the surface editor on this page. */
+        /** Open the Appearance editor on this place. */
         private static final int ACTION_SURFACE_EDITOR = 3;
         private static final int ACTION_HELP = 4;
+        /** Open the Layout editor on this place. */
+        private static final int ACTION_LAYOUT_EDITOR = 5;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -3234,14 +3238,17 @@ public class TerminalPaneController {
 
         /**
          * What the tab carries, for the pane it is out on. Alone, a pane has nothing to move,
-         * maximise or close, so it offers the editor instead; maximised, it has no neighbour to
-         * swap with. Help closes every one of them.
+         * maximise or close, so it offers the two editor doors instead — Appearance and Layout,
+         * the pair every place on the wall carries; maximised, it has no neighbour to swap with.
+         * Help closes every one of them.
          */
         private void applyControlActions() {
             List<PaneControlsView.Action> actions = new ArrayList<>(4);
             if (isLonePane()) {
                 actions.add(PaneControlsView.Action.glyph(ACTION_SURFACE_EDITOR,
                     CornerTabGlyphs.APPEARANCE));
+                actions.add(PaneControlsView.Action.glyph(ACTION_LAYOUT_EDITOR,
+                    CornerTabGlyphs.LAYOUT));
             } else {
                 if (mMaximizedLeaf == null) {
                     actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE, this::drawMoveMark,
@@ -3469,6 +3476,9 @@ public class TerminalPaneController {
             } else if (action == ACTION_SURFACE_EDITOR) {
                 dismissControls();
                 mHost.openSurfaceEditor();
+            } else if (action == ACTION_LAYOUT_EDITOR) {
+                dismissControls();
+                mHost.openLayoutEditor();
             }
         }
 

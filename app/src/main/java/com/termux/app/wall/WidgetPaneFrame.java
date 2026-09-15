@@ -32,7 +32,8 @@ import com.termux.app.terminal.PaneSurfaceStyle;
  * keeps its app-widget host views across the move.
  *
  * <p>A tap on one of the page's four corners drops the same tab the Display page's corners drop,
- * with the page's own two buttons: its settings, and the pencil that starts editing the widgets.
+ * with the page's own buttons: its settings, the pencil that starts editing the widgets, and the
+ * two doors every place carries — Appearance and Layout.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
  * While a widget is being edited that pair is replaced by the grid's size, which opens the wheels
  * that change it. Everything between the corners is the widgets': a grid that reaches the rim is
@@ -47,8 +48,10 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         /** The pencil: start editing the widgets, exactly as the long-press menu does. */
         void editWidgets();
         default void showHelpOverlay() {}
-        /** The sliders: open the surface editor on this place, as the terminal pane's tab does. */
+        /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
+        /** The grid: open the Layout editor on this place, as every corner tab does. */
+        default void openLayoutEditor() {}
         /** The columns the grid is showing now. */
         int widgetGridColumns();
         /** The rows the grid is showing now. */
@@ -63,6 +66,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_GRID_SIZE = 2;
     private static final int ACTION_HELP = 3;
     private static final int ACTION_EDITOR = 4;
+    private static final int ACTION_LAYOUT = 5;
 
     private final PaneRim mRim = new PaneRim();
     private final CornerBracket mBracket = new CornerBracket();
@@ -160,6 +164,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
             PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
+            PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
     }
 
@@ -180,6 +185,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         if (mHost == null) return;
         if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
         else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
+        else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
         else if (id == ACTION_SETTINGS) mHost.openWidgetGridSettings();
         else if (id == ACTION_EDIT) mHost.editWidgets();
     }

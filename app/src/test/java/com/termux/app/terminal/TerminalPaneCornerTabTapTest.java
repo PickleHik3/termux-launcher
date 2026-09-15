@@ -42,7 +42,8 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Modelled on the Widgets page's tap test, with one extra question that page never had to ask —
  * whether a tab built from a list of any length still hands every one of its buttons to the right
- * action, five of them included, since a fifth is what the Layout editor will add.
+ * action, five of them included, which is what the Widgets and Display pages' tabs carry now that
+ * Layout has a button of its own.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -61,24 +62,32 @@ public class TerminalPaneCornerTabTapTest {
         @Override public void onTreesChanged() {}
         @Override public String defaultCwd() { return "/"; }
         @Override public void showHelpOverlay() { log.add("help"); }
-        @Override public void openSurfaceEditor() { log.add("editor"); }
+        @Override public void openSurfaceEditor() { log.add("appearance"); }
+        @Override public void openLayoutEditor() { log.add("layout"); }
     }
 
     // ---------------------------------------------------------------- the four actions
 
-    /** A pane on its own has nothing to move, maximise or close: it offers the editor, and help. */
+    /**
+     * A pane on its own has nothing to move, maximise or close: it offers the two editor doors —
+     * Appearance and Layout — and help.
+     */
     @Test
-    public void aLonePanesTabOffersTheEditorAndHelp() {
+    public void aLonePanesTabOffersBothEditorsAndHelp() {
         Fixture fixture = fixture();
         fixture.showTab();
-        assertEquals("two buttons on a lone pane", 2, fixture.slots().length);
+        assertEquals("three buttons on a lone pane", 3, fixture.slots().length);
 
         fixture.tapSlot(0);
-        assertEquals(Arrays.asList("editor"), fixture.host.log);
+        assertEquals(Arrays.asList("appearance"), fixture.host.log);
 
         fixture.showTab();
         fixture.tapSlot(1);
-        assertEquals(Arrays.asList("editor", "help"), fixture.host.log);
+        assertEquals(Arrays.asList("appearance", "layout"), fixture.host.log);
+
+        fixture.showTab();
+        fixture.tapSlot(2);
+        assertEquals(Arrays.asList("appearance", "layout", "help"), fixture.host.log);
     }
 
     /**

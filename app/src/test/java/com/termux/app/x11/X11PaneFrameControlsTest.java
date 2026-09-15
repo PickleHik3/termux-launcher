@@ -1,5 +1,6 @@
 package com.termux.app.x11;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
@@ -24,6 +25,10 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -148,6 +153,48 @@ public class X11PaneFrameControlsTest {
         tap(page, x, y);
         assertFalse(page.isControlsTabShown());
         assertFalse(page.isScaleRailShown());
+    }
+
+    /**
+     * The page's two editor doors: the sliders open Appearance, the grid beside them opens
+     * Layout, and each puts the tab and the rail away behind it.
+     */
+    @Test
+    public void theTabCarriesTheAppearanceAndLayoutDoors() {
+        X11PaneFrame page = pageWithControlsOut();
+        List<String> log = new ArrayList<>();
+        page.setHost(new X11PaneFrame.Host() {
+            @Override public void startDisplay() {}
+            @Override public void openSurfaceEditor() { log.add("appearance"); }
+            @Override public void openLayoutEditor() { log.add("layout"); }
+        });
+
+        tapAction(page, X11PaneFrame.ACTION_EDITOR);
+        assertEquals(Collections.singletonList("appearance"), log);
+        assertFalse(page.isControlsTabShown());
+        assertFalse(page.isScaleRailShown());
+
+        tap(page, WIDTH - 2f, 2f);
+        settle();
+        tapAction(page, X11PaneFrame.ACTION_LAYOUT);
+        assertEquals(Arrays.asList("appearance", "layout"), log);
+        assertFalse(page.isControlsTabShown());
+        assertFalse(page.isScaleRailShown());
+    }
+
+    /** Tap wherever the tab says that button is, which is the only way a finger can find it. */
+    private static void tapAction(X11PaneFrame page, int id) {
+        PaneControlsView tab = page.controlsTab();
+        RectF bounds = new RectF();
+        tab.tabBounds(bounds);
+        float y = bounds.centerY();
+        for (float x = bounds.left; x <= bounds.right; x += 1f) {
+            if (tab.actionAt(x, y) == id) {
+                tap(page, x, y);
+                return;
+            }
+        }
+        throw new AssertionError("no button on the tab for action " + id);
     }
 
     @Test

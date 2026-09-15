@@ -13705,7 +13705,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
-                TermuxActivity.this.openSurfaceEditorArrange();
+                TermuxActivity.this.openSurfaceEditor();
+            }
+            @Override public void openLayoutEditor() {
+                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
             }
             @Override public void openWidgetGridSettings() {
                 ActivityUtils.startActivity(TermuxActivity.this,
@@ -13764,7 +13767,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
-                TermuxActivity.this.openSurfaceEditorArrange();
+                TermuxActivity.this.openSurfaceEditor();
+            }
+            @Override public void openLayoutEditor() {
+                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.DISPLAY);
             }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
             @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
@@ -16692,6 +16698,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openSurfaceEditor() {
             TermuxActivity.this.openSurfaceEditor();
+        }
+
+        @Override public void openLayoutEditor() {
+            TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.TERMINAL);
         }
 
         @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,
