@@ -53,6 +53,15 @@ public final class TourViewTargets implements TourTargets {
          *     "space", or a letter
          */
         boolean findTourKeyRect(@NonNull String keyName, @NonNull Rect outOnScreen);
+
+        /**
+         * The ? on the corner tab that is up, in screen coordinates, or false when no tab is
+         * showing. The tab draws its buttons rather than laying them out as views, so only the
+         * chrome that drew it can say where that one is.
+         */
+        default boolean findTourHelpButtonRect(@NonNull Rect outOnScreen) {
+            return false;
+        }
     }
 
     @NonNull private final ViewFinder mFinder;
@@ -98,9 +107,11 @@ public final class TourViewTargets implements TourTargets {
                 return rectInOverlay(extraKeyView(KEYBOARD_TOGGLE_KEY_NAME),
                     "the extra keys row is down or is not carrying the keyboard key");
             // Drawn by the pane's own corner tab rather than laid out as a view, so the chrome
-            // measures it; until it does, the card shows without a glow like any other.
+            // measures it. Before the tab is up there is no ? to glow, and the card glows the
+            // corner the tab comes out of instead — which is what its own sentence asks for.
             case HELP_BUTTON:
-                return miss("the corner tab's help button is not measured yet");
+                Rect help = helpButtonRect();
+                return help != null ? help : paneCornerRect();
             case PANE_CORNER:
                 return paneCornerRect();
             // Both dock styles are the same view; landscape swaps it for the rail.
@@ -174,6 +185,16 @@ public final class TourViewTargets implements TourTargets {
             if (found != null) return found;
         }
         return null;
+    }
+
+    /** The ? of the corner tab that is up, converted out of screen coordinates into the overlay's. */
+    @Nullable
+    private Rect helpButtonRect() {
+        Rect onScreen = new Rect();
+        if (!mFinder.findTourHelpButtonRect(onScreen) || onScreen.isEmpty()) return null;
+        mOverlay.getLocationOnScreen(mLocation);
+        onScreen.offset(-mLocation[0], -mLocation[1]);
+        return onScreen;
     }
 
     /**

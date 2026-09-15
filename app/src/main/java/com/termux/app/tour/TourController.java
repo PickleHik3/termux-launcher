@@ -174,6 +174,19 @@ public final class TourController {
     }
 
     /**
+     * Re-reads the run for the phone it is about to run on. The two sentences that depend on a
+     * system setting — the way back from an app, and which way round the keyboard lesson goes —
+     * are only right if they are built from what the phone says when the run starts, so the host
+     * hands the run back in before every start, replay, resume and practice. Ignored while a card
+     * is up: changing the run under a running one would move the card the user is reading.
+     */
+    public void setSteps(List<TourStep> steps) {
+        if (mRunning || steps == null || steps.isEmpty()) return;
+        mSteps.clear();
+        mSteps.addAll(steps);
+    }
+
+    /**
      * Whether the user has already been through a run. Any finished run counts, whatever version
      * it was: someone who sat through the thirteen-card run is not shown this one on upgrade.
      */

@@ -50,6 +50,17 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         boolean isTerminalSheetUp();
 
         boolean isSurfaceEditorUp();
+
+        /** Whether the help overlay is up, which every card waits behind. */
+        boolean isHelpUp();
+
+        /**
+         * The ? of the corner tab that is up, in screen coordinates, or false when none is. The
+         * tab draws its buttons, so the chrome is the only thing that can measure this one.
+         */
+        default boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
+            return false;
+        }
     }
 
     /**
@@ -62,6 +73,26 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         void returnToTerminal();
     }
 
+    /**
+     * The two things about the phone the run cannot work out for itself: whether this launcher is
+     * the home app — which changes what the second lesson says and whether the last question is
+     * asked at all — and the way to the system's own home-app chooser.
+     */
+    public interface HomeHost {
+        boolean isLauncherHomeApp();
+
+        void openHomeAppChooser();
+    }
+
+    /**
+     * The card an older run that stopped somewhere unmapped is met with. Not part of the run: it
+     * is the question asked before one starts, and it is answered with a button.
+     */
+    private static final TourStep RESUME_OR_RESTART_CARD = new TourStep("resume_or_restart",
+        TourStep.Kind.CHOICE, new int[] {R.string.tour_card_resume_or_restart},
+        new String[] {TourTargets.NONE}, new String[] {}, new TourGesture[] {TourGesture.NONE},
+        false, false, new TourAction[] {TourAction.RESUME, TourAction.RESTART});
+
     /** The place the run is taught on: the wall's own home page. */
     public static final String HOME_PLACE = com.termux.app.wall.PaneWallPolicy.homePage().name();
 
@@ -71,6 +102,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Nullable private final KeyProbe mKeyProbe;
     @Nullable private ChromeProbe mChromeProbe;
     @Nullable private WallHost mWallHost;
+    @Nullable private HomeHost mHomeHost;
+    /** A run that was asked for while help was up, held until help goes away. */
+    @Nullable private Runnable mStartWaitingForHelp;
     /** What the in-app keyboard has latched, for the chord cards' walking glow. */
     private boolean mCtrlLatched;
     private boolean mAltLatched;
@@ -137,20 +171,68 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mWallHost = host;
     }
 
+    /** The phone's home-app setting, which the run reads and the last card can change. */
+    public void setHomeHost(@Nullable HomeHost host) {
+        mHomeHost = host;
+    }
+
     /**
      * Starts the run for someone who has just finished first launch. Does nothing for a user who
      * has already been through one, which is what keeps an upgrade silent.
      */
     public void startIfNeeded() {
         if (mController.isFinished() || mController.isRunning()) return;
+        if (waitForHelpToClose(this::startIfNeeded)) return;
+        rebuildRunForThisPhone();
         bringTheWallHome();
         mController.startIfNeeded();
     }
 
     /** Starts the run from card one, whatever came before: what Replay will ask for. */
     public void restart() {
+        if (waitForHelpToClose(this::restart)) return;
+        rebuildRunForThisPhone();
         bringTheWallHome();
         mController.start();
+    }
+
+    /**
+     * One lesson on its own, for help's "Try it". Writes nothing through: practising a lesson can
+     * never finish, restart or skip the real run.
+     */
+    public boolean startPractice(@Nullable String lessonId) {
+        if (lessonId == null) return false;
+        if (waitForHelpToClose(() -> startPractice(lessonId))) return true;
+        rebuildRunForThisPhone();
+        return mController.startPractice(lessonId);
+    }
+
+    /**
+     * Whether the run has to wait: a card drawn over help is in the way of the page of answers the
+     * first lesson spent itself teaching the user to reach, so anything that would put one up
+     * while help is open is held until help closes.
+     */
+    private boolean waitForHelpToClose(@NonNull Runnable start) {
+        if (!isHelpUp()) return false;
+        TourLog.d("help is up; the run waits for it to close");
+        mStartWaitingForHelp = start;
+        return true;
+    }
+
+    private boolean isHelpUp() {
+        ChromeProbe probe = mChromeProbe;
+        return probe != null ? probe.isHelpUp() : mSignals.isHelpShown();
+    }
+
+    /**
+     * The run, built for the phone it is about to run on. Two of its sentences depend on what the
+     * phone is set to right now — the way back from an app, and which way round the keyboard
+     * lesson goes — and both were read from a launcher that had not been asked yet when the tour
+     * was first wired up.
+     */
+    private void rebuildRunForThisPhone() {
+        mController.setSteps(TourRun.steps(new TourRun.RunContext(
+            mHomeHost != null && mHomeHost.isLauncherHomeApp(), mSignals.isKeyboardShown())));
     }
 
     /**
@@ -159,6 +241,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
      * @return true when a run was actually resumed.
      */
     public boolean resumeIfInProgress() {
+        if (waitForHelpToClose(this::resumeIfInProgress)) return false;
+        rebuildRunForThisPhone();
         boolean resumed = mController.resumeIfInProgress();
         if (resumed) bringTheWallHome();
         return resumed;
@@ -289,6 +373,36 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
+     * Whether help is up, once it has settled either way. Both the signal the first lesson is
+     * cleared by and the chrome every card waits behind, so a run held back while help was open
+     * is let go here.
+     */
+    public void onHelpShownSettled(boolean shown) {
+        mSignals.onHelpShownSettled(shown);
+        refreshCardVisibility();
+        if (shown) return;
+        Runnable waiting = mStartWaitingForHelp;
+        if (waiting == null) return;
+        mStartWaitingForHelp = null;
+        waiting.run();
+    }
+
+    /** Whether the in-app keyboard is showing, once it has settled either way. */
+    public void onKeyboardShownSettled(boolean shown) {
+        mSignals.onKeyboardShownSettled(shown);
+    }
+
+    /** An Android app was launched from the launcher, however the user found it. */
+    public void onAppLaunched() {
+        mSignals.onAppLaunched();
+    }
+
+    /** The launcher is in front of the user again. */
+    public void onLauncherResumed() {
+        mSignals.onLauncherResumed();
+    }
+
+    /**
      * Something that covers the home screen whole opened or closed. Cheap, and safe to call on
      * anything that might have moved one of them.
      */
@@ -303,7 +417,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     private void refreshCardVisibility() {
         TourOverlayView overlay = mOverlay;
         if (overlay == null) return;
-        TourStep step = mController.currentStep();
+        // The resume-or-restart question is a card with no run behind it yet: without this the
+        // policy would read "no card is up" and take the question off the screen.
+        TourStep step = mController.isAwaitingResumeChoice()
+            ? RESUME_OR_RESTART_CARD : mController.currentStep();
         java.util.EnumSet<TourChrome> chrome = chromeUp();
         int presentation = TourCardVisibility.decide(step, mController.currentStage(), chrome,
             mSignals.isOnHomePlace());
@@ -324,6 +441,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         if (probe.isCommandPaletteUp()) up.add(TourChrome.PALETTE);
         if (probe.isTerminalSheetUp()) up.add(TourChrome.TERMINAL_SHEET);
         if (probe.isSurfaceEditorUp()) up.add(TourChrome.SURFACE_EDITOR);
+        if (probe.isHelpUp()) up.add(TourChrome.HELP);
         return up;
     }
 
@@ -344,7 +462,7 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             TourLog.d("card " + step.id + ":" + stage + " has nowhere to show: no content view");
             return;
         }
-        overlay.showStep(step, stage);
+        overlay.showStep(step, stage, mController.currentActions());
         applyChordGlow();
         refreshCardVisibility();
         if (TourLog.enabled()) {
@@ -362,20 +480,46 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         removeOverlay();
     }
 
+    @Override
+    public void onTourHomeChoice(TourController.Choice choice) {
+        TourLog.d("home-screen card answered " + choice);
+        if (choice == TourController.Choice.USE_AS_HOME && mHomeHost != null)
+            mHomeHost.openHomeAppChooser();
+    }
+
+    /**
+     * A run from the older tour stopped somewhere this one has no equivalent for. The card says so
+     * and offers the two ways on; both begin at the first lesson, and the difference is only what
+     * the user was told.
+     */
+    @Override
+    public void onTourResumeOrRestart() {
+        TourOverlayView overlay = obtainOverlay();
+        if (overlay == null) return;
+        overlay.showStep(RESUME_OR_RESTART_CARD, 0, RESUME_OR_RESTART_CARD.actions());
+        refreshCardVisibility();
+    }
+
     // TourOverlayView.Callbacks
 
     @Override
-    public void onTourSkipTapped() {
+    public void onTourActionTapped(@NonNull TourAction action) {
         TourStep step = mController.currentStep();
-        TourLog.d("skip tapped on card " + (step == null ? "none" : step.id)
+        TourLog.d(action + " tapped on card " + (step == null ? "none" : step.id)
             + ":" + mController.currentStage());
-        mController.skip();
-    }
-
-    @Override
-    public void onTourFinishTapped() {
-        TourLog.d("done tapped on the closing card");
-        mController.finish();
+        switch (action) {
+            case BACK: mController.back(); break;
+            case SKIP_STEP: mController.skip(); break;
+            case END_TOUR: mController.endTour(); break;
+            case DONE:
+            case END_PRACTICE: mController.endPractice(); break;
+            case USE_AS_HOME: mController.choose(TourController.Choice.USE_AS_HOME); break;
+            case KEEP_TRYING: mController.choose(TourController.Choice.KEEP_TRYING); break;
+            case CONTINUE: mController.choose(TourController.Choice.CONTINUE); break;
+            case START_USING: mController.finish(); break;
+            case RESUME: mController.resumeChosen(); break;
+            case RESTART: mController.restartChosen(); break;
+        }
     }
 
     /** What the card that is up is waiting for, for the log. */
@@ -446,6 +590,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     public boolean findTourKeyRect(@NonNull String keyName,
                                    @NonNull android.graphics.Rect outOnScreen) {
         return mKeyProbe != null && mKeyProbe.keyRectOnScreen(keyName, outOnScreen);
+    }
+
+    @Override
+    public boolean findTourHelpButtonRect(@NonNull android.graphics.Rect outOnScreen) {
+        return mChromeProbe != null && mChromeProbe.helpButtonRectOnScreen(outOnScreen);
     }
 
     @Nullable
