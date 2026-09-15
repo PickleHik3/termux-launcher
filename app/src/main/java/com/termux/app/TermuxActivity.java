@@ -312,6 +312,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             content.addView(mHelpOverlay, new android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
+        // A run that is partway through a lesson has nowhere to put a practice card, so help does
+        // not offer one.
+        mHelpOverlay.setPracticeAvailable(mFirstBootTour == null || mFirstBootTour.canStartPractice());
         mHelpOverlay.show(currentWallPlace());
         if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(true);
     }

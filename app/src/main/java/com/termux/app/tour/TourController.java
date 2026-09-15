@@ -263,8 +263,12 @@ public final class TourController {
      * Shows one lesson on its own: help's "Try it". It clears on that lesson's own signals and
      * ends there, and writes nothing — not the completed version, not the card, not the stage and
      * not the skip flag — so practising a lesson can never finish, restart or skip the real run.
+     *
+     * <p>Refused outright while a real run is up: replacing the card the run is waiting on loses
+     * the run's place, and the signals the practice clears on are the ones the run wanted.
      */
     public boolean startPractice(String stepId) {
+        if (mRunning && !mPracticing) return false;
         int index = indexOf(stepId);
         if (index < 0) return false;
         mPracticing = true;

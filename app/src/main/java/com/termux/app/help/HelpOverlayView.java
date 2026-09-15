@@ -74,6 +74,8 @@ public final class HelpOverlayView extends FrameLayout {
     private final Map<String, Integer> boxColors = new HashMap<>();
     private final Runnable onDismiss;
     private PracticeListener practiceListener;
+    /** Whether the launcher can take a "Try it" right now; a run already up cannot. */
+    private boolean practiceAvailable = true;
     private HelpTargets.Snapshot snapshot;
     private HelpLeaderRouter.Result routed;
     private TerminalDress dress;
@@ -112,6 +114,19 @@ public final class HelpOverlayView extends FrameLayout {
     /** Where "Try it" sends the user. */
     public void setPracticeListener(PracticeListener listener) {
         this.practiceListener = listener;
+    }
+
+    /**
+     * Whether "Try it" is offered at all. Set before {@link #show}: a first-run tour already
+     * partway through a lesson cannot take one, and a dead button is kinder than a lost run.
+     */
+    public void setPracticeAvailable(boolean available) {
+        this.practiceAvailable = available;
+    }
+
+    /** "Try it" needs a lesson to hand over and a launcher in a state to take it. */
+    private boolean canTryIt() {
+        return practiceAvailable && model.canTryIt();
     }
 
     public void show(PaneWallPage place) {
@@ -324,7 +339,7 @@ public final class HelpOverlayView extends FrameLayout {
         LinearLayout second = buttonRow();
         second.addView(button(getContext().getString(R.string.help_show_gesture),
             model.canShowGesture(), () -> command(model.showGesture())), weighted());
-        second.addView(button(getContext().getString(R.string.help_try_it), model.canTryIt(),
+        second.addView(button(getContext().getString(R.string.help_try_it), canTryIt(),
             () -> command(model.tryIt())), weighted());
         panel.addView(second, rowParams(dp(6)));
         placePanel(panel, targetRect(model.highlightTargetId()));

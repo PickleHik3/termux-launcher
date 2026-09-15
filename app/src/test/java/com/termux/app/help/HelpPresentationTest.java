@@ -163,6 +163,19 @@ public class HelpPresentationTest {
         assertEquals("find_help", practised);
     }
 
+    @Test public void tryItIsNotOfferedWhileTheLauncherCannotTakeOne() {
+        overlay.setPracticeAvailable(false);
+        open(PaneWallPage.TERMINAL);
+        startingWith("Pane corners\n").performClick();
+        layout();
+        TextView tryIt = exactly("Try it");
+        assertNotNull(tryIt);
+        assertFalse(tryIt.isEnabled());
+        tryIt.performClick();
+        assertTrue(overlay.isShowing());
+        assertNull(practised);
+    }
+
     @Test public void theWindowsBoxCoversTheChipsAndThePlus() {
         TerminalWindowBar bar = new TerminalWindowBar(activity, null);
         bar.setId(R.id.terminal_window_bar);

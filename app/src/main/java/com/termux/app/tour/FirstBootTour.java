@@ -197,11 +197,24 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
+     * Whether help may offer "Try it" at all. A run that is partway through a lesson cannot take
+     * one: the practice card would replace the card the run is waiting on, and the practice's own
+     * signals would clear it.
+     */
+    public boolean canStartPractice() {
+        return !mController.isRunning() || mController.isPracticing();
+    }
+
+    /**
      * One lesson on its own, for help's "Try it". Writes nothing through: practising a lesson can
      * never finish, restart or skip the real run.
      */
     public boolean startPractice(@Nullable String lessonId) {
         if (lessonId == null) return false;
+        if (!canStartPractice()) {
+            TourLog.d("a run is already up; practice for " + lessonId + " is refused");
+            return false;
+        }
         if (waitForHelpToClose(() -> startPractice(lessonId))) return true;
         rebuildRunForThisPhone();
         return mController.startPractice(lessonId);

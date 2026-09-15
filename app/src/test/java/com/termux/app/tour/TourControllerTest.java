@@ -386,6 +386,26 @@ public class TourControllerTest {
         assertFalse(controller.isRunning());
     }
 
+    @Test
+    public void practiceIsRefusedWhileARunIsUpAndLeavesItWhereItWas() {
+        controller.start();
+        clearTheCard();
+        assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
+        doTheGesture();
+        int stage = controller.currentStage();
+        assertFalse(controller.startPractice(TourRun.KEYBOARD));
+        assertFalse(controller.isPracticing());
+        assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
+        assertEquals(stage, controller.currentStage());
+    }
+
+    @Test
+    public void practiceIsStillAllowedWhileAnotherLessonIsBeingPractised() {
+        assertTrue(controller.startPractice(TourRun.KEYBOARD));
+        assertTrue(controller.startPractice(TourRun.FIND_ACTION));
+        assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
+    }
+
     // Resume.
 
     @Test
