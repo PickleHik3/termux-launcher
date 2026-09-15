@@ -13,6 +13,7 @@ replaced without warning.
 | `~/.termux/fonts.conf` | yes, if absent | Terminal faces, symbol maps, fallback chain, ligatures, OpenType features, variable axes, box drawing, cell metrics |
 | `~/.termux/termux.properties` | yes, if absent | `TERM`, volume and back keys, extra keys, cursor, scrollback, margins, colours, app behaviour |
 | `~/.termux/keyboard/layout.xml` | no — copy it yourself | In-app keyboard layout, including the space bar's swipe slots |
+| `~/.config/kitty/kitty.conf` | no — never created by the app | Font directives only, in kitty's own spelling; every other kitty setting is ignored |
 
 The three seeded files arrive with every directive commented out, so a fresh
 install behaves exactly as it did before they existed. Uncomment what you want.
@@ -38,6 +39,10 @@ Precedence, from strongest to weakest:
    is the app-managed one
 3. `~/.termux/font.ttf` and `font-italic.ttf` — the native Termux contract, also
    what Termux:Styling writes
+
+Below all three, `~/.config/kitty/kitty.conf` is read first if you keep one, for
+its font directives only. The `kitty.conf` example here lists exactly which
+lines are read; the app never creates that file.
 
 So the picker and a hand-written `fonts.conf` can coexist: set only the
 directives you care about here and the fragment supplies the rest. Errors from a
