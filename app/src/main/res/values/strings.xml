@@ -92,6 +92,8 @@
     <string name="settings_clipboard_header">Clipboard</string>
     <string name="settings_osc52_clipboard_read_title">Let programs read the clipboard</string>
     <string name="settings_osc52_clipboard_read_summary">Programs in the terminal can paste what you copied.</string>
+    <string name="settings_trim_wrapped_trailing_spaces_title">Trim trailing spaces on wrapped lines</string>
+    <string name="settings_trim_wrapped_trailing_spaces_summary">Copying text drops the extra spaces left at the end of a wrapped line instead of keeping them.</string>
     <string name="settings_sessions_panes_header">Sessions and panes</string>
     <string name="settings_split_pane_controls_title">Split-pane controls</string>
     <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
