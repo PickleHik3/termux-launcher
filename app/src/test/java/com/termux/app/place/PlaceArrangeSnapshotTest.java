@@ -15,6 +15,7 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -55,6 +56,9 @@ public class PlaceArrangeSnapshotTest {
         places.setAzRowShown(PaneWallPage.TERMINAL, PORTRAIT, false);
         places.setKeyboardForm(PaneWallPage.TERMINAL, PORTRAIT, KeyboardForm.SPLIT);
         places.setKeyboardOnEnter(PaneWallPage.TERMINAL, KeyboardOnEnter.CLOSED);
+        places.setDockHeightScale(PaneWallPage.TERMINAL, PORTRAIT, 1.4f);
+        places.setKeyboardHeightScale(PaneWallPage.TERMINAL, PORTRAIT, 1.25f);
+        places.setKeyboardChinDp(PaneWallPage.TERMINAL, PORTRAIT, 16);
         // And, after a rotation mid-session, the other orientation as well.
         places.setStatusBarEdge(PaneWallPage.TERMINAL, LANDSCAPE, Edge.LEFT);
         places.setWidgetColumns(PaneWallPage.WIDGETS, LANDSCAPE, 6);
@@ -99,6 +103,46 @@ public class PlaceArrangeSnapshotTest {
         assertEquals("the orientation a rotation handed the editor comes back too",
             Edge.TOP, places.statusBarEdge(PaneWallPage.TERMINAL, LANDSCAPE));
         assertEquals(4, places.widgetColumns(PaneWallPage.WIDGETS, LANDSCAPE));
+        assertEquals(TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT,
+            places.dockHeightScale(PaneWallPage.TERMINAL, PORTRAIT), 0.0001f);
+        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            places.keyboardHeightScale(PaneWallPage.TERMINAL, PORTRAIT), 0.0001f);
+        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            places.keyboardChinDp(PaneWallPage.TERMINAL, PORTRAIT));
+    }
+
+    @Test
+    public void eachSizeIsSomethingToLoseOnItsOwn() {
+        String entry = PlaceArrangeSnapshot.capture(places).signature();
+
+        places.setDockHeightScale(PaneWallPage.WIDGETS, LANDSCAPE, 1.4f);
+        String afterDock = PlaceArrangeSnapshot.capture(places).signature();
+        assertNotEquals("the dock's height", entry, afterDock);
+
+        places.setKeyboardHeightScale(PaneWallPage.WIDGETS, LANDSCAPE, 1.25f);
+        String afterKeyboard = PlaceArrangeSnapshot.capture(places).signature();
+        assertNotEquals("the keyboard's height", afterDock, afterKeyboard);
+
+        places.setKeyboardChinDp(PaneWallPage.WIDGETS, LANDSCAPE, 16);
+        assertNotEquals("the keyboard's chin", afterKeyboard,
+            PlaceArrangeSnapshot.capture(places).signature());
+    }
+
+    @Test
+    public void discardingPutsEverySizeBackWhereItStood() {
+        places.setKeyboardHeightScale(PaneWallPage.DISPLAY, LANDSCAPE, 0.7f);
+        places.setKeyboardChinDp(PaneWallPage.DISPLAY, LANDSCAPE, 8);
+        places.setDockHeightScale(PaneWallPage.DISPLAY, LANDSCAPE, 2.4f);
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+
+        places.setKeyboardHeightScale(PaneWallPage.DISPLAY, LANDSCAPE, 1.6f);
+        places.setKeyboardChinDp(PaneWallPage.DISPLAY, LANDSCAPE, 40);
+        places.setDockHeightScale(PaneWallPage.DISPLAY, LANDSCAPE, 0.5f);
+        entry.restore(places);
+
+        assertEquals(0.7f, places.keyboardHeightScale(PaneWallPage.DISPLAY, LANDSCAPE), 0.0001f);
+        assertEquals(8, places.keyboardChinDp(PaneWallPage.DISPLAY, LANDSCAPE));
+        assertEquals(2.4f, places.dockHeightScale(PaneWallPage.DISPLAY, LANDSCAPE), 0.0001f);
     }
 
     @Test
