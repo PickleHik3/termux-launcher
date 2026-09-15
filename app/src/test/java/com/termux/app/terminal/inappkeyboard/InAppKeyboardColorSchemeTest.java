@@ -109,6 +109,29 @@ public class InAppKeyboardColorSchemeTest {
     }
 
     @Test
+    public void persistedImportedBase16PaletteDerivesAReadableFunctionKeyTier()
+        throws JSONException {
+        // Base16 has no swatch of its own for the function-key tier the live keyboard shows
+        // (InAppKeyboardPaletteFactory), so applyToPalette must derive one rather than leaving
+        // it at the un-migrated default (which would make imported schemes look flat again).
+        Context context = ApplicationProvider.getApplicationContext();
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
+            importedSchemeJson(InAppKeyboardColorScheme.BASE16_COLOR_COUNT, 0x101010, ""));
+
+        Theme.Palette original = InAppKeyboardPaletteFactory.create(context, "system");
+        Theme.Palette imported = scheme.applyToPalette(original);
+
+        assertFalse("function bg differs from the letter key bg",
+            imported.functionKeyBackground == imported.keyBackground);
+        assertTrue("function bg is one tone step darker than the letter key bg",
+            androidx.core.graphics.ColorUtils.calculateLuminance(imported.functionKeyBackground)
+                < androidx.core.graphics.ColorUtils.calculateLuminance(imported.keyBackground));
+        assertTrue("function label stays readable on the derived function bg",
+            androidx.core.graphics.ColorUtils.calculateContrast(
+                imported.functionLabelColor, imported.functionKeyBackground) >= 4.5d);
+    }
+
+    @Test
     public void persistedImportedBase24PaletteRoundTripsWithoutDroppingExtendedColors()
         throws JSONException {
         Context context = ApplicationProvider.getApplicationContext();
