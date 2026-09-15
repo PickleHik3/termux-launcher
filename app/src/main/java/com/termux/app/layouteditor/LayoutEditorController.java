@@ -18,6 +18,7 @@ import android.widget.TextView;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import com.google.android.material.button.MaterialButtonToggleGroup;
@@ -46,9 +47,9 @@ import java.util.List;
  * through, so the place behind the card follows every drop made in the orientation the phone is
  * actually in. The other orientation moves on the miniature alone until the phone is turned.
  *
- * <p>Beneath the picture stand the rows for what no bar can be dragged into — the keyboard, and
- * Home's grid. They write through the same way a drop does, and scroll inside whatever room the
- * canvas above them has left.
+ * <p>Beneath the picture stand the rows for what no bar can be dragged into — the dock's and the
+ * keyboard's height, the keyboard's own choices and its chin, and Home's grid. They write through
+ * the same way a drop does, and scroll inside whatever room the canvas above them has left.
  *
  * <p>✓ keeps the edits, Discard and the revert glyph put every bar back where the editor found it,
  * and Back with something moved asks rather than choosing for the user — the live write-through
@@ -128,6 +129,8 @@ public final class LayoutEditorController {
     @Nullable private LayoutEditorPlan mPlan;
     /** True while the toggle is being restated from the plan, so it writes nothing back. */
     private boolean mRestatingToggle;
+    /** The track a finger is on, which no restatement may move under it. */
+    @Nullable private SeekBar mDraggedSlider;
     /** The rows' own scroller and column, built on first use and refilled per place. */
     @Nullable private ScrollView mRowsScroller;
     @Nullable private LinearLayout mRows;
@@ -321,6 +324,9 @@ public final class LayoutEditorController {
         LinearLayout rows = rowsColumn(card);
         rows.removeAllViews();
         mRowSyncs.clear();
+        // The tracks being replaced are gone, finger or no finger, and the reference would outlive
+        // the view.
+        mDraggedSlider = null;
         Context context = mHost.context();
         Element heading = null;
         for (LayoutEditorPlan.Row row : plan.rows()) {
@@ -330,8 +336,8 @@ public final class LayoutEditorController {
             }
             if (row.group instanceof PlaceArrangeModel.Pills)
                 addPillsRow(context, rows, row, (PlaceArrangeModel.Pills) row.group);
-            else if (row.group instanceof PlaceArrangeModel.Counter)
-                addCounterRow(context, rows, row, (PlaceArrangeModel.Counter) row.group);
+            else if (row.group instanceof PlaceArrangeModel.Track)
+                addTrackRow(context, rows, row, (PlaceArrangeModel.Track) row.group);
         }
         if (mRowsScroller != null) mRowsScroller.scrollTo(0, 0);
     }
@@ -365,12 +371,11 @@ public final class LayoutEditorController {
         return rows;
     }
 
-    /** What the rows under it are about: the keyboard, or Home's grid. */
+    /** What the rows under it are about: the dock, the keyboard, or Home's grid. */
     @NonNull
     private TextView sectionTitle(@NonNull Context context, @NonNull Element element) {
         TextView title = new TextView(context);
-        title.setText(element == Element.WIDGET_GRID
-            ? R.string.settings_layout_widget_grid_title : R.string.settings_layout_keyboard_title);
+        title.setText(headingRes(element));
         title.setTextSize(11f);
         title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
         title.setTextColor(mHost.themeColor(
@@ -382,6 +387,18 @@ public final class LayoutEditorController {
         params.bottomMargin = Math.round(dpToPx(2));
         title.setLayoutParams(params);
         return title;
+    }
+
+    @StringRes
+    private static int headingRes(@NonNull Element element) {
+        switch (element) {
+            case PINNED_APPS:
+                return R.string.termux_surface_tuning_dock;
+            case WIDGET_GRID:
+                return R.string.settings_layout_widget_grid_title;
+            default:
+                return R.string.settings_layout_keyboard_title;
+        }
     }
 
     /**
@@ -440,47 +457,72 @@ public final class LayoutEditorController {
         mRowSyncs.get(mRowSyncs.size() - 1).run();
     }
 
-    /** The widget grid's two counts, on the slider row the appearance editor's numbers use. */
-    private void addCounterRow(@NonNull Context context, @NonNull ViewGroup into,
-                               @NonNull LayoutEditorPlan.Row row,
-                               @NonNull PlaceArrangeModel.Counter counter) {
+    /**
+     * One number on a track: the widget grid's two counts, and the three sizes. Both kinds are the
+     * same row — a label, a track and a number in its own unit — and both write through on every
+     * tick, so the live place follows a finger that is still moving.
+     */
+    private void addTrackRow(@NonNull Context context, @NonNull ViewGroup into,
+                             @NonNull LayoutEditorPlan.Row row,
+                             @NonNull PlaceArrangeModel.Track track) {
         View view = LayoutInflater.from(context)
-            .inflate(R.layout.layout_editor_counter_row, into, false);
-        ((TextView) view.findViewById(R.id.layout_editor_row_label)).setText(counter.labelRes);
+            .inflate(R.layout.layout_editor_slider_row, into, false);
+        ((TextView) view.findViewById(R.id.layout_editor_row_label)).setText(track.labelRes);
         SeekBar slider = view.findViewById(R.id.layout_editor_row_slider);
         TextView value = view.findViewById(R.id.layout_editor_row_value);
-        slider.setContentDescription(context.getString(counter.labelRes));
-        slider.setMax(Math.max(1, counter.max - counter.min));
+        slider.setContentDescription(context.getString(track.labelRes));
+        slider.setMax(Math.max(1, track.max - track.min));
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                PlaceArrangeModel.Counter current = rowCounter(row);
+                PlaceArrangeModel.Track current = rowTrack(row);
                 if (current == null)
                     return;
                 int picked = current.min + progress;
-                value.setText(Integer.toString(picked));
+                value.setText(trackValueText(current, picked));
                 if (!fromUser || picked == current.value)
                     return;
-                // One grid reflow per tick and nothing else: the rows are left standing while the
-                // thumb is down, so the one being dragged is not rebuilt out from under it.
+                // One re-lay per tick and nothing else: the rows are left standing while the thumb
+                // is down, so the one being dragged is not rebuilt out from under it.
                 current.writer.write(picked);
                 afterRowWrite();
             }
 
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStartTrackingTouch(SeekBar bar) {
+                mDraggedSlider = bar;
+            }
 
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                mDraggedSlider = null;
+            }
         });
         mRowSyncs.add(() -> {
-            PlaceArrangeModel.Counter current = rowCounter(row);
+            PlaceArrangeModel.Track current = rowTrack(row);
             if (current == null)
                 return;
             int progress = Math.max(0, Math.min(slider.getMax(), current.value - current.min));
-            if (slider.getProgress() != progress) slider.setProgress(progress);
-            value.setText(Integer.toString(current.value));
+            // A size read back through the store's clamp can land a step off what the finger asked
+            // for; moving the thumb there under the finger would fight the drag.
+            if (slider.getProgress() != progress && mDraggedSlider != slider)
+                slider.setProgress(progress);
+            value.setText(trackValueText(current, current.value));
         });
         into.addView(view);
         mRowSyncs.get(mRowSyncs.size() - 1).run();
+    }
+
+    /** One track's number in its own unit: a bare count, a step of its range, or a length. */
+    @NonNull
+    private String trackValueText(@NonNull PlaceArrangeModel.Track track, int value) {
+        switch (track.unit) {
+            case PERCENT:
+                return mHost.context().getString(
+                    R.string.termux_dock_tuning_value_percent, value);
+            case DP:
+                return mHost.context().getString(R.string.termux_dock_tuning_value_dp, value);
+            default:
+                return Integer.toString(value);
+        }
     }
 
     /** A row wrote through: the place behind the card follows when it is the one on screen. */
@@ -502,10 +544,9 @@ public final class LayoutEditorController {
     }
 
     @Nullable
-    private PlaceArrangeModel.Counter rowCounter(@NonNull LayoutEditorPlan.Row row) {
+    private PlaceArrangeModel.Track rowTrack(@NonNull LayoutEditorPlan.Row row) {
         PlaceArrangeModel.Group group = mPlan == null ? null : mPlan.row(row.element, row.index);
-        return group instanceof PlaceArrangeModel.Counter
-            ? (PlaceArrangeModel.Counter) group : null;
+        return group instanceof PlaceArrangeModel.Track ? (PlaceArrangeModel.Track) group : null;
     }
 
     /** Which segment an id is, or -1 for anything that is not one of the four. */
@@ -578,6 +619,7 @@ public final class LayoutEditorController {
         PaneWallPage place = mPlan == null ? null : mPlan.place();
         mPlan = null;
         mRowsKey = null;
+        mDraggedSlider = null;
         if (mCard != null) {
             mCard.revert.setVisibility(View.GONE);
             mCard.discard.setVisibility(View.GONE);

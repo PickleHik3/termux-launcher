@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One count row beneath the miniature — the widget grid's columns and rows. Label, track and
-     number, the same three columns the appearance editor's number rows stand in. -->
+<!-- One number row beneath the miniature — the widget grid's columns and rows, and the dock's and
+     the keyboard's sizes. Label, track and number, the same three columns the appearance editor's
+     number rows stand in; the number's unit comes from the row it is filled for. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="32dp"
