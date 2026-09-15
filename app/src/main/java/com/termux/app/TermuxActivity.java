@@ -105,6 +105,7 @@ import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceLookPreferences;
 import com.termux.app.place.PlaceOrientation;
+import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
@@ -9101,7 +9102,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // And the sizes, which are the place's and the orientation's rather than the place's
         // alone, so the same getters answer for what is on screen (ADR 0001).
         mPlaceLayoutStore = new PlaceLayoutStore(scoped);
-        scoped.setPlaceSizes(new com.termux.app.place.PlaceSizePreferences(
+        scoped.setPlaceSizes(new PlaceSizePreferences(
             () -> mPlaceLayoutStore, this::currentWallPlace, this::currentPlaceOrientation));
         return scoped;
     }
