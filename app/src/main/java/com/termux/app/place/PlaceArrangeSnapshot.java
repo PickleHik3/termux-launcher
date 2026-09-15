@@ -11,7 +11,8 @@ import java.util.List;
 /**
  * Every place's arrangement, in both orientations, as one immutable value: what the surface editor
  * took a copy of on entry, what its revert puts back, and — folded to a string — how it knows a bar
- * has been moved since.
+ * has been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly
+ * as unsaved as a moved bar.
  *
  * <p>Read and written through {@link PlaceLayoutStore}'s own accessors rather than the raw keys, so
  * a restore writes the value the place was resolving to whether or not it had a scoped key of its
@@ -35,6 +36,9 @@ public final class PlaceArrangeSnapshot {
         final PlaceLayout.KeyboardForm keyboardForm;
         final int widgetColumns;
         final int widgetRows;
+        final float dockHeightScale;
+        final float keyboardHeightScale;
+        final int keyboardChinDp;
 
         Entry(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
               @NonNull PlaceOrientation orientation) {
@@ -49,6 +53,9 @@ public final class PlaceArrangeSnapshot {
             keyboardForm = places.keyboardForm(place, orientation);
             widgetColumns = places.widgetColumns(place, orientation);
             widgetRows = places.widgetRows(place, orientation);
+            dockHeightScale = places.dockHeightScale(place, orientation);
+            keyboardHeightScale = places.keyboardHeightScale(place, orientation);
+            keyboardChinDp = places.keyboardChinDp(place, orientation);
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
@@ -61,6 +68,9 @@ public final class PlaceArrangeSnapshot {
             places.setKeyboardForm(place, orientation, keyboardForm);
             places.setWidgetColumns(place, orientation, widgetColumns);
             places.setWidgetRows(place, orientation, widgetRows);
+            places.setDockHeightScale(place, orientation, dockHeightScale);
+            places.setKeyboardHeightScale(place, orientation, keyboardHeightScale);
+            places.setKeyboardChinDp(place, orientation, keyboardChinDp);
         }
 
         void appendTo(@NonNull StringBuilder out) {
@@ -72,7 +82,10 @@ public final class PlaceArrangeSnapshot {
                 .append(extraKeys).append(',')
                 .append(keyboardMode).append(',')
                 .append(keyboardForm).append(',')
-                .append(widgetColumns).append('x').append(widgetRows).append('|');
+                .append(widgetColumns).append('x').append(widgetRows).append(',')
+                .append(dockHeightScale).append(',')
+                .append(keyboardHeightScale).append(',')
+                .append(keyboardChinDp).append('|');
         }
     }
 

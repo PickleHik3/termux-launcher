@@ -16,6 +16,7 @@ import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -295,7 +296,7 @@ public class PlaceLayoutStoreTest {
         // There is no hidden status bar any more, and the display's keyboard memory has moved.
         assertFalse(prefs.contains("x11_hide_status_bar"));
         assertFalse(prefs.contains("x11_keyboard_shown"));
-        assertEquals(2, prefs.getInt("place.migrated", 0));
+        assertEquals(3, prefs.getInt("place.migrated", 0));
 
         // A second store over the same preferences must not fold anything again: the user's own
         // choices since the migration stand.
@@ -325,13 +326,13 @@ public class PlaceLayoutStoreTest {
         // Version 2 still runs: the extra-keys master was off, so it folds to Hidden everywhere.
         assertEquals(RowPlacement.HIDDEN,
             store.resolve(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT).extraKeys);
-        assertEquals(2, prefs.getInt("place.migrated", 0));
+        assertEquals(3, prefs.getInt("place.migrated", 0));
     }
 
     @Test
     public void aFreshInstallHasNothingToFoldAndSaysSo() {
         PlaceLayoutStore store = store();
-        assertEquals(2, prefs.getInt("place.migrated", 0));
+        assertEquals(3, prefs.getInt("place.migrated", 0));
         assertFalse(prefs.contains("place.terminal.landscape.apps_row"));
         assertEquals(RowPlacement.LEFT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
@@ -384,5 +385,187 @@ public class PlaceLayoutStoreTest {
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
         assertEquals(RowPlacement.HIDDEN,
             store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).extraKeys);
+    }
+
+    // ------------------------------------------------------------------ the three sizes
+
+    @Test
+    public void theSizeKeysAreScopedTheWayTheSpecNamesThem() {
+        assertEquals("place.home.portrait.dock_height",
+            PlaceLayoutStore.arrangementKey(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT,
+                "dock_height"));
+        assertEquals("place.terminal.landscape.keyboard_height",
+            PlaceLayoutStore.arrangementKey(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE,
+                "keyboard_height"));
+        assertEquals("place.display.portrait.keyboard_chin",
+            PlaceLayoutStore.arrangementKey(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT,
+                "keyboard_chin"));
+    }
+
+    @Test
+    public void aFreshInstallResolvesTheSizesItShippedWith() {
+        PlaceLayoutStore store = store();
+        for (PaneWallPage place : PaneWallPage.values()) {
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                assertEquals(place + " " + orientation + " dock",
+                    TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT,
+                    store.dockHeightScale(place, orientation), 0.0001f);
+                assertEquals(place + " " + orientation + " keyboard",
+                    TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE,
+                    store.keyboardHeightScale(place, orientation), 0.0001f);
+                assertEquals(place + " " + orientation + " chin",
+                    TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING,
+                    store.keyboardChinDp(place, orientation));
+            }
+        }
+    }
+
+    @Test
+    public void aSizeWrittenForOnePlaceAndOrientationLeavesEveryOtherAlone() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardHeightScale(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT, 1.4f);
+        store.setDockHeightScale(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT, 1.2f);
+        store.setKeyboardChinDp(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT, 18);
+
+        assertEquals(1.4f,
+            store.keyboardHeightScale(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT), 0.0001f);
+        assertEquals("home landscape is untouched",
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            store.keyboardHeightScale(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE), 0.0001f);
+        assertEquals("the terminal is untouched",
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            store.keyboardHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0.0001f);
+        assertEquals(TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT,
+            store.dockHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0.0001f);
+        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            store.keyboardChinDp(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+    }
+
+    @Test
+    public void aSizeIsClampedOnTheWayInAndOnTheWayOut() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, 9f);
+        store.setDockHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, -3f);
+        store.setKeyboardChinDp(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, 400);
+        assertEquals(TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            store.keyboardHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0.0001f);
+        assertEquals(TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
+            store.dockHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0.0001f);
+        assertEquals(TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            store.keyboardChinDp(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+
+        // And a number written into the file by hand is clamped as it is read back.
+        prefs.edit()
+            .putFloat("place.display.landscape.keyboard_height", 0.01f)
+            .putFloat("place.display.landscape.dock_height", 99f)
+            .putInt("place.display.landscape.keyboard_chin", -5)
+            .commit();
+        assertEquals(TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            store.keyboardHeightScale(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE), 0.0001f);
+        assertEquals(TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT,
+            store.dockHeightScale(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE), 0.0001f);
+        assertEquals(TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            store.keyboardChinDp(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+    }
+
+    @Test
+    public void theFirstRunSeedsEveryPlaceAndOrientationFromTheValuesTheyResolvedToBefore() {
+        // What an install upgrading into the Layout editor is carrying: a keyboard height per
+        // orientation, one chin, a shared dock height, and one place that took a dock height of
+        // its own while the look keys could still be scoped.
+        prefs.edit()
+            .putFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE, 1.2f)
+            .putFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE, 0.9f)
+            .putInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING, 14)
+            .putFloat(TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT, 2.0f)
+            .putFloat(PlaceLookPreferences.lookKey(PaneWallPage.DISPLAY,
+                TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT), 1.1f)
+            .commit();
+
+        PlaceLayoutStore store = store();
+
+        assertEquals(3, prefs.getInt("place.migrated", 0));
+        for (PaneWallPage place : PaneWallPage.values()) {
+            assertEquals(place + " portrait keyboard", 1.2f,
+                store.keyboardHeightScale(place, PlaceOrientation.PORTRAIT), 0.0001f);
+            assertEquals(place + " landscape keyboard", 0.9f,
+                store.keyboardHeightScale(place, PlaceOrientation.LANDSCAPE), 0.0001f);
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                assertEquals(place + " " + orientation + " chin", 14,
+                    store.keyboardChinDp(place, orientation));
+                // The display kept a dock height of its own in both orientations; every other
+                // place took the shared one.
+                assertEquals(place + " " + orientation + " dock",
+                    place == PaneWallPage.DISPLAY ? 1.1f : 2.0f,
+                    store.dockHeightScale(place, orientation), 0.0001f);
+            }
+        }
+        // Dock height has left the scopable look keys, so the old override goes with them.
+        assertFalse(prefs.contains(PlaceLookPreferences.lookKey(PaneWallPage.DISPLAY,
+            TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT)));
+    }
+
+    @Test
+    public void theSizesAreSeededOnceAndNeverAgain() {
+        prefs.edit()
+            .putFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE, 1.2f)
+            .putInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING, 14)
+            .putFloat(TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT, 2.0f)
+            .commit();
+        PlaceLayoutStore store = store();
+        store.setKeyboardHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, 1.5f);
+        store.setKeyboardChinDp(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, 4);
+        store.setDockHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, 0.8f);
+
+        PlaceLayoutStore reopened = store();
+
+        assertEquals(1.5f,
+            reopened.keyboardHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT),
+            0.0001f);
+        assertEquals(4, reopened.keyboardChinDp(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        assertEquals(0.8f,
+            reopened.dockHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0.0001f);
+    }
+
+    @Test
+    public void anInstallAlreadyOnVersionTwoStillGetsTheSizes() {
+        prefs.edit()
+            .putInt("place.migrated", 2)
+            .putFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE, 1.3f)
+            .commit();
+
+        PlaceLayoutStore store = store();
+
+        assertEquals(3, prefs.getInt("place.migrated", 0));
+        assertEquals(1.3f,
+            store.keyboardHeightScale(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE), 0.0001f);
+    }
+
+    @Test
+    public void landscapeTakesPortraitsKeyboardHeightWhenItNeverHadOneOfItsOwn() {
+        // The landscape global fell back to the portrait one, so the seed has to as well.
+        prefs.edit().putFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE, 1.35f).commit();
+
+        PlaceLayoutStore store = store();
+
+        assertEquals(1.35f,
+            store.keyboardHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), 0.0001f);
+    }
+
+    @Test
+    public void clearingAPlacesOrientationGivesTheSizesBackToo() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, 1.5f);
+        store.setDockHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, 0.8f);
+        store.setKeyboardChinDp(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, 12);
+
+        store.clear(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
+
+        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            store.keyboardHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0.0001f);
+        assertEquals(TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT,
+            store.dockHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0.0001f);
+        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING,
+            store.keyboardChinDp(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
     }
 }

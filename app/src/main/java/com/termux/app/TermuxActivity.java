@@ -105,6 +105,7 @@ import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceLookPreferences;
 import com.termux.app.place.PlaceOrientation;
+import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
@@ -9193,8 +9194,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mLookPreferences = new PlaceLookPreferences(base.getSharedPreferences());
-        return new TermuxAppSharedPreferences(base.getContext(), mLookPreferences,
-            base.getMultiProcessSharedPreferences());
+        TermuxAppSharedPreferences scoped = new TermuxAppSharedPreferences(base.getContext(),
+            mLookPreferences, base.getMultiProcessSharedPreferences());
+        // And the sizes, which are the place's and the orientation's rather than the place's
+        // alone, so the same getters answer for what is on screen (ADR 0001).
+        mPlaceLayoutStore = new PlaceLayoutStore(scoped);
+        scoped.setPlaceSizes(new PlaceSizePreferences(
+            () -> mPlaceLayoutStore, this::currentWallPlace, this::currentPlaceOrientation));
+        return scoped;
     }
 
     /**
@@ -9566,6 +9573,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean lookChanged = mLookPreferences != null
             && mLookPreferences.setRenderPlace(currentWallPlace())
             && mLookPreferences.hasAnyOverrides();
+        // The dock's height, the keyboard's height and its chin are the place's and the
+        // orientation's, so a wall settling on a place sized differently — or a turn of the screen
+        // — has to re-read them even where no look was ever overridden.
+        lookChanged |= applyPlaceSizes();
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
@@ -9594,6 +9605,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
         if (lookChanged) applyPlaceLook();
+    }
+
+    /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
+    private float mAppliedDockHeightScale = Float.NaN;
+    private float mAppliedKeyboardHeightScale = Float.NaN;
+    private int mAppliedKeyboardChinDp = -1;
+
+    /** Whether the sizes the place and orientation on screen ask for have moved since. */
+    private boolean applyPlaceSizes() {
+        if (mPreferences == null) return false;
+        float dock = mPreferences.getAppLauncherBarHeightScale();
+        float keyboard = mPreferences.getInAppKeyboardHeightScale();
+        int chin = mPreferences.getInAppKeyboardBottomPadding();
+        boolean moved = Float.compare(dock, mAppliedDockHeightScale) != 0
+            || Float.compare(keyboard, mAppliedKeyboardHeightScale) != 0
+            || chin != mAppliedKeyboardChinDp;
+        mAppliedDockHeightScale = dock;
+        mAppliedKeyboardHeightScale = keyboard;
+        mAppliedKeyboardChinDp = chin;
+        return moved;
     }
 
     /**

@@ -41,6 +41,7 @@ One-time migration on first read:
 - `x11_hide_status_bar` → dropped (no hidden state)
 - `x11_keyboard_shown` → `place.display.keyboard_open`
 - `top_pane_clock_collapsed` → `place.*.status_compact`
+- `app_launcher_bar_height` (and its per-place look override), `in_app_keyboard_height_scale`(`_landscape`), `in_app_keyboard_bottom_padding` → `place.*.*.{dock_height,keyboard_height,keyboard_chin}`, migration version 3 — see `../layout-editor/SPEC.md` and `/docs/adr/0001-sizes-live-in-the-layout-store.md`
 
 ## Layout page (Settings root destination)
 

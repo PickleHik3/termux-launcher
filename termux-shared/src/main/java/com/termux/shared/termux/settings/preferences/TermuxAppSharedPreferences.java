@@ -125,14 +125,58 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DEFAULT_BUTTONS, value, false);
     }
 
+    /**
+     * Where the three sizes a place owns actually live once the launcher has a layout store.
+     *
+     * <p>Dock height, keyboard height and the keyboard's chin are laid out per place and per
+     * orientation, not shared. The launcher installs the layout store here through
+     * {@link #setPlaceSizes}, so the getters below keep their signatures and start answering for
+     * the place and orientation on screen — the same trick that makes the look layer resolve
+     * without a per-place branch above it. Nothing installed leaves the shared values the launcher
+     * kept before, which is what the Settings screens and the tests read.
+     */
+    public interface PlaceSizes {
+        float dockHeightScale();
+        void setDockHeightScale(float value);
+        float keyboardHeightScale();
+        void setKeyboardHeightScale(float value);
+        int keyboardChinDp();
+        void setKeyboardChinDp(int value);
+    }
+
+    @Nullable private PlaceSizes mPlaceSizes;
+
+    /** Hands the three per-place sizes to the layout store. Null puts them back on the file. */
+    public void setPlaceSizes(@Nullable PlaceSizes placeSizes) {
+        mPlaceSizes = placeSizes;
+    }
+
     public float getAppLauncherBarHeightScale() {
-        float heightScale = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
-        return DataUtils.rangedOrDefault(heightScale, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT, 0.4f, 3.0f);
+        if (mPlaceSizes != null) return mPlaceSizes.dockHeightScale();
+        return getSharedAppLauncherBarHeightScale();
     }
 
     public void setAppLauncherBarHeightScale(float value) {
+        if (mPlaceSizes != null) {
+            mPlaceSizes.setDockHeightScale(value);
+            return;
+        }
         SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT,
-            Math.max(0.4f, Math.min(3.0f, value)), false);
+            clampAppLauncherBarHeightScale(value), false);
+    }
+
+    /** The dock height the launcher kept for everything, before it became a layout value. */
+    public float getSharedAppLauncherBarHeightScale() {
+        float heightScale = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
+        return DataUtils.rangedOrDefault(heightScale, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT,
+            TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT, TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT);
+    }
+
+    public static float clampAppLauncherBarHeightScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
+        return Math.max(TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
+            Math.min(TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT, value));
     }
 
     public String getAppLauncherDockStyle() {
@@ -1359,12 +1403,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public float getInAppKeyboardHeightScale() {
+        if (mPlaceSizes != null) return mPlaceSizes.keyboardHeightScale();
+        return getSharedInAppKeyboardHeightScale(isLandscapeOrientation());
+    }
+
+    /**
+     * The keyboard height the launcher kept globally for one orientation, whatever place is on
+     * screen. Landscape falls back to portrait's number, which is what it always did.
+     */
+    public float getSharedInAppKeyboardHeightScale(boolean landscape) {
         float defaultValue = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
             getDefaultInAppKeyboardHeightScale());
         if (Float.isNaN(defaultValue) || Float.isInfinite(defaultValue))
             defaultValue = getDefaultInAppKeyboardHeightScale();
-        if (!isLandscapeOrientation())
+        if (!landscape)
             return clampInAppKeyboardHeightScale(defaultValue);
         float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE,
@@ -1374,6 +1427,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public void setInAppKeyboardHeightScale(float value) {
+        if (mPlaceSizes != null) {
+            mPlaceSizes.setKeyboardHeightScale(value);
+            return;
+        }
         SharedPreferenceUtils.setFloat(mSharedPreferences,
             isLandscapeOrientation()
                 ? TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE
@@ -1525,7 +1582,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             getAppLauncherDockStyle());
     }
 
-    private float getDefaultInAppKeyboardHeightScale() {
+    /** The keyboard height a place that has never been given one of its own opens at. */
+    public float getDefaultInAppKeyboardHeightScale() {
         return usesRoundedInAppKeyboardDefaults()
             ? TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE
             : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
@@ -1557,12 +1615,22 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Extra air under the last key row, in dp, inside the keyboard's own surface. */
     public int getInAppKeyboardBottomPadding() {
+        if (mPlaceSizes != null) return mPlaceSizes.keyboardChinDp();
+        return getSharedInAppKeyboardBottomPadding();
+    }
+
+    /** The chin the launcher kept for everything, before it became a layout value. */
+    public int getSharedInAppKeyboardBottomPadding() {
         return clampInAppKeyboardBottomPadding(SharedPreferenceUtils.getInt(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING));
     }
 
     public void setInAppKeyboardBottomPadding(int value) {
+        if (mPlaceSizes != null) {
+            mPlaceSizes.setKeyboardChinDp(value);
+            return;
+        }
         SharedPreferenceUtils.setInt(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
             clampInAppKeyboardBottomPadding(value), false);

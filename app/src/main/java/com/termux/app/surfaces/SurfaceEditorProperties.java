@@ -299,13 +299,15 @@ public final class SurfaceEditorProperties {
                 TermuxAppSharedPreferences::getAppLauncherButtonCount,
                 (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
                 PREVIEW_GEOMETRY, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT),
+            // No scope key: the dock's height is a layout value, kept per place and per
+            // orientation in the layout store, which the preferences already resolve through.
             own(ID_SIZE, R.string.termux_dock_tuning_size, Kind.SLIDER, Unit.DOCK_SIZE,
                 DockLayoutPolicy.sizePresetCount() - 1,
                 prefs -> DockLayoutPolicy.nearestSizePresetIndex(
                     prefs.getAppLauncherBarHeightScale()),
                 (prefs, value) -> prefs.setAppLauncherBarHeightScale(
                     DockLayoutPolicy.sizePreset(value)),
-                PREVIEW_GEOMETRY, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT)));
+                PREVIEW_GEOMETRY)));
 
         // The keyboard renders the dock's material — one blurred backdrop, one grain, the dock
         // capsule's shape — so it owns an opacity and a margin and nothing else of the glass. Its
