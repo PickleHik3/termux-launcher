@@ -170,6 +170,22 @@ public class LayoutEditorPlanTest {
     }
 
     @Test
+    public void aSecondDoorMovesTheEditorToThatPlaceAndDiscardStillCoversTheFirst() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        plan.drop(Bar.EXTRA_KEYS, null);
+
+        plan.showPlace(PaneWallPage.WIDGETS);
+        assertEquals(PaneWallPage.WIDGETS, plan.place());
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
+        assertEquals("bottom", prefs.getString("place.home.portrait.status_bar", null));
+
+        plan.revert();
+        assertFalse(plan.isDirty());
+        assertEquals("the place the editor opened on is back too",
+            RowPlacement.BOTTOM, places.extraKeys(PaneWallPage.TERMINAL, PORTRAIT));
+    }
+
+    @Test
     public void thePortraitCanvasIsAboutHalfTheScreenAndTheLandscapeOneFillsTheWidth() {
         int screenWidth = 1080;
         int screenHeight = 2400;

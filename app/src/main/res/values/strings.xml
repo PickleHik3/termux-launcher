@@ -1303,6 +1303,11 @@
                 <string name="termux_surface_tuning_unsaved_discard">Discard</string>
                 <string name="termux_surface_tuning_unsaved_save">Save</string>
                 <string name="termux_surface_tuning_unsaved_keep_editing">Keep editing</string>
+
+                <!-- The Layout editor: the miniature of one place, and the way out of it. -->
+                <string name="termux_layout_editor_title">Layout</string>
+                <string name="termux_layout_editor_revert">Undo changes</string>
+                <string name="termux_layout_editor_unsaved_message">Discard them and put everything back where it was when you opened the editor, or save and close?</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
 

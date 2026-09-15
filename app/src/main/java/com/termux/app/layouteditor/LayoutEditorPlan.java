@@ -41,7 +41,7 @@ public final class LayoutEditorPlan {
     }
 
     @NonNull private final PlaceLayoutStore mPlaces;
-    @NonNull private final PaneWallPage mPlace;
+    @NonNull private PaneWallPage mPlace;
     /** The arrangement of every place as the editor found it; what Discard and ↺ put back. */
     @NonNull private final PlaceArrangeSnapshot mEntry;
     @NonNull private final String mEntrySignature;
@@ -94,6 +94,15 @@ public final class LayoutEditorPlan {
     @NonNull
     public PlaceLayout shownLayout() {
         return mPlaces.resolve(mPlace, mShownOrientation);
+    }
+
+    /**
+     * The place on the miniature. A second door opened while the editor is up — the Settings row
+     * for another place, say — moves it rather than starting a session over, so what Discard puts
+     * back is still the arrangement the user first opened the editor on.
+     */
+    public void showPlace(@NonNull PaneWallPage place) {
+        mPlace = place;
     }
 
     /** The Portrait / Landscape toggle. Moves the picture and the target of the next drop. */

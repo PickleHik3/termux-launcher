@@ -1000,6 +1000,20 @@
             android:elevation="20dp"
             android:visibility="gone" />
 
+        <!-- The Layout editor, the surface editor's sibling: a miniature of the place on screen,
+             parked over the live place so the real thing stays visible behind it. The host fills
+             the region and is not clickable itself, so nothing outside the card is swallowed.
+
+             Populated from layout_editor.xml on the editor's first open. -->
+        <FrameLayout
+            android:id="@+id/layout_editor_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentBottom="true"
+            android:elevation="20dp"
+            android:visibility="gone" />
+
         <com.termux.app.LauncherAzGestureFxView
             android:id="@+id/apps_bar_az_label_overlay"
             android:layout_width="match_parent"

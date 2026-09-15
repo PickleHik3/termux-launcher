@@ -227,6 +227,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     public static final String EXTRA_SURFACE_EDITOR_PLACE =
         "com.termux.app.extra.SURFACE_EDITOR_PLACE";
+    /** Opens the Layout editor over the live place, from Settings → Layout. */
+    public static final String EXTRA_LAYOUT_EDITOR =
+        "com.termux.app.extra.LAYOUT_EDITOR";
+    /**
+     * The place the Layout editor should open on — {@code widgets}, {@code terminal} or
+     * {@code display}, as {@link com.termux.app.wall.PaneWallPage#toolName()} names them. Absent or
+     * unknown opens it on the place the user is already looking at.
+     */
+    public static final String EXTRA_LAYOUT_EDITOR_PLACE =
+        "com.termux.app.extra.LAYOUT_EDITOR_PLACE";
     /** Opens the extra-keys row editor over the live terminal, from Settings. */
     public static final String EXTRA_EDIT_EXTRA_KEYS =
         "com.termux.app.extra.EDIT_EXTRA_KEYS";
@@ -461,6 +471,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final SurfaceEditorController mSurfaceEditor =
         new SurfaceEditorController(new SurfaceEditorHost());
+
+    /**
+     * The Layout editor overlay, the surface editor's sibling: where a place's elements sit rather
+     * than how its surfaces look. Only one of the two is ever open.
+     */
+    private final com.termux.app.layouteditor.LayoutEditorController mLayoutEditor =
+        new com.termux.app.layouteditor.LayoutEditorController(new LayoutEditorHost());
 
     /**
      * Termux app shared preferences manager.
@@ -1105,6 +1122,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState == null) {
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleSurfaceEditorIntent(getIntent());
+            handleLayoutEditorIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
         }
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
@@ -1352,6 +1370,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setIntent(intent);
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
+        handleLayoutEditorIntent(intent);
         handleEditExtraKeysIntent(intent);
         handleReplayTourIntent(intent);
         if (isLauncherHomeIntent(intent)) {
@@ -6140,6 +6159,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mCommandPalette != null)
             mCommandPalette.refreshAppearance();
         mChrome.onConfigurationChanged();
+        // The Layout editor's miniature shows the place behind it, so it turns with the phone.
+        mLayoutEditor.onPlaceOrientationChanged();
         scheduleOrientationGeometryPass();
     }
 
@@ -8241,6 +8262,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_PLACE);
+        // Only one editor holds the screen at a time; the Layout editor is already up.
+        if (mLayoutEditor.isActive())
+            return;
         mSurfaceEditor.enter(initialSection, place);
     }
 
@@ -8257,6 +8281,79 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (page.toolName().equalsIgnoreCase(name.trim())) return page;
         }
         return null;
+    }
+
+    /**
+     * Settings → Layout, or any other door that names a place: the launcher comes forward on that
+     * place with the Layout editor over it. An unnamed place opens it on whatever is on screen.
+     */
+    private void handleLayoutEditorIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_LAYOUT_EDITOR, false))
+            return;
+        com.termux.app.wall.PaneWallPage place =
+            parseSurfaceEditorPlace(intent.getStringExtra(EXTRA_LAYOUT_EDITOR_PLACE));
+        intent.removeExtra(EXTRA_LAYOUT_EDITOR);
+        intent.removeExtra(EXTRA_LAYOUT_EDITOR_PLACE);
+        openLayoutEditor(place);
+    }
+
+    /** Opens the Layout editor on one place, or on the place the user is looking at for null. */
+    void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
+        // The wall has to be built before the editor can be held on a place, and a cold start
+        // delivers the intent while the root view is still being laid out.
+        View root = findViewById(R.id.activity_termux_root_view);
+        com.termux.app.wall.PaneWallPage target = place;
+        if (root != null) root.post(() -> mLayoutEditor.enter(
+            target == null ? currentWallPlace() : target));
+        else mLayoutEditor.enter(target == null ? currentWallPlace() : target);
+    }
+
+    /** The activity's half of the Layout editor's seam: its views, the places, the chrome pass. */
+    private final class LayoutEditorHost
+            implements com.termux.app.layouteditor.LayoutEditorController.Host {
+        @NonNull @Override public Context context() {
+            return TermuxActivity.this;
+        }
+
+        @Nullable @Override public <T extends View> T findView(int viewId) {
+            return findViewById(viewId);
+        }
+
+        @Nullable @Override public PlaceLayoutStore places() {
+            return placeLayoutStore();
+        }
+
+        @NonNull @Override public com.termux.app.wall.PaneWallPage placeOnScreen() {
+            return currentWallPlace();
+        }
+
+        @NonNull @Override public PlaceOrientation placeOrientation() {
+            return currentPlaceOrientation();
+        }
+
+        @Override public void applyPlaceArrangement() {
+            // The same pass a Layout page write comes back through: the layout is resolved once
+            // and every surface re-reads its part of it, with nothing recreated, so the editor
+            // stays open over the chrome it has just moved.
+            syncPlaceLayout();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        }
+
+        @Override public void holdPaneWallOnPlace(
+                @NonNull com.termux.app.wall.PaneWallPage place, boolean held) {
+            if (mPaneWallController == null) return;
+            if (held) mPaneWallController.goTo(place, false);
+            mPaneWallController.setGesturesEnabled(!held);
+            syncWallGestureAvailability();
+        }
+
+        @Override public int themeColor(int attr, int fallbackRes) {
+            return getTermuxThemeColor(attr, fallbackRes);
+        }
+
+        @Override public boolean isSurfaceEditorActive() {
+            return mSurfaceEditor.isActive();
+        }
     }
 
     /** The activity's half of the surface editor's seam: its views, its prefs, its render pipeline. */
@@ -11222,6 +11319,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
+                if (!mLayoutEditor.isActive()) return false;
+                mLayoutEditor.requestClose();
+                return true;
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                // Back to the home screen means leaving the editor — through its own
+                // unsaved-changes rule, never by discarding. A stop leaves it standing.
+                if (reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME)
+                    mLayoutEditor.requestExit();
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
                 if (!mSurfaceEditor.isActive()) return false;
                 mSurfaceEditor.requestClose();
                 return true;
@@ -12806,6 +12916,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openSurfaceEditor() {
         // From inside the launcher the editor is opened on the place the user is looking at; the
         // shared look is what the Settings row opens.
+        if (mLayoutEditor.isActive()) return;
         mSurfaceEditor.enter(null, currentWallPlace());
     }
 
@@ -12814,6 +12925,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the place the user is looking at, with the rest of it one tap away on the card.
      */
     void openSurfaceEditorArrange() {
+        if (mLayoutEditor.isActive()) return;
         mSurfaceEditor.enterArrange(currentWallPlace());
     }
 

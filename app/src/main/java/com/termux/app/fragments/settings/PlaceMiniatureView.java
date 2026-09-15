@@ -388,6 +388,23 @@ public final class PlaceMiniatureView extends View {
         return mGridCollapsed;
     }
 
+    /**
+     * The phone frame's width over its height, for one orientation. The Layout editor sizes its
+     * canvas from it, so the frame it asks for is the frame this view would draw.
+     */
+    public static float frameAspect(@NonNull PlaceOrientation orientation) {
+        return orientation == PlaceOrientation.LANDSCAPE ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
+    }
+
+    /**
+     * The height the view spends on everything that is not the phone: its own padding and the
+     * tray's room, which is kept whether or not anything is in it. A caller sizing the view to a
+     * frame adds this to the frame height it wants.
+     */
+    public float reservedHeightPx() {
+        return 2 * dp(4) + dp(TRAY_HEIGHT_DP) + dp(TRAY_GAP_DP);
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
