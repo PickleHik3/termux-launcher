@@ -1,8 +1,10 @@
 package com.termux.app.terminal;
 
 import android.app.Application;
+import android.content.Context;
 import android.graphics.Color;
 import android.os.Build;
+import android.view.ContextThemeWrapper;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -12,6 +14,7 @@ import com.termux.terminal.TerminalColorScheme;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import java.util.Properties;
@@ -100,6 +103,38 @@ public class MaterialTerminalColorSchemeTest {
         // Stable for the same inputs, or every resume would look like a change.
         assertEquals(dflt, MaterialTerminalColorScheme.signature(
             ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT));
+    }
+
+    /**
+     * The "IfNeeded" gate ({@code refreshMaterialTerminalColorsIfNeeded}) trusts this fingerprint to
+     * notice a day/night flip on its own — nothing else tells it the mode moved. It has to, because
+     * the flip is not carried as a bit of its own: the resolved role colours are simply different
+     * under {@code values-night}, all the way down to {@code termux_surface_base}, so the same
+     * attribute reads that build the signature already see the new theme once the context does.
+     *
+     * <p>The bare application context {@code ApplicationProvider} hands back here carries none of
+     * {@code Theme.TermuxActivity.DayNight.NoActionBar}'s attributes — every {@code MaterialColors}
+     * lookup in {@link #signature} would silently return its literal {@code 0} fallback regardless
+     * of day or night, which is exactly what this test exists to catch. A {@link ContextThemeWrapper}
+     * over the real activity theme is what {@code TermuxActivity} and the background day/night
+     * refresh both actually theme their context with, so this wraps one too.
+     */
+    @Test
+    public void theSignatureMovesOnADayNightFlip() {
+        int day = themedSignature();
+        RuntimeEnvironment.setQualifiers("+night");
+        int night = themedSignature();
+        assertNotEquals(day, night);
+        // Stable while nothing else moved, or every resume in the same mode would look dirty.
+        assertEquals(night, themedSignature());
+        RuntimeEnvironment.setQualifiers("+notnight");
+        assertEquals("flipping back should reproduce the original signature", day, themedSignature());
+    }
+
+    private static int themedSignature() {
+        Context themed = new ContextThemeWrapper(ApplicationProvider.getApplicationContext(),
+            com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        return MaterialTerminalColorScheme.signature(themed, TerminalContrastLevel.DEFAULT);
     }
 
     /**
