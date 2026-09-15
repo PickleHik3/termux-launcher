@@ -7,6 +7,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.tour.TourRun;
 import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
@@ -68,6 +69,19 @@ public class HelpTopicsTest {
         }
         assertTrue(any);
         assertEquals(4, HelpTopics.LESSON_IDS.size());
+    }
+
+    @Test public void everyLessonIdNamesALessonTheRunActuallyHas() {
+        // The catalogue's ids and the run's are the same four strings, and nothing hands practice
+        // to a card the run cannot start.
+        assertEquals(TourRun.lessons().size(), HelpTopics.LESSON_IDS.size());
+        for (String lessonId : HelpTopics.LESSON_IDS) {
+            assertTrue(lessonId, TourRun.lessons().contains(lessonId));
+        }
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            if (entry.lessonId == null) continue;
+            assertTrue(entry.id, HelpTopics.LESSON_IDS.contains(entry.lessonId));
+        }
     }
 
     @Test public void theFourLessonsAreReachedFromTheTopicsThatTeachThem() {
