@@ -295,7 +295,7 @@ public final class TourOverlayView extends FrameLayout {
         if (!sameCard) mChordGlowIndex = 0;
         applyCopy();
         boolean closing = step.isClosingCard();
-        mButton.setText(closing ? R.string.tour_done : R.string.tour_skip);
+        mButton.setText(closing ? R.string.tour_start_using : R.string.tour_skip);
         if (closing) showClosingSections();
         else {
             mBodyScroll.setVisibility(GONE);

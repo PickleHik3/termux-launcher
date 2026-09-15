@@ -7,119 +7,156 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The run, as data: thirteen cards in the order the launcher teaches itself.
+ * The run, as data: four lessons, the home-screen question and the closing card.
  *
- * <p>Every card's signals are emitted by the chrome now, and every target but the closing card's
- * resolves to a control the overlay can glow. A card whose control is not in the layout in front
- * of the user — no plus on the landscape rail, no space bar with the keyboard down — shows
- * without a glow, and is still cleared by the gesture and still skippable.
+ * <p>The lessons teach the four things a newcomer cannot look up without them — where help is, how
+ * to reach their Android apps, how to get the keyboard out of the way, and how to find an action.
+ * Everything else is offered on the way out or lives in help, and nothing here opens a shell, a
+ * window or a session: the user's first terminal is exactly as they left it.
+ *
+ * <p>Two lessons read the phone rather than a fixed sentence, which is what {@link RunContext} is:
+ * "press Home to come back" is wrong on a phone whose home screen is something else, and "hide the
+ * keyboard" is wrong when the keyboard is already down.
  */
 public final class TourRun {
 
+    /** Find help: a pane corner, the ? behind it, and the way back out of help. */
+    public static final String FIND_HELP = "find_help";
+    /** Find Android apps: the dock's drawer, an app, and the way back to the launcher. */
+    public static final String FIND_APPS = "find_apps";
+    /** Control the keyboard: the keyboard button, both ways. */
+    public static final String KEYBOARD = "keyboard";
+    /** Find an action: the command palette, and something to find in it. */
+    public static final String FIND_ACTION = "find_action";
+    /** The home-screen question, which is answered with a button and not a gesture. */
+    public static final String HOME_CHOICE = "home_choice";
+    /** The last card. */
+    public static final String CLOSING = "closing";
+
+    /** The four lessons, in order; the two cards after them are not lessons. */
+    private static final List<String> LESSONS = Collections.unmodifiableList(
+        Arrays.asList(FIND_HELP, FIND_APPS, KEYBOARD, FIND_ACTION));
+
     /**
-     * The card the keyboard chapter opens on. The run records the session and the window it is
-     * shown in, because the chapter's last two cards ask the user back to exactly those.
+     * What the run has to know about the phone it is running on.
+     *
+     * <p>Both of these are read when the run is built rather than when a card is shown: a lesson
+     * that asked the user to hide a keyboard which is already down, or to press a Home button that
+     * leads somewhere else, is asking for something that cannot be done.
      */
-    public static final String KEYBOARD_CHAPTER_FIRST_STEP = "kb_split";
+    public static final class RunContext {
 
-    private static final List<TourStep> STEPS = Collections.unmodifiableList(Arrays.asList(
-        new TourStep("status_place", R.string.tour_card_status_place,
-            R.string.tour_card_status_place_then, TourTargets.STATUS_BAR,
-            new String[] {TourSignals.PLACE_CHANGED, TourSignals.PLACE_RETURNED},
-            new TourGesture[] {TourGesture.SWIPE_LEFT, TourGesture.SWIPE_RIGHT}),
+        /** Whether the launcher is the phone's home app. */
+        public final boolean launcherIsHome;
 
-        new TourStep("status_expand", R.string.tour_card_status_expand, 0, TourTargets.STATUS_BAR,
-            new String[] {TourSignals.STATUS_BAR_EXPANDED, TourSignals.STATUS_BAR_COLLAPSED},
-            new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.DRAG_UP}),
+        /** Whether the keyboard is showing as the run is built. */
+        public final boolean keyboardShown;
 
-        // The + makes the window; everything after it happens on the chip the + just added, so
-        // the glow moves there rather than staying on a button the user has finished with. One
-        // sentence per stage: the × is a separate control and a separate tap, and a card still
-        // saying "tap the chip, then ×" while the × is the thing under the finger asks for the
-        // gesture the user has already made.
-        new TourStep("window",
-            new int[] {R.string.tour_card_window, R.string.tour_card_window_then,
-                R.string.tour_card_window_close},
-            new String[] {TourTargets.PLUS_BUTTON, TourTargets.WINDOW_CHIP,
-                TourTargets.WINDOW_CLOSE},
-            new String[] {TourSignals.WINDOW_OPENED, TourSignals.WINDOW_CHIP_SELECTED,
-                TourSignals.WINDOW_CLOSED},
-            new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.TAP}, false, false),
+        public RunContext(boolean launcherIsHome, boolean keyboardShown) {
+            this.launcherIsHome = launcherIsHome;
+            this.keyboardShown = keyboardShown;
+        }
+    }
 
-        // The keyboard chapter. Five cards on the in-app keyboard, taught as the chords they
-        // actually are: the glow walks Ctrl, then Alt, then the key, because the keyboard latches
-        // a modifier on a tap and the user presses them one at a time.
-        new TourStep(KEYBOARD_CHAPTER_FIRST_STEP, R.string.tour_card_kb_split, 0,
-            new String[] {TourTargets.CTRL_KEY, TourTargets.ALT_KEY, TourTargets.ENTER_KEY},
-            new String[] {TourSignals.PANE_SPLIT},
-            new TourGesture[] {TourGesture.TAP}, false, true),
+    /** The run, in order, for the phone described by {@code context}. */
+    public static List<TourStep> steps(RunContext context) {
+        return Collections.unmodifiableList(Arrays.asList(
+            findHelp(), findApps(context), keyboard(context), findAction(), homeChoice(context),
+            closing()));
+    }
 
-        new TourStep("kb_window", R.string.tour_card_kb_window, 0,
-            new String[] {TourTargets.CTRL_KEY, TourTargets.ALT_KEY, TourTargets.C_KEY},
-            new String[] {TourSignals.WINDOW_OPENED},
-            new TourGesture[] {TourGesture.TAP}, false, true),
+    /** The lessons, in order: what practice and Back may name, and the migration maps to. */
+    public static List<String> lessons() {
+        return LESSONS;
+    }
 
-        new TourStep("kb_session", R.string.tour_card_kb_session, 0,
-            new String[] {TourTargets.CTRL_KEY, TourTargets.ALT_KEY, TourTargets.SHIFT_KEY,
-                TourTargets.C_KEY},
-            new String[] {TourSignals.SESSION_OPENED},
-            new TourGesture[] {TourGesture.TAP}, false, true),
+    /**
+     * Lesson one. Help is where everything else in the launcher can be looked up, so the run
+     * teaches the way to it first and does not let go until the user has been inside and come back
+     * out: a lesson that ended on the ? would leave help covering the screen with no card to say
+     * what to do about it.
+     */
+    private static TourStep findHelp() {
+        return new TourStep(FIND_HELP,
+            new int[] {R.string.tour_card_find_help_corner, R.string.tour_card_find_help_open,
+                R.string.tour_card_find_help_close},
+            new String[] {TourTargets.PANE_CORNER, TourTargets.HELP_BUTTON, TourTargets.NONE},
+            new String[] {TourSignals.PANE_CORNER_MENU, TourSignals.HELP_OPENED,
+                TourSignals.HELP_CLOSED},
+            new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.TAP}, false, false);
+    }
 
-        // The chapter opened a window and a session; these two put the user back where it found
-        // them, and they clear on arriving rather than on swiping.
-        new TourStep("kb_session_back", R.string.tour_card_kb_session_back, 0,
-            TourTargets.SPACE_BAR,
-            new String[] {TourSignals.SESSION_RETURNED},
-            new TourGesture[] {TourGesture.SWIPE_DOWN_LEFT}),
+    /**
+     * Lesson two. The drawer covers the dock it was pulled off and the launched app covers the
+     * launcher, so only the first stage has anything to point at. The last stage's sentence is the
+     * one thing in the run that depends on a system setting: a phone whose home screen is another
+     * launcher has no Home button that leads back here.
+     */
+    private static TourStep findApps(RunContext context) {
+        return new TourStep(FIND_APPS,
+            new int[] {R.string.tour_card_find_apps_dock, R.string.tour_card_find_apps_open,
+                context.launcherIsHome
+                    ? R.string.tour_card_find_apps_back_home
+                    : R.string.tour_card_find_apps_back_switch},
+            new String[] {TourTargets.DOCK, TourTargets.NONE, TourTargets.NONE},
+            new String[] {TourSignals.DRAWER_OPENED, TourSignals.APP_LAUNCHED,
+                TourSignals.LAUNCHER_RESUMED},
+            new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.TAP, TourGesture.TAP},
+            false, false);
+    }
 
-        new TourStep("kb_window_back", R.string.tour_card_kb_window_back, 0,
-            TourTargets.SPACE_BAR,
-            new String[] {TourSignals.WINDOW_RETURNED},
-            new TourGesture[] {TourGesture.SWIPE_UP_LEFT}),
+    /**
+     * Lesson three, both ways round the same button. Nothing is typed: the lesson is about getting
+     * the keyboard out of the way and back again, and a shell command is practice for another day.
+     */
+    private static TourStep keyboard(RunContext context) {
+        int[] copy = context.keyboardShown
+            ? new int[] {R.string.tour_card_keyboard_hide, R.string.tour_card_keyboard_show_again}
+            : new int[] {R.string.tour_card_keyboard_show, R.string.tour_card_keyboard_hide_again};
+        String[] signals = context.keyboardShown
+            ? new String[] {TourSignals.KEYBOARD_HIDDEN, TourSignals.KEYBOARD_SHOWN}
+            : new String[] {TourSignals.KEYBOARD_SHOWN, TourSignals.KEYBOARD_HIDDEN};
+        return new TourStep(KEYBOARD, copy,
+            new String[] {TourTargets.KEYBOARD_TOGGLE_KEY, TourTargets.KEYBOARD_TOGGLE_KEY},
+            signals, new TourGesture[] {TourGesture.TAP, TourGesture.TAP}, false, false);
+    }
 
-        // The corner controls are a menu, and the user is left inside it: the card asks for the
-        // way out before it moves on, or the next card arrives over a menu that is still up.
-        new TourStep("pane_corner", R.string.tour_card_pane_corner,
-            R.string.tour_card_pane_corner_then,
-            new String[] {TourTargets.PANE_CORNER, TourTargets.NONE},
-            new String[] {TourSignals.PANE_CORNER_MENU, TourSignals.PANE_CONTROLS_DISMISSED},
-            new TourGesture[] {TourGesture.TAP, TourGesture.TAP}),
-
-        // Once the drawer is open it covers the dock, so the second half points at nothing and the
-        // card falls back to the middle of the plane the gesture is performed on.
-        new TourStep("drawer", R.string.tour_card_drawer, R.string.tour_card_drawer_then,
-            new String[] {TourTargets.DOCK, TourTargets.NONE},
-            new String[] {TourSignals.DRAWER_OPENED, TourSignals.DRAWER_CLOSED},
-            new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.DRAG_DOWN}),
-
-        // Anchored at the top rather than against the row: the scrub filters the app icons just
-        // above the letters and throws a preview up beside the finger, and a card resting on the
-        // row covers both of the things the user is picking between.
-        new TourStep("az_scrub", R.string.tour_card_az_scrub, 0,
-            new String[] {TourTargets.AZ_ROW},
-            new String[] {TourSignals.APP_LAUNCHED_FROM_SCRUB},
-            new TourGesture[] {TourGesture.SCRUB}, true),
-
-        // The palette is a full-plane surface, so the card that opened it would otherwise be the
-        // last thing the user sees before the closing card arrives over it. Its second half asks
-        // for the way out, points at nothing — the palette covers the screen — and is the card
-        // that closes that surface, so it stays readable compact at the top while it is up.
-        new TourStep("palette",
-            new int[] {R.string.tour_card_palette, R.string.tour_card_palette_close},
+    /**
+     * Lesson four. The palette is a full-plane surface, so its second stage points at nothing and
+     * is the card that asks for the way out of the surface it is drawn over. The user is asked to
+     * find something rather than to run it: that actions are searchable is the whole lesson.
+     */
+    private static TourStep findAction() {
+        return new TourStep(FIND_ACTION,
+            new int[] {R.string.tour_card_find_action_palette,
+                R.string.tour_card_find_action_close},
             new String[] {TourTargets.SPACE_BAR, TourTargets.NONE},
             new String[] {TourSignals.PALETTE_OPENED, TourSignals.PALETTE_CLOSED},
-            new TourGesture[] {TourGesture.SWIPE_UP, TourGesture.TAP}, false, false),
+            new TourGesture[] {TourGesture.SWIPE_UP, TourGesture.TAP}, false, false);
+    }
 
-        // The only card with no target and no signal: it carries the three edition-aware lines
-        // and ends on its own buttons.
-        new TourStep("closing", R.string.tour_card_closing, 0, TourTargets.NONE,
-            new String[] {},
-            new TourGesture[] {TourGesture.NONE})
-    ));
+    /**
+     * The home-screen question, asked once the lessons are over so that the answer is an informed
+     * one. A phone that is already set up this way has nothing to decide, and is told so rather
+     * than asked again.
+     */
+    private static TourStep homeChoice(RunContext context) {
+        return new TourStep(HOME_CHOICE, TourStep.Kind.CHOICE,
+            new int[] {context.launcherIsHome
+                ? R.string.tour_card_home_choice_already
+                : R.string.tour_card_home_choice},
+            new String[] {TourTargets.NONE}, new String[] {},
+            new TourGesture[] {TourGesture.NONE}, false, false,
+            context.launcherIsHome
+                ? new TourAction[] {TourAction.CONTINUE}
+                : new TourAction[] {TourAction.USE_AS_HOME, TourAction.KEEP_TRYING});
+    }
 
-    /** The run, in order. */
-    public static List<TourStep> steps() {
-        return STEPS;
+    /** The last card: what is worth knowing on the way out, and one action to leave on. */
+    private static TourStep closing() {
+        return new TourStep(CLOSING, TourStep.Kind.CLOSING,
+            new int[] {R.string.tour_card_closing}, new String[] {TourTargets.NONE},
+            new String[] {}, new TourGesture[] {TourGesture.NONE}, false, false, null);
     }
 
     private TourRun() {}

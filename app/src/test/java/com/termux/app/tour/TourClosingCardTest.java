@@ -5,6 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.R;
+
 import org.junit.Test;
 
 import java.util.List;
@@ -46,12 +48,24 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void theKeyHintsSectionIsTheSameOneEverywhereAndCarriesNoCommand() {
+    public void theMultitaskingSectionIsTheSameOneEverywhereAndCarriesNoCommand() {
+        // None of the four lessons opens a shell, a window or a session, so the model is told
+        // here and the rest is left to help.
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section hints = TourClosingCard.sections(edition).get(0);
-            assertEquals(TourClosingCard.sections(TourEdition.TERMUX).get(0).headingRes,
-                hints.headingRes);
-            assertFalse("key hints has nothing to run", hints.hasCommand());
+            TourClosingCard.Section multitasking = TourClosingCard.sections(edition).get(0);
+            assertEquals(R.string.tour_closing_multitasking_heading, multitasking.headingRes);
+            assertEquals(R.string.tour_closing_multitasking_copy, multitasking.copyRes);
+            assertFalse("multitasking has nothing to run", multitasking.hasCommand());
+        }
+    }
+
+    @Test
+    public void theLauncherExtrasAndGraphicalSectionsAreStillThere() {
+        for (TourEdition edition : TourEdition.values()) {
+            assertEquals(R.string.tour_closing_extras_heading,
+                TourClosingCard.sections(edition).get(1).headingRes);
+            assertEquals(R.string.tour_closing_graphical_heading,
+                TourClosingCard.sections(edition).get(2).headingRes);
         }
     }
 

@@ -66,12 +66,11 @@ public class TourChordGlowTest {
     }
 
     @Test
-    public void everyChordCardOfTheRunEndsOnAKeyOfItsOwn() {
-        for (TourStep step : TourRun.steps()) {
-            if (!step.chordGlow) continue;
-            int last = TourChordGlow.indexFor(step, true, true, true);
-            assertEquals("chord " + step.id + " should land on its last key",
-                step.targetCount() - 1, last);
-        }
+    public void noCardOfTheRunIsAChordAnyMore() {
+        // The four lessons are taps and swipes on controls the user can see; the chord glow is
+        // kept for help's own demonstrations of the prefix keys.
+        for (TourStep step : TourRun.steps(new TourRun.RunContext(false, true)))
+            assertEquals("chord glow for " + step.id, 0,
+                TourChordGlow.indexFor(step, true, true, true));
     }
 }
