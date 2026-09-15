@@ -46,21 +46,20 @@ public class HelpPresentationModelTest {
         return model;
     }
 
-    @Test public void theTerminalOpensOnTheTopicChooserAndHomeOnTheOverview() {
-        assertEquals(HelpPresentationModel.Mode.TOPICS, opened(PaneWallPage.TERMINAL).mode());
-        assertEquals(HelpPresentationModel.Mode.OVERVIEW, opened(PaneWallPage.WIDGETS).mode());
-        assertEquals(HelpPresentationModel.Mode.TOPICS, HelpPresentationModel.TERMINAL_DEFAULT_MODE);
-        assertEquals(HelpPresentationModel.Mode.OVERVIEW, HelpPresentationModel.WIDGETS_DEFAULT_MODE);
-        assertEquals(HelpPresentationModel.DISPLAY_DEFAULT_MODE, opened(PaneWallPage.DISPLAY).mode());
+    @Test public void everyPlaceOpensOnTheGuide() {
+        for (PaneWallPage place : PaneWallPage.values()) {
+            assertEquals(place.name(), HelpPresentationModel.Mode.OVERVIEW, opened(place).mode());
+        }
         assertTrue(opened(PaneWallPage.TERMINAL).isOpen());
     }
 
-    @Test public void openingLandsOnTheFirstPageWithNothingSelected() {
+    @Test public void openingSelectsNothingAndFiltersNothing() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
+        model.showBasics();
+        model.selectTopic("dock");
         assertEquals(HelpPresentationModel.Effect.NONE,
             model.open(PaneWallPage.TERMINAL, everything(PaneWallPage.TERMINAL)));
-        assertEquals(0, model.page());
-        assertEquals(1, model.pageCount());
+        assertEquals(HelpPresentationModel.Mode.OVERVIEW, model.mode());
         assertNull(model.selectedId());
         assertNull(model.selected());
         assertFalse(model.basicsOnly());
@@ -129,6 +128,7 @@ public class HelpPresentationModelTest {
 
     @Test public void showBasicsListsOnlyTheEverydayTopics() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
+        model.backToTopics();
         assertEquals(HelpPresentationModel.Effect.NONE, model.showBasics());
         assertTrue(model.basicsOnly());
         assertEquals(HelpPresentationModel.Mode.TOPICS, model.mode());
@@ -150,18 +150,13 @@ public class HelpPresentationModelTest {
         assertEquals(HelpTopics.sizeFor(PaneWallPage.TERMINAL) - 2, ids.size());
     }
 
-    @Test public void showAllOpensTheWholeCatalogueOnTheFirstOverviewPage() {
+    @Test public void showAllLeavesTheChooserForTheWholeGuide() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
         model.showBasics();
-        model.setPageCount(3);
-        model.next();
         assertEquals(HelpPresentationModel.Effect.NONE, model.showAll());
         assertEquals(HelpPresentationModel.Mode.OVERVIEW, model.mode());
         assertFalse(model.basicsOnly());
-        assertEquals(0, model.page());
         assertEquals(HelpTopics.forPlace(PaneWallPage.TERMINAL), model.entries());
-        assertNotEquals(0, model.sectionLabelRes());
-        assertEquals(HelpTopics.Group.EVERYDAY.labelRes, model.sectionLabelRes());
     }
 
     @Test public void theListNeverHidesATopicWhoseControlIsMissing() {
@@ -171,67 +166,6 @@ public class HelpPresentationModelTest {
         assertEquals(HelpTopics.forPlace(PaneWallPage.TERMINAL), model.entries());
         assertFalse(model.isMeasurable("space"));
         assertTrue(model.isMeasurable("dock"));
-    }
-
-    @Test public void previousAndNextClampToThePagesTheRouterReports() {
-        HelpPresentationModel model = opened(PaneWallPage.WIDGETS);
-        assertEquals(HelpPresentationModel.Effect.NONE, model.setPageCount(2));
-        assertEquals(2, model.pageCount());
-        assertEquals(HelpPresentationModel.Effect.NONE, model.previous());
-        assertEquals(0, model.page());
-        model.next();
-        assertEquals(1, model.page());
-        model.next();
-        assertEquals(1, model.page());
-        model.previous();
-        assertEquals(0, model.page());
-        model.setPageCount(1);
-        assertEquals(0, model.page());
-        model.setPageCount(0);
-        assertEquals(1, model.pageCount());
-    }
-
-    @Test public void aShorterPageCountBringsTheReaderBackInsideIt() {
-        HelpPresentationModel model = opened(PaneWallPage.WIDGETS);
-        model.setPageCount(4);
-        model.next();
-        model.next();
-        assertEquals(2, model.page());
-        model.setPageCount(2);
-        assertEquals(1, model.page());
-    }
-
-    @Test public void theSectionLabelNamesTheGroupOnThePage() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.showAll();
-        List<HelpTopics.Entry> entries = model.overviewEntries();
-        model.setPageCount(entries.size());
-        Set<Integer> labels = new HashSet<>();
-        for (int i = 0; i < entries.size(); i++) {
-            assertEquals(entries.get(i).id, entries.get(i).group.labelRes, model.sectionLabelRes());
-            labels.add(model.sectionLabelRes());
-            model.next();
-        }
-        assertTrue(labels.contains(HelpTopics.Group.KEYBOARD.labelRes));
-        assertTrue(labels.contains(HelpTopics.Group.MULTITASKING.labelRes));
-    }
-
-    @Test public void theSectionLabelFollowsTheCardTheRouterActuallyPutFirst() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.showAll();
-        model.setPageCount(3);
-        // Pages are packed by collision, so page one can open on a Multitasking card.
-        assertEquals(HelpTopics.Group.MULTITASKING.labelRes, model.sectionLabelResFor("shortcuts"));
-        assertEquals(HelpTopics.Group.KEYBOARD.labelRes, model.sectionLabelResFor("space"));
-        // Nothing to go on falls back to the even split over the reported page count.
-        assertEquals(model.sectionLabelRes(), model.sectionLabelResFor(null));
-        assertEquals(model.sectionLabelRes(), model.sectionLabelResFor("no_such_topic"));
-    }
-
-    @Test public void theSectionLabelIsTheOverviewsAlone() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.selectTopic("dock");
-        assertEquals(0, model.sectionLabelResFor("shortcuts"));
     }
 
     @Test public void showGestureAsksForADemonstrationAndLeavesHelpOpen() {

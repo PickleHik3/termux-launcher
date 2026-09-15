@@ -154,6 +154,22 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         return mControls;
     }
 
+    /**
+     * The ? of the tab that is up, in screen coordinates; false when no tab is showing. The tab
+     * draws its buttons rather than laying them out as views, so nothing outside can find that one.
+     */
+    public boolean helpButtonRectOnScreen(@androidx.annotation.NonNull android.graphics.Rect out) {
+        if (mControls == null || !mControls.actionBounds(ACTION_HELP, mHelpButtonBounds)) return false;
+        int[] origin = new int[2];
+        mControls.getLocationOnScreen(origin);
+        out.set(Math.round(mHelpButtonBounds.left) + origin[0],
+            Math.round(mHelpButtonBounds.top) + origin[1],
+            Math.round(mHelpButtonBounds.right) + origin[0],
+            Math.round(mHelpButtonBounds.bottom) + origin[1]);
+        return !out.isEmpty();
+    }
+    private final android.graphics.RectF mHelpButtonBounds = new android.graphics.RectF();
+
     public void dismissControls() {
         dismissGridSizePopup();
         if (mControls != null) mControls.dismiss();
@@ -183,7 +199,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             return;
         }
         if (mHost == null) return;
-        if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
+        if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
         else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
         else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
         else if (id == ACTION_SETTINGS) mHost.openWidgetGridSettings();
@@ -291,8 +307,11 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                     if (mPressedAction != PaneControlsView.ACTION_NONE) {
                         if (mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
                             performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                            // The wheels hang off the tab, so that one leaves it out.
-                            if (mPressedAction != ACTION_GRID_SIZE) mControls.dismiss();
+                            // The wheels hang off the tab, so that one leaves it out; help reads
+                            // the ? off it, so it runs while the tab is still out and puts the tab
+                            // away itself.
+                            if (mPressedAction != ACTION_GRID_SIZE && mPressedAction != ACTION_HELP)
+                                mControls.dismiss();
                             mControls.activate(mPressedAction);
                         }
                     } else if (mPressedCorner != CornerZones.NONE) {

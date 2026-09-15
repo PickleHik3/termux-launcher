@@ -41,6 +41,13 @@ public final class CornerTabGlyphs {
     public static final String APPEARANCE = "";
 
     /**
+     * nf-fa-book: the whole of help, topic by topic — what the floating catalogue button beside an
+     * open guide opens. A book rather than a list, because what it opens is the reference, not one
+     * more menu.
+     */
+    public static final String CATALOGUE = "";
+
+    /**
      * nf-md-view_dashboard (U+F056E, a surrogate pair): the Layout editor — where a place's bars,
      * dock, keyboard and grid sit. The Material Design icons Nerd Fonts carries live in plane 15,
      * so this one is two chars where the Font Awesome glyphs above are one.
