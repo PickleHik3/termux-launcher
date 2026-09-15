@@ -20,11 +20,11 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceScreen;
 
 import com.termux.R;
+import com.termux.app.TermuxActivity;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.LayoutElement;
 import com.termux.app.fragments.settings.LayoutElementRowPreference;
-import com.termux.app.fragments.settings.LayoutOverviewPreference;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
@@ -49,10 +49,10 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The Layout page after the v2 restructure: one compact row per element with its portrait and
- * landscape values, a chooser behind each of them writing the scoped key for the orientation it
- * was picked under, the Widget grid row on Home alone, and the Display place offered only once the
- * Linux display is on.
+ * The Layout page as the door into the Layout editor: three place rows, each closing Settings and
+ * deep-linking the launcher to that place with the editor up, and — until they move into the
+ * editor — the element rows below them, each writing the scoped key for the orientation it was
+ * picked under.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -109,21 +109,32 @@ public class LayoutPreferencesFragmentTest {
     }
 
     @Test
-    public void thePageIsOneRowPerElementAndNothingElse() {
+    public void thePageOpensWithOneRowPerPlaceAndThenTheElementRows() {
         LayoutPreferencesFragment fragment = launch();
         PreferenceScreen screen = fragment.getPreferenceScreen();
 
-        assertTrue(screen.findPreference("layout_overview") instanceof LayoutOverviewPreference);
+        assertEquals("Home, Terminal, Display", 3, LayoutPreferencesFragment.KEY_PLACE_ROWS.length);
+        String[] titles = {"Home", "Terminal", "Display"};
+        for (int i = 0; i < LayoutPreferencesFragment.KEY_PLACE_ROWS.length; i++) {
+            String key = LayoutPreferencesFragment.KEY_PLACE_ROWS[i];
+            Preference row = screen.findPreference(key);
+            assertNotNull("place row " + key, row);
+            assertEquals("place row " + key + " stands first", i, indexOf(screen, key));
+            assertEquals(titles[i], String.valueOf(row.getTitle()));
+        }
+        assertNull("the twin miniatures have left the page",
+            screen.findPreference("layout_overview"));
+
         LayoutElement[] order = LayoutElement.values();
         assertEquals("Status bar, pinned apps, A–Z, extra keys, keyboard, widget grid",
             6, order.length);
         for (int i = 0; i < order.length; i++) {
             Preference row = screen.findPreference(order[i].key());
             assertTrue("row " + order[i], row instanceof LayoutElementRowPreference);
-            // The overview stands first, so the rows follow it in the enum's own order.
-            assertEquals("row order for " + order[i], i + 1, indexOf(screen, order[i].key()));
+            // The three doors stand first, so the element rows follow them in the enum's own order.
+            assertEquals("row order for " + order[i], i + 3, indexOf(screen, order[i].key()));
         }
-        assertEquals("the overview and the rows are the whole page", order.length + 1,
+        assertEquals("the doors and the rows are the whole page", order.length + 3,
             screen.getPreferenceCount());
 
         // No captions anywhere: a row says its values, nothing else.
@@ -132,6 +143,61 @@ public class LayoutPreferencesFragmentTest {
             assertTrue("row " + element + " summarises its values",
                 summary(fragment, element).contains("·"));
         }
+    }
+
+    @Test
+    public void eachPlaceRowClosesSettingsAndDeepLinksTheLauncherToThatPlacesLayoutEditor() {
+        Application app = RuntimeEnvironment.getApplication();
+        PaneWallPage[] places =
+            {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY};
+        for (int i = 0; i < LayoutPreferencesFragment.KEY_PLACE_ROWS.length; i++) {
+            ActivityController<SettingsActivity> controller = Robolectric.buildActivity(
+                SettingsActivity.class,
+                new Intent(app, SettingsActivity.class).putExtra(
+                    SettingsActivity.EXTRA_INITIAL_FRAGMENT,
+                    LayoutPreferencesFragment.class.getName()))
+                .create().start().resume();
+            SettingsActivity activity = controller.get();
+            activity.getSupportFragmentManager().executePendingTransactions();
+            LayoutPreferencesFragment fragment = (LayoutPreferencesFragment)
+                activity.getSupportFragmentManager().findFragmentById(R.id.settings);
+            assertNotNull(fragment);
+
+            Preference row = fragment.getPreferenceScreen()
+                .findPreference(LayoutPreferencesFragment.KEY_PLACE_ROWS[i]);
+            assertNotNull(row);
+            row.performClick();
+
+            Intent started = Shadows.shadowOf(activity).getNextStartedActivity();
+            assertNotNull("the launcher was asked for", started);
+            assertEquals(TermuxActivity.class.getName(),
+                started.getComponent() == null ? null : started.getComponent().getClassName());
+            assertTrue("with the Layout editor",
+                started.getBooleanExtra(TermuxActivity.EXTRA_LAYOUT_EDITOR, false));
+            assertEquals("on this place", places[i].toolName(),
+                started.getStringExtra(TermuxActivity.EXTRA_LAYOUT_EDITOR_PLACE));
+            assertTrue("Settings closes behind it", activity.isFinishing());
+        }
+    }
+
+    @Test
+    public void theDisplayRowOnlyStandsWhenTheLinuxDisplayIsOn() {
+        LayoutPreferencesFragment offFragment = launch();
+        Preference off = offFragment.getPreferenceScreen()
+            .findPreference(LayoutPreferencesFragment.KEY_PLACE_ROWS[2]);
+        assertNotNull(off);
+        assertFalse("fresh install: display is off", off.isVisible());
+
+        Context context = RuntimeEnvironment.getApplication();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
+        preferences.setX11DisplayEnabled(true);
+
+        LayoutPreferencesFragment onFragment = launch();
+        Preference on = onFragment.getPreferenceScreen()
+            .findPreference(LayoutPreferencesFragment.KEY_PLACE_ROWS[2]);
+        assertNotNull(on);
+        assertEquals("display enabled iff BuildConfig.X11_SERVER too",
+            com.termux.BuildConfig.X11_SERVER, on.isVisible());
     }
 
     private static int indexOf(PreferenceScreen screen, String key) {
@@ -157,26 +223,6 @@ public class LayoutPreferencesFragmentTest {
             assertTrue("row " + element + " on home",
                 fragment.getPreferenceScreen().findPreference(element.key()).isVisible());
         }
-    }
-
-    @Test
-    public void theDisplayTabOnlyAppearsWhenTheLinuxDisplayIsOn() {
-        LayoutPreferencesFragment offFragment = launch();
-        LayoutOverviewPreference overview =
-            offFragment.getPreferenceScreen().findPreference("layout_overview");
-        assertNotNull(overview);
-        assertFalse("fresh install: display is off", overview.isDisplayTabVisible());
-
-        Context context = RuntimeEnvironment.getApplication();
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        preferences.setX11DisplayEnabled(true);
-
-        LayoutPreferencesFragment onFragment = launch();
-        LayoutOverviewPreference onOverview =
-            onFragment.getPreferenceScreen().findPreference("layout_overview");
-        assertNotNull(onOverview);
-        assertEquals("display enabled iff BuildConfig.X11_SERVER too",
-            com.termux.BuildConfig.X11_SERVER, onOverview.isDisplayTabVisible());
     }
 
     @Test

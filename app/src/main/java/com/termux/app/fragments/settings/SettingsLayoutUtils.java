@@ -69,7 +69,6 @@ public final class SettingsLayoutUtils {
 
         // Preferences that fully own their layout.
         if (preference instanceof SegmentedPillPreference
-            || preference instanceof LayoutOverviewPreference
             || preference instanceof LayoutElementRowPreference
             || preference instanceof CategorySortProgressPreference
             || preference instanceof StatusActionPreference

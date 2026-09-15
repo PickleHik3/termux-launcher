@@ -1,12 +1,15 @@
 package com.termux.app.fragments.settings.termux;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.preference.Preference;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
@@ -15,7 +18,6 @@ import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.LayoutChooserSheet;
 import com.termux.app.fragments.settings.LayoutElement;
 import com.termux.app.fragments.settings.LayoutElementRowPreference;
-import com.termux.app.fragments.settings.LayoutOverviewPreference;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
@@ -27,16 +29,23 @@ import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * The Layout page: what is on screen and where, per place (Home / Terminal / Display) and, for
- * arrangement, per orientation. The page is the editor — the pill picks the place, the two
- * miniatures show it in portrait and landscape at once, and one compact row per element says what
- * it is set to in each and opens a chooser for it. Every write goes straight to
- * {@link PlaceLayoutStore} and both pictures and every row are re-read afterwards.
+ * The Layout page: a door, not an editor. One row per place — Home, Terminal, Display — and each of
+ * them closes Settings and opens the launcher on that place with the Layout editor over it, which
+ * is where a place's elements are moved now.
+ *
+ * <p>The element rows below are what the page used to be: one compact row per element saying what
+ * it is set to in each orientation, with a chooser behind it writing straight to
+ * {@link PlaceLayoutStore}. They stay until they move into the editor beside the miniature.
  */
 @Keep
 public final class LayoutPreferencesFragment extends MaterialPreferenceFragment {
 
-    private static final String KEY_OVERVIEW = "layout_overview";
+    /** The three doors, in the order they stand on the page. */
+    @VisibleForTesting
+    static final String[] KEY_PLACE_ROWS =
+        {"layout_place_home", "layout_place_terminal", "layout_place_display"};
+    private static final PaneWallPage[] PLACE_ROW_PLACES =
+        {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY};
     /** The Widgets page's own cog deep-links to this row, so it names itself. */
     public static final String KEY_WIDGET_GRID = LayoutElement.WIDGET_GRID.key();
 
@@ -73,7 +82,7 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
             mSelectedPlace = PaneWallPage.TERMINAL;
         }
 
-        configureOverview(displayAvailable);
+        configurePlaceRows(displayAvailable);
         configureRows();
         refresh();
         // Only now do the rows know which of them this place has, so this is the first moment a
@@ -134,11 +143,9 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
         if (preferences == null) return;
         boolean displayAvailable = isDisplayAvailable(preferences);
-        LayoutOverviewPreference overview = findPreference(KEY_OVERVIEW);
-        if (overview != null) overview.setDisplayTabVisible(displayAvailable);
+        configurePlaceRows(displayAvailable);
         if (!displayAvailable && mSelectedPlace == PaneWallPage.DISPLAY) {
             mSelectedPlace = PaneWallPage.TERMINAL;
-            if (overview != null) overview.setSelection(mSelectedPlace);
         }
         refresh();
     }
@@ -147,30 +154,43 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
         return com.termux.BuildConfig.X11_SERVER && preferences.isX11DisplayEnabled();
     }
 
-    private void configureOverview(boolean displayAvailable) {
-        LayoutOverviewPreference overview = findPreference(KEY_OVERVIEW);
-        if (overview == null) return;
-        overview.setDisplayTabVisible(displayAvailable);
-        overview.setSelection(mSelectedPlace);
-        overview.setOnSelectionListener(new LayoutOverviewPreference.Listener() {
-            @Override
-            public void onPlaceChanged(@NonNull PaneWallPage place) {
-                mSelectedPlace = place;
-                refresh();
-            }
+    /**
+     * The three doors. Each one finishes Settings and opens the launcher on its place with the
+     * Layout editor up; the Display row stands only where there is a display to lay out.
+     */
+    private void configurePlaceRows(boolean displayAvailable) {
+        for (int i = 0; i < KEY_PLACE_ROWS.length; i++) {
+            Preference row = findPreference(KEY_PLACE_ROWS[i]);
+            if (row == null) continue;
+            PaneWallPage place = PLACE_ROW_PLACES[i];
+            row.setVisible(place != PaneWallPage.DISPLAY || displayAvailable);
+            row.setOnPreferenceClickListener(preference -> {
+                openLayoutEditor(place);
+                return true;
+            });
+        }
+    }
 
-            @Override
-            public void onBlockTapped(@NonNull PlaceMiniatureView.Block block) {
-                openChooser(LayoutElement.forBlock(block, mSelectedPlace));
-            }
+    /**
+     * Hands the launcher over: it comes forward on that place with the Layout editor over it, and
+     * Settings closes behind, so Back from the editor is the place itself rather than this list.
+     */
+    private void openLayoutEditor(@NonNull PaneWallPage place) {
+        Context context = getContext();
+        if (context == null) return;
+        startActivity(layoutEditorIntent(context, place));
+        Activity activity = getActivity();
+        if (activity != null) activity.finish();
+    }
 
-            @Override
-            public void onBarDropped(@NonNull PlaceOrientation orientation,
-                                     @NonNull PlaceMiniatureView.Block bar,
-                                     @Nullable PlaceLayout.Edge edge) {
-                dropBar(orientation, bar, edge);
-            }
-        });
+    /** The one place the Layout editor's deep link is spelled out. */
+    @NonNull
+    static Intent layoutEditorIntent(@NonNull Context context, @NonNull PaneWallPage place) {
+        Intent intent = new Intent(context, TermuxActivity.class);
+        intent.putExtra(TermuxActivity.EXTRA_LAYOUT_EDITOR, true);
+        intent.putExtra(TermuxActivity.EXTRA_LAYOUT_EDITOR_PLACE, place.toolName());
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return intent;
     }
 
     /** Wires every row's chooser once, and the Look row's deep link into the surface editor. */
@@ -190,11 +210,6 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     private void refresh() {
         Context context = getContext();
         if (context == null || mPlaces == null) return;
-        LayoutOverviewPreference overview = findPreference(KEY_OVERVIEW);
-        if (overview != null) {
-            overview.setLayouts(mPlaces.resolve(mSelectedPlace, PlaceOrientation.PORTRAIT),
-                mPlaces.resolve(mSelectedPlace, PlaceOrientation.LANDSCAPE));
-        }
         for (LayoutElement element : LayoutElement.values()) {
             LayoutElementRowPreference row = findPreference(element.key());
             if (row == null) continue;
@@ -260,8 +275,6 @@ public final class LayoutPreferencesFragment extends MaterialPreferenceFragment 
     @VisibleForTesting
     void selectPlace(@NonNull PaneWallPage place) {
         mSelectedPlace = place;
-        LayoutOverviewPreference overview = findPreference(KEY_OVERVIEW);
-        if (overview != null) overview.setSelection(place);
         refresh();
     }
 
