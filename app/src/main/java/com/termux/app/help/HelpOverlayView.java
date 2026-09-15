@@ -320,16 +320,27 @@ public final class HelpOverlayView extends FrameLayout {
         LinearLayout panel = panel();
         String title = getContext().getString(entry.titleRes);
         panel.addView(header(title));
-        panel.addView(line(getContext().getString(entry.purposeRes), true,
+        // The sentences scroll rather than push the buttons off the wall at a large font scale.
+        LinearLayout body = new LinearLayout(getContext());
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.addView(line(getContext().getString(entry.purposeRes), true,
             model.topicHighlightColor(accent)), rowParams(dp(6)));
-        panel.addView(line(getContext().getString(entry.actionRes), false, dress.textColor),
+        body.addView(line(getContext().getString(entry.actionRes), false, dress.textColor),
             rowParams(dp(4)));
         int revealRes = model.revealRes();
         if (revealRes != 0)
-            panel.addView(line(getContext().getString(revealRes), false,
+            body.addView(line(getContext().getString(revealRes), false,
                 ColorUtils.setAlphaComponent(dress.textColor, 199)), rowParams(dp(6)));
         HelpTopics.Entry related = HelpTopics.entry(place, model.relatedTopicId());
-        if (related != null) panel.addView(chip(related), rowParams(dp(8)));
+        if (related != null) body.addView(chip(related), rowParams(dp(8)));
+        ScrollView scroll = new ScrollView(getContext());
+        scroll.setFillViewport(false);
+        scroll.addView(body, new ScrollView.LayoutParams(LayoutParams.MATCH_PARENT,
+            LayoutParams.WRAP_CONTENT));
+        // Weighted, so a panel taller than the wall takes the shortfall out of the text it can
+        // scroll and never out of the buttons under it.
+        panel.addView(scroll, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT,
+            LayoutParams.WRAP_CONTENT, 1f));
         // Close is the header's, once: a second one in the button row is the same way out twice.
         LinearLayout first = buttonRow();
         first.addView(button(getContext().getString(R.string.help_back_to_topics), true,

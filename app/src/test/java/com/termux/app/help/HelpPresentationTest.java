@@ -163,6 +163,25 @@ public class HelpPresentationTest {
         assertEquals("find_help", practised);
     }
 
+    @Test public void aTopicsSentencesScrollAndItsButtonsDoNot() {
+        open(PaneWallPage.TERMINAL);
+        startingWith("Pane corners\n").performClick();
+        layout();
+        assertTrue(inScrollView(startingWith("Every pane corner holds")));
+        assertFalse(inScrollView(exactly("Back to topics")));
+        assertFalse(inScrollView(exactly("Show gesture")));
+    }
+
+    private boolean inScrollView(View view) {
+        assertNotNull(view);
+        android.view.ViewParent parent = view.getParent();
+        while (parent != null) {
+            if (parent instanceof android.widget.ScrollView) return true;
+            parent = parent.getParent();
+        }
+        return false;
+    }
+
     @Test public void aTopicOffersOneCloseAndItIsTheHeaders() {
         open(PaneWallPage.TERMINAL);
         startingWith("Pane corners\n").performClick();
