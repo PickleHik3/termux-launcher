@@ -52,6 +52,8 @@ miniature scrolls to its row. Rows use `SegmentedPillPreference`.
 
 ## Surface editor per place
 
+> **Renamed 2026-09-15**: this editor is now the **Appearance editor** (`../layout-editor/SPEC.md`); the per-place look semantics below are unchanged.
+
 - Opened on a place (long-press, Layout page, deep link): edits that place. Header names the place;
   rows show a "follows shared" mark until touched (like today's detached mark).
 - Opened from Settings → Look: edits the shared layer; overridden rows carry a note naming the places.
@@ -141,6 +143,8 @@ keys at 47dp with 26px margins (was 38dp with 96/63), and the surface editor ope
 
 ## Layout page v2 — the page is the editor (decided 2026-09-10)
 
+> **Superseded 2026-09-15** by `../layout-editor/SPEC.md`: Settings → Layout becomes a door with three rows into the Layout editor; the twin miniatures and element rows leave the page.
+
 Supersedes "Layout page" above. Option B (draggable miniature) on option A's skeleton; the surface
 editor is untouched. The lavish review page it was agreed on is gone with its worktree; this section is the record.
 
@@ -173,6 +177,8 @@ hit-testing, unit-tested like `DockLayoutPolicy`.
 Out of scope: the surface editor, `PlaceLayoutStore` keys, launcher behaviour.
 
 ## Arranging inside the surface editor (phase 3, decided 2026-09-10)
+
+> **Superseded 2026-09-15** by `../layout-editor/SPEC.md`: in-place placement is removed; layout is edited on the miniature in the Layout editor with Done/Discard, and the sizes move into the layout store (ADR 0001).
 
 The Layout page arranges a place from a picture of it; the surface editor arranges it on the real
 screen. Same keys, same writes, no Done: a pick lands in `PlaceLayoutStore` for the edited place and
