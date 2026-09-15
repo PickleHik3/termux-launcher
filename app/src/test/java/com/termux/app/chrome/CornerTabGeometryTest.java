@@ -35,8 +35,13 @@ public class CornerTabGeometryTest {
         CornerZones.BOTTOM_LEFT, CornerZones.BOTTOM_RIGHT
     };
 
+    /** Five 30dp buttons: 5 + 30 + (8 + 30) x 4 + 5. */
+    private static final float[] FIVE = {30f, 30f, 30f, 30f, 30f};
+    private static final float FIVE_WIDTH = 192f;
+
     private final RectF mTab = new RectF();
-    private final RectF[] mButtons = {new RectF(), new RectF(), new RectF()};
+    private final RectF[] mButtons = {new RectF(), new RectF(), new RectF(), new RectF(),
+        new RectF()};
 
     private void layout(int corner, RectF bounds, float inset, float progress) {
         layout(corner, bounds, 0f, inset, progress);
@@ -156,6 +161,65 @@ public class CornerTabGeometryTest {
             assertEquals(mTab.top, mButtons[i].top, 0.01f);
             assertEquals(mTab.bottom, mButtons[i].bottom, 0.01f);
         }
+    }
+
+    /**
+     * A tab of any length. Every place on the wall builds its buttons from a list now, so five is
+     * as ordinary as two: they lay out in order, meet edge to edge, and the tab is exactly as wide
+     * as they asked for while the frame has room.
+     */
+    @Test
+    public void fiveButtonsLayOutInOrderAndFillTheTab() {
+        RectF frame = frame();
+        CornerTabGeometry.layout(CornerZones.TOP_RIGHT, frame, FIVE, 5, GAP, PAD, HEIGHT, 0f, 0f,
+            MARGIN, 1f, mTab, mButtons);
+
+        assertEquals(FIVE_WIDTH, CornerTabGeometry.naturalWidth(FIVE, 5, GAP, PAD), 0.01f);
+        assertEquals(600f - MARGIN, mTab.right, 0.01f);
+        assertEquals(600f - MARGIN - FIVE_WIDTH, mTab.left, 0.01f);
+        assertEquals("the first button reaches the tab's leading edge",
+            mTab.left, mButtons[0].left, 0.01f);
+        assertEquals("the last button reaches its trailing edge",
+            mTab.right, mButtons[4].right, 0.01f);
+        for (int i = 0; i < 5; i++) {
+            assertEquals(mTab.top, mButtons[i].top, 0.01f);
+            assertEquals(mTab.bottom, mButtons[i].bottom, 0.01f);
+            if (i > 0) {
+                assertEquals("button " + i + " meets the one before it",
+                    mButtons[i - 1].right, mButtons[i].left, 0.01f);
+            }
+        }
+    }
+
+    /**
+     * The narrow-pane rule with a full tab on it: a split pane far too narrow for five buttons
+     * shrinks them in proportion rather than walking them off its far side, so the fifth is still
+     * inside the frame and still has a slot a thumb can land in.
+     */
+    @Test
+    public void fiveButtonsScaleDownRatherThanOverflowANarrowFrame() {
+        // Room for 94 of the 192 the five ask for: a 100dp-wide pane of a vertical split.
+        RectF narrow = new RectF(0f, 0f, 100f, 800f);
+        CornerTabGeometry.layout(CornerZones.TOP_RIGHT, narrow, FIVE, 5, GAP, PAD, HEIGHT, 0f, 0f,
+            MARGIN, 1f, mTab, mButtons);
+
+        assertEquals(100f - MARGIN, mTab.right, 0.01f);
+        assertEquals(MARGIN, mTab.left, 0.01f);
+        assertTrue("the tab was cut down to the room there is",
+            mTab.width() < FIVE_WIDTH);
+        for (int i = 0; i < 5; i++) {
+            assertTrue("button " + i + " left of the tab", mButtons[i].left >= mTab.left - 0.01f);
+            assertTrue("button " + i + " past the tab", mButtons[i].right <= mTab.right + 0.01f);
+            assertTrue("button " + i + " has no slot to tap", mButtons[i].width() > 0f);
+            if (i > 0) {
+                assertEquals("button " + i + " meets the one before it",
+                    mButtons[i - 1].right, mButtons[i].left, 0.01f);
+            }
+        }
+        assertEquals("and they still fill it edge to edge", mTab.left, mButtons[0].left, 0.01f);
+        assertEquals(mTab.right, mButtons[4].right, 0.01f);
+        assertTrue(mTab.left >= narrow.left);
+        assertTrue(mTab.right <= narrow.right);
     }
 
     @Test
