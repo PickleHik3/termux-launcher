@@ -131,6 +131,7 @@ import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.DockPagingModel;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.view.TerminalView;
@@ -202,6 +203,12 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private static final String LOG_TAG = "SuggestionBarView";
+    /**
+     * Its own tag, because this traces one gesture end to end and would otherwise drown the row's
+     * ordinary logging. Silent unless the app's log level is Debug, which is where every other
+     * debug trace in this codebase sits.
+     */
+    private static final String PAGING_LOG_TAG = "DockPaging";
     private static final char[] AZ_ORDER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".toCharArray();
     private static final long APP_LAUNCH_TOUCH_DELAY_MS = 120L;
     private static final long PICKUP_DECISION_WINDOW_MS = 650L;
@@ -2238,6 +2245,14 @@ public final class SuggestionBarView extends GridLayout
             float vx = swipeVelocityTracker == null ? 0f : swipeVelocityTracker.getXVelocity();
             int committedPageDelta = DockPagingModel.commitPageDelta(dx, dy, vx,
                 resolvePageSwipeCommitDistancePx(), density());
+            if (pagingLogEnabled()) {
+                logPaging("up dx=" + dx + " dy=" + dy + " vx=" + vx
+                    + " commit=" + committedPageDelta + " claim=" + claim
+                    + " pinnedPage=" + pinnedPageIndex + " previewPage=" + swipePreviewPageIndex
+                    + " animating=" + pageSwitchAnimating + " dragging=" + swipePageDragging
+                    + " commitDistancePx=" + resolvePageSwipeCommitDistancePx()
+                    + " width=" + getWidth());
+            }
             if (claim == GESTURE_CLAIM_PAGE_SWIPE && committedPageDelta != 0
                 && TextUtils.isEmpty(lastInput.trim())) {
                 int pageDelta = committedPageDelta;
@@ -6366,11 +6381,20 @@ public final class SuggestionBarView extends GridLayout
      * indistinguishable from a completed one both at the source and in any log.
      */
     private boolean animatePageSwitch(int pageDelta, float velocityPxPerSec) {
-        if (pageSwitchAnimating) return false;
+        if (pageSwitchAnimating) {
+            logPaging("animatePageSwitch dropped: a switch is already animating");
+            return false;
+        }
         int totalPages = getPinnedPagesCount();
-        if (totalPages <= 1) return false;
+        if (totalPages <= 1) {
+            logPaging("animatePageSwitch dropped: totalPages=" + totalPages);
+            return false;
+        }
         int targetPage = DockPagingModel.wrap(pinnedPageIndex + pageDelta, totalPages);
-        if (targetPage == pinnedPageIndex) return false;
+        if (targetPage == pinnedPageIndex) {
+            logPaging("animatePageSwitch dropped: target is the current page " + targetPage);
+            return false;
+        }
 
         performPinnedPageTransitionHaptic(targetPage);
         pageSwitchAnimating = true;
@@ -6383,8 +6407,10 @@ public final class SuggestionBarView extends GridLayout
             reloadWithInput("", lastTerminalView);
         };
         if (swipePageDragging && swipePreviewPageIndex == targetPage) {
+            logPaging("animatePageSwitch settle to page " + targetPage + " (swipe preview)");
             runSwipePreviewPageSwitch(direction, duration, updateContent, null);
         } else {
+            logPaging("animatePageSwitch settle to page " + targetPage + " (unified bar)");
             final float travel = Math.max(dp(24), getWidth() * 0.24f);
             runUnifiedAppsBarPageSwitch(direction, travel, duration, updateContent, null);
         }
@@ -6755,6 +6781,15 @@ public final class SuggestionBarView extends GridLayout
         swipePreviewFolderEntries = Collections.emptyList();
     }
 
+    /** Whether the dock's page-gesture trace is on, so a call site can skip building its string. */
+    private static boolean pagingLogEnabled() {
+        return Logger.getLogLevel() >= Logger.LOG_LEVEL_DEBUG;
+    }
+
+    private static void logPaging(@NonNull String message) {
+        if (pagingLogEnabled()) Logger.logDebug(PAGING_LOG_TAG, message);
+    }
+
     /**
      * The page commit, wrapped so it runs exactly once from whichever path the switch animation
      * ends on — its own end, or a cancel.
@@ -6766,14 +6801,26 @@ public final class SuggestionBarView extends GridLayout
      * committed and then silently landed back on the page it came from — the ghost swipe. A
      * qualified swipe is a decision; the animation is only how it is shown.
      */
-    @NonNull
-    private static Runnable pageCommitOnce(@Nullable Runnable commit) {
-        final boolean[] done = {false};
-        return () -> {
-            if (done[0]) return;
-            done[0] = true;
+    private static final class PageCommitOnce {
+        @Nullable private final Runnable commit;
+        @NonNull private final String animation;
+        private boolean done;
+
+        PageCommitOnce(@Nullable Runnable commit, @NonNull String animation) {
+            this.commit = commit;
+            this.animation = animation;
+        }
+
+        /** Commits the page the first time it is asked, and records which listener asked. */
+        void runFrom(@NonNull String listener) {
+            if (done) {
+                logPaging(animation + ": commit already done, " + listener + " ignored");
+                return;
+            }
+            done = true;
+            logPaging(animation + ": commit fired from " + listener);
             if (commit != null) commit.run();
-        };
+        }
     }
 
     private void runSwipePreviewPageSwitch(
@@ -6793,7 +6840,7 @@ public final class SuggestionBarView extends GridLayout
         final float distanceRatio = clamp01(Math.abs(targetOffset - startOffset) / Math.max(1f, getWidth()));
         final long settleDuration = clamp(Math.round(duration * (0.72f + (0.28f * distanceRatio))), 240, 420);
         swipePageDragging = true;
-        final Runnable commit = pageCommitOnce(updateContent);
+        final PageCommitOnce commit = new PageCommitOnce(updateContent, "swipe-preview");
         ValueAnimator settle = ValueAnimator.ofFloat(startOffset, targetOffset);
         swipePreviewSettleAnimator = settle;
         settle.setDuration(settleDuration);
@@ -6813,7 +6860,7 @@ public final class SuggestionBarView extends GridLayout
                 // an identity check here would skip the whole teardown on every cancel.
                 if (cancelled) return;
                 if (swipePreviewSettleAnimator == animation) swipePreviewSettleAnimator = null;
-                commit.run();
+                commit.runFrom("settle end");
                 pageSwitchAnimating = false;
                 swipePageDragging = false;
                 swipePagePosition = resolveCurrentSwipePagePosition();
@@ -6834,7 +6881,7 @@ public final class SuggestionBarView extends GridLayout
                 // is not visual state, though — no switch is in flight once this animator is
                 // cancelled, and leaving it set made the next qualified swipe get consumed at
                 // ACTION_UP and then dropped with no animation at all.
-                commit.run();
+                commit.runFrom("settle cancel");
                 pageSwitchAnimating = false;
                 swipePagePosition = resolveCurrentSwipePagePosition();
             }
@@ -6949,7 +6996,7 @@ public final class SuggestionBarView extends GridLayout
         final Interpolator settleInterpolator = pageSettleInterpolator();
         final long outgoingDuration = Math.max(92L, Math.round(duration * 0.44f));
         final long incomingDuration = Math.max(118L, duration - outgoingDuration);
-        final Runnable commit = pageCommitOnce(updateContent);
+        final PageCommitOnce commit = new PageCommitOnce(updateContent, "unified bar");
 
         animate()
             .translationX(-direction * (travel * 0.78f))
@@ -6965,7 +7012,7 @@ public final class SuggestionBarView extends GridLayout
                     cancelled = true;
                     // Commit before the reset: the page is the swipe's decision, and the incoming
                     // half that would otherwise have carried it is not going to run.
-                    commit.run();
+                    commit.runFrom("outgoing cancel");
                     finish(false);
                 }
 
@@ -6975,7 +7022,7 @@ public final class SuggestionBarView extends GridLayout
                         return;
                     }
                     completed = true;
-                    commit.run();
+                    commit.runFrom("outgoing end");
                     setTranslationX(direction * travel);
                     setAlpha(0f);
                     animate()
