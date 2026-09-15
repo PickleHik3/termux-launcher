@@ -174,7 +174,9 @@ public final class X11PaneFrame extends PaneContentFrame {
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
         mControls.setListener(id -> {
             if (mHost == null) return;
-            if (id == ACTION_HELP) { dismissControls(); mHost.showHelpOverlay(); }
+            // Help first, the tab second: help reads the ? it was opened from while it is still
+            // out, and puts the tab away itself.
+            if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
             else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
             else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
@@ -255,7 +257,9 @@ public final class X11PaneFrame extends PaneContentFrame {
                     if (mPressedAction != PaneControlsView.ACTION_NONE) {
                         if (mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
                             performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
-                            dismissControls();
+                            // Help runs while the tab is still out — it reads the ? to hang its
+                            // own buttons beside it — and puts the tab away itself.
+                            if (mPressedAction != ACTION_HELP) dismissControls();
                             mControls.activate(mPressedAction);
                         }
                     } else if (mPressedCorner != CornerZones.NONE) {
@@ -386,6 +390,22 @@ public final class X11PaneFrame extends PaneContentFrame {
     }
 
     /** Put the controls away, for a host that moved the wall on. */
+    /**
+     * The ? of the tab that is up, in screen coordinates; false when no tab is showing. The tab
+     * draws its buttons rather than laying them out as views, so nothing outside can find that one.
+     */
+    public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
+        if (mControls == null || !mControls.actionBounds(ACTION_HELP, mHelpButtonBounds)) return false;
+        int[] origin = new int[2];
+        mControls.getLocationOnScreen(origin);
+        out.set(Math.round(mHelpButtonBounds.left) + origin[0],
+            Math.round(mHelpButtonBounds.top) + origin[1],
+            Math.round(mHelpButtonBounds.right) + origin[0],
+            Math.round(mHelpButtonBounds.bottom) + origin[1]);
+        return !out.isEmpty();
+    }
+    private final android.graphics.RectF mHelpButtonBounds = new android.graphics.RectF();
+
     public void dismissControls() {
         if (mControls != null) mControls.dismiss();
         if (mRail != null) mRail.dismiss();

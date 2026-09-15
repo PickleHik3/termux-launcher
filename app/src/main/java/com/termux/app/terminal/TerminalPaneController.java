@@ -3472,8 +3472,10 @@ public class TerminalPaneController {
             Leaf leaf = mControlLeaf;
             if (leaf == null) return;
             if (action == ACTION_HELP) {
-                dismissControlsForHelp();
+                // Help first, the tab second: help reads the ? to hang its own buttons beside it,
+                // and dismisses every tab on the wall on its way up.
                 mHost.showHelpOverlay();
+                dismissControlsForHelp();
             } else if (action == ACTION_MAXIMIZE) {
                 mMaximizedLeaf = mMaximizedLeaf == null ? leaf : null;
                 mActiveWindow.active = leaf;

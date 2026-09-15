@@ -278,6 +278,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showHelpOverlay() {
         ViewGroup content = findViewById(android.R.id.content);
         if (content == null) return;
+        // Where the ? was, read while its tab is still up: help hangs its own buttons there, and a
+        // tab dismissed first would have nothing left to measure.
+        android.graphics.Rect anchor = new android.graphics.Rect();
+        boolean anchored = mPaneController != null && mPaneController.helpButtonRectOnScreen(anchor);
+        if (!anchored && mPaneWallController != null) {
+            anchored = mPaneWallController.widgetsPage() != null
+                && mPaneWallController.widgetsPage().helpButtonRectOnScreen(anchor);
+            if (!anchored) anchored = mPaneWallController.displayPage() != null
+                && mPaneWallController.displayPage().helpButtonRectOnScreen(anchor);
+        }
         if (mPaneController != null) mPaneController.dismissControlsForHelp();
         if (mPaneWallController != null) {
             if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().dismissControls();
@@ -316,7 +326,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A run that is partway through a lesson has nowhere to put a practice card, so help does
         // not offer one.
         mHelpOverlay.setPracticeAvailable(mFirstBootTour == null || mFirstBootTour.canStartPractice());
-        mHelpOverlay.show(currentWallPlace());
+        mHelpOverlay.show(currentWallPlace(), anchored ? anchor : null);
         if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(true);
     }
 
