@@ -112,6 +112,11 @@ public final class SessionsDrawerView extends LinearLayout
     /** The tint a row's own surface carries, over whatever the drawer is painted with. */
     private static final int ROW_FILL_ALPHA = 14;
     private static final int ROW_CURRENT_FILL_ALPHA = 34;
+    /** Which corners a row's surface rounds: a row with something unfolded under it shares a card. */
+    private static final int CORNERS_ALL = 0;
+    private static final int CORNERS_TOP = 1;
+    private static final int CORNERS_BOTTOM = 2;
+    private static final int UNFOLD_SIDE_DP = 12;
 
     @Nullable private Listener mListener;
     @NonNull private TerminalDress mDress;
@@ -383,8 +388,10 @@ public final class SessionsDrawerView extends LinearLayout
     private void buildLiveRows() {
         for (SessionBrowserModel.Session session : mSessions) {
             mRows.addView(buildSessionRow(session), rowParams(ROW_HEIGHT_DP));
-            if (rowState(session.id) != RowState.IDLE) mRows.addView(buildRowUnfold(session),
-                new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+            if (rowState(session.id) != RowState.IDLE) {
+                mRows.addView(unfold(buildRowUnfold(session), session.current),
+                    new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+            }
             if (mExpandedSessionId == null || mExpandedSessionId != session.id) continue;
             for (int i = 0; i < session.windows.size(); i++) {
                 mRows.addView(buildWindowRow(session, session.windows.get(i),
@@ -395,7 +402,8 @@ public final class SessionsDrawerView extends LinearLayout
 
     @NonNull
     private View buildSessionRow(@NonNull SessionBrowserModel.Session session) {
-        LinearLayout row = baseRow(session.current);
+        boolean unfolded = rowState(session.id) != RowState.IDLE;
+        LinearLayout row = baseRow(session.current, unfolded ? CORNERS_TOP : CORNERS_ALL);
         row.setPaddingRelative(dp(8), dp(2), dp(2), dp(2));
 
         TextView chevron = label(14f, mDress.subTextColor);
@@ -461,7 +469,7 @@ public final class SessionsDrawerView extends LinearLayout
             case CONFIRM_CLOSE:
                 return buildConfirmRow(
                     getContext().getString(R.string.sessions_drawer_close_question),
-                    getContext().getString(R.string.session_browser_close),
+                    getContext().getString(R.string.sessions_drawer_end),
                     getContext().getString(R.string.sessions_drawer_keep),
                     () -> {
                         if (mListener != null) mListener.onCloseSession(session.id);
@@ -480,7 +488,7 @@ public final class SessionsDrawerView extends LinearLayout
                     beginTyping(session.name == null ? "" : session.name);
                     rebuild();
                 });
-                addAction(actions, getContext().getString(R.string.session_browser_close), () -> {
+                addAction(actions, getContext().getString(R.string.sessions_drawer_end), () -> {
                     mRowState = RowState.CONFIRM_CLOSE;
                     rebuild();
                 });
@@ -491,7 +499,7 @@ public final class SessionsDrawerView extends LinearLayout
     @NonNull
     private View buildWindowRow(@NonNull SessionBrowserModel.Session session,
                                 @NonNull SessionBrowserModel.Window window, boolean last) {
-        LinearLayout row = baseRow(false);
+        LinearLayout row = baseRow(false, CORNERS_ALL);
         row.setPaddingRelative(dp(24), dp(1), dp(6), dp(1));
         TextView connector = label(12f, mDress.subTextColor);
         connector.setText(last ? "└" : "├");
@@ -522,14 +530,15 @@ public final class SessionsDrawerView extends LinearLayout
         for (SavedWorkspace workspace : mSaved) {
             mRows.addView(buildSavedRow(workspace), rowParams(ROW_HEIGHT_DP));
             if (savedState(workspace.name) == SavedState.IDLE) continue;
-            mRows.addView(buildSavedUnfold(workspace),
+            mRows.addView(unfold(buildSavedUnfold(workspace), false),
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         }
     }
 
     @NonNull
     private View buildSavedRow(@NonNull SavedWorkspace workspace) {
-        LinearLayout row = baseRow(false);
+        boolean unfolded = savedState(workspace.name) != SavedState.IDLE;
+        LinearLayout row = baseRow(false, unfolded ? CORNERS_TOP : CORNERS_ALL);
         row.setPaddingRelative(dp(12), dp(2), dp(2), dp(2));
         LinearLayout text = textBlock();
         TextView title = label(TITLE_SP, mDress.textColor);
@@ -617,7 +626,7 @@ public final class SessionsDrawerView extends LinearLayout
             entry.setGravity(Gravity.CENTER_VERTICAL);
             entry.setMinHeight(dp(40));
             entry.setPaddingRelative(dp(8), 0, dp(8), 0);
-            entry.setBackground(rowSurface(false));
+            entry.setBackground(rowSurface(false, CORNERS_ALL));
             entry.setOnClickListener(view -> {
                 collapseAll();
                 mSaveFieldOpen = true;
@@ -631,6 +640,7 @@ public final class SessionsDrawerView extends LinearLayout
         }
         LinearLayout column = new LinearLayout(getContext());
         column.setOrientation(VERTICAL);
+        surface(column, false, CORNERS_ALL);
         column.addView(buildFieldRow(getContext().getString(R.string.sessions_drawer_save_workspace),
             getContext().getString(R.string.session_browser_workspace_name),
             getContext().getString(R.string.session_browser_save_workspace),
@@ -667,21 +677,24 @@ public final class SessionsDrawerView extends LinearLayout
     @NonNull
     private View buildFieldRow(@NonNull CharSequence heading, @NonNull String hint,
                                @NonNull String commitLabel, @NonNull OnValue onValue) {
+        // The surface is the card it unfolds inside; see unfold(). Standalone, the caller adds one.
         LinearLayout column = new LinearLayout(getContext());
         column.setOrientation(VERTICAL);
-        column.setBackground(rowSurface(false));
-        column.setPaddingRelative(dp(8), dp(4), dp(8), dp(6));
 
         TextView caption = label(SUBTITLE_SP, mDress.subTextColor);
         caption.setText(heading);
-        column.addView(caption, new LayoutParams(
-            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        LayoutParams captionParams = new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        captionParams.topMargin = dp(4);
+        column.addView(caption, captionParams);
 
         TextView field = label(TITLE_SP, mDress.textColor);
-        field.setMinHeight(dp(34));
+        field.setMinHeight(dp(36));
         field.setGravity(Gravity.CENTER_VERTICAL);
-        column.addView(field, new LayoutParams(
-            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        LayoutParams fieldParams = new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        fieldParams.bottomMargin = dp(4);
+        column.addView(field, fieldParams);
 
         LinearLayout actions = actionStrip();
         addAction(actions, getContext().getString(android.R.string.cancel), () -> {
@@ -713,13 +726,14 @@ public final class SessionsDrawerView extends LinearLayout
                                  @NonNull String cancelLabel, @NonNull Runnable onConfirm) {
         LinearLayout column = new LinearLayout(getContext());
         column.setOrientation(VERTICAL);
-        column.setBackground(rowSurface(false));
-        column.setPaddingRelative(dp(8), dp(6), dp(8), dp(6));
-        TextView message = label(SUBTITLE_SP + 1f, mDress.textColor);
+        TextView message = label(SUBTITLE_SP + 1.5f, mDress.textColor);
         message.setSingleLine(false);
         message.setText(question);
-        column.addView(message, new LayoutParams(
-            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        LayoutParams messageParams = new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        messageParams.topMargin = dp(8);
+        messageParams.bottomMargin = dp(10);
+        column.addView(message, messageParams);
         LinearLayout actions = actionStrip();
         addAction(actions, cancelLabel, () -> {
             collapseAll();
@@ -731,21 +745,40 @@ public final class SessionsDrawerView extends LinearLayout
         return column;
     }
 
+    /**
+     * The buttons under a row's unfold. No surface of its own: a strip that carried one drew a
+     * second rounded card inside the first, and its inset was what pushed the buttons off the text.
+     */
     @NonNull
     private LinearLayout actionStrip() {
-        LinearLayout strip = new ActionStrip(getContext());
-        strip.setBackground(rowSurface(false));
-        strip.setPaddingRelative(dp(4), dp(2), dp(4), dp(2));
-        return strip;
+        return new ActionStrip(getContext());
+    }
+
+    /**
+     * Dresses what unfolds under a row as the bottom of that row's card.
+     *
+     * <p>The row rounds only its top corners while something is open under it, and this rounds only
+     * the bottom, in the same fill, so the two read as one card rather than two stacked on a seam.
+     */
+    @NonNull
+    private View unfold(@NonNull View body, boolean current) {
+        surface(body, current, CORNERS_BOTTOM);
+        return body;
+    }
+
+    private void surface(@NonNull View view, boolean current, int corners) {
+        view.setBackground(rowSurface(current, corners));
+        view.setPaddingRelative(dp(UNFOLD_SIDE_DP), dp(4), dp(UNFOLD_SIDE_DP), dp(8));
     }
 
     /**
      * Actions side by side while they fit, one under another once they do not.
      *
      * <p>The drawer is under half the terminal wide, so on a phone three labels at a large font
-     * scale no longer fit across it; a row that clipped its last action would lose Close, the one
+     * scale no longer fit across it; a row that clipped its last action would lose End, the one
      * the row was unfolded for. Same shape as AppCompat's button bar: measure flat, stack on
-     * overflow, unstack when there is room again.
+     * overflow, unstack when there is room again. Flat, the buttons share the row evenly, so a pair
+     * of answers sits centred under its question instead of huddled at one end.
      */
     static final class ActionStrip extends LinearLayout {
         private int mLastWidthSize = -1;
@@ -753,7 +786,6 @@ public final class SessionsDrawerView extends LinearLayout
         ActionStrip(@NonNull Context context) {
             super(context);
             setOrientation(HORIZONTAL);
-            setGravity(Gravity.END);
         }
 
         boolean isStacked() {
@@ -791,6 +823,7 @@ public final class SessionsDrawerView extends LinearLayout
             for (int i = 0; i < getChildCount(); i++) {
                 LayoutParams params = (LayoutParams) getChildAt(i).getLayoutParams();
                 params.width = stacked ? LayoutParams.MATCH_PARENT : LayoutParams.WRAP_CONTENT;
+                params.weight = stacked ? 0f : 1f;
                 params.topMargin = stacked && i > 0 ? params.leftMargin : 0;
             }
         }
@@ -808,7 +841,7 @@ public final class SessionsDrawerView extends LinearLayout
         button.setPaddingRelative(dp(10), 0, dp(10), 0);
         button.setOnClickListener(view -> action.run());
         LayoutParams params = new LayoutParams(
-            LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+            LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, 1f);
         params.leftMargin = dp(2);
         strip.addView(button, params);
     }
@@ -854,18 +887,21 @@ public final class SessionsDrawerView extends LinearLayout
     }
 
     @NonNull
-    private LinearLayout baseRow(boolean current) {
+    private LinearLayout baseRow(boolean current, int corners) {
         LinearLayout row = new LinearLayout(getContext());
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setClickable(true);
-        row.setBackground(rowSurface(current));
+        row.setBackground(rowSurface(current, corners));
         return row;
     }
 
     @NonNull
-    private GradientDrawable rowSurface(boolean current) {
+    private GradientDrawable rowSurface(boolean current, int corners) {
         GradientDrawable surface = new GradientDrawable();
-        surface.setCornerRadius(dp(10));
+        float radius = dp(10);
+        float top = corners == CORNERS_BOTTOM ? 0f : radius;
+        float bottom = corners == CORNERS_TOP ? 0f : radius;
+        surface.setCornerRadii(new float[] {top, top, top, top, bottom, bottom, bottom, bottom});
         surface.setColor(ColorUtils.setAlphaComponent(mDress.textColor,
             current ? ROW_CURRENT_FILL_ALPHA : ROW_FILL_ALPHA));
         return surface;

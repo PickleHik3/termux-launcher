@@ -137,7 +137,7 @@ public class SessionsDrawerViewTest {
         drawer.bindLive(Collections.singletonList(session(7, 0, true, "build", 70)));
 
         findText(drawer, "⋯").performClick();
-        findText(drawer, string(R.string.session_browser_close)).performClick();
+        findText(drawer, string(R.string.sessions_drawer_end)).performClick();
         assertEquals(SessionsDrawerView.RowState.CONFIRM_CLOSE, drawer.rowState(7));
         assertNotNull("the question has to be on screen, over the row it is about",
             findText(drawer, string(R.string.sessions_drawer_close_question)));
@@ -145,11 +145,11 @@ public class SessionsDrawerViewTest {
         findText(drawer, string(R.string.sessions_drawer_keep)).performClick();
 
         assertEquals(SessionsDrawerView.RowState.IDLE, drawer.rowState(7));
-        assertTrue("Keep is not Close", listener.events.isEmpty());
+        assertTrue("Keep is not End", listener.events.isEmpty());
 
         findText(drawer, "⋯").performClick();
-        findText(drawer, string(R.string.session_browser_close)).performClick();
-        findText(drawer, string(R.string.session_browser_close)).performClick();
+        findText(drawer, string(R.string.sessions_drawer_end)).performClick();
+        findText(drawer, string(R.string.sessions_drawer_end)).performClick();
         assertEquals(Collections.singletonList("close:7"), listener.events);
     }
 

@@ -1668,7 +1668,8 @@
     <string name="sessions_drawer_saved">Saved</string>
     <string name="sessions_drawer_done">Done</string>
     <string name="sessions_drawer_keep">Keep</string>
-    <string name="sessions_drawer_close_question">Close this session?</string>
+    <string name="sessions_drawer_end">End</string>
+    <string name="sessions_drawer_close_question">End this session?</string>
     <string name="sessions_drawer_add_to_current">Add to current</string>
     <string name="sessions_drawer_save_workspace">Save as workspace…</string>
     <string name="sessions_drawer_run_commands">Also start what was running</string>
