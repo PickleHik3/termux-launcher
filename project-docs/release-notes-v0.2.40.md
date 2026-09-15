@@ -44,9 +44,15 @@
 - Settings ▸ Keyboard has a Keyboard type row that sets docked, floating or split on every place at once; opening Settings ▸ Layout for one place still sets its type on its own.
 - The split keyboard parts every row down the middle and lets taps in the gap through to what is behind it. The gap's width and the floating keyboard's width are sliders in Settings ▸ Keyboard.
 - On the Display place, tapping a text field brings the keyboard up and tapping elsewhere puts it away. Turn it off in Display options if you would rather not.
+- The default keyboard theme follows Material 3 now: letter keys sit on the lightest surface, the function keys one tone lower, Enter in your accent colour, and a held modifier in the accent's container tone. No key borders, rounder keys. Imported colour schemes get the same function-key tier.
 
 ### Terminal
 
+- Copying a wrapped line drops the padding spaces at its end. Settings ▸ Terminal ▸ Clipboard turns it off if you want the spaces kept.
+- The terminal's sixteen colours are drawn from your wallpaper's own hue and saturation at Material tone levels, so the prompt, `ls` and every TUI read as one palette instead of neon accents on a Material background. Black and white stay black and white.
+- The oh-my-posh theme and the starship palette speak Material: segments are pills in the container colours with matching text, and starship's palette now carries every Material role name (`primary_container`, `on_surface_variant`, …) next to the usual ones. A ready-made Material prompt sits at the end of the rendered starship file for you to copy.
+- herdr joins the tools that follow the terminal colours: its panes, sidebar and status line take the wallpaper palette, and the launcher wires it into your existing herdr config without touching the rest.
+- The palette keeps up on its own: a dark/light flip, a new wallpaper or a new Material colour re-renders every followed tool, even while the launcher is not in front.
 - The session browser, the workspace panels, scrollback search and quick select rise out of the terminal's bottom edge instead of floating over it.
 - A window pill shows one short item — the open file, the process or the directory — and its ring, bell, tick and cross all sit in the icon's spot.
 - `tlstore` (or `tl`, `tls`) installs and updates seven things the launcher shows off — the fish setup, the wallpaper prompt and Neovim themes, fastfetch, kitten, a terminal clock and Claude Code — with a picker when you don't name anything.
@@ -54,6 +60,8 @@
 
 ### Appearance and Layout
 
+- Extra keys can carry a colour: tap a key while its Appearance card is up and pick from your theme's accents, containers, black or white. The colour is a Material role, so it changes with your wallpaper and dark mode. The Home, Terminal and Display keys come coloured out of the box.
+- Extra keys that do nothing on the place in front of you are dimmed: shell keys on the Home place, pane and session keys on the Display place.
 - Every corner tab — Home, Terminal, Display and a lone terminal pane — carries two buttons: Appearance for how the place looks, Layout for where its elements sit and how big they are. The terminal's long-press menu offers the same two.
 - The Layout editor shows a miniature of the place you are on; drag a bar to an edge or into the hide tray to move or hide it, with a Portrait/Landscape toggle above the miniature so you can lay out the other orientation without turning the phone.
 - Dock height, keyboard height and the keyboard's bottom padding are set per place and per orientation in the Layout editor now; upgrading carries your current values over unchanged.
