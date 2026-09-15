@@ -185,11 +185,30 @@ public class HelpLeaderRouterTest {
 
     @Test public void aTakenSpotSlidesTheCardAwayFromItsControl() {
         Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 12,
-            Arrays.asList(t("a", 0, 0, 100, 40, Side.ABOVE), t("b", 10, 0, 110, 40, Side.ABOVE)),
+            Arrays.asList(t("a", 0, 0, 100, 40, Side.ABOVE), t("b", 100, 0, 200, 40, Side.ABOVE)),
             Collections.emptyList(), Collections.emptyList());
         Placement a = placement(r, "a"), b = placement(r, "b");
         assertEquals(a.card.bottom + 12, b.card.top, 0.01f);
-        assertEquals(a.card.left, b.card.left, 0.01f);
+        assertEquals(75f, b.card.left, 0.01f);
+        // The lower card's leader takes a lane of its own rather than a line through the upper card.
+        for (Segment line : b.lines) assertFalse(enters(line, a.card));
+        assertLeadersClear(r, 12);
+    }
+
+    /** A control the cards have boxed in keeps its card in place and gives up its line. */
+    @Test public void aBoxedInControlKeepsItsCardAndLosesItsLine() {
+        List<Target> crowd = new java.util.ArrayList<>();
+        for (int i = 0; i < 4; i++)
+            crowd.add(new Target("t" + i, B(i * 20, 0, i * 20 + 10, 40), Side.ABOVE, 200, 100));
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 8, crowd,
+            Collections.emptyList(), Collections.emptyList());
+        assertTrue(r.unplaced.isEmpty());
+        assertEquals(1, r.pages);
+        assertNoOverlap(r);
+        assertLeadersClear(r, 8);
+        int bare = 0;
+        for (Placement p : r.placements) if (p.lines.isEmpty()) bare++;
+        assertTrue("every crowded card still drew a line", bare > 0);
     }
 
     @Test public void leadersAreStraightWhenFacingAndElbowedWhenBeside() {
@@ -239,6 +258,96 @@ public class HelpLeaderRouterTest {
         int onFirst = 0;
         for (Placement p : r.placements) if (p.page == 0) onFirst++;
         assertEquals(12, onFirst);
+    }
+
+    // ---- No two leaders may overlap or touch; parallel runs keep the gap. ----
+
+    @Test public void coincidentLeadersTakeSeparateLanes() {
+        // Both boxes are centred on x = 100: the straight leaders would be the same line.
+        List<Target> targets = Arrays.asList(
+            t("wide", 0, 0, 200, 40, Side.ABOVE), t("narrow", 80, 0, 120, 40, Side.ABOVE));
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 12, targets,
+            Collections.emptyList(), Collections.emptyList());
+        assertTrue(r.unplaced.isEmpty());
+        assertEquals(2, r.placements.size());
+        assertNoOverlap(r);
+        assertLeadersClear(r, 12);
+        for (Placement p : r.placements) assertFalse(p.lines.isEmpty());
+    }
+
+    /** The Terminal as it opens on the phone: everything fits on one page. */
+    @Test public void defaultTerminalArrangesOnOnePage() {
+        List<Target> targets = new java.util.ArrayList<>(terminalTargets());
+        targets.add(t("plus", 202, 20, 226, 44, Side.ABOVE));
+        List<Box> keys = Arrays.asList(B(0, 900, 120, 960), B(130, 900, 330, 960));
+        Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 12, targets, keys,
+            Collections.singletonList(B(238, 60, 242, 700)));
+        assertTrue("unplaced " + ids(r.unplaced), r.unplaced.isEmpty());
+        assertEquals(1, r.pages);
+        assertEquals(10, r.placements.size());
+        assertNoOverlap(r);
+        assertLeadersClear(r, 12);
+        for (Placement p : r.placements) assertFalse("no leader for " + p.target.id, p.lines.isEmpty());
+    }
+
+    @Test public void everyDefaultLayoutKeepsItsLeadersApart() {
+        assertLeadersClear(HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 12, terminalTargets(),
+            Collections.emptyList(), inside(terminalTargets())), 12);
+        assertLeadersClear(HelpLeaderRouter.arrange(B(0, 100, 400, 590), 12, 12, displayTargets(),
+            Collections.emptyList(), inside(displayTargets())), 12);
+        assertLeadersClear(HelpLeaderRouter.arrange(B(0, 100, 400, 590), 12, 12, widgetsTargets(),
+            Collections.emptyList(), inside(widgetsTargets())), 12);
+    }
+
+    private List<Target> displayTargets() {
+        return Arrays.asList(t("apps", 20, 20, 180, 44, Side.ABOVE),
+            t("stats", 230, 20, 350, 44, Side.ABOVE), t("status", 360, 20, 390, 44, Side.ABOVE),
+            t("corner", 0, 100, 32, 132, Side.INSIDE), t("start", 140, 330, 260, 378, Side.INSIDE),
+            t("touchpad", 20, 620, 380, 830, Side.BELOW));
+    }
+
+    private List<Target> widgetsTargets() {
+        return Arrays.asList(t("status", 350, 20, 390, 44, Side.ABOVE),
+            t("corner", 0, 100, 32, 132, Side.INSIDE), t("widget", 15, 230, 185, 345, Side.INSIDE),
+            t("empty", 210, 350, 390, 570, Side.INSIDE));
+    }
+
+    private static List<Box> inside(List<Target> targets) {
+        List<Box> boxes = new java.util.ArrayList<>();
+        for (Target t : targets) if (t.side == Side.INSIDE) boxes.add(t.box);
+        return boxes;
+    }
+
+    private static String ids(List<Target> targets) {
+        StringBuilder s = new StringBuilder();
+        for (Target t : targets) s.append(t.id).append(' ');
+        return s.toString();
+    }
+
+    /** No leader may cross, touch or run within the gap of another card's leader. */
+    private void assertLeadersClear(Result r, float gap) {
+        for (Placement p : r.placements) for (Placement q : r.placements) {
+            if (p == q || p.page != q.page) continue;
+            for (Segment a : p.lines) for (Segment b : q.lines) {
+                assertFalse(p.target.id + " crosses " + q.target.id, crosses(a, b));
+                assertTrue(p.target.id + " runs into " + q.target.id + " (" + clearance(a, b) + ")",
+                    clearance(a, b) >= gap - 0.001f);
+            }
+        }
+    }
+
+    // Endpoint projection, not the router's bounding-box maths.
+    private float clearance(Segment a, Segment b) {
+        if (crosses(a, b)) return 0;
+        return Math.min(Math.min(pointToSegment(a.x1, a.y1, b), pointToSegment(a.x2, a.y2, b)),
+            Math.min(pointToSegment(b.x1, b.y1, a), pointToSegment(b.x2, b.y2, a)));
+    }
+
+    private float pointToSegment(float px, float py, Segment s) {
+        float dx = s.x2 - s.x1, dy = s.y2 - s.y1, len = dx * dx + dy * dy;
+        float u = len == 0 ? 0 : ((px - s.x1) * dx + (py - s.y1) * dy) / len;
+        u = Math.max(0, Math.min(1, u));
+        return (float) Math.hypot(px - (s.x1 + u * dx), py - (s.y1 + u * dy));
     }
 
     private static Placement placement(Result r, String id) {
