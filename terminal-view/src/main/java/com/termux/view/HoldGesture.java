@@ -62,18 +62,30 @@ final class HoldGesture {
 
     private float mSlop;
 
+    /** One cell of the terminal under the finger, in pixels, or 0 when there is no renderer yet. */
+    private float mCellWidth, mRowHeight;
+
     /** Whether the program asked to be told about motion while a button is held. */
     private boolean mMotionReported;
 
     /** Whether the finger has travelled since the hold, which is what the hint waits for. */
     private boolean mTravelled;
 
-    /** A finger landed. Only an {@code available} one can hold: see the view's own guard. */
-    void down(float x, float y, float slopPixels, boolean available) {
+    /**
+     * A finger landed. Only an {@code available} one can hold: see the view's own guard.
+     *
+     * @param slopPixels the system touch slop, which is what decides a scroll before the hold.
+     * @param cellWidthPx one terminal cell across, or 0 when there is no renderer to ask.
+     * @param rowHeightPx one terminal row down, or 0 when there is no renderer to ask.
+     */
+    void down(float x, float y, float slopPixels, float cellWidthPx, float rowHeightPx,
+              boolean available) {
         mPhase = available ? Phase.PENDING : Phase.IDLE;
         mHoldX = mX = x;
         mHoldY = mY = y;
         mSlop = slopPixels;
+        mCellWidth = cellWidthPx;
+        mRowHeight = rowHeightPx;
         mMotionReported = false;
         mTravelled = false;
     }
@@ -101,6 +113,7 @@ final class HoldGesture {
     /** The finger moved. Before the hold that is a scroll; after it, a drag of one kind or another. */
     Outcome move(float x, float y) {
         boolean travelled = travelledFrom(mHoldX, mHoldY, x, y);
+        boolean travelledHeld = travelled || movedOneCellFrom(x, y);
         mX = x;
         mY = y;
         switch (mPhase) {
@@ -109,7 +122,7 @@ final class HoldGesture {
                     mPhase = Phase.DONE;
                 return Outcome.NOTHING;
             case HELD:
-                if (!travelled)
+                if (!travelledHeld)
                     return Outcome.NOTHING;
                 // The finger has said what it wanted, so the second stage is off. A program that
                 // asked for no motion is told nothing until the lift, which still clicks.
@@ -229,5 +242,24 @@ final class HoldGesture {
         float dx = x - fromX;
         float dy = y - fromY;
         return dx * dx + dy * dy > mSlop * mSlop;
+    }
+
+    /**
+     * Whether a held finger has moved a whole cell from where it landed. Once the hold has handed
+     * the finger the mouse, a cell is the smallest move that means anything to the program, and on
+     * a small font that is well inside the touch slop a scroll would need - so a drag that the user
+     * can see land on the next character should not have to travel further than one.
+     *
+     * <p>A distance from the landing point, never a boundary crossing: the cell the finger started
+     * in is not divided, so a thumb that rolls slightly is still holding wherever it landed.
+     */
+    private boolean movedOneCellFrom(float x, float y) {
+        return reachedStep(Math.abs(x - mHoldX), mCellWidth)
+            || reachedStep(Math.abs(y - mHoldY), mRowHeight);
+    }
+
+    /** One step is the smaller of the cell and the slop; a cell nobody measured is no step at all. */
+    private boolean reachedStep(float travel, float cell) {
+        return cell > 0f && travel >= Math.min(mSlop, cell);
     }
 }

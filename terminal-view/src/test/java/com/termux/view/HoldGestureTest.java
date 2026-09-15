@@ -17,10 +17,19 @@ public class HoldGestureTest {
 
     private static final float SLOP = 20f;
 
+    /** A cell of a small font: both dimensions well inside the slop, as they are on a phone. */
+    private static final float CELL_WIDTH = 8f;
+    private static final float ROW_HEIGHT = 18f;
+
     /** A finger lands, starting the hold's own clock. */
     private HoldGesture down() {
+        return down(CELL_WIDTH, ROW_HEIGHT);
+    }
+
+    /** The same landing on a terminal whose cells are this big, or 0 for one nobody measured. */
+    private HoldGesture down(float cellWidth, float rowHeight) {
         HoldGesture hold = new HoldGesture();
-        hold.down(100f, 200f, SLOP, true);
+        hold.down(100f, 200f, SLOP, cellWidth, rowHeight, true);
         return hold;
     }
 
@@ -76,7 +85,7 @@ public class HoldGestureTest {
     public void theHoldOnlyEverRecognisesAPendingFinger() {
         HoldGesture hold = new HoldGesture();
         assertEquals(Outcome.NOTHING, hold.holdElapsed(true, true));
-        hold.down(10f, 20f, SLOP, false);
+        hold.down(10f, 20f, SLOP, CELL_WIDTH, ROW_HEIGHT, false);
         assertEquals(Phase.IDLE, hold.phase());
         assertEquals(Outcome.NOTHING, hold.holdElapsed(true, true));
     }
@@ -84,7 +93,7 @@ public class HoldGestureTest {
     @Test
     public void aHoldExemptFingerDoesNothingAtAll() {
         HoldGesture hold = new HoldGesture();
-        hold.down(100f, 200f, SLOP, false);
+        hold.down(100f, 200f, SLOP, CELL_WIDTH, ROW_HEIGHT, false);
         assertEquals(Phase.IDLE, hold.phase());
         assertEquals(Outcome.NOTHING, hold.move(100f, 320f));
         assertEquals(Outcome.NOTHING, hold.holdElapsed(true, true));
@@ -132,6 +141,63 @@ public class HoldGestureTest {
         assertEquals(Outcome.CLICK, hold.up(180f, 500f));
         assertEquals(180f, hold.x(), 0.001f);
         assertEquals(500f, hold.y(), 0.001f);
+    }
+
+    @Test
+    public void oneCellSidewaysAfterTheHoldIsAlreadyADrag() {
+        HoldGesture hold = held(true);
+        // Less than the touch slop, but a whole cell: the program would see the cursor move.
+        assertEquals(Outcome.DRAG_STARTED, hold.move(100f + CELL_WIDTH, 200f));
+        assertEquals(Phase.DRAGGING, hold.phase());
+        assertFalse(hold.reachesSelect());
+    }
+
+    @Test
+    public void oneRowDownAfterTheHoldIsAlreadyADrag() {
+        HoldGesture hold = held(true);
+        assertEquals(Outcome.DRAG_STARTED, hold.move(100f, 200f + ROW_HEIGHT));
+        assertEquals(Phase.DRAGGING, hold.phase());
+    }
+
+    @Test
+    public void theSameCellOfTravelBeforeTheHoldIsNotAScroll() {
+        HoldGesture hold = down();
+        assertEquals(Outcome.NOTHING, hold.move(100f + CELL_WIDTH, 200f + ROW_HEIGHT));
+        // The slop still owns everything before the hold, so the hold is still coming.
+        assertTrue(hold.isPending());
+        assertTrue(hold.reachesSelect());
+        assertEquals(Outcome.HOLD_MOUSE, hold.holdElapsed(true, true));
+    }
+
+    @Test
+    public void lessThanACellAndLessThanTheSlopIsStillAStillFinger() {
+        HoldGesture hold = held(true);
+        assertEquals(Outcome.NOTHING, hold.move(105f, 205f));
+        assertEquals(Phase.HELD, hold.phase());
+        assertTrue(hold.heldAndStill());
+        // And the second stage still arrives, because nothing has been said yet.
+        assertEquals(Outcome.HOLD_SELECTED, hold.selectElapsed());
+    }
+
+    @Test
+    public void aTerminalNobodyMeasuredFallsBackToTheSlopAlone() {
+        HoldGesture hold = new HoldGesture();
+        hold.down(100f, 200f, SLOP, 0f, 0f, true);
+        assertEquals(Outcome.HOLD_MOUSE, hold.holdElapsed(true, true));
+        assertEquals(Outcome.NOTHING, hold.move(100f + CELL_WIDTH, 200f + ROW_HEIGHT));
+        assertTrue(hold.heldAndStill());
+        assertEquals(Outcome.DRAG_STARTED, hold.move(100f, 240f));
+    }
+
+    @Test
+    public void aCellBiggerThanTheSlopNeverRaisesTheBarAboveIt() {
+        HoldGesture hold = down(30f, 60f);
+        assertEquals(Outcome.HOLD_MOUSE, hold.holdElapsed(true, true));
+        // Under the slop and under the cell: nothing to say yet.
+        assertEquals(Outcome.NOTHING, hold.move(115f, 200f));
+        assertTrue(hold.heldAndStill());
+        // Past the slop but still inside that oversized cell: the slop wins.
+        assertEquals(Outcome.DRAG_STARTED, hold.move(125f, 200f));
     }
 
     @Test
@@ -255,7 +321,7 @@ public class HoldGestureTest {
         hold.up(hold.x(), hold.y());
         hold.reset();
         assertEquals(Phase.IDLE, hold.phase());
-        hold.down(10f, 20f, SLOP, true);
+        hold.down(10f, 20f, SLOP, CELL_WIDTH, ROW_HEIGHT, true);
         assertEquals(Outcome.HOLD_MOUSE, hold.holdElapsed(true, false));
         assertTrue(hold.heldAndStill());
         assertEquals(10f, hold.holdX(), 0.001f);

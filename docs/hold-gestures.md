@@ -46,6 +46,12 @@ before/after figures and the hint mock: `.lavish/hold-gestures.html`.
   middle of it. Without it there is nothing to wait for past the first buzz. `AimState`, the strip,
   the hint under it and its counter are removed; a Mouse-mode long-press reticule was considered
   and dropped (Mouse mode sends the press on landing, so an aim would have to defer it).
+- **After the buzz, one cell of travel is a drag.** Before the hold the 8 dp slop decides scroll
+  versus hold, as everywhere on Android. After it, a move of one cell width sideways or one row up
+  or down from the landing point (or the slop, whichever is smaller) starts the mouse drag and
+  cancels the selection stage; a distance, never a cell-boundary crossing. Found on pong
+  2026-09-15 (fourth feel): a careful one-column border resize in herdr stayed inside the slop, so
+  nothing was reported and selection opened at T_select instead.
 - **T_select: twice `ViewConfiguration.getLongPressTimeout()`.** 800 ms on a default phone,
   2000 / 3000 ms at Medium / Long, so the two buzzes are always at least half a second apart.
   `HoldTiming.selectTimeoutMs`. Start at 800; lower toward 600 only if it feels sluggish.
@@ -90,6 +96,8 @@ while a corner may still claim the touch (`MouseModePress`), so a corner hold no
 First feel on pong 2026-09-15: the corner bracket outlived the touch (removed, a956ec7e) and the
 second-finger selection was too far from what users expect (replaced by the T_select stage above).
 Third feel: the loupe kept colliding with T_select and was removed (see "The loupe is gone").
+Fourth feel: one-column border resizes missed the 8 dp slop and fell into selection; after the
+buzz one cell of travel now starts the drag.
 Owed: the device checks below on pong, then the developer's cue before merging into dev.
 
 ## Device checks on pong
@@ -104,6 +112,7 @@ Owed: the device checks below on pong, then the developer's cue before merging i
 7. vim: hold and keep holding. Second buzz at about 0.8 s, selection handles at the cell;
    Copy · Paste · More; More opens the action sheet.
 8. vim: hold, then drag, then keep still. No selection appears however long the finger stays.
+8b. herdr (or tmux): hold a pane border, then move one column. The border follows; no selection.
 9. Plain shell: hold → selection after one buzz; a fast drag still scrolls.
 10. Two-finger scroll and pinch still work in vim and the shell, including with one finger already
     resting.

@@ -1641,7 +1641,12 @@ public final class TerminalView extends View {
                 cancelHoldTimers();
                 releaseHoldDownEvent();
                 mHoldGesture.reset();
-                mHoldGesture.down(event.getX(), event.getY(), mTouchSlop, isHoldAvailable(event));
+                // Once the hold has handed the finger the mouse, one cell of travel is a drag; the
+                // touch slop still decides everything before that.
+                mHoldGesture.down(event.getX(), event.getY(), mTouchSlop,
+                    mRenderer == null ? 0f : mRenderer.mFontWidth,
+                    mRenderer == null ? 0f : mRenderer.mFontLineSpacing,
+                    isHoldAvailable(event));
                 if (mHoldGesture.isPending()) {
                     mHoldDownEvent = MotionEvent.obtain(event);
                     // Both stages are timed from the landing, so the second is not lengthened by
