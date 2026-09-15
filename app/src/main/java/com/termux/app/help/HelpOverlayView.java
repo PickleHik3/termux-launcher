@@ -382,7 +382,11 @@ public final class HelpOverlayView extends FrameLayout {
         int top = snapshot.wall.bottom - footer.getMeasuredHeight() - dp(8);
         put(footer, new Rect(left, top, left + width, top + footer.getMeasuredHeight()));
         cards.add(footer);
-        announce(getContext().getString(R.string.help_header, placeName()), "overview" + page);
+        // Where the reader has landed, not that this is still help: the section, and the page of it.
+        int sectionRes = currentSectionLabelRes();
+        String section = sectionRes == 0 ? placeName() : getContext().getString(sectionRes);
+        announce(getContext().getString(R.string.help_overview_page, section, page + 1, pageCount),
+            "overview" + page);
     }
 
     /** The section the page being read belongs to, named by the first card the router put on it. */

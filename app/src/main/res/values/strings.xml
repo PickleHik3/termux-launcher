@@ -1972,6 +1972,7 @@
     <string name="help_topic_empty_action">Long-press it to add a widget or another page.</string>
     <string name="help_topic_empty_reveal">Move a widget aside to make room.</string>
     <string name="help_header">Help · %1$s</string>
+    <string name="help_overview_page">%1$s, page %2$d of %3$d</string>
     <string name="help_place_home">Home</string>
     <string name="help_place_terminal">Terminal</string>
     <string name="help_place_display">Display</string>
