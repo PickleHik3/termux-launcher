@@ -671,6 +671,9 @@ public final class SurfaceEditorController {
     /** The shared layer's half of the entry snapshot. Only ever run with the place scope lifted. */
     @NonNull
     private Runnable captureSharedEntryState() {
+        // The dock's height, the keyboard's height and its chin are absent on purpose: they are
+        // the place's and the orientation's now, and the arrangement snapshot above already holds
+        // every one of them.
         final TermuxAppSharedPreferences prefs = prefs();
         final String links = surfaceEditorLinkSignature();
         final int initialBlur = prefs.getExtraKeysBlurRadius();
@@ -678,16 +681,13 @@ public final class SurfaceEditorController {
         final int initialGrain = prefs.getDockGlassGrain();
         final int initialDockRadius = prefs.getAppLauncherDockCornerRadius();
         final int initialDockInset = prefs.getDockHorizontalInset();
-        final float initialBarHeight = prefs.getAppLauncherBarHeightScale();
         final int initialButtonCount = prefs.getAppLauncherButtonCount();
         final String initialStyle = prefs.getAppLauncherDockStyle();
-        final float initialKeyboardHeight = prefs.getInAppKeyboardHeightScale();
         final float initialKeyboardSpacing = prefs.getInAppKeyboardKeyMarginScale();
         final float initialKeyboardRadius = prefs.getInAppKeyboardKeyCornerRadiusDp();
         final int initialKeyboardKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
         final int initialKeyboardBgOpacity = prefs.getInAppKeyboardBackgroundOpacity();
         final int initialKeyboardInset = prefs.getInAppKeyboardHorizontalInset();
-        final int initialKeyboardChin = prefs.getInAppKeyboardBottomPadding();
         final String initialKeyboardColorScheme = prefs.getInAppKeyboardColorScheme();
         final String initialKeyboardTheme = prefs.getInAppKeyboardTheme();
         final int initialStatusBlur = prefs.getStatusBarBlurRadius();
@@ -720,16 +720,13 @@ public final class SurfaceEditorController {
             prefs().setDockGlassGrain(initialGrain);
             prefs().setAppLauncherDockCornerRadius(initialDockRadius);
             prefs().setDockHorizontalInset(initialDockInset);
-            prefs().setAppLauncherBarHeightScale(initialBarHeight);
             prefs().setAppLauncherButtonCount(initialButtonCount);
             prefs().setAppLauncherDockStyle(initialStyle);
-            prefs().setInAppKeyboardHeightScale(initialKeyboardHeight);
             prefs().setInAppKeyboardKeyMarginScale(initialKeyboardSpacing);
             prefs().setInAppKeyboardKeyCornerRadiusDp(initialKeyboardRadius);
             prefs().setInAppKeyboardKeyOpacity(initialKeyboardKeyOpacity);
             prefs().setInAppKeyboardBackgroundOpacity(initialKeyboardBgOpacity);
             prefs().setInAppKeyboardHorizontalInset(initialKeyboardInset);
-            prefs().setInAppKeyboardBottomPadding(initialKeyboardChin);
             prefs().setInAppKeyboardColorScheme(initialKeyboardColorScheme);
             prefs().setInAppKeyboardTheme(initialKeyboardTheme);
             prefs().setStatusBarBlurRadius(initialStatusBlur);
@@ -4313,17 +4310,14 @@ public final class SurfaceEditorController {
             .append(prefs().getAppBarOpacity()).append('|')
             .append(prefs().getDockGlassGrain()).append('|')
             .append(prefs().getAppLauncherDockCornerRadius()).append('|')
-            .append(prefs().getAppLauncherBarHeightScale()).append('|')
             .append(prefs().getAppLauncherButtonCount()).append('|')
             .append(prefs().getAppLauncherDockStyle()).append('|')
             .append(prefs().getDockHorizontalInset()).append('|')
-            .append(prefs().getInAppKeyboardHeightScale()).append('|')
             .append(prefs().getInAppKeyboardKeyMarginScale()).append('|')
             .append(prefs().getInAppKeyboardKeyCornerRadiusDp()).append('|')
             .append(prefs().getInAppKeyboardKeyOpacity()).append('|')
             .append(prefs().getInAppKeyboardBackgroundOpacity()).append('|')
             .append(prefs().getInAppKeyboardHorizontalInset()).append('|')
-            .append(prefs().getInAppKeyboardBottomPadding()).append('|')
             .append(prefs().getInAppKeyboardColorScheme()).append('|')
             .append(prefs().getInAppKeyboardTheme()).append('|')
             .append(prefs().getStatusBarBlurRadius()).append('|')
@@ -4350,8 +4344,9 @@ public final class SurfaceEditorController {
             .append(prefs().getSurfaceMaterial()).append('|')
             .append(prefs().getSurfaceMaterialIntensity()).append('|')
             .append(look() == null ? "" : look().signature()).append('|')
-            // Where every place's bars stand. The editor can move one now, and a moved bar is
-            // exactly as unsaved as a moved slider.
+            // Where every place's bars stand and how tall its dock, keyboard and chin are. The
+            // editor can move any of them now, and a moved one is exactly as unsaved as a moved
+            // slider.
             .append(mHost.places() == null
                 ? "" : PlaceArrangeSnapshot.capture(mHost.places()).signature())
             .toString();

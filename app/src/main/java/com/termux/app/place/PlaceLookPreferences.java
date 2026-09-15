@@ -34,10 +34,10 @@ import java.util.TreeMap;
  *
  * <p>Keys are the scheme the arrangement store already uses, one level deeper:
  * {@code place.<home|terminal|display>.look.<shared key>}. Only the keys the surface editor owns
- * can be scoped — the cells of the inheritance model and their links to Base, the dock's shape and
- * size, the apps per page, the keyboard's key metrics, the status chips, the terminal's frame and
- * the wallpaper dim. Everything else, Base itself included, is shared by definition and passes
- * straight through.
+ * can be scoped — the cells of the inheritance model and their links to Base, the dock's shape, the
+ * apps per page, the keyboard's key metrics, the status chips, the terminal's frame and the
+ * wallpaper dim. Everything else, Base itself included, is shared by definition and passes straight
+ * through, and the three sizes are not a look at all: they live in {@link PlaceLayoutStore}.
  *
  * <p>Two places are remembered rather than one. The <em>render place</em> is the place on screen
  * and is what reads resolve through. The <em>edit scope</em> is what the surface editor is holding
@@ -70,9 +70,10 @@ public final class PlaceLookPreferences implements SharedPreferences {
                 if (key != null) keys.add(key);
             }
         }
+        // Dock height is deliberately absent: a size is layout, not look, so it lives per place
+        // and per orientation in PlaceLayoutStore — docs/adr/0001-sizes-live-in-the-layout-store.md.
         Collections.addAll(keys,
             TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE,
-            TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT,
             TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY,

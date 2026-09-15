@@ -285,6 +285,9 @@ public class PlaceLookPreferencesTest {
         assertFalse(PlaceLookPreferences.isScopable(TERMUX_APP.KEY_SURFACE_MATERIAL));
         assertFalse(PlaceLookPreferences.isScopable(TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE));
         assertFalse(PlaceLookPreferences.isScopable(TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE));
+        // A size is layout, not look: the dock's height lives per place and per orientation in
+        // the layout store, so no place takes it as a look override any more.
+        assertFalse(PlaceLookPreferences.isScopable(TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT));
         assertNull(PlaceLookPreferences.placeOfLookKey(KEY_STATUS_BLUR));
         assertEquals(PaneWallPage.WIDGETS, PlaceLookPreferences.placeOfLookKey(
             PlaceLookPreferences.lookKey(PaneWallPage.WIDGETS, KEY_STATUS_BLUR)));

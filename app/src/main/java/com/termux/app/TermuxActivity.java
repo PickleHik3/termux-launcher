@@ -9096,8 +9096,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mLookPreferences = new PlaceLookPreferences(base.getSharedPreferences());
-        return new TermuxAppSharedPreferences(base.getContext(), mLookPreferences,
-            base.getMultiProcessSharedPreferences());
+        TermuxAppSharedPreferences scoped = new TermuxAppSharedPreferences(base.getContext(),
+            mLookPreferences, base.getMultiProcessSharedPreferences());
+        // And the sizes, which are the place's and the orientation's rather than the place's
+        // alone, so the same getters answer for what is on screen (ADR 0001).
+        mPlaceLayoutStore = new PlaceLayoutStore(scoped);
+        scoped.setPlaceSizes(new com.termux.app.place.PlaceSizePreferences(
+            () -> mPlaceLayoutStore, this::currentWallPlace, this::currentPlaceOrientation));
+        return scoped;
     }
 
     /**

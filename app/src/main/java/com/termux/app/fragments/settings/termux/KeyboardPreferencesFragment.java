@@ -380,7 +380,7 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             return;
         switch (key) {
             case "in_app_keyboard_bottom_padding":
-                mPreferences.setInAppKeyboardBottomPadding(value);
+                putKeyboardChin(value);
                 break;
             // The shape sliders are percentages on screen and fractions in the store, and each is
             // remembered for the orientation the phone is being held in.
@@ -407,7 +407,7 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             return defValue;
         switch (key) {
             case "in_app_keyboard_bottom_padding":
-                return mPreferences.getInAppKeyboardBottomPadding();
+                return keyboardChin();
             case "in_app_keyboard_floating_width":
                 return Math.round(mPreferences.getInAppKeyboardFloatingWidthScale() * 100f);
             case "in_app_keyboard_floating_height":
@@ -438,6 +438,27 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             default:
                 break;
         }
+    }
+
+    /**
+     * The air under the last key row, for every place at once in the orientation the phone is in.
+     * Like the keyboard type below it, the allowance belongs to a place and an orientation now;
+     * this row is the blunt one, for a user fitting the keys to their phone's chin rather than to
+     * one screen.
+     */
+    private void putKeyboardChin(int dp) {
+        PlaceLayoutStore places = places();
+        if (places == null) return;
+        PlaceOrientation orientation = orientation();
+        for (PaneWallPage place : PaneWallPage.values())
+            places.setKeyboardChinDp(place, orientation, dp);
+    }
+
+    /** The allowance the places agree on, or the terminal's where they have been set apart. */
+    private int keyboardChin() {
+        PlaceLayoutStore places = places();
+        if (places == null) return 0;
+        return places.keyboardChinDp(PaneWallPage.TERMINAL, orientation());
     }
 
     /**
