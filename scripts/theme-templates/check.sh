@@ -640,6 +640,73 @@ test_nvim() {
     [ -f "$home/.config/nvim/colors/launcher-material.lua" ] || fail "undo.sh removed a hand-edited colorscheme file; it should have survived"
 }
 
+# ---- herdr ----
+test_herdr() {
+    local dir="$TEMPLATES_DIR/herdr"
+    local rendered="$WORK/herdr.rendered"
+    render_template "$dir" "launcher-material.toml" >"$rendered" 2>"$WORK/herdr.err" || { fail "render error: $(cat "$WORK/herdr.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    if grep -vE '^[A-Za-z0-9_]+ = "#[0-9A-Fa-f]{6}"$' "$rendered" >"$WORK/herdr.bad" && [ -s "$WORK/herdr.bad" ]; then
+        fail "line(s) not matching herdr's key = \"#hex\" shape: $(cat "$WORK/herdr.bad")"; return
+    fi
+    note "herdr: not installed on this machine - syntax validation only (key = \"#hex\" shape)"
+
+    # ---- absent: no config.toml at all ----
+    local home="$WORK/herdr-absent/home"
+    rm -rf "$WORK/herdr-absent"; mkdir -p "$home"
+    local theme_dir="$WORK/herdr-absent/theme_dir"; mkdir -p "$theme_dir"
+    local output="$home/.config/herdr/launcher-material.toml"
+    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (absent) failed"
+    cp "$home/.config/herdr/config.toml" "$WORK/herdr-absent/after1.toml" 2>/dev/null
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (absent) failed"
+    cmp -s "$WORK/herdr-absent/after1.toml" "$home/.config/herdr/config.toml" 2>/dev/null || fail "apply.sh (absent) not idempotent"
+    grep -qxF '[theme.custom]' "$home/.config/herdr/config.toml" || fail "apply.sh (absent) did not create a [theme.custom] table"
+    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (absent) failed"
+    [ -e "$home/.config/herdr/config.toml" ] && fail "undo.sh (absent) left a config.toml behind (it held only our own table)"
+    [ -e "$output" ] && fail "undo.sh (absent) left the rendered file behind"
+
+    # ---- no-table: config.toml pre-exists with no [theme.custom] table ----
+    home="$WORK/herdr-no-table/home"
+    rm -rf "$WORK/herdr-no-table"; mkdir -p "$home/.config/herdr"
+    theme_dir="$WORK/herdr-no-table/theme_dir"; mkdir -p "$theme_dir"
+    output="$home/.config/herdr/launcher-material.toml"
+    cp "$rendered" "$output"
+    printf '[general]\nworkspace_root = "~/src"\n' > "$home/.config/herdr/config.toml"
+    local orig="$WORK/herdr-no-table/orig.toml"; cp "$home/.config/herdr/config.toml" "$orig"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (no-table) failed"
+    grep -qxF '[theme.custom]' "$home/.config/herdr/config.toml" || fail "apply.sh (no-table) did not add a [theme.custom] table"
+    cp "$home/.config/herdr/config.toml" "$WORK/herdr-no-table/after1.toml"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (no-table) failed"
+    cmp -s "$WORK/herdr-no-table/after1.toml" "$home/.config/herdr/config.toml" || fail "apply.sh (no-table) not idempotent"
+    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (no-table) failed"
+    cmp -s "$orig" "$home/.config/herdr/config.toml" || fail "undo.sh (no-table) did not restore original bytes"
+    [ -e "$output" ] && fail "undo.sh (no-table) left the rendered file behind"
+
+    # ---- pre: [theme.custom] pre-exists with a conflicting key and unrelated content ----
+    home="$WORK/herdr-pre/home"
+    rm -rf "$WORK/herdr-pre"; mkdir -p "$home/.config/herdr"
+    theme_dir="$WORK/herdr-pre/theme_dir"; mkdir -p "$theme_dir"
+    output="$home/.config/herdr/launcher-material.toml"
+    cp "$rendered" "$output"
+    printf '[general]\nworkspace_root = "~/src"\n\n[theme.custom]\naccent = "#123456"\nfont_size = 14\n\n[keys]\nquit = "q"\n' \
+        > "$home/.config/herdr/config.toml"
+    orig="$WORK/herdr-pre/orig.toml"; cp "$home/.config/herdr/config.toml" "$orig"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (pre) failed"
+    grep -qxF '# launcher-material: accent = "#123456"' "$home/.config/herdr/config.toml" \
+        || fail "apply.sh (pre) did not comment out the conflicting pre-existing accent key"
+    grep -qxF 'font_size = 14' "$home/.config/herdr/config.toml" \
+        || fail "apply.sh (pre) touched an unrelated key in [theme.custom]"
+    grep -qxF 'quit = "q"' "$home/.config/herdr/config.toml" \
+        || fail "apply.sh (pre) touched an unrelated table"
+    cp "$home/.config/herdr/config.toml" "$WORK/herdr-pre/after1.toml"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (pre) failed"
+    cmp -s "$WORK/herdr-pre/after1.toml" "$home/.config/herdr/config.toml" || fail "apply.sh (pre) not idempotent"
+    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (pre) failed"
+    cmp -s "$orig" "$home/.config/herdr/config.toml" || fail "undo.sh (pre) did not restore original bytes (including the uncommented accent key)"
+    [ -e "$output" ] && fail "undo.sh (pre) left the rendered file behind"
+}
+
 # ---------------------------------------------------------------------------
 # Run all templates
 # ---------------------------------------------------------------------------
@@ -654,9 +721,10 @@ declare -A TEST_FN=(
     [lazygit]=test_lazygit
     [ohmyposh]=test_ohmyposh
     [nvim]=test_nvim
+    [herdr]=test_herdr
 )
 
-ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim"
+ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim herdr"
 
 for id in $ORDER; do
     dir="$TEMPLATES_DIR/$id"
