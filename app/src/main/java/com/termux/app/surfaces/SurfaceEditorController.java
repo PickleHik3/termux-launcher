@@ -52,7 +52,11 @@ import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLookPreferences;
+import com.termux.app.terminal.io.ExtraKeyColorSwatches;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.extrakeys.ExtraKeyButton;
+import com.termux.shared.termux.extrakeys.ExtraKeyColorRole;
+import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -134,6 +138,18 @@ public final class SurfaceEditorController {
         /** The coalesced glass re-render; {@code blurChanged} also drops the blur cache. */
         void applyGlassPreview(boolean blurChanged);
         void openKeyboardColors();
+        /**
+         * The extra keys row the user is looking at, or null where the place on screen has none.
+         * The editor puts it in pick mode while the keyboard card is up, so a tap dresses a key
+         * instead of firing it.
+         */
+        @Nullable ExtraKeysView liveExtraKeysView();
+        /**
+         * Writes the colours the editor staged into the stored key page, keyed by each key's
+         * position in the row the user picked from, and rebuilds the row from it. Called once, on
+         * the way out, because the editor commits only on Done.
+         */
+        void commitExtraKeyColors(@NonNull Map<Integer, ExtraKeyColorRole> colorsByKeyIndex);
         /**
          * The rect the terminal's own frame is drawn at, in window coordinates as
          * {@code {left, top, right, bottom}}, or null while it cannot be measured. The canvas has
@@ -499,6 +515,7 @@ public final class SurfaceEditorController {
             parkFloat();
             positionSelectionRings(false);
             syncGlow();
+            syncExtraKeysPickMode();
         });
         if (scopeMoved) syncEditorAfterBulkWrite();
     }
@@ -560,6 +577,9 @@ public final class SurfaceEditorController {
         // shared layer whichever place the editor was opened on.
         runShared(() -> shared[0] = captureSharedEntryState());
         return () -> {
+            // The key row's staged colours were never written, so putting them back is dropping
+            // them — and the live row goes back to what it is storing.
+            clearStagedKeyColors();
             if (prefs() == null)
                 return;
             runShared(shared[0]);
@@ -766,6 +786,7 @@ public final class SurfaceEditorController {
             parkPanel(animate && changed);
         }
         syncGlow();
+        syncExtraKeysPickMode();
     }
 
     /**
@@ -803,6 +824,7 @@ public final class SurfaceEditorController {
         parkFloat();
         setFloatShown(true, animate);
         syncGlow();
+        syncExtraKeysPickMode();
     }
 
     /** Raises the card at its park: a short rise and fade in, rather than a pop. */
@@ -1146,6 +1168,114 @@ public final class SurfaceEditorController {
         into.addView(rowView);
         syncs.add(sync);
         sync.run();
+    }
+
+    // ------------------------------------------------------------------- the key row's colours
+
+    /**
+     * The colours picked in this session, by each key's position in the row the user picked from.
+     * A null value is a key put back to the row's own styling. Staged, not written: the editor
+     * commits only on Done, and the live row is showing the preview meanwhile.
+     */
+    private final ExtraKeyColorStaging mStagedKeyColors = new ExtraKeyColorStaging();
+    /** The row currently in pick mode, held so it can be taken back out of it. */
+    @Nullable private ExtraKeysView mPickingKeys;
+    @Nullable private PopupWindow mKeyColorPopup;
+
+    /**
+     * The live key row follows the keyboard card: while that card is up, a tap on a key opens its
+     * colours instead of firing it. Every other target, and the resting editor, hand the row back.
+     */
+    private void syncExtraKeysPickMode() {
+        boolean picking = mSurfaceEditorOpen && mCardShown
+            && mSelectedSlot == SurfaceSlot.KEYBOARD;
+        ExtraKeysView wanted = picking ? mHost.liveExtraKeysView() : null;
+        if (mPickingKeys != null && mPickingKeys != wanted) {
+            mPickingKeys.setPickMode(false);
+            mPickingKeys.setKeyPickListener(null);
+            mPickingKeys = null;
+        }
+        if (wanted == null) {
+            dismissKeyColorPopup();
+            return;
+        }
+        mPickingKeys = wanted;
+        wanted.setKeyPickListener(this::showKeyColorPicker);
+        wanted.setPickMode(true);
+    }
+
+    /** The swatches for one key, over the cap the user touched. */
+    private void showKeyColorPicker(int keyIndex, @NonNull ExtraKeyButton info,
+                                    @NonNull com.google.android.material.button.MaterialButton keyView) {
+        dismissKeyColorPopup();
+        Context context = mHost.context();
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(12), dp(16), dp(14));
+        card.setBackground(buildPanelBackground(20));
+
+        TextView title = new TextView(context);
+        title.setText(R.string.settings_extra_keys_color_title);
+        title.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_LabelLarge);
+        title.setTextColor(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary));
+        title.setPadding(0, 0, 0, dp(8));
+        card.addView(title);
+
+        ExtraKeyColorRole current = mStagedKeyColors.roleFor(keyIndex, info.getColor());
+        card.addView(ExtraKeyColorSwatches.build(context, current, role -> {
+            mStagedKeyColors.stage(keyIndex, role);
+            if (mPickingKeys != null) mPickingKeys.previewKeyColor(keyView, role);
+            syncDirtyActions();
+        }));
+
+        PopupWindow popup = new PopupWindow(card, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        popup.setOutsideTouchable(true);
+        card.measure(View.MeasureSpec.makeMeasureSpec(
+                getResources().getDisplayMetrics().widthPixels - dp(24), View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int width = card.getMeasuredWidth();
+        int height = card.getMeasuredHeight();
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int[] location = new int[2];
+        keyView.getLocationOnScreen(location);
+        int x = clamp(location[0] + keyView.getWidth() / 2 - width / 2, dp(8),
+            Math.max(dp(8), screenWidth - width - dp(8)));
+        // Above the key where there is room for it, below where there is not: the row usually sits
+        // at the foot of the screen, and a popup under it would be off the bottom.
+        int above = location[1] - height - dp(8);
+        int y = above >= dp(8) ? above : location[1] + keyView.getHeight() + dp(8);
+        View root = mHost.findView(android.R.id.content);
+        if (root == null) root = keyView.getRootView();
+        try {
+            popup.showAtLocation(root, Gravity.NO_GRAVITY, x, y);
+        } catch (Exception ignored) {
+            return;
+        }
+        mKeyColorPopup = popup;
+    }
+
+    private void dismissKeyColorPopup() {
+        if (mKeyColorPopup == null)
+            return;
+        try {
+            mKeyColorPopup.dismiss();
+        } catch (Exception ignored) {
+        }
+        mKeyColorPopup = null;
+    }
+
+    /** Puts every staged colour back, which is what ↺ and Discard mean for the key row. */
+    private void clearStagedKeyColors() {
+        dismissKeyColorPopup();
+        if (mStagedKeyColors.isEmpty())
+            return;
+        mStagedKeyColors.clear();
+        if (mPickingKeys != null)
+            mPickingKeys.clearPreviewColors();
     }
 
     /** The two rows that leave the editor for a screen of their own. */
@@ -3282,7 +3412,8 @@ public final class SurfaceEditorController {
             .append(prefs().getSurfaceBaseValue(SurfaceProperty.SIDE_GAP)).append('|')
             .append(prefs().getSurfaceMaterial()).append('|')
             .append(prefs().getSurfaceMaterialIntensity()).append('|')
-            .append(look() == null ? "" : look().signature())
+            .append(look() == null ? "" : look().signature()).append('|')
+            .append(mStagedKeyColors.signature())
             .toString();
     }
 
@@ -3371,6 +3502,21 @@ public final class SurfaceEditorController {
         }
         dismissClockDropdown();
         hideSurfaceTuningPeekReadout();
+        // ✓ is the commit for the key row too: the colours picked on the live row are written into
+        // the stored page now, and the row is rebuilt from it. A Discard already emptied this.
+        dismissKeyColorPopup();
+        if (mPickingKeys != null) {
+            mPickingKeys.setPickMode(false);
+            mPickingKeys.setKeyPickListener(null);
+        }
+        if (!mStagedKeyColors.isEmpty()) {
+            Map<Integer, ExtraKeyColorRole> staged = mStagedKeyColors.snapshot();
+            mStagedKeyColors.clear();
+            mHost.commitExtraKeyColors(staged);
+        } else if (mPickingKeys != null) {
+            mPickingKeys.clearPreviewColors();
+        }
+        mPickingKeys = null;
         mPanelPeeking = false;
         mSurfaceEditorEntrySignature = null;
         mSurfaceEditorRevert = null;

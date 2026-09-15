@@ -31,6 +31,13 @@ public class ExtraKeyButton {
     public static final String KEY_POPUP = "popup";
 
     /**
+     * The key name for the Material colour role the cap is painted in, if using a dict to define
+     * the extra key. {color: role, ...}. The value is one of {@link ExtraKeyColorRole}'s tokens;
+     * anything else, and an absent value, leave the key with the row's own styling.
+     */
+    public static final String KEY_COLOR = "color";
+
+    /**
      * The key that will be sent to the terminal, either a control character, like defined in
      * {@link ExtraKeysConstants#PRIMARY_KEY_CODES_FOR_STRINGS} (LEFT, RIGHT, PGUP...) or some text.
      */
@@ -51,6 +58,12 @@ public class ExtraKeyButton {
      */
     @Nullable
     private final ExtraKeyButton popup;
+
+    /**
+     * The Material role the cap is painted in, or {@code null} to leave it with the row's styling.
+     */
+    @Nullable
+    private final ExtraKeyColorRole color;
 
     /**
      * Initialize a {@link ExtraKeyButton}.
@@ -98,6 +111,9 @@ public class ExtraKeyButton {
         this.key = TextUtils.join(" ", keys);
         this.display = resolveDisplay(keys, getStringFromJson(config, KEY_DISPLAY_NAME), extraKeyDisplayMap);
         this.popup = popup;
+        // An unreadable role is simply no role: a hand-written file with a typo in it should give
+        // up the colour, not the key.
+        this.color = ExtraKeyColorRole.fromToken(getStringFromJson(config, KEY_COLOR));
     }
 
     /**
@@ -158,6 +174,14 @@ public class ExtraKeyButton {
     @Nullable
     public ExtraKeyButton getPopup() {
         return popup;
+    }
+
+    /**
+     * Get {@link #color}: the Material role the cap is painted in, or null for the row's styling.
+     */
+    @Nullable
+    public ExtraKeyColorRole getColor() {
+        return color;
     }
 
     /**
