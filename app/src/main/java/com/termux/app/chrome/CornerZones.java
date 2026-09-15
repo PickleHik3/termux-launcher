@@ -29,11 +29,23 @@ public final class CornerZones {
     /** The square's side. A thumb, not a cursor. */
     public static final float SIZE_DP = 32f;
 
+    /**
+     * The square's side on a terminal pane. Bigger than the rest, because it is the only one that
+     * is held rather than tapped: the program underneath keeps every touch that does not rest
+     * there, so the square costs the program nothing and can afford the room a slow thumb needs.
+     */
+    public static final float PANE_SIZE_DP = 40f;
+
     private CornerZones() {
     }
 
     public static float sizePx(float density) {
         return SIZE_DP * density;
+    }
+
+    /** {@link #PANE_SIZE_DP} in pixels: the held square a terminal pane keeps at each corner. */
+    public static float paneSizePx(float density) {
+        return PANE_SIZE_DP * density;
     }
 
     /**

@@ -183,7 +183,7 @@ Strings go in `strings.xml` under `help_…`. Titles bold, lines as given.
 | + | `TerminalWindowBar.createWindowButtonView()` | New window | Tap + to open a terminal window. | shown |
 | Stats cluster | `terminal_status_stats_cluster` (box only the visible children) | the visible stats, e.g. CPU · RAM · Weather | Tap one for details. | ≥1 stat visible |
 | Status bar | anchor at a peeking place icon (`StatusBarLensView`) or the bar's end cap | Status bar | Swipe along it to change place. Drag down for the clock and notifications. | always |
-| Pane corner | one corner zone of the active pane (`CornerZones`, 32 dp square) | Pane corners | Tap one for move, maximise, close and this help. (lone pane: Tap one for the pane's controls and this help.) | always |
+| Pane corner | one corner zone of the active pane (`CornerZones`, 40 dp square) | Pane corners | Hold one for move, maximise, close and this help. (lone pane: Hold one for the pane's controls and this help.) | always |
 | Divider | the split divider view | Divider | Drag to resize the panes. | ≥2 panes |
 | Dock | `apps_bar_viewpager` / `dock_rail_scroll` | Dock | Pull down for the app drawer. (rail: Swipe off the rail for the app drawer.) | shown |
 | A–Z row | `apps_bar_az_row` / `place_az_bar_top` / `place_az_bar_column` | A–Z row | Slide to filter your apps, drag up to one and let go. | shown |
@@ -206,7 +206,7 @@ on the chooser now; this table is still what "Show all" renders.
 | `az` | Everyday | The A–Z row picks an app by its first letter. | Slide along it, then drag up to the app you want. | Show the A–Z row in the Layout editor to see it. |
 | `status` | Everyday | The status bar shows which place you are on. | Swipe along it to change place, or drag it down for the clock. | Show the status bar in the Layout editor to see it. |
 | `stats` | Everyday | The status widgets show how the phone is doing. | Tap one for details. | Turn a status widget on in Settings to see it. |
-| `corners` | Everyday | Every pane corner holds the controls for that pane, including this help. | Press a corner, then tap the ? button. | Press any corner of a pane to see its controls. |
+| `corners` | Everyday | Every pane corner holds the controls for that pane, including this help. | Hold a corner, then tap the ? button. | Hold any corner of a pane to see its controls. |
 | `sessions` | Everyday | Sessions group your windows. | Tap the badge to switch. | Show the status bar in the Layout editor to see the badge. |
 | `windows` | Everyday | Windows are tabs for your terminals. | Tap one to switch, or tap + for a new one. | Show the status bar in the Layout editor to see your windows. |
 | `keys` | Keyboard | The extra keys row carries the keys a phone keyboard leaves out. | Tap a key, or swipe up on it for its second key. | Show the keyboard to see this key. |

@@ -20,6 +20,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
+import com.termux.view.HoldTiming;
 import com.termux.view.TerminalView;
 
 import org.junit.Test;
@@ -220,6 +221,91 @@ public class TerminalPaneCornerTabTapTest {
         assertEquals(top, ((TerminalPaneController.Leaf) root.b).session);
     }
 
+    // ---------------------------------------------------------------- the corner hold
+
+    /**
+     * The square is the program's. A tap in it reaches the pane's terminal and opens nothing —
+     * which is what makes tmux's clock and vim's ruler touchable in a pane corner again.
+     */
+    @Test
+    public void aTapInACornerSquareReachesTheTerminalAndOpensNoTab() {
+        Fixture fixture = fixture();
+        List<Integer> forwarded = fixture.recordForwardedTouches();
+
+        fixture.tap(WIDTH - 2f, 2f);
+
+        assertEquals("down and up, and nothing cancelled",
+            Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP), forwarded);
+        assertFalse("a tap is not a hold", fixture.controls.isControlsShown());
+    }
+
+    /** Rest in the same square and the corner takes it: one cancel to the program, then the tab. */
+    @Test
+    public void aHoldInACornerSquareCancelsTheTerminalAndOpensTheTab() {
+        Fixture fixture = fixture();
+        List<Integer> forwarded = fixture.recordForwardedTouches();
+
+        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        fixture.waitOutTheHold();
+
+        assertEquals("the program was told the touch is over",
+            Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_CANCEL), forwarded);
+
+        fixture.touch(MotionEvent.ACTION_UP, WIDTH - 2f, 2f);
+        fixture.idle();
+
+        assertEquals("and gets nothing after the corner claimed it",
+            Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_CANCEL), forwarded);
+        assertTrue("the hold opened the tab", fixture.controls.isControlsShown());
+    }
+
+    /**
+     * The exemption is the other half of the same bargain: while the corner may still take the
+     * finger, the terminal runs neither its aim nor its own hold for it, and the moment the finger
+     * is anyone's for good it runs both again.
+     */
+    @Test
+    public void theTerminalIsHoldExemptOnlyWhileTheCornerMightStillTakeIt() {
+        Fixture fixture = fixture();
+        TerminalView pane = fixture.paneView();
+        assertFalse("nothing is down yet", pane.isHoldExempt());
+
+        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        assertTrue("the finger might yet be a corner hold", pane.isHoldExempt());
+
+        fixture.touch(MotionEvent.ACTION_UP, WIDTH - 2f, 2f);
+        fixture.idle();
+        assertFalse("the finger lifted", pane.isHoldExempt());
+
+        // And a finger that walks out of the square hands the terminal its own holds back.
+        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        assertTrue(pane.isHoldExempt());
+        fixture.touch(MotionEvent.ACTION_MOVE, WIDTH - 2f, HEIGHT / 2f);
+        assertFalse("the program kept the gesture", pane.isHoldExempt());
+        fixture.touch(MotionEvent.ACTION_UP, WIDTH - 2f, HEIGHT / 2f);
+        fixture.idle();
+        assertFalse(fixture.controls.isControlsShown());
+    }
+
+    /** A drag out of the square is the program's scroll, and every event of it still arrives. */
+    @Test
+    public void aDragOutOfACornerSquareStaysWithTheTerminal() {
+        Fixture fixture = fixture();
+        List<Integer> forwarded = fixture.recordForwardedTouches();
+
+        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        fixture.touch(MotionEvent.ACTION_MOVE, WIDTH - 2f, HEIGHT / 2f);
+        // Long past the hold: a finger the program already owns is never taken back.
+        fixture.waitOutTheHold();
+        fixture.touch(MotionEvent.ACTION_MOVE, WIDTH - 2f, HEIGHT * 0.8f);
+        fixture.touch(MotionEvent.ACTION_UP, WIDTH - 2f, HEIGHT * 0.8f);
+        fixture.idle();
+
+        assertEquals(Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE,
+            MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP), forwarded);
+        assertFalse("no tab came out", fixture.controls.isControlsShown());
+    }
+
     /** A tap anywhere but the tab puts it away, as it always did. */
     @Test
     public void aTapOffTheTabPutsItAway() {
@@ -284,6 +370,12 @@ public class TerminalPaneCornerTabTapTest {
             Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
         }
 
+        /** Wait out the hold, which is what a corner square now asks for before it answers. */
+        void waitOutTheHold() {
+            Shadows.shadowOf(Looper.getMainLooper())
+                .idleFor(HoldTiming.holdTimeoutMs() + 20L, TimeUnit.MILLISECONDS);
+        }
+
         void touch(int action, float x, float y) {
             MotionEvent event = MotionEvent.obtain(0L, 0L, action, x, y, 0);
             overlay.onTouchEvent(event);
@@ -296,10 +388,38 @@ public class TerminalPaneCornerTabTapTest {
             idle();
         }
 
-        /** A tap on the pane's top-trailing corner, which is where the tab has always come out. */
+        /** Down, still for the hold, up — what the corner asks for now. */
+        void hold(float x, float y) {
+            touch(MotionEvent.ACTION_DOWN, x, y);
+            waitOutTheHold();
+            touch(MotionEvent.ACTION_UP, x, y);
+            idle();
+        }
+
+        /** The pane's own terminal, which the corner square hands its touches to. */
+        TerminalView paneView() {
+            TerminalView view = controller.getActivePaneView();
+            assertNotNull("the pane has a terminal", view);
+            return view;
+        }
+
+        /**
+         * Every touch the corner forwarded to the terminal, in order. It replaces the controller's
+         * own listener, which only focuses the pane — nothing this asks about.
+         */
+        List<Integer> recordForwardedTouches() {
+            List<Integer> actions = new ArrayList<>();
+            paneView().setOnTouchListener((v, ev) -> {
+                actions.add(ev.getActionMasked());
+                return false;
+            });
+            return actions;
+        }
+
+        /** A hold on the pane's top-trailing corner, which is where the tab comes out. */
         void showTab() {
-            tap(width - 2f, 2f);
-            assertTrue("the corner tap should have dropped the tab", controls.isControlsShown());
+            hold(width - 2f, 2f);
+            assertTrue("the corner hold should have dropped the tab", controls.isControlsShown());
         }
 
         /** Where the tab's buttons are, as the view itself laid them out. */
