@@ -99,8 +99,8 @@ nixpkgs with no repository to add, and carries no command. VAJ keeps `pkg`, like
 - The card is anchored to its target: centred on it, below it when it is in the top half of the
   overlay and above it otherwise, with a pointer on the edge facing it. A card with no target
   keeps the middle of the overlay.
-- The overlay hides while the drawer, the command palette, a terminal sheet or the surface editor
-  is up. The exception is the card whose ask is to close that very surface — the drawer's second
+- The overlay hides while the drawer, the command palette, a terminal sheet, or the Appearance or
+  Layout editor is up. The exception is the card whose ask is to close that very surface — the drawer's second
   half and the palette's: it shows compact at the top of the screen, under the launcher's own top
   bar, with no glow. A card that falls due behind chrome is shown when the chrome goes.
   `TourCardVisibility` is the whole rule, and is pure.

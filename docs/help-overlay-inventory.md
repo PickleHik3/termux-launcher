@@ -24,7 +24,11 @@ inventory was built against; read it as history, not as what `TourRun.java` demo
 | 8 | Extra keys row | 37.5 dp | `terminal_toolbar_view_pager` | all, default bottom |
 | 9 | In-app keyboard | keyboard | `inapp_keyboard_view_host` | terminal; hidden on entering Display and Widgets unless the place asks for it |
 
-Full-bleed layers over everything: app drawer, command palette, floating keyboard, surface editor.
+Full-bleed layers over everything: app drawer, command palette, floating keyboard, the Appearance
+editor, the Layout editor.
+
+Every corner tab on every place carries the same two doors, and so does the terminal's long-press
+menu: **Appearance** changes how this screen looks, **Layout** changes where things sit on it.
 
 Landscape: the dock becomes a rail down the left edge (`dock_rail_scroll`); the extra keys and
 the A–Z bar can stand in side columns; a status bar on a side edge swaps to a column of window
@@ -62,7 +66,8 @@ Gestures on the bar, on every place:
 | + | New terminal window (terminal place only) | tap | end of the chip strip | 3, stage 1 |
 | Panes | The split tree; each pane a terminal | touches go to the terminal; dividers drag | fills the page | — |
 | Pane corners | 32 dp square at each of a pane's four corners; drops a tab | tap | four corners of every pane; with two panes eight squares cluster along the divider | 9 (glow uses the top-left) |
-| Corner tab | One button on a lone pane (surface editor); move · maximise · close in a split; maximise · close when maximised | tap a button; tap anywhere else dismisses | slides out of the corner touched | 9 |
+| Corner tab | **Sliders** (Appearance), **grid** (Layout) and **?** on a lone pane; move · maximise · close and ? in a split; maximise · close and ? when maximised | tap a button; tap anywhere else dismisses | slides out of the corner touched | 9 |
+| Long-press menu | Command palette · Select URL · Share transcript · background image · **Appearance** · **Layout** · Settings · Reset · Kill process | long-press the terminal | dialog | — |
 | Dock | Pinned apps, paged | tap launches; sideways swipe pages; **pull down opens the drawer** | bottom row of the accessory stack | 10 |
 | App drawer | Full-bleed plane | pull down on the dock (sideways off the rail in landscape); swipe down closes | covers the screen | 10 |
 | A–Z row | Alphabet index; scrub filters the icons and shows a preview beside the finger | slide along, drag up to an app, let go | between the dock and the extra keys | 11 |
@@ -78,7 +83,7 @@ Gestures on the bar, on every place:
 |------|------|---------|----------|------|
 | X display surface | The embedded X server's picture; edges belong to X | all touches between the corners go to X | fills the page | — |
 | Empty state | "No display" message with **Start display** (or a turn-on prompt while the setting is off) | tap the button | centred | — |
-| Page corners → tab | **Power** (start or stop the display), **cog** (display settings), **sliders** (surface editor for this place), **?** (help) | tap a corner, then a button | any of the page's four corners | — |
+| Page corners → tab | **Power** (start or stop the display), **cog** (display settings), **sliders** (Appearance for this place), **grid** (Layout for this place), **?** (help) | tap a corner, then a button | any of the page's four corners | — |
 | Scale rail | Vertical slider with a read-out; only while the corner tab is out and a display runs | drag the thumb | along the leading edge, 16 dp in | — |
 | Touchpad | 1 finger moves and taps, 2 fingers scroll, pinch, right-click, 3 fingers middle-click, switch windows, bring the keyboard back; scroll strip on its trailing edge; arrow in its bottom-left restores the keyboard | mouse mode on | takes the keyboard's place; over a split keyboard it stands in the gap | — |
 | Status bar chips | The display's app windows, front one selected | tap raises that window | the terminal chips' slot | — |
@@ -96,7 +101,7 @@ keys row are the way back to the terminal without the status bar.
 | Empty hint | "Add a widget" message | — | centred | — |
 | Page dots | More than one widget page | sideways swipe pages | bottom centre | — |
 | Long-press menu | Add widget · Edit widgets · Add page · Remove page | long-press empty grid | popup at the touch point | — |
-| Page corners → tab | **Cog** (layout settings at the widget grid), **pencil** (edit widgets), **sliders** (surface editor for this place), **?** (help); while editing, a grid-size read-out and ? | tap a corner, then a button | any of the page's four corners | — |
+| Page corners → tab | **Cog** (layout settings at the widget grid), **pencil** (edit widgets), **sliders** (Appearance for this place), **grid** (Layout for this place), **?** (help); while editing, a grid-size read-out and ? | tap a corner, then a button | any of the page's four corners | — |
 | Edit mode | Move widgets by whole cells, resize by edge handles | long-press a widget, drag; drag a handle | on the grid | — |
 | Status bar | Bare: no badge, no chips; stats centred and reversed | — | — | — |
 | Keyboard | Closed on entering by default | — | — | — |

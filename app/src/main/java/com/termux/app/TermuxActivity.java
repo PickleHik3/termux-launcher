@@ -836,6 +836,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
 
+    private static final int CONTEXT_MENU_LAYOUT_EDITOR_ID = 12;
+
     /** One row of the long-press action dialog. */
     private static final class TerminalActionItem {
         final int id;
@@ -8427,26 +8429,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentPlaceLayout();
         }
 
-        @Nullable @Override public PlaceLayoutStore places() {
-            return placeLayoutStore();
-        }
-
-        @NonNull @Override public com.termux.app.wall.PaneWallPage placeOnScreen() {
-            return currentWallPlace();
-        }
-
-        @NonNull @Override public PlaceOrientation placeOrientation() {
-            return currentPlaceOrientation();
-        }
-
-        @Override public void applyPlaceArrangement() {
-            // The same pass a Layout page write comes back through: the layout is resolved once
-            // and every surface re-reads its part of it. Nothing here recreates the activity, so
-            // the editor stays open over the chrome it has just moved.
-            syncPlaceLayout();
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
-        }
-
         @Nullable @Override public com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() {
             return mInAppKeyboard;
         }
@@ -10687,6 +10669,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_SURFACE_EDITOR_ID:
                 openSurfaceEditor();
                 return true;
+            case CONTEXT_MENU_LAYOUT_EDITOR_ID:
+                openLayoutEditor(null);
+                return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
                 com.termux.app.terminal.TerminalCommandPalette.show(this);
                 return true;
@@ -10789,7 +10774,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? R.string.action_disable_background_image
                 : R.string.action_enable_background_image)
         ));
-        items.add(new TerminalActionItem(CONTEXT_MENU_SURFACE_EDITOR_ID, getString(R.string.action_surface_editor)));
+        // The two doors the corner tabs carry, for anyone who never found a corner: how the place
+        // looks, and where its things sit.
+        items.add(new TerminalActionItem(CONTEXT_MENU_SURFACE_EDITOR_ID, getString(R.string.action_appearance_editor)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_LAYOUT_EDITOR_ID, getString(R.string.action_layout_editor)));
         // Only when the companion is installed: a row that opens the Appearance settings under the
         // name of a plugin the device does not have is a broken promise, not a shortcut.
         if (isTerminalStylingAvailable()) {
@@ -13001,15 +12989,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSurfaceEditor.enter(null, currentWallPlace());
     }
 
-    /**
-     * The corner tab of a place that is not the terminal: the editor opens on the arrangement of
-     * the place the user is looking at, with the rest of it one tap away on the card.
-     */
-    void openSurfaceEditorArrange() {
-        if (mLayoutEditor.isActive()) return;
-        mSurfaceEditor.enterArrange(currentWallPlace());
-    }
-
     void openSettings() {
         openSettingsHome();
     }
@@ -13755,17 +13734,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
-                TermuxActivity.this.openSurfaceEditorArrange();
+                TermuxActivity.this.openSurfaceEditor();
+            }
+            @Override public void openLayoutEditor() {
+                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
             }
             @Override public void openWidgetGridSettings() {
-                ActivityUtils.startActivity(TermuxActivity.this,
-                    com.termux.app.activities.SettingsActivity.createFragmentIntent(
-                        TermuxActivity.this,
-                        com.termux.app.fragments.settings.termux.LayoutPreferencesFragment.class,
-                        R.string.settings_destination_layout,
-                        com.termux.app.wall.PaneWallPage.WIDGETS.toolName(),
-                        com.termux.app.fragments.settings.termux.LayoutPreferencesFragment
-                            .KEY_WIDGET_GRID));
+                // The grid's two counts are rows in the Layout editor now, beside a picture of the
+                // place they lay out.
+                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
             }
             @Override public void editWidgets() {
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
@@ -13814,7 +13791,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
-                TermuxActivity.this.openSurfaceEditorArrange();
+                TermuxActivity.this.openSurfaceEditor();
+            }
+            @Override public void openLayoutEditor() {
+                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.DISPLAY);
             }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
             @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
@@ -16742,6 +16722,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openSurfaceEditor() {
             TermuxActivity.this.openSurfaceEditor();
+        }
+
+        @Override public void openLayoutEditor() {
+            TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.TERMINAL);
         }
 
         @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,

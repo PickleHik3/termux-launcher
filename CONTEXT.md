@@ -38,9 +38,10 @@ and can style all surfaces at once.
 _Avoid_: surface editor (legacy umbrella name), look editor, style editor, full editor
 
 **Layout editor**:
-The editor for where a place's elements sit: bars, dock, keyboard, widget grid, hidden or shown.
-Its canvas is the miniature; it shows one orientation with a toggle to the other. Entered from
-the corner tab or from Settings → Layout.
+The editor for where a place's elements sit and how big they are: bars, dock, keyboard, widget
+grid, hidden or shown, plus dock height, keyboard height and keyboard chin. Its canvas is the
+miniature; it shows one orientation with a toggle to the other. Entered from the corner tab, the
+long-press menu or Settings → Layout.
 _Avoid_: arrange mode, surface editor, place editor
 
 **Miniature**:

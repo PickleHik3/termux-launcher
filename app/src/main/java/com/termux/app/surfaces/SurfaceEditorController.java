@@ -41,7 +41,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
 import com.termux.R;
-import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
@@ -51,14 +50,8 @@ import com.termux.app.surfaces.SurfaceEditorProperties.Kind;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
-import com.termux.app.place.PlaceArrangeModel;
-import com.termux.app.place.PlaceArrangePolicy;
-import com.termux.app.place.PlaceArrangeSnapshot;
-import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
-import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceLookPreferences;
-import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
@@ -112,21 +105,6 @@ public final class SurfaceEditorController {
          * arrangement actually has, and parks inside the room it leaves.
          */
         @NonNull PlaceLayout placeLayout();
-        /**
-         * Where every place keeps its arrangement, or null before the preferences exist. The
-         * editor's Place section and its hold-to-move write through this, exactly as the Layout
-         * page's pills do.
-         */
-        @Nullable PlaceLayoutStore places();
-        /** The place the chrome on screen belongs to, which the shared layer stands in for. */
-        @NonNull PaneWallPage placeOnScreen();
-        /** The orientation on screen: the only one an arrangement pick here writes for. */
-        @NonNull PlaceOrientation placeOrientation();
-        /**
-         * An arrangement value moved: re-lay every piece of chrome the arrangement decides, for
-         * the place on screen, without tearing the editor down.
-         */
-        void applyPlaceArrangement();
         @Nullable TermuxInAppKeyboard inAppKeyboard();
         @Nullable View attachedInAppKeyboardView();
         boolean isInAppKeyboardShown();
@@ -229,17 +207,6 @@ public final class SurfaceEditorController {
         return mSurfaceEditorOpen ? mEditPlace : null;
     }
 
-    /**
-     * The place whose arrangement the editor is moving: the one it was opened on, or — on the
-     * shared layer, where there is no place — the one the wall is standing on, which is what the
-     * user is looking at either way.
-     */
-    @NonNull
-    private PaneWallPage arrangedPlace() {
-        PaneWallPage place = editPlace();
-        return place == null ? mHost.placeOnScreen() : place;
-    }
-
     /** Runs one action against the shared layer, whatever place the editor was opened on. */
     private void runShared(@NonNull Runnable action) {
         PlaceLookPreferences look = look();
@@ -304,11 +271,6 @@ public final class SurfaceEditorController {
     // ------------------------------------------------------------------------------ session state
 
     private boolean mSurfaceEditorOpen;
-    /**
-     * How much of the editor this session offers. Set on entry and held for the session, except
-     * that "More…" moves an arrange session on to the full editor without re-entering it.
-     */
-    @NonNull private SurfaceEditorMode mSurfaceEditorMode = SurfaceEditorMode.FULL;
     /** Whether the status pane was collapsed when the editor opened; restored on the way out. */
     private boolean mEntryStatusCollapsed;
     private boolean mHasEntryStatusCollapsed;
@@ -341,17 +303,6 @@ public final class SurfaceEditorController {
     /** True while a toggle group is being restated in code, so a restate is not read as a pick. */
     private boolean mRestatingToggles;
 
-    // The editor's own keyboard-height drag state; adjust mode keeps a separate copy in the
-    // activity, and the two gestures can never run at once.
-    private float mInAppKeyboardHeightDragStartY;
-    private float mInAppKeyboardHeightDragStartScale;
-    private float mInAppKeyboardUnscaledDragHeight;
-    // The chin drag: where the finger went down, and the allowance it started from.
-    private float mInAppKeyboardChinDragStartY;
-    private int mInAppKeyboardChinDragStartDp;
-    // The dock's size drag, off its top-border pill.
-    private float mSurfaceTuningDockHeightDragStartY;
-    private float mSurfaceTuningDockHeightDragStartScale;
     private float mSurfaceTuningInsetDragStartX;
     private float mSurfaceTuningInsetDragStartY;
     private int mSurfaceTuningInsetDragStartDp;
@@ -377,14 +328,9 @@ public final class SurfaceEditorController {
      */
     private static final float SURFACE_EDITOR_MIN_BAND_DP = 120f;
     private static final float SURFACE_TUNING_INSET_DRAG_GAIN = 0.5f;
-    /** How far the capture groups reach above their surface so the border handle is inside. */
+    /** How far the capture groups reach above their surface, so its top edge is easy to grab. */
     private static final int SURFACE_TUNING_HANDLE_OVERHANG_DP = 14;
 
-    /** How far below the last key row the chin pill sits, where the glass under them allows it. */
-    private static final int KEYBOARD_CHIN_GRIP_DROP_DP = 10;
-
-    /** Finger travel that walks the dock's size across its whole range, smallest to largest. */
-    private static final float SURFACE_TUNING_DOCK_HEIGHT_DRAG_SPAN_DP = 40f;
     /**
      * The ring's stroke widths, and how far outside its surface the ring view reaches so the
      * strokes can be centred on the surface's own edge rather than pushed inside it.
@@ -500,31 +446,12 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * Opens the editor on one place with placement alone: the outlines and hold-to-move as ever,
-     * but the card asks only where the place's bars stand, and the shared layer stays behind the
-     * "More…" row until the user asks for it.
-     */
-    public void enterArrange(@Nullable PaneWallPage place) {
-        enter(null, place, SurfaceEditorMode.ARRANGE);
-    }
-
-    /**
      * Opens the editor on one place, or on the shared layer for a null place. On a place, every
      * scopable row reads and writes that place's own look and the wall is held there, so the live
      * preview is what the place will wear; the shared layer's own controls — Base, the material,
      * the presets — stay everyone's either way.
      */
     public void enter(@Nullable String initialSection, @Nullable PaneWallPage place) {
-        enter(initialSection, place, SurfaceEditorMode.FULL);
-    }
-
-    /**
-     * As above, in the mode asked for. A session already open only ever moves up: a full editor
-     * asked for while an arrange session rests opens the rest of it, and never the other way
-     * round, because the user has already been shown more than arrange offers.
-     */
-    public void enter(@Nullable String initialSection, @Nullable PaneWallPage place,
-                      @NonNull SurfaceEditorMode mode) {
         if (prefs() == null)
             return;
         Panel panel = panel();
@@ -541,8 +468,6 @@ public final class SurfaceEditorController {
             mHasEntryStatusCollapsed = true;
         }
         mSurfaceEditorOpen = true;
-        if (freshEditorSession || mode == SurfaceEditorMode.FULL)
-            mSurfaceEditorMode = mode;
         // A second intent can name a different place; the scope follows it, and the snapshot below
         // does not — it already holds every place's look, so it stays the thing Discard returns to.
         boolean scopeMoved = applyEditScope(place, freshEditorSession);
@@ -574,9 +499,6 @@ public final class SurfaceEditorController {
             parkFloat();
             positionSelectionRings(false);
             syncGlow();
-            // Once the band has been measured, so the line lands in the free room rather than
-            // wherever the host was before the first pass.
-            if (freshEditorSession) showArrangeHintIfNew();
         });
         if (scopeMoved) syncEditorAfterBulkWrite();
     }
@@ -633,11 +555,6 @@ public final class SurfaceEditorController {
         // Every place's look, not just the one being edited: Reset held and a preset both clear
         // all of them, and ↺ has to be able to put those back too.
         final Map<String, Object> looks = look == null ? null : look.capture();
-        // And every place's arrangement, in both orientations: the editor can move a bar now, and
-        // a rotation mid-session moves which orientation the next pick lands in.
-        final PlaceLayoutStore places = mHost.places();
-        final PlaceArrangeSnapshot arrangement =
-            places == null ? null : PlaceArrangeSnapshot.capture(places);
         final Runnable[] shared = new Runnable[1];
         // Captured and restored with the scope lifted, so the shared layer is snapshotted as the
         // shared layer whichever place the editor was opened on.
@@ -647,11 +564,6 @@ public final class SurfaceEditorController {
                 return;
             runShared(shared[0]);
             if (look != null && looks != null) look.restore(looks);
-            if (places != null && arrangement != null) {
-                arrangement.restore(places);
-                // A bar that moved has to go back to its edge before the chrome is re-read below.
-                mHost.applyPlaceArrangement();
-            }
             mHost.refreshPaneLayout();
             mHost.applyTerminalSurfaceAppearance();
             // One place re-reads the clock's face, alignment, 12-hour and lazy mode — and restyles
@@ -672,8 +584,7 @@ public final class SurfaceEditorController {
     @NonNull
     private Runnable captureSharedEntryState() {
         // The dock's height, the keyboard's height and its chin are absent on purpose: they are
-        // the place's and the orientation's now, and the arrangement snapshot above already holds
-        // every one of them.
+        // the place's and the orientation's now, and the Layout editor is what edits them.
         final TermuxAppSharedPreferences prefs = prefs();
         final String links = surfaceEditorLinkSignature();
         final int initialBlur = prefs.getExtraKeysBlurRadius();
@@ -783,7 +694,6 @@ public final class SurfaceEditorController {
         // and still on screen — so it asks nothing; the unsaved gate belongs to leaving the editor.
         panel.close.setOnClickListener(view -> hideCard(true));
         panel.floatPalette.setOnClickListener(view -> selectTarget(null, true));
-        syncFloatPalette(panel);
 
         panel.shape.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked || mRestatingToggles || prefs() == null)
@@ -918,23 +828,11 @@ public final class SurfaceEditorController {
             .start();
     }
 
-    /**
-     * The palette on the resting pill, which is the only way to the shared layer: an arrange
-     * session keeps it, and everything the shared card holds, out of reach.
-     */
-    private void syncFloatPalette(@NonNull Panel panel) {
-        int wanted = SurfaceEditorCardPlan.paletteShown(mSurfaceEditorMode)
-            ? View.VISIBLE : View.GONE;
-        if (panel.floatPalette.getVisibility() != wanted)
-            panel.floatPalette.setVisibility(wanted);
-    }
-
     /** The floating pill: up while the card is down, and never both at once. */
     private void setFloatShown(boolean shown, boolean animate) {
         Panel panel = mPanel;
         if (panel == null)
             return;
-        syncFloatPalette(panel);
         View pill = panel.floatRoot;
         pill.animate().cancel();
         stopFloatBreath();
@@ -1062,14 +960,10 @@ public final class SurfaceEditorController {
     /** The editable set behind the body, folded to one number so restates can skip a rebuild. */
     private long rowSignature() {
         long signature = mSelectedSlot == null ? -1 : mSelectedSlot.ordinal();
-        signature = signature * 31 + mSurfaceEditorMode.ordinal();
         for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot))
             signature = signature * 31 + (isAvailable(mSelectedSlot, control) ? 1 : 0);
-        // The Place section leads the body, and every part of the question it asks can move under
-        // an open card: the place, the orientation a rotation hands it, and the arrangement itself,
-        // which decides which bars this surface carries and what each of them may be set to.
-        signature = signature * 31 + arrangedPlace().ordinal();
-        signature = signature * 31 + mHost.placeOrientation().ordinal();
+        // The arrangement can move under an open card — the pinned apps leaving the dock band
+        // take the dock's two rows about them with it — so it is part of the question too.
         return signature * 31 + mHost.placeLayout().hashCode();
     }
 
@@ -1086,17 +980,10 @@ public final class SurfaceEditorController {
         rows.removeAllViews();
         List<Runnable> syncs = new ArrayList<>();
         mRowSyncs = syncs;
-        // Where the place's bars stand comes first: it is what the surface *is*, and the look rows
-        // under it are what it is made of.
-        addPlaceSection(mHost.context(), rows, syncs);
-        if (SurfaceEditorCardPlan.lookRowsShown(mSurfaceEditorMode, mSelectedSlot)) {
-            for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot)) {
-                if (isAvailable(mSelectedSlot, control))
-                    addControlRow(mHost.context(), rows, control, mSelectedSlot, syncs);
-            }
+        for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot)) {
+            if (isAvailable(mSelectedSlot, control))
+                addControlRow(mHost.context(), rows, control, mSelectedSlot, syncs);
         }
-        if (SurfaceEditorCardPlan.moreRowShown(mSurfaceEditorMode, mSelectedSlot))
-            addMoreRow(mHost.context(), rows);
         if (mRowsScroller != null)
             mRowsScroller.scrollTo(0, 0);
         applyRowsCap();
@@ -1145,41 +1032,6 @@ public final class SurfaceEditorController {
             return;
         mRowsMaxHeightPx = capped;
         mRowsScroller.requestLayout();
-    }
-
-    /**
-     * The row that ends an arrange card: the rest of the editor, one tap away, in the same shape
-     * as every other row that leaves for somewhere else.
-     */
-    private void addMoreRow(@NonNull Context context, @NonNull ViewGroup into) {
-        View action = LayoutInflater.from(context)
-            .inflate(R.layout.surface_editor_action_row, into, false);
-        ((TextView) action.findViewById(R.id.surface_editor_row_label))
-            .setText(R.string.termux_surface_editor_more);
-        action.setOnClickListener(view -> showFullEditor());
-        into.addView(action);
-    }
-
-    /**
-     * "More…": the same session, now the whole editor. Not a re-entry — the snapshot taken when
-     * the editor opened is what Discard still returns to, and re-entering would quietly adopt
-     * whatever has been arranged since as the thing to go back to.
-     */
-    private void showFullEditor() {
-        Panel panel = mPanel;
-        if (panel == null || !mSurfaceEditorOpen
-            || mSurfaceEditorMode == SurfaceEditorMode.FULL)
-            return;
-        mSurfaceEditorMode = SurfaceEditorMode.FULL;
-        syncFloatPalette(panel);
-        rebuildRows();
-        syncPanel();
-        // The card just grew by every look row the surface has: it is re-measured before it is
-        // parked, so it stands off its surface at the height it actually ended up.
-        panel.root.post(() -> {
-            applyRowsCap();
-            parkPanel(true);
-        });
     }
 
     /**
@@ -1302,232 +1154,6 @@ public final class SurfaceEditorController {
             mHost.openKeyboardColors();
     }
 
-    // ------------------------------------------------------------------------- the Place section
-    //
-    // Every card leads with where this surface's bars stand on the place being edited, for the
-    // orientation on screen and no other. The values, the labels and the writes are the Layout
-    // page's — PlaceArrangeModel holds them, and a pick lands in PlaceLayoutStore immediately, the
-    // way the page's pills do. What the card cannot say, the screen does: the chrome re-lays out
-    // under it.
-
-    /** The four segment slots the pill row declares; the ones a value set does not use are taken
-     *  off, so the group's own corners still fall at the ends of what is offered. */
-    private static final int[] PLACE_SEGMENT_IDS = {
-        R.id.surface_editor_place_row_segment_0, R.id.surface_editor_place_row_segment_1,
-        R.id.surface_editor_place_row_segment_2, R.id.surface_editor_place_row_segment_3};
-
-    private void addPlaceSection(@NonNull Context context, @NonNull ViewGroup into,
-                                 @NonNull List<Runnable> syncs) {
-        PlaceLayoutStore places = mHost.places();
-        if (places == null || mSelectedSlot == null)
-            return;
-        PaneWallPage place = arrangedPlace();
-        PlaceOrientation orientation = mHost.placeOrientation();
-        boolean titled = false;
-        for (PlaceArrangeModel.Element element : SurfaceEditorPlaceSection.elementsFor(
-                mSelectedSlot, place, mHost.placeLayout())) {
-            List<PlaceArrangeModel.Group> groups =
-                PlaceArrangeModel.groups(places, place, orientation, element);
-            for (int index = 0; index < groups.size(); index++) {
-                if (!titled) {
-                    into.addView(placeSectionTitle(context));
-                    titled = true;
-                }
-                PlaceArrangeModel.Group group = groups.get(index);
-                if (group instanceof PlaceArrangeModel.Pills)
-                    addPlacePillsRow(context, into, element, index,
-                        (PlaceArrangeModel.Pills) group, syncs);
-                else if (group instanceof PlaceArrangeModel.Counter)
-                    addPlaceCounterRow(context, into, element, index,
-                        (PlaceArrangeModel.Counter) group, syncs);
-            }
-        }
-    }
-
-    /** The one heading on the card: the look rows below it need none, being what the card is. */
-    @NonNull
-    private TextView placeSectionTitle(@NonNull Context context) {
-        TextView title = new TextView(context);
-        title.setText(R.string.termux_surface_editor_place_section);
-        title.setTextSize(11f);
-        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
-        title.setTextColor(mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            R.color.termux_on_surface_variant));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.bottomMargin = dp(2);
-        title.setLayoutParams(params);
-        return title;
-    }
-
-    /**
-     * One placement row. Both the pick and the restatement re-read the model rather than trusting
-     * the group they were built from: a rotation, or another row's pick, can move what this row is
-     * showing without the row itself being rebuilt yet.
-     */
-    private void addPlacePillsRow(@NonNull Context context, @NonNull ViewGroup into,
-                                  @NonNull PlaceArrangeModel.Element element, int index,
-                                  @NonNull PlaceArrangeModel.Pills pills,
-                                  @NonNull List<Runnable> syncs) {
-        View row = LayoutInflater.from(context)
-            .inflate(R.layout.surface_editor_place_row, into, false);
-        ((TextView) row.findViewById(R.id.surface_editor_place_row_label)).setText(pills.labelRes);
-        MaterialButtonToggleGroup group = row.findViewById(R.id.surface_editor_place_row_pills);
-        if (group == null)
-            return;
-        final int count = Math.min(pills.values.length, PLACE_SEGMENT_IDS.length);
-        for (int i = PLACE_SEGMENT_IDS.length - 1; i >= count; i--) {
-            View extra = row.findViewById(PLACE_SEGMENT_IDS[i]);
-            if (extra != null)
-                group.removeView(extra);
-        }
-        for (int i = 0; i < count; i++) {
-            Button segment = row.findViewById(PLACE_SEGMENT_IDS[i]);
-            if (segment != null)
-                segment.setText(pills.labelResIds[i]);
-        }
-        group.setContentDescription(getString(pills.labelRes));
-        group.addOnButtonCheckedListener((toggleGroup, checkedId, isChecked) -> {
-            if (!isChecked || mRestatingToggles)
-                return;
-            PlaceArrangeModel.Pills current = placePills(element, index);
-            int picked = indexOfSegment(checkedId);
-            if (current == null || picked < 0 || picked >= current.values.length)
-                return;
-            if (current.values[picked].equals(current.selected))
-                return;
-            current.writer.write(current.values[picked]);
-            afterPlaceArrangementWrite();
-        });
-        syncs.add(() -> {
-            PlaceArrangeModel.Pills current = placePills(element, index);
-            if (current == null)
-                return;
-            int selected = current.selectedIndex();
-            int wanted = selected < 0 || selected >= count ? View.NO_ID : PLACE_SEGMENT_IDS[selected];
-            if (group.getCheckedButtonId() == wanted)
-                return;
-            mRestatingToggles = true;
-            try {
-                if (wanted == View.NO_ID)
-                    group.clearChecked();
-                else
-                    group.check(wanted);
-            } finally {
-                mRestatingToggles = false;
-            }
-        });
-        into.addView(row);
-        syncs.get(syncs.size() - 1).run();
-    }
-
-    /** The widget grid's two counts, on the same slider row every look number uses. */
-    private void addPlaceCounterRow(@NonNull Context context, @NonNull ViewGroup into,
-                                    @NonNull PlaceArrangeModel.Element element, int index,
-                                    @NonNull PlaceArrangeModel.Counter counter,
-                                    @NonNull List<Runnable> syncs) {
-        View rowView = LayoutInflater.from(context)
-            .inflate(R.layout.surface_editor_row, into, false);
-        TextView label = rowView.findViewById(R.id.surface_editor_row_label);
-        SeekBar slider = rowView.findViewById(R.id.surface_editor_row_slider);
-        TextView value = rowView.findViewById(R.id.surface_editor_row_value);
-        View chip = rowView.findViewById(R.id.surface_editor_row_chip);
-        if (chip != null)
-            chip.setVisibility(View.INVISIBLE);
-        label.setText(counter.labelRes);
-        slider.setContentDescription(getString(counter.labelRes));
-        slider.setMax(Math.max(1, counter.max - counter.min));
-        Runnable sync = () -> {
-            PlaceArrangeModel.Counter current = placeCounter(element, index);
-            if (current == null)
-                return;
-            int progress = clamp(current.value - current.min, 0, slider.getMax());
-            if (slider.getProgress() != progress)
-                slider.setProgress(progress);
-            value.setText(Integer.toString(current.value));
-        };
-        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override void onSliderChanged(SeekBar bar, int progress, boolean fromUser) {
-                PlaceArrangeModel.Counter current = placeCounter(element, index);
-                if (current == null)
-                    return;
-                int picked = clamp(current.min + progress, current.min, current.max);
-                value.setText(Integer.toString(picked));
-                if (!fromUser || picked == current.value)
-                    return;
-                // A grid reflow per tick, and nothing else: the body is left standing while the
-                // thumb is down, so the row being dragged is not rebuilt out from under it.
-                current.writer.write(picked);
-                mHost.applyPlaceArrangement();
-                syncDirtyActions();
-            }
-        });
-        into.addView(rowView);
-        syncs.add(sync);
-        sync.run();
-    }
-
-    /** Which segment an id is, or -1 for anything that is not one of the four. */
-    private static int indexOfSegment(int viewId) {
-        for (int i = 0; i < PLACE_SEGMENT_IDS.length; i++) {
-            if (PLACE_SEGMENT_IDS[i] == viewId)
-                return i;
-        }
-        return -1;
-    }
-
-    /** The model's answer for one row, read fresh: the place and the orientation can both move. */
-    @Nullable
-    private PlaceArrangeModel.Group placeGroup(@NonNull PlaceArrangeModel.Element element,
-                                               int index) {
-        PlaceLayoutStore places = mHost.places();
-        if (places == null || !mSurfaceEditorOpen)
-            return null;
-        List<PlaceArrangeModel.Group> groups = PlaceArrangeModel.groups(places, arrangedPlace(),
-            mHost.placeOrientation(), element);
-        return index < groups.size() ? groups.get(index) : null;
-    }
-
-    @Nullable
-    private PlaceArrangeModel.Pills placePills(@NonNull PlaceArrangeModel.Element element,
-                                               int index) {
-        PlaceArrangeModel.Group group = placeGroup(element, index);
-        return group instanceof PlaceArrangeModel.Pills ? (PlaceArrangeModel.Pills) group : null;
-    }
-
-    @Nullable
-    private PlaceArrangeModel.Counter placeCounter(@NonNull PlaceArrangeModel.Element element,
-                                                   int index) {
-        PlaceArrangeModel.Group group = placeGroup(element, index);
-        return group instanceof PlaceArrangeModel.Counter
-            ? (PlaceArrangeModel.Counter) group : null;
-    }
-
-    /**
-     * An arrangement value has moved: the chrome is re-laid out at once, and the card catches up on
-     * the next frame. Not in this one — the pick came from a button the rebuild is about to
-     * replace, and a view may not be removed inside its own listener.
-     */
-    private void afterPlaceArrangementWrite() {
-        mHost.applyPlaceArrangement();
-        syncDirtyActions();
-        Panel panel = mPanel;
-        if (panel == null)
-            return;
-        panel.root.post(() -> {
-            if (!mSurfaceEditorOpen)
-                return;
-            positionSurfaceTuningGestureTargets();
-            if (!mCardShown)
-                return;
-            rebuildRows();
-            syncPanel();
-            applyRowsCap();
-            parkPanel(false);
-        });
-    }
-
     /**
      * Restates the whole card from preferences: heading, header actions, the two pills, and every
      * row. Called once per previewed frame, so each read-out skips a value that has not moved.
@@ -1546,7 +1172,7 @@ public final class SurfaceEditorController {
         // The heading names the surface, or — on the shared layer — wears the palette glyph plus
         // the "Global" label that says what all of them means: the strip under it is what the
         // layer is.
-        boolean shared = mSelectedSlot == null;
+        boolean shared = SurfaceEditorCardPlan.sharedStripShown(mSelectedSlot);
         PaneWallPage place = editPlace();
         // On a place, the heading names it beside the surface: what the card moves is that place's,
         // and the header is the only thing on screen that can say so.
@@ -1774,8 +1400,6 @@ public final class SurfaceEditorController {
                 return getString(R.string.termux_dock_tuning_value_dp, Math.round(value / 10f));
             case PERCENT:
                 return getString(R.string.termux_dock_tuning_value_percent, value);
-            case DOCK_SIZE:
-                return dockSizePresetLabel(value);
             case COUNT:
                 return Integer.toString(Math.max(1, value));
             default:
@@ -2164,14 +1788,6 @@ public final class SurfaceEditorController {
         R.id.surface_editor_ring_keyboard,
         R.id.surface_editor_ring_canvas};
 
-    /** The keyboard's two edge pills: height on the top border, the chin allowance on the keys'. */
-    private static final int[] KEYBOARD_GRIP_IDS = {
-        R.id.surface_tuning_keyboard_height_grip,
-        R.id.surface_tuning_keyboard_chin_grip};
-
-    /** The dock's one pill: its size, on the top border. */
-    private static final int[] DOCK_GRIP_IDS = {R.id.surface_tuning_dock_height_grip};
-
     private static final SurfaceSlot[] RING_SLOTS = {
         SurfaceSlot.STATUS, SurfaceSlot.DOCK, SurfaceSlot.KEYBOARD, SurfaceSlot.CANVAS};
 
@@ -2386,24 +2002,11 @@ public final class SurfaceEditorController {
     }
 
     private void applyGlow(float phase) {
-        float breath = eased(phase);
-        float ringAlpha = mSelectedSlot == null ? 0.34f + 0.66f * breath : 1f;
+        float ringAlpha = mSelectedSlot == null ? 0.34f + 0.66f * eased(phase) : 1f;
         for (int ringId : RING_IDS) {
             View ring = mHost.findView(ringId);
             if (ring != null && ring.getVisibility() == View.VISIBLE)
                 ring.setAlpha(ringAlpha);
-        }
-        applyGripGlow(KEYBOARD_GRIP_IDS, SurfaceSlot.KEYBOARD, breath);
-        applyGripGlow(DOCK_GRIP_IDS, SurfaceSlot.DOCK, breath);
-    }
-
-    /** A surface's own pills breathe while it is the one being edited, and rest bright otherwise. */
-    private void applyGripGlow(@NonNull int[] gripIds, @NonNull SurfaceSlot slot, float breath) {
-        float alpha = mSelectedSlot == slot ? 0.7f + (0.3f * breath) : 1f;
-        for (int gripId : gripIds) {
-            View grip = mHost.findView(gripId);
-            if (grip != null)
-                grip.setAlpha(alpha);
         }
     }
 
@@ -2484,24 +2087,14 @@ public final class SurfaceEditorController {
                     mSurfaceTuningInsetDragStartY = event.getRawY();
                     mSurfaceTuningInsetDragStartDp = surfaceTuningInsetDp(slot);
                     mSurfaceTuningDragMoved = false;
-                    // Held rather than dragged, this is the arrangement gesture: the bar comes off
-                    // its edge. The margin drag below cancels it as soon as the finger travels.
-                    scheduleArrangeLift(slot, view.getLeft() + event.getX(),
-                        view.getTop() + event.getY());
                     view.getParent().requestDisallowInterceptTouchEvent(true);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
-                    if (mArrangeDrag != null) {
-                        moveArrangeDrag(view.getLeft() + event.getX(),
-                            view.getTop() + event.getY());
-                        return true;
-                    }
                     float travelX = event.getRawX() - mSurfaceTuningInsetDragStartX;
                     float travelY = event.getRawY() - mSurfaceTuningInsetDragStartY;
                     if (!mSurfaceTuningDragMoved
                         && Math.max(Math.abs(travelX), Math.abs(travelY)) > slop) {
                         mSurfaceTuningDragMoved = true;
-                        cancelPendingArrangeLift();
                         // A margin drag is the one gesture whose surface the card may be crowding.
                         if (canDragMargin(slot))
                             setPanelPeek(true);
@@ -2524,14 +2117,6 @@ public final class SurfaceEditorController {
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     view.getParent().requestDisallowInterceptTouchEvent(false);
-                    cancelPendingArrangeLift();
-                    if (mArrangeDrag != null) {
-                        // A lifted bar is dropped, never treated as a tap: the card the tap would
-                        // raise is the one the bar has just left.
-                        finishArrangeDrag(event.getActionMasked() == MotionEvent.ACTION_UP);
-                        mSurfaceTuningDragMoved = false;
-                        return true;
-                    }
                     setPanelPeek(false);
                     // Tapping the surface already selected does nothing, deliberately: the click
                     // listener is the one place that decides, so finger and TalkBack agree.
@@ -2539,548 +2124,6 @@ public final class SurfaceEditorController {
                         && event.getActionMasked() == MotionEvent.ACTION_UP)
                         view.performClick();
                     mSurfaceTuningDragMoved = false;
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
-    // ------------------------------------------------------------------------------ hold to move
-    //
-    // The one gesture that moves a bar rather than shaping it. Held on a bar's outline, the bar
-    // comes off its edge and follows the finger; every edge it may legally stand on is drawn as a
-    // slot, and a bar that may hide gets a tray. It rides the same capture layer as the tap and
-    // the margin drag, which is what keeps the bar's own gestures — the wall's pager on the status
-    // bar above all — from ever seeing the touch.
-
-    /** How far a slot band reaches in from its edge. Wide enough to aim at with a thumb. */
-    /** A slot is as thick as the bar it is for, but never thinner than a comfortable target. */
-    private static final float SURFACE_EDITOR_ARRANGE_SLOT_MIN_DP = 40f;
-    /** The tray strip: high enough to carry its caption, narrow enough to leave the sides clear. */
-    private static final float SURFACE_EDITOR_ARRANGE_TRAY_DP = 52f;
-    private static final float SURFACE_EDITOR_ARRANGE_TRAY_WIDTH_FRACTION = 0.56f;
-    /** How long the one-time line stays up before it fades on its own. */
-    private static final long SURFACE_EDITOR_ARRANGE_HINT_MS = 3600L;
-
-    /** The dock band's rows, top to bottom, and the bar each of them is. */
-    private static final int[] DOCK_ROW_IDS = {
-        R.id.apps_bar_viewpager, R.id.apps_bar_az_row, R.id.terminal_toolbar_view_pager};
-    private static final PlaceArrangePolicy.Bar[] DOCK_ROW_BARS = {
-        PlaceArrangePolicy.Bar.APPS_ROW, PlaceArrangePolicy.Bar.AZ_INDEX,
-        PlaceArrangePolicy.Bar.EXTRA_KEYS};
-
-    /** One lifted bar: what it is, where it came from, and everywhere it may land. */
-    private static final class ArrangeDrag {
-        @NonNull final PlaceArrangePolicy.Bar bar;
-        @NonNull final PaneWallPage place;
-        @NonNull final PlaceOrientation orientation;
-        @NonNull final List<PlaceArrangePolicy.Slot> slots;
-        final float startX;
-        final float startY;
-        @Nullable PlaceArrangePolicy.Slot target;
-
-        ArrangeDrag(@NonNull PlaceArrangePolicy.Bar bar, @NonNull PaneWallPage place,
-                    @NonNull PlaceOrientation orientation,
-                    @NonNull List<PlaceArrangePolicy.Slot> slots, float startX, float startY) {
-            this.bar = bar;
-            this.place = place;
-            this.orientation = orientation;
-            this.slots = slots;
-            this.startX = startX;
-            this.startY = startY;
-        }
-    }
-
-    @Nullable private ArrangeDrag mArrangeDrag;
-    /** The lift waiting for the press to be held long enough; cancelled by travel or release. */
-    @Nullable private Runnable mPendingArrangeLift;
-
-    @Nullable
-    private PlaceArrangeOverlayView arrangeOverlay() {
-        return mHost.findView(R.id.surface_editor_arrange_overlay);
-    }
-
-    private void scheduleArrangeLift(@NonNull SurfaceSlot slot, float x, float y) {
-        cancelPendingArrangeLift();
-        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
-        if (overlay == null || !mSurfaceEditorOpen)
-            return;
-        Runnable lift = () -> {
-            mPendingArrangeLift = null;
-            beginArrangeDrag(slot, x, y);
-        };
-        mPendingArrangeLift = lift;
-        overlay.postDelayed(lift, ViewConfiguration.getLongPressTimeout());
-    }
-
-    private void cancelPendingArrangeLift() {
-        Runnable lift = mPendingArrangeLift;
-        if (lift == null)
-            return;
-        mPendingArrangeLift = null;
-        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
-        if (overlay != null)
-            overlay.removeCallbacks(lift);
-    }
-
-    /**
-     * Lifts the bar the finger went down on, or does nothing at all where there is none to lift —
-     * the keyboard and the terminal are not bars, and a bar the arrangement leaves nowhere to go
-     * stays where it is rather than rising to no slots.
-     */
-    private void beginArrangeDrag(@NonNull SurfaceSlot slot, float x, float y) {
-        PlaceLayoutStore places = mHost.places();
-        PlaceArrangeOverlayView overlay = arrangeOverlay();
-        View host = mHost.findView(R.id.surface_tuning_gesture_overlay);
-        if (!mSurfaceEditorOpen || places == null || overlay == null || host == null
-            || host.getWidth() <= 0 || host.getHeight() <= 0)
-            return;
-        PlaceArrangePolicy.Bar bar = barUnderPoint(slot, y);
-        if (bar == null)
-            return;
-        PaneWallPage place = arrangedPlace();
-        PlaceOrientation orientation = mHost.placeOrientation();
-        PlaceArrangePolicy.Targets targets = PlaceArrangePolicy.targets(place, orientation,
-            mHost.placeLayout(), bar);
-        int[] ghost = barRectInOverlay(bar);
-        if (targets.isEmpty() || ghost == null)
-            return;
-        List<PlaceArrangePolicy.Slot> slots = buildArrangeSlots(targets, bar, ghost,
-            host.getWidth(), host.getHeight());
-        if (slots.isEmpty())
-            return;
-        mArrangeDrag = new ArrangeDrag(bar, place, orientation, slots, x, y);
-        hideArrangeHint();
-        overlay.setAccent(
-            mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary),
-            mHost.themeColor(com.termux.shared.R.attr.termuxColorOnAccentContainer,
-                R.color.termux_on_accent_container));
-        overlay.setGhost(ghost[0], ghost[1], ghost[2], ghost[3], dpToPx(ringRadiusDp(slot)));
-        overlay.showSlots(slots, targets.tray
-            ? getString(R.string.termux_surface_editor_arrange_tray) : null);
-        overlay.setHighlighted(null);
-        overlay.bringToFront();
-        // The card would otherwise stand between the bar and half the slots it is aiming for.
-        setPanelPeek(true);
-        View pressed = mHost.findView(R.id.surface_tuning_gesture_overlay);
-        if (pressed != null)
-            pressed.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-    }
-
-    private void moveArrangeDrag(float x, float y) {
-        ArrangeDrag drag = mArrangeDrag;
-        PlaceArrangeOverlayView overlay = arrangeOverlay();
-        if (drag == null || overlay == null)
-            return;
-        drag.target = PlaceArrangePolicy.slotUnder(drag.slots, x, y);
-        overlay.moveGhost(x - drag.startX, y - drag.startY);
-        overlay.setHighlighted(drag.target);
-    }
-
-    /**
-     * The release. Over a slot or the tray it writes, exactly as a pick on the card does; over
-     * anything else the bar springs back to the edge it came from and nothing is written.
-     */
-    private void finishArrangeDrag(boolean released) {
-        ArrangeDrag drag = mArrangeDrag;
-        if (drag == null)
-            return;
-        mArrangeDrag = null;
-        PlaceLayoutStore places = mHost.places();
-        PlaceArrangeOverlayView overlay = arrangeOverlay();
-        boolean written = released && places != null && PlaceArrangePolicy.dropOn(places,
-            drag.place, drag.orientation, drag.bar, drag.target);
-        setPanelPeek(false);
-        if (overlay != null) {
-            if (written)
-                overlay.clear();
-            else
-                overlay.springBack(prefs() == null || !prefs().isLazyModeEnabled(), null);
-        }
-        if (written)
-            afterPlaceArrangementWrite();
-    }
-
-    /**
-     * Which bar a press on an outline grabbed. The status bar is one bar and its whole outline is
-     * it; the dock band is a stack of up to three, so the row the finger actually went down on is
-     * the one that lifts. The keyboard and the terminal have no placement to move.
-     */
-    @Nullable
-    private PlaceArrangePolicy.Bar barUnderPoint(@NonNull SurfaceSlot slot, float y) {
-        if (slot == SurfaceSlot.STATUS)
-            return PlaceArrangePolicy.Bar.STATUS_BAR;
-        if (slot != SurfaceSlot.DOCK)
-            return null;
-        PlaceArrangePolicy.Bar nearest = null;
-        float nearestDistance = Float.MAX_VALUE;
-        for (int i = 0; i < DOCK_ROW_IDS.length; i++) {
-            int[] rect = rectInOverlay(mHost.findView(DOCK_ROW_IDS[i]));
-            if (rect == null)
-                continue;
-            if (y >= rect[1] && y <= rect[3])
-                return DOCK_ROW_BARS[i];
-            float distance = Math.min(Math.abs(y - rect[1]), Math.abs(y - rect[3]));
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearest = DOCK_ROW_BARS[i];
-            }
-        }
-        return nearest;
-    }
-
-    /** The rect a lifted bar rises from: its own row's, or the dock surface where it has none. */
-    @Nullable
-    private int[] barRectInOverlay(@NonNull PlaceArrangePolicy.Bar bar) {
-        if (bar == PlaceArrangePolicy.Bar.STATUS_BAR)
-            return rectInOverlay(mHost.findView(R.id.terminal_window_bar_host));
-        for (int i = 0; i < DOCK_ROW_BARS.length; i++) {
-            if (DOCK_ROW_BARS[i] != bar)
-                continue;
-            int[] rect = rectInOverlay(mHost.findView(DOCK_ROW_IDS[i]));
-            if (rect != null)
-                return rect;
-        }
-        return rectInOverlay(mHost.findView(R.id.accessory_surface_host));
-    }
-
-    /** A view's rect in the gesture overlay's own space, or null while it is not on screen. */
-    @Nullable
-    private int[] rectInOverlay(@Nullable View view) {
-        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
-        if (overlay == null || view == null || view.getVisibility() != View.VISIBLE
-            || view.getWidth() <= 0 || view.getHeight() <= 0)
-            return null;
-        overlay.getLocationInWindow(mTmpAnchorLocation);
-        int overlayLeft = mTmpAnchorLocation[0];
-        int overlayTop = mTmpAnchorLocation[1];
-        view.getLocationInWindow(mTmpAnchorLocation);
-        return new int[] {
-            mTmpAnchorLocation[0] - overlayLeft,
-            mTmpAnchorLocation[1] - overlayTop,
-            mTmpAnchorLocation[0] - overlayLeft + view.getWidth(),
-            mTmpAnchorLocation[1] - overlayTop + view.getHeight()};
-    }
-
-    /**
-     * The slots a lifted bar may land on, each drawn where the bar would actually stand: the
-     * bar's own rectangle for the edge it is on now, and for every other edge a band of the bar's
-     * thickness along that edge of the free room — the canvas between the status bar, the dock and
-     * the keyboard, less any column another bar already stands in down a side. A status bar
-     * dragged off the top therefore shows its slot just above the dock, not under the keyboard.
-     * The tray is placed in the band the card and the pill live in, which is by definition clear
-     * of every bar.
-     */
-    @NonNull
-    private List<PlaceArrangePolicy.Slot> buildArrangeSlots(
-            @NonNull PlaceArrangePolicy.Targets targets, @NonNull PlaceArrangePolicy.Bar bar,
-            @NonNull int[] own, int width, int height) {
-        List<PlaceArrangePolicy.Slot> slots = new ArrayList<>(5);
-        PlaceLayout layout = mHost.placeLayout();
-        PlaceLayout.Edge standing = standingEdge(layout, bar);
-        boolean vertical = standing != null && standing.isOnSide();
-        float thickness = Math.max(dpToPx(SURFACE_EDITOR_ARRANGE_SLOT_MIN_DP),
-            vertical ? own[2] - own[0] : own[3] - own[1]);
-        float[] free = freeRoomInOverlay(layout, bar, width, height);
-        for (PlaceLayout.Edge edge : targets.edges) {
-            if (edge == standing) {
-                slots.add(new PlaceArrangePolicy.Slot(edge, own[0], own[1], own[2], own[3]));
-                continue;
-            }
-            switch (edge) {
-                case TOP:
-                    slots.add(new PlaceArrangePolicy.Slot(edge, free[0], free[1], free[2],
-                        Math.min(free[3], free[1] + thickness)));
-                    break;
-                case BOTTOM:
-                    slots.add(new PlaceArrangePolicy.Slot(edge, free[0],
-                        Math.max(free[1], free[3] - thickness), free[2], free[3]));
-                    break;
-                case LEFT:
-                    slots.add(new PlaceArrangePolicy.Slot(edge, free[0], free[1],
-                        Math.min(free[2], free[0] + thickness), free[3]));
-                    break;
-                case RIGHT:
-                default:
-                    slots.add(new PlaceArrangePolicy.Slot(edge,
-                        Math.max(free[0], free[2] - thickness), free[1], free[2], free[3]));
-                    break;
-            }
-        }
-        if (!targets.tray)
-            return slots;
-        int[] region = pillRegion();
-        float trayHeight = Math.min(dpToPx(SURFACE_EDITOR_ARRANGE_TRAY_DP),
-            Math.max(1f, region[1] - region[0]));
-        float top = ((region[0] + region[1]) / 2f) - (trayHeight / 2f);
-        float trayWidth = width * SURFACE_EDITOR_ARRANGE_TRAY_WIDTH_FRACTION;
-        float left = (width - trayWidth) / 2f;
-        slots.add(new PlaceArrangePolicy.Slot(null, left, top, left + trayWidth, top + trayHeight));
-        return slots;
-    }
-
-    /** The edge a bar stands on right now, or null while it is hidden. */
-    @Nullable
-    private static PlaceLayout.Edge standingEdge(@NonNull PlaceLayout layout,
-                                                 @NonNull PlaceArrangePolicy.Bar bar) {
-        switch (bar) {
-            case STATUS_BAR:
-                return layout.statusBarEdge;
-            case APPS_ROW:
-                return rowEdge(layout.appsRow);
-            case AZ_INDEX:
-                return PlaceChromePolicy.azRowShown(layout)
-                    ? PlaceChromePolicy.azBarEdge(layout) : null;
-            case EXTRA_KEYS:
-            default:
-                return rowEdge(layout.extraKeys);
-        }
-    }
-
-    @Nullable
-    private static PlaceLayout.Edge rowEdge(@NonNull PlaceLayout.RowPlacement placement) {
-        switch (placement) {
-            case BOTTOM: return PlaceLayout.Edge.BOTTOM;
-            case LEFT: return PlaceLayout.Edge.LEFT;
-            case RIGHT: return PlaceLayout.Edge.RIGHT;
-            case HIDDEN:
-            default: return null;
-        }
-    }
-
-    /**
-     * The free room a moved bar would take an edge of, in overlay space: vertically the band
-     * between the status bar, the dock and the keyboard (where the card and the pill live), and
-     * horizontally the overlay less every column another bar already stands in down a side.
-     */
-    @NonNull
-    private float[] freeRoomInOverlay(@NonNull PlaceLayout layout,
-                                      @NonNull PlaceArrangePolicy.Bar lifted, int width,
-                                      int height) {
-        int[] region = pillRegion();
-        float top = region[1] > region[0] ? region[0] : 0f;
-        float bottom = region[1] > region[0] ? region[1] : height;
-        float left = 0f;
-        float right = width;
-        for (PlaceArrangePolicy.Bar other : PlaceArrangePolicy.Bar.values()) {
-            if (other == lifted)
-                continue;
-            PlaceLayout.Edge edge = standingEdge(layout, other);
-            if (edge == null || !edge.isOnSide())
-                continue;
-            int[] rect = barRectInOverlay(other);
-            if (rect == null)
-                continue;
-            if (edge == PlaceLayout.Edge.LEFT)
-                left = Math.max(left, rect[2]);
-            else
-                right = Math.min(right, rect[0]);
-        }
-        if (right - left < dpToPx(SURFACE_EDITOR_ARRANGE_SLOT_MIN_DP)) {
-            left = 0f;
-            right = width;
-        }
-        return new float[] {left, top, right, bottom};
-    }
-
-    /** Clears whatever the arrange layer is showing, on the way out or after a rotation. */
-    private void clearArrangeDrag() {
-        cancelPendingArrangeLift();
-        mArrangeDrag = null;
-        PlaceArrangeOverlayView overlay = arrangeOverlay();
-        if (overlay != null)
-            overlay.clear();
-    }
-
-    /**
-     * The one line that says the gesture exists, the first time the editor opens after it shipped.
-     * Nothing on screen can advertise a hold, and the arrangement is the editor's newest half.
-     */
-    private void showArrangeHintIfNew() {
-        if (prefs() == null || prefs().isSurfaceEditorArrangeHintShown())
-            return;
-        TextView hint = mHost.findView(R.id.surface_editor_arrange_hint);
-        if (hint == null)
-            return;
-        prefs().setSurfaceEditorArrangeHintShown(true);
-        int[] region = pillRegion();
-        ViewGroup.LayoutParams params = hint.getLayoutParams();
-        if (params instanceof ViewGroup.MarginLayoutParams) {
-            ((ViewGroup.MarginLayoutParams) params).topMargin =
-                region[0] + Math.max(0, (region[1] - region[0]) / 3);
-            hint.setLayoutParams(params);
-        }
-        hint.animate().cancel();
-        hint.setAlpha(0f);
-        hint.setVisibility(View.VISIBLE);
-        hint.animate().alpha(1f).setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
-            .setInterpolator(Motion.settle()).start();
-        hint.postDelayed(this::hideArrangeHint, SURFACE_EDITOR_ARRANGE_HINT_MS);
-    }
-
-    private void hideArrangeHint() {
-        TextView hint = mHost.findView(R.id.surface_editor_arrange_hint);
-        if (hint == null || hint.getVisibility() != View.VISIBLE)
-            return;
-        hint.animate().cancel();
-        hint.animate().alpha(0f).setDuration(SURFACE_TUNING_FADE_DURATION_MS)
-            .setInterpolator(surfaceTuningFadeInterpolator())
-            .withEndAction(() -> {
-                hint.setVisibility(View.GONE);
-                hint.setAlpha(1f);
-            }).start();
-    }
-
-    /** Vertical drag on the keyboard's top-border pill, on the same 1:1 mapping as the old handle. */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningKeyboardHeightGesture() {
-        View handle = mHost.findView(R.id.surface_tuning_keyboard_height_handle);
-        if (handle == null)
-            return;
-        handle.setOnTouchListener((view, event) -> {
-            if (!mSurfaceEditorOpen || prefs() == null || keyboard() == null)
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mInAppKeyboardHeightDragStartY = event.getRawY();
-                    mInAppKeyboardHeightDragStartScale = keyboard().getHeightScale();
-                    int renderedHeight = mHost.attachedInAppKeyboardView() == null
-                        ? 0 : mHost.attachedInAppKeyboardView().getMeasuredHeight();
-                    mInAppKeyboardUnscaledDragHeight = Math.max(1f,
-                        renderedHeight / Math.max(0.01f, mInAppKeyboardHeightDragStartScale));
-                    if (mSelectedSlot != SurfaceSlot.KEYBOARD)
-                        selectTarget(SurfaceSlot.KEYBOARD, true);
-                    setPanelPeek(true);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float scale = TermuxInAppKeyboard.calculateHeightScaleForDrag(
-                        mInAppKeyboardHeightDragStartScale,
-                        event.getRawY() - mInAppKeyboardHeightDragStartY,
-                        mInAppKeyboardUnscaledDragHeight);
-                    keyboard().previewSurfaceEditorHeightScale(scale);
-                    setSurfaceTuningPeekReadout(
-                        getString(R.string.termux_surface_tuning_peek_keyboard_height),
-                        getString(R.string.termux_dock_tuning_value_percent,
-                            keyboardEditorProgress(keyboard().getHeightScale(),
-                                TermuxPreferenceConstants.TERMUX_APP
-                                    .MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                                TermuxPreferenceConstants.TERMUX_APP
-                                    .MAX_IN_APP_KEYBOARD_HEIGHT_SCALE)));
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    prefs().setInAppKeyboardHeightScale(keyboard().getHeightScale());
-                    syncDirtyActions();
-                    setPanelPeek(false);
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
-    /**
-     * Vertical drag on the dock's top-border pill: its size, across the same four presets the card's
-     * Size row offers, on the travel span the handle has always used. Up is bigger.
-     */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningDockHeightGesture() {
-        View handle = mHost.findView(R.id.surface_tuning_dock_height_handle);
-        if (handle == null)
-            return;
-        handle.setOnTouchListener((view, event) -> {
-            if (!mSurfaceEditorOpen || prefs() == null)
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mSurfaceTuningDockHeightDragStartY = event.getRawY();
-                    mSurfaceTuningDockHeightDragStartScale =
-                        prefs().getAppLauncherBarHeightScale();
-                    if (mSelectedSlot != SurfaceSlot.DOCK)
-                        selectTarget(SurfaceSlot.DOCK, true);
-                    setPanelPeek(true);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float minScale = DockLayoutPolicy.minSizePreset();
-                    float maxScale = DockLayoutPolicy.maxSizePreset();
-                    float travelDp = pxToDp(mSurfaceTuningDockHeightDragStartY - event.getRawY());
-                    float scale = mSurfaceTuningDockHeightDragStartScale
-                        + ((travelDp / SURFACE_TUNING_DOCK_HEIGHT_DRAG_SPAN_DP)
-                            * (maxScale - minScale));
-                    scale = Math.max(minScale, Math.min(maxScale, scale));
-                    if (Float.compare(scale, prefs().getAppLauncherBarHeightScale()) != 0) {
-                        prefs().setAppLauncherBarHeightScale(scale);
-                        // Preview only while the finger is down; the terminal resize settles once
-                        // on release rather than reflowing the shell on every travelled pixel.
-                        requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_ALL);
-                    }
-                    setSurfaceTuningPeekReadout(
-                        getString(R.string.termux_surface_tuning_peek_dock_size),
-                        dockSizePresetLabel(DockLayoutPolicy.nearestSizePresetIndex(scale)));
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_GEOMETRY_COMMIT);
-                    setPanelPeek(false);
-                    syncPanel();
-                    syncDirtyActions();
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
-    /**
-     * Vertical drag on the pill under the last key row: the space between the keys and the bottom of
-     * the screen, the same allowance the keyboard settings page owns. Up is more room, and the pill
-     * is re-parked on the key row's new bottom edge, so it stays where the finger left it.
-     */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningKeyboardChinGesture() {
-        View handle = mHost.findView(R.id.surface_tuning_keyboard_chin_handle);
-        if (handle == null)
-            return;
-        handle.setOnTouchListener((view, event) -> {
-            if (!mSurfaceEditorOpen || prefs() == null)
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mInAppKeyboardChinDragStartY = event.getRawY();
-                    mInAppKeyboardChinDragStartDp = prefs().getInAppKeyboardBottomPadding();
-                    if (mSelectedSlot != SurfaceSlot.KEYBOARD)
-                        selectTarget(SurfaceSlot.KEYBOARD, true);
-                    setPanelPeek(true);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    int paddingDp = TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(
-                        Math.round(mInAppKeyboardChinDragStartDp
-                            - pxToDp(event.getRawY() - mInAppKeyboardChinDragStartY)));
-                    if (paddingDp != prefs().getInAppKeyboardBottomPadding()) {
-                        prefs().setInAppKeyboardBottomPadding(paddingDp);
-                        // The keyboard surface pass is what places the allowance, and the glass
-                        // preview runs it. The terminal reflow it also implies waits for release.
-                        requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_GLASS);
-                    }
-                    setSurfaceTuningPeekReadout(
-                        getString(R.string.termux_surface_tuning_peek_keyboard_chin),
-                        getString(R.string.termux_dock_tuning_value_dp, paddingDp));
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    applySurfaceEditorStructuralPreview();
-                    syncDirtyActions();
-                    setPanelPeek(false);
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
                     return true;
                 default:
                     return false;
@@ -3105,9 +2148,6 @@ public final class SurfaceEditorController {
         bindSurfaceTouch(R.id.surface_tuning_keyboard_gesture_group, SurfaceSlot.KEYBOARD);
         bindSurfaceTouch(R.id.surface_tuning_status_gesture_group, SurfaceSlot.STATUS);
         bindSurfaceTouch(R.id.surface_tuning_canvas_gesture_group, SurfaceSlot.CANVAS);
-        bindSurfaceTuningDockHeightGesture();
-        bindSurfaceTuningKeyboardHeightGesture();
-        bindSurfaceTuningKeyboardChinGesture();
         bindClockHandle();
     }
 
@@ -3143,20 +2183,12 @@ public final class SurfaceEditorController {
         View statusSurface = mHost.findView(R.id.terminal_window_bar_host);
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_status_gesture_group, overlay,
             statusSurface);
-        SurfaceEditorScene scene = scene();
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_dock_gesture_group, overlay,
             anchorViewFor(SurfaceSlot.DOCK));
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_keyboard_gesture_group, overlay,
             anchorViewFor(SurfaceSlot.KEYBOARD));
         positionCanvasGestureGroup(overlay);
-        // The dock's size grip rides its top border and drags the height of the pinned apps row.
-        // With those apps in a rail there is no such height, so the grip is not offered.
-        setSurfaceTuningHandleVisible(R.id.surface_tuning_dock_height_handle,
-            scene.offersHandle(SurfaceEditorScene.Handle.DOCK_HEIGHT));
-        setSurfaceTuningHandleVisible(R.id.surface_tuning_keyboard_height_handle,
-            scene.offersHandle(SurfaceEditorScene.Handle.KEYBOARD_HEIGHT));
         positionClockHandle(statusSurface);
-        positionKeyboardChinHandle();
         positionSelectionRings(false);
     }
 
@@ -3224,86 +2256,6 @@ public final class SurfaceEditorController {
     /** The tap target never gets shorter than the ▾ glyph's old 28dp box. */
     private static final int CLOCK_HANDLE_MIN_HEIGHT_DP = 28;
 
-    /**
-     * Parks the chin pill on the glass just under the last key row — never on the surface's own
-     * bottom edge, which docked is the screen edge and floating is the capsule's rim. It drops
-     * {@link #KEYBOARD_CHIN_GRIP_DROP_DP} below the keys wherever the glass under them has that
-     * much room, and as far as the room goes where it does not, so the pill always clears the
-     * bottom key row and always lands on material.
-     *
-     * <p>The 28dp touch box stays inside the capture group, which clips its children and can be
-     * shorter than the drop asks for; the pill it draws is placed within that box instead, so the
-     * finger target never shrinks and the mark never lands half-drawn.
-     */
-    private void positionKeyboardChinHandle() {
-        View handle = mHost.findView(R.id.surface_tuning_keyboard_chin_handle);
-        View grip = mHost.findView(R.id.surface_tuning_keyboard_chin_grip);
-        if (handle == null || grip == null)
-            return;
-        View group = mHost.findView(R.id.surface_tuning_keyboard_gesture_group);
-        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
-        View surface = mHost.findView(R.id.inapp_keyboard_view_host);
-        View keys = mHost.attachedInAppKeyboardView();
-        boolean wanted = mSurfaceEditorOpen
-            && scene().offersHandle(SurfaceEditorScene.Handle.KEYBOARD_CHIN)
-            && group != null && group.getVisibility() == View.VISIBLE && overlay != null
-            && surface != null && surface.getHeight() > 0
-            && keys != null && keys.getHeight() > 0;
-        if (!wanted) {
-            if (handle.getVisibility() != View.GONE)
-                handle.setVisibility(View.GONE);
-            return;
-        }
-        int[] overlayLocation = new int[2];
-        int[] surfaceLocation = new int[2];
-        int[] keysLocation = new int[2];
-        overlay.getLocationInWindow(overlayLocation);
-        surface.getLocationInWindow(surfaceLocation);
-        keys.getLocationInWindow(keysLocation);
-        int size = dp(28);
-        int gripHeight = Math.max(1, dp(4));
-        // The group's box is recomputed from the surface, not read off the group: on the pass that
-        // reveals the overlay the group has only just been given its margins, and a pill that
-        // measured it there placed itself out of bounds and hid until the next touch moved
-        // something. The surface and the keys are laid out whenever the keyboard is up.
-        int surfaceTop = surfaceLocation[1] - overlayLocation[1];
-        int groupTop = surfaceGestureGroupTop(surfaceTop);
-        int groupHeight = Math.max(1, (surfaceTop + surface.getHeight()) - groupTop);
-        int keysBottom = ((keysLocation[1] - overlayLocation[1]) + keys.getHeight()) - groupTop;
-        // The glass left under the keys: the allowance, plus the capsule's inner padding floating.
-        int band = Math.max(0, groupHeight - keysBottom);
-        // No glass under the last key row is no chin: the pill would sit on the keys themselves
-        // and drag a number with nowhere to show, so it is not offered at all.
-        if (band < gripHeight) {
-            if (handle.getVisibility() != View.GONE)
-                handle.setVisibility(View.GONE);
-            return;
-        }
-        int drop = clamp(dp(KEYBOARD_CHIN_GRIP_DROP_DP), gripHeight / 2, band - gripHeight / 2);
-        int gripCenter = keysBottom + drop;
-        int top = clamp(gripCenter - size / 2, 0, Math.max(0, groupHeight - size));
-        ViewGroup.LayoutParams params = handle.getLayoutParams();
-        if (params instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
-            if (margins.topMargin != top || margins.height != size) {
-                margins.topMargin = top;
-                margins.height = size;
-                handle.setLayoutParams(margins);
-            }
-        }
-        int gripTop = clamp(gripCenter - gripHeight / 2 - top, 0, Math.max(0, size - gripHeight));
-        ViewGroup.LayoutParams gripParams = grip.getLayoutParams();
-        if (gripParams instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams gripMargins = (ViewGroup.MarginLayoutParams) gripParams;
-            if (gripMargins.topMargin != gripTop) {
-                gripMargins.topMargin = gripTop;
-                grip.setLayoutParams(gripMargins);
-            }
-        }
-        if (handle.getVisibility() != View.VISIBLE)
-            handle.setVisibility(View.VISIBLE);
-    }
-
     /** The canvas takes the whole free region, so a tap on the terminal selects the terminal. */
     private void positionCanvasGestureGroup(@NonNull View overlay) {
         View group = mHost.findView(R.id.surface_tuning_canvas_gesture_group);
@@ -3327,17 +2279,10 @@ public final class SurfaceEditorController {
         group.setVisibility(View.VISIBLE);
     }
 
-    /** A drag handle the arrangement leaves nothing for is taken off the surface, not drawn dead. */
-    private void setSurfaceTuningHandleVisible(int handleId, boolean visible) {
-        View handle = mHost.findView(handleId);
-        if (handle != null && (handle.getVisibility() == View.VISIBLE) != visible)
-            handle.setVisibility(visible ? View.VISIBLE : View.GONE);
-    }
-
     /**
      * Tracks one surface's measured rect with its capture group, reaching
-     * {@link #SURFACE_TUNING_HANDLE_OVERHANG_DP} further up so the pill centred on the top border
-     * still falls inside the group's hit area.
+     * {@link #SURFACE_TUNING_HANDLE_OVERHANG_DP} further up so a finger aimed at the surface's own
+     * top border still lands inside the group's hit area.
      */
     private void positionSurfaceTuningGestureGroup(int groupId, @NonNull View overlay,
                                                    @Nullable View surface) {
@@ -3537,15 +2482,13 @@ public final class SurfaceEditorController {
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_MATERIAL);
         prefs().setSurfaceMaterialIntensity(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY);
-        // The rest is outside the cascade: geometry, shape and the keyboard's own metrics.
-        prefs().setAppLauncherBarHeightScale(
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
+        // The rest is outside the cascade: geometry, shape and the keyboard's own metrics. The
+        // dock's height and the keyboard's are not among them — they are the place's layout now,
+        // and the Layout editor is where they are put back.
         prefs().setAppLauncherButtonCount(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_BUTTON_COUNT);
         prefs().setAppLauncherDockStyle(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE);
-        prefs().setInAppKeyboardHeightScale(
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
         prefs().setInAppKeyboardKeyMarginScale(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
         prefs().setInAppKeyboardKeyCornerRadiusDp(
@@ -3553,8 +2496,6 @@ public final class SurfaceEditorController {
         prefs().setInAppKeyboardKeyOpacity(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
         if (keyboard() != null) {
-            keyboard().previewSurfaceEditorHeightScale(
-                TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
             keyboard().previewSurfaceEditorKeyOpacity(
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
         }
@@ -4343,12 +3284,7 @@ public final class SurfaceEditorController {
             .append(prefs().getSurfaceBaseValue(SurfaceProperty.SIDE_GAP)).append('|')
             .append(prefs().getSurfaceMaterial()).append('|')
             .append(prefs().getSurfaceMaterialIntensity()).append('|')
-            .append(look() == null ? "" : look().signature()).append('|')
-            // Where every place's bars stand and how tall its dock, keyboard and chin are. The
-            // editor can move any of them now, and a moved one is exactly as unsaved as a moved
-            // slider.
-            .append(mHost.places() == null
-                ? "" : PlaceArrangeSnapshot.capture(mHost.places()).signature())
+            .append(look() == null ? "" : look().signature())
             .toString();
     }
 
@@ -4437,15 +3373,12 @@ public final class SurfaceEditorController {
         }
         dismissClockDropdown();
         hideSurfaceTuningPeekReadout();
-        clearArrangeDrag();
-        hideArrangeHint();
         mPanelPeeking = false;
         mSurfaceEditorEntrySignature = null;
         mSurfaceEditorRevert = null;
         mSelectedSlot = null;
         mCardShown = false;
         mSurfaceEditorOpen = false;
-        mSurfaceEditorMode = SurfaceEditorMode.FULL;
         PaneWallPage editedPlace = mEditPlace;
         mEditPlace = null;
         boolean scopeMoved = false;
@@ -4469,9 +3402,6 @@ public final class SurfaceEditorController {
         View clockHandle = mHost.findView(R.id.surface_tuning_status_clock_handle);
         if (clockHandle != null)
             clockHandle.setVisibility(View.GONE);
-        View chinHandle = mHost.findView(R.id.surface_tuning_keyboard_chin_handle);
-        if (chinHandle != null)
-            chinHandle.setVisibility(View.GONE);
         if (mPanel != null)
             mPanel.host.setVisibility(View.GONE);
         restoreExpandedStatusAfterSurfaceEditor();
@@ -4596,20 +3526,6 @@ public final class SurfaceEditorController {
     private void applySurfaceEditorStructuralPreview() {
         requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_ALL
             | SurfaceEditorProperties.PREVIEW_GEOMETRY_COMMIT);
-    }
-
-    @NonNull
-    private String dockSizePresetLabel(int index) {
-        switch (clamp(index, 0, DockLayoutPolicy.sizePresetCount() - 1)) {
-            case 0:
-                return getString(R.string.termux_dock_preset_smallest);
-            case 1:
-                return getString(R.string.termux_dock_preset_small);
-            case 2:
-                return getString(R.string.termux_dock_preset_default);
-            default:
-                return getString(R.string.termux_dock_preset_large);
-        }
     }
 
     public static int keyboardEditorProgress(float value, float minValue, float maxValue) {

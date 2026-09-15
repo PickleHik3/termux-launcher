@@ -17,13 +17,12 @@ import java.util.List;
 /**
  * What one element of a place's arrangement offers, for one orientation, and what a pick writes.
  * Pure: it builds descriptions and writers, draws nothing and holds no view, so the Place section
- * on the surface editor's cards is only the rendering of this and both are testable on their own.
+ * on the surface editor's cards and the rows under the Layout editor's miniature are only two
+ * renderings of this, and all three are testable on their own.
  *
- * <p>The Layout page asks the same questions of the same store through
- * {@code LayoutChooserModel}, which answers for both orientations at once because its rows show
- * both. The editor is standing on the live screen, so it only ever offers the orientation that is
- * on it — hence a model of its own, with the value sets and labels held against the page's by
- * {@code PlaceArrangeModelTest} so the two cannot drift.
+ * <p>One orientation at a time is the whole point: both editors stand on a picture of a single
+ * orientation — the live screen, or the miniature — so a row offers what that one holds and a pick
+ * writes only its key.
  */
 public final class PlaceArrangeModel {
 
@@ -82,20 +81,80 @@ public final class PlaceArrangeModel {
         }
     }
 
-    /** A count with a range — the widget grid's columns and rows. */
-    public static final class Counter extends Group {
+    /** How a number on a track reads out beside it. */
+    public enum Unit {
+        /** A bare count — the grid's cells. */
+        COUNT,
+        /** How far along its own range a size stands. */
+        PERCENT,
+        /** A length, printed in dp. */
+        DP
+    }
+
+    /**
+     * A number on a track: where it stands between a floor and a ceiling, and what a drag writes.
+     * The two kinds below are the same row on the card and differ only in what the number means.
+     */
+    public abstract static class Track extends Group {
+        @NonNull public final Unit unit;
         public final int min;
         public final int max;
         public final int value;
         @NonNull public final IntWriter writer;
 
-        Counter(@StringRes int labelRes, int min, int max, int value, @NonNull IntWriter writer) {
+        Track(@StringRes int labelRes, @NonNull Unit unit, int min, int max, int value,
+              @NonNull IntWriter writer) {
             super(labelRes);
+            this.unit = unit;
             this.min = min;
             this.max = max;
             this.value = value;
             this.writer = writer;
         }
+    }
+
+    /** A count with a range — the widget grid's columns and rows. */
+    public static final class Counter extends Track {
+        Counter(@StringRes int labelRes, int min, int max, int value, @NonNull IntWriter writer) {
+            super(labelRes, Unit.COUNT, min, max, value, writer);
+        }
+    }
+
+    /**
+     * One of the three sizes a place keeps per orientation: how tall its dock stands, how tall its
+     * keyboard stands, and how much air sits under the last key row.
+     *
+     * <p>The two heights are stored as scales and stand here as {@value #SCALE_STEPS} steps of
+     * their own range, so one row kind covers all three and the mapping lives here rather than in
+     * whatever is drawing the track.
+     */
+    public static final class Size extends Track {
+        Size(@StringRes int labelRes, @NonNull Unit unit, int min, int max, int value,
+             @NonNull IntWriter writer) {
+            super(labelRes, unit, min, max, value, writer);
+        }
+    }
+
+    /** A size stored as a scale is written back as a scale. */
+    public interface FloatWriter {
+        void write(float value);
+    }
+
+    /** How many steps a scale's track has between its floor and its ceiling. */
+    public static final int SCALE_STEPS = 100;
+
+    /** Where a scale stands on its track, as a step between 0 and {@link #SCALE_STEPS}. */
+    public static int scaleProgress(float value, float min, float max) {
+        if (Float.isNaN(value) || Float.isInfinite(value) || max <= min)
+            return 0;
+        return Math.max(0, Math.min(SCALE_STEPS,
+            Math.round((value - min) / (max - min) * SCALE_STEPS)));
+    }
+
+    /** The scale one step on the track stands for. */
+    public static float scaleValue(int progress, float min, float max) {
+        int step = Math.max(0, Math.min(SCALE_STEPS, progress));
+        return min + (max - min) * step / SCALE_STEPS;
     }
 
     /** The value the A–Z index's shown/hidden pill stores; the edge is a value of its own. */
@@ -213,6 +272,55 @@ public final class PlaceArrangeModel {
                     value -> places.setWidgetRows(place, orientation, value)));
                 return groups;
         }
+    }
+
+    /**
+     * The sizes one element owns on this place in this orientation: the dock's height, and the
+     * keyboard's height and the air under its last key row. Empty for everything else, because
+     * everything else about a place's arrangement is a position rather than a size.
+     *
+     * <p>Kept apart from {@link #groups} because the two answer different questions of the same
+     * element — where the dock stands, and how tall it is — and only the Layout editor asks the
+     * second. Both write through the store, which owns the clamps, so a step at either end of a
+     * track is the value the place actually takes.
+     */
+    @NonNull
+    public static List<Group> sizes(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+                                    @NonNull PlaceOrientation orientation,
+                                    @NonNull Element element) {
+        List<Group> groups = new ArrayList<>(2);
+        if (!element.isOn(place)) return groups;
+        switch (element) {
+            case PINNED_APPS:
+                groups.add(scale(R.string.termux_layout_editor_height,
+                    places.dockHeightScale(place, orientation),
+                    TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
+                    TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT,
+                    value -> places.setDockHeightScale(place, orientation, value)));
+                return groups;
+            case KEYBOARD:
+                groups.add(scale(R.string.termux_layout_editor_height,
+                    places.keyboardHeightScale(place, orientation),
+                    TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
+                    TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE,
+                    value -> places.setKeyboardHeightScale(place, orientation, value)));
+                groups.add(new Size(R.string.termux_surface_tuning_peek_keyboard_chin, Unit.DP,
+                    TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING,
+                    TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING,
+                    places.keyboardChinDp(place, orientation),
+                    value -> places.setKeyboardChinDp(place, orientation, value)));
+                return groups;
+            default:
+                return groups;
+        }
+    }
+
+    /** One scale on a track of {@value #SCALE_STEPS} steps, written back in its own units. */
+    @NonNull
+    private static Size scale(@StringRes int labelRes, float value, float min, float max,
+                              @NonNull FloatWriter writer) {
+        return new Size(labelRes, Unit.PERCENT, 0, SCALE_STEPS, scaleProgress(value, min, max),
+            progress -> writer.write(scaleValue(progress, min, max)));
     }
 
     /** Where a bar may stand: every edge in landscape, and only top or bottom in portrait. */

@@ -5,11 +5,16 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
+import com.termux.app.place.PlaceArrangeModel;
+import com.termux.app.place.PlaceArrangeModel.Element;
 import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * One Layout editor session, as decisions rather than views: which orientation the miniature is
@@ -22,6 +27,12 @@ import com.termux.app.wall.PaneWallPage;
  * agree. Editing the other orientation therefore changes the miniature and nothing else until the
  * phone is turned.
  *
+ * <p>The rows beneath the miniature are the same question asked of the same store: what this place
+ * offers that no bar can be dragged into — how its keyboard stands, whether it opens on entry, how
+ * many cells its grid has, and how tall its dock and its keyboard stand. They come from
+ * {@link PlaceArrangeModel}, which already answers for one orientation at a time, so the toggle
+ * moves the rows exactly as it moves the picture.
+ *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
  * {@link LayoutEditorController} is the shell that draws it.
  */
@@ -29,6 +40,26 @@ public final class LayoutEditorPlan {
 
     /** How much of the screen's height the portrait miniature's phone frame stands in. */
     public static final float PORTRAIT_FRAME_SCREEN_FRACTION = 0.55f;
+
+    /**
+     * The headings the rows stand under, in the order they stand in, and whether that element's
+     * own choices stand there too. Everything else about a place's arrangement is a bar, and a bar
+     * is moved on the picture rather than picked from a row — which is why the Dock heading carries
+     * nothing but its height: where the dock stands is a drag on the miniature.
+     */
+    private enum Section {
+        DOCK(Element.PINNED_APPS, false),
+        KEYBOARD(Element.KEYBOARD, true),
+        WIDGET_GRID(Element.WIDGET_GRID, true);
+
+        @NonNull final Element element;
+        final boolean offersChoices;
+
+        Section(@NonNull Element element, boolean offersChoices) {
+            this.element = element;
+            this.offersChoices = offersChoices;
+        }
+    }
 
     /** What one drop on the miniature did. */
     public enum Drop {
@@ -38,6 +69,24 @@ public final class LayoutEditorPlan {
         MINIATURE,
         /** Written for the orientation on screen: the live place follows it. */
         LIVE
+    }
+
+    /**
+     * One row beneath the miniature. The element and the place it takes among that element's own
+     * groups are what the row is; the group is only what it says right now, so a row that has just
+     * been picked on — or that a rotation has moved — is re-read through {@link #row} rather than
+     * trusted.
+     */
+    public static final class Row {
+        @NonNull public final Element element;
+        public final int index;
+        @NonNull public final PlaceArrangeModel.Group group;
+
+        Row(@NonNull Element element, int index, @NonNull PlaceArrangeModel.Group group) {
+            this.element = element;
+            this.index = index;
+            this.group = group;
+        }
     }
 
     @NonNull private final PlaceLayoutStore mPlaces;
@@ -94,6 +143,45 @@ public final class LayoutEditorPlan {
     @NonNull
     public PlaceLayout shownLayout() {
         return mPlaces.resolve(mPlace, mShownOrientation);
+    }
+
+    /**
+     * The rows beneath the miniature: this place's dock height, its keyboard, and on Home its grid,
+     * for the orientation on the toggle. A pick or a drag writes through the group's own writer,
+     * the same way a drop writes through the picture.
+     */
+    @NonNull
+    public List<Row> rows() {
+        List<Row> rows = new ArrayList<>(8);
+        for (Section section : Section.values()) {
+            List<PlaceArrangeModel.Group> groups = groupsOf(section);
+            for (int index = 0; index < groups.size(); index++)
+                rows.add(new Row(section.element, index, groups.get(index)));
+        }
+        return rows;
+    }
+
+    /** One row's answer, read fresh, or null where the place no longer offers it. */
+    @Nullable
+    public PlaceArrangeModel.Group row(@NonNull Element element, int index) {
+        for (Section section : Section.values()) {
+            if (section.element != element)
+                continue;
+            List<PlaceArrangeModel.Group> groups = groupsOf(section);
+            return index < 0 || index >= groups.size() ? null : groups.get(index);
+        }
+        return null;
+    }
+
+    /** Everything under one heading: what that element offers, then how big it stands. */
+    @NonNull
+    private List<PlaceArrangeModel.Group> groupsOf(@NonNull Section section) {
+        List<PlaceArrangeModel.Group> groups = new ArrayList<>(4);
+        if (section.offersChoices)
+            groups.addAll(
+                PlaceArrangeModel.groups(mPlaces, mPlace, mShownOrientation, section.element));
+        groups.addAll(PlaceArrangeModel.sizes(mPlaces, mPlace, mShownOrientation, section.element));
+        return groups;
     }
 
     /**
@@ -156,5 +244,15 @@ public final class LayoutEditorPlan {
             ? screenWidthPx / Math.max(frameAspect, 0.01f)
             : PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx;
         return Math.round(frameHeight) + reservedPx;
+    }
+
+    /**
+     * How tall the rows may grow before they scroll inside their own room: what the card has left
+     * once the canvas and the chrome around it have taken theirs, and never less than
+     * {@code minPx}, so a canvas that fills the screen still leaves a list rather than a sliver.
+     */
+    public static int rowsHeightCapPx(int screenHeightPx, int miniatureHeightPx, int chromePx,
+                                      int minPx) {
+        return Math.max(minPx, screenHeightPx - miniatureHeightPx - chromePx);
     }
 }

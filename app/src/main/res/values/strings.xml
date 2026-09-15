@@ -43,19 +43,15 @@
     <string name="settings_layout_row_shown">Shown</string>
     <string name="settings_layout_keyboard_title">Keyboard</string>
     <string name="settings_layout_widget_grid_title">Widget grid</string>
-    <string name="settings_layout_row_values_format">%1$s · %2$s</string>
     <string name="settings_layout_chooser_group_format">%1$s · %2$s</string>
-    <string name="settings_layout_grid_size_format">%1$d×%2$d</string>
     <string name="settings_layout_status_bar_title">Status bar</string>
     <string name="settings_layout_alphabets_edge_title">Position</string>
-    <string name="settings_layout_keyboard_on_enter_title">Keyboard on enter</string>
     <string name="settings_layout_keyboard_on_enter_as_left">As left</string>
     <string name="settings_layout_keyboard_on_enter_open">Open</string>
     <string name="settings_layout_keyboard_on_enter_closed">Closed</string>
     <string name="settings_layout_keyboard_mode_title">Keyboard mode</string>
     <string name="settings_layout_keyboard_mode_resize">Resizes</string>
     <string name="settings_layout_keyboard_mode_overlay">Floats over</string>
-    <string name="settings_layout_keyboard_form_title">Keyboard type</string>
     <string name="settings_layout_keyboard_form_docked">Docked</string>
     <string name="settings_layout_keyboard_form_floating">Floating</string>
     <string name="settings_layout_keyboard_form_split">Split</string>
@@ -651,7 +647,8 @@
     <string name="notice_tap_to_open">tap to open</string>
     <string name="notice_shell_wants_attention">%1$s wants attention</string>
     <string name="action_open_settings">Settings</string>
-    <string name="action_surface_editor">Surface editor</string>
+    <string name="action_appearance_editor">Appearance</string>
+    <string name="action_layout_editor">Layout</string>
     <string name="msg_generating_report">Generating Report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
 
@@ -1253,15 +1250,8 @@
                 <string name="termux_surface_editor_place_shared_description">Shared with every place.</string>
                 <string name="termux_surface_editor_place_own_description">%1$s has its own. Tap to share it again.</string>
                 <string name="termux_surface_editor_place_title">%1$s · %2$s</string>
-                <!-- The arrangement of the place the editor is open on: where its bars stand, on
-                     the card of the surface each one belongs to. -->
-                <string name="termux_surface_editor_place_section">Place</string>
-                <!-- Opens the rest of the editor from a card that is showing placement only. -->
-                <string name="termux_surface_editor_more">More…</string>
                 <string name="termux_surface_editor_place_keyboard_type">Type</string>
                 <string name="termux_surface_editor_place_keyboard_on_enter">On enter</string>
-                <string name="termux_surface_editor_arrange_tray">Drop here to hide</string>
-                <string name="termux_surface_editor_arrange_hint">Hold a bar to move it</string>
                 <string name="termux_surface_editor_place_overrides_one">%1$s has its own.</string>
                 <string name="termux_surface_editor_place_overrides_two">%1$s and %2$s have their own.</string>
                 <string name="termux_surface_editor_place_overrides_three">%1$s, %2$s and %3$s have their own.</string>
@@ -1280,14 +1270,10 @@
                 <string name="termux_surface_tuning_keyboard_spacing">Key spacing</string>
                 <string name="termux_surface_tuning_keyboard_key_opacity">Key opacity</string>
                 <string name="termux_surface_tuning_edges">Margin</string>
-                <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
-                <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
-                <string name="termux_surface_tuning_keyboard_chin_handle">Drag to change the bottom padding</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
                 <string name="termux_dock_tuning_radius">Corners</string>
-                <string name="termux_dock_tuning_size">Size</string>
                 <string name="termux_dock_tuning_icons">Apps</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
                 <string name="termux_dock_tuning_terminal_border">Frame</string>
@@ -1295,8 +1281,6 @@
                 <string name="termux_surface_tuning_peek_readout">%1$s · %2$s</string>
                 <!-- The peek echo names the control in full; the card's own label column is too
                      narrow for that, and there the heading disambiguates anyway. -->
-                <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
-                <string name="termux_surface_tuning_peek_keyboard_height">Keyboard height</string>
                 <string name="termux_surface_tuning_peek_keyboard_chin">Bottom padding</string>
                 <string name="termux_surface_tuning_unsaved_title">Unsaved changes</string>
                 <string name="termux_surface_tuning_unsaved_message">Discard them and put every surface back to how it looked when you opened the editor, or save and close?</string>
@@ -1308,6 +1292,9 @@
                 <string name="termux_layout_editor_title">Layout</string>
                 <string name="termux_layout_editor_revert">Undo changes</string>
                 <string name="termux_layout_editor_unsaved_message">Discard them and put everything back where it was when you opened the editor, or save and close?</string>
+                <!-- The dock's and the keyboard's height rows. The heading above each one says
+                     which is which, so the label column only has to say what it sets. -->
+                <string name="termux_layout_editor_height">Height</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
 
@@ -1335,10 +1322,6 @@
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
                 <string name="termux_app_launcher_dock_style_default">Docked</string>
                 <string name="termux_app_launcher_dock_style_rounded">Floating</string>
-                <string name="termux_dock_preset_smallest">Smallest</string>
-                <string name="termux_dock_preset_small">Small</string>
-                <string name="termux_dock_preset_default">Default</string>
-                <string name="termux_dock_preset_large">Large</string>
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_title">Reset ranking?</string>
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_message">This will clear app usage ranking for A-Z launch suggestions.</string>
                 <string name="termux_app_launcher_reset_usage_ranking_done">Adaptive A-Z ranking reset</string>

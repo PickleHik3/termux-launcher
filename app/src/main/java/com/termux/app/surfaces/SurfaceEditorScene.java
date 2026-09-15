@@ -24,23 +24,13 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
  * still a card, one measured to zero is not.
  *
  * <p>And the offer itself has to match the arrangement. A surface that is not on screen has no
- * card, and a handle that describes a shape the surface does not have — a height grip for a bar
- * with no height, pages of apps for a rail that scrolls — is not offered rather than offered dead.
+ * card, and a row that describes a shape the surface does not have — pages of apps for a rail that
+ * scrolls — is not offered rather than offered dead.
  *
  * <p>Pure: an arrangement and a few pixel counts in, booleans and pixel counts out, so every case
  * is testable without a window.
  */
 public final class SurfaceEditorScene {
-
-    /** A drag handle the gesture overlay carries, over and above the surface's own card. */
-    public enum Handle {
-        /** The dock's size, on its top border. */
-        DOCK_HEIGHT,
-        /** The keyboard's height, on its top border. */
-        KEYBOARD_HEIGHT,
-        /** The space under the last key row. */
-        KEYBOARD_CHIN
-    }
 
     @NonNull public final Edge statusBarEdge;
     /** Whether anything at all lands on the dock band, which is what decides it is drawn. */
@@ -115,33 +105,17 @@ public final class SurfaceEditorScene {
     /**
      * Whether the card raised on a surface offers one of its rows.
      *
-     * <p>Only the dock's two rows about its pinned apps are dropped. Both describe the apps row —
-     * the size is that row's height, the count is how many apps a page of it holds — and neither
-     * has anything to move once the apps stand in a rail: the rail's width is fixed and it scrolls
-     * rather than pages. Everything else on the card is the surface's material or its shape, which
-     * a dock carrying only the extra keys wears exactly the same.
+     * <p>Only the dock's row about its pinned apps is dropped. It is how many apps a page of that
+     * row holds, and it has nothing to move once the apps stand in a rail: the rail scrolls rather
+     * than pages. Everything else on the card is the surface's material or its shape, which a dock
+     * carrying only the extra keys wears exactly the same.
      */
     public boolean offersRow(@Nullable SurfaceSlot slot, @NonNull String rowId) {
         if (slot != SurfaceSlot.DOCK)
             return true;
-        if (SurfaceEditorProperties.ID_SIZE.equals(rowId)
-            || SurfaceEditorProperties.ID_APPS.equals(rowId))
+        if (SurfaceEditorProperties.ID_APPS.equals(rowId))
             return appsRowShown;
         return true;
-    }
-
-    /** Whether the overlay carries one of the surfaces' own drag handles. */
-    public boolean offersHandle(@NonNull Handle handle) {
-        switch (handle) {
-            case DOCK_HEIGHT:
-                // The grip rides the dock's top border and drags the pinned apps row's height —
-                // the same number the card's size row carries. A rail has no such height.
-                return dockRowShown && appsRowShown;
-            case KEYBOARD_HEIGHT:
-            case KEYBOARD_CHIN:
-            default:
-                return keyboardShown;
-        }
     }
 
     /**

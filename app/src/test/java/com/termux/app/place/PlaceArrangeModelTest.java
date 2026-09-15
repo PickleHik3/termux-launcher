@@ -10,8 +10,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
-import com.termux.app.fragments.settings.LayoutChooserModel;
-import com.termux.app.fragments.settings.LayoutElement;
 import com.termux.app.place.PlaceArrangeModel.Counter;
 import com.termux.app.place.PlaceArrangeModel.Element;
 import com.termux.app.place.PlaceArrangeModel.Group;
@@ -30,15 +28,12 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
- * What the surface editor's Place section offers and what a pick writes — and that it is the same
- * offer the Layout page makes, for the orientation the editor is standing in.
+ * What the surface editor's Place section offers, for the orientation the editor is standing in,
+ * and what a pick writes.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -180,46 +175,5 @@ public class PlaceArrangeModelTest {
         assertEquals("right", after.selected);
         assertEquals(2, after.selectedIndex());
         assertNotEquals(before.selectedIndex(), after.selectedIndex());
-    }
-
-    // ------------------------------------------------------------- the same offer as the page's
-
-    /**
-     * The Layout page answers the same questions for both orientations at once. Its value sets and
-     * labels are the ones a user has already learned, so the editor may not quietly grow a
-     * different set: every pill row here has to appear, values and labels alike, in what the page
-     * offers for the same element.
-     */
-    @Test
-    public void everyPillSetIsOneTheLayoutPageAlreadyOffers() {
-        for (PaneWallPage place : PaneWallPage.values()) {
-            for (LayoutElement pageElement : LayoutElement.values()) {
-                if (!pageElement.isOn(place)) continue;
-                Element element = Element.valueOf(pageElement.name());
-                Set<String> offered = new HashSet<>();
-                for (LayoutChooserModel.Group group
-                        : LayoutChooserModel.groups(app, places, place, pageElement)) {
-                    if (group instanceof LayoutChooserModel.Pills)
-                        offered.add(shapeOf(((LayoutChooserModel.Pills) group).values,
-                            ((LayoutChooserModel.Pills) group).labelResIds));
-                }
-                for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                    for (Group group : groups(place, orientation, element)) {
-                        if (!(group instanceof Pills)) continue;
-                        Pills row = (Pills) group;
-                        assertTrue(place + " " + element + " " + orientation + " offers "
-                                + Arrays.toString(row.values) + ", which the page does not",
-                            offered.contains(shapeOf(row.values, row.labelResIds)));
-                    }
-                }
-            }
-        }
-    }
-
-    private static String shapeOf(String[] values, int[] labelResIds) {
-        List<String> shape = new ArrayList<>(values.length);
-        for (int i = 0; i < values.length; i++)
-            shape.add(values[i] + "=" + labelResIds[i]);
-        return shape.toString();
     }
 }

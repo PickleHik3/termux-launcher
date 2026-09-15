@@ -112,8 +112,8 @@ Search is designed for an idle shell prompt. Confirm the current prefix under **
 App search prefix**; `%` is the default. If the prefix conflicts with shell input, choose a
 different single character.
 
-For browsing without terminal input, use the A–Z row or enable it under **Settings → Layout →
-Alphabets row**.
+For browsing without terminal input, use the A–Z row or enable it from **Settings → Layout**, on
+the place you want it for.
 
 ## CPU, memory, weather, media, or notifications are missing
 
@@ -145,7 +145,7 @@ working state. Check what the visible session is running before treating it as a
 
 ## Blur, wallpaper colors, or transparency look wrong
 
-Open **Settings → Look → Surface editor** and test against the real home screen.
+Open **Settings → Look → Appearance** and test against the real home screen.
 
 - Live wallpapers can limit or disable dock blur.
 - GPU blur requires Android 12 or later; older Android versions use a simpler surface.

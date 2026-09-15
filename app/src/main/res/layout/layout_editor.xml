@@ -111,4 +111,14 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:layout_marginEnd="6dp" />
+
+    <!-- Everything about the place that no bar can be dragged into: how its keyboard stands, and
+         on Home how many cells its grid has. Filled in code from LayoutEditorPlan, into a scroller
+         that grows to whatever the canvas above has left and scrolls inside it after that. -->
+    <FrameLayout
+        android:id="@+id/layout_editor_rows_host"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="6dp" />
 </LinearLayout>

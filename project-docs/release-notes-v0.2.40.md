@@ -41,7 +41,7 @@
 - The in-app keyboard comes in three types: docked, floating and split. Swipe up on the keyboard key of the extra-keys row to switch, and each place remembers its own type for portrait and for landscape.
 - A floating keyboard is one solid panel in the theme's colour, dragged by the bar along its top, and it remembers where you left it on each place.
 - Drag the handle in the floating keyboard's bottom-left corner: left for wider, up for taller. A height slider sits beside the width one in Settings ▸ Keyboard.
-- Settings ▸ Keyboard has a Keyboard type row that sets docked, floating or split on every place at once; the Layout page still sets one place on its own.
+- Settings ▸ Keyboard has a Keyboard type row that sets docked, floating or split on every place at once; opening Settings ▸ Layout for one place still sets its type on its own.
 - The split keyboard parts every row down the middle and lets taps in the gap through to what is behind it. The gap's width and the floating keyboard's width are sliders in Settings ▸ Keyboard.
 - On the Display place, tapping a text field brings the keyboard up and tapping elsewhere puts it away. Turn it off in Display options if you would rather not.
 
@@ -51,6 +51,14 @@
 - A window pill shows one short item — the open file, the process or the directory — and its ring, bell, tick and cross all sit in the icon's spot.
 - `tlstore` (or `tl`, `tls`) installs and updates seven things the launcher shows off — the fish setup, the wallpaper prompt and Neovim themes, fastfetch, kitten, a terminal clock and Claude Code — with a picker when you don't name anything.
 - A config file of yours is never replaced without showing you the change and asking first.
+
+### Appearance and Layout
+
+- Every corner tab — Home, Terminal, Display and a lone terminal pane — carries two buttons: Appearance for how the place looks, Layout for where its elements sit and how big they are. The terminal's long-press menu offers the same two.
+- The Layout editor shows a miniature of the place you are on; drag a bar to an edge or into the hide tray to move or hide it, with a Portrait/Landscape toggle above the miniature so you can lay out the other orientation without turning the phone.
+- Dock height, keyboard height and the keyboard's bottom padding are set per place and per orientation in the Layout editor now; upgrading carries your current values over unchanged.
+- Settings ▸ Layout opens onto Home, Terminal and Display — pick one to land on that place with its Layout editor open.
+- The terminal pane's corner tab shows the same sliders and ? icons as the other places now.
 
 ### Local AI
 

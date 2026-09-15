@@ -10,7 +10,6 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.surfaces.SurfaceEditorScene.Handle;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 
 import org.junit.Test;
@@ -143,21 +142,11 @@ public class SurfaceEditorSceneTest {
     }
 
     @Test
-    public void aRaisedKeyboardIsASurfaceAndCarriesItsTwoHandles() {
+    public void aRaisedKeyboardIsASurfaceOfItsOwn() {
         SurfaceEditorScene scene = SurfaceEditorScene.of(
             layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM), true, true);
 
         assertTrue(scene.offersSurface(SurfaceSlot.KEYBOARD));
-        assertTrue(scene.offersHandle(Handle.KEYBOARD_HEIGHT));
-        assertTrue(scene.offersHandle(Handle.KEYBOARD_CHIN));
-    }
-
-    @Test
-    public void aClosedKeyboardCarriesNoHandles() {
-        SurfaceEditorScene scene = portrait();
-
-        assertFalse(scene.offersHandle(Handle.KEYBOARD_HEIGHT));
-        assertFalse(scene.offersHandle(Handle.KEYBOARD_CHIN));
     }
 
     /** Landscape with everything in a column: there is no dock band, so there is no dock surface. */
@@ -166,24 +155,21 @@ public class SurfaceEditorSceneTest {
         SurfaceEditorScene scene = landscapeColumns();
 
         assertFalse(scene.offersSurface(SurfaceSlot.DOCK));
-        assertFalse(scene.offersHandle(Handle.DOCK_HEIGHT));
         assertTrue(scene.offersSurface(SurfaceSlot.STATUS));
         assertTrue(scene.offersSurface(SurfaceSlot.CANVAS));
     }
 
     /**
-     * The extra keys on the dock with the apps in a rail: the dock is a surface again, but the two
-     * rows and the grip that move the pinned apps row's height and paging have nothing to move.
+     * The extra keys on the dock with the apps in a rail: the dock is a surface again, but the row
+     * about how many apps a page of the pinned row holds has nothing to move.
      */
     @Test
-    public void aDockCarryingOnlyTheExtraKeysDropsTheAppsRowsAndItsGrip() {
+    public void aDockCarryingOnlyTheExtraKeysDropsTheAppsRow() {
         SurfaceEditorScene scene = SurfaceEditorScene.of(
             layout(Edge.LEFT, RowPlacement.LEFT, RowPlacement.BOTTOM), false, true);
 
         assertTrue(scene.offersSurface(SurfaceSlot.DOCK));
-        assertFalse(scene.offersRow(SurfaceSlot.DOCK, SurfaceEditorProperties.ID_SIZE));
         assertFalse(scene.offersRow(SurfaceSlot.DOCK, SurfaceEditorProperties.ID_APPS));
-        assertFalse(scene.offersHandle(Handle.DOCK_HEIGHT));
         // Its material and its shape are still the dock's own.
         for (String row : new String[] {SurfaceEditorProperties.ID_OPACITY,
             SurfaceEditorProperties.ID_BLUR, SurfaceEditorProperties.ID_GRAIN,
@@ -192,13 +178,12 @@ public class SurfaceEditorSceneTest {
     }
 
     @Test
-    public void aDockWithItsAppsRowKeepsEveryRowAndItsGrip() {
+    public void aDockWithItsAppsRowKeepsEveryRow() {
         SurfaceEditorScene scene = portrait();
 
         for (SurfaceEditorProperties.Control control
                 : SurfaceEditorProperties.panel(SurfaceSlot.DOCK))
             assertTrue(control.id, scene.offersRow(SurfaceSlot.DOCK, control.id));
-        assertTrue(scene.offersHandle(Handle.DOCK_HEIGHT));
     }
 
     /** No other surface's card is curated by the arrangement; their own state decides. */
