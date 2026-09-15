@@ -91,13 +91,14 @@ From issue #36 (the revised onboarding review), landed on top of the third pass 
   `showAll()` drops into the overview from its first page. Neither is a gesture on the launcher.
 - **Overview paging.** The "1 / 2" pill is replaced by Previous and Next (`previous()`, `next()`,
   each clamped at its end) and a section label naming the group of the page's first entry
-  (`sectionLabelRes()`). Not yet drawn: `HelpOverlayView` still lays out the old `pagePill`.
+  (`sectionLabelRes()`), drawn by `HelpOverlayView` in place of the pill.
 - **Close.** An explicit close request (`close()` → `Effect.CLOSE`) alongside the outside-tap
   dismiss the third pass already drew (`help_close` pill).
 - **Show gesture.** `showGesture()` asks the renderer for a finite demonstration over the
   selected topic's control, and leaves help open (`Effect.demonstrate`), only when that control
   is on screen (`canShowGesture()`). The spec has the renderer draw a static directional cue
-  instead of the finger trace when the system animator scale is zero; that drawing is not built.
+  instead of the finger trace when the system animator scale is zero (`ReducedMotion`); the trace
+  itself is the tour's, drawn through the shared `TourFingerPainter`.
 - **Try it.** `tryIt()` closes help and hands the topic's lesson id to practice
   (`Effect.practice`), only for a topic with both a measurable control and a lesson
   (`canTryIt()`). `TourController.startPractice(lessonId)` runs that one lesson alone: Done/End
@@ -115,12 +116,14 @@ From issue #36 (the revised onboarding review), landed on top of the third pass 
   supplies the catalogue's "how to bring it back" line and `relatedTopicId()` an optional related
   topic — never a substitute rect.
 - **Palette and Settings entries.** The spec adds a Help entry to the command palette (app
-  category) and to Settings beside Replay the tour, both opening help for the current place.
-  Neither exists yet — no `HelpTool` and no Settings entry in this pass.
+  category, tool `app.open_help`) and to Settings beside Replay the tour (`EXTRA_SHOW_HELP`), both
+  reaching the activity's one `showHelpOverlay()`.
 - **Accessibility.** The spec asks for focus and a topic announcement when help opens, and a
-  label on every button (Close, Previous, Next, Show gesture, Try it). `HelpOverlayView` still
-  sets one content description for the whole overlay (`help_accessibility`); the per-control work
-  is not done.
+  label on every button (Close, Previous, Next, Show gesture, Try it); the panel takes focus and
+  announces the topic title, and every button carries a content description.
+- **Overview stays the third pass's.** `keys` and `corners` are topics in the chooser only: the
+  overview keeps per-key labels on the extra keys row with no box round it, and no corner-tab card
+  (the second pass dropped that hint because the reader reached help through that tab).
 - **Hands off to the tour.** The `corners` topic's lesson is `find_help`
   (`TourRun.LESSON_FIND_HELP` — see `docs/first-boot-tour.md`), so "Try it" there and the tour's
   own first lesson are the same three taps.
@@ -236,7 +239,7 @@ New package `com.termux.app.help`:
   highlight and its colour. Reads `HelpTopics`; renders nothing and measures nothing itself.
 - `HelpOverlayView` — scrim, boxes, in-place key labels, cards, leader lines, paging pill, close
   pill; consumes touches; `show(place)`, `dismiss()`, re-measures on global layout like
-  `FirstBootTour.obtainOverlay` does. Not yet rewired to `HelpPresentationModel` (fourth pass).
+  `FirstBootTour.obtainOverlay` does. Renders `HelpPresentationModel` by mode (fourth pass).
 - `HelpTargets` — the per-place candidate list and their measurement, reusing the `ViewFinder`
   idea from `tour/TourViewTargets` (do not couple to the tour's classes; copy the two helpers if
   needed).

@@ -313,7 +313,7 @@ drawer). Branch `fix/drawer-back`, independent of the tour.
 |-------|--------|-------------|------------|
 | A Model | feat/help-topics-model | `HelpTopics` catalogue and `HelpPresentationModel`, pure and tested. | — |
 | B Tour | feat/help-topics-tour | `TourStep` kinds and actions, the help/keyboard/app-launch tour signals, `TourRun`'s four lessons, `TourController` practice mode and the version-2 migration. | A |
-| C Wiring | feat/help-topics-wiring | `HelpOverlayView` rewired to `HelpPresentationModel` (chooser, overview paging, show gesture, try it), the activity's help show/dismiss paths feeding `TourSignalRelay`, the command palette and Settings entries, accessibility. Not yet branched. | A, B |
+| C Wiring | feat/help-topics | `HelpOverlayView` rewired to `HelpPresentationModel` (chooser, overview paging, show gesture, try it), the activity's help show/dismiss paths feeding `TourSignalRelay`, the command palette and Settings entries, accessibility. Not yet branched. | A, B |
 | D Docs | feat/help-topics-docs | This spec and `docs/help-overlay.md` brought up to date. | A, B |
 
 A and B are merged into the integration branch `feat/help-topics`.
