@@ -24,6 +24,7 @@ import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -39,9 +40,15 @@ import java.util.List;
  * finger landed on. The page keeps the touches: the view is never clickable, so it cannot stand
  * between a finger and whatever the page is drawing underneath.
  *
- * <p>A button is a 30dp square with a Nerd Font glyph, or a strip as wide as its own text. Both
- * are roomier than a pane's tab on purpose — these sit over a live picture with no other chrome to
- * steady the thumb, and the 22dp pair was missed as often as hit.
+ * <p>A button is a 30dp square with a Nerd Font glyph or a mark drawn by hand, or a strip as wide
+ * as its own text. Both are roomier than a pane's tab on purpose — these sit over a live picture
+ * with no other chrome to steady the thumb, and the 22dp pair was missed as often as hit.
+ *
+ * <p>The frame the tab hangs off is the view's own bounds by default, which is what a page wants:
+ * the view is laid over the page and the tab lands on the page's own corner. A terminal pane is
+ * not a view of its own — one overlay draws the tabs of every pane on the wall — so that caller
+ * hands in a {@link FrameSource} instead, and the tab is laid out and drawn inside whichever pane
+ * it names, in the overlay's own coordinates.
  */
 public final class PaneControlsView extends View {
 
@@ -55,39 +62,102 @@ public final class PaneControlsView extends View {
     /** How deep the tab is once it is fully out. */
     private static final float TAB_HEIGHT_DP = 32f;
 
-    /** One button of the tab: an id the page knows, and either a glyph or a short label. */
+    /** Drawn in the theme's primary colour, as all but two of the buttons are. */
+    public static final int TINT_PRIMARY = 0;
+    /** Drawn in the tertiary colour: the pane-move grip, which is a handle rather than an action. */
+    public static final int TINT_TERTIARY = 1;
+    /** Drawn in the error colour, as a close is. */
+    public static final int TINT_ERROR = 2;
+
+    /**
+     * A button's mark, for the few no font carries: the pane-move grip, the maximise box and the
+     * close cross. The paint arrives already stroked and coloured for how far out the tab is, so a
+     * mark draws its lines and leaves the colour alone.
+     */
+    public interface Mark {
+        void draw(@NonNull Canvas canvas, @NonNull RectF button, @NonNull Paint paint,
+                  float density);
+    }
+
+    /**
+     * One button of the tab: an id the page knows, and either a glyph, a short label, or a mark it
+     * draws itself.
+     */
     public static final class Action {
         final int id;
         @NonNull final String text;
         final boolean isGlyph;
+        @Nullable final Mark mark;
+        final int tint;
 
-        private Action(int id, @NonNull String text, boolean isGlyph) {
+        private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
+                       int tint) {
             this.id = id;
             this.text = text;
             this.isGlyph = isGlyph;
+            this.mark = mark;
+            this.tint = tint;
         }
 
         /** A Nerd Font glyph in a square button. */
         @NonNull
         public static Action glyph(int id, @NonNull String glyph) {
-            return new Action(id, glyph, true);
+            return new Action(id, glyph, true, null, TINT_PRIMARY);
         }
 
-        /** A short read-out — the grid's size — in a button as wide as its text. */
+        /** A short read-out — the grid's size, or the help question mark — as wide as its text. */
         @NonNull
         public static Action label(int id, @NonNull String text) {
-            return new Action(id, text, false);
+            return new Action(id, text, false, null, TINT_PRIMARY);
         }
+
+        /** A hand-drawn mark, in a square button the size a glyph's would be. */
+        @NonNull
+        public static Action drawn(int id, @NonNull Mark mark) {
+            return drawn(id, mark, TINT_PRIMARY);
+        }
+
+        /** As above, in one of the tab's other colours. */
+        @NonNull
+        public static Action drawn(int id, @NonNull Mark mark, int tint) {
+            return new Action(id, "", false, mark, tint);
+        }
+    }
+
+    /**
+     * The frame a tab hangs off when it is not this view's own bounds: where it is, and the shape
+     * it is drawn with. One instance is filled over and over, so nothing reads it after the call
+     * that filled it.
+     */
+    public static final class Frame {
+        /** The frame's bounds, in this view's coordinates. */
+        public final RectF bounds = new RectF();
+        /** The radius its corners are drawn at, as the user set it; 0 for a square frame. */
+        public float radiusPx;
+        /** The border it paints — the line the tab lines up inside, 0 when it paints none. */
+        public float borderPx;
+    }
+
+    /** Where the tab's frame is now; asked afresh every time the tab is laid out or drawn. */
+    public interface FrameSource {
+        /** Fill {@code out}; false when there is no frame to hang a tab off any more. */
+        boolean fillFrame(@NonNull Frame out);
     }
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The marks' own paint, so a hand-drawn button cannot disturb the tab's fill and stroke. */
+    private final Paint mMarkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path mPath = new Path();
     private final RectF mTab = new RectF();
     private final List<Action> mActions = new ArrayList<>();
-    /** This view's own bounds, the frame the tab is laid out inside. */
+    /** The frame the tab is laid out inside: this view's bounds, or what a frame source says. */
     private final RectF mBounds = new RectF();
+    /** Scratch for the shape the tab is painted through; never allocated per frame. */
+    private final RectF mClip = new RectF();
+    @Nullable private FrameSource mFrameSource;
+    private final Frame mFrame = new Frame();
     /** One hit rectangle per action, in this view's coordinates; recomputed with the geometry. */
     private RectF[] mButtons = new RectF[0];
     /** Each action's asked-for width, in the order they are drawn. */
@@ -115,6 +185,9 @@ public final class PaneControlsView extends View {
         mLabelPaint.setTypeface(Typeface.DEFAULT_BOLD);
         mLabelPaint.setTextAlign(Paint.Align.CENTER);
         mLabelPaint.setTextSize(dp(12));
+        mMarkPaint.setStyle(Paint.Style.STROKE);
+        mMarkPaint.setStrokeCap(Paint.Cap.ROUND);
+        mMarkPaint.setStrokeWidth(dp(1.35f));
         setWillNotDraw(false);
         setClickable(false);
         setFocusable(false);
@@ -139,6 +212,37 @@ public final class PaneControlsView extends View {
         mPaneRadiusPx = radius;
         mPaneBorderPx = stroke;
         invalidate();
+    }
+
+    /**
+     * Where the tab's frame is, for a caller whose frame is not this view. The source is asked
+     * afresh on every layout and every frame drawn, so a pane that moves under a tab already out
+     * carries it along; it also answers the shape, which {@link #setPaneBorder} would otherwise
+     * have to be told again every time the pane changed. Null puts the tab back on this view's
+     * own bounds, which is where a page wants it.
+     */
+    public void setFrameSource(@Nullable FrameSource source) {
+        mFrameSource = source;
+        invalidate();
+    }
+
+    /**
+     * Read where the tab's frame is now into {@link #mBounds}; false when there is none, which is
+     * a pane that has gone while its tab was out.
+     */
+    private boolean readFrame() {
+        if (mFrameSource == null) {
+            mBounds.set(0f, 0f, getWidth(), getHeight());
+            return getWidth() > 0 && getHeight() > 0;
+        }
+        if (!mFrameSource.fillFrame(mFrame)) {
+            mBounds.setEmpty();
+            return false;
+        }
+        mBounds.set(mFrame.bounds);
+        mPaneRadiusPx = Math.max(0f, mFrame.radiusPx);
+        mPaneBorderPx = Math.max(0f, mFrame.borderPx);
+        return mBounds.width() > 0f && mBounds.height() > 0f;
     }
 
     /** How far in from the border's inner edge the tab starts. */
@@ -172,8 +276,13 @@ public final class PaneControlsView extends View {
      * it away first — and an id that is no longer here loses its alert with it.
      */
     public void setActions(@NonNull Action... actions) {
+        setActions(Arrays.asList(actions));
+    }
+
+    /** As above, for a caller that builds its buttons from the state it is in. */
+    public void setActions(@NonNull Collection<Action> actions) {
         mActions.clear();
-        mActions.addAll(Arrays.asList(actions));
+        mActions.addAll(actions);
         mButtons = new RectF[mActions.size()];
         mWidths = new float[mActions.size()];
         for (int i = 0; i < mActions.size(); i++) mButtons[i] = new RectF();
@@ -226,10 +335,37 @@ public final class PaneControlsView extends View {
         mRetracting = false;
     }
 
+    /**
+     * Out at once, with no motion: chrome that belongs to a mode the user is already in, rather
+     * than a tab a finger asked for. A maximised pane's tab is re-asserted this way on every
+     * render, and animating it there would make it flicker out and back on each one.
+     */
+    public void showNow(int corner) {
+        if (mAnimator != null) mAnimator.cancel();
+        mCorner = corner;
+        mProgress = 1f;
+        mShown = true;
+        mRetracting = false;
+        invalidate();
+    }
+
     public void dismiss() {
         if (!mShown || mRetracting) return;
         animateTo(0f, true);
         mRetracting = true;
+    }
+
+    /**
+     * Gone at once: the tab is making way for something that covers it whole, so sliding it out
+     * from under the new thing would only be seen as a glitch at its edge.
+     */
+    public void dismissNow() {
+        if (mAnimator != null) mAnimator.cancel();
+        mProgress = 0f;
+        mShown = false;
+        mRetracting = false;
+        mCorner = CornerZones.NONE;
+        invalidate();
     }
 
     /** Run one button; false when the id is not on this tab. */
@@ -285,7 +421,7 @@ public final class PaneControlsView extends View {
     /** How wide one button is: a glyph's square, or the room its own text asks for. */
     private float buttonWidth(@NonNull Action action) {
         float square = dp(30);
-        if (action.isGlyph) return square;
+        if (action.isGlyph || action.mark != null) return square;
         return Math.max(square, mLabelPaint.measureText(action.text) + dp(20));
     }
 
@@ -295,12 +431,12 @@ public final class PaneControlsView extends View {
      * view brings only the sizes its own buttons wear.
      */
     private void computeGeometry() {
-        if (mActions.isEmpty()) {
+        if (mActions.isEmpty() || !readFrame()) {
             mTab.setEmpty();
+            for (RectF button : mButtons) button.setEmpty();
             return;
         }
         for (int i = 0; i < mActions.size(); i++) mWidths[i] = buttonWidth(mActions.get(i));
-        mBounds.set(0f, 0f, getWidth(), getHeight());
         CornerTabGeometry.layout(corner(), mBounds, mWidths, mActions.size(), dp(8), dp(5),
             dp(TAB_HEIGHT_DP), mPaneBorderPx, cornerInsetPx(), dp(3), mProgress, mTab, mButtons);
     }
@@ -311,7 +447,9 @@ public final class PaneControlsView extends View {
      * outside it.
      */
     private float edgeY() {
-        return CornerZones.isTop(corner()) ? mPaneBorderPx : getHeight() - mPaneBorderPx;
+        return CornerZones.isTop(corner())
+            ? mBounds.top + mPaneBorderPx
+            : mBounds.bottom - mPaneBorderPx;
     }
 
     /** The tab's own far edge, the one that carries the rounded pair. */
@@ -322,8 +460,9 @@ public final class PaneControlsView extends View {
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
-        if (!mShown || mProgress <= 0f || getWidth() <= 0 || mActions.isEmpty()) return;
+        if (!mShown || mProgress <= 0f || mActions.isEmpty()) return;
         computeGeometry();
+        if (mTab.isEmpty()) return;
         Context context = getContext();
         int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
@@ -341,14 +480,13 @@ public final class PaneControlsView extends View {
         // its inside, so neither the tab's outer corner nor its ears can land on the line. A page
         // with no border clips to its plain bounding box, which is what this always was.
         float arc = CornerTabGeometry.innerRadiusPx(mPaneRadiusPx, mPaneBorderPx);
-        mBounds.set(0f, 0f, getWidth(), getHeight());
-        CornerTabGeometry.innerBounds(mBounds, mPaneBorderPx, mBounds);
+        CornerTabGeometry.innerBounds(mBounds, mPaneBorderPx, mClip);
         if (arc > 0f) {
             mPath.reset();
-            mPath.addRoundRect(mBounds, arc, arc, Path.Direction.CW);
+            mPath.addRoundRect(mClip, arc, arc, Path.Direction.CW);
             canvas.clipPath(mPath);
         } else {
-            canvas.clipRect(mBounds);
+            canvas.clipRect(mClip);
         }
 
         // The fill runs a hair past the edge and is trimmed there by the clip, so no anti-aliased
@@ -383,11 +521,24 @@ public final class PaneControlsView extends View {
         canvas.drawPath(mPath, mPaint);
 
         int alpha = Math.round(255f * mProgress);
+        int tertiary = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorTertiary, primary);
         for (int i = 0; i < mActions.size(); i++) {
             Action action = mActions.get(i);
-            int tint = mAlerted.contains(action.id) ? error : primary;
-            drawText(canvas, mButtons[i], action,
-                ColorUtils.setAlphaComponent(tint, alpha));
+            int tint = mAlerted.contains(action.id) ? error
+                : action.tint == TINT_ERROR ? error
+                : action.tint == TINT_TERTIARY ? tertiary : primary;
+            int color = ColorUtils.setAlphaComponent(tint, alpha);
+            if (action.mark != null) {
+                mMarkPaint.setStyle(Paint.Style.STROKE);
+                mMarkPaint.setStrokeCap(Paint.Cap.ROUND);
+                mMarkPaint.setStrokeWidth(dp(1.35f));
+                mMarkPaint.setColor(color);
+                action.mark.draw(canvas, mButtons[i], mMarkPaint,
+                    getResources().getDisplayMetrics().density);
+            } else {
+                drawText(canvas, mButtons[i], action, color);
+            }
         }
         canvas.restoreToCount(save);
     }
