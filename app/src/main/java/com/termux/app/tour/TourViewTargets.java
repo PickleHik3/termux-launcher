@@ -200,7 +200,9 @@ public final class TourViewTargets implements TourTargets {
     /**
      * A corner of the terminal pane, and the terminal's rather than the display's, because the
      * display may well be switched off. The square is the one the panes themselves answer touches
-     * in, clamped the same way, so the glow is the hit area and not a guess at it.
+     * in — the bigger {@link CornerZones#PANE_SIZE_DP} a terminal pane keeps, because its corner is
+     * held rather than tapped — clamped the same way, so the glow is the hit area and not a guess
+     * at it.
      */
     @Nullable
     private Rect paneCornerRect() {
@@ -208,7 +210,7 @@ public final class TourViewTargets implements TourTargets {
             "no terminal pane is on screen");
         if (pane == null) return null;
         float density = mOverlay.getResources().getDisplayMetrics().density;
-        int size = Math.round(CornerZones.clampSize(CornerZones.sizePx(density),
+        int size = Math.round(CornerZones.clampSize(CornerZones.paneSizePx(density),
             pane.width(), pane.height()));
         if (size <= 0) return miss("the pane is too small to have a corner zone");
         return new Rect(pane.left, pane.top, pane.left + size, pane.top + size);

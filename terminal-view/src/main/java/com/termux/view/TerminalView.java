@@ -17,6 +17,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.text.Editable;
 import android.text.InputType;
+import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.ActionMode;
@@ -197,15 +198,6 @@ public final class TerminalView extends View {
     private int mTouchMouseDragLastCol, mTouchMouseDragLastRow;
 
     /**
-     * Set from a long press until the following move either commits to a mouse drag (past touch
-     * slop) or the finger lifts without having moved, in which case local text selection starts
-     * instead - see {@link #handleTouchMouseDrag(MotionEvent)}.
-     */
-    private boolean mTouchMouseDragArmed;
-
-    private MotionEvent mTouchMouseDragArmEvent;
-
-    /**
      * Mouse mode: every touch is the mouse, for a program that asked for one. A finger down is
      * the left button down at its cell, a move is the button held and moved, a lift is the
      * release; two fingers turn the wheel, one notch per line of travel in the natural direction
@@ -216,7 +208,16 @@ public final class TerminalView extends View {
      * it is on, and it all comes back when it is off.
      */
     private boolean mTouchMouseMode;
-    private boolean mTouchMouseModePressed;
+
+    /**
+     * Set by the chrome above this view while a finger that landed in one of its pane corner
+     * squares is down: that hold belongs to the corner and opens its tab, so the view never starts
+     * a hold of its own for it. Taps and drags there still reach the view as usual.
+     * See {@link HoldTiming} for why the two holds must never race.
+     */
+    private boolean mHoldExempt;
+    /** Mouse mode's left button, and whether its press is still waiting on a pane corner. */
+    private final MouseModePress mTouchMouseModePress = new MouseModePress();
     private int mTouchMouseModeLastCol, mTouchMouseModeLastRow;
     /** Two fingers are down and their travel is the wheel. */
     private boolean mTouchMouseWheelActive;
@@ -241,8 +242,6 @@ public final class TerminalView extends View {
 
     private final int mTouchSlop;
 
-    private final int mTouchSlopSquared;
-
     /** Where the current gesture's finger landed, which is where a still finger clicks. */
     private float mTouchDownX, mTouchDownY;
 
@@ -250,54 +249,33 @@ public final class TerminalView extends View {
     private final TapPrecision.ScrollDelivery mScrollDelivery = new TapPrecision.ScrollDelivery();
 
     /**
-     * The hold-to-aim loupe: see {@link AimState}. Armed only for a finger on a terminal that is
-     * tracking the mouse, which is where a stray tap costs the user the wrong menu row.
+     * The hold, which is this view's own and no longer the stock long press: see {@link HoldGesture}.
+     * The gesture detector is left with taps, scrolls, flings, double taps and the pinch.
      */
-    private final AimState mAimState = new AimState();
+    private final HoldGesture mHoldGesture = new HoldGesture();
 
-    /** Set for the rest of a gesture the aim took over, so the tap and fling paths let it be. */
-    private boolean mAimConsumedGesture;
+    /** Set for the rest of a gesture the hold took over, so the tap and fling paths let it be. */
+    private boolean mHoldConsumedGesture;
 
-    /** The cell the aim is on, clamped to the screen, in view rows and columns. */
-    private int mAimColumn, mAimRow;
+    /** The finger's landing, kept so the hold has an event to start text selection from. */
+    private MotionEvent mHoldDownEvent;
 
-    /** The strip magnifies its row by this much, and reaches this far either side of the aim. */
-    private static final float AIM_LOUPE_SCALE = 3f;
-
-    private static final int AIM_LOUPE_HALF_COLUMNS = 6;
-
-    private static final float AIM_LOUPE_PADDING_DP = 6f;
-
-    /** How far clear of the aimed cell the strip floats, so a thumb is not covering the answer. */
-    private static final float AIM_LOUPE_GAP_DP = 14f;
-
-    /** Dress for the loupe; 0 colours and a negative radius follow the terminal's own palette. */
-    private int mAimLoupeFillColor;
-
-    private int mAimLoupeStrokeColor;
-
-    private int mAimLoupeTextColor;
-
-    private float mAimLoupeCornerRadiusPx = -1f;
-
-    private Paint mAimPaint;
-
-    private RectF mAimPlate;
-
-    private Paint.FontMetrics mAimFontMetrics;
-
-    private final Runnable mAimOpenRunnable = new Runnable() {
+    private final Runnable mHoldRunnable = new Runnable() {
 
         @Override
         public void run() {
-            if (mEmulator == null || mRenderer == null || !mEmulator.isMouseTrackingActive()) {
-                mAimState.cancel();
-                return;
-            }
-            if (!mAimState.delayElapsed())
-                return;
-            updateAimCell();
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            boolean mouseTracking = mEmulator != null && mRenderer != null
+                && mEmulator.isMouseTrackingActive();
+            applyHoldOutcome(mHoldGesture.holdElapsed(mouseTracking, isTouchMouseDragReportingEnabled()));
+        }
+    };
+
+    /** The hold's second stage: a finger that never moved goes on to select text. */
+    private final Runnable mHoldSelectRunnable = new Runnable() {
+
+        @Override
+        public void run() {
+            applyHoldOutcome(mHoldGesture.selectElapsed());
         }
     };
 
@@ -373,7 +351,7 @@ public final class TerminalView extends View {
                     settleScrollOffset();
                 if (mTouchMouseDragReported)
                     return true;
-                if (mAimConsumedGesture)
+                if (mHoldConsumedGesture)
                     return true;
                 if (mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !mScrollDelivery.delivered()) {
                     // Quick event processing when mouse tracking is active - do not wait for check of double tapping
@@ -390,6 +368,9 @@ public final class TerminalView extends View {
             public boolean onSingleTapUp(MotionEvent event) {
                 if (mEmulator == null)
                     return true;
+                // A hold that started this very selection must not be read as the tap that ends it.
+                if (mHoldConsumedGesture)
+                    return true;
                 if (isSelectingText()) {
                     stopTextSelectionMode();
                     return true;
@@ -405,7 +386,8 @@ public final class TerminalView extends View {
                     return true;
                 if (mTouchMouseDragActive)
                     return true;
-                if (mAimState.isAiming() || mAimConsumedGesture)
+                // After a hold a drag is a mouse drag or a selection handle, never a scroll.
+                if (mHoldConsumedGesture)
                     return true;
                 if (mEmulator.isMouseTrackingActive() && e.isFromSource(InputDevice.SOURCE_MOUSE)) {
                     // If moving with mouse pointer while pressing button, report that instead of scroll.
@@ -455,7 +437,7 @@ public final class TerminalView extends View {
                     return true;
                 if (mTouchMouseDragReported)
                     return true;
-                if (mAimConsumedGesture)
+                if (mHoldConsumedGesture)
                     return true;
                 // Do not start scrolling until last fling has been taken care of:
                 if (!mScroller.isFinished())
@@ -518,25 +500,13 @@ public final class TerminalView extends View {
 
             @Override
             public void onLongPress(MotionEvent event) {
-                // A hold long enough to select text was never an aim: hand the gesture over.
-                cancelAim();
-                if (mGestureRecognizer.isInProgress())
-                    return;
-                if (mClient.onLongPress(event))
-                    return;
-                if (isSelectingText())
-                    return;
-                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                if (isTouchMouseDragReportingEnabled()) {
-                    armTouchMouseDragFromLongPress(event);
-                } else {
-                    startTextSelectionMode(event);
-                }
+                // The hold is the view's own now, and fires earlier than this - see HoldTiming. The
+                // detector's long press is kept only for what it does to the detector itself: it
+                // stops the lift that ends a hold from arriving as a tap or a fling.
             }
         });
         mScroller = new Scroller(context);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mTouchSlopSquared = mTouchSlop * mTouchSlop;
         AccessibilityManager am = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
         mAccessibilityEnabled = am.isEnabled();
 
@@ -1260,11 +1230,11 @@ public final class TerminalView extends View {
     /** Turn mouse mode on or off; see {@link #mTouchMouseMode}. */
     public void setTouchMouseMode(boolean enabled) {
         if (mTouchMouseMode == enabled) return;
-        if (mTouchMouseModePressed && mEmulator != null) {
+        MouseModePress.Step step = mTouchMouseModePress.release();
+        if (step == MouseModePress.Step.RELEASE && mEmulator != null) {
             sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
                 mTouchMouseModeLastRow, false);
         }
-        mTouchMouseModePressed = false;
         mTouchMouseWheelActive = false;
         stopTouchMouseWheelFling();
         mTouchMouseMode = enabled;
@@ -1295,18 +1265,12 @@ public final class TerminalView extends View {
                     mTouchMouseWheelVelocity.clear();
                 }
                 mTouchMouseWheelVelocity.addMovement(event);
-                if (!tracking) break;
-                mTouchMouseModePressed = true;
                 mTouchMouseModeLastCol = column;
                 mTouchMouseModeLastRow = row;
-                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, column, row, true);
+                applyMouseModePress(mTouchMouseModePress.down(tracking, mHoldExempt));
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                if (mTouchMouseModePressed) {
-                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
-                        mTouchMouseModeLastRow, false);
-                    mTouchMouseModePressed = false;
-                }
+                applyMouseModePress(mTouchMouseModePress.pointerDown());
                 if (mTouchMouseWheelVelocity != null) mTouchMouseWheelVelocity.addMovement(event);
                 mTouchMouseWheelActive = true;
                 mTouchMouseWheelStartY = meanY(event);
@@ -1324,7 +1288,10 @@ public final class TerminalView extends View {
                     mTouchMouseWheelSent = notches;
                     break;
                 }
-                if (mTouchMouseModePressed
+                // A press deferred for a pane corner goes out here, at the cell the finger landed
+                // on, the moment the movement is real enough that no corner is going to claim it.
+                applyMouseModePress(mTouchMouseModePress.move(movedPastSlop(event)));
+                if (mTouchMouseModePress.isPressed()
                     && (column != mTouchMouseModeLastCol || row != mTouchMouseModeLastRow)) {
                     mTouchMouseModeLastCol = column;
                     mTouchMouseModeLastRow = row;
@@ -1343,11 +1310,8 @@ public final class TerminalView extends View {
                     mTouchMouseWheelActive = false;
                     if (action == MotionEvent.ACTION_UP) flingTouchMouseWheel();
                 }
-                if (mTouchMouseModePressed) {
-                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
-                        mTouchMouseModeLastRow, false);
-                    mTouchMouseModePressed = false;
-                }
+                applyMouseModePress(action == MotionEvent.ACTION_UP
+                    ? mTouchMouseModePress.up() : mTouchMouseModePress.cancel());
                 if (mTouchMouseWheelVelocity != null) {
                     mTouchMouseWheelVelocity.recycle();
                     mTouchMouseWheelVelocity = null;
@@ -1356,6 +1320,32 @@ public final class TerminalView extends View {
             default:
                 break;
         }
+    }
+
+    /** Send what mouse mode's button owes the program, always at the cell it is tracking. */
+    private void applyMouseModePress(MouseModePress.Step step) {
+        switch (step) {
+            case PRESS:
+                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
+                    mTouchMouseModeLastRow, true);
+                break;
+            case CLICK:
+                sendClickAt(mTouchMouseModeLastCol, mTouchMouseModeLastRow);
+                break;
+            case RELEASE:
+                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
+                    mTouchMouseModeLastRow, false);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** Whether this gesture has travelled far enough to be a drag rather than a finger resting. */
+    private boolean movedPastSlop(MotionEvent event) {
+        float dx = event.getX() - mTouchDownX;
+        float dy = event.getY() - mTouchDownY;
+        return dx * dx + dy * dy > (float) mTouchSlop * mTouchSlop;
     }
 
     /** The midpoint of every finger down, so one finger drifting does not jolt the wheel. */
@@ -1612,272 +1602,182 @@ public final class TerminalView extends View {
     }
 
     /**
-     * The aim only ever opens where a stray tap would be typed at a program that is reading the
-     * mouse, and only for a finger: a real pointer is already as precise as the cell it is over,
-     * and {@link #mTouchMouseMode} is its own explicit mode.
+     * Tell the view whether the finger now down belongs to a pane corner. The pane chrome calls this
+     * with {@code true} before forwarding a corner square's {@code ACTION_DOWN} and with
+     * {@code false} once that finger lifts or the corner has claimed it, so the view never recognises
+     * a hold for a touch the corner will take at {@link HoldTiming#holdTimeoutMs()}.
      */
-    private boolean isAimAvailable(MotionEvent event) {
-        return mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingActive()
-            && !mTouchMouseMode && !event.isFromSource(InputDevice.SOURCE_MOUSE)
-            && !isSelectingText();
+    public void setHoldExempt(boolean exempt) {
+        mHoldExempt = exempt;
+        if (exempt) {
+            cancelHoldTimers();
+            applyHoldOutcome(mHoldGesture.cancel());
+        }
+    }
+
+    /** Whether the finger now down belongs to a pane corner rather than to this view's holds. */
+    public boolean isHoldExempt() {
+        return mHoldExempt;
     }
 
     /**
-     * Feed the aim its side of the touch stream. It consumes nothing — the gesture recogniser
-     * still sees every event — it only decides whether the gesture ends as a click at the cell the
-     * user was looking at rather than at wherever the finger happened to be.
+     * A hold is offered to any finger on the terminal itself, whether or not a program is reading
+     * the mouse - a plain shell's hold is text selection. Mouse mode is its own explicit mode, a
+     * real pointer needs no hold, and a finger in a pane corner belongs to the corner's tab.
      */
-    private void handleAimTouch(MotionEvent event) {
+    private boolean isHoldAvailable(MotionEvent event) {
+        return mEmulator != null && mRenderer != null && !mTouchMouseMode
+            && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !mHoldExempt;
+    }
+
+    /**
+     * Feed the hold its side of the touch stream. It consumes nothing - the gesture recogniser
+     * still sees every event - it only decides what the gesture turns out to have meant.
+     */
+    private void handleHoldTouch(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                mAimConsumedGesture = false;
-                mAimState.reset();
-                removeCallbacks(mAimOpenRunnable);
-                if (isAimAvailable(event)) {
-                    mAimState.down(event.getX(), event.getY(), mTouchSlop);
-                    postDelayed(mAimOpenRunnable, AimState.AIM_DELAY_MS);
+                mHoldConsumedGesture = false;
+                cancelHoldTimers();
+                releaseHoldDownEvent();
+                mHoldGesture.reset();
+                // Once the hold has handed the finger the mouse, one cell of travel is a drag; the
+                // touch slop still decides everything before that.
+                mHoldGesture.down(event.getX(), event.getY(), mTouchSlop,
+                    mRenderer == null ? 0f : mRenderer.mFontWidth,
+                    mRenderer == null ? 0f : mRenderer.mFontLineSpacing,
+                    isHoldAvailable(event));
+                if (mHoldGesture.isPending()) {
+                    mHoldDownEvent = MotionEvent.obtain(event);
+                    // Both stages are timed from the landing, so the second is not lengthened by
+                    // however long the first took to be recognised.
+                    postDelayed(mHoldRunnable, HoldTiming.holdTimeoutMs());
+                    postDelayed(mHoldSelectRunnable, HoldTiming.selectTimeoutMs());
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
-                if (mAimState.move(event.getX(), event.getY()))
-                    updateAimCell();
-                if (!mAimState.isPending())
-                    removeCallbacks(mAimOpenRunnable);
+                applyHoldOutcome(mHoldGesture.move(event.getX(), event.getY()));
+                if (!mHoldGesture.isPending())
+                    removeCallbacks(mHoldRunnable);
+                // A finger that has travelled has said what it wanted; only a still one goes on.
+                if (!mHoldGesture.reachesSelect())
+                    removeCallbacks(mHoldSelectRunnable);
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                // A second finger is a pinch or a wheel, never an aim.
-                cancelAim();
+                cancelHoldTimers();
+                applyHoldOutcome(mHoldGesture.pointerDown());
                 break;
             case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
-                removeCallbacks(mAimOpenRunnable);
-                boolean wasAiming = mAimState.isAiming();
-                boolean click = mAimState.lift();
-                if (wasAiming) {
-                    mAimConsumedGesture = true;
-                    if (click && event.getActionMasked() == MotionEvent.ACTION_UP)
-                        sendClickAt(mAimColumn, mAimRow);
-                    invalidate();
-                }
-                break;
-        }
-    }
-
-    /** Give the gesture up to whatever claimed it, taking the loupe off the screen. */
-    private void cancelAim() {
-        removeCallbacks(mAimOpenRunnable);
-        boolean wasAiming = mAimState.isAiming();
-        mAimState.cancel();
-        if (wasAiming) {
-            mAimConsumedGesture = true;
-            invalidate();
-        }
-    }
-
-    /** Settle which cell the aim is on, clamped to the screen, and repaint the loupe there. */
-    private void updateAimCell() {
-        if (mEmulator == null || mRenderer == null)
-            return;
-        mAimColumn = Math.max(0, Math.min(mEmulator.mColumns - 1, getColumnForX(mAimState.aimX())));
-        mAimRow = Math.max(0, Math.min(mEmulator.mRows - 1, getRowForY(mAimState.aimY())));
-        invalidate();
-    }
-
-    /**
-     * Dress the aim loupe, so the terminal's own surface styling can reach it. A colour of 0 or a
-     * negative radius follows the terminal's palette instead, which is what it does until an app
-     * says otherwise.
-     */
-    public void setAimLoupeStyle(int fillColor, int strokeColor, int textColor, float cornerRadiusPx) {
-        mAimLoupeFillColor = fillColor;
-        mAimLoupeStrokeColor = strokeColor;
-        mAimLoupeTextColor = textColor;
-        mAimLoupeCornerRadiusPx = cornerRadiusPx;
-        if (mAimState.isAiming())
-            invalidate();
-    }
-
-    /**
-     * The aim: the cell the lift will click, outlined where it sits, and that row magnified into a
-     * strip floating clear of the fingertip. Drawn in view coordinates, off the same offsets the
-     * cell mapping uses, so what is outlined is what will be clicked.
-     */
-    private void drawAimLoupe(Canvas canvas) {
-        if (mEmulator == null || mRenderer == null)
-            return;
-        final float density = getResources().getDisplayMetrics().density;
-        final float cellWidth = mRenderer.mFontWidth;
-        final int lineSpacing = mRenderer.mFontLineSpacing;
-        final float left = getHorizontalContentOffset();
-        final float top = getVerticalContentOffset() - mScrollOffsetPixels
-            + mRenderer.mFontLineSpacingAndAscent;
-        final int[] palette = mEmulator.mColors.mCurrentColors;
-        final int strokeColor = mAimLoupeStrokeColor != 0
-            ? mAimLoupeStrokeColor : opaqueColor(palette[TextStyle.COLOR_INDEX_CURSOR]);
-        final int fillColor = mAimLoupeFillColor != 0
-            ? mAimLoupeFillColor : opaqueColor(palette[TextStyle.COLOR_INDEX_BACKGROUND]);
-        final int textColor = mAimLoupeTextColor != 0
-            ? mAimLoupeTextColor : opaqueColor(palette[TextStyle.COLOR_INDEX_FOREGROUND]);
-
-        if (mAimPaint == null) {
-            mAimPaint = new Paint();
-            mAimPaint.setAntiAlias(true);
-            mAimPlate = new RectF();
-            mAimFontMetrics = new Paint.FontMetrics();
-        }
-        final Paint paint = mAimPaint;
-        final float hairline = Math.max(1f, density);
-
-        final float cellLeft = left + mAimColumn * cellWidth;
-        final float cellTop = top + mAimRow * lineSpacing;
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(hairline);
-        paint.setColor(strokeColor);
-        canvas.drawRect(cellLeft, cellTop, cellLeft + cellWidth, cellTop + lineSpacing, paint);
-
-        final int first = Math.max(0, mAimColumn - AIM_LOUPE_HALF_COLUMNS);
-        final int last = Math.min(mEmulator.mColumns - 1, mAimColumn + AIM_LOUPE_HALF_COLUMNS);
-        final float magnifiedCell = cellWidth * AIM_LOUPE_SCALE;
-        final float magnifiedRow = lineSpacing * AIM_LOUPE_SCALE;
-        final float padding = AIM_LOUPE_PADDING_DP * density;
-        final float gap = AIM_LOUPE_GAP_DP * density;
-        final float stripWidth = (last - first + 1) * magnifiedCell + padding * 2f;
-        final float stripHeight = magnifiedRow + padding * 2f;
-        // The aimed cell's magnified slot sits under the fingertip, and the plate slides along the
-        // view rather than off it.
-        float stripLeft = mAimState.aimX() - (mAimColumn - first + 0.5f) * magnifiedCell - padding;
-        stripLeft = Math.max(padding, Math.min(getWidth() - stripWidth - padding, stripLeft));
-        float stripTop = cellTop - gap - stripHeight;
-        if (stripTop < padding)
-            stripTop = cellTop + lineSpacing + gap;
-
-        mAimPlate.set(stripLeft, stripTop, stripLeft + stripWidth, stripTop + stripHeight);
-        final float radius = mAimLoupeCornerRadiusPx >= 0f ? mAimLoupeCornerRadiusPx : stripHeight / 2f;
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(fillColor);
-        canvas.drawRoundRect(mAimPlate, radius, radius, paint);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setColor(strokeColor);
-        canvas.drawRoundRect(mAimPlate, radius, radius, paint);
-
-        final float rowTop = stripTop + padding;
-        final float aimedLeft = stripLeft + padding + (mAimColumn - first) * magnifiedCell;
-        canvas.drawRect(aimedLeft, rowTop, aimedLeft + magnifiedCell, rowTop + magnifiedRow, paint);
-
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(textColor);
-        paint.setTypeface(mRenderer.mTypeface);
-        paint.setTextSize(mRenderer.mTextSize * AIM_LOUPE_SCALE);
-        paint.setTextAlign(Paint.Align.CENTER);
-        paint.getFontMetrics(mAimFontMetrics);
-        final float baseline = rowTop
-            + (magnifiedRow - (mAimFontMetrics.descent - mAimFontMetrics.ascent)) / 2f
-            - mAimFontMetrics.ascent;
-        final TerminalBuffer screen = mEmulator.getScreen();
-        final int textRow = mAimRow + mTopRow;
-        for (int column = first; column <= last; column++) {
-            String cell = screen.getSelectedText(column, textRow, column, textRow, false);
-            if (cell.isEmpty())
-                continue;
-            canvas.drawText(cell, stripLeft + padding + (column - first + 0.5f) * magnifiedCell,
-                baseline, paint);
-        }
-    }
-
-    /** The loupe's plate has to hide the transcript behind it, whatever the palette's alpha says. */
-    private static int opaqueColor(int color) {
-        return color | 0xFF000000;
-    }
-
-    /**
-     * Arm a possible mouse drag from a long press, without reporting anything yet: a long press
-     * alone - held then released without moving - is still local text selection (so its floating
-     * toolbar, e.g. copy, stays reachable), same as when no application asked for motion reporting.
-     * Only once the finger actually moves past touch slop does {@link #handleTouchMouseDrag} commit
-     * to reporting a mouse drag, at which point local selection is no longer offered for this
-     * gesture. Gating on a long press at all - rather than on slop and a short timeout - means an
-     * ordinary fast drag, one or two finger, never gets reported as a click in the first place, so
-     * it is free to scroll.
-     */
-    private void armTouchMouseDragFromLongPress(MotionEvent event) {
-        mTouchMouseDragArmed = true;
-        mTouchMouseDragArmEvent = MotionEvent.obtain(event);
-        mTouchMouseDragLastCol = getColumnForX(event.getX());
-        mTouchMouseDragLastRow = getRowForY(event.getY());
-    }
-
-    private void clearArmedTouchMouseDrag() {
-        mTouchMouseDragArmed = false;
-        if (mTouchMouseDragArmEvent != null) {
-            mTouchMouseDragArmEvent.recycle();
-            mTouchMouseDragArmEvent = null;
-        }
-    }
-
-    /**
-     * Continue a mouse drag armed by {@link #armTouchMouseDragFromLongPress(MotionEvent)}: once
-     * past touch slop, send the deferred press and a motion event per cell entered, then the
-     * eventual release. A finger lifted while still only armed - never having moved past slop -
-     * falls back to starting local text selection at the long press instead.
-     */
-    private void handleTouchMouseDrag(MotionEvent event) {
-        switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_MOVE:
-                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
-                    if (event.getPointerCount() != 1) {
-                        clearArmedTouchMouseDrag();
-                        break;
-                    }
-                    float dx = event.getX() - mTouchMouseDragArmEvent.getX();
-                    float dy = event.getY() - mTouchMouseDragArmEvent.getY();
-                    if (dx * dx + dy * dy <= mTouchSlopSquared)
-                        break;
-                    clearArmedTouchMouseDrag();
-                    mTouchMouseDragActive = true;
-                    mTouchMouseDragReported = true;
-                    // Distinct from the long press's own haptic, so committing to a reported drag -
-                    // as opposed to the finger lifting straight into local text selection - is felt.
-                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLastCol, mTouchMouseDragLastRow, true);
-                }
-                if (!mTouchMouseDragActive)
-                    break;
-                if (event.getPointerCount() != 1) {
-                    releaseTouchMouseDrag();
-                    break;
-                }
-                int column = getColumnForX(event.getX());
-                int row = getRowForY(event.getY());
-                if (column != mTouchMouseDragLastCol || row != mTouchMouseDragLastRow) {
-                    mTouchMouseDragLastCol = column;
-                    mTouchMouseDragLastRow = row;
-                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, column, row, true);
-                }
-                break;
-            case MotionEvent.ACTION_POINTER_DOWN:
-                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
-                    // A second finger joining before any movement was decided reads as a scroll,
-                    // not a selection - drop the arm rather than falling back to local selection.
-                    clearArmedTouchMouseDrag();
-                    break;
-                }
-                releaseTouchMouseDrag();
-                break;
-            case MotionEvent.ACTION_UP:
-                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
-                    MotionEvent armEvent = mTouchMouseDragArmEvent;
-                    mTouchMouseDragArmEvent = null;
-                    mTouchMouseDragArmed = false;
-                    startTextSelectionMode(armEvent);
-                    armEvent.recycle();
-                    break;
-                }
-                releaseTouchMouseDrag();
+                cancelHoldTimers();
+                applyHoldOutcome(mHoldGesture.up(event.getX(), event.getY()));
+                releaseHoldDownEvent();
                 break;
             case MotionEvent.ACTION_CANCEL:
-                clearArmedTouchMouseDrag();
+                cancelHoldTimers();
+                applyHoldOutcome(mHoldGesture.cancel());
+                releaseHoldDownEvent();
+                break;
+        }
+    }
+
+    /** Do what one touch event meant to the hold. */
+    private void applyHoldOutcome(HoldGesture.Outcome outcome) {
+        switch (outcome) {
+            case HOLD_SELECTED:
+                // The second stage: a finger that already held and kept holding. Its own haptic,
+                // so going further is felt as an answer and not as the first buzz again. A plain
+                // shell has no mouse to offer, so its very first stage is this one.
+                if (mHoldConsumedGesture) {
+                    performHapticFeedback(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        ? HapticFeedbackConstants.CONFIRM : HapticFeedbackConstants.LONG_PRESS);
+                } else if (!recogniseHold()) {
+                    break;
+                }
+                if (!isSelectingText())
+                    startTextSelectionMode(mHoldDownEvent);
+                break;
+            case HOLD_MOUSE:
+                recogniseHold();
+                break;
+            case DRAG_STARTED:
+                mTouchMouseDragActive = true;
+                mTouchMouseDragReported = true;
+                mTouchMouseDragLastCol = getColumnForX(mHoldGesture.holdX());
+                mTouchMouseDragLastRow = getRowForY(mHoldGesture.holdY());
+                // Distinct from the hold's own haptic, so committing to a reported drag - as
+                // opposed to the finger lifting into a click - is felt.
+                performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLastCol,
+                    mTouchMouseDragLastRow, true);
+                // The move that committed the drag is also the first move to report.
+                reportTouchMouseDragTo(mHoldGesture.x(), mHoldGesture.y());
+                break;
+            case DRAG_MOVED:
+                reportTouchMouseDragTo(mHoldGesture.x(), mHoldGesture.y());
+                break;
+            case DRAG_ENDED:
                 releaseTouchMouseDrag();
                 break;
+            case CLICK:
+                // The lift clicks where a plain tap would: TapPrecision picks the cell from the
+                // landing and the lift together, so a thumb that rolled does not click next door.
+                if (mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingActive()) {
+                    float[] at = TapPrecision.clickPointFor(mHoldGesture.holdX(),
+                        mHoldGesture.holdY(), mHoldGesture.x(), mHoldGesture.y(),
+                        mRenderer.mFontLineSpacing);
+                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]));
+                }
+                break;
+            case ABANDONED:
+                // The hold gives the gesture back rather than keeping it: two fingers that are both
+                // moving are the wheel or the pinch, and those need the scroll path again.
+                mHoldConsumedGesture = false;
+                break;
+            case NOTHING:
+            default:
+                break;
+        }
+    }
+
+    /**
+     * The hold is recognised: it owns this gesture, the client gets the point its action sheet
+     * opens at, and the user is told with one buzz.
+     *
+     * @return false when the client took the hold for itself and the finger is no longer ours.
+     */
+    private boolean recogniseHold() {
+        mHoldConsumedGesture = true;
+        if (mHoldDownEvent == null || mClient.onLongPress(mHoldDownEvent)) {
+            mHoldGesture.cancel();
+            return false;
+        }
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        return true;
+    }
+
+    /** Tell a program that asked for motion where the held button has got to. */
+    private void reportTouchMouseDragTo(float x, float y) {
+        if (!mTouchMouseDragActive)
+            return;
+        int column = getColumnForX(x);
+        int row = getRowForY(y);
+        if (column == mTouchMouseDragLastCol && row == mTouchMouseDragLastRow)
+            return;
+        mTouchMouseDragLastCol = column;
+        mTouchMouseDragLastRow = row;
+        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, column, row, true);
+    }
+
+    /** Neither stage of the hold is owed any longer. */
+    private void cancelHoldTimers() {
+        removeCallbacks(mHoldRunnable);
+        removeCallbacks(mHoldSelectRunnable);
+    }
+
+    private void releaseHoldDownEvent() {
+        if (mHoldDownEvent != null) {
+            mHoldDownEvent.recycle();
+            mHoldDownEvent = null;
         }
     }
 
@@ -1915,9 +1815,8 @@ public final class TerminalView extends View {
             mScrollDelivery.reset();
             mTouchMouseDragActive = false;
             mTouchMouseDragReported = false;
-            clearArmedTouchMouseDrag();
         }
-        handleAimTouch(event);
+        handleHoldTouch(event);
         if (mTouchMouseMode && !event.isFromSource(InputDevice.SOURCE_MOUSE)) {
             if (isSelectingText()) stopTextSelectionMode();
             handleTouchMouseMode(event);
@@ -1945,8 +1844,6 @@ public final class TerminalView extends View {
                         break;
                 }
             }
-        } else if (isTouchMouseDragReportingEnabled()) {
-            handleTouchMouseDrag(event);
         }
         mGestureRecognizer.onTouchEvent(event);
         return true;
@@ -2510,8 +2407,6 @@ public final class TerminalView extends View {
             }
             if (drawOffset != 0f)
                 canvas.restore();
-            if (mAimState.isAiming())
-                drawAimLoupe(canvas);
             // render the text selection handles
             renderTextSelection();
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
@@ -3156,8 +3051,9 @@ public final class TerminalView extends View {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        removeCallbacks(mAimOpenRunnable);
-        mAimState.reset();
+        cancelHoldTimers();
+        mHoldGesture.reset();
+        releaseHoldDownEvent();
         updateKittyAnimationVisibility();
         if (mTextSelectionCursorController != null) {
             // Might solve the following exception

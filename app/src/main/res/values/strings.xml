@@ -1781,7 +1781,7 @@
     <string name="tour_start_using">Start using Termux</string>
     <string name="tour_resume">Pick up where I left off</string>
     <string name="tour_restart">Start over</string>
-    <string name="tour_card_find_help_corner">Tap a pane corner.</string>
+    <string name="tour_card_find_help_corner">Hold a pane corner.</string>
     <string name="tour_card_find_help_open">Tap ? to see what the controls do.</string>
     <string name="tour_card_find_help_close">Close help to continue.</string>
     <string name="tour_card_find_apps_dock">Pull down on the dock.</string>
@@ -1807,7 +1807,7 @@
     <string name="tour_closing_multitasking_heading">Multitasking</string>
     <string name="tour_closing_multitasking_copy">A session groups your windows. A window holds panes, and each pane runs a shell. Help has the full reference for every key and gesture.</string>
     <string name="tour_closing_customisation_heading">Customisation</string>
-    <string name="tour_closing_customisation_copy">Press a corner tab for the Appearance and Layout editors to make the launcher yours.</string>
+    <string name="tour_closing_customisation_copy">Hold a pane corner for the Appearance and Layout editors to make the launcher yours.</string>
     <string name="tour_closing_extras_heading">Launcher extras</string>
     <string name="tour_closing_extras_copy">Install the launcher\'s own extras.</string>
     <string name="tour_closing_graphical_heading">Graphical apps</string>
@@ -1917,8 +1917,11 @@
     <string name="help_topic_stats_action">Tap one for details.</string>
     <string name="help_topic_stats_reveal">Turn a status widget on in Settings to see it.</string>
     <string name="help_topic_corners_purpose">Every pane corner holds the controls for that pane, including this help.</string>
-    <string name="help_topic_corners_action">Press a corner, then tap the ? button.</string>
-    <string name="help_topic_corners_reveal">Press any corner of a pane to see its controls.</string>
+    <string name="help_topic_corners_action">Hold a corner, then tap the ? button.</string>
+    <string name="help_topic_corners_reveal">Hold any corner of a pane to see its controls.</string>
+    <string name="help_topic_terminal_purpose">The terminal is where your shell runs.</string>
+    <string name="help_topic_terminal_action">Hold for a moment to use the mouse: lift to click, drag to drag. Keep holding to select text.</string>
+    <string name="help_topic_terminal_reveal">Open a window to see a terminal.</string>
     <string name="help_topic_sessions_purpose">Sessions group your windows.</string>
     <string name="help_topic_sessions_action">Tap the badge to switch.</string>
     <string name="help_topic_sessions_reveal">Show the status bar in the Layout editor to see the badge.</string>
@@ -1973,4 +1976,5 @@
     <string name="help_topic_corners_title">Pane corners</string>
     <string name="help_topic_keys_title">Extra keys</string>
     <string name="help_topic_shortcuts_title">Key chords</string>
+    <string name="help_topic_terminal_title">Terminal</string>
 </resources>

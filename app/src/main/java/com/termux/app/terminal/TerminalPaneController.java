@@ -15,11 +15,16 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.os.Trace;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.PathInterpolator;
@@ -36,6 +41,7 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.DockPlankController;
 import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
@@ -43,6 +49,7 @@ import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TextStyle;
+import com.termux.view.HoldTiming;
 import com.termux.view.TerminalView;
 
 import java.util.ArrayList;
@@ -3151,8 +3158,14 @@ public class TerminalPaneController {
     /**
      * Transparent interaction layer: generous border hit targets without thick layout dividers.
      *
+     * <p>A corner square here is <em>held</em>, not tapped. The terminal is the one surface whose
+     * own program draws into its corners, so a touch that lands in a square is handed straight to
+     * the pane's {@link TerminalView} and only becomes this overlay's once the finger has rested
+     * for {@link HoldTiming#holdTimeoutMs()}; see {@link CornerHold}. The Widgets and Display
+     * frames still open on a tap, and their squares stay the smaller {@link CornerZones#SIZE_DP}.
+     *
      * <p>The corner tab itself is not drawn here. It is a {@link PaneControlsView}, the same view
-     * the Widgets and Display pages carry, told where the tapped pane is by a frame source; this
+     * the Widgets and Display pages carry, told where the held pane is by a frame source; this
      * overlay keeps the touches, as those pages keep theirs, and asks the view which button a
      * finger landed on. That is what lets the tab hold a list of buttons of any length instead of
      * the four slots it used to have, and scale them down on a narrow pane the way the pages' do.
@@ -3189,7 +3202,6 @@ public class TerminalPaneController {
         @Nullable private Leaf mCornerTapLeaf;
         /** Which of that leaf's corners the finger is on, or {@link CornerZones#NONE}. */
         private int mPressedCorner = CornerZones.NONE;
-        private final CornerBracket mBracket = new CornerBracket();
         @Nullable private Leaf mControlLeaf;
         @Nullable private Leaf mMovingLeaf;
         @Nullable private Leaf mMoveTarget;
@@ -3205,6 +3217,20 @@ public class TerminalPaneController {
         private boolean mCornerPressed;
         private boolean mTouchMoved;
         private int mPressedControlAction = ACTION_NONE;
+        /** Who owns a finger down in a corner square: the program under it, or this corner. */
+        private final CornerHold mHold = new CornerHold();
+        /**
+         * The pane's terminal while the corner has not claimed the gesture. A sibling view that
+         * returns false on the down never sees the rest of the stream, so the square cannot let a
+         * touch fall through — it keeps it and hands the terminal a copy of every event instead.
+         */
+        @Nullable private TerminalView mForwardTarget;
+        /**
+         * Its own handler rather than {@link View#postDelayed}: a detached view queues those until
+         * it is attached, and the hold has to fire whether or not this overlay is on screen yet.
+         */
+        private final Handler mHoldHandler = new Handler(Looper.getMainLooper());
+        private final Runnable mHoldElapsed = this::onHoldElapsed;
 
         PaneInteractionOverlay() {
             super(mHostView.getContext());
@@ -3350,28 +3376,20 @@ public class TerminalPaneController {
                     mPressedCorner = findTouchedCorner(x, y);
                     if (mPressedCorner == CornerZones.NONE) return false;
                     // Which seams that corner sits on: one at the end of a seam, both where two
-                    // cross, none at a corner the host's own edge makes.
+                    // cross, none at a corner the host's own edge makes. Read now, because the
+                    // seam the hold will resize is the one under the finger when it landed.
                     findCornerDividerTargets();
-                    if (mXSplit != null || mYSplit != null) {
-                        mDraggingDivider = true;
-                        beginHostSurfaceResize();
-                        if (mXSplit != null) {
-                            mXWeightA = mXSplit.weightA;
-                            mXWeightB = mXSplit.weightB;
-                        }
-                        if (mYSplit != null) {
-                            mYWeightA = mYSplit.weightA;
-                            mYWeightB = mYSplit.weightB;
-                        }
-                        focusLeaf(mCornerTapLeaf);
-                        getParent().requestDisallowInterceptTouchEvent(true);
-                        invalidate();
-                        return true;
-                    }
-                    mCornerPressed = true;
-                    focusLeaf(mCornerTapLeaf);
+                    // The corner claims nothing yet. Until the hold fires the program under the
+                    // square gets every event, so a tap on tmux's clock or vim's ruler reaches
+                    // the thing that drew it.
+                    mHold.down(x, y, ViewConfiguration.get(getContext()).getScaledTouchSlop(),
+                        dp(3), mXSplit != null || mYSplit != null);
+                    // Armed before the terminal sees anything: the pane focuses itself off the
+                    // forwarded down, and whatever that stirs up must not find half a gesture.
+                    aimForwardingAtTerminal();
+                    mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
                     getParent().requestDisallowInterceptTouchEvent(true);
-                    invalidate();
+                    forwardToTerminal(event);
                     return true;
 
                 case MotionEvent.ACTION_MOVE:
@@ -3396,10 +3414,24 @@ public class TerminalPaneController {
                         invalidate();
                         return true;
                     }
-                    if (mCornerTapLeaf != null) {
+                    if (mHold.isTracking()) {
+                        CornerHold.Move moved = mHold.move(x, y);
+                        if (moved == CornerHold.Move.ABANDONED) releaseHoldToTerminal();
+                        if (mHold.forwardsToTerminal()) {
+                            forwardToTerminal(event);
+                            return true;
+                        }
                         mHandleX = x;
                         mHandleY = y;
-                        mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(3);
+                        mTouchMoved |= moved == CornerHold.Move.COMMITTED
+                            || moved == CornerHold.Move.DRAGGING;
+                        // The tick belongs to the drag starting, not to every pixel of it.
+                        if (moved == CornerHold.Move.COMMITTED && mDraggingDivider)
+                            performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                        if (mDraggingDivider) {
+                            applySplitDrag(mXSplit, x - mDownX, mXWeightA, mXWeightB);
+                            applySplitDrag(mYSplit, y - mDownY, mYWeightA, mYWeightB);
+                        }
                         invalidate();
                         return true;
                     }
@@ -3432,15 +3464,26 @@ public class TerminalPaneController {
                         int action = mPressedControlAction;
                         boolean activate = !mTouchMoved && controlActionAt(x, y) == action;
                         resetTouchState();
-                        if (activate) mControls.activate(action);
+                        if (activate) {
+                            // The same tick the Widgets and Display tabs give their buttons.
+                            performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                            mControls.activate(action);
+                        }
                         return true;
                     }
-                    if (mDraggingDivider || mCornerTapLeaf != null) {
+                    if (mHold.isTracking()) {
+                        CornerHold.Lift lift = mHold.lift();
+                        if (lift == CornerHold.Lift.NOTHING) {
+                            // The program kept this one. Let it finish its own gesture.
+                            forwardToTerminal(event);
+                            resetTouchState();
+                            return true;
+                        }
                         Leaf leaf = mCornerTapLeaf;
                         // Read before the reset clears it: the tab comes out of the corner the
                         // finger actually asked at.
                         int corner = mPressedCorner;
-                        boolean resized = mDraggingDivider && mTouchMoved;
+                        boolean resized = lift == CornerHold.Lift.COMMIT_RESIZE;
                         if (resized) {
                             snapSplitToCellGrid(mXSplit);
                             snapSplitToCellGrid(mYSplit);
@@ -3457,7 +3500,19 @@ public class TerminalPaneController {
                     }
                     return false;
 
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    // Two fingers on a terminal are a scroll or a pinch, never a hold: the corner
+                    // lets go and the program gets both of them.
+                    if (mHold.secondFinger()) releaseHoldToTerminal();
+                    if (mHold.forwardsToTerminal()) forwardToTerminal(event);
+                    return mHold.isTracking();
+
+                case MotionEvent.ACTION_POINTER_UP:
+                    if (mHold.forwardsToTerminal()) forwardToTerminal(event);
+                    return mHold.isTracking();
+
                 case MotionEvent.ACTION_CANCEL:
+                    if (mHold.forwardsToTerminal()) forwardToTerminal(event);
                     if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                     resetTouchState();
                     invalidate();
@@ -3516,8 +3571,99 @@ public class TerminalPaneController {
         }
 
         /**
+         * The hold time passed with the finger still where it landed. The corner takes the gesture
+         * from here: the program is told its touch is over, the hand is told the hold was heard,
+         * and the rest of the stream stays in this overlay.
+         */
+        private void onHoldElapsed() {
+            if (!mHold.holdElapsed()) return;
+            cancelTerminalGesture();
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            focusLeaf(mCornerTapLeaf);
+            if (mXSplit != null || mYSplit != null) {
+                mDraggingDivider = true;
+                beginHostSurfaceResize();
+                if (mXSplit != null) {
+                    mXWeightA = mXSplit.weightA;
+                    mXWeightB = mXSplit.weightB;
+                }
+                if (mYSplit != null) {
+                    mYWeightA = mYSplit.weightA;
+                    mYWeightB = mYSplit.weightB;
+                }
+            } else {
+                mCornerPressed = true;
+            }
+            invalidate();
+        }
+
+        /** The terminal behind the corner square the finger landed in, if it has one. */
+        @Nullable
+        private TerminalView cornerTerminalView() {
+            return mCornerTapLeaf == null ? null : mPaneViews.get(mCornerTapLeaf.session);
+        }
+
+        /**
+         * Point the forwarding at the touched pane. The view is told the finger is exempt as it is
+         * aimed, so it never starts a hold of its own for a touch this corner may take at
+         * {@link HoldTiming#holdTimeoutMs()}.
+         */
+        private void aimForwardingAtTerminal() {
+            mForwardTarget = cornerTerminalView();
+            if (mForwardTarget != null) mForwardTarget.setHoldExempt(true);
+        }
+
+        /**
+         * A copy of one event in the terminal's own coordinates. Both views are read off the
+         * screen rather than off the layout, so a pane the motion overlay has moved out from under
+         * its frame still gets the touch where the finger actually is.
+         */
+        private void forwardToTerminal(@NonNull MotionEvent event) {
+            TerminalView view = mForwardTarget;
+            if (view == null) return;
+            int[] overlay = location(this);
+            int[] target = location(view);
+            MotionEvent copy = MotionEvent.obtainNoHistory(event);
+            copy.offsetLocation(overlay[0] - target[0], overlay[1] - target[1]);
+            view.dispatchTouchEvent(copy);
+            copy.recycle();
+        }
+
+        /**
+         * Tell the terminal the touch it has been tracking is over. A cancel is the one ending
+         * that leaves nothing behind — no click, no selection, no reported button — which is what
+         * a finger that turned out to be a corner hold owes the program.
+         */
+        private void cancelTerminalGesture() {
+            TerminalView view = mForwardTarget;
+            if (view == null) return;
+            long now = SystemClock.uptimeMillis();
+            MotionEvent cancel =
+                MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0);
+            view.dispatchTouchEvent(cancel);
+            cancel.recycle();
+            endForwardingToTerminal();
+        }
+
+        /**
+         * The finger travelled, or a second one landed, before the hold could fire. The gesture is
+         * the program's: keep handing it every event — it has had them all along — and let its own
+         * holds run again.
+         */
+        private void releaseHoldToTerminal() {
+            mHoldHandler.removeCallbacks(mHoldElapsed);
+            if (mForwardTarget != null) mForwardTarget.setHoldExempt(false);
+        }
+
+        private void endForwardingToTerminal() {
+            if (mForwardTarget == null) return;
+            mForwardTarget.setHoldExempt(false);
+            mForwardTarget = null;
+        }
+
+        /**
          * The seams the pane corner under the finger sits on. The corner's own point on the pane
-         * is what is matched against each seam, not the finger's — so the whole 32dp square drags
+         * is what is matched against each seam, not the finger's — so the whole square drags
          * whatever that corner is the end of, rather than only the part of it near the seam.
          */
         private void findCornerDividerTargets() {
@@ -3614,7 +3760,7 @@ public class TerminalPaneController {
         }
 
         /**
-         * Takes hold of the pane whose corner was touched, and returns which corner it was. A
+         * Takes note of the pane whose corner was touched, and returns which corner it was. A
          * point inside a pane wins over an equally-near pane across the divider; for the
          * divider's own empty pixels, the focused pane wins. This makes the first pane of a split
          * as reachable as every pane created after it.
@@ -3632,8 +3778,10 @@ public class TerminalPaneController {
                 leaves.add(leaf);
                 panes.add(rect);
             }
+            // The terminal's squares are the big ones: they are held rather than tapped, and a
+            // touch that does not rest costs the program nothing.
             CornerZones.Hit hit = CornerZones.pick(panes, activeIndex, x, y,
-                CornerZones.sizePx(getResources().getDisplayMetrics().density), dp(6));
+                CornerZones.paneSizePx(getResources().getDisplayMetrics().density), dp(6));
             if (hit == null) return CornerZones.NONE;
             mCornerTapLeaf = leaves.get(hit.index);
             return hit.corner;
@@ -3814,17 +3962,8 @@ public class TerminalPaneController {
                     canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 }
             }
-            if (mCornerPressed && mCornerTapLeaf != null && !mDraggingDivider) {
-                RectF corner = paneRect(mCornerTapLeaf, mDrawPaneRect);
-                if (corner != null) {
-                    // Held but not yet moved: the corner itself is marked, which says both which
-                    // pane answered and which of its corners the finger has, where a glow around
-                    // the whole border said only the first.
-                    mBracket.draw(canvas, mPressedCorner, corner,
-                        getResources().getDisplayMetrics().density,
-                        CornerBracket.color(getContext()));
-                }
-            }
+            // A held corner draws nothing of its own: the buzz says the hold took, and the tab that
+            // follows says which corner. A bracket here outlived the touch and read as a smudge.
             if (mMovingLeaf != null && mMoveTarget != null && mMoveTarget != mMovingLeaf) {
                 RectF target = paneRect(mMoveTarget, mDrawPaneRect);
                 if (target != null) {
@@ -3929,6 +4068,9 @@ public class TerminalPaneController {
         }
 
         private void resetTouchState() {
+            mHoldHandler.removeCallbacks(mHoldElapsed);
+            mHold.reset();
+            endForwardingToTerminal();
             mXSplit = null;
             mYSplit = null;
             mCornerTapLeaf = null;

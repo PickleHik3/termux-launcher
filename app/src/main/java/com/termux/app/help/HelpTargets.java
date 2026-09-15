@@ -98,6 +98,9 @@ public final class HelpTargets {
             add(s, "dock", dock, copy(R.string.help_dock_title,
                 dock != null && dock.getId() == R.id.dock_rail_scroll ? R.string.help_rail_body : R.string.help_dock_body));
             add(s, "az", firstOfType(root, AzScrubRowView.class), copy(R.string.help_az_title, R.string.help_az_body));
+            // The pane itself is the control the touch grammar is about, so it is its own box.
+            add(s, "terminal", finder.activePane(), copy(R.string.help_topic_terminal_title,
+                R.string.help_topic_terminal_purpose, R.string.help_topic_terminal_action));
             paneCorner(s);
             // The row as one box, for the topic that is about the row. Each key keeps its own
             // label drawn on its own cap: the box says which row, the labels say which key.
@@ -138,15 +141,17 @@ public final class HelpTargets {
         return s;
     }
     /**
-     * One corner zone of the pane the user is on: the square the pane itself answers a corner
-     * touch in, so the box is the hit area rather than a guess at it.
+     * One corner zone of the pane the user is on: the square a corner hold has to land in, so the
+     * box is where the gesture is made rather than a guess at it. It is not a hit area - a tap
+     * there goes through to the program, and only the hold belongs to the corner - and it is the
+     * pane's own larger square, not the 32 dp one the other places use.
      */
     private void paneCorner(Snapshot s) {
         Rect pane = rect(finder.activePane());
         if (pane == null) return;
         float density = context.getResources().getDisplayMetrics().density;
         int size = Math.round(com.termux.app.chrome.CornerZones.clampSize(
-            com.termux.app.chrome.CornerZones.sizePx(density), pane.width(), pane.height()));
+            com.termux.app.chrome.CornerZones.paneSizePx(density), pane.width(), pane.height()));
         if (size <= 0) return;
         add(s, "corners", new Rect(pane.left, pane.top, pane.left + size, pane.top + size), 0,
             copy(R.string.help_topic_corners_title, R.string.help_topic_corners_purpose,

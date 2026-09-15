@@ -39,7 +39,7 @@ Version 2 (below, "Fifth pass") supersedes this thirteen-card run; kept here as 
 | 6 | Press Ctrl, Alt, Shift, then C to open a session. | | session count +1 |
 | 7 | Swipe the space bar toward the bottom-left to return to your first session. | | the current session is the chapter's again |
 | 8 | Swipe the space bar toward the top-left to return to your first window. | | the active window is the chapter's again |
-| 9 | Tap a pane corner. | Tap anywhere else to close it. | pane corner menu opened; pane controls dismissed |
+| 9 | Hold a pane corner. | Tap anywhere else to close it. | pane corner menu opened; pane controls dismissed |
 | 10 | Pull down on the dock. | Swipe down to close the drawer. | drawer opened; drawer closed |
 | 11 | Slide along the A–Z row, drag up to an app and let go. | | app launched from scrub |
 | 12 | Swipe up on the space bar to open the command palette. | Tap outside the palette to close it. | palette opened; palette closed |
@@ -234,7 +234,7 @@ four short lessons, a home-screen question and a closing card — `TourRun.java`
 
 | Step (kind) | Stage | Copy | Target | Gesture | Cleared by |
 |---|---|---|---|---|---|
-| 1 `find_help` (lesson) | 0 | Tap a pane corner. | Pane corner | tap | pane corner menu opened |
+| 1 `find_help` (lesson) | 0 | Hold a pane corner. | Pane corner | hold | pane corner menu opened |
 | | 1 | Tap ? to see what the controls do. | Help button | tap | help opened |
 | | 2 | Close help to continue. | — | tap | help closed |
 | 2 `find_apps` (lesson) | 0 | Pull down on the dock. | Dock | drag down | drawer opened |
