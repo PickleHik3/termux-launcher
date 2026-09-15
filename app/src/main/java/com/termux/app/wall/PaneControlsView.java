@@ -385,6 +385,19 @@ public final class PaneControlsView extends View {
         return ACTION_NONE;
     }
 
+    /**
+     * The bounds of one button while the tab is up, in this view's coordinates; false when the tab
+     * is down, half shown, or carries no such action.
+     */
+    public boolean actionBounds(int id, @NonNull RectF out) {
+        if (!isControlsShown() || mProgress < .35f) return false;
+        int index = indexOf(id);
+        if (index < 0) return false;
+        computeGeometry();
+        out.set(mButtons[index]);
+        return !out.isEmpty();
+    }
+
     /** Where the tab sits on screen, for a popup that has to hang off it. */
     public void tabBounds(@NonNull RectF out) {
         computeGeometry();

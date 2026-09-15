@@ -3738,15 +3738,17 @@ public class TerminalPaneController {
 
         /** The trailing button of the tab that is up — always the ? — in screen coordinates. */
         boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
-            if (!mControlsShown || mControlLeaf == null) return false;
-            computeControlGeometry();
-            RectF button = mControlButtons[controlCount() - 1];
-            if (button.isEmpty()) return false;
-            int[] host = location(mHostView);
-            out.set(Math.round(button.left) + host[0], Math.round(button.top) + host[1],
-                Math.round(button.right) + host[0], Math.round(button.bottom) + host[1]);
+            if (mControlLeaf == null || !mControls.actionBounds(ACTION_HELP, mHelpButtonBounds)) {
+                return false;
+            }
+            int[] host = location(mControls);
+            out.set(Math.round(mHelpButtonBounds.left) + host[0],
+                Math.round(mHelpButtonBounds.top) + host[1],
+                Math.round(mHelpButtonBounds.right) + host[0],
+                Math.round(mHelpButtonBounds.bottom) + host[1]);
             return !out.isEmpty();
         }
+        private final RectF mHelpButtonBounds = new RectF();
 
         private boolean isLonePane() {
             return TerminalPaneController.isLonePane(
