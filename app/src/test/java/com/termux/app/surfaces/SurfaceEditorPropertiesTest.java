@@ -100,7 +100,6 @@ public class SurfaceEditorPropertiesTest {
         // These live nowhere else in the app: no settings screen carries them. Losing one from the
         // table deletes it from the product, so the list is spelled out rather than derived.
         List<String> mustExist = Arrays.asList(
-            SurfaceEditorProperties.ID_SIZE,
             SurfaceEditorProperties.ID_APPS,
             SurfaceEditorProperties.ID_BORDER,
             SurfaceEditorProperties.ID_KEYBOARD_SPACING,

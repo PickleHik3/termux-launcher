@@ -105,17 +105,15 @@ public final class SurfaceEditorScene {
     /**
      * Whether the card raised on a surface offers one of its rows.
      *
-     * <p>Only the dock's two rows about its pinned apps are dropped. Both describe the apps row —
-     * the size is that row's height, the count is how many apps a page of it holds — and neither
-     * has anything to move once the apps stand in a rail: the rail's width is fixed and it scrolls
-     * rather than pages. Everything else on the card is the surface's material or its shape, which
-     * a dock carrying only the extra keys wears exactly the same.
+     * <p>Only the dock's row about its pinned apps is dropped. It is how many apps a page of that
+     * row holds, and it has nothing to move once the apps stand in a rail: the rail scrolls rather
+     * than pages. Everything else on the card is the surface's material or its shape, which a dock
+     * carrying only the extra keys wears exactly the same.
      */
     public boolean offersRow(@Nullable SurfaceSlot slot, @NonNull String rowId) {
         if (slot != SurfaceSlot.DOCK)
             return true;
-        if (SurfaceEditorProperties.ID_SIZE.equals(rowId)
-            || SurfaceEditorProperties.ID_APPS.equals(rowId))
+        if (SurfaceEditorProperties.ID_APPS.equals(rowId))
             return appsRowShown;
         return true;
     }

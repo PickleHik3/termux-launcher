@@ -72,14 +72,6 @@ public class SurfaceEditorPlaceScopeTest {
                         control.scopeKeys.isEmpty());
                     continue;
                 }
-                if (SurfaceEditorProperties.ID_SIZE.equals(control.id)) {
-                    // The dock's height is a layout value: per place and per orientation in the
-                    // layout store, which the preferences resolve through, so it has no look
-                    // scope of its own.
-                    assertTrue(slot + "/" + control.id + " is a size, not a look",
-                        control.scopeKeys.isEmpty());
-                    continue;
-                }
                 assertFalse(slot + "/" + control.id + " should be scopable",
                     control.scopeKeys.isEmpty());
                 for (String key : control.scopeKeys)

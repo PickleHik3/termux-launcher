@@ -41,7 +41,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
 import com.termux.R;
-import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
@@ -1401,8 +1400,6 @@ public final class SurfaceEditorController {
                 return getString(R.string.termux_dock_tuning_value_dp, Math.round(value / 10f));
             case PERCENT:
                 return getString(R.string.termux_dock_tuning_value_percent, value);
-            case DOCK_SIZE:
-                return dockSizePresetLabel(value);
             case COUNT:
                 return Integer.toString(Math.max(1, value));
             default:
@@ -3529,20 +3526,6 @@ public final class SurfaceEditorController {
     private void applySurfaceEditorStructuralPreview() {
         requestSurfaceEditorPreview(SurfaceEditorProperties.PREVIEW_ALL
             | SurfaceEditorProperties.PREVIEW_GEOMETRY_COMMIT);
-    }
-
-    @NonNull
-    private String dockSizePresetLabel(int index) {
-        switch (clamp(index, 0, DockLayoutPolicy.sizePresetCount() - 1)) {
-            case 0:
-                return getString(R.string.termux_dock_preset_smallest);
-            case 1:
-                return getString(R.string.termux_dock_preset_small);
-            case 2:
-                return getString(R.string.termux_dock_preset_default);
-            default:
-                return getString(R.string.termux_dock_preset_large);
-        }
     }
 
     public static int keyboardEditorProgress(float value, float minValue, float maxValue) {

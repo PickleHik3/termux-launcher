@@ -5,7 +5,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
-import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -82,8 +81,6 @@ public final class SurfaceEditorProperties {
         /** Stored in tenths of a dp, so the track is fine enough to find a shape by eye. */
         DP_TENTHS,
         PERCENT,
-        /** The dock's four height presets, printed by name. */
-        DOCK_SIZE,
         /** A bare count, like apps per page. */
         COUNT,
         /** Nothing to print. */
@@ -151,7 +148,6 @@ public final class SurfaceEditorProperties {
     public static final String ID_CORNERS = "corners";
     public static final String ID_MARGIN = "margin";
 
-    public static final String ID_SIZE = "size";
     public static final String ID_APPS = "apps";
     public static final String ID_KEYBOARD_KEY_RADIUS = "keyboard_key_radius";
     public static final String ID_KEYBOARD_KEY_OPACITY = "keyboard_key_opacity";
@@ -298,16 +294,7 @@ public final class SurfaceEditorProperties {
             own(ID_APPS, R.string.termux_dock_tuning_icons, Kind.SLIDER, Unit.COUNT, 20,
                 TermuxAppSharedPreferences::getAppLauncherButtonCount,
                 (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
-                PREVIEW_GEOMETRY, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT),
-            // No scope key: the dock's height is a layout value, kept per place and per
-            // orientation in the layout store, which the preferences already resolve through.
-            own(ID_SIZE, R.string.termux_dock_tuning_size, Kind.SLIDER, Unit.DOCK_SIZE,
-                DockLayoutPolicy.sizePresetCount() - 1,
-                prefs -> DockLayoutPolicy.nearestSizePresetIndex(
-                    prefs.getAppLauncherBarHeightScale()),
-                (prefs, value) -> prefs.setAppLauncherBarHeightScale(
-                    DockLayoutPolicy.sizePreset(value)),
-                PREVIEW_GEOMETRY)));
+                PREVIEW_GEOMETRY, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT)));
 
         // The keyboard renders the dock's material — one blurred backdrop, one grain, the dock
         // capsule's shape — so it owns an opacity and a margin and nothing else of the glass. Its

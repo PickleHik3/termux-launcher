@@ -1274,7 +1274,6 @@
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
                 <string name="termux_dock_tuning_radius">Corners</string>
-                <string name="termux_dock_tuning_size">Size</string>
                 <string name="termux_dock_tuning_icons">Apps</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
                 <string name="termux_dock_tuning_terminal_border">Frame</string>
@@ -1323,10 +1322,6 @@
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
                 <string name="termux_app_launcher_dock_style_default">Docked</string>
                 <string name="termux_app_launcher_dock_style_rounded">Floating</string>
-                <string name="termux_dock_preset_smallest">Smallest</string>
-                <string name="termux_dock_preset_small">Small</string>
-                <string name="termux_dock_preset_default">Default</string>
-                <string name="termux_dock_preset_large">Large</string>
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_title">Reset ranking?</string>
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_message">This will clear app usage ranking for A-Z launch suggestions.</string>
                 <string name="termux_app_launcher_reset_usage_ranking_done">Adaptive A-Z ranking reset</string>

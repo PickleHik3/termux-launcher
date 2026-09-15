@@ -169,7 +169,6 @@ public class SurfaceEditorSceneTest {
             layout(Edge.LEFT, RowPlacement.LEFT, RowPlacement.BOTTOM), false, true);
 
         assertTrue(scene.offersSurface(SurfaceSlot.DOCK));
-        assertFalse(scene.offersRow(SurfaceSlot.DOCK, SurfaceEditorProperties.ID_SIZE));
         assertFalse(scene.offersRow(SurfaceSlot.DOCK, SurfaceEditorProperties.ID_APPS));
         // Its material and its shape are still the dock's own.
         for (String row : new String[] {SurfaceEditorProperties.ID_OPACITY,
