@@ -71,6 +71,32 @@ public class TerminalFontLoaderTest {
         assertSame(first.regular, second.regular);
     }
 
+    /**
+     * kitty resolves a family name through fontconfig, which finds files people dropped into
+     * ~/.fonts; Android would answer the same name with its default face and draw tofu.
+     */
+    @Test
+    public void aFamilyNameResolvesToAnInstalledFileBeforeAndroidIsAsked() throws Exception {
+        File directory = temporary.newFolder("fonts");
+        File font = new File(directory, "HerdrAgentIconsMax-Regular.ttf");
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(font)) {
+            out.write(new byte[64]);
+        }
+        TerminalFontConfig.Result byFamily = TerminalFontConfig.parse(
+            "symbol_map U+E1A0-U+E1B6 Herdr Agent Icons Max\n", true);
+        TerminalFontConfig.Result byPath = TerminalFontConfig.parse(
+            "symbol_map U+E1A0-U+E1B6 path=" + font.getAbsolutePath() + "\n", true);
+        assertTrue(byFamily.errors.toString(), byFamily.errors.isEmpty());
+
+        TerminalFontLoader.Faces faces = TerminalFontLoader.load(byFamily,
+            FontFamilyIndex.of(java.util.Collections.singletonList(directory)));
+
+        assertTrue(faces.errors.toString(), faces.errors.isEmpty());
+        assertEquals(1, faces.symbolMaps.length);
+        assertSame(TerminalFontLoader.load(byPath).symbolMaps[0].typeface,
+            faces.symbolMaps[0].typeface);
+    }
+
     @Test
     public void resolvesTheFallbackChainInOrderAndDropsBrokenEntries() {
         TerminalFontConfig.Result config = TerminalFontConfig.parse(
