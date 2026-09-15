@@ -355,3 +355,17 @@ Editions are a section, not a file. The notes for a version are one document:
   documents are gitignored on purpose.
 - The merged commit is the implementation record. Do not leave a second checklist behind in the
   repo after the work lands.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `PickleHik3/termux-launcher`; every `gh` call passes `-R`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels, unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
