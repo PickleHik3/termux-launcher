@@ -774,6 +774,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT, value, false);
     }
 
+    /** Whether the Display place types with the phone's own keyboard instead of the launcher's. */
+    public boolean isX11AndroidKeyboardEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_ANDROID_KEYBOARD, TERMUX_APP.DEFAULT_X11_ANDROID_KEYBOARD);
+    }
+
+    public void setX11AndroidKeyboardEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_ANDROID_KEYBOARD, value, false);
+    }
+
     public boolean isX11DrawerAppsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_X11_DRAWER_APPS, TERMUX_APP.DEFAULT_X11_DRAWER_APPS);

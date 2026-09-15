@@ -335,14 +335,14 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public boolean showInAppKeyboard(boolean fromFocus) {
         record("showInAppKeyboard:" + (fromFocus ? "focus" : "manual"));
-        if (!inAppKeyboardEnabled) return false;
+        if (!inAppKeyboardEnabled && !displayTakesSystemKeyboard) return false;
         inAppKeyboardShown = true;
         return true;
     }
 
     @Override public boolean hideInAppKeyboard(boolean fromFocus) {
         record("hideInAppKeyboard:" + (fromFocus ? "focus" : "manual"));
-        if (!inAppKeyboardEnabled) return false;
+        if (!inAppKeyboardEnabled && !displayTakesSystemKeyboard) return false;
         inAppKeyboardShown = false;
         return true;
     }
@@ -850,6 +850,13 @@ class FakeTerminalHost implements TerminalHost {
     /** No Display place here, so the keyboard key is never the touchpad frame's. */
     @Override public boolean toggleDisplayFrameKeyboard() {
         return false;
+    }
+
+    /** Set when the Display place is standing there typed into with the phone's own keyboard. */
+    boolean displayTakesSystemKeyboard;
+
+    @Override public boolean displayTakesSystemKeyboard() {
+        return displayTakesSystemKeyboard;
     }
 
     @Override public boolean toggleKeyInspector() {
