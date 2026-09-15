@@ -29,21 +29,16 @@ shell prompts:
 - **Drag scrolls, always.** Inside mouse-aware apps the drag becomes scroll-wheel events, so lists
   in `htop`, lazygit, or vim scroll naturally.
 - **Tap sends a mouse click** when the running app tracks the mouse.
-- **Hold a still finger to see where you are pointing.** In a mouse-aware app the *loupe* — a
-  magnified strip of the row under your fingertip, with the cell you are on outlined — opens
-  almost immediately, so your thumb is never covering the answer. A moment later a small haptic
-  says the hold is recognised, and the loupe stays for as long as you keep holding.
-- **After the hold, your finger decides what happens.** Lift and the cell in the loupe is clicked.
-  Drag and, if the app asked for motion, the mouse button is held down and dragged with you — a
-  second haptic marks the moment — so you can select in vim, move tmux splits, or resize TUI panes
-  exactly like a desktop mouse. If it did not ask for motion, dragging just carries the aim along
-  and the lift clicks wherever you let go.
+- **Hold for a moment to use the mouse.** In a mouse-aware app, keep a finger still and a small
+  haptic hands it the mouse button. Lift and that cell is clicked. Drag and, if the app asked for
+  motion, the button is held down and dragged with you — a second haptic marks the moment — so you
+  can select in vim, move tmux splits, or resize TUI panes exactly like a desktop mouse. If it did
+  not ask for motion, dragging sends nothing and the lift still clicks.
 - **Keep holding to select text.** Stay still a moment longer and a different haptic says the hold
-  has gone further: the loupe closes and Copy · Paste · More opens on the cell it was showing, with
-  More leading to the rest of the actions. A second finger at any point is a two-finger scroll or
-  pinch, as usual.
-- **In a plain shell there is no loupe:** the same hold starts ordinary text selection with the
-  copy toolbar at the first haptic, and a drag before it scrolls.
+  has gone further: Copy · Paste · More opens where your finger landed, with More leading to the
+  rest of the actions. A second finger at any point is a two-finger scroll or pinch, as usual.
+- **In a plain shell there is no mouse to take:** the same hold starts ordinary text selection with
+  the copy toolbar at the first haptic, and a drag before it scrolls.
 - **Pinch to zoom** changes the focused pane's font size, with jitter filtering so two-finger
   scrolling does not zoom by accident.
 

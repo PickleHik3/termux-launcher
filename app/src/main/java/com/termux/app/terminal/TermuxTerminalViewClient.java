@@ -783,18 +783,6 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     @Override
-    public CharSequence holdSelectHint() {
-        if (!mHost.preferences().shouldShowHoldSelectHint()) return null;
-        return mContext.getString(R.string.hold_select_hint);
-    }
-
-    @Override
-    public void onHoldSelectUsed() {
-        int uses = mHost.preferences().getHoldSelectHintUses();
-        if (uses < Integer.MAX_VALUE) mHost.preferences().setHoldSelectHintUses(uses + 1);
-    }
-
-    @Override
     public boolean onShowContextMenu(TerminalView view) {
         return mHost.showTerminalActionSheet(mLastLongPressOnScreen);
     }

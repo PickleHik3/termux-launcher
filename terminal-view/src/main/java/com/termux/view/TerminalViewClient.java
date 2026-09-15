@@ -42,20 +42,6 @@ public interface TerminalViewClient {
     boolean onLongPress(MotionEvent event);
 
     /**
-     * The one line shown under the loupe while a hold is recognised, or null when the user has no
-     * further use for it. The sentence comes from the client because the launcher owns both the
-     * wording and the count of times the hint has been taken up.
-     */
-    default CharSequence holdSelectHint() {
-        return null;
-    }
-
-    /** A second finger has just opened text selection from a hold: the hint did its job. */
-    default void onHoldSelectUsed() {
-        // No-op by default: a host that shows no hint has nothing to count.
-    }
-
-    /**
      * Raise a transient notice to the user. The view has no opinion on how it is drawn; the client
      * owns that surface, so accessibility actions taken here surface the same way as every other
      * notice in the app rather than as a stock toast.

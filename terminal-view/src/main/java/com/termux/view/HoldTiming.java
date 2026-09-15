@@ -5,7 +5,7 @@ import android.view.ViewConfiguration;
 /**
  * How long a still finger must rest before it is a hold. One number for every hold the launcher
  * recognises on the terminal place: the pane corner that opens its tab and the terminal's own hold
- * that keeps the loupe and decides between click, drag and selection by what the finger does next.
+ * that hands the finger the mouse and then decides between click, drag and selection by what it does next.
  *
  * <p>It rides on Android's long-press timeout so a user who slowed that down for a tremor gets a
  * slower launcher too, but stays under it so the corner overlay always wins the race against the

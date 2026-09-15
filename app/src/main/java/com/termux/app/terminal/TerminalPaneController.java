@@ -3605,7 +3605,7 @@ public class TerminalPaneController {
 
         /**
          * Point the forwarding at the touched pane. The view is told the finger is exempt as it is
-         * aimed, so it starts neither its aim nor its own hold for a touch this corner may take at
+         * aimed, so it never starts a hold of its own for a touch this corner may take at
          * {@link HoldTiming#holdTimeoutMs()}.
          */
         private void aimForwardingAtTerminal() {

@@ -2718,20 +2718,4 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED, migrated, true);
     }
-
-    /** How many times a second finger has opened text selection from a hold on the terminal. */
-    public int getHoldSelectHintUses() {
-        return SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_HOLD_SELECT_HINT_USES, TERMUX_APP.DEFAULT_HOLD_SELECT_HINT_USES);
-    }
-
-    public void setHoldSelectHintUses(int uses) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_HOLD_SELECT_HINT_USES, uses, true);
-    }
-
-    /** Whether the hint under the loupe still has something to teach this user. */
-    public boolean shouldShowHoldSelectHint() {
-        return getHoldSelectHintUses() < TERMUX_APP.HOLD_SELECT_HINT_USES_BEFORE_SILENCE;
-    }
 }

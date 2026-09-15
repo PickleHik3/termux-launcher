@@ -11,7 +11,7 @@ package com.termux.app.chrome;
  * event either way — it consumed the touch stream to be able to forward it — and simply claims
  * nothing.
  *
- * <p>Pure by design, like {@link com.termux.view.AimState} on the other side of the same square:
+ * <p>Pure by design, like {@link com.termux.view.HoldTiming} on the other side of the same square:
  * the overlay feeds it a touch stream and reads back who owns the gesture and what the lift meant.
  */
 public final class CornerHold {

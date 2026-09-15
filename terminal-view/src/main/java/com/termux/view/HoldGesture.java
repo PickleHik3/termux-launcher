@@ -5,12 +5,11 @@ package com.termux.view;
  * that is still at {@link HoldTiming#holdTimeoutMs()} has held, and from there the finger itself
  * chooses between clicking, dragging and selecting text — nothing else is decided by time again.
  *
- * <p>On a terminal that is tracking the mouse the hold keeps the loupe ({@link AimState}) open and
- * the lift clicks the cell it is showing; a drag is a button-held mouse drag when the program asked
- * for motion and otherwise just carries the aim along; keeping still for longer again takes the
- * hold to its second stage and selects text. A second finger hands both fingers back to the wheel
- * or the pinch, before or after the hold. On a plain shell there is nothing to aim at, so the hold
- * is text selection at the first stage, as Termux has always been.
+ * <p>On a terminal that is tracking the mouse the hold hands the finger the mouse: the lift clicks
+ * the cell under it, and a drag is a button-held mouse drag when the program asked for motion.
+ * Keeping still for longer again takes the hold to its second stage and selects text. A second
+ * finger hands both fingers back to the wheel or the pinch, before or after the hold. A plain shell
+ * has no mouse to offer, so its hold is text selection at the first stage, as Termux always has.
  *
  * <p>Pure by design — it is fed a touch stream and answers with what the view owes the user, so
  * every row of that grammar is a unit test rather than a thumb on a phone.
@@ -34,22 +33,20 @@ final class HoldGesture {
     enum Outcome {
         /** Nothing is owed. */
         NOTHING,
-        /** The hold is recognised on a mouse-tracking terminal: buzz, and the loupe stays. */
-        HOLD_AIMED,
+        /** The hold is recognised on a mouse-tracking terminal: buzz, and the finger is the mouse. */
+        HOLD_MOUSE,
         /**
          * The hold is text selection: on a plain shell that is the first stage, and on a
-         * mouse-tracking one it is a finger that kept holding past the second.
+         * mouse-tracking one it is a finger that kept holding into the second.
          */
         HOLD_SELECTED,
-        /** A drag the program does not want reported: the aim follows the finger. */
-        AIM_MOVED,
         /** The drag is committed: tick, and hold the button down from the cell held. */
         DRAG_STARTED,
         /** The drag moved on: report wherever it is now. */
         DRAG_MOVED,
         /** The drag is over: let the button up. */
         DRAG_ENDED,
-        /** The lift clicks the cell the hold was aiming at. */
+        /** The lift clicks the cell the finger ended on. */
         CLICK,
         /** The hold is given up; the fingers belong to the wheel, the pinch or the scroll again. */
         ABANDONED
@@ -85,20 +82,20 @@ final class HoldGesture {
      * The hold time elapsed. A finger that travelled has already given the hold up, so a still
      * pending one is a still one.
      *
-     * @param mouseTracking whether the program is reading the mouse, which is what there is to aim.
+     * @param mouseTracking whether the program is reading the mouse, which is what there is to hand over.
      * @param motionReported whether it also asked for motion while a button is held.
      */
     Outcome holdElapsed(boolean mouseTracking, boolean motionReported) {
         if (mPhase != Phase.PENDING)
             return Outcome.NOTHING;
         if (!mouseTracking) {
-            // Nothing to aim at: the hold is the selection, and the gesture belongs to it now.
+            // No mouse to hand over: the hold is the selection, and the gesture belongs to it now.
             mPhase = Phase.DONE;
             return Outcome.HOLD_SELECTED;
         }
         mMotionReported = motionReported;
         mPhase = Phase.HELD;
-        return Outcome.HOLD_AIMED;
+        return Outcome.HOLD_MOUSE;
     }
 
     /** The finger moved. Before the hold that is a scroll; after it, a drag of one kind or another. */
@@ -114,9 +111,11 @@ final class HoldGesture {
             case HELD:
                 if (!travelled)
                     return Outcome.NOTHING;
+                // The finger has said what it wanted, so the second stage is off. A program that
+                // asked for no motion is told nothing until the lift, which still clicks.
                 mTravelled = true;
                 if (!mMotionReported)
-                    return Outcome.AIM_MOVED;
+                    return Outcome.NOTHING;
                 mPhase = Phase.DRAGGING;
                 return Outcome.DRAG_STARTED;
             case DRAGGING:
@@ -131,7 +130,7 @@ final class HoldGesture {
      * gets the second stage: once it is dragging it has already said what it wanted.
      */
     Outcome selectElapsed() {
-        if (!showsHint())
+        if (!heldAndStill())
             return Outcome.NOTHING;
         // The selection owns the gesture from here, as it does on a plain shell.
         mPhase = Phase.DONE;
@@ -153,8 +152,10 @@ final class HoldGesture {
         }
     }
 
-    /** The last finger lifted, ending the gesture whatever it turned out to be. */
-    Outcome up() {
+    /** The last finger lifted at {@code x}, {@code y}, ending the gesture whatever it turned out to be. */
+    Outcome up(float x, float y) {
+        mX = x;
+        mY = y;
         Phase phase = mPhase;
         mPhase = Phase.DONE;
         switch (phase) {
@@ -191,11 +192,8 @@ final class HoldGesture {
         return mPhase == Phase.HELD || mPhase == Phase.DRAGGING;
     }
 
-    /**
-     * Whether the hint under the loupe still applies: the hold is recognised and the finger has not
-     * moved, so holding on for the second stage is still the thing to say.
-     */
-    boolean showsHint() {
+    /** Whether the hold is recognised and the finger has not moved since. */
+    boolean heldAndStill() {
         return mPhase == Phase.HELD && !mTravelled;
     }
 
@@ -204,7 +202,7 @@ final class HoldGesture {
      * held and stayed put. Anything else - a drag, a lift, a second finger - has answered already.
      */
     boolean reachesSelect() {
-        return mPhase == Phase.PENDING || showsHint();
+        return mPhase == Phase.PENDING || heldAndStill();
     }
 
     Phase phase() {

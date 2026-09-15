@@ -261,7 +261,7 @@ public class TerminalPaneCornerTabTapTest {
 
     /**
      * The exemption is the other half of the same bargain: while the corner may still take the
-     * finger, the terminal runs neither its aim nor its own hold for it, and the moment the finger
+     * finger, the terminal runs no hold of its own for it, and the moment the finger
      * is anyone's for good it runs both again.
      */
     @Test

@@ -11,13 +11,13 @@ import org.junit.Test;
 
 /**
  * Every row of the terminal's touch grammar, driven as the view drives it: a tap, a drag, the
- * loupe's window, the hold, and each of the four things a held finger may do next.
+ * the hold itself, and each of the things a held finger may do next.
  */
 public class HoldGestureTest {
 
     private static final float SLOP = 20f;
 
-    /** A finger lands where the loupe and the hold would both start. */
+    /** A finger lands, starting the hold's own clock. */
     private HoldGesture down() {
         HoldGesture hold = new HoldGesture();
         hold.down(100f, 200f, SLOP, true);
@@ -27,15 +27,20 @@ public class HoldGestureTest {
     /** A finger that held on a terminal reading the mouse, with or without motion reporting. */
     private HoldGesture held(boolean motionReported) {
         HoldGesture hold = down();
-        assertEquals(Outcome.HOLD_AIMED, hold.holdElapsed(true, motionReported));
+        assertEquals(Outcome.HOLD_MOUSE, hold.holdElapsed(true, motionReported));
         return hold;
+    }
+
+    /** The lift, when nothing in the row cares where it landed. */
+    private Outcome lift(HoldGesture hold) {
+        return hold.up(hold.x(), hold.y());
     }
 
     @Test
     public void aTapIsNeitherAHoldNorAnythingElse() {
         HoldGesture hold = down();
         assertEquals(Outcome.NOTHING, hold.move(103f, 204f));
-        assertEquals(Outcome.NOTHING, hold.up());
+        assertEquals(Outcome.NOTHING, hold.up(hold.x(), hold.y()));
         assertEquals(Phase.DONE, hold.phase());
         assertFalse(hold.isHeld());
     }
@@ -51,8 +56,8 @@ public class HoldGestureTest {
     }
 
     @Test
-    public void theLoupesOwnWindowLeavesTheHoldStillPending() {
-        // The loupe opens well before the hold and decides nothing: the finger is still pending.
+    public void aTremorBeforeTheHoldTimeLeavesItStillPending() {
+        // Under slop is not movement, so the hold is still on its way.
         HoldGesture hold = down();
         assertEquals(Outcome.NOTHING, hold.move(104f, 203f));
         assertTrue(hold.isPending());
@@ -60,11 +65,11 @@ public class HoldGestureTest {
     }
 
     @Test
-    public void aStillFingerHoldsAndKeepsTheLoupe() {
+    public void aStillFingerHoldsAndIsHandedTheMouse() {
         HoldGesture hold = held(false);
         assertEquals(Phase.HELD, hold.phase());
         assertTrue(hold.isHeld());
-        assertTrue(hold.showsHint());
+        assertTrue(hold.heldAndStill());
     }
 
     @Test
@@ -85,18 +90,21 @@ public class HoldGestureTest {
         assertEquals(Outcome.NOTHING, hold.holdElapsed(true, true));
         assertEquals(Outcome.NOTHING, hold.selectElapsed());
         assertEquals(Outcome.NOTHING, hold.pointerDown());
-        assertEquals(Outcome.NOTHING, hold.up());
+        assertEquals(Outcome.NOTHING, hold.up(hold.x(), hold.y()));
         assertFalse(hold.isHeld());
         assertFalse(hold.reachesSelect());
     }
 
     @Test
-    public void liftingAfterTheHoldClicksWhereItWasAiming() {
+    public void liftingAfterTheHoldClicksWhereTheFingerEnded() {
         HoldGesture hold = held(false);
-        assertEquals(Outcome.CLICK, hold.up());
+        assertEquals(Outcome.CLICK, hold.up(104f, 203f));
         assertEquals(Phase.DONE, hold.phase());
-        assertEquals(100f, hold.x(), 0.001f);
-        assertEquals(200f, hold.y(), 0.001f);
+        // The landing is kept too: together they are what TapPrecision reads.
+        assertEquals(100f, hold.holdX(), 0.001f);
+        assertEquals(200f, hold.holdY(), 0.001f);
+        assertEquals(104f, hold.x(), 0.001f);
+        assertEquals(203f, hold.y(), 0.001f);
     }
 
     @Test
@@ -110,19 +118,18 @@ public class HoldGestureTest {
         assertEquals(200f, hold.holdY(), 0.001f);
         assertEquals(Outcome.DRAG_MOVED, hold.move(140f, 460f));
         assertEquals(140f, hold.x(), 0.001f);
-        assertEquals(Outcome.DRAG_ENDED, hold.up());
-        assertFalse(hold.showsHint());
+        assertEquals(Outcome.DRAG_ENDED, hold.up(hold.x(), hold.y()));
+        assertFalse(hold.heldAndStill());
     }
 
     @Test
-    public void draggingAfterTheHoldOnlyMovesTheAimWhenMotionIsNotWanted() {
+    public void draggingAfterTheHoldTellsAProgramWantingNoMotionNothingUntilTheLift() {
         HoldGesture hold = held(false);
-        assertEquals(Outcome.AIM_MOVED, hold.move(100f, 400f));
+        assertEquals(Outcome.NOTHING, hold.move(100f, 400f));
         assertEquals(Phase.HELD, hold.phase());
-        assertFalse(hold.showsHint());
-        assertEquals(Outcome.AIM_MOVED, hold.move(180f, 500f));
-        // The lift still clicks, now at wherever the aim was carried to.
-        assertEquals(Outcome.CLICK, hold.up());
+        assertEquals(Outcome.NOTHING, hold.move(180f, 500f));
+        // The lift still clicks, at wherever the finger ended up.
+        assertEquals(Outcome.CLICK, hold.up(180f, 500f));
         assertEquals(180f, hold.x(), 0.001f);
         assertEquals(500f, hold.y(), 0.001f);
     }
@@ -136,7 +143,7 @@ public class HoldGestureTest {
         assertEquals(Outcome.HOLD_SELECTED, hold.selectElapsed());
         assertEquals(Phase.DONE, hold.phase());
         // The selection owns the gesture; the lift that follows adds nothing.
-        assertEquals(Outcome.NOTHING, hold.up());
+        assertEquals(Outcome.NOTHING, hold.up(hold.x(), hold.y()));
         assertEquals(Outcome.NOTHING, hold.selectElapsed());
     }
 
@@ -148,11 +155,12 @@ public class HoldGestureTest {
         assertEquals(Outcome.NOTHING, dragging.selectElapsed());
         assertEquals(Phase.DRAGGING, dragging.phase());
 
-        // The same holds when the program wants no motion and the drag only moves the aim.
-        HoldGesture aiming = held(false);
-        assertEquals(Outcome.AIM_MOVED, aiming.move(100f, 400f));
-        assertFalse(aiming.reachesSelect());
-        assertEquals(Outcome.NOTHING, aiming.selectElapsed());
+        // The same holds when the program wants no motion and the drag reports nothing at all.
+        HoldGesture quiet = held(false);
+        assertEquals(Outcome.NOTHING, quiet.move(100f, 400f));
+        assertFalse(quiet.reachesSelect());
+        assertEquals(Outcome.NOTHING, quiet.selectElapsed());
+        assertEquals(Phase.HELD, quiet.phase());
     }
 
     @Test
@@ -167,7 +175,7 @@ public class HoldGestureTest {
     @Test
     public void aLiftBeforeTheSecondStageClicksInstead() {
         HoldGesture hold = held(false);
-        assertEquals(Outcome.CLICK, hold.up());
+        assertEquals(Outcome.CLICK, hold.up(hold.x(), hold.y()));
         assertEquals(Outcome.NOTHING, hold.selectElapsed());
         assertEquals(Phase.DONE, hold.phase());
     }
@@ -203,9 +211,9 @@ public class HoldGestureTest {
         assertEquals(Outcome.HOLD_SELECTED, hold.holdElapsed(false, false));
         // The selection owns the gesture from here; nothing else is decided by the finger.
         assertEquals(Phase.DONE, hold.phase());
-        assertFalse(hold.showsHint());
+        assertFalse(hold.heldAndStill());
         assertEquals(Outcome.NOTHING, hold.move(100f, 400f));
-        assertEquals(Outcome.NOTHING, hold.up());
+        assertEquals(Outcome.NOTHING, hold.up(hold.x(), hold.y()));
         // A plain shell has no second stage: the first buzz already selected.
         assertEquals(Outcome.NOTHING, hold.selectElapsed());
     }
@@ -216,9 +224,9 @@ public class HoldGestureTest {
         assertEquals(Outcome.NOTHING, hold.cancel());
         assertEquals(Phase.DONE, hold.phase());
         assertFalse(hold.isHeld());
-        assertFalse(hold.showsHint());
+        assertFalse(hold.heldAndStill());
         assertEquals(Outcome.NOTHING, hold.move(400f, 600f));
-        assertEquals(Outcome.NOTHING, hold.up());
+        assertEquals(Outcome.NOTHING, hold.up(hold.x(), hold.y()));
         assertEquals(Outcome.NOTHING, hold.selectElapsed());
     }
 
@@ -232,24 +240,24 @@ public class HoldGestureTest {
     }
 
     @Test
-    public void theHintLeavesWithTheFirstThingTheFingerSays() {
-        assertFalse(down().showsHint());
+    public void heldAndStillIsOnlyTrueBetweenTheHoldAndTheFingersNextWord() {
+        assertFalse(down().heldAndStill());
         HoldGesture dragged = held(true);
-        assertTrue(dragged.showsHint());
+        assertTrue(dragged.heldAndStill());
         dragged.move(100f, 400f);
-        assertFalse(dragged.showsHint());
+        assertFalse(dragged.heldAndStill());
     }
 
     @Test
     public void aSecondGestureStartsClean() {
         HoldGesture hold = held(true);
         hold.move(100f, 400f);
-        hold.up();
+        hold.up(hold.x(), hold.y());
         hold.reset();
         assertEquals(Phase.IDLE, hold.phase());
         hold.down(10f, 20f, SLOP, true);
-        assertEquals(Outcome.HOLD_AIMED, hold.holdElapsed(true, false));
-        assertTrue(hold.showsHint());
+        assertEquals(Outcome.HOLD_MOUSE, hold.holdElapsed(true, false));
+        assertTrue(hold.heldAndStill());
         assertEquals(10f, hold.holdX(), 0.001f);
     }
 }
