@@ -128,6 +128,43 @@ From issue #36 (the revised onboarding review), landed on top of the third pass 
   (`TourRun.FIND_HELP` — see `docs/first-boot-tour.md`), so "Try it" there and the tour's
   own first lesson are the same three taps.
 
+## Fifth pass (2026-09-15, from the phone): guide first, catalogue on demand
+
+From the phone, on top of the fourth pass. Where the two differ, this one wins: it supersedes the
+fourth pass's default-mode lines and every paging line above.
+
+- **Every place opens on the guide.** The per-place default constants and `defaultMode` are gone;
+  `open()` always lands on `OVERVIEW`. The catalogue is a second question, asked only by the reader
+  who wants it.
+- **The guide carries no chrome.** No header, no Close, no Show topics, no Previous or Next, no
+  section label, and no footer reserved at the bottom of the band. That reservation is what pushed
+  the A–Z hint onto a second page on Terminal, and Display and Home were offering Previous and Next
+  over a single page of their own.
+- **The guide is one page.** `pageCount`, `page`, `previous`, `next`, `setPageCount`,
+  `sectionLabelRes` and `sectionLabelResFor` are gone from the model. A hint the router cannot fit
+  on the page is left out of the guide and logged under `TermuxHelp`; its topic is still in the
+  catalogue, so nothing is lost, only unpinned from a control.
+- **Two floating buttons.** `HelpOverlayView` draws them in every mode, beside where the ? the user
+  pressed was: a × that closes help, and a book (`CornerTabGlyphs.CATALOGUE`) that opens the topic
+  chooser and, pressed again, puts it away and leaves the guide standing. They are the diameter of a
+  corner-tab button inside a 48 dp square, in the tab's own glass and tint, kept inside the overlay,
+  and named "Close help" and "Help topics".
+- **The anchor.** `show(place, anchor)` takes the ? in screen coordinates:
+  `TerminalPaneController.helpButtonRectOnScreen` on Terminal, and a method of the same name on
+  `X11PaneFrame` and `WidgetPaneFrame`, each reading `PaneControlsView.actionBounds(ACTION_HELP, …)`
+  while the tab is still out. All three corner tabs therefore run help before they dismiss
+  themselves, and the activity reads the anchor before it dismisses the tabs. No anchor — Settings,
+  the palette — falls back to the active pane's corner zone, or the wall's top-trailing corner.
+- **The popup keeps its own buttons** — Show basics, Show all, the topic chips, Back to topics,
+  Show gesture, Try it — and its header is the title alone: the × glyph is help's one close. Show
+  all dismisses the popup and returns to the guide.
+- **Tap outside** any card, panel or glyph closes help, in every mode. Taps on cards, the panel,
+  chips and glyphs still never reach the launcher.
+- Strings dropped: `help_previous`, `help_next`, `help_overview_page`, `help_show_topics`,
+  `help_close`. Added: `help_close_glyph`, `help_close_action`, `help_topics_action`.
+- The tour is untouched: lesson 1 ("Close help to continue") is satisfied by the × or an outside
+  tap, and `TourViewTargets` HELP_BUTTON still measures the corner tab's ?.
+
 ## Per place: boxes and copy
 
 Strings go in `strings.xml` under `help_…`. Titles bold, lines as given.
@@ -232,14 +269,15 @@ New package `com.termux.app.help`:
   ids, an optional lesson id from `TourRun.lessons()`, an optional related topic id, and an
   `identityIndex` that pins the entry's overview colour. `forPlace`, `entry`, `sizeFor`, `all`.
 - `HelpPresentationModel` — what help is showing and what it wants done about it, pure: a mode
-  (`TOPICS`, `TOPIC`, `OVERVIEW`), the selected topic, the overview page and the basics filter.
-  Commands (`open`, `selectTopic`, `backToTopics`, `showBasics`, `showAll`, `previous`, `next`,
+  (`OVERVIEW`, the guide every place opens on; `TOPICS`; `TOPIC`), the selected topic and the
+  basics filter. Commands (`open`, `selectTopic`, `backToTopics`, `showBasics`, `showAll`,
   `showGesture`, `tryIt`, `close`, `remeasure`) return an `Effect` (`NONE`, `DEMONSTRATE`,
   `CLOSE`, `CLOSE_AND_PRACTICE`); queries answer what to render, including the one target to
   highlight and its colour. Reads `HelpTopics`; renders nothing and measures nothing itself.
-- `HelpOverlayView` — scrim, boxes, in-place key labels, cards, leader lines, paging pill, close
-  pill; consumes touches; `show(place)`, `dismiss()`, re-measures on global layout like
-  `FirstBootTour.obtainOverlay` does. Renders `HelpPresentationModel` by mode (fourth pass).
+- `HelpOverlayView` — scrim, boxes, in-place key labels, cards, leader lines, the topic popup and
+  the two floating glyph buttons; consumes touches; `show(place, anchor)`, `dismiss()`, re-measures
+  on global layout like `FirstBootTour.obtainOverlay` does. Renders `HelpPresentationModel` by mode,
+  the guide on one page (fifth pass).
 - `HelpTargets` — the per-place candidate list and their measurement, reusing the `ViewFinder`
   idea from `tour/TourViewTargets` (do not couple to the tour's classes; copy the two helpers if
   needed).
@@ -250,7 +288,8 @@ New package `com.termux.app.help`:
 - Debug log tag `TermuxHelp` (mirror `tour/TourLog`).
 
 Entry wiring: a `HELP` action on each of the three corner tabs, routed to one activity method
-`showHelpOverlay()` that dismisses the tab and opens the overlay for `currentWallPlace()`.
+`showHelpOverlay()` that reads the ? off whichever tab is up, dismisses every tab and opens the
+overlay for `currentWallPlace()` with that rect as its anchor.
 Dismiss on Back through the activity's existing back handling, on `onWallPageSettled`, on
 `onPause`.
 
