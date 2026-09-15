@@ -740,6 +740,18 @@ public final class SuggestionBarView extends GridLayout
         LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
         if (existing != null) existing.icons().invalidateAll();
         invalidateRenderedIconCaches();
+        syncIconPackIdentity();
+    }
+
+    /**
+     * Keeps the rendered-icon cache keyed to the icon packs now in force, so a render made under
+     * the previous pack is unreachable rather than merely unwanted. See
+     * {@link DockIconCache#setIconPackIdentity}.
+     */
+    private void syncIconPackIdentity() {
+        LauncherAppDataProvider provider = appDataProvider != null
+            ? appDataProvider : LauncherAppDataProvider.peekInstance();
+        if (provider != null) iconCache.setIconPackIdentity(provider.iconPackIdentity());
     }
 
     private void invalidateRenderedIconCaches() {
@@ -1146,6 +1158,7 @@ public final class SuggestionBarView extends GridLayout
         if (iconPackRepository == null) {
             iconPackRepository = new IconPackRepository(getContext());
         }
+        syncIconPackIdentity();
         if (!appDataProvider.hasLoadedApps()) {
             appDataProvider.warmAsync(() -> {
                 if (!hostVisible || !isAttachedToWindow()) {

@@ -50,7 +50,10 @@ public final class LauncherAppDataProvider {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = newIdleFriendlyExecutor();
     private final LauncherIconResolver iconResolver;
+    private final IconPackRepository iconPackRepository;
     private final LauncherIconStore iconStore;
+    /** Memoized {@link #iconPackIdentity()}; null means "ask the packages again". */
+    @Nullable private String iconPackIdentity;
     private List<LauncherAppEntry> cachedApps = Collections.emptyList();
     private final Map<String, LauncherAppEntry> cachedById = new LinkedHashMap<>();
     private final Map<String, LauncherAppEntry> cachedFirstByPackage = new HashMap<>();
@@ -66,6 +69,7 @@ public final class LauncherAppDataProvider {
     private LauncherAppDataProvider(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.iconResolver = new LauncherIconResolver(this.context);
+        this.iconPackRepository = new IconPackRepository(this.context);
         this.iconStore = new LauncherIconStore(
             this.context.getResources(),
             DockIconCache.memoryClassMb(this.context),
@@ -133,6 +137,24 @@ public final class LauncherAppDataProvider {
     }
 
     /**
+     * The icon-pack configuration now in force, as a token that changes whenever the treatment
+     * does. Every cache of treated artwork keys on it — the store here, and the rendered-icon
+     * caches that live with their surfaces — so a pack switch cannot serve a render made under the
+     * previous pack. Read from the packages once and held until an invalidation.
+     */
+    @NonNull
+    public synchronized String iconPackIdentity() {
+        if (iconPackIdentity == null) {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+            iconPackIdentity = preferences == null ? "" : iconPackRepository.activeIconPackIdentity(
+                preferences.getAppLauncherIconPackPackage(),
+                preferences.getAppLauncherPinnedIconPackPackage());
+            iconStore.setIconPackIdentity(iconPackIdentity);
+        }
+        return iconPackIdentity;
+    }
+
+    /**
      * The provider if one has already been built, and null otherwise. Clearing a cache is not a
      * reason to construct the thing that owns it: there is nothing held to clear until something
      * has asked for artwork, and building a catalogue provider as a side effect of an invalidation
@@ -169,6 +191,7 @@ public final class LauncherAppDataProvider {
 
     public synchronized void invalidate() {
         refreshGeneration++;
+        iconPackIdentity = null;
         loading = false;
         loaded = false;
         refreshing = false;
