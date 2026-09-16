@@ -287,6 +287,72 @@ Honest boundary: none of this is device-verified. The eight Robolectric tests in
 pure in `DockPagingModelTest` and `PageTickStripTest`. `SuggestionBarRailFormTest.theRailIsOnePage`
 became `theRailPagesByTheColumnItWasGiven` — it asserted the defect.
 
+## P7 outcome (2026-09-16)
+
+**One page indicator, and it is the row's.** The dock painted its own ticks from
+`LauncherAzGestureFxView` (`drawPageTicksIndicator`, over the glass, while a finger owned the row)
+and P6 gave the row a `PageTickStripView` of its own for every other edge — so a place with the row
+on a rail had two, the dock's still lit with the accent and the rail's grey beside it, both moving
+on the same swipe. The FX layer's whole interaction-overflow path is gone: `drawPageTicksIndicator`,
+`drawInteractionPageIndicators`, `setInteractionOverflowState`, the position and attention
+animators, the idle fade, the scratch arrays and the edge glow that path gated (which no caller
+could reach — every one of them passed `useSubtlePageIndicators` true, the flag that suppressed it).
+`clearDrag` and `resetAzGestureState` lost the "keep the overflow affordance" argument with it.
+
+The strip is a band of whichever host the row is standing in, and the pair travels together:
+`place_apps_bar_host` off the dock, and on the dock `apps_bar_indicator_band` — which is now a
+`PageTickStripView` rather than 3dp of air, finally holding what
+`AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx` has always been named for. The band is
+the strip's own 9dp and it belongs to the **apps row** rather than to the gap between two rows, so
+the dock is ~6dp taller with the letters shown and gains a band it never had with them hidden; that
+is the price of an indicator that is always readable instead of one that appeared under a finger.
+Which side of the row it takes is `PageTickStrip.leadsRow` — the stack's own reversal rule, so the
+ticks lead their host on a right-hand rail (towards the terminal) and follow it everywhere else,
+which is under the row on the top and bottom edges and right of a left-hand rail.
+
+Colour is `PageTickStrip`'s: the launcher's `colorPrimary` through the two steps the FX layer took
+to reach it, the page being shown at full and the rest of them muted by proximity
+(`INACTIVE_ALPHA`), and the most-used page's warm `DYNAMIC_TICK_COLOR` preserved. Page state has one
+source and one listener: `SuggestionBarView.publishPageIndicator` counts whichever pages the bar is
+showing — the matches for a held letter, the pinned apps otherwise — which is the choice the FX
+ticks made, now made where the page model already lives.
+
+**The scrub preview opens towards the middle of the screen.** On a right-hand column the matches
+rose as a vertical stack over the letters they came from, with the focused app's name drawn across
+them. Two causes: `AzFloatingStripPolicy.layout` answered in `AzBarFrame`'s canonical frame, where
+"along the bar" is the slot axis — so a column's matches ran *down* the column — and
+`LauncherAzGestureFxView.drawFocusedAppPreviewIcon` had a `stackedBand` branch that anchored the
+name bubble to the focused icon and let it climb the screen over the band.
+
+The band is now laid out on the screen and is **always one row of icons reading left to right**,
+grown away from the bar: up off a bottom bar, down off a top one, left off a right-hand column and
+right off a left-hand one (`AzFloatingStripPolicy.growthFor`). Along the bar it follows the finger;
+across it, it is a fixed gap clear of the letters; and it is clamped inside the canvas it was given
+— the bar's own span along itself and the screen across it (`TermuxActivity.azStripCanvasBounds`).
+`availableLengthPx` is the run between the bar and the far margin, so a column never lays out more
+icons than the room beside it holds. The hit-test, the paging ends and the focused slot are all on
+the screen now too (`resolveAzStripFocus` takes screen coordinates), and the gesture still sees the
+band through `AzBarFrame.toCanonical`, so the capture wedge and the return band are untouched.
+`labelSideFor` puts the name on the far side of the band from the bar. The view is a dumb consumer:
+no `toScreen` mapping, no per-edge branch, only the rise direction.
+
+Tests: `TermuxActivityPageIndicatorTest` (five, Robolectric on the real `activity_termux.xml`) —
+one strip bound per edge and it is a band of the row's own host, the side it takes per edge, the
+accent on the page being shown and the muted rest on every edge, the warm dynamic tick, and the FX
+class asserted to have no page-tick method left at all. `AzFloatingStripPolicyTest` grew six:
+growth direction per edge, no overlap with the bar for every edge × slot count × anchor, clamped
+inside the canvas, a narrow column's slot count, an empty bar, and the label side.
+`PageTickStripTest` grew `leadsRow`/`verticalOn` and the alpha ramp. Updated with a reason:
+`DockLayoutPolicyTest`'s band column 8 → 25 px and the combined heights with it (the band is the
+strip's 9dp now), `rowSwitches_…` renamed and the no-letters case expecting a band (it belongs to
+the apps row), `AccessoryStackLayoutPolicyTest`'s 9 → 27 at density 3,
+`LauncherAzGestureFxViewTest` and `AzFloatingStripPolicyTest` ported to the edge-aware `layout`.
+
+Honest boundary: none of this is device-verified. The dock growing by the strip's band is arithmetic
+the suite covers but a look on the phone will decide whether it reads right. And the near end of a
+side bar's match band is where the finger enters it, which is also a paging-dwell zone — a dwell is
+required, so a finger passing through should not flip a page, but that is reasoned, not seen.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |

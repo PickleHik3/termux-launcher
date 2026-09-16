@@ -80,8 +80,10 @@ public class AccessoryStackLayoutPolicyTest {
     }
 
     @Test
-    public void pageIndicatorBandHeight_usesFixedStrip() {
-        assertEquals(9, AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(true, 3f));
+    public void pageIndicatorBandHeight_isTheTickStripsOwnBandAndGoesWithTheRow() {
+        // The band the page ticks stand in, so it is the strip's own 9dp and it is the apps row —
+        // not the letters — that decides whether there is one at all.
+        assertEquals(27, AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(true, 3f));
         assertEquals(0, AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(false, 3f));
     }
 

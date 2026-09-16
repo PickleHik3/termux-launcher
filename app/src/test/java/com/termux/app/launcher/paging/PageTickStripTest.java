@@ -1,7 +1,10 @@
 package com.termux.app.launcher.paging;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import com.termux.app.place.PlaceLayout.Edge;
 
 import org.junit.Test;
 
@@ -70,5 +73,42 @@ public class PageTickStripTest {
         assertEquals(PageTickStrip.GAP_DP * DENSITY,
             PageTickStrip.gapPx(one, 10f, DENSITY), 0.01f);
         assertEquals(1, PageTickStrip.centersPx(one, 0f, 100f).length);
+    }
+
+    @Test
+    public void theTicksTakeTheInnerSideOfTheBarOnEveryEdge() {
+        // The stack's own rule: the row is the outermost band and the ticks the inner one, so the
+        // strip leads its host exactly where a stack reverses.
+        assertTrue("left of a right-hand rail, towards the terminal",
+            PageTickStrip.leadsRow(Edge.RIGHT));
+        assertFalse("under the dock's own row", PageTickStrip.leadsRow(Edge.BOTTOM));
+        assertFalse("under a row lying along the top", PageTickStrip.leadsRow(Edge.TOP));
+        assertFalse("right of a left-hand rail", PageTickStrip.leadsRow(Edge.LEFT));
+
+        assertTrue(PageTickStrip.verticalOn(Edge.LEFT));
+        assertTrue(PageTickStrip.verticalOn(Edge.RIGHT));
+        assertFalse(PageTickStrip.verticalOn(Edge.TOP));
+        assertFalse(PageTickStrip.verticalOn(Edge.BOTTOM));
+    }
+
+    @Test
+    public void theActivePageIsTheAccentAndTheRestAreMutedByProximity() {
+        assertEquals(1f, PageTickStrip.proximity(1, 1f), 0.0001f);
+        assertEquals(0f, PageTickStrip.proximity(0, 1f), 0.0001f);
+        assertEquals(0.5f, PageTickStrip.proximity(0, 0.5f), 0.0001f);
+        assertEquals("nothing further than a page away reads at all",
+            0f, PageTickStrip.proximity(0, 2.4f), 0.0001f);
+
+        assertEquals("the page being shown is the accent itself",
+            1f, PageTickStrip.alphaFor(1f), 0.0001f);
+        assertEquals("and the rest of them are it, muted",
+            PageTickStrip.INACTIVE_ALPHA, PageTickStrip.alphaFor(0f), 0.0001f);
+        // Continuous across a swipe: halfway between two pages they share the difference.
+        assertEquals(PageTickStrip.alphaFor(0.5f),
+            (PageTickStrip.alphaFor(0f) + PageTickStrip.alphaFor(1f)) * 0.5f, 0.0001f);
+
+        // The most-used page's own tint sleeps while it is not the page being shown.
+        assertEquals(1f, PageTickStrip.dynamicDampFor(1f), 0.0001f);
+        assertTrue(PageTickStrip.dynamicDampFor(0f) < 1f);
     }
 }

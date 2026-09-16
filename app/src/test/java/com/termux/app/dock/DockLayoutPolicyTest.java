@@ -40,22 +40,25 @@ public class DockLayoutPolicyTest {
         // appsTop, appsBottom, combined, compactStatusBar, iconScale
         // With the apps row on an edge the letters are the dock's top row and wear a 6dp crown
         // (17px): 52 -> 69, and the stack grows with it.
+        // The band under the apps row is the page ticks' own strip (9dp = 25px) rather than the
+        // 3dp of air it used to be, because the dock's row carries the same indicator every other
+        // edge does instead of the FX layer painting one over the glass.
         Object[][] rows = {
-            {1.72f, false, false, 132, 107, 52, 8, 0, 67, 17, 8, 295, 88, 1.3068f},
+            {1.72f, false, false, 132, 107, 52, 25, 0, 67, 17, 8, 312, 88, 1.3068f},
             {1.72f, false, true, 0, 0, 69, 0, 0, 67, 17, 8, 172, 88, 1.3068f},
-            {1.72f, true, false, 132, 107, 52, 8, 28, 67, 17, 8, 295, 83, 1.7252f},
+            {1.72f, true, false, 132, 107, 52, 25, 28, 67, 17, 8, 312, 83, 1.7252f},
             {1.72f, true, true, 0, 0, 69, 0, 28, 67, 17, 8, 172, 83, 1.7252f},
-            {1.95f, false, false, 148, 123, 52, 8, 0, 67, 17, 8, 311, 88, 1.487604f},
+            {1.95f, false, false, 148, 123, 52, 25, 0, 67, 17, 8, 328, 88, 1.487604f},
             {1.95f, false, true, 0, 0, 69, 0, 0, 67, 17, 8, 172, 88, 1.487604f},
-            {1.95f, true, false, 149, 120, 52, 8, 28, 67, 19, 10, 312, 83, 1.9633334f},
+            {1.95f, true, false, 149, 120, 52, 25, 28, 67, 19, 10, 329, 83, 1.9633334f},
             {1.95f, true, true, 0, 0, 69, 0, 28, 67, 19, 10, 172, 83, 1.9633334f},
-            {2.18f, false, false, 166, 141, 52, 8, 0, 67, 17, 8, 329, 88, 1.68f},
+            {2.18f, false, false, 166, 141, 52, 25, 0, 67, 17, 8, 346, 88, 1.68f},
             {2.18f, false, true, 0, 0, 69, 0, 0, 67, 17, 8, 172, 88, 1.68f},
-            {2.18f, true, false, 169, 135, 52, 8, 28, 67, 21, 13, 332, 83, 2.21312f},
+            {2.18f, true, false, 169, 135, 52, 25, 28, 67, 21, 13, 349, 83, 2.21312f},
             {2.18f, true, true, 0, 0, 69, 0, 28, 67, 21, 13, 172, 83, 2.21312f},
-            {2.45f, false, false, 183, 158, 52, 8, 0, 67, 17, 8, 346, 88, 1.89072f},
+            {2.45f, false, false, 183, 158, 52, 25, 0, 67, 17, 8, 363, 88, 1.89072f},
             {2.45f, false, true, 0, 0, 69, 0, 0, 67, 17, 8, 172, 88, 1.89072f},
-            {2.45f, true, false, 190, 151, 52, 8, 28, 67, 24, 15, 353, 83, 2.508f},
+            {2.45f, true, false, 190, 151, 52, 25, 28, 67, 24, 15, 370, 83, 2.508f},
             {2.45f, true, true, 0, 0, 69, 0, 28, 67, 24, 15, 172, 83, 2.508f},
         };
         List<Object[]> cases = new ArrayList<>();
@@ -252,11 +255,13 @@ public class DockLayoutPolicyTest {
     }
 
     @Test
-    public void rowSwitches_collapseTheirOwnRowsAndTheBandBetweenThem() {
+    public void rowSwitches_collapseTheirOwnRowsAndTheBandTheTicksStandIn() {
         DockLayout noAz = DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .azRowEnabledPref(false).build());
         assertEquals(0, noAz.azRowHeightPx);
-        assertEquals(0, noAz.indicatorBandHeightPx);
+        // The band belongs to the apps row, not to the gap between two rows: it is where the page
+        // ticks stand, and the row still has pages with the letters switched off.
+        assertEquals(25, noAz.indicatorBandHeightPx);
         assertEquals(169, noAz.appsBarHeightPx);
 
         DockLayout noApps = DockLayoutPolicy.compute(inputs(2.18f, true, false)

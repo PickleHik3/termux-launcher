@@ -239,7 +239,7 @@ public final class DockLayoutPolicy {
             out.azRowChinPaddingPx = AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(
                 azRowEnabled, in.rowUnderAz, density);
             out.indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(
-                appsRowEnabled && azRowEnabled, density);
+                appsRowEnabled, density);
             out.interRowGapPx = out.indicatorBandHeightPx;
         }
         out.appsBarHeightHintPx =

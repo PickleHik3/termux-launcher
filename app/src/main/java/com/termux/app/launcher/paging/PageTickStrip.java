@@ -1,5 +1,7 @@
 package com.termux.app.launcher.paging;
 
+import com.termux.app.place.PlaceLayout;
+
 /**
  * The "minimal ticks" page indicator's geometry: how long each tick is at a given fractional page
  * position, how much air goes between them, and where each one's centre lands along the strip.
@@ -13,7 +15,7 @@ package com.termux.app.launcher.paging;
  * position so the morph is continuous across a swipe, and the gap is constant unless the ticks
  * would not otherwise fit.
  *
- * <p>Pure: no {@code View}, no {@code Canvas}, only densities and pixels.
+ * <p>Pure: no {@code View}, no {@code Canvas}, only densities, pixels and proportions.
  */
 public final class PageTickStrip {
 
@@ -84,4 +86,54 @@ public final class PageTickStrip {
         }
         return centers;
     }
+
+    /**
+     * Which side of the bar the strip stands on, as the index it takes in the bar's own host.
+     *
+     * <p>One rule for all four edges, and it is the stack's own: the row is the outermost band and
+     * the ticks are the inner one, so the strip leads the host exactly where a stack reverses —
+     * a right-hand rail (the ticks are left of it, towards the terminal) and the bottom dock (the
+     * ticks are under the icons, between the row and whatever band comes next). On the top edge and
+     * on a left rail the row leads and the ticks follow it.
+     */
+    public static boolean leadsRow(PlaceLayout.Edge edge) {
+        return edge == PlaceLayout.Edge.RIGHT;
+    }
+
+    /** Which way the ticks run: down the strip for a rail, across it for a row. */
+    public static boolean verticalOn(PlaceLayout.Edge edge) {
+        return edge != null && edge.isOnSide();
+    }
+
+    /**
+     * The tick at rest, as a fraction of the accent's opacity, and the one under the active page at
+     * full. Everything keys off proximity to the fractional position, so the morph is continuous
+     * across a swipe and two adjacent ticks share it at the midpoint.
+     */
+    public static final float INACTIVE_ALPHA = 0.40f;
+
+    /** How near a tick is to the active page: 1 on it, 0 a whole page away. */
+    public static float proximity(int page, float position) {
+        return Math.max(0f, 1f - Math.abs(page - position));
+    }
+
+    /** A tick's opacity at that proximity: muted at rest, the accent's own at the active page. */
+    public static float alphaFor(float proximity) {
+        float p = Math.max(0f, Math.min(1f, proximity));
+        return INACTIVE_ALPHA + ((1f - INACTIVE_ALPHA) * p);
+    }
+
+    /**
+     * The warm tint the "most-used" page's tick carries: distinguishable from the accent ticks
+     * beside it, harmonised rather than neon. Damped further while that page is not the active one,
+     * so a sleeping page never steals attention.
+     */
+    public static final int DYNAMIC_TICK_COLOR = 0xFFE0A338;
+
+    /** The extra damp a dynamic tick carries while its page is not the one being shown. */
+    public static float dynamicDampFor(float proximity) {
+        float p = Math.max(0f, Math.min(1f, proximity));
+        return 0.55f + (0.45f * p);
+    }
+
 }

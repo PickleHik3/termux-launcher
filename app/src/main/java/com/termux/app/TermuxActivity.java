@@ -5499,14 +5499,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // floating strip instead — so only drop the gesture when the letters are gone too.
             // Standing on another edge is not gone: the row here is empty, the bar is elsewhere.
             if (!isAzRowEnabled()) {
-                resetAzGestureState(false, true);
+                resetAzGestureState(true);
             }
         }
         if (indicatorBand != null) {
-            // The band is the air between the apps row and the letters; with no apps row above it
-            // there is nothing to separate, and it would only pad the dock out.
-            indicatorBand.setVisibility(
-                state.appsRowEnabled && state.azRowEnabled ? View.VISIBLE : View.GONE);
+            // The band is where the dock row's page ticks stand, so it is there exactly when that
+            // row is — and whether anything is drawn in it is the row's own answer, re-asked here
+            // rather than decided twice. A row standing on another edge took its ticks with it.
+            boolean ticksAreTheDocksOwn = mSuggestionBarView != null
+                && mSuggestionBarView.boundPageIndicator() == indicatorBand;
+            if (state.appsRowEnabled && ticksAreTheDocksOwn) {
+                mSuggestionBarView.publishPageIndicator();
+            } else {
+                indicatorBand.setVisibility(View.GONE);
+            }
         }
         if (terminalToolbarViewPager != null) {
             terminalToolbarViewPager.setVisibility(
@@ -6669,7 +6675,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override
             public void onCancel() {
-                resetAzGestureState(false, true);
+                resetAzGestureState(true);
             }
 
             @Override
@@ -6862,7 +6868,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The scrub follows the bar rather than being wired to each of them: one gesture,
                 // one callback, and no second bar left listening on an edge nobody is looking at.
                 if (mAzScrubRowView != null) mAzScrubRowView.setScrubCallback(null);
-                resetAzGestureState(false, true);
+                resetAzGestureState(true);
                 mAzScrubRowView = next;
                 next.setScrubCallback(mAzScrubCallback);
                 next.setBarEdge(edge);
@@ -7214,7 +7220,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!isLauncherCatalogEnabled()) {
             mSuggestionBarExplicitSearchActive = false;
-            resetAzGestureState(false, true);
+            resetAzGestureState(true);
             resetAzOverflowAffordanceState();
             return;
         }
@@ -7379,7 +7385,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (decision.pinnedSymbolReset) {
             mSuggestionBarView.clearAzFocusedEntry();
             mSuggestionBarView.clearAzPreview();
-            resetAzGestureState(false, false);
+            resetAzGestureState(false);
             updateAzOverflowAffordance();
             return;
         }
@@ -7412,7 +7418,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SuggestionBarView.AzDragFocusResult focusResult = null;
         if (decision.requestFocusResolve) {
             focusResult = standalone
-                ? mSuggestionBarView.resolveAzStripFocus(canonicalX, canonicalY)
+                ? mSuggestionBarView.resolveAzStripFocus(rawX, rawY)
                 : mSuggestionBarView.resolveAzDragFocus(rawX, rawY);
         }
         if (standalone && mLauncherAzGestureFxLabelOverlayView != null) {
@@ -7435,7 +7441,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
             if (launched && mFirstBootTour != null) mFirstBootTour.onAppLaunchedFromScrub();
-            resetAzGestureState(!launched, false);
+            resetAzGestureState(false);
             updateAzOverflowAffordance();
             if (!launched) {
                 scheduleAzOverflowRefresh();
@@ -7459,17 +7465,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return null;
         }
         // Measured against the letters, not the overlay that draws it: the overlay rests GONE and
-        // has no width until something puts it on screen, and the strip is what would do that.
-        // The letters are also the span the band is clamped to — they are the surface being scrubbed.
-        // Their rectangle goes through the edge transform first, so the strip is laid out along a
-        // bar at the bottom of the frame however the bar is really standing.
+        // has no width until something puts it on screen, and the strip is what would do that. The
+        // band is laid out on the screen, because that is the only space in which "away from the
+        // bar" and "towards the middle" are the same direction on all four edges.
         float density = getResources().getDisplayMetrics().density;
         AzBarFrame frame = azBarFrame();
-        AzScrubGesture.Bounds bar = frame.toCanonical(azBarScreenBounds());
-        float rowLeftRaw = bar.left;
-        float rowTopRaw = bar.top;
-        float rowWidth = bar.width();
-        int slots = AzFloatingStripPolicy.slotsForWidth(rowWidth, density);
+        AzScrubGesture.Bounds bar = azBarScreenBounds();
+        AzScrubGesture.Bounds canvas = azStripCanvasBounds(bar);
+        int slots = AzFloatingStripPolicy.slotsForLength(
+            AzFloatingStripPolicy.availableLengthPx(mAzBarEdge, bar, canvas, density), density);
         if (refreshMatches) {
             mSuggestionBarView.previewAzStripLetter(letter, slots);
         }
@@ -7482,19 +7486,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mAzStrip;
         }
         List<com.termux.app.launcher.model.LauncherAppEntry> entries = mSuggestionBarView.azStripVisibleEntries();
-        // The band centres on the letter the thumb is holding, so the matches appear next to the
-        // finger rather than in the middle of the bar. Mapped through the frame like the bar was,
-        // and only re-read here, when the letter or page changes — never per touch sample.
-        float anchorX = rowLeftRaw + (rowWidth * 0.5f);
+        // The band follows the letter the thumb is holding, so the matches appear next to the
+        // finger rather than in the middle of the bar. Only re-read here, when the letter or the
+        // page changes — never per touch sample.
+        float anchorX = (bar.left + bar.right) * 0.5f;
+        float anchorY = (bar.top + bar.bottom) * 0.5f;
         RectF letterGlass = new RectF();
         mAzScrubRowView.getLetterFocusBoundsOnScreen(normalized, letterGlass);
         if (!letterGlass.isEmpty()) {
-            AzScrubGesture.Bounds letterBar = frame.toCanonical(new AzScrubGesture.Bounds(
-                letterGlass.left, letterGlass.top, letterGlass.right, letterGlass.bottom));
-            anchorX = (letterBar.left + letterBar.right) * 0.5f;
+            anchorX = letterGlass.centerX();
+            anchorY = letterGlass.centerY();
         }
         AzFloatingStripPolicy.Strip strip = entries.isEmpty() ? null : AzFloatingStripPolicy.layout(
-            rowLeftRaw, rowWidth, rowTopRaw, anchorX, entries.size(), density);
+            mAzBarEdge, bar, canvas, anchorX, anchorY, entries.size(), density);
         if (strip == null) {
             clearAzStandaloneStrip();
             return null;
@@ -7502,12 +7506,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzStrip = strip;
         mAzStripSyncedLetter = normalized;
         mAzStripSyncedPage = page;
-        // The gesture and the hit-test work in the frame; the layers that draw the strip and place
-        // the preview bubble beside it want it on screen, so the band is mapped back once here.
-        AzScrubGesture.Bounds stripScreen = frame.toScreen(
-            new AzScrubGesture.Bounds(strip.left, strip.top, strip.right, strip.bottom));
-        mAzStripRawBounds.set(stripScreen.left, stripScreen.top, stripScreen.right,
-            stripScreen.bottom);
+        // The band is already on screen, which is where the layers that draw it, the finger that
+        // hit-tests it and the bubble that names its focused icon all live.
+        mAzStripRawBounds.set(strip.left, strip.top, strip.right, strip.bottom);
         mSuggestionBarView.setAzStripGeometry(strip);
         // Artwork straight from the budgeted icon store the row draws from — referenced, never
         // copied, and dropped again on release. The focus-ring visual for each slot is resolved
@@ -7586,6 +7587,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getResources().getDisplayMetrics().density);
     }
 
+    /**
+     * The room the floating strip is allowed to take: the bar's own span along itself, and the
+     * whole screen across it. A column stands inside the canvas band, so its span is exactly the
+     * height the matches may use; a row spans the width the letters do, which is what the band has
+     * always been clamped to.
+     */
+    @NonNull
+    private AzScrubGesture.Bounds azStripCanvasBounds(@NonNull AzScrubGesture.Bounds bar) {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        return mAzBarEdge.isOnSide()
+            ? new AzScrubGesture.Bounds(0f, bar.top, metrics.widthPixels, bar.bottom)
+            : new AzScrubGesture.Bounds(bar.left, 0f, bar.right, metrics.heightPixels);
+    }
+
     /** The bar's own rectangle on screen, whether or not it is shown. */
     @NonNull
     private AzScrubGesture.Bounds azBarScreenBounds() {
@@ -7646,12 +7661,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 focusBounds = null;
             }
         } else if (standalone && focusResult != null && focusResult.iconBounds != null) {
-            // The strip hit-test answers in the frame, and the layers that draw a ring round the
-            // focused slot are drawing on the screen, so the slot comes back through the transform.
-            AzScrubGesture.Bounds slot = azBarFrame().toScreen(new AzScrubGesture.Bounds(
-                focusResult.iconBounds.left, focusResult.iconBounds.top,
-                focusResult.iconBounds.right, focusResult.iconBounds.bottom));
-            mAzStripFocusRawBounds.set(slot.left, slot.top, slot.right, slot.bottom);
+            // The strip is laid out and hit-tested on the screen, so its focused slot already is
+            // the rectangle the ring is drawn round.
+            mAzStripFocusRawBounds.set(focusResult.iconBounds);
             focusBounds = mAzStripFocusRawBounds;
         } else {
             focusBounds = focusResult == null ? null : focusResult.iconBounds;
@@ -7662,12 +7674,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 focusResult == null ? null : focusResult.iconOutlineBounds
             );
         }
-        boolean overflowActive = mSuggestionBarView != null && mSuggestionBarView.hasAzOverflowPages();
-        boolean canLeft = mSuggestionBarView != null && mSuggestionBarView.canAzPageLeft();
-        boolean canRight = mSuggestionBarView != null && mSuggestionBarView.canAzPageRight();
-        float currentPagePosition = mSuggestionBarView != null ? mSuggestionBarView.getAzVisualPagePosition() : 0f;
-        int pageCount = mSuggestionBarView != null ? mSuggestionBarView.getAzVisiblePageCount() : 1;
-        applyAzFxInteractionOverflowState(overflowActive, canLeft, canRight, currentPagePosition, pageCount, overflowActive, true, -1);
+        // The matches' own pages are the row's ticks, drawn by the strip that rides with the row.
+        if (mSuggestionBarView != null) mSuggestionBarView.publishPageIndicator();
 
         applyAzFxDrag(
             mAzGesture.isActive(),
@@ -7715,51 +7723,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
         applyAzFxRowBounds(isAzIndexStandalone());
-        boolean azOverflowActive = mSuggestionBarView.hasAzOverflowPages();
-        boolean interactionActive = mSuggestionBarInteractionActive;
-        boolean canLeft = false;
-        boolean canRight = false;
-        float currentPagePosition = 0f;
-        int pageCount = 1;
-        boolean showPageIndicators = false;
-        boolean subtlePageIndicators = false;
-        int dynamicPageIndex = -1;
-        if (azOverflowActive) {
-            canLeft = mSuggestionBarView.canAzPageLeft();
-            canRight = mSuggestionBarView.canAzPageRight();
-            currentPagePosition = mSuggestionBarView.getAzVisualPagePosition();
-            pageCount = mSuggestionBarView.getAzVisiblePageCount();
-            showPageIndicators = true;
-            interactionActive = true;
-            subtlePageIndicators = true;
-        } else if (mSuggestionBarInteractionActive && mSuggestionBarView.hasPinnedOverflowPages()) {
-            canLeft = mSuggestionBarView.canPinnedPageLeft();
-            canRight = mSuggestionBarView.canPinnedPageRight();
-            currentPagePosition = mSuggestionBarView.getPinnedVisualPagePosition();
-            pageCount = mSuggestionBarView.getPinnedVisiblePageCount();
-            showPageIndicators = true;
-            subtlePageIndicators = true;
-            dynamicPageIndex = mSuggestionBarView.getPinnedDynamicPageIndex();
-        } else if (!mAzGesture.isActive() && !mSuggestionBarInteractionActive && mSuggestionBarView.hasPinnedOverflowPages()) {
-            canLeft = mSuggestionBarView.canPinnedPageLeft();
-            canRight = mSuggestionBarView.canPinnedPageRight();
-            currentPagePosition = mSuggestionBarView.getPinnedVisualPagePosition();
-            pageCount = mSuggestionBarView.getPinnedVisiblePageCount();
-            showPageIndicators = true;
-            interactionActive = true;
-            subtlePageIndicators = true;
-            dynamicPageIndex = mSuggestionBarView.getPinnedDynamicPageIndex();
-        }
-        applyAzFxInteractionOverflowState(
-            interactionActive,
-            canLeft,
-            canRight,
-            currentPagePosition,
-            pageCount,
-            showPageIndicators,
-            subtlePageIndicators,
-            dynamicPageIndex
-        );
+        // The page ticks are the row's own strip now, on whichever edge it stands; nothing here
+        // draws them. What is left is where the FX layers position themselves.
+        if (mSuggestionBarView != null) mSuggestionBarView.publishPageIndicator();
     }
 
     /**
@@ -7780,40 +7746,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void applyAzFxInteractionOverflowState(
-        boolean active,
-        boolean canLeft,
-        boolean canRight,
-        float currentPagePosition,
-        int pageCount,
-        boolean showPageIndicators,
-        boolean subtlePinnedIndicators,
-        int dynamicPageIndex
-    ) {
-        if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.setInteractionOverflowState(
-                active, canLeft, canRight, currentPagePosition, pageCount, showPageIndicators, subtlePinnedIndicators, dynamicPageIndex
-            );
-        }
-        if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.setInteractionOverflowState(
-                active, canLeft, canRight, currentPagePosition, pageCount, showPageIndicators, subtlePinnedIndicators, dynamicPageIndex
-            );
-        }
-    }
-
     private void resetAzOverflowAffordanceState() {
         mSuggestionBarInteractionActive = false;
         if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.clearDrag(false);
+            mLauncherAzGestureFxUnderlayView.clearDrag();
             mLauncherAzGestureFxUnderlayView.setVisibility(View.GONE);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.clearDrag(false);
+            mLauncherAzGestureFxOverlayView.clearDrag();
             mLauncherAzGestureFxOverlayView.setVisibility(View.GONE);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
-            mLauncherAzGestureFxLabelOverlayView.clearDrag(false);
+            mLauncherAzGestureFxLabelOverlayView.clearDrag();
             mLauncherAzGestureFxLabelOverlayView.setVisibility(View.GONE);
         }
     }
@@ -7920,12 +7864,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private SuggestionBarView.AzDragFocusResult resolveAzFocusAtLastPoint() {
-        // The gesture remembers its last point in the canonical frame, which is what the strip is
-        // hit-tested in; the apps row is a view on the screen, so that one is asked in screen
-        // coordinates. On a bottom bar the two are the same numbers.
+        // Both surfaces are hit-tested on the screen; the gesture remembers its last point in the
+        // canonical frame, so it comes back through the transform first.
         if (isAzIndexStandalone()) {
             SuggestionBarView.AzDragFocusResult result = mSuggestionBarView.resolveAzStripFocus(
-                mAzGesture.lastRawX(), mAzGesture.lastRawY());
+                azGestureScreenX(), azGestureScreenY());
             if (mLauncherAzGestureFxLabelOverlayView != null) {
                 mLauncherAzGestureFxLabelOverlayView.setFloatingStripFocusedSlot(
                     mSuggestionBarView.azStripFocusedSlot());
@@ -8000,7 +7943,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void resetAzGestureState(boolean keepOverflowAffordance, boolean clearPreview) {
+    private void resetAzGestureState(boolean clearPreview) {
         stopAzEdgePagingLoop();
         cancelAzOverflowRefresh();
         mAzGesture.reset();
@@ -8017,13 +7960,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSuggestionBarView.clearAzFocusedEntry();
         }
         if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.clearDrag(keepOverflowAffordance);
+            mLauncherAzGestureFxUnderlayView.clearDrag();
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.clearDrag(keepOverflowAffordance);
+            mLauncherAzGestureFxOverlayView.clearDrag();
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
-            mLauncherAzGestureFxLabelOverlayView.clearDrag(false);
+            mLauncherAzGestureFxLabelOverlayView.clearDrag();
         }
         if (clearPreview && mSuggestionBarView != null) {
             mSuggestionBarView.clearAzPreview();
@@ -9401,17 +9344,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * pickup and the paging all follow it across. The rail used to be a second tree of plain
      * {@code ImageView}s rebuilt on every pass, which is why it could do none of those.
      *
+     * <p>Package-private for the same reason {@link #applyEdgeStacks} is: the indicator test drives
+     * it against the real layout.
+     *
      * @return whether the portable host appeared or went, which the content's edge padding is
      *     derived from
      */
-    private boolean syncPinnedAppsHost() {
+    boolean syncPinnedAppsHost() {
+        return syncPinnedAppsHost(currentPlaceLayout());
+    }
+
+    /** As {@link #syncPinnedAppsHost()}, for a layout the caller already has. */
+    boolean syncPinnedAppsHost(@NonNull PlaceLayout layout) {
         LinearLayout host = findViewById(R.id.place_apps_bar_host);
         DockRailScrollView scroll = findViewById(R.id.place_apps_bar_scroll);
         PageTickStripView indicator = findViewById(R.id.place_apps_bar_indicator);
+        PageTickStripView dockIndicator = findViewById(R.id.apps_bar_indicator_band);
         ViewGroup plank = findViewById(R.id.apps_bar_plank_layer);
         if (host == null || scroll == null || plank == null || mSuggestionBarView == null)
             return false;
-        PlaceLayout layout = currentPlaceLayout();
         PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(layout);
         boolean offDock = PlaceChromePolicy.appsShown(layout)
             && edge != PlaceLayout.Edge.BOTTOM;
@@ -9439,14 +9390,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         scroll.setDrawerPullListener(wantHost && edge.isOnSide()
             ? mDockRailDrawerPullListener : null);
-        // The ticks are the row's off the dock and the FX layers' on it, so the bar is handed the
-        // strip only while it stands somewhere else.
-        mSuggestionBarView.setPageIndicator(wantHost ? indicator : null);
+        // One indicator, handed to the row by whichever host the row is standing in: the dock's own
+        // band on the bottom edge, the portable host's band everywhere else. The dock used to paint
+        // its own ticks from the FX layer over the glass, which is what made two of them.
+        mSuggestionBarView.setPageIndicator(wantHost ? indicator : dockIndicator);
+        if (!wantHost && dockIndicator != null) dockIndicator.setVerticalForm(false);
         if (wantHost) {
             DockLayout dockLayout = getDockLayout();
             int edgeMarginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
             int indicatorBandPx = PageTickStrip.bandPx(getResources().getDisplayMetrics().density);
-            if (indicator != null) indicator.setVerticalForm(edge.isOnSide());
+            if (indicator != null) indicator.setVerticalForm(PageTickStrip.verticalOn(edge));
             if (edge.isOnSide()) {
                 // The band the rail itself claims: the cutout under it is the padded content
                 // root's, so the two are never counted twice. Padded on all four sides with the
@@ -9471,9 +9424,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             // The strip lies under a row and stands on the inner side of a rail — the side the
             // terminal is on — so it reads as part of the bar rather than as the screen's edge.
+            // Which of the two leads the host is PageTickStrip's answer, the same one the dock's
+            // band gets by standing under the dock's row.
             host.setOrientation(edge.isOnSide()
                 ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-            orderAppsBarBands(host, scroll, indicator, edge != PlaceLayout.Edge.RIGHT);
+            orderAppsBarBands(host, scroll, indicator, !PageTickStrip.leadsRow(edge));
             scroll.setClipToPadding(false);
             // Every form fills its host now: a rail pages by the column's length rather than
             // running past the end of it, so there is nothing left for the scroll to reach.
@@ -18007,7 +17962,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!isSuggestionBarEnabled() || mSuggestionBarView == null || mTerminalView == null) {
             return;
         }
-        resetAzGestureState(false, true);
+        resetAzGestureState(true);
         mSuggestionBarView.onTerminalInteraction();
         if (inputChar == getSuggestionBarSplitChar()) {
             mSuggestionBarExplicitSearchActive = true;
@@ -18033,7 +17988,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!isSuggestionBarEnabled() || mSuggestionBarView == null || mTerminalView == null) {
             return;
         }
-        resetAzGestureState(false, true);
+        resetAzGestureState(true);
         mSuggestionBarView.onTerminalInteraction();
         if (enter) {
             mSuggestionBarExplicitSearchActive = false;

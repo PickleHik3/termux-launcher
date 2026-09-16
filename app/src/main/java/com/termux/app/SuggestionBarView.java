@@ -1525,6 +1525,8 @@ public final class SuggestionBarView extends GridLayout
         }
         renderButtons(activeAzCandidates, true);
         captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
+        // The matches are the row's content now, so they are what the ticks count.
+        publishPageIndicator();
     }
 
     public void persistAzPreview(char letter, int selectionIndex) {
@@ -1605,7 +1607,7 @@ public final class SuggestionBarView extends GridLayout
         return azStripLastSlot;
     }
 
-    /** The strip as it was laid out, in the canonical frame focus is resolved in. */
+    /** The strip as it was laid out, on the screen focus is resolved on. */
     public void setAzStripGeometry(@Nullable AzFloatingStripPolicy.Strip strip) {
         azStripGeometry = strip;
     }
@@ -1625,20 +1627,19 @@ public final class SuggestionBarView extends GridLayout
      * Focus over the floating strip, reported in the row's own vocabulary so the FX layers and the
      * gesture need no second case for it.
      *
-     * <p>The point and the answer are both in the canonical frame the strip was laid out in —
-     * along the bar as x, away from it as y — which is the screen for a bar along the bottom and a
-     * turn or a mirror for any other edge. Paging therefore reads the strip's own ends whichever
-     * way round they are on screen: for a column, its "left" end is the top one.
+     * <p>The point and the answer are both on the screen, which is where the band was laid out:
+     * it is one row of icons reading left to right on every edge, so its slots and its paging ends
+     * are the same arithmetic wherever the index stands.
      */
     @NonNull
-    public AzDragFocusResult resolveAzStripFocus(float alongPx, float awayPx) {
+    public AzDragFocusResult resolveAzStripFocus(float screenXPx, float screenYPx) {
         boolean paged = azStripPageCount() > 1;
         AzFloatingStripPolicy.Strip strip = azStripGeometry;
         float density = getResources().getDisplayMetrics().density;
-        int edge = toAzEdge(AzFloatingStripPolicy.edgeAt(strip, alongPx, paged, density));
+        int edge = toAzEdge(AzFloatingStripPolicy.edgeAt(strip, screenXPx, paged, density));
         List<LauncherAppEntry> visible = azStripVisibleEntries();
         int slot = hasAzStripMatches()
-            ? AzFloatingStripPolicy.slotAt(strip, alongPx, awayPx, azStripLastSlot, density) : -1;
+            ? AzFloatingStripPolicy.slotAt(strip, screenXPx, screenYPx, azStripLastSlot, density) : -1;
         if (strip == null || slot < 0 || slot >= visible.size()) {
             azStripLastSlot = -1;
             return new AzDragFocusResult(null, null, null, null, null, edge, paged, paged);
@@ -2199,6 +2200,7 @@ public final class SuggestionBarView extends GridLayout
         activeAzCandidates = new ArrayList<>();
         invalidateAzRenderState();
         reloadWithInput(lastInput, lastTerminalView);
+        publishPageIndicator();
     }
 
     public void clearAzPreviewWithFade() {
@@ -7113,38 +7115,61 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * The strip of page ticks that rides with this row when it stands off the dock. On the dock
-     * the ticks belong to the FX layers, which paint them over the glass while a finger owns the
-     * row; no other edge has such a layer, which is why a top row paged silently and a rail — one
-     * page holding everything — could not page at all.
+     * The one strip of page ticks, handed to the row by whichever host the row is standing in. The
+     * dock used to paint its own set from an FX layer over the glass while a finger owned the row,
+     * which is why a row moved off the dock showed two indicators at once and neither knew about
+     * the other; there is one now, and it travels with the row.
+     *
+     * <p>The strip being put down is reset first, so a band that is on screen but no longer bound
+     * cannot be left holding the last row's pages.
      */
     public void setPageIndicator(@Nullable PageTickStripView indicator) {
         if (pageIndicator == indicator) return;
+        PageTickStripView previous = pageIndicator;
         pageIndicator = indicator;
+        if (previous != null) {
+            previous.setPages(1, 0f, -1);
+            previous.setVisibility(INVISIBLE);
+        }
         publishPageIndicator();
     }
 
+    /** The strip this bar is currently feeding, or null while it has none. */
+    @Nullable
+    PageTickStripView boundPageIndicator() {
+        return pageIndicator;
+    }
+
     /**
-     * Hands the strip what it draws: how many pages the row has and where between them it stands.
+     * Hands the strip what it draws: how many pages the bar has and where between them it stands.
      * Cheap and idempotent — the strip invalidates only on a real change — so every path that can
-     * move the row between pages ends here instead of each of them knowing about the strip.
+     * move the bar between pages ends here instead of each of them knowing about the strip.
+     *
+     * <p>Whichever set of pages the bar is showing is the one the ticks count: the matches for a
+     * held letter while the A–Z index has the row, the pinned apps otherwise. That is the same
+     * choice the dock's FX ticks made, kept in the one place the page model already lives.
      */
     void publishPageIndicator() {
         PageTickStripView indicator = pageIndicator;
         if (indicator == null) return;
-        boolean overflow = hasPinnedOverflowPages();
+        boolean azPages = hasAzOverflowPages();
+        boolean overflow = azPages || hasPinnedOverflowPages();
         indicator.setVerticalForm(vertical);
-        indicator.setTickColor(resolvePageIndicatorTickColor());
-        indicator.setPages(overflow ? getPinnedVisiblePageCount() : 1,
-            overflow ? getPinnedVisualPagePosition() : 0f);
+        indicator.setAccentColor(resolvePageIndicatorAccentColor());
+        int pages = azPages ? getAzVisiblePageCount()
+            : (overflow ? getPinnedVisiblePageCount() : 1);
+        float position = azPages ? getAzVisualPagePosition()
+            : (overflow ? getPinnedVisualPagePosition() : 0f);
+        indicator.setPages(pages, position, azPages ? -1 : getPinnedDynamicPageIndex());
         // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
         // gained a page would otherwise grow by it and shove the terminal.
         indicator.setVisibility(overflow ? VISIBLE : INVISIBLE);
     }
 
-    /** The ticks in the row's own text colour, dimmed the way the dock's own ticks are. */
-    private int resolvePageIndicatorTickColor() {
-        return (resolveLauncherTextColor() & 0x00FFFFFF) | 0x99000000;
+    /** The ticks' accent: the launcher's own, which is what the dock's ticks were drawn from. */
+    private int resolvePageIndicatorAccentColor() {
+        return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
+            ContextCompat.getColor(getContext(), R.color.termux_primary));
     }
 
     private void setRowInteractionActive(boolean active) {
