@@ -138,6 +138,38 @@ public class PaneControlsViewRenderTest {
         }
     }
 
+    /**
+     * The join where the tab meets the frame side is a straight T-junction now, not an arc: a pixel
+     * just inside the frame's edge, right at the tab's own top, is the tab's own stroke — the line
+     * it draws for itself starts flush against the frame rather than curving away from it.
+     */
+    @Test
+    public void theStraightJoinIsDrawnAtTheTabsTop() {
+        for (int corner : new int[]{CornerZones.TOP_LEFT, CornerZones.TOP_RIGHT,
+            CornerZones.BOTTOM_LEFT, CornerZones.BOTTOM_RIGHT}) {
+            Bitmap bitmap = render(corner);
+            RectF tab = new RectF();
+            view(corner).tabBounds(tab);
+            boolean left = CornerZones.isLeft(corner);
+            boolean top = CornerZones.isTop(corner);
+            float topY = top ? tab.bottom : tab.top;
+            int fillComposite = ColorUtils.compositeColors(TINT, BEHIND);
+            int x = Math.round(left ? tab.left + 3f : tab.right - 3f);
+            // The row fully inside the tab's own fill, adjacent to the join line: the fill runs
+            // from the join up to the frame edge for a top corner, so that is the row just above
+            // it; for a bottom corner the fill starts exactly at the join and runs down, so it is
+            // the join's own row. A stroke line sitting on that join, even split across the pixel
+            // grid by anti-aliasing, visibly darkens or lightens this row away from the plain fill
+            // colour a flat, un-stroked join would leave it.
+            int y = Math.round(topY) + (top ? -1 : 0);
+            int pixel = bitmap.getPixel(x, y);
+            assertTrue("corner " + corner + ": the straight join at the tab's top is not drawn at ("
+                    + x + ", " + y + "), " + hex(pixel) + " reads as the plain fill "
+                    + hex(fillComposite),
+                far(pixel, fillComposite));
+        }
+    }
+
     /** The pane as the wall paints it — wall, border stroke, tab — into a bitmap. */
     private Bitmap render(int corner) {
         Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
