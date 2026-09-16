@@ -41,9 +41,20 @@ system-bar glass strip; the A–Z index may still ride the apps row (then its ow
 
 Stored keys `place.<place>.<orientation>.<key>` keep their values (`bottom|left|right|hidden` and
 the status/A–Z edges are a subset of the new model). New sibling `<key>_order`; absent = today's
-fixed stack (bottom: extra keys 0, A–Z 1, apps 2; side: rail 0, extra keys 1, status 2, A–Z 3), so
+fixed stack as verified in L1 (top: status 0, A–Z 1, apps 2, extra keys 3; bottom: extra keys 0,
+A–Z 1, apps 2, status 3; sides: status 0, apps 1, extra keys 2, A–Z 3), so
 an updated install renders identically. `MIGRATION_VERSION` 3 → 4. Order keys join
 `ARRANGEMENT_KEYS` so Discard/↺ restores a re-order.
+
+## L1 outcome (2026-09-16, `6b9db619`)
+
+`Element`, `Slot`, `EdgeStackPolicy` (`stack`, `edgeOf`, `orderOf`, `thicknessPx`,
+`contentInsets`, `targets`, `Metrics`, `Drop`), `PlaceLayout.slots`, store v4 with `<key>_order`.
+All four edges accepted for all four bars (TOP rows are stored but not rendered until L2). The
+shared side column (status bar merged with the rail or extra keys column, `max()` instead of a
+sum) is replaced by stacking; L2 removes `StatusBarEdgeGeometry.sharedColumnLengthPx` and friends.
+The miniature draws a bottom status bar outermost while the screen renders it innermost; L4
+fixes the miniature.
 
 ## Build plan
 
