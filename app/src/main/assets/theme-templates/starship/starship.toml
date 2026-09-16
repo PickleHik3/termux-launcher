@@ -39,3 +39,62 @@ surface0  = "{{colors.terminal_background.default.hex}}"
 base      = "{{colors.terminal_background.default.hex}}"
 mantle    = "{{colors.terminal_background.default.hex}}"
 crust     = "{{colors.terminal_background.default.hex}}"
+
+# Material roles, under their own names. The shades above are what existing presets
+# ask for; these are what the Material prompt below is drawn with.
+primary                   = "{{colors.primary.default.hex}}"
+on_primary                = "{{colors.on_primary.default.hex}}"
+primary_container         = "{{colors.primary_container.default.hex}}"
+on_primary_container      = "{{colors.on_primary_container.default.hex}}"
+secondary                 = "{{colors.secondary.default.hex}}"
+on_secondary              = "{{colors.on_secondary.default.hex}}"
+secondary_container       = "{{colors.secondary_container.default.hex}}"
+on_secondary_container    = "{{colors.on_secondary_container.default.hex}}"
+tertiary                  = "{{colors.tertiary.default.hex}}"
+on_tertiary               = "{{colors.on_tertiary.default.hex}}"
+tertiary_container        = "{{colors.tertiary_container.default.hex}}"
+on_tertiary_container     = "{{colors.on_tertiary_container.default.hex}}"
+error                     = "{{colors.error.default.hex}}"
+on_error                  = "{{colors.on_error.default.hex}}"
+error_container           = "{{colors.error_container.default.hex}}"
+on_error_container        = "{{colors.on_error_container.default.hex}}"
+surface                   = "{{colors.surface.default.hex}}"
+surface_container         = "{{colors.surface_container.default.hex}}"
+surface_container_high    = "{{colors.surface_container_high.default.hex}}"
+surface_container_highest = "{{colors.surface_container_highest.default.hex}}"
+on_surface                = "{{colors.on_surface.default.hex}}"
+on_surface_variant        = "{{colors.on_surface_variant.default.hex}}"
+outline                   = "{{colors.outline.default.hex}}"
+outline_variant           = "{{colors.outline_variant.default.hex}}"
+
+# >>> Material prompt >>>
+# A prompt drawn as Material pills, in the roles above. It is off by default so it
+# never replaces a prompt you already have. To use it, copy these lines into your
+# own starship.toml above this block, drop the leading "# " from each, and open a
+# new shell.
+#
+# format = "$directory$git_branch$git_status$cmd_duration$line_break$character"
+#
+# [directory]
+# format = "[](fg:primary_container)[$path]($style)[](fg:primary_container) "
+# style = "fg:on_primary_container bg:primary_container"
+# truncation_length = 3
+# truncation_symbol = "…/"
+#
+# [git_branch]
+# format = "[](fg:secondary_container)[$symbol$branch]($style)[](fg:secondary_container) "
+# style = "fg:on_secondary_container bg:secondary_container"
+#
+# [git_status]
+# format = "[](fg:tertiary_container)[$all_status$ahead_behind]($style)[](fg:tertiary_container) "
+# style = "fg:on_tertiary_container bg:tertiary_container"
+#
+# [cmd_duration]
+# format = "[](fg:surface_container_high)[ $duration]($style)[](fg:surface_container_high) "
+# min_time = 500
+# style = "fg:on_surface_variant bg:surface_container_high"
+#
+# [character]
+# success_symbol = "[❯](bold fg:primary)"
+# error_symbol = "[❯](bold fg:error)"
+# <<< Material prompt <<<

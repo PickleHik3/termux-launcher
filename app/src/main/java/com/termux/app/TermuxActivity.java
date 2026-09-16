@@ -1697,6 +1697,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalSessionActivityClient.onResume();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.applyTrimWrappedTrailingSpacesPreference();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
@@ -8550,6 +8552,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 KeyboardColorSchemeFragment.class, R.string.settings_keyboard_colors_title));
         }
 
+        @Override @Nullable public ExtraKeysView liveExtraKeysView() {
+            return getExtraKeysView();
+        }
+
+        @Override public void commitExtraKeyColors(
+                @NonNull java.util.Map<Integer,
+                    com.termux.shared.termux.extrakeys.ExtraKeyColorRole> colorsByKeyIndex) {
+            writeExtraKeyColors(colorsByKeyIndex);
+        }
+
         @Override @Nullable public Bitmap wallpaperPreviewThumb(int widthPx, int heightPx) {
             if (mPreferences == null || widthPx <= 0 || heightPx <= 0)
                 return null;
@@ -9540,6 +9552,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             keys.reload(getTermuxTerminalExtraKeys(0).getExtraKeysInfo(), mTerminalToolbarDefaultHeight);
             column.addView(keys);
             mColumnExtraKeysView = keys;
+            applyExtraKeysPlaceEligibility(keys);
         }
         // Padded like the rail: the docked edge carries its inset plus a margin, and the keys stay
         // clear of the status and navigation bars.
@@ -9644,6 +9657,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateDockRailView();
         boolean columnChanged = syncExtraKeysColumn();
         columnChanged |= syncAzBarHosts();
+        // The keys follow the wall, but their meanings do not: a key with nothing to act on where
+        // the wall has landed is drawn dead until the wall moves again.
+        applyExtraKeysPlaceEligibility();
         if (arrangementChanged || columnChanged) {
             // Rows collapse or come back with a column or a rail, and the render state that hides
             // them is derived rather than stored, so both are rebuilt here.
@@ -12242,6 +12258,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mExtraKeysViews.set(page, extraKeysView);
         if (page == 0) mExtraKeysView = extraKeysView;
         applyExtraKeysFeedbackAccent(extraKeysView);
+        applyExtraKeysPlaceEligibility(extraKeysView);
     }
 
     public void setExtraKeysView(ExtraKeysView extraKeysView) {
@@ -12269,6 +12286,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
         }
+    }
+
+    /**
+     * Tells every built key row which of its keys can act where the wall is standing. Keys that
+     * cannot are drawn dead rather than dropped, so the row keeps the shape the user gave it.
+     *
+     * <p>One pass over a handful of buttons per view, run when the wall settles on a place or a row
+     * is built — never per frame.
+     */
+    /** The place the built rows were last told about, so a sync that moves nothing repaints nothing. */
+    @Nullable private com.termux.app.wall.PaneWallPage mAppliedExtraKeysPlace;
+
+    private void applyExtraKeysPlaceEligibility() {
+        if (currentWallPlace() == mAppliedExtraKeysPlace) return;
+        mAppliedExtraKeysPlace = currentWallPlace();
+        for (ExtraKeysView view : mExtraKeysViews) applyExtraKeysPlaceEligibility(view);
+        applyExtraKeysPlaceEligibility(mColumnExtraKeysView);
+    }
+
+    private void applyExtraKeysPlaceEligibility(@Nullable ExtraKeysView extraKeysView) {
+        if (extraKeysView == null) return;
+        final com.termux.app.wall.PaneWallPage place = currentWallPlace();
+        extraKeysView.setKeyUsabilityPolicy(
+            value -> com.termux.app.terminal.io.ExtraKeyEligibility.isUsable(value, place));
+    }
+
+    /**
+     * Writes the colours the Appearance editor picked into the stored key row and rebuilds the row
+     * from it, so what is on screen and what is in the file are the same thing. The editor always
+     * picks from the first key page — the row and the column are both built from it.
+     */
+    private void writeExtraKeyColors(@NonNull java.util.Map<Integer,
+            com.termux.shared.termux.extrakeys.ExtraKeyColorRole> colorsByKeyIndex) {
+        if (colorsByKeyIndex.isEmpty()) return;
+        String propertyKey = TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS[0];
+        java.util.Properties properties =
+            com.termux.app.settings.TermuxPropertiesFile.load(this);
+        String value = properties.getProperty(propertyKey);
+        if (value == null) value = TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES[0];
+        com.termux.app.terminal.io.ExtraKeysLayoutModel model =
+            com.termux.app.terminal.io.ExtraKeysLayoutModel.parse(value);
+        if (!model.applyColorsByIndex(colorsByKeyIndex)) return;
+        com.termux.app.settings.TermuxPropertiesFile.write(propertyKey, model.serialize());
+        reloadExtraKeysFromProperties();
     }
 
     public ViewPager getTerminalToolbarViewPager() {
@@ -16348,8 +16409,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController.showWindow(w);
         mPaneController.focusSession(session);
         // Apply font/colours (nerd-font typeface) to every populated pane.
-        if (getTermuxTerminalSessionClient() != null)
+        if (getTermuxTerminalSessionClient() != null) {
             getTermuxTerminalSessionClient().checkForFontAndColors();
+            getTermuxTerminalSessionClient().applyTrimWrappedTrailingSpacesPreference();
+        }
         for (TerminalView v : getTerminalPaneViews())
             if (v.getCurrentSession() != null) v.onScreenUpdated();
         rebuildDrawerSessions();

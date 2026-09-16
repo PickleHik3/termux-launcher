@@ -56,6 +56,36 @@ public class ScreenBufferTest extends TerminalTestCase {
         assertEquals("ABC\nFG", mTerminal.getScreen().getSelectedText(0, 0, 1, 1, true, true));
     }
 
+    /** Trimming on (the shipped default): a wrapped row's trailing padding is dropped. */
+    public void testGetSelectedTextTrimsWrappedRowPaddingByDefault() {
+        // Row 0 fills all 5 columns as "AB   " and wraps; row 1 continues as "  CD ".
+        // Row 1 starts with a space, so no join space is added back.
+        withTerminalSized(5, 3).enterString("AB     CD");
+        assertEquals("AB  CD", mTerminal.getSelectedText(0, 0, 4, 1));
+    }
+
+    /** A trimmed wrapped row that ends mid-word keeps exactly one space before the next word. */
+    public void testGetSelectedTextKeepsOneSpaceBeforeNextWord() {
+        // Row 0 fills all 5 columns as "AB   " and wraps; row 1 continues as "CD   ".
+        withTerminalSized(5, 3).enterString("AB   CD");
+        assertEquals("AB CD", mTerminal.getSelectedText(0, 0, 4, 1));
+    }
+
+    /** With the setting off, a wrapped row's trailing padding is kept in full, as before. */
+    public void testGetSelectedTextKeepsWrappedRowPaddingWhenTrimDisabled() {
+        withTerminalSized(5, 3).enterString("AB   CD");
+        mTerminal.setTrimWrappedTrailingSpaces(false);
+        assertEquals("AB   CD", mTerminal.getSelectedText(0, 0, 4, 1));
+    }
+
+    /** An unwrapped row's trailing padding is always trimmed, regardless of the setting. */
+    public void testGetSelectedTextUnwrappedRowUnaffectedByTrimSetting() {
+        withTerminalSized(5, 3).enterString("ABC  \r\nDEF");
+        assertEquals("ABC\nDEF", mTerminal.getSelectedText(0, 0, 4, 1));
+        mTerminal.setTrimWrappedTrailingSpaces(false);
+        assertEquals("ABC\nDEF", mTerminal.getSelectedText(0, 0, 4, 1));
+    }
+
     public void testGetWordAtLocation() {
         withTerminalSized(5, 3).enterString("ABCDEFGHIJ\r\nKLMNO");
         assertEquals("ABCDEFGHIJKLMNO", mTerminal.getScreen().getWordAtLocation(0, 0));

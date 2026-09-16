@@ -368,6 +368,47 @@ public final class ExtraKeysView extends GridLayout {
      *  a press-hold indication, not just repetitive/special ones). */
     @Nullable private Runnable mGenericHoldVisualRunnable;
 
+    // ------------------------------------------------------------------- usable keys and colours
+
+    /**
+     * Whether a key can act where the row is currently standing. The row itself knows nothing about
+     * places; the host answers, and the row draws the answer.
+     */
+    public interface KeyUsabilityPolicy {
+        /**
+         * @param keyValue the key or macro the button sends, exactly as configured.
+         * @return {@code false} to draw the key dead and let taps fall through it.
+         */
+        boolean isKeyUsable(@NonNull String keyValue);
+    }
+
+    /** A key tapped while the row is in pick mode, instead of the key firing. */
+    public interface KeyPickListener {
+        void onExtraKeyPicked(int keyIndex, @NonNull ExtraKeyButton buttonInfo,
+                              @NonNull MaterialButton button);
+    }
+
+    /** Material's disabled-content opacity, as an alpha channel: 38% of 255. */
+    private static final int DISABLED_LABEL_ALPHA = 97;
+
+    /**
+     * The rounding a coloured cap is drawn with. The row's own keys carry no shape — their fill is
+     * normally transparent — so this is the one shape a key ever shows.
+     */
+    private static final float COLORED_KEY_CORNER_RADIUS_DP = 12f;
+
+    @Nullable private KeyUsabilityPolicy mUsabilityPolicy;
+    @Nullable private KeyPickListener mKeyPickListener;
+    /** While true a tap picks the key for the editor instead of firing it, and nothing is dead. */
+    private boolean mPickMode;
+
+    /** The definition behind each built button, so styling can be restated without the matrix. */
+    private final Map<MaterialButton, ExtraKeyButton> mKeyInfo = new HashMap<>();
+    /** Colours the editor is previewing, which stand in front of the stored ones until it commits. */
+    private final Map<MaterialButton, ExtraKeyColorRole> mPreviewRoles = new HashMap<>();
+    /** Role colours resolved from the theme once, rather than per press. Cleared on a theme change. */
+    private final Map<ExtraKeyColorRole, int[]> mRoleColors = new HashMap<>();
+
     public ExtraKeysView(Context context, AttributeSet attrs) {
         super(context, attrs);
         // The hold bloom lives in this view's overlay and must be allowed to draw past the
@@ -645,6 +686,8 @@ public final class ExtraKeysView extends GridLayout {
             return;
         for (SpecialButtonState state : mSpecialButtons.values()) state.buttons = new ArrayList<>();
         mGlowLevels.clear();
+        mKeyInfo.clear();
+        mPreviewRoles.clear();
         removeAllViews();
         ExtraKeyButton[][] buttons = extraKeysInfo.getMatrix();
         mLoadedMatrix = buttons;
@@ -676,6 +719,7 @@ public final class ExtraKeysView extends GridLayout {
                     }
                 });
 
+                mKeyInfo.put(button, buttonInfo);
                 setKeyCapText(button, buttonInfo.getDisplay());
                 button.setTextColor(mButtonTextColor);
                 // Keep multi-letter labels (SHFT, CTRL) on one line. The active/sticky background is
@@ -701,6 +745,28 @@ public final class ExtraKeysView extends GridLayout {
                 final float[] popupSwipeDownRawX = new float[1];
                 final boolean[] toolbarPageSwipeTriggered = new boolean[1];
                 button.setOnTouchListener((view, event) -> {
+                    // Picking a key is not pressing it: the editor wants to know which cap was
+                    // touched, and the key must not fire while it is being dressed.
+                    if (mPickMode) {
+                        switch (event.getAction()) {
+                            case MotionEvent.ACTION_DOWN:
+                                animateKeyCapDip(button, KeyVisualState.PRESSED);
+                                break;
+                            case MotionEvent.ACTION_UP:
+                                animateKeyCapDip(button, KeyVisualState.RESTING);
+                                if (mKeyPickListener != null) {
+                                    mKeyPickListener.onExtraKeyPicked(
+                                        indexOfChild(button), buttonInfo, button);
+                                }
+                                break;
+                            case MotionEvent.ACTION_CANCEL:
+                                animateKeyCapDip(button, KeyVisualState.RESTING);
+                                break;
+                            default:
+                                break;
+                        }
+                        return true;
+                    }
                     switch(event.getAction()) {
                         case MotionEvent.ACTION_DOWN:
                             popupSwipeDownRawY[0] = event.getRawY();
@@ -818,6 +884,9 @@ public final class ExtraKeysView extends GridLayout {
                 param.rowSpec = GridLayout.spec(mVertical ? col : row, GridLayout.FILL, 1.f);
                 button.setLayoutParams(param);
                 addView(button);
+                // Its colour, and whether it can act here at all, decided once as it is built —
+                // never on the draw path.
+                restoreButtonVisualState(button, buttonInfo);
             }
         }
     }
@@ -1013,7 +1082,8 @@ public final class ExtraKeysView extends GridLayout {
         // A latched modifier keeps its glyphs glowing (persists across rebuilds). When it goes
         // inactive, clear its glow so a consumed one-shot modifier doesn't leave a stale halo
         // (a tap-to-toggle-off still plays its release fade via the following releaseKeyGlow call).
-        if (state.isActive || state.isLocked) {
+        // A key drawn dead shows no glow either — a halo on an inert cap reads as "still armed".
+        if ((state.isActive || state.isLocked) && isKeyUsable(mKeyInfo.get(button))) {
             // A latch is a sustained state — show it at the hold tier (wider, whiter halo).
             applyKeyGlow(button, 1f, glowRadiusDp(KEY_GLOW_RADIUS_HOLD_DP), KEY_GLOW_WHITE_MIX_HOLD);
         } else if (mGlowLevels.containsKey(button)) {
@@ -1023,10 +1093,134 @@ public final class ExtraKeysView extends GridLayout {
 
     private void applyButtonVisualState(@NonNull MaterialButton button, @NonNull KeyVisualState state,
                                         boolean activeText) {
-        // Feedback is now the glyph glow, not a pill: keep the background flat in every state and let
-        // the glow (plus the active text colour) carry the pressed / latched indication.
-        button.setTextColor(activeText ? mButtonActiveTextColor : mButtonTextColor);
-        button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+        // Feedback is the glyph glow, not a pill: the background stays flat in every state unless
+        // the key was given a colour of its own, and the glow (plus the active text colour) carries
+        // the pressed / latched indication either way.
+        ExtraKeyButton info = mKeyInfo.get(button);
+        boolean usable = isKeyUsable(info);
+        if (button.isEnabled() != usable)
+            button.setEnabled(usable);
+        if (!usable) {
+            // Material's disabled look: the label at 38%, nothing behind it, nothing to press.
+            button.setTextColor(withAlpha(mButtonTextColor, DISABLED_LABEL_ALPHA));
+            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+            return;
+        }
+        ExtraKeyColorRole role = roleFor(button, info);
+        if (role == null) {
+            button.setTextColor(activeText ? mButtonActiveTextColor : mButtonTextColor);
+            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+            return;
+        }
+        int[] colors = roleColors(role);
+        // A latched modifier still wins: its accent label reads over the role's own fill.
+        button.setTextColor(activeText ? mButtonActiveTextColor : colors[1]);
+        GradientDrawable cap = new GradientDrawable();
+        cap.setShape(GradientDrawable.RECTANGLE);
+        cap.setCornerRadius(dpToPx(COLORED_KEY_CORNER_RADIUS_DP));
+        cap.setColor(colors[0]);
+        button.setBackground(cap);
+    }
+
+    /** The colour a key is painted in: what the editor is previewing, else what it was given. */
+    @Nullable
+    private ExtraKeyColorRole roleFor(@NonNull MaterialButton button,
+                                      @Nullable ExtraKeyButton info) {
+        if (mPreviewRoles.containsKey(button))
+            return mPreviewRoles.get(button);
+        return info == null ? null : info.getColor();
+    }
+
+    /** {@code {background, label}} for a role, resolved from the theme once and then remembered. */
+    @NonNull
+    private int[] roleColors(@NonNull ExtraKeyColorRole role) {
+        int[] cached = mRoleColors.get(role);
+        if (cached != null)
+            return cached;
+        int[] resolved = { role.background(getContext()), role.label(getContext()) };
+        mRoleColors.put(role, resolved);
+        return resolved;
+    }
+
+    /** Whether this key acts where the row is standing. In pick mode every key is live to be picked. */
+    private boolean isKeyUsable(@Nullable ExtraKeyButton info) {
+        if (mPickMode || mUsabilityPolicy == null || info == null)
+            return true;
+        return mUsabilityPolicy.isKeyUsable(info.getKey());
+    }
+
+    /**
+     * Which keys can act where the row now stands. Setting a policy restates every key once; the
+     * host calls this again whenever the wall settles on another place.
+     */
+    public void setKeyUsabilityPolicy(@Nullable KeyUsabilityPolicy policy) {
+        mUsabilityPolicy = policy;
+        restateEveryKey();
+    }
+
+    /**
+     * Pick mode: a tap reports the key to {@link #setKeyPickListener} instead of firing it, and no
+     * key is drawn dead, so any of them can be given a colour. The Appearance editor holds this
+     * while its keyboard card is up.
+     */
+    public void setPickMode(boolean pickMode) {
+        if (mPickMode == pickMode)
+            return;
+        mPickMode = pickMode;
+        dismissPopup();
+        restateEveryKey();
+    }
+
+    public boolean isPickMode() {
+        return mPickMode;
+    }
+
+    public void setKeyPickListener(@Nullable KeyPickListener listener) {
+        mKeyPickListener = listener;
+    }
+
+    /**
+     * Shows a colour on one key without storing it, for the editor's live preview. A null role
+     * previews "no colour"; {@link #clearPreviewColors()} puts the stored colours back.
+     */
+    public void previewKeyColor(@NonNull MaterialButton button,
+                                @Nullable ExtraKeyColorRole role) {
+        mPreviewRoles.put(button, role);
+        restoreButtonVisualStateFor(button);
+    }
+
+    /** Drops every previewed colour, leaving the keys as they are stored. */
+    public void clearPreviewColors() {
+        if (mPreviewRoles.isEmpty())
+            return;
+        mPreviewRoles.clear();
+        restateEveryKey();
+    }
+
+    /**
+     * Re-reads every role from the theme and repaints. The host calls this when the theme, the
+     * scheme or the wallpaper palette moves under an already-built row.
+     */
+    public void refreshKeyStyles() {
+        mRoleColors.clear();
+        restateEveryKey();
+    }
+
+    /** One pass over the built keys. Cheap by construction: a row holds a handful of buttons. */
+    private void restateEveryKey() {
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child instanceof MaterialButton)
+                restoreButtonVisualStateFor((MaterialButton) child);
+        }
+    }
+
+    private void restoreButtonVisualStateFor(@NonNull MaterialButton button) {
+        ExtraKeyButton info = mKeyInfo.get(button);
+        if (info == null)
+            applyButtonVisualState(button, KeyVisualState.RESTING, false);
+        else
+            restoreButtonVisualState(button, info);
     }
 
     private void animateKeyCapDip(@NonNull MaterialButton button, @NonNull KeyVisualState state) {

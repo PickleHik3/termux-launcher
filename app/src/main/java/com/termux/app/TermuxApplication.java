@@ -2,9 +2,16 @@ package com.termux.app;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.res.Configuration;
+import android.view.ContextThemeWrapper;
+
+import androidx.annotation.NonNull;
 
 import com.jakewharton.processphoenix.ProcessPhoenix;
 import com.termux.BuildConfig;
+import com.termux.R;
+import com.termux.app.terminal.MaterialTerminalColorScheme;
+import com.termux.app.theme.templates.ThemeTemplates;
 import com.termux.shared.errors.Error;
 import com.termux.shared.android.ProcessUtils;
 import com.termux.shared.logger.Logger;
@@ -12,6 +19,7 @@ import com.termux.shared.termux.TermuxBootstrap;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.file.TermuxFileUtils;
+import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
@@ -21,9 +29,35 @@ import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.app.notice.AppNotice;
 import com.termux.launcherctl.LauncherCtlApiServer;
 
+import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class TermuxApplication extends Application {
 
     private static final String LOG_TAG = "TermuxApplication";
+
+    /**
+     * Runs the day/night re-export below; never the UI thread, and never the thread a
+     * configuration change is delivered on.
+     */
+    private static final ExecutorService NIGHT_MODE_EXPORT_EXECUTOR =
+        Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "app-night-mode-theme-export");
+            thread.setPriority(Thread.MIN_PRIORITY);
+            thread.setDaemon(true);
+            return thread;
+        });
+
+    /**
+     * Set once {@link #onCreate()} has done enough setup that a configuration change is worth
+     * acting on. A callback that arrived while this was still false would be racing shell manager
+     * and preference setup for no reason: nothing has read a wallpaper or written a session yet.
+     */
+    private volatile boolean mReady;
+
+    /** {@code UI_MODE_NIGHT_MASK} bits last seen, so only an actual day/night flip does anything. */
+    private volatile int mLastNightModeMask;
 
     public void onCreate() {
         super.onCreate();
@@ -83,12 +117,78 @@ public class TermuxApplication extends Application {
             TermuxShellIntegrationInstaller.ensureInstalled(this);
             TermuxLauncherConfigInstaller.ensureInstalled(this);
         }
+        mLastNightModeMask = context.getResources().getConfiguration().uiMode
+            & Configuration.UI_MODE_NIGHT_MASK;
+        mReady = true;
     }
 
     @Override
     public void onTerminate() {
         super.onTerminate();
         LauncherCtlApiServer.getInstance().stop();
+    }
+
+    /**
+     * The one config bit this class cares about: day/night. {@code TermuxActivity} only sees this
+     * when it is next created, and while it is merely stopped — the ordinary case, since it is the
+     * home screen and outlives being backgrounded — Android defers that recreation until the
+     * activity is restarted rather than delivering it immediately (see
+     * {@code TermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded}'s javadoc
+     * for the foreground half of this same path). Meanwhile any shell already running against
+     * {@code ~/.termux/material-colors.sh} and the enabled theme templates — tmux's status line, a
+     * live starship or herdr prompt — would keep painting the contrast the wallpaper wore before the
+     * flip until the user reopens the launcher. This re-derives the export and reruns the template
+     * pass from here instead, off the UI thread, so those tools do not have to wait.
+     *
+     * <p>Deliberately narrow: it does not touch a live {@code TerminalSession}'s colours, repaint a
+     * view, or rebuild the in-app keyboard — all of that needs a live activity and already happens
+     * unconditionally the moment {@code TermuxActivity.onCreate} next runs, recreated exactly because
+     * this same config bit moved.
+     */
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (!mReady) return;
+        int nightModeMask = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        if (nightModeMask == mLastNightModeMask) return;
+        mLastNightModeMask = nightModeMask;
+        refreshThemeTemplatesForNightModeFlip(newConfig);
+    }
+
+    /**
+     * Only the dynamic-wallpaper palette depends on day/night: the static from-scheme path derives
+     * every role from {@code ~/.termux/colors.properties} through {@code LauncherSchemeTheme}, which
+     * this deliberately does not touch — mutually exclusive with dynamic colors, and unaffected by
+     * this event.
+     *
+     * <p>Passes are ordered through the same {@link ThemeTemplates} applier the activity schedules
+     * through (both resolve to one applier keyed off this application instance), so whichever call
+     * lands last — this one or the activity's own, should the two race on resume — wins outright;
+     * the other stops between templates rather than redoing finished work.
+     */
+    private void refreshThemeTemplatesForNightModeFlip(@NonNull Configuration newConfig) {
+        Context context = getApplicationContext();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+        if (preferences == null || !preferences.isTerminalDynamicColorsEnabled()) return;
+        TerminalContrastLevel level = preferences.getTerminalContrastLevel();
+        // Claimed here, synchronously, so a pass this triggers is ordered by when the flip was
+        // actually observed rather than when the executor got around to it.
+        long pass = ThemeTemplates.schedulePass(context);
+        NIGHT_MODE_EXPORT_EXECUTOR.execute(() -> {
+            try {
+                Context configuredContext = context.createConfigurationContext(newConfig);
+                Context themedContext = new ContextThemeWrapper(configuredContext,
+                    R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+                Properties terminalColors = MaterialTerminalColorScheme.create(themedContext, level);
+                Properties exported = MaterialTerminalColorScheme.createMaterialRoleProperties(
+                    themedContext, terminalColors, level);
+                MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
+                ThemeTemplates.runPass(context, exported, pass);
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG,
+                    "Error refreshing theme templates for a background day/night flip", e);
+            }
+        });
     }
 
     public static void setLogConfig(Context context) {

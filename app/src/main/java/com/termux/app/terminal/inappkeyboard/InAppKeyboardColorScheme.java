@@ -303,9 +303,17 @@ public final class InAppKeyboardColorScheme {
     public juloo.keyboard2.Theme.Palette applyToPalette(
         @NonNull juloo.keyboard2.Theme.Palette base) {
         if (!mBase16Palette || mSwatches.length < BASE16_COLOR_COUNT) return base;
+        int keyBackground = preserveAlpha(mSwatches[0x1], base.keyBackground);
+        // Base16 has no swatch of its own for the function-key tier the live keyboard now
+        // shows (see InAppKeyboardPaletteFactory / inapp-keyboard/UPSTREAM.md), so it is
+        // derived the way that tier reads against the letter keys elsewhere: one tone step
+        // darker than the key background, labelled with the sub-label swatch.
+        int functionKeyBackground = oneToneDarker(keyBackground);
+        int functionLabelColor =
+            InAppKeyboardPaletteFactory.ensureContrast(mSwatches[0x4], functionKeyBackground);
         return new juloo.keyboard2.Theme.Palette(
             preserveAlpha(mSwatches[0x0], base.keyboardBackground),
-            preserveAlpha(mSwatches[0x1], base.keyBackground),
+            keyBackground,
             preserveAlpha(mSwatches[0x2], base.actionKeyBackground),
             preserveAlpha(mSwatches[0x2], base.spaceBarBackground),
             preserveAlpha(mSwatches[0xD], base.activatedKeyBackground),
@@ -319,7 +327,15 @@ public final class InAppKeyboardColorScheme {
             base.secondaryDimming, base.greyedDimming, mSwatches[0x6], mSwatches[0x4],
             new int[] {mSwatches[0x8], mSwatches[0x9], mSwatches[0xA], mSwatches[0xB],
                 mSwatches[0xC], mSwatches[0xD], mSwatches[0xE], mSwatches[0xF]},
-            base.keyGradientTopOverlay, base.keyGradientBottomOverlay);
+            base.keyGradientTopOverlay, base.keyGradientBottomOverlay,
+            functionKeyBackground, functionLabelColor);
+    }
+
+    /** One M3 container tier darker, alpha preserved — see {@link #applyToPalette}. */
+    private static int oneToneDarker(int color) {
+        int darker = androidx.core.graphics.ColorUtils.blendARGB(
+            color | 0xFF000000, android.graphics.Color.BLACK, 0.12f);
+        return preserveAlpha(darker, color);
     }
 
     private static int preserveAlpha(int color, int alphaSource) {

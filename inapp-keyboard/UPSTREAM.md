@@ -167,6 +167,25 @@ fails when the catalogue has gone stale.
   the match, with flags left out, because the same key carries different
   rendering flags depending on how a layout file spells it. A layout that does
   not carry the named key answers false, which is a normal answer.
+- Function-key palette slot (local addition): `Theme.Palette.functionKeyBackground` /
+  `functionLabelColor`, the matching `Theme.colorKeyFunction` / `functionLabelColor` /
+  `functionSubLabelColor` / `functionSecondaryLabelColor` / `functionGreyedLabelColor` fields,
+  `Theme.Computed.key_function`, and the `functionStyle` parameter on
+  `Theme.Computed.Key`'s constructor. Upstream's Action role covers both the real enter/editor-
+  action key and every other modifier key sharing that role (shift, ctrl, backspace, arrows,
+  layout switch, config — see `bottom_row.xml`), with no way to give the actual action key a
+  different look from the rest. Since re-splitting that role in every layout's `role=` attribute
+  would be a layout change, `Keyboard2View.isEnterKey` tells them apart at draw time instead, from
+  a key's own value (`Kind.Keyevent` with `KEYCODE_ENTER`) rather than its role, and picks
+  `key_action` (the filled Material action-button look) only for that key, `key_function`
+  (function-key look) for the rest of the Action role. Space_bar no longer borrows the Action
+  role's label colors — it now reads from the same label source as Normal, since
+  `InAppKeyboardPaletteFactory` gives it the letter keys' tone rather than the action role's. Every
+  shorter `Palette` constructor overload defaults the two new fields to `keyBackground`/
+  `labelColor`, so a caller that does not migrate (the imported-Base16-palette path in
+  `InAppKeyboardColorScheme.applyToPalette`, and `KeyboardColorSchemeFragment`'s preview-only
+  `withKeyboardBackground` copy) renders function keys like ordinary letter keys instead of
+  losing color entirely.
 - Tap correction hook (local addition): `Keyboard2View.TapResolver` plus
   `setTapResolver`, and the new file `TapGeometry.java`. At `ACTION_DOWN` the
   view resolves the static grid as upstream does, then lets the host resolver

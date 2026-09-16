@@ -58,6 +58,10 @@ Programs in the terminal — a Neovim or tmux clipboard provider, for example �
 you last copied on Android, through the OSC 52 escape sequence. Turn this off under
 **Settings → Terminal → Let programs read the clipboard** if you would rather they could not.
 
+Copying a selection that runs onto a wrapped line drops that line's trailing padding, the same as
+any other line, keeping one space if it broke mid-word. Turn this off under **Settings → Terminal
+→ Trim trailing spaces on wrapped lines** to copy wrapped lines exactly as shown, padding included.
+
 The long-press **Terminal action sheet** remains deliberately short: command palette, URL picker,
 share transcript, wallpaper controls, Glass Lab, settings, reset terminal, and kill process. Use the
 palette for the full searchable surface.

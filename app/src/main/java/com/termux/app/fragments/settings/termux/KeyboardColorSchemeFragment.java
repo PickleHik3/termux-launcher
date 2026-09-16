@@ -190,14 +190,15 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
     /** Copy of a palette with only the keyboard background replaced. */
     @NonNull
-    private static Theme.Palette withKeyboardBackground(@NonNull Theme.Palette base, int color) {
+    static Theme.Palette withKeyboardBackground(@NonNull Theme.Palette base, int color) {
         return new Theme.Palette(color, base.keyBackground, base.actionKeyBackground,
             base.spaceBarBackground, base.activatedKeyBackground, base.labelColor,
             base.subLabelColor, base.activatedLabelColor, base.pressedLabelColor,
             base.lockedModifierColor, base.borderColor, base.borderEnabled, base.borderWidth,
             base.borderRadius, base.opacity, base.secondaryDimming, base.greyedDimming,
             base.actionLabelColor, base.actionSubLabelColor, base.indicatorColors,
-            base.keyGradientTopOverlay, base.keyGradientBottomOverlay);
+            base.keyGradientTopOverlay, base.keyGradientBottomOverlay,
+            base.functionKeyBackground, base.functionLabelColor);
     }
 
     /** Bottom sheet-style card holding the swatches, edit/reset actions, and role filters. */
