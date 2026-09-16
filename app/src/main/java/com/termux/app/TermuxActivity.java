@@ -10685,9 +10685,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return DockLayoutPolicy.compute(buildDockInputs(0));
     }
 
-    /** The dock's geometry for an arrangement the caller is applying, rather than the stored one. */
+    /**
+     * The dock's geometry for an arrangement the caller is applying, rather than the stored one.
+     *
+     * <p>Package-visible for the same reason {@link #applyEdgeStacks} is: the paging tests drive a
+     * whole arrangement against the real {@code activity_termux.xml} rather than re-deriving the
+     * band each bar is handed.
+     */
     @NonNull
-    private DockLayout dockLayoutFor(@NonNull PlaceLayout layout) {
+    DockLayout dockLayoutFor(@NonNull PlaceLayout layout) {
         return DockLayoutPolicy.compute(buildDockInputs(0, layout));
     }
 
@@ -10701,8 +10707,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mAppliedAzRowChinPaddingPx = Integer.MIN_VALUE;
     private int mAppliedAzRowCrownPaddingPx = Integer.MIN_VALUE;
 
-    /** True when this layout moved the dock. */
-    private boolean applyDockLayout(@NonNull DockLayout layout) {
+    /** True when this layout moved the dock. Package-visible for the arrangement tests. */
+    boolean applyDockLayout(@NonNull DockLayout layout) {
         boolean moved = updateViewHeight(R.id.apps_bar_viewpager, layout.appsBarHeightPx);
         moved |= updateViewHeight(R.id.apps_bar_indicator_band, layout.indicatorBandHeightPx);
         moved |= updateViewHeight(R.id.apps_bar_az_row, layout.azRowHeightPx);

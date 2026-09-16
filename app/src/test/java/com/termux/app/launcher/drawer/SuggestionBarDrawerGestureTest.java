@@ -136,9 +136,13 @@ public class SuggestionBarDrawerGestureTest {
         assertEquals(0, listener.begins);
         assertEquals(0, listener.drags);
         assertEquals(0, listener.ends);
-        // No synthetic cancel on the paging path — the child sees its own UP and bounces back.
-        assertEquals(0, child.countOf(MotionEvent.ACTION_CANCEL));
-        assertEquals(1, child.countOf(MotionEvent.ACTION_UP));
+        // Updated with a reason: the paging claim stands its children down the same way a claimed
+        // drawer drag does, with exactly one synthetic cancel at the claim. It used to send none
+        // and leave the release to the child's own UP — which a committed swipe consumes itself,
+        // so the icon the finger came down on kept its press-down lift and stood there looking
+        // permanently touched.
+        assertEquals(1, child.countOf(MotionEvent.ACTION_CANCEL));
+        assertEquals(0, child.countOf(MotionEvent.ACTION_UP));
     }
 
     @Test
