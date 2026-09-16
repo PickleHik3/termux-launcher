@@ -276,6 +276,31 @@ public class LayoutEditorPlanTest {
             RowPlacement.BOTTOM, places.extraKeys(PaneWallPage.TERMINAL, PORTRAIT));
     }
 
+    // ----------------------------------------------------------------------- the notice slot
+
+    @Test
+    public void theSideStatusNoticeIsSilentWhileTheStatusBarStandsOnTopOrBottom() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        assertFalse("the shipped default is the top edge", plan.warnsSideStatusBar());
+
+        plan.drop(Bar.STATUS_BAR, Edge.BOTTOM);
+        assertFalse(plan.warnsSideStatusBar());
+    }
+
+    @Test
+    public void theSideStatusNoticeFiresOnceTheStatusBarStandsOnASide() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+
+        plan.drop(Bar.STATUS_BAR, Edge.LEFT);
+        assertTrue(plan.warnsSideStatusBar());
+
+        plan.showOrientation(LANDSCAPE);
+        assertFalse("the other orientation is untouched", plan.warnsSideStatusBar());
+
+        plan.drop(Bar.STATUS_BAR, Edge.RIGHT);
+        assertTrue(plan.warnsSideStatusBar());
+    }
+
     // ------------------------------------------------------------ the rows beneath the miniature
 
     @Test

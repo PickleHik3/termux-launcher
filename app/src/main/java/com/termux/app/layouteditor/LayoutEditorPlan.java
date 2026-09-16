@@ -239,6 +239,15 @@ public final class LayoutEditorPlan {
         return MiniatureDragPolicy.warnsNarrowCanvas(shownLayout(), mShownOrientation);
     }
 
+    /**
+     * Whether the status bar's own slot has landed on a side edge, where it never rests expanded
+     * ({@code StatusBarGesturePolicy.expansionAllowed}). The editor shows a line about it and
+     * nothing else — a side status bar is allowed, it is only worth knowing about.
+     */
+    public boolean warnsSideStatusBar() {
+        return shownLayout().slot(com.termux.app.place.Element.STATUS).edge.isOnSide();
+    }
+
     /** Whether anything has moved since the editor opened — the unsaved-changes question. */
     public boolean isDirty() {
         return !mEntrySignature.equals(PlaceArrangeSnapshot.capture(mPlaces).signature());
