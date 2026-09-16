@@ -11,6 +11,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.place.EdgeStackView;
+
 /**
  * The page indicator a pinned-apps row carries off the dock: a short strip of ticks that rides with
  * the row, lying down under it on the top edge and standing beside it on a rail.
@@ -24,7 +26,7 @@ import androidx.annotation.Nullable;
  * <p>The shape and the sizes are {@link PageTickStrip}'s, so the indicator is the same object on
  * every edge; only the axis changes, and it is taken from the strip's own proportions.
  */
-public class PageTickStripView extends View {
+public class PageTickStripView extends View implements EdgeStackView.Air {
 
     @NonNull private final Paint tickPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     @NonNull private final RectF tick = new RectF();
@@ -120,6 +122,18 @@ public class PageTickStripView extends View {
 
     public float getPagePosition() {
         return pagePosition;
+    }
+
+    /**
+     * The ticks are the only thing the strip draws, so this is their thickness across the band —
+     * and nothing at all while there is one page and no strip to draw. The hairline that splits
+     * the gap the strip stands in keeps clear of it.
+     */
+    @Override
+    public int airMarkThicknessPx() {
+        if (pageCount <= 1) return 0;
+        return Math.round(PageTickStrip.THICKNESS_DP
+            * getResources().getDisplayMetrics().density);
     }
 
     @Override

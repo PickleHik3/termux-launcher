@@ -464,22 +464,29 @@ public class TermuxActivityEdgeStackLayoutTest {
         laidOutColumn(activity, 1080, 1370);
 
         float density = activity.getResources().getDisplayMetrics().density;
-        int airPx = DockLayoutPolicy.loneRowAirPx(density);
+        // Updated for Q8 with a reason: the ticks stand in the row's air rather than in a band
+        // beside it, so the air on each side of the icons is their band and the row is symmetric
+        // about them here too. P8's 4dp sliver is what a row showing no ticks still keeps.
+        int airPx = DockLayoutPolicy.rowAirPx(true, true, density);
         int stripPx = PageTickStrip.bandPx(density);
+        assertEquals(stripPx, airPx);
+        assertTrue(airPx > DockLayoutPolicy.loneRowAirPx(density));
         View plank = activity.findViewById(R.id.place_off_dock_plank_host);
         View scroll = activity.findViewById(R.id.place_apps_bar_scroll);
         View ticks = activity.findViewById(R.id.place_apps_bar_indicator);
 
         assertEquals("the air is inside the sheet now, not around it", 0, plank.getPaddingTop());
         assertEquals(0, plank.getPaddingBottom());
+        // The ticks trail the row on the top edge, so they are the air under the icons and the
+        // row keeps the whole of the air over them.
         assertEquals(airPx, scroll.getPaddingTop());
-        assertEquals(airPx, scroll.getPaddingBottom());
+        assertEquals(0, scroll.getPaddingBottom());
         assertEquals("the ticks claim their band", stripPx, ticks.getHeight());
 
-        int iconPx = scroll.getHeight() - (2 * airPx);
+        int iconPx = scroll.getHeight() - airPx;
         assertTrue("there is an icon in there: " + iconPx, iconPx > 0);
-        assertEquals("the plank is the icon, the ticks and one air either side",
-            iconPx + stripPx + (2 * airPx), plank.getHeight());
+        assertEquals("the plank is the icon and one air either side, the ticks inside it",
+            iconPx + (2 * airPx), plank.getHeight());
     }
 
     @Test

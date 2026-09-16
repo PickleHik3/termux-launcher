@@ -9512,10 +9512,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // moved to the top edge reads exactly as it did at the bottom.
                 int contentInset = Math.round((dockLayout.capsule
                     ? dockLayout.capsuleContentInsetPx : dockLayout.horizontalInsetPx) * 0.82f);
-                scroll.setPadding(contentInset, dockLayout.appsTopPaddingPx,
-                    contentInset, dockLayout.appsBottomPaddingPx);
-                setBandSize(scroll, ViewGroup.LayoutParams.MATCH_PARENT, dockLayout.appsRowBandPx);
-                setBandSize(indicator, ViewGroup.LayoutParams.MATCH_PARENT, indicatorBandPx);
+                // The ticks' band is the air on the row's centre-facing side, which up here is
+                // under the icons, so the row itself keeps only what is left of the air on that
+                // side. Between them the pair is the band, and the icon is in the middle of it.
+                boolean ticksLead = PageTickStrip.leadsRow(edge);
+                int besideTicks = dockLayout.appsRowPaddingBesideTicksPx();
+                scroll.setPadding(contentInset,
+                    ticksLead ? besideTicks : dockLayout.appsTopPaddingPx,
+                    contentInset,
+                    ticksLead ? dockLayout.appsBottomPaddingPx : besideTicks);
+                setBandSize(scroll, ViewGroup.LayoutParams.MATCH_PARENT,
+                    dockLayout.appsRowViewBandPx());
+                setBandSize(indicator, ViewGroup.LayoutParams.MATCH_PARENT,
+                    dockLayout.appsRowStripBandPx);
                 setBandSize(host, ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT);
             }
@@ -9962,8 +9971,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mOffDockPlankEdge = edge;
             List<Element> onPlank = offDockPlankElements(layout, edge);
             DockLayout dockLayout = dockLayoutFor(layout);
+            // The row's band carries the ticks inside its own air, so the plank is the band and
+            // whatever else stands on it — nothing is added for the strip.
             glassHeightPx = dockLayout.appsRowBandPx
-                + PageTickStrip.bandPx(getResources().getDisplayMetrics().density)
                 + (onPlank.contains(Element.AZ) ? azBarThicknessPx() : 0);
             int sideInsetPx = dockLayout.horizontalInsetPx;
             int airPx = offDockPlankAirPx(onPlank);
@@ -10018,12 +10028,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout layout = currentPlaceLayout();
         List<Element> onPlank = offDockPlankElements(layout, offDockPlankEdge(layout));
         // The plank carries the air either side of it once, for both bars: the row's band grows by
-        // it and the index riding the plank claims only the letters themselves.
-        boolean appsOffDock = PlaceChromePolicy.appsShown(layout)
-            && PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM;
+        // it and the index riding the plank claims only the letters themselves. The ticks stand in
+        // the row's own air wherever it lies down, so a lying-down row claims its band and nothing
+        // more; only a rail's strip is a column beside it.
         int appsRowPx = dockLayout.appsRowBandPx
-            + (onPlank.isEmpty() ? 0 : 2 * offDockPlankAirPx(onPlank))
-            + (appsOffDock ? indicatorBandPx : 0);
+            + (onPlank.isEmpty() ? 0 : 2 * offDockPlankAirPx(onPlank));
         int azRowPx = onPlank.contains(Element.AZ)
             ? azBarThicknessPx()
             : lettersOffDock
@@ -10614,8 +10623,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int surfaceInset = layout.horizontalInsetPx;
         int contentInset = layout.capsule ? layout.capsuleContentInsetPx : surfaceInset;
         int extraKeysInset = layout.capsule ? layout.capsuleExtraKeysInsetPx : surfaceInset;
-        int appsTopPadding = layout.appsTopPaddingPx;
-        int appsBottomPadding = layout.appsBottomPaddingPx;
+        // The ticks stand on the row's centre-facing side, which on the dock is over the icons,
+        // and the band they stand in is that side's air rather than a band added to it: the pager
+        // keeps whatever is left of the air there, which is nothing while the strip fills it.
+        boolean ticksLeadDockRow = PageTickStrip.leadsRow(PlaceLayout.Edge.BOTTOM);
+        int appsTopPadding = ticksLeadDockRow
+            ? layout.appsRowPaddingBesideTicksPx() : layout.appsTopPaddingPx;
+        int appsBottomPadding = ticksLeadDockRow
+            ? layout.appsBottomPaddingPx : layout.appsRowPaddingBesideTicksPx();
         // The apps row reads with more side padding than the A–Z row because its icons are
         // space-between (half a slot of empty space at each edge). Trim the apps-row inset ~18%
         // so the icons sit closer to the edges and line up better with the A–Z row's letter span.
@@ -10683,6 +10698,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A row with nothing beside it in its container keeps a sliver of air instead of the
             // dock's own row paddings, which are the space between three rows on one sheet.
             .appsRowAlone(isAppsRowAlone(layout))
+            // A row that lies down carries the ticks in its own air; a rail's stand in a column
+            // beside it, so its cross-axis keeps the plain air of a lone row.
+            .appsRowPageStripShown(!PlaceChromePolicy.appsRailShown(layout))
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))

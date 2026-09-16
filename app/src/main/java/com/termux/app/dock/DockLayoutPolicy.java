@@ -1,6 +1,7 @@
 package com.termux.app.dock;
 
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.launcher.paging.PageTickStrip;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -95,6 +96,14 @@ public final class DockLayoutPolicy {
          * dock's own paddings for {@link #LONE_ROW_AIR_DP}; the icon is the same size either way.
          */
         public final boolean appsRowAlone;
+        /**
+         * Whether the row carries the page ticks. The strip is not a band beside the row: it
+         * stands in the air the row already keeps on its centre-facing side, so its presence is
+         * what that air is worth ({@link PageTickStrip#BAND_DP}) rather than something added to
+         * it. A rail is the exception the cross-axis never sees — its ticks stand in a column of
+         * their own beside it, and its own air is unchanged.
+         */
+        public final boolean appsRowPageStripShown;
         public final float density;
         /** The dock size preset, as stored (a raw scale, not a progress). */
         public final float barHeightScale;
@@ -129,6 +138,7 @@ public final class DockLayoutPolicy {
             this.appsRowOnEdge = b.appsRowOnEdge;
             this.appsOnRail = b.appsOnRail;
             this.appsRowAlone = b.appsRowAlone;
+            this.appsRowPageStripShown = b.appsRowPageStripShown;
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
@@ -154,6 +164,9 @@ public final class DockLayoutPolicy {
             private boolean appsRowOnEdge;
             private boolean appsOnRail;
             private boolean appsRowAlone;
+            // Every row that lies down carries the ticks' band, whether or not it has a second
+            // page to show — the band is its air, so a row that gained a page cannot grow by it.
+            private boolean appsRowPageStripShown = true;
             private float density = 1f;
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
@@ -178,6 +191,7 @@ public final class DockLayoutPolicy {
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
             public Builder appsRowAlone(boolean v) { this.appsRowAlone = v; return this; }
+            public Builder appsRowPageStripShown(boolean v) { this.appsRowPageStripShown = v; return this; }
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
@@ -248,11 +262,18 @@ public final class DockLayoutPolicy {
         int sharedBottomPaddingPx =
             capsule ? out.capsuleAppsBottomPaddingPx : out.defaultAppsBottomPaddingPx;
         int loneAirPx = loneRowAirPx(density);
-        int sharedAirPx = sharedRowAirPx(density);
-        // Alone the row keeps its sliver; sharing, it keeps the letters' crown on both sides. The
-        // one place the row's vertical padding is decided, whichever edge and form it is in.
-        out.appsTopPaddingPx = in.appsRowAlone ? loneAirPx : sharedAirPx;
-        out.appsBottomPaddingPx = out.appsTopPaddingPx;
+        // The band the page ticks stand in is that side's air, not a band beside it. It used to
+        // stack on top of the air, so the icon sat half a strip below the middle of what the two
+        // hairlines enclose and the row read bottom-heavy. The strip draws inside the air now and
+        // the row is symmetric about its icon on every edge it lies on.
+        int stripBandPx = in.appsRowPageStripShown ? PageTickStrip.bandPx(density) : 0;
+        // Alone the row keeps its sliver; sharing, it keeps the letters' crown on both sides —
+        // unless the ticks need more than that, in which case their own band is the air on both
+        // sides. The one place the row's air is decided, whichever edge and form it is in.
+        int airPx = rowAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
+        out.appsRowStripBandPx = stripBandPx;
+        out.appsTopPaddingPx = airPx;
+        out.appsBottomPaddingPx = airPx;
         out.capsuleBottomGapPx = Math.round(density * 6f);
 
         out.iconScale = in.preferencesAvailable
@@ -290,7 +311,11 @@ public final class DockLayoutPolicy {
                 ? 0
                 : (in.appsRowAlone ? iconBaselinePx : out.appsRowIconPx)
                     + out.appsTopPaddingPx + out.appsBottomPaddingPx;
-            out.appsBarHeightPx = appsRowEnabled ? out.appsRowBandPx : 0;
+            // The dock's own row view is the band less the strip's share of it: the ticks stand
+            // in the host beside the pager rather than inside it, and between them they are the
+            // band. Nothing is reserved for the strip on top of the air.
+            out.appsBarHeightPx =
+                appsRowEnabled ? Math.max(0, out.appsRowBandPx - stripBandPx) : 0;
             out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
                 azRowEnabled, in.rowOverAz, in.rowUnderAz, density);
             out.azRowCrownPaddingPx = AccessoryStackLayoutPolicy.computeAzRowCrownPaddingPx(
@@ -298,16 +323,16 @@ public final class DockLayoutPolicy {
             out.azRowChinPaddingPx = AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(
                 azRowEnabled, in.rowUnderAz, density);
             out.indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(
-                appsRowEnabled, density);
+                appsRowEnabled && in.appsRowPageStripShown, density);
             out.interRowGapPx = out.indicatorBandHeightPx;
         }
-        out.appsBarHeightHintPx =
-            Math.max(0, out.appsBarHeightPx - out.appsTopPaddingPx - out.appsBottomPaddingPx);
-        // The same figure taken off the band rather than off the dock's own row, so a row lying
-        // down on another edge — where the dock's row has collapsed to nothing — still knows how
-        // tall its icons may be.
+        // The box the icon is centred in: the band less the air on each side of it. Taken off the
+        // band rather than off the dock's own row, so a row lying down on another edge — where the
+        // dock's row has collapsed to nothing — still knows how tall its icons may be, and so that
+        // the strip's share of the air does not read as a shorter icon.
         out.appsRowBandHintPx =
             Math.max(0, out.appsRowBandPx - out.appsTopPaddingPx - out.appsBottomPaddingPx);
+        out.appsBarHeightHintPx = appsRowEnabled ? out.appsRowBandHintPx : 0;
 
         // The apps rail.
         boolean railActive = in.appsOnRail && in.preferencesAvailable && in.appsRowEnabledPref;
@@ -353,6 +378,20 @@ public final class DockLayoutPolicy {
      */
     public static int sharedRowAirPx(float density) {
         return Math.round(Math.max(0f, density) * SHARED_ROW_AIR_DP);
+    }
+
+    /**
+     * The air a pinned-apps row that lies down keeps on each side of its icons: the ticks' own
+     * band ({@link PageTickStrip#BAND_DP}) while the row carries them, because the strip stands in
+     * that air rather than beside it, and the plain air of the row's form when it does not.
+     *
+     * <p>Equal on both sides by construction — the ticks take the centre-facing one — so a row is
+     * symmetric about its icon and the icon sits in the middle of the band whichever edge it lies
+     * on.
+     */
+    public static int rowAirPx(boolean alone, boolean pageStripShown, float density) {
+        int base = alone ? loneRowAirPx(density) : sharedRowAirPx(density);
+        return Math.max(base, pageStripShown ? PageTickStrip.bandPx(density) : 0);
     }
 
     /**

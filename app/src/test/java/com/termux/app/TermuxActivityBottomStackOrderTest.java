@@ -9,6 +9,8 @@ import android.view.ViewParent;
 import com.termux.R;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.launcher.paging.PageTickStrip;
+import com.termux.app.launcher.paging.PageTickStripView;
 import com.termux.app.place.EdgeStackView;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
@@ -343,13 +345,15 @@ public class TermuxActivityBottomStackOrderTest {
         // Walking down the stack: the keys, then the apps row's host, then the letters.
         int keysBottom = topIn(rows, activity.findViewById(R.id.terminal_toolbar_view_pager))
             + KEYS_PX;
-        int ticksTop = topIn(rows, activity.findViewById(R.id.apps_bar_indicator_band));
+        // Updated for Q8 with a reason: the ticks are the row's own air on that side rather than
+        // its content, so the gap the hairline splits reaches the icons, ticks and all.
+        int iconsTop = topIn(rows, activity.findViewById(R.id.apps_bar_viewpager)) + airTop;
         int iconsBottom = topIn(rows, activity.findViewById(R.id.apps_bar_viewpager))
             + APPS_PX - airBottom;
         int lettersTop = topIn(rows, activity.findViewById(R.id.apps_bar_az_row));
 
-        assertEquals("the keys and the row's ticks split their gap",
-            (keysBottom + ticksTop) / 2, seams[0]);
+        assertEquals("the keys and the row's icons split their gap",
+            (keysBottom + iconsTop) / 2, seams[0]);
         assertEquals("the icons and the letters split theirs",
             (iconsBottom + lettersTop) / 2, seams[1]);
         // The defect, in the one gap this arrangement leaves: the line used to be drawn on the
@@ -360,47 +364,137 @@ public class TermuxActivityBottomStackOrderTest {
 
     /**
      * The air the row's icons stand in, on the arrangement the complaint was made on: the status
-     * bar innermost, then the keys, the apps row and the letters on the dock's rim. The row used
-     * to carry about twice the air of the bands beside it — its band was the extra-keys row scaled
-     * by the size preset and the icon a fill ratio of what was left, so the leftover was air. It
-     * is the icon and the letters' own crown on each side now, and the ticks stand beside that air
-     * rather than inside it.
+     * bar innermost, then the keys, the apps row and the letters on the dock's rim.
+     *
+     * <p>The complaint: "the app icons look offset to the bottom within the 2 dividers above and
+     * below". The ticks' own 9dp band stood on top of the 6dp of air over the icons and only 6dp
+     * stood under them, so the icon sat 4.5dp below the middle of the band and read bottom-heavy.
+     * The band is symmetric about its icon now — the air on each side is the band the ticks stand
+     * in, and they stand inside the centre-facing one rather than beside it.
      */
     @Test
-    public void theSharedRowsIconStandsInSixDpOfAirOnEachSide() {
+    public void theRowsIconStandsInTheMiddleOfWhatTheTwoHairlinesEnclose() {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
         assertNotNull(preferences);
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
 
-        PlaceLayout layout = bottomStack(
-            Element.STATUS, Element.EXTRA_KEYS, Element.APPS, Element.AZ);
+        float density = activity.getResources().getDisplayMetrics().density;
+        int airPx = DockLayoutPolicy.rowAirPx(false, true, density);
+        assertEquals("the air is the band the ticks stand in",
+            PageTickStrip.bandPx(density), airPx);
+
+        // Reading down the dock: the extra keys, the apps row, the letters on the rim — the row
+        // with a band on each side of it, which is the pair of hairlines the complaint is about.
+        PlaceLayout layout = bottom(Element.EXTRA_KEYS, Element.APPS, Element.AZ);
         DockLayout dock = activity.dockLayoutFor(layout);
         activity.applyEdgeStacks(layout);
         activity.applyDockLayout(dock);
+        // Those two bands keep the same air of their own, so each hairline splits an equal gap and
+        // what is left to measure is the row's own symmetry.
+        int neighbourAirPx = Math.round(density * 6f);
+        activity.findViewById(R.id.terminal_toolbar_view_pager)
+            .setPadding(0, 0, 0, neighbourAirPx);
+        activity.findViewById(R.id.apps_bar_az_row).setPadding(0, neighbourAirPx, 0, 0);
+        // A row with pages to show, so the strip is a strip and not an empty band.
+        PageTickStripView ticks = activity.findViewById(R.id.apps_bar_indicator_band);
+        ticks.setVisibility(View.VISIBLE);
+        ticks.setPages(3, 0f);
         layoutContainer();
 
-        float density = activity.getResources().getDisplayMetrics().density;
-        int airPx = DockLayoutPolicy.sharedRowAirPx(density);
         assertTrue("the row has to be on the dock for this to mean anything",
             dock.appsRowIconPx > 0 && dock.appsBarHeightPx > 0);
-        assertEquals("the band is the icon and its air", dock.appsRowIconPx + (2 * airPx),
-            dock.appsBarHeightPx);
+        assertEquals("the band is the icon and its air on each side",
+            dock.appsRowIconPx + (2 * airPx), dock.appsRowBandPx);
 
         View pager = activity.findViewById(R.id.apps_bar_viewpager);
-        View ticks = activity.findViewById(R.id.apps_bar_indicator_band);
-        View letters = activity.findViewById(R.id.apps_bar_az_host);
-        assertEquals(airPx, pager.getPaddingTop());
+        View host = activity.findViewById(R.id.apps_bar_row_host);
+        assertEquals("nothing is left of the air on the ticks' side", 0, pager.getPaddingTop());
         assertEquals(airPx, pager.getPaddingBottom());
 
         int pagerTop = topIn(rows, pager);
         int iconTop = pagerTop + pager.getPaddingTop();
         int iconBottom = pagerTop + pager.getHeight() - pager.getPaddingBottom();
+        int hostTop = topIn(rows, host);
         assertEquals("the icon box is the icon", dock.appsRowIconPx, iconBottom - iconTop);
-        // The ticks lead the row on the bottom edge, so they are the band above the icons.
-        int ticksBottom = topIn(rows, ticks) + ticks.getHeight();
-        assertEquals("ticks -> icon", airPx, iconTop - ticksBottom);
-        // And the seam with the band on the dock's rim is the same air on the other side.
-        assertEquals("icon -> seam", airPx, topIn(rows, letters) - iconBottom);
+        assertEquals("the host is the band", dock.appsRowBandPx, host.getHeight());
+        assertEquals("air over the icons", airPx, iconTop - hostTop);
+        assertEquals("and the same under them", airPx,
+            hostTop + host.getHeight() - iconBottom);
+
+        // The ticks lead the row on the bottom edge, so they stand in the air above the icons —
+        // the whole of it, which is what the row no longer keeps for itself.
+        int ticksTop = topIn(rows, ticks);
+        assertEquals(hostTop, ticksTop);
+        assertEquals(airPx, ticks.getHeight());
+        assertEquals("the ticks reach the icons and no further", iconTop,
+            ticksTop + ticks.getHeight());
+
+        // Three bands on one sheet: a hairline in each gap, and the row is between them.
+        int[] seams = rows.separatorCenters();
+        assertEquals(2, seams.length);
+        int above = seams[0];
+        int below = seams[1];
+        assertEquals("the icon's middle is the middle of what the hairlines enclose",
+            (above + below) / 2f, (iconTop + iconBottom) / 2f, 1f);
+
+        // And the hairline stands clear of the ticks it now shares a gap with.
+        float thickness = PageTickStrip.THICKNESS_DP * density;
+        float tickTop = ticksTop + ((ticks.getHeight() - thickness) / 2f);
+        assertTrue("the hairline is above the ticks: " + above, above < tickTop);
+        assertTrue("and the ticks are clear of the icons", tickTop + thickness < iconTop);
+    }
+
+    /**
+     * The one arrangement tight enough to put the hairline on the ticks: the letters directly over
+     * the icons, where the letters wear no chin because a row stands under them. The whole gap is
+     * then the ticks' own band, so its middle is the middle of the tick glyphs — a line drawn
+     * there reads as a strike-through. It goes to the far side of them from the icons instead.
+     */
+    @Test
+    public void theHairlineNeverCrossesTheTicksEvenWithTheLettersHardOverThem() {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
+        assertNotNull(preferences);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+
+        // Reading down the dock: the extra keys, the letters, the apps row on the rim.
+        PlaceLayout layout = bottom(Element.EXTRA_KEYS, Element.AZ, Element.APPS);
+        DockLayout dock = activity.dockLayoutFor(layout);
+        activity.applyEdgeStacks(layout);
+        activity.applyDockLayout(dock);
+        PageTickStripView ticks = activity.findViewById(R.id.apps_bar_indicator_band);
+        ticks.setVisibility(View.VISIBLE);
+        ticks.setPages(3, 0f);
+        layoutContainer();
+
+        float density = activity.getResources().getDisplayMetrics().density;
+        View pager = activity.findViewById(R.id.apps_bar_viewpager);
+        View host = activity.findViewById(R.id.apps_bar_row_host);
+        View letters = activity.findViewById(R.id.apps_bar_az_row);
+        int hostTop = topIn(rows, host);
+        int iconTop = topIn(rows, pager) + pager.getPaddingTop();
+        int ticksTop = topIn(rows, ticks);
+        int lettersBottom = topIn(rows, letters) + letters.getHeight();
+        float thickness = PageTickStrip.THICKNESS_DP * density;
+        float markTop = ticksTop + ((ticks.getHeight() - thickness) / 2f);
+        float markBottom = markTop + thickness;
+        int clearancePx = Math.max(1, Math.round(density));
+
+        assertEquals("a row under them, so the letters wear no chin and keep no air here",
+            hostTop, lettersBottom);
+        assertTrue("the row has to be on the dock for this to mean anything",
+            dock.appsRowIconPx > 0);
+
+        int[] seams = rows.separatorCenters();
+        assertEquals(2, seams.length);
+        int seam = seams[1];
+        assertTrue("the hairline clears the tick glyphs: " + seam + " vs " + markTop,
+            seam <= markTop - clearancePx);
+        assertTrue("and stands between the letters and the ticks: " + seam,
+            seam > lettersBottom);
+        // The ticks are still the air over the icons and nothing else moved.
+        assertEquals("the ticks reach the icons and no further", iconTop,
+            ticksTop + ticks.getHeight());
+        assertTrue("and stop short of them", markBottom < iconTop);
     }
 
     // ---------------------------------------------------------------- helpers

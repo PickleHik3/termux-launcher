@@ -215,7 +215,9 @@ public class EdgeStackView extends LinearLayout {
             if (child.getVisibility() == GONE) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (previous != null) {
-                out[drawn++] = (contentEnd(previous, column) + contentStart(child, column)) / 2;
+                int center = (contentEnd(previous, column) + contentStart(child, column)) / 2;
+                center = clearOfAirMarks(center, previous, column, true);
+                out[drawn++] = clearOfAirMarks(center, child, column, false);
             }
             previous = child;
         }
@@ -254,9 +256,62 @@ public class EdgeStackView extends LinearLayout {
     }
 
     /**
+     * A child that is its band's own air rather than its content. The page ticks are the one of
+     * these: the strip stands in the air the row keeps on its centre-facing side instead of in a
+     * band beside it, so a hairline splits the gap around the ticks the way it splits any other
+     * air. Counted as content, that air was only ever on one side of the icons and the row read
+     * lopsided between its two hairlines.
+     */
+    public interface Air {
+        /**
+         * How thick the marks this child draws are across the band, centred in it, or 0 while it
+         * draws none. The hairline splitting the gap keeps clear of them: air is the line's to
+         * cross, but the marks standing in it are not.
+         */
+        int airMarkThicknessPx();
+    }
+
+    /**
+     * The seam moved clear of the marks an {@link Air} child draws in the gap. The midpoint of a
+     * gap whose air is mostly the page ticks lands on the ticks themselves, and a hairline through
+     * the middle of them reads as a line struck through the row's indicator. It goes to the far
+     * side of the marks from the band's own content instead — a hairline's thickness clear of
+     * them, between them and whatever the gap's other side is — so in the one arrangement tight
+     * enough to need it the icon is off the middle by exactly what the line moved, and by nothing
+     * anywhere else.
+     */
+    private int clearOfAirMarks(int center, @NonNull View band, boolean column, boolean atEnd) {
+        if (!(band instanceof ViewGroup)) return center;
+        ViewGroup group = (ViewGroup) band;
+        int bandStart = column ? band.getLeft() : band.getTop();
+        for (int index = 0; index < group.getChildCount(); index++) {
+            View child = group.getChildAt(index);
+            if (!(child instanceof Air) || child.getVisibility() == GONE) continue;
+            int extent = column ? child.getWidth() : child.getHeight();
+            if (extent <= 0) continue;
+            int thickness = ((Air) child).airMarkThicknessPx();
+            if (thickness <= 0 || thickness >= extent) continue;
+            int start = bandStart + (column ? child.getLeft() : child.getTop());
+            int end = start + extent;
+            // Only the air standing between this band's content and the gap is in the line's way;
+            // the same strip at the band's other end belongs to the gap on that side.
+            if (atEnd ? start < contentEnd(band, column) : end > contentStart(band, column))
+                continue;
+            int clearancePx = Math.max(1,
+                Math.round(getResources().getDisplayMetrics().density));
+            int marks = (extent - thickness) / 2;
+            center = atEnd
+                ? Math.max(center, end - marks + clearancePx)
+                : Math.min(center, start + marks - clearancePx);
+        }
+        return center;
+    }
+
+    /**
      * The bar standing at one end of a band: the drawn child reaching nearest that end. A child
      * that is gone or has collapsed to nothing is not a bar — the apps row's own host holds a
-     * collapsed pager whenever the row stands somewhere else.
+     * collapsed pager whenever the row stands somewhere else — and neither is one that is the
+     * band's {@link Air}.
      */
     @Nullable
     private static View drawnChildAt(@NonNull View band, boolean column, boolean atStart) {
@@ -266,6 +321,7 @@ public class EdgeStackView extends LinearLayout {
         for (int index = 0; index < group.getChildCount(); index++) {
             View child = group.getChildAt(index);
             if (child.getVisibility() == GONE) continue;
+            if (child instanceof Air) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (found == null) {
                 found = child;
