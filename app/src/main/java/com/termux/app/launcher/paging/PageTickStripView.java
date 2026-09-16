@@ -124,6 +124,18 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
         return pagePosition;
     }
 
+    /**
+     * The ticks are the only thing the strip draws, so this is their thickness across the band —
+     * and nothing at all while there is one page and no strip to draw. The hairline that splits
+     * the gap the strip stands in keeps clear of it.
+     */
+    @Override
+    public int airMarkThicknessPx() {
+        if (pageCount <= 1) return 0;
+        return Math.round(PageTickStrip.THICKNESS_DP
+            * getResources().getDisplayMetrics().density);
+    }
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);

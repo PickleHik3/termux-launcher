@@ -444,6 +444,59 @@ public class TermuxActivityBottomStackOrderTest {
         assertTrue("and the ticks are clear of the icons", tickTop + thickness < iconTop);
     }
 
+    /**
+     * The one arrangement tight enough to put the hairline on the ticks: the letters directly over
+     * the icons, where the letters wear no chin because a row stands under them. The whole gap is
+     * then the ticks' own band, so its middle is the middle of the tick glyphs — a line drawn
+     * there reads as a strike-through. It goes to the far side of them from the icons instead.
+     */
+    @Test
+    public void theHairlineNeverCrossesTheTicksEvenWithTheLettersHardOverThem() {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
+        assertNotNull(preferences);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+
+        // Reading down the dock: the extra keys, the letters, the apps row on the rim.
+        PlaceLayout layout = bottom(Element.EXTRA_KEYS, Element.AZ, Element.APPS);
+        DockLayout dock = activity.dockLayoutFor(layout);
+        activity.applyEdgeStacks(layout);
+        activity.applyDockLayout(dock);
+        PageTickStripView ticks = activity.findViewById(R.id.apps_bar_indicator_band);
+        ticks.setVisibility(View.VISIBLE);
+        ticks.setPages(3, 0f);
+        layoutContainer();
+
+        float density = activity.getResources().getDisplayMetrics().density;
+        View pager = activity.findViewById(R.id.apps_bar_viewpager);
+        View host = activity.findViewById(R.id.apps_bar_row_host);
+        View letters = activity.findViewById(R.id.apps_bar_az_row);
+        int hostTop = topIn(rows, host);
+        int iconTop = topIn(rows, pager) + pager.getPaddingTop();
+        int ticksTop = topIn(rows, ticks);
+        int lettersBottom = topIn(rows, letters) + letters.getHeight();
+        float thickness = PageTickStrip.THICKNESS_DP * density;
+        float markTop = ticksTop + ((ticks.getHeight() - thickness) / 2f);
+        float markBottom = markTop + thickness;
+        int clearancePx = Math.max(1, Math.round(density));
+
+        assertEquals("a row under them, so the letters wear no chin and keep no air here",
+            hostTop, lettersBottom);
+        assertTrue("the row has to be on the dock for this to mean anything",
+            dock.appsRowIconPx > 0);
+
+        int[] seams = rows.separatorCenters();
+        assertEquals(2, seams.length);
+        int seam = seams[1];
+        assertTrue("the hairline clears the tick glyphs: " + seam + " vs " + markTop,
+            seam <= markTop - clearancePx);
+        assertTrue("and stands between the letters and the ticks: " + seam,
+            seam > lettersBottom);
+        // The ticks are still the air over the icons and nothing else moved.
+        assertEquals("the ticks reach the icons and no further", iconTop,
+            ticksTop + ticks.getHeight());
+        assertTrue("and stop short of them", markBottom < iconTop);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /** Everything on the bottom edge, innermost (nearest the canvas) first — nothing anywhere else. */
