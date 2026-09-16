@@ -49,6 +49,7 @@ public class HelpPresentationTest {
             @Override public View activePane() { return wall; }
             @Override public int paneCount() { return 1; }
             @Override public boolean keyRectOnScreen(String name,Rect out) { return false; }
+            @Override public boolean keyCornerRectOnScreen(String name,Rect out) { return false; }
         };
         overlay = new HelpOverlayView(activity, finder, () -> dismissed++);
         overlay.setPracticeListener(lessonId -> practised = lessonId);

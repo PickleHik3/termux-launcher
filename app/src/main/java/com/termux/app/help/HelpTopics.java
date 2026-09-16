@@ -140,6 +140,8 @@ public final class HelpTopics {
             R.string.help_topic_prefix_action, R.string.help_topic_prefix_reveal, null, "shortcuts");
         terminal.add("space", Group.KEYBOARD, R.string.help_space_title, R.string.help_topic_space_purpose,
             R.string.help_topic_space_action, R.string.help_topic_space_reveal, LESSON_FIND_ACTION, null);
+        terminal.add("settings", Group.KEYBOARD, R.string.help_launcher_settings_title, R.string.help_topic_settings_purpose,
+            R.string.help_topic_settings_action, R.string.help_topic_settings_reveal, null, "space");
         terminal.add("divider", Group.MULTITASKING, R.string.help_divider_title, R.string.help_topic_divider_purpose,
             R.string.help_topic_divider_action, R.string.help_topic_divider_reveal, null, "shortcuts");
         terminal.add("shortcuts", Group.MULTITASKING, R.string.help_topic_shortcuts_title, R.string.help_topic_shortcuts_purpose,
@@ -159,6 +161,8 @@ public final class HelpTopics {
             R.string.help_topic_scale_action, R.string.help_topic_scale_reveal, null, "start");
         display.add("touchpad", Group.EVERYDAY, R.string.help_pad_title, R.string.help_topic_touchpad_purpose,
             R.string.help_topic_touchpad_action, R.string.help_topic_touchpad_reveal, null, null);
+        display.add("settings", Group.KEYBOARD, R.string.help_launcher_settings_title, R.string.help_topic_settings_purpose,
+            R.string.help_topic_settings_action, R.string.help_topic_settings_reveal, null, null);
         map.put(PaneWallPage.DISPLAY, display.done());
 
         Builder home = new Builder(PaneWallPage.WIDGETS);
@@ -168,6 +172,8 @@ public final class HelpTopics {
             R.string.help_topic_widget_action, R.string.help_topic_widget_reveal, null, "empty");
         home.add("empty", Group.EVERYDAY, R.string.help_empty_title, R.string.help_topic_empty_purpose,
             R.string.help_topic_empty_action, R.string.help_topic_empty_reveal, null, "widget");
+        home.add("settings", Group.KEYBOARD, R.string.help_launcher_settings_title, R.string.help_topic_settings_purpose,
+            R.string.help_topic_settings_action, R.string.help_topic_settings_reveal, null, null);
         map.put(PaneWallPage.WIDGETS, home.done());
         return Collections.unmodifiableMap(map);
     }

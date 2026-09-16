@@ -1896,6 +1896,8 @@
     <string name="help_session_chord">%1$s opens a session.</string>
     <string name="help_space_title">Space bar</string>
     <string name="help_space_body">Swipe up for the command palette, toward a corner for windows and sessions.</string>
+    <string name="help_launcher_settings_title">Termux Launcher settings</string>
+    <string name="help_launcher_settings_body">Swipe the key toward the cog.</string>
     <string name="help_display_apps_title">Display apps</string>
     <string name="help_display_apps_body">Tap once to show its × button.</string>
     <string name="help_scale_title">Scale</string>
@@ -1958,6 +1960,9 @@
     <string name="help_topic_space_purpose">The command palette finds any action by name.</string>
     <string name="help_topic_space_action">Swipe up on the space bar to open it.</string>
     <string name="help_topic_space_reveal">Show the keyboard to see the space bar.</string>
+    <string name="help_topic_settings_purpose">Settings cover the whole launcher — how it looks, its keys and its places.</string>
+    <string name="help_topic_settings_action">Swipe the key toward the cog to open settings.</string>
+    <string name="help_topic_settings_reveal">Show the keyboard to see the cog.</string>
     <string name="help_topic_divider_purpose">The divider sets how much room each pane gets.</string>
     <string name="help_topic_divider_action">Drag it to give one pane more.</string>
     <string name="help_topic_divider_reveal">Split a pane to get a divider.</string>

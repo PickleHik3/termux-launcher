@@ -28,6 +28,7 @@ public final class HelpTargets {
         View activePane();
         int paneCount();
         boolean keyRectOnScreen(String name, Rect out);
+        boolean keyCornerRectOnScreen(String name, Rect out);
     }
     public static final class Target {
         public final String id;
@@ -56,6 +57,8 @@ public final class HelpTargets {
             return s.toString();
         }
     }
+    /** The keyboard value the launcher's own settings hang off; the cog is how it is drawn. */
+    private static final String SETTINGS_KEY = "config";
     private final ViewFinder finder;
     private final View overlay;
     private final Context context;
@@ -87,6 +90,10 @@ public final class HelpTargets {
         // made anywhere along it, and a box on one small icon read as being about that icon.
         View host = finder.findHelpView(R.id.terminal_window_bar_host);
         add(s, "status", rect(host), radius(host), copy(R.string.help_status_title, R.string.help_status_body));
+        // Launcher settings live on a keyboard corner rather than in the chrome, so every place
+        // points at the cog itself: the box is the glyph, which is the thing the user swipes off.
+        add(s, "settings", keyCornerRect(SETTINGS_KEY), 0,
+            copy(R.string.help_launcher_settings_title, R.string.help_launcher_settings_body));
         if (place == PaneWallPage.TERMINAL) {
             add(s, "sessions", finder.findHelpView(R.id.terminal_sessions_indicator),
                 copy(R.string.help_sessions_title, R.string.help_sessions_body));
@@ -282,6 +289,15 @@ public final class HelpTargets {
         int[] source = new int[2], origin = new int[2];
         view.getLocationOnScreen(source); overlay.getLocationOnScreen(origin);
         Rect r = new Rect(local); r.offset(source[0]-origin[0],source[1]-origin[1]);
+        return r.intersect(0,0,overlay.getWidth(),overlay.getHeight()) ? r : null;
+    }
+    /** A corner glyph, with room round it: a box drawn tight on a cog reads as part of the cog. */
+    private Rect keyCornerRect(String name) {
+        Rect r = new Rect();
+        if (!finder.keyCornerRectOnScreen(name, r) || r.isEmpty()) return null;
+        int[] origin = new int[2]; overlay.getLocationOnScreen(origin); r.offset(-origin[0],-origin[1]);
+        int breathing = Math.round(4 * context.getResources().getDisplayMetrics().density);
+        r.inset(-breathing, -breathing);
         return r.intersect(0,0,overlay.getWidth(),overlay.getHeight()) ? r : null;
     }
     private Rect keyRect(String name) {

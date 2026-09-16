@@ -312,6 +312,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public boolean keyRectOnScreen(String name, android.graphics.Rect out) {
                         return getInAppKeyboardKeyRect(name, out);
                     }
+                    @Override public boolean keyCornerRectOnScreen(String name, android.graphics.Rect out) {
+                        return getInAppKeyboardKeyCornerRect(name, out);
+                    }
                 }, () -> {
                     // The one path every dismissal takes, so the run hears about help going away
                     // however it went: the Close button, a tap outside, Back, or onPause.
@@ -11776,6 +11779,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     public boolean getInAppKeyboardKeyRect(@NonNull String keyName, @NonNull Rect out) {
         return mInAppKeyboard != null && mInAppKeyboard.getKeyRectOnScreen(keyName, out);
+    }
+
+    /**
+     * Bounds of the glyph one of the in-app keyboard's corner values is drawn as, named the way a
+     * layout file names it. False when the keyboard is down or no key of the layout in front of
+     * the user carries that value on a corner.
+     */
+    public boolean getInAppKeyboardKeyCornerRect(@NonNull String valueName, @NonNull Rect out) {
+        return mInAppKeyboard != null && mInAppKeyboard.getKeyCornerRectOnScreen(valueName, out);
     }
 
     /**

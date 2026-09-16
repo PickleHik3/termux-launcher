@@ -118,20 +118,33 @@ public class HelpTopicsTest {
         assertEquals(HelpTopics.Group.KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "keys").group);
         assertEquals(HelpTopics.Group.KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "prefix").group);
         assertEquals(HelpTopics.Group.KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "space").group);
+        assertEquals(HelpTopics.Group.KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "settings").group);
         assertEquals(HelpTopics.Group.MULTITASKING, HelpTopics.entry(PaneWallPage.TERMINAL, "divider").group);
         assertEquals(HelpTopics.Group.MULTITASKING, HelpTopics.entry(PaneWallPage.TERMINAL, "shortcuts").group);
     }
 
-    @Test public void homeAndDisplayAreEverydayThroughout() {
+    @Test public void homeAndDisplayAreEverydayApartFromTheKeyboardsOwnTopic() {
         for (PaneWallPage place : new PaneWallPage[] {PaneWallPage.WIDGETS, PaneWallPage.DISPLAY}) {
             for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) {
-                assertEquals(entry.id, HelpTopics.Group.EVERYDAY, entry.group);
+                assertEquals(entry.id, "settings".equals(entry.id)
+                    ? HelpTopics.Group.KEYBOARD : HelpTopics.Group.EVERYDAY, entry.group);
             }
         }
         assertTrue(ids(PaneWallPage.DISPLAY).containsAll(
             java.util.Arrays.asList("status", "windows", "stats", "start", "scale", "touchpad")));
         assertTrue(ids(PaneWallPage.WIDGETS).containsAll(
             java.util.Arrays.asList("status", "widget", "empty")));
+    }
+
+    @Test public void everyPlaceSaysWhereTheLauncherSettingsAre() {
+        // The cog is a keyboard key, and the keyboard is up wherever the user is, so the topic is
+        // the same one on all three places.
+        for (PaneWallPage place : PaneWallPage.values()) {
+            HelpTopics.Entry entry = HelpTopics.entry(place, "settings");
+            assertNotNull(place.toString(), entry);
+            assertEquals(HelpTopics.Group.KEYBOARD, entry.group);
+            assertFalse(HelpTopics.topicOnly(entry.id));
+        }
     }
 
     @Test public void aRelatedTopicIsAnotherTopicOfTheSamePlace() {

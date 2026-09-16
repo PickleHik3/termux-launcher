@@ -925,6 +925,108 @@ public class Keyboard2View extends View
   }
 
   /**
+   * On-screen bounds of the glyph a key's corner value is drawn as — the settings cog that hangs
+   * off the Fn key, say. The answer is the drawn label, not the cap it sits on and not the swipe's
+   * hit area: a host pointing at the cog wants a box round the cog.
+   *
+   * <p>The first corner carrying the value wins, in the layout's own order, and the geometry
+   * mirrors {@link #drawSubLabel} so the box lands on the glyph the user is looking at. Held
+   * modifiers are left out of the comparison: which corner a value sits on does not move with them.
+   *
+   * @return false when no key carries that value on a corner, or nothing is measured yet
+   */
+  public boolean getKeyCornerRectOnScreen(String valueName, Rect out)
+  {
+    if (_keyboard == null || _tc == null || valueName == null)
+      return false;
+    KeyValue wanted = KeyValue.getKeyByName(valueName);
+    if (wanted == null)
+      return false;
+    getLocationOnScreen(_keyRectLocation);
+    float y = getPaddingTop() + _tc.margin_top;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      y += row.shift * _tc.row_height;
+      float x = _marginLeft + _tc.margin_left;
+      float keyH = row.height * _tc.row_height - _tc.vertical_margin;
+      for (KeyboardData.Key k : row.keys)
+      {
+        x += k.shift * _keyWidth;
+        float keyW = _keyWidth * k.width - _tc.horizontal_margin;
+        for (int i = 1; i < 9; i++)
+        {
+          if (k.keys[i] == null || !sameValue(k.keys[i], wanted))
+            continue;
+          subLabelBounds(k, k.keys[i], i, x, y, keyW, keyH, out);
+          return true;
+        }
+        x += _keyWidth * k.width;
+      }
+      y += row.height * _tc.row_height;
+    }
+    return false;
+  }
+
+  /** Where one sub-label is drawn, in screen coordinates; {@link #drawSubLabel}'s own arithmetic. */
+  private void subLabelBounds(KeyboardData.Key k, KeyValue kv, int sub_index,
+      float x, float y, float keyW, float keyH, Rect out)
+  {
+    Paint.Align a = LABEL_POSITION_H[sub_index];
+    Vertical v = LABEL_POSITION_V[sub_index];
+    Theme.Computed.Key tc_key = themeKeyFor(k.role);
+    float textSize = scaleTextSize(kv, false);
+    Paint p = tc_key.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT),
+        tc_key.subLabelColor, textSize, a);
+    float subPadding = _config.keyPaddingPx;
+    if (a != Paint.Align.CENTER && v != Vertical.CENTER)
+      subPadding += tc_key.border_radius * 0.3f;
+    float baseline = y;
+    if (v == Vertical.CENTER)
+      baseline += (keyH - p.ascent() - p.descent()) / 2f;
+    else
+      baseline += (v == Vertical.TOP) ? subPadding - p.ascent() : keyH - subPadding - p.descent();
+    float anchor = x;
+    if (a == Paint.Align.CENTER)
+      anchor += keyW / 2f;
+    else
+      anchor += (a == Paint.Align.LEFT) ? subPadding : keyW - subPadding;
+    String label = kv.getString();
+    int label_len = label.length();
+    if (label_len > 3 && kv.getKind() == KeyValue.Kind.String)
+      label_len = 3;
+    float width = p.measureText(label, 0, label_len);
+    float top = baseline + p.ascent();
+    float bottom = baseline + p.descent();
+    // A font with no metrics for the glyph would give the caller an empty rect, which reads as
+    // "not there"; the label's own size is a box the right shape in the right corner.
+    if (width <= 0f)
+      width = textSize;
+    if (bottom - top <= 0f)
+    {
+      top = baseline - textSize * 0.8f;
+      bottom = baseline + textSize * 0.2f;
+    }
+    float left = (a == Paint.Align.LEFT) ? anchor
+      : (a == Paint.Align.RIGHT) ? anchor - width : anchor - width / 2f;
+    out.set(Math.round(_keyRectLocation[0] + left),
+        Math.round(_keyRectLocation[1] + top),
+        Math.round(_keyRectLocation[0] + left + width),
+        Math.round(_keyRectLocation[1] + bottom));
+  }
+
+  /** The computed theme a key of this role is drawn with, as {@link #onDraw} picks it. */
+  private Theme.Computed.Key themeKeyFor(KeyboardData.Key.Role role)
+  {
+    switch (role)
+    {
+      case Action: return _tc.key_action;
+      case Space_bar: return _tc.key_space_bar;
+      case Suggestion: return _tc.key_suggestion;
+      default: return _tc.key;
+    }
+  }
+
+  /**
    * Whether a key's centre cap is the named one. Flags are deliberately out of the comparison —
    * the same key carries different rendering flags depending on how a layout file spells it, and
    * "the Alt key" is the same key either way — so kind and value decide.
@@ -933,20 +1035,25 @@ public class Keyboard2View extends View
   {
     if (isSpaceBar(wanted))
       return isSpaceBar(key);
-    KeyValue center = key.keys[0];
-    if (center == null)
+    return sameValue(key.keys[0], wanted);
+  }
+
+  /** Whether two values are the same key, flags aside — see {@link #isKeyNamed}. */
+  private static boolean sameValue(KeyValue value, KeyValue wanted)
+  {
+    if (value == null)
       return false;
-    if (center.sameKey(wanted))
+    if (value.sameKey(wanted))
       return true;
-    if (center.getKind() != wanted.getKind())
+    if (value.getKind() != wanted.getKind())
       return false;
-    switch (center.getKind())
+    switch (value.getKind())
     {
-      case Modifier: return center.getModifier() == wanted.getModifier();
-      case Keyevent: return center.getKeyevent() == wanted.getKeyevent();
-      case Char: return center.getChar() == wanted.getChar();
-      case Editing: return center.getEditing() == wanted.getEditing();
-      case Event: return center.getEvent() == wanted.getEvent();
+      case Modifier: return value.getModifier() == wanted.getModifier();
+      case Keyevent: return value.getKeyevent() == wanted.getKeyevent();
+      case Char: return value.getChar() == wanted.getChar();
+      case Editing: return value.getEditing() == wanted.getEditing();
+      case Event: return value.getEvent() == wanted.getEvent();
       default: return false;
     }
   }

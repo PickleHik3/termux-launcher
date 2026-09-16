@@ -112,6 +112,35 @@ public class Keyboard2ViewKeyRectTest
   }
 
   @Test
+  public void aCornerGlyphCanBePointedAtWhereItIsDrawn() throws Exception
+  {
+    // Help boxes the settings cog, which is only ever a corner of some other key.
+    Keyboard2View view = measuredView(
+        "<keyboard bottom_row='false'><row><key c='fn' nw='loc alt' se='config'/>"
+        + "<key width='4.0' c='space'/></row></keyboard>");
+    Rect cap = new Rect();
+    Rect cog = new Rect();
+    assertTrue(view.getKeyRectOnScreen("fn", cap));
+    assertTrue(view.getKeyCornerRectOnScreen("config", cog));
+    assertTrue("the cog has a glyph to box", cog.width() > 0 && cog.height() > 0);
+    assertTrue("the cog is on its cap", cap.contains(cog));
+    assertTrue("and smaller than it", cog.width() < cap.width() && cog.height() < cap.height());
+    // South-east: the glyph sits in the half of the cap the swipe goes toward.
+    assertTrue(cog.centerX() > cap.centerX());
+    assertTrue(cog.centerY() > cap.centerY());
+  }
+
+  @Test
+  public void aValueOnNoCornerHasNoGlyphToPointAt() throws Exception
+  {
+    Keyboard2View view = measuredView(LAYOUT);
+    assertFalse(view.getKeyCornerRectOnScreen("config", new Rect()));
+    // A centre cap is not a corner: asking for one by the corner probe answers no.
+    assertFalse(view.getKeyCornerRectOnScreen("ctrl", new Rect()));
+    assertTrue(view.getKeyCornerRectOnScreen("cursor_left", new Rect()));
+  }
+
+  @Test
   public void theSpaceBarAliasIsTheSameAnswerAsAskingForItByName() throws Exception
   {
     Keyboard2View view = measuredView(LAYOUT);

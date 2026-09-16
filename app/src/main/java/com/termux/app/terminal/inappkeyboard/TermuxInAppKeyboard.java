@@ -881,6 +881,16 @@ public final class TermuxInAppKeyboard {
     }
 
     /**
+     * On-screen bounds of the glyph one of a key's corner values is drawn as, named the way a
+     * layout file names it ("config"). False while the keyboard is down and for a layout that puts
+     * that value on no corner at all, which help reads as "nothing to point at here".
+     */
+    public boolean getKeyCornerRectOnScreen(@NonNull String valueName, @NonNull Rect out) {
+        return mKeyboardView != null && isVisible()
+            && mKeyboardView.getKeyCornerRectOnScreen(valueName, out);
+    }
+
+    /**
      * The whole keyboard container's bounds on screen, for overlays that must let touches through
      * to the keys they type with; false while the keyboard is hidden.
      */
