@@ -87,9 +87,13 @@ public class PlaceArrangeModelTest {
     }
 
     @Test
-    public void theIndexGainsAnEdgeRowOnlyOnceTheAppsRowHasLeftTheBottom() {
-        assertEquals("riding the apps row it is shown or hidden and nothing else",
-            1, groups(PaneWallPage.TERMINAL, PORTRAIT, Element.AZ_INDEX).size());
+    public void theIndexKeepsItsEdgeRowWhereverTheAppsRowStands() {
+        // The edge is the index's own wherever it stands: it is what takes it off the apps row and
+        // what puts it back, so the control is there while the index is.
+        List<Group> riding = groups(PaneWallPage.TERMINAL, PORTRAIT, Element.AZ_INDEX);
+        assertEquals(2, riding.size());
+        assertEquals(Arrays.asList("top", "bottom"),
+            Arrays.asList(((Pills) riding.get(1)).values));
 
         places.setAppsRow(PaneWallPage.TERMINAL, PORTRAIT, RowPlacement.HIDDEN);
         List<Group> standingAlone = groups(PaneWallPage.TERMINAL, PORTRAIT, Element.AZ_INDEX);

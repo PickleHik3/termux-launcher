@@ -4,6 +4,7 @@ import android.app.Application;
 import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.LinearLayout;
 
 import com.termux.R;
@@ -124,7 +125,18 @@ public class TermuxActivityEdgeStackLayoutTest {
         TermuxActivity activity = inflate();
         activity.applyEdgeStacks(layoutWith(Element.APPS, Edge.TOP));
         View host = activity.findViewById(R.id.place_apps_bar_host);
-        assertSame(activity.findViewById(R.id.place_edge_stack_top), host.getParent());
+        // Through the plank it stands on, which is the top stack's child.
+        assertSame(activity.findViewById(R.id.place_off_dock_plank_bars), host.getParent());
+        assertTrue(standsIn(activity, Edge.TOP, host));
+    }
+
+    /** Whether the bar ends up inside that edge's stack, plank or no plank between them. */
+    private static boolean standsIn(TermuxActivity activity, Edge edge, View bar) {
+        View stack = stackOf(activity, edge);
+        for (ViewParent parent = bar.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent == stack) return true;
+        }
+        return false;
     }
 
     @Test
@@ -153,7 +165,7 @@ public class TermuxActivityEdgeStackLayoutTest {
         for (Edge edge : new Edge[] {Edge.TOP, Edge.LEFT, Edge.RIGHT}) {
             activity.applyEdgeStacks(layoutWith(Element.APPS, edge));
             assertSame(edge + " apps", activity.findViewById(R.id.place_apps_bar_host), apps);
-            assertSame(edge.toString(), stackOf(activity, edge), apps.getParent());
+            assertTrue(edge.toString(), standsIn(activity, edge, apps));
             activity.applyEdgeStacks(layoutWith(Element.EXTRA_KEYS, edge));
             assertSame(edge + " keys", activity.findViewById(R.id.place_extra_keys_host), keys);
             assertSame(edge.toString(), stackOf(activity, edge), keys.getParent());
@@ -167,6 +179,108 @@ public class TermuxActivityEdgeStackLayoutTest {
             case LEFT: return activity.findViewById(R.id.place_edge_stack_left);
             default: return activity.findViewById(R.id.place_edge_stack_right);
         }
+    }
+
+    // ------------------------------------------------------------------ the shared plank
+
+    /** Every element on the bottom edge, with the two named put on {@code edge}. */
+    private static PlaceLayout layoutWith(Element first, Element second, Edge edge) {
+        Map<Element, Slot> slots = new EnumMap<>(Element.class);
+        for (Element element : Element.values()) {
+            boolean moved = element == first || element == second;
+            slots.put(element, Slot.on(moved ? edge : Edge.BOTTOM, element));
+        }
+        if (first != Element.STATUS && second != Element.STATUS)
+            slots.put(Element.STATUS, Slot.on(Edge.TOP, Element.STATUS));
+        return new PlaceLayout(slots, PlaceLayout.KeyboardMode.RESIZE,
+            PlaceLayout.KeyboardForm.DOCKED, 4, 4);
+    }
+
+    @Test
+    public void aTopRowAndTheIndexRidingItShareOnePlank() {
+        TermuxActivity activity = inflate();
+        PlaceLayout layout = layoutWith(Element.APPS, Element.AZ, Edge.TOP);
+        activity.applyEdgeStacks(layout);
+
+        ViewGroup plankBars = activity.findViewById(R.id.place_off_dock_plank_bars);
+        View plank = activity.findViewById(R.id.place_off_dock_plank_host);
+        View apps = activity.findViewById(R.id.place_apps_bar_host);
+        View index = activity.findViewById(R.id.place_az_bar_host);
+        assertSame("the row is on the plank", plankBars, apps.getParent());
+        assertSame("and so is the index riding it", plankBars, index.getParent());
+        assertSame("the plank is what stands in the top stack",
+            activity.findViewById(R.id.place_edge_stack_top), plank.getParent());
+        // The index is the outer band of the two along the top, the way it is the band under the
+        // row along the bottom.
+        assertEquals(0, plankBars.indexOfChild(index));
+        assertEquals(1, plankBars.indexOfChild(apps));
+
+        // One sheet of glass, under both bars.
+        assertNotNull(activity.findViewById(R.id.place_off_dock_plank_glass));
+        assertNotNull(activity.findViewById(R.id.place_off_dock_plank_blur));
+        assertNotNull(activity.findViewById(R.id.place_off_dock_plank_surface));
+    }
+
+    @Test
+    public void thePlankIsGlazedAtTheDocksOwnCornerRadius() {
+        TermuxActivity activity = inflate();
+        PlaceLayout layout = layoutWith(Element.APPS, Element.AZ, Edge.TOP);
+        activity.applyEdgeStacks(layout);
+        assertTrue(activity.syncOffDockPlank(layout));
+
+        View plank = activity.findViewById(R.id.place_off_dock_plank_host);
+        assertEquals(View.VISIBLE, plank.getVisibility());
+        View glass = activity.findViewById(R.id.place_off_dock_plank_glass);
+        assertTrue(glass.getOutlineProvider()
+            instanceof com.termux.app.statusbar.StatusBarSurfaceOutlineProvider);
+        com.termux.app.statusbar.StatusBarSurfaceOutlineProvider outline =
+            (com.termux.app.statusbar.StatusBarSurfaceOutlineProvider) glass.getOutlineProvider();
+
+        int glassHeightPx = activity.offDockPlankGlassHeightPx();
+        assertTrue("both bands are on the sheet", glassHeightPx > 0);
+        assertEquals("the Appearance editor's dock radius, clamped to the whole plank",
+            activity.resolveDockCapsuleCornerRadiusPx(glassHeightPx), outline.radiusPx(), 0.01f);
+        // The defect: clamped to the index's own 19dp band the plank could never be rounder than
+        // half of it, whatever the slider said.
+        assertTrue("rounder than a half-capsule of one bar",
+            outline.radiusPx() > activity.resolveDockCapsuleCornerRadiusPx(
+                Math.round(activity.getResources().getDisplayMetrics().density * 19f)));
+    }
+
+    @Test
+    public void anIndexOnAnotherEdgeKeepsItsOwnCapsuleAndTheRowKeepsThePlank() {
+        TermuxActivity activity = inflate();
+        PlaceLayout layout = layoutWith(Element.APPS, Edge.TOP)
+            .withSlot(Element.AZ, Slot.on(Edge.LEFT, Element.AZ));
+        activity.applyEdgeStacks(layout);
+
+        View apps = activity.findViewById(R.id.place_apps_bar_host);
+        View index = activity.findViewById(R.id.place_az_bar_host);
+        assertSame("the row is alone on the plank",
+            activity.findViewById(R.id.place_off_dock_plank_bars), apps.getParent());
+        assertSame("the index stands in the left stack",
+            activity.findViewById(R.id.place_edge_stack_left), index.getParent());
+        assertEquals(View.VISIBLE,
+            activity.findViewById(R.id.place_az_bar_host_glass).getVisibility());
+    }
+
+    @Test
+    public void theDefaultArrangementNeverBuildsAPlank() {
+        // Everything along the bottom is the dock's own, so the plank stays away and the top stack
+        // holds nothing but the status bar — the shipped screen, untouched.
+        TermuxActivity activity = inflate();
+        PlaceLayout layout = layoutWith(Element.APPS, Edge.BOTTOM);
+        activity.applyEdgeStacks(layout);
+        activity.syncOffDockPlank(layout);
+
+        View plank = activity.findViewById(R.id.place_off_dock_plank_host);
+        assertEquals(View.GONE, plank.getVisibility());
+        assertEquals("nothing was ever put on it", 0,
+            ((ViewGroup) activity.findViewById(R.id.place_off_dock_plank_bars)).getChildCount());
+        EdgeStackView top = activity.findViewById(R.id.place_edge_stack_top);
+        assertSame(activity.findViewById(R.id.terminal_window_bar_host), top.getChildAt(0));
+        assertEquals(0,
+            ((EdgeStackView) activity.findViewById(R.id.place_edge_stack_bottom)).getChildCount());
     }
 
     @Test

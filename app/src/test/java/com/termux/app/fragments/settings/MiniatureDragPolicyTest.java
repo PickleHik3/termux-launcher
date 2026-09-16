@@ -108,23 +108,24 @@ public class MiniatureDragPolicyTest {
     }
 
     @Test
-    public void theAzIndexRidingThePinnedAppsCanOnlyBePutAway() {
+    public void theAzIndexRidingThePinnedAppsCanBeDraggedOffTheRow() {
+        // Riding is the two of them sharing an edge, so the index is lifted and dropped like any
+        // other band: every edge is offered, and one of them is the row's own.
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             Targets riding = targets(Bar.AZ_INDEX, orientation, layout(RowPlacement.BOTTOM));
-            assertTrue("it goes where the pinned apps go", riding.drops.isEmpty());
-            assertTrue("hiding it is the one thing a drag can do", riding.tray);
+            assertEquals(orientation.toString(), EVERY_EDGE, edges(riding));
+            assertTrue("hiding it is still a drag's other answer", riding.tray);
             assertFalse(riding.isEmpty());
         }
     }
 
     @Test
-    public void aHiddenAzIndexUnderThePinnedAppsComesBackToTheBottomOnly() {
-        // Its chip in the tray must have somewhere to go; the bottom is where it rides.
+    public void aHiddenAzIndexUnderThePinnedAppsComesBackToAnyEdge() {
+        // Its chip in the tray is lifted by the same grip as any other and lands wherever it is
+        // dropped; the bottom is simply where it rejoins the row.
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             Targets hidden = targets(Bar.AZ_INDEX, orientation, layout(RowPlacement.BOTTOM, false));
-            assertEquals(orientation + ": back under the pinned apps",
-                Arrays.asList(Edge.BOTTOM), edges(hidden));
-            assertEquals(1, hidden.drops.size());
+            assertEquals(orientation.toString(), EVERY_EDGE, edges(hidden));
             assertTrue(hidden.tray);
         }
     }

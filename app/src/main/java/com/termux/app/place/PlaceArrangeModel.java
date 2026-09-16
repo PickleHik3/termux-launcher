@@ -232,9 +232,10 @@ public final class PlaceArrangeModel {
                 groups.add(new Pills(R.string.settings_layout_miniature_alphabets, AZ_VALUES,
                     AZ_LABELS, shown ? AZ_SHOWN : AZ_HIDDEN,
                     value -> places.setAzRowShown(place, orientation, AZ_SHOWN.equals(value))));
-                // Standing on its own the bar picks its own edge; under the pinned apps it rides
-                // with them and the stored edge is not what happens.
-                if (shown && PlaceChromePolicy.azIndexStandsAlone(places.resolve(place, orientation)))
+                // The edge is the bar's own wherever it stands: on the pinned apps row's edge it
+                // rides that row, on any other it gets a bar of its own, and this is the control
+                // that moves it between the two.
+                if (shown)
                     groups.add(edgePills(R.string.settings_layout_alphabets_edge_title, orientation,
                         places.azBarEdge(place, orientation),
                         value -> places.setAzBarEdge(place, orientation,

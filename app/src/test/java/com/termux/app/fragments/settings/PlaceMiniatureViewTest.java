@@ -262,22 +262,65 @@ public class PlaceMiniatureViewTest {
     }
 
     @Test
-    public void theAzBarEdgeOnlyAppliesWhileTheBarStandsAlone() {
+    public void theAzBarEdgeAlwaysApplies() {
         PlaceMiniatureView view = sized();
-        // Riding under a bottom apps row: a stored side edge is ignored, the band stays along the
-        // bottom, between the pinned apps and the extra keys, same as the default arrangement.
-        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.LEFT, RowPlacement.BOTTOM),
-            PlaceOrientation.LANDSCAPE);
+        // Riding the apps row is the two of them sharing the bottom: the band lies between the
+        // pinned apps and the extra keys, which is the default arrangement.
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM), PlaceOrientation.LANDSCAPE);
         RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
         RectF ridingRow = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
         RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
         assertNotNull(apps);
         assertNotNull(ridingRow);
         assertNotNull(keys);
-        assertTrue("the ignored side edge never turns the band into a column",
+        assertTrue("a bottom band is wider than it is tall",
             ridingRow.width() > ridingRow.height());
-        assertTrue("still below the pinned apps", ridingRow.top >= apps.bottom - 0.5f);
-        assertTrue("still above the extra keys", ridingRow.bottom <= keys.top + 0.5f);
+        assertTrue("below the pinned apps", ridingRow.top >= apps.bottom - 0.5f);
+        assertTrue("above the extra keys", ridingRow.bottom <= keys.top + 0.5f);
+
+        // Stored on a side with the apps row still along the bottom: it does not ride that row, so
+        // it stands in a column of its own.
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.LEFT, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF column = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        assertNotNull(column);
+        assertTrue("its stored side edge stands it in a column", column.height() > column.width());
+    }
+
+    /**
+     * The decision behind the same-edge rule, on the picture: dragging only the apps row to the
+     * top leaves the index's band along the bottom, where the user left it.
+     */
+    @Test
+    public void draggingOnlyTheAppsRowToTheTopLeavesTheIndexAtTheBottom() {
+        PlaceLayoutStore places = store();
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM), PlaceOrientation.LANDSCAPE);
+        view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
+
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        MiniatureDragPolicy.Slot top = view.slotFor(Edge.TOP);
+        assertNotNull("the top edge is offered", top);
+        touch(view, MotionEvent.ACTION_MOVE, top.centerX(), top.centerY());
+        touch(view, MotionEvent.ACTION_UP, top.centerX(), top.centerY());
+
+        PlaceLayout after = places.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
+        assertEquals(Edge.TOP, after.slot(Element.APPS).edge);
+        assertEquals("the index stayed where it was", Edge.BOTTOM, after.slot(Element.AZ).edge);
+        assertFalse("and so stopped riding the row", after.slot(Element.AZ).hidden);
+
+        view.setLayout(after, PlaceOrientation.LANDSCAPE);
+        RectF movedRow = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF index = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        assertNotNull(movedRow);
+        assertNotNull(index);
+        assertTrue("the row went to the top", movedRow.top < view.getHeight() / 2f);
+        assertTrue("the index band is still at the bottom", index.top > movedRow.bottom);
     }
 
     @Test
@@ -627,7 +670,7 @@ public class PlaceMiniatureViewTest {
     }
 
     @Test
-    public void theAzIndexRidingThePinnedAppsCanOnlyBeDraggedIntoTheTray() {
+    public void theAzIndexRidingThePinnedAppsIsDraggedOffTheRowOrIntoTheTray() {
         PlaceLayoutStore places = store();
         PlaceMiniatureView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
@@ -638,8 +681,10 @@ public class PlaceMiniatureViewTest {
         RectF grip = view.gripRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
-        assertEquals("the tray is the only target", 1, view.slots().size());
-        assertTrue(view.slots().get(0).isTray());
+        // Riding is the two of them sharing an edge, so the index may be lifted off the row onto
+        // any other — and the tray is still there for putting it away.
+        assertNotNull("every edge is a target", view.slotFor(Edge.LEFT));
+        assertNotNull(view.slotFor(Edge.TOP));
         RectF tray = view.trayRect();
         touch(view, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
         touch(view, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());

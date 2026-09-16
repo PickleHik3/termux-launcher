@@ -359,25 +359,24 @@ public class EdgeStackPolicyTest {
     }
 
     @Test
-    public void theAzBarRidingTheAppsRowIgnoresItsOwnSlot() {
-        // Its stored edge says LEFT, but the pinned apps stand along the bottom, so it rides them.
-        PlaceLayout riding = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.LEFT,
+    public void theAzBarStandsWhereItsOwnSlotSaysEvenUnderAnAppsRow() {
+        // Its stored edge says LEFT and the pinned apps stand along the bottom: it does not ride
+        // them, because riding is the two of them sharing an edge rather than a row that drags the
+        // index about.
+        PlaceLayout apart = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.LEFT,
             RowPlacement.HIDDEN);
-        assertEquals(Edge.LEFT, riding.slot(Element.AZ).edge);
-        assertEquals(Edge.BOTTOM, EdgeStackPolicy.edgeOf(riding, Element.AZ));
-        assertTrue(EdgeStackPolicy.stack(riding, Edge.LEFT).isEmpty());
-        // Its stored order is the one a left column would give it; riding, that is ignored too and
-        // it takes the band it has always had under the apps row.
-        assertEquals(Element.AZ.defaultOrder(Edge.LEFT), riding.slot(Element.AZ).order);
-        assertEquals(Element.AZ.defaultOrder(Edge.BOTTOM),
-            EdgeStackPolicy.orderOf(riding, Element.AZ, Edge.BOTTOM));
+        assertEquals(Edge.LEFT, apart.slot(Element.AZ).edge);
+        assertEquals(Edge.LEFT, EdgeStackPolicy.edgeOf(apart, Element.AZ));
+        assertFalse(PlaceChromePolicy.azRidesAppsRow(apart));
+        assertEquals(Arrays.asList(Element.AZ), EdgeStackPolicy.stack(apart, Edge.LEFT));
+        assertEquals(Arrays.asList(Element.APPS), EdgeStackPolicy.stack(apart, Edge.BOTTOM));
+
+        // Standing on the row's own edge it rides it, and is the band under it as it always was.
+        PlaceLayout riding = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.HIDDEN);
+        assertTrue(PlaceChromePolicy.azRidesAppsRow(riding));
         assertEquals(Arrays.asList(Element.AZ, Element.APPS),
             EdgeStackPolicy.stack(riding, Edge.BOTTOM));
-
-        // With the apps row off the bottom the same stored edge stands it in its own column.
-        PlaceLayout alone = layout(Edge.TOP, RowPlacement.HIDDEN, true, Edge.LEFT,
-            RowPlacement.HIDDEN);
-        assertEquals(Arrays.asList(Element.AZ), EdgeStackPolicy.stack(alone, Edge.LEFT));
     }
 
     // ------------------------------------------------------------------ drop targets
@@ -444,19 +443,19 @@ public class EdgeStackPolicyTest {
     }
 
     @Test
-    public void theAzBarRidingTheAppsRowHasNowhereToGoButAway() {
+    public void theAzBarRidingTheAppsRowCanStillBeDraggedOffIt() {
+        // Riding is not a cage: the index is a band of its edge like any other, so every edge is
+        // offered and the drag that takes it off the row is a drop on one of the others.
         PlaceLayout riding = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
             RowPlacement.BOTTOM);
-        assertTrue(EdgeStackPolicy.targets(riding, Element.AZ, PlaceOrientation.PORTRAIT).isEmpty());
+        assertEquals(Arrays.asList(Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT),
+            edgesOffered(EdgeStackPolicy.targets(riding, Element.AZ, PlaceOrientation.PORTRAIT)));
 
-        // Away, its one slot back is the row it rides; without it a chip in the tray would lift
-        // with nowhere to land but the tray it came from.
+        // Away, it is offered every edge too — the row's among them, which is how it comes back.
         PlaceLayout away = layout(Edge.TOP, RowPlacement.BOTTOM, false, Edge.BOTTOM,
             RowPlacement.BOTTOM);
-        List<EdgeStackPolicy.Drop> back =
-            EdgeStackPolicy.targets(away, Element.AZ, PlaceOrientation.PORTRAIT);
-        assertEquals(1, back.size());
-        assertEquals(Edge.BOTTOM, back.get(0).edge);
+        assertEquals(Arrays.asList(Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT),
+            edgesOffered(EdgeStackPolicy.targets(away, Element.AZ, PlaceOrientation.PORTRAIT)));
 
         // Standing alone it picks its own edge like anything else.
         PlaceLayout alone = layout(Edge.TOP, RowPlacement.HIDDEN, true, Edge.BOTTOM,
@@ -523,13 +522,9 @@ public class EdgeStackPolicyTest {
     }
 
     @Test
-    public void aReOrderedRowTakesTheRidingIndexWithIt() {
-        // The index rides the pinned apps row, so it is a band of the bottom like any other here.
-        // Its stored edge follows the edge it is drawn on, without which the drop the user made is
-        // not the stack they end up with.
-        PlaceLayout riding = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.LEFT,
+    public void aReOrderedEdgeReNumbersTheRidingIndexWithEverythingElseOnIt() {
+        PlaceLayout riding = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
             RowPlacement.BOTTOM);
-        assertEquals(Edge.LEFT, riding.slot(Element.AZ).edge);
         assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS),
             EdgeStackPolicy.stack(riding, Edge.BOTTOM));
 
@@ -537,6 +532,34 @@ public class EdgeStackPolicyTest {
         assertEquals(Arrays.asList(Element.AZ, Element.EXTRA_KEYS, Element.APPS),
             EdgeStackPolicy.stack(dropped, Edge.BOTTOM));
         assertEquals(Edge.BOTTOM, dropped.slot(Element.AZ).edge);
+    }
+
+    /**
+     * The decision behind the same-edge rule: dragging the row alone is dragging the row alone.
+     * The index keeps the edge the user left it on and stands there with a bar of its own, and
+     * dropping it on the row's edge is what puts it back under the row.
+     */
+    @Test
+    public void aRowDroppedOnAnotherEdgeLeavesTheIndexWhereItWas() {
+        PlaceLayout riding = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertTrue(PlaceChromePolicy.azRidesAppsRow(riding));
+
+        PlaceLayout rowOnTop = EdgeStackPolicy.withDrop(riding, Element.APPS, Edge.TOP, 1);
+        assertEquals(Edge.TOP, rowOnTop.slot(Element.APPS).edge);
+        assertEquals("the index did not follow", Edge.BOTTOM, rowOnTop.slot(Element.AZ).edge);
+        assertFalse(PlaceChromePolicy.azRidesAppsRow(rowOnTop));
+        assertTrue(PlaceChromePolicy.azIndexStandsAlone(rowOnTop));
+        assertEquals(Arrays.asList(Element.STATUS, Element.APPS),
+            EdgeStackPolicy.stack(rowOnTop, Edge.TOP));
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ),
+            EdgeStackPolicy.stack(rowOnTop, Edge.BOTTOM));
+
+        // Dropped onto the row's edge the index rides it again.
+        PlaceLayout rejoined = EdgeStackPolicy.withDrop(rowOnTop, Element.AZ, Edge.TOP, 1);
+        assertTrue(PlaceChromePolicy.azRidesAppsRow(rejoined));
+        assertEquals(Arrays.asList(Element.STATUS, Element.AZ, Element.APPS),
+            EdgeStackPolicy.stack(rejoined, Edge.TOP));
     }
 
     @Test
