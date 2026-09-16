@@ -64,7 +64,7 @@ public final class SurfaceEditorScene {
     @NonNull
     public static SurfaceEditorScene of(@NonNull PlaceLayout layout, boolean keyboardShown,
                                         boolean floatingDock) {
-        return new SurfaceEditorScene(layout.statusBarEdge,
+        return new SurfaceEditorScene(layout.slot(com.termux.app.place.Element.STATUS).edge,
             PlaceChromePolicy.dockShown(layout),
             PlaceChromePolicy.appsRowShown(layout),
             PlaceChromePolicy.appsRailShown(layout),

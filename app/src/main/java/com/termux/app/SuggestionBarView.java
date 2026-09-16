@@ -241,6 +241,8 @@ public final class SuggestionBarView extends GridLayout
     private final List<View> terminalSearchTargets = new ArrayList<>();
     private int terminalSearchFocusIndex = -1;
     private int maxButtonCount = 7;
+    /** The rail form: the icons stand in a column rather than lying in a row. */
+    private boolean vertical = false;
     private float textSize = 12f;
     private boolean bandW = false;
     @Nullable private ColorFilter appIconColorFilter;
@@ -709,6 +711,28 @@ public final class SuggestionBarView extends GridLayout
 
     public void setMaxButtonCount(int maxButtonCount) {
         this.maxButtonCount = maxButtonCount;
+    }
+
+    /**
+     * Stands the row on its side: one column of icons instead of one row, which is the rail. The
+     * same view, the same pinned items, the same long-press and folder surfaces — only the axis
+     * changes, and with it the icon size (a rail icon is a fixed size, not a share of a row's
+     * height) and the paging (a column holds every pinned item and its host scrolls).
+     *
+     * @return whether the axis moved, which the caller has to rebuild the slots for
+     */
+    public boolean setVerticalForm(boolean vertical) {
+        if (this.vertical == vertical) return false;
+        this.vertical = vertical;
+        invalidateRenderedIconCaches();
+        lastSurfaceRenderSignature = 0;
+        childLayoutPending = true;
+        requestLayout();
+        return true;
+    }
+
+    public boolean isVerticalForm() {
+        return vertical;
     }
 
     public void setTextSize(float textSize) {
@@ -2687,7 +2711,8 @@ public final class SuggestionBarView extends GridLayout
             invalidateAzRenderState();
         }
 
-        setColumnCount(buttonCount);
+        setColumnCount(vertical ? 1 : buttonCount);
+        setRowCount(vertical ? Math.max(1, buttonCount) : 1);
         if (azPreview) {
             azRenderedSlotCount = buttonCount;
         }
@@ -2755,7 +2780,10 @@ public final class SuggestionBarView extends GridLayout
             post(this::animatePinnedMutationFeedback);
         }
 
-        boolean showEmptyPinnedHint = !azPreview
+        // A rail with nothing pinned is simply not there: its host is taken down, so there is no
+        // band to write an invitation across the way the bottom row has.
+        boolean showEmptyPinnedHint = !vertical
+            && !azPreview
             && TextUtils.isEmpty(lastInput.trim())
             && (pinnedItems == null || pinnedItems.isEmpty())
             && entries.isEmpty();
@@ -2792,7 +2820,10 @@ public final class SuggestionBarView extends GridLayout
                 filler.setLayoutParams(createSlotParams(i));
                 addView(filler);
             }
-        } else {
+        } else if (!vertical) {
+            // Only a row needs fillers: its slots are a share of a fixed width, so an empty one
+            // still has to be claimed or the icons stop being space-between. A column's slots are
+            // a fixed length each and simply stop where the icons do.
             for (int i = 0; i < buttonCount; i++) {
                 if (usedColumns[i]) continue;
                 ImageButton filler = new ImageButton(getContext(), null, android.R.attr.buttonBarButtonStyle);
@@ -3171,14 +3202,35 @@ public final class SuggestionBarView extends GridLayout
         return shell;
     }
 
-    private LayoutParams createSlotParams(int col) {
+    /**
+     * One slot's box. Lying down the slots share the row's width evenly and take its whole height,
+     * which is what makes the icons space-between; standing up they share the column's width and
+     * take a fixed slice of its length each ({@code DockLayoutPolicy.railSlotLengthPx}), so a rail
+     * with more icons than the screen is tall scrolls instead of squeezing them.
+     */
+    private LayoutParams createSlotParams(int index) {
         LayoutParams param = new GridLayout.LayoutParams();
+        param.setMargins(0, 0, 0, 0);
+        if (vertical) {
+            param.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            param.height = railSlotLengthPx();
+            param.columnSpec = GridLayout.spec(0, GridLayout.FILL, 1f);
+            // TOP rather than FILL: a column's slots are a fixed pitch, and FILL hands the slack
+            // between the last icon and the bottom of the rail to the last slot, which then
+            // stretched to the whole remaining height.
+            param.rowSpec = GridLayout.spec(index, GridLayout.TOP);
+            return param;
+        }
         param.width = 0;
         param.height = ViewGroup.LayoutParams.MATCH_PARENT;
-        param.setMargins(0, 0, 0, 0);
-        param.columnSpec = GridLayout.spec(col, GridLayout.FILL, 1f);
+        param.columnSpec = GridLayout.spec(index, GridLayout.FILL, 1f);
         param.rowSpec = GridLayout.spec(0, GridLayout.FILL, 1f);
         return param;
+    }
+
+    /** How much of the rail's axis one icon takes: the icon, and its air above and below. */
+    private int railSlotLengthPx() {
+        return com.termux.app.dock.DockLayoutPolicy.railSlotLengthPx(screenDensity());
     }
 
     private void launchEntry(@NonNull LauncherAppEntry entry, @Nullable TerminalView terminalView) {
@@ -3373,25 +3425,13 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * Resolved pinned entries for an external dock surface (the landscape rail). Folders are
-     * excluded — the rail has no popup surface to open them into.
+     * Whether anything is pinned at all. The rail asks: a column with no icons claims no screen
+     * edge, where the bottom row keeps its band and its invitation to pin something.
      */
-    @NonNull
-    public List<LauncherAppEntry> getDockRailEntries() {
+    public boolean hasPinnedItems() {
         List<PinnedItem> source = configRepository != null
             ? configRepository.loadPinnedItems() : pinnedItems;
-        List<LauncherAppEntry> out = new ArrayList<>();
-        for (LauncherAppEntry entry : entriesForPinnedItems(source)) {
-            if (!"folder".equals(entry.appRef.packageName)) {
-                out.add(entry);
-            }
-        }
-        return out;
-    }
-
-    /** Launches an entry on behalf of an external dock surface (the landscape rail). */
-    public void launchEntryFromRail(@NonNull LauncherAppEntry entry, @Nullable View sourceView) {
-        launchEntry(entry, null, sourceView, true);
+        return source != null && !source.isEmpty();
     }
 
     private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source) {
@@ -7546,6 +7586,8 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private int computePinnedItemsPerPage() {
+        // Standing up there is one page: the column holds every pinned item and the host scrolls.
+        if (vertical) return Math.max(1, pinnedItemCount());
         return DockPagingModel.pinnedItemsPerPage(maxButtonCount);
     }
 
@@ -7657,6 +7699,9 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private int iconSizePx() {
+        // A rail icon is a fixed size on every side: its column has no row height to be a share of.
+        if (vertical)
+            return com.termux.app.dock.DockLayoutPolicy.railIconSizePx(screenDensity());
         int availableHeight = dockRowHeightHintPx > 0 ? dockRowHeightHintPx : getHeight();
         if (availableHeight <= 0) {
             ViewParent parent = getParent();

@@ -90,24 +90,24 @@ public class EdgeStackPolicyTest {
         RowPlacement railSide = right ? RowPlacement.RIGHT : RowPlacement.LEFT;
         Edge side = right ? Edge.RIGHT : Edge.LEFT;
 
-        boolean railActive = layout.appsRow == railSide;
+        boolean railActive = rowOf(layout, com.termux.app.place.Element.APPS) == railSide;
         int railWidthPx = railActive ? cutout + RAIL_THICKNESS : 0;
         int inset = railActive ? railWidthPx : cutout;
 
         int keysFootprint = 0;
-        if (layout.extraKeys == railSide) {
+        if (rowOf(layout, com.termux.app.place.Element.EXTRA_KEYS) == railSide) {
             int edgeInset = railActive ? railWidthPx : cutout;
             keysFootprint = edgeInset + 2 * RAIL_MARGIN + KEYS_WIDTH;
         }
         inset = Math.max(inset, keysFootprint);
 
         int statusFootprint = 0;
-        if (layout.statusBarEdge == side) {
+        if (layout.slot(Element.STATUS).edge == side) {
             statusFootprint = cutout + STATUS_OUTER_MARGIN + STATUS_COLUMN_BAR;
         }
         inset = Math.max(inset, statusFootprint);
 
-        boolean azOnSide = layout.azRowShown && PlaceChromePolicy.azBarEdge(layout) == side;
+        boolean azOnSide = (!layout.slot(Element.AZ).hidden) && PlaceChromePolicy.azBarEdge(layout) == side;
         if (azOnSide) {
             int azEdgeInset = Math.max(Math.max(cutout, railWidthPx),
                 Math.max(keysFootprint, statusFootprint));
@@ -132,8 +132,8 @@ public class EdgeStackPolicyTest {
     private static boolean statusSharesASide(PlaceLayout layout, boolean right) {
         Edge side = right ? Edge.RIGHT : Edge.LEFT;
         RowPlacement railSide = right ? RowPlacement.RIGHT : RowPlacement.LEFT;
-        return layout.statusBarEdge == side
-            && (layout.appsRow == railSide || layout.extraKeys == railSide);
+        return layout.slot(Element.STATUS).edge == side
+            && (rowOf(layout, com.termux.app.place.Element.APPS) == railSide || rowOf(layout, com.termux.app.place.Element.EXTRA_KEYS) == railSide);
     }
 
     // ------------------------------------------------------------------ equivalence
@@ -265,18 +265,18 @@ public class EdgeStackPolicyTest {
      */
     private static List<Element> miniatureOrder(PlaceLayout layout, Edge edge) {
         List<Element> claimed = new ArrayList<>(4);
-        boolean azShown = layout.azRowShown;
+        boolean azShown = (!layout.slot(Element.AZ).hidden);
         Edge azEdge = PlaceChromePolicy.azBarEdge(layout);
-        if (layout.statusBarEdge == edge) claimed.add(Element.STATUS);
+        if (layout.slot(Element.STATUS).edge == edge) claimed.add(Element.STATUS);
         if (azShown && azEdge == Edge.TOP && edge == Edge.TOP) claimed.add(Element.AZ);
-        if (layout.appsRow.isOnSide() && edgeOf(layout.appsRow) == edge) claimed.add(Element.APPS);
-        if (layout.extraKeys.isOnSide() && edgeOf(layout.extraKeys) == edge)
+        if (rowOf(layout, com.termux.app.place.Element.APPS).isOnSide() && edgeOf(rowOf(layout, com.termux.app.place.Element.APPS)) == edge) claimed.add(Element.APPS);
+        if (rowOf(layout, com.termux.app.place.Element.EXTRA_KEYS).isOnSide() && edgeOf(rowOf(layout, com.termux.app.place.Element.EXTRA_KEYS)) == edge)
             claimed.add(Element.EXTRA_KEYS);
         if (azShown && azEdge.isOnSide() && azEdge == edge) claimed.add(Element.AZ);
-        if (layout.extraKeys == RowPlacement.BOTTOM && edge == Edge.BOTTOM)
+        if (rowOf(layout, com.termux.app.place.Element.EXTRA_KEYS) == RowPlacement.BOTTOM && edge == Edge.BOTTOM)
             claimed.add(Element.EXTRA_KEYS);
         if (azShown && azEdge == Edge.BOTTOM && edge == Edge.BOTTOM) claimed.add(Element.AZ);
-        if (layout.appsRow == RowPlacement.BOTTOM && edge == Edge.BOTTOM)
+        if (rowOf(layout, com.termux.app.place.Element.APPS) == RowPlacement.BOTTOM && edge == Edge.BOTTOM)
             claimed.add(Element.APPS);
         return claimed;
     }
@@ -296,7 +296,7 @@ public class EdgeStackPolicyTest {
                 // follows the launcher, the picture follows the stack, and the one arrangement the
                 // old order got wrong is skipped here and pinned by
                 // aBottomStatusBarIsTheInnermostBandOfTheBottomStack.
-                if (edge == Edge.BOTTOM && layout.statusBarEdge == Edge.BOTTOM) continue;
+                if (edge == Edge.BOTTOM && layout.slot(Element.STATUS).edge == Edge.BOTTOM) continue;
                 assertEquals(layout + " " + edge, miniatureOrder(layout, edge),
                     EdgeStackPolicy.stack(layout, edge));
             }
@@ -568,5 +568,22 @@ public class EdgeStackPolicyTest {
             EdgeStackPolicy.thicknessPx(Element.EXTRA_KEYS, Edge.BOTTOM, metrics));
         assertEquals(EXTRA_KEYS_COLUMN,
             EdgeStackPolicy.thicknessPx(Element.EXTRA_KEYS, Edge.RIGHT, metrics));
+    }
+
+    /**
+     * One element's slot as the terse row placement the old model spelled. Only the tests speak
+     * it now: the model itself keeps the slot, so a bar on the top edge is a top edge rather than
+     * being folded into the bottom, and this helper says so by refusing to name one.
+     */
+    private static PlaceLayout.RowPlacement rowOf(PlaceLayout layout,
+                                                  com.termux.app.place.Element element) {
+        com.termux.app.place.Slot slot = layout.slot(element);
+        if (slot.hidden) return PlaceLayout.RowPlacement.HIDDEN;
+        switch (slot.edge) {
+            case LEFT: return PlaceLayout.RowPlacement.LEFT;
+            case RIGHT: return PlaceLayout.RowPlacement.RIGHT;
+            case BOTTOM: return PlaceLayout.RowPlacement.BOTTOM;
+            default: throw new AssertionError("no row placement for " + slot);
+        }
     }
 }

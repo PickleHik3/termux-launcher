@@ -67,6 +67,18 @@ public final class DockLayout {
     public final AppDrawerGestureArbiter.Pull railPull;
     public final int railEdgeInsetPx;
     public final int railWidthPx;
+    /** The rail's own band: its width without the display cutout the edge stack already carries. */
+    public final int railBandPx;
+    public final int railIconSizePx;
+    public final int railIconSpacingPx;
+    /** How much of the rail's axis one icon takes, itself and its air either side. */
+    public final int railSlotLengthPx;
+    /**
+     * The band a lying-down pinned-apps row claims wherever it lies. Equal to
+     * {@link #appsBarHeightPx} while the row is the dock's own; non-zero for a row along the top,
+     * where the dock has collapsed and this is the only height there is.
+     */
+    public final int appsRowBandPx;
 
     /** The top pane's compact height in the active style, read by the drawer's top-band clip. */
     public final int compactStatusBarHeightPx;
@@ -107,6 +119,11 @@ public final class DockLayout {
         this.railPull = b.railPull;
         this.railEdgeInsetPx = b.railEdgeInsetPx;
         this.railWidthPx = b.railWidthPx;
+        this.railBandPx = Math.max(0, b.railBandPx);
+        this.railIconSizePx = Math.max(0, b.railIconSizePx);
+        this.railIconSpacingPx = Math.max(0, b.railIconSpacingPx);
+        this.railSlotLengthPx = Math.max(0, b.railSlotLengthPx);
+        this.appsRowBandPx = Math.max(0, b.appsRowBandPx);
         this.compactStatusBarHeightPx = b.compactStatusBarHeightPx;
         this.mConfiguredCornerRadiusDp = b.configuredCornerRadiusDp;
     }
@@ -165,6 +182,11 @@ public final class DockLayout {
         AppDrawerGestureArbiter.Pull railPull = AppDrawerGestureArbiter.Pull.NONE;
         int railEdgeInsetPx;
         int railWidthPx;
+        int railBandPx;
+        int railIconSizePx;
+        int railIconSpacingPx;
+        int railSlotLengthPx;
+        int appsRowBandPx;
         int compactStatusBarHeightPx;
         int configuredCornerRadiusDp;
 

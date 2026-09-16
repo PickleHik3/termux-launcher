@@ -59,8 +59,13 @@ public final class DockLayoutPolicy {
         public final boolean preferencesAvailable;
         /** Rounded (capsule) dock style selected. */
         public final boolean capsule;
-        /** The pinned apps stand as a column on a screen edge — the rail — not as a bottom row. */
+        /**
+         * The pinned apps stand somewhere other than the dock's own bottom row — a rail down one
+         * side, or a row along the top. Either way the dock's row collapses.
+         */
         public final boolean appsRowOnEdge;
+        /** Of those, the ones that stand as a column on a side edge: the rail. */
+        public final boolean appsOnRail;
         public final float density;
         /** The dock size preset, as stored (a raw scale, not a progress). */
         public final float barHeightScale;
@@ -89,6 +94,7 @@ public final class DockLayoutPolicy {
             this.preferencesAvailable = b.preferencesAvailable;
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
+            this.appsOnRail = b.appsOnRail;
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
@@ -111,6 +117,7 @@ public final class DockLayoutPolicy {
             private boolean preferencesAvailable = true;
             private boolean capsule;
             private boolean appsRowOnEdge;
+            private boolean appsOnRail;
             private float density = 1f;
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
@@ -131,6 +138,7 @@ public final class DockLayoutPolicy {
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
+            public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
@@ -207,11 +215,15 @@ public final class DockLayoutPolicy {
         out.appsRowEnabled = appsRowEnabled;
         out.azRowEnabled = azRowEnabled;
         if (in.preferencesAvailable) {
-            out.appsBarHeightPx = appsRowEnabled
+            // The band a lying-down apps row claims, whichever edge it lies on. The dock's own
+            // height is that band while the row is the dock's; a row standing along the top is the
+            // same band in another stack, and the dock collapses to nothing.
+            out.appsRowBandPx = in.appsRowEnabledPref
                 ? appsBarHeightPx(capsule, sizeProgress, defaultDockProgress,
                     in.baseToolbarHeightPx, out.appsTopPaddingPx, out.appsBottomPaddingPx,
                     density, Math.max(0, in.additionalAppsBarHeightPx))
                 : 0;
+            out.appsBarHeightPx = appsRowEnabled ? out.appsRowBandPx : 0;
             out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
                 azRowEnabled, appsRowEnabled, in.extraKeysRowShown, density);
             out.azRowCrownPaddingPx = AccessoryStackLayoutPolicy.computeAzRowCrownPaddingPx(
@@ -230,7 +242,7 @@ public final class DockLayoutPolicy {
             : FALLBACK_ICON_SCALE;
 
         // The apps rail.
-        boolean railActive = in.appsRowOnEdge && in.preferencesAvailable && in.appsRowEnabledPref;
+        boolean railActive = in.appsOnRail && in.preferencesAvailable && in.appsRowEnabledPref;
         out.railActive = railActive;
         out.railOnRight = in.railOnRight;
         out.railPull = railActive
@@ -245,9 +257,42 @@ public final class DockLayoutPolicy {
             + Math.max(Math.round(density * DOCK_RAIL_MIN_WIDTH_DP),
                 Math.round(density * (DOCK_RAIL_ICON_SIZE_DP + 2 * DOCK_RAIL_EDGE_MARGIN_DP)));
 
+        // The rail's own axis, so the vertical form of the pinned-apps row and the column it
+        // stands in are sized from one place rather than each measuring its own icons.
+        out.railBandPx = Math.max(0, out.railWidthPx - out.railEdgeInsetPx);
+        out.railIconSizePx = railIconSizePx(density);
+        out.railIconSpacingPx = railIconSpacingPx(density);
+        out.railSlotLengthPx = railSlotLengthPx(density);
+
         out.compactStatusBarHeightPx = Math.round(density * (capsule ? 30f : 32f));
 
         return out.build();
+    }
+
+    /** One rail icon's size, the same on every side and independent of the dock's size preset. */
+    public static int railIconSizePx(float density) {
+        return Math.round(Math.max(0f, density) * DOCK_RAIL_ICON_SIZE_DP);
+    }
+
+    /** The air above and below one rail icon. */
+    public static int railIconSpacingPx(float density) {
+        return Math.round(Math.max(0f, density) * DOCK_RAIL_ICON_SPACING_DP);
+    }
+
+    /**
+     * How much of the rail's axis one icon takes: itself and its air either side. The vertical
+     * form of the pinned-apps row gives each of its slots exactly this.
+     */
+    public static int railSlotLengthPx(float density) {
+        return railIconSizePx(density) + 2 * railIconSpacingPx(density);
+    }
+
+    /**
+     * Where the {@code index}-th icon's own box starts along the rail, measured from the first
+     * slot's top. The icon itself sits {@link #railIconSpacingPx} further in.
+     */
+    public static int railSlotOffsetPx(int index, float density) {
+        return Math.max(0, index) * railSlotLengthPx(density);
     }
 
     /**

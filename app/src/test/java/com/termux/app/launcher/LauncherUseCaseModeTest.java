@@ -46,7 +46,7 @@ public class LauncherUseCaseModeTest {
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 assertEquals(place + " " + orientation, expected,
-                    places.resolve(place, orientation).appsRow);
+                    rowOf(places.resolve(place, orientation), com.termux.app.place.Element.APPS));
             }
         }
     }
@@ -56,9 +56,9 @@ public class LauncherUseCaseModeTest {
         PlaceLayoutStore places = places();
         for (PaneWallPage place : PaneWallPage.values()) {
             assertEquals(place + " portrait", RowPlacement.BOTTOM,
-                places.resolve(place, PlaceOrientation.PORTRAIT).appsRow);
+                rowOf(places.resolve(place, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.APPS));
             assertEquals(place + " landscape", RowPlacement.LEFT,
-                places.resolve(place, PlaceOrientation.LANDSCAPE).appsRow);
+                rowOf(places.resolve(place, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
         }
     }
 
@@ -181,5 +181,22 @@ public class LauncherUseCaseModeTest {
         assertEquals(null, LauncherUseCaseMode.parseSnapshot(""));
         assertEquals(null, LauncherUseCaseMode.parseSnapshot("1,0"));
         assertEquals(null, LauncherUseCaseMode.parseSnapshot("1,0,1,yes"));
+    }
+
+    /**
+     * One element's slot as the terse row placement the old model spelled. Only the tests speak
+     * it now: the model itself keeps the slot, so a bar on the top edge is a top edge rather than
+     * being folded into the bottom, and this helper says so by refusing to name one.
+     */
+    private static RowPlacement rowOf(com.termux.app.place.PlaceLayout layout,
+                                                  com.termux.app.place.Element element) {
+        com.termux.app.place.Slot slot = layout.slot(element);
+        if (slot.hidden) return RowPlacement.HIDDEN;
+        switch (slot.edge) {
+            case LEFT: return RowPlacement.LEFT;
+            case RIGHT: return RowPlacement.RIGHT;
+            case BOTTOM: return RowPlacement.BOTTOM;
+            default: throw new AssertionError("no row placement for " + slot);
+        }
     }
 }

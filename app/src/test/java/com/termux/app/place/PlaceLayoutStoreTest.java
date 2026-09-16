@@ -58,18 +58,18 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore store = store();
         for (PaneWallPage place : PaneWallPage.values()) {
             PlaceLayout portrait = store.resolve(place, PlaceOrientation.PORTRAIT);
-            assertEquals(place + " portrait status", Edge.TOP, portrait.statusBarEdge);
-            assertEquals(place + " portrait apps", RowPlacement.BOTTOM, portrait.appsRow);
-            assertTrue(place + " portrait az", portrait.azRowShown);
-            assertEquals(place + " portrait keys", RowPlacement.BOTTOM, portrait.extraKeys);
+            assertEquals(place + " portrait status", Edge.TOP, portrait.slot(Element.STATUS).edge);
+            assertEquals(place + " portrait apps", RowPlacement.BOTTOM, rowOf(portrait, com.termux.app.place.Element.APPS));
+            assertTrue(place + " portrait az", (!portrait.slot(Element.AZ).hidden));
+            assertEquals(place + " portrait keys", RowPlacement.BOTTOM, rowOf(portrait, com.termux.app.place.Element.EXTRA_KEYS));
             assertEquals(place + " portrait keyboard", KeyboardMode.RESIZE, portrait.keyboardMode);
             assertEquals(place + " portrait columns", 4, portrait.widgetColumns);
             assertEquals(place + " portrait rows", 5, portrait.widgetRows);
 
             // Landscape stands the pinned apps on the left edge: today's rail.
             PlaceLayout landscape = store.resolve(place, PlaceOrientation.LANDSCAPE);
-            assertEquals(place + " landscape apps", RowPlacement.LEFT, landscape.appsRow);
-            assertEquals(place + " landscape keys", RowPlacement.BOTTOM, landscape.extraKeys);
+            assertEquals(place + " landscape apps", RowPlacement.LEFT, rowOf(landscape, com.termux.app.place.Element.APPS));
+            assertEquals(place + " landscape keys", RowPlacement.BOTTOM, rowOf(landscape, com.termux.app.place.Element.EXTRA_KEYS));
         }
     }
 
@@ -95,7 +95,7 @@ public class PlaceLayoutStoreTest {
         PlaceLayout home = store.resolve(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT);
         assertEquals(6, home.widgetColumns);
         assertEquals(7, home.widgetRows);
-        assertFalse(home.azRowShown);
+        assertFalse((!home.slot(Element.AZ).hidden));
     }
 
     @Test
@@ -106,15 +106,15 @@ public class PlaceLayoutStoreTest {
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 PlaceLayout layout = store.resolve(place, orientation);
-                assertEquals(place + " " + orientation, RowPlacement.HIDDEN, layout.appsRow);
-                assertEquals(place + " " + orientation, RowPlacement.HIDDEN, layout.extraKeys);
+                assertEquals(place + " " + orientation, RowPlacement.HIDDEN, rowOf(layout, com.termux.app.place.Element.APPS));
+                assertEquals(place + " " + orientation, RowPlacement.HIDDEN, rowOf(layout, com.termux.app.place.Element.EXTRA_KEYS));
             }
         }
         // The migration folded the master into Hidden once; a scoped write afterwards is a real
         // placement, not a value the master can still veto.
         store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, RowPlacement.RIGHT);
         assertEquals(RowPlacement.RIGHT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
     }
 
     @Test
@@ -122,18 +122,18 @@ public class PlaceLayoutStoreTest {
         launcher.setShowTerminalToolbar(false);
         PlaceLayoutStore store = store();
         assertEquals(RowPlacement.HIDDEN,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).extraKeys);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.EXTRA_KEYS));
 
         store.setExtraKeys(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
         assertTrue("a placement is a request to see them", launcher.shouldShowTerminalToolbar());
         assertEquals(RowPlacement.BOTTOM,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).extraKeys);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.EXTRA_KEYS));
 
         // Hiding them again is a placement of its own and leaves the toggle alone.
         store.setExtraKeys(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
         assertTrue(launcher.shouldShowTerminalToolbar());
         assertEquals(RowPlacement.HIDDEN,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).extraKeys);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.EXTRA_KEYS));
     }
 
     // ------------------------------------------------------------------ scoped writes
@@ -143,11 +143,11 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore store = store();
         store.setExtraKeys(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE, RowPlacement.RIGHT);
         assertEquals(RowPlacement.RIGHT,
-            store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE).extraKeys);
+            rowOf(store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.EXTRA_KEYS));
         assertEquals(RowPlacement.BOTTOM,
-            store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).extraKeys);
+            rowOf(store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.EXTRA_KEYS));
         assertEquals(RowPlacement.BOTTOM,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).extraKeys);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.EXTRA_KEYS));
     }
 
     @Test
@@ -191,33 +191,33 @@ public class PlaceLayoutStoreTest {
 
         store.clear(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
         PlaceLayout portrait = store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
-        assertEquals(RowPlacement.BOTTOM, portrait.appsRow);
-        assertEquals(Edge.TOP, portrait.statusBarEdge);
+        assertEquals(RowPlacement.BOTTOM, rowOf(portrait, com.termux.app.place.Element.APPS));
+        assertEquals(Edge.TOP, portrait.slot(Element.STATUS).edge);
         assertEquals(RowPlacement.RIGHT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
         // az_bar is in ARRANGEMENT_KEYS but for the untouched orientation, so it survives the clear.
         assertEquals(Edge.LEFT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).slot(Element.AZ).edge);
     }
 
     @Test
     public void azBarEdgeDefaultsToBottomAndStandsOnEveryEdge() {
         PlaceLayoutStore store = store();
         assertEquals(Edge.BOTTOM,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).azBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).slot(Element.AZ).edge);
         assertEquals(Edge.BOTTOM,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).slot(Element.AZ).edge);
 
         store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.LEFT);
         store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.LEFT);
         assertEquals("portrait stands a column of its own now", Edge.LEFT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).azBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).slot(Element.AZ).edge);
         assertEquals(Edge.LEFT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).slot(Element.AZ).edge);
 
         store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.TOP);
         assertEquals(Edge.TOP,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).azBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).slot(Element.AZ).edge);
     }
 
     @Test
@@ -226,7 +226,7 @@ public class PlaceLayoutStoreTest {
         store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.RIGHT);
         store.clear(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
         assertEquals(Edge.BOTTOM,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).slot(Element.AZ).edge);
     }
 
     @Test
@@ -283,14 +283,14 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore store = store();
         for (PaneWallPage place : PaneWallPage.values()) {
             assertEquals(place + " landscape apps", RowPlacement.RIGHT,
-                store.resolve(place, PlaceOrientation.LANDSCAPE).appsRow);
+                rowOf(store.resolve(place, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
             assertFalse(place + " status", store.isStatusCompact(place));
         }
         // The old side is folded into both orientations, and portrait stands a column now too.
         assertEquals(RowPlacement.LEFT,
-            store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE).extraKeys);
+            rowOf(store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.EXTRA_KEYS));
         assertEquals(RowPlacement.LEFT,
-            store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).extraKeys);
+            rowOf(store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.EXTRA_KEYS));
         assertTrue(store.wasKeyboardOpen(PaneWallPage.DISPLAY));
         // There is no hidden status bar any more, and the display's keyboard memory has moved.
         assertFalse(prefs.contains("x11_hide_status_bar"));
@@ -303,7 +303,7 @@ public class PlaceLayoutStoreTest {
         store.setStatusCompact(PaneWallPage.TERMINAL, true);
         PlaceLayoutStore reopened = store();
         assertEquals(RowPlacement.LEFT,
-            reopened.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+            rowOf(reopened.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
         assertTrue(reopened.isStatusCompact(PaneWallPage.TERMINAL));
         assertFalse(reopened.isStatusCompact(PaneWallPage.WIDGETS));
     }
@@ -321,10 +321,10 @@ public class PlaceLayoutStoreTest {
 
         PlaceLayoutStore store = store();
         assertEquals(RowPlacement.LEFT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
         // Version 2 still runs: the extra-keys master was off, so it folds to Hidden everywhere.
         assertEquals(RowPlacement.HIDDEN,
-            store.resolve(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT).extraKeys);
+            rowOf(store.resolve(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.EXTRA_KEYS));
         assertEquals(4, prefs.getInt("place.migrated", 0));
     }
 
@@ -334,7 +334,7 @@ public class PlaceLayoutStoreTest {
         assertEquals(4, prefs.getInt("place.migrated", 0));
         assertFalse(prefs.contains("place.terminal.landscape.apps_row"));
         assertEquals(RowPlacement.LEFT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
     }
 
     @Test
@@ -360,12 +360,12 @@ public class PlaceLayoutStoreTest {
         store.setStatusBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.RIGHT);
 
         assertEquals(Edge.RIGHT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).statusBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).slot(Element.STATUS).edge);
         assertEquals(Edge.RIGHT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).statusBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).slot(Element.STATUS).edge);
         store.setStatusBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.BOTTOM);
         assertEquals(Edge.BOTTOM,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).statusBarEdge);
+            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).slot(Element.STATUS).edge);
     }
 
     @Test
@@ -379,12 +379,12 @@ public class PlaceLayoutStoreTest {
         store.setExtraKeys(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
 
         PlaceLayout portrait = store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
-        assertEquals(RowPlacement.LEFT, portrait.appsRow);
-        assertEquals(RowPlacement.RIGHT, portrait.extraKeys);
+        assertEquals(RowPlacement.LEFT, rowOf(portrait, com.termux.app.place.Element.APPS));
+        assertEquals(RowPlacement.RIGHT, rowOf(portrait, com.termux.app.place.Element.EXTRA_KEYS));
         assertEquals(RowPlacement.RIGHT,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
+            rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
         assertEquals(RowPlacement.HIDDEN,
-            store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).extraKeys);
+            rowOf(store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.EXTRA_KEYS));
     }
 
     // ------------------------------------------------------------------ slots and stack order
@@ -705,5 +705,22 @@ public class PlaceLayoutStoreTest {
             store.dockHeightScale(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0.0001f);
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING,
             store.keyboardChinDp(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+    }
+
+    /**
+     * One element's slot as the terse row placement the old model spelled. Only the tests speak
+     * it now: the model itself keeps the slot, so a bar on the top edge is a top edge rather than
+     * being folded into the bottom, and this helper says so by refusing to name one.
+     */
+    private static PlaceLayout.RowPlacement rowOf(PlaceLayout layout,
+                                                  com.termux.app.place.Element element) {
+        com.termux.app.place.Slot slot = layout.slot(element);
+        if (slot.hidden) return PlaceLayout.RowPlacement.HIDDEN;
+        switch (slot.edge) {
+            case LEFT: return PlaceLayout.RowPlacement.LEFT;
+            case RIGHT: return PlaceLayout.RowPlacement.RIGHT;
+            case BOTTOM: return PlaceLayout.RowPlacement.BOTTOM;
+            default: throw new AssertionError("no row placement for " + slot);
+        }
     }
 }

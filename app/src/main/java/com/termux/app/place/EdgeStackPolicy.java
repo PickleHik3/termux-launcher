@@ -30,8 +30,8 @@ import java.util.List;
  *
  * <p>Two rules are kept from the old model and are not ours to change:
  * the status bar is never hidden (the wall's pager rides it), and the alphabets index riding the
- * pinned apps row ignores its own slot and goes wherever that row goes
- * ({@link PlaceChromePolicy#azBarEdge}).
+ * pinned apps row ignores its own slot and goes wherever that row goes — any of the four edges
+ * now, not just the bottom ({@link PlaceChromePolicy#azBarEdge}).
  *
  * <p>One rule is a renderer fact rather than a policy one, recorded here so the next reader does
  * not look for it: only a status bar standing on {@link Edge#TOP} gets the system-bar glass strip
@@ -329,7 +329,7 @@ public final class EdgeStackPolicy {
      *
      * <p>The alphabets index riding the pinned apps row has no edge of its own to pick: the one
      * thing a drag can do with it is put it away, and, once away, bring it back to the row it
-     * rides. An element already standing on an edge does not count itself when the indices for
+     * rides — on whichever edge that row now stands. An element already standing on an edge does not count itself when the indices for
      * that edge are counted, since a drop there is a move within the stack.
      */
     @NonNull
@@ -337,9 +337,10 @@ public final class EdgeStackPolicy {
                                      @NonNull PlaceOrientation orientation) {
         List<Drop> drops = new ArrayList<>(16);
         boolean hideAllowed = element.hideAllowed();
-        if (element == Element.AZ && PlaceChromePolicy.appsRowShown(layout)) {
+        if (element == Element.AZ && PlaceChromePolicy.azRidesAppsRow(layout)) {
             if (layout.slot(Element.AZ).hidden) {
-                drops.add(new Drop(Edge.BOTTOM, Element.AZ.defaultOrder(Edge.BOTTOM), hideAllowed));
+                Edge riding = PlaceChromePolicy.appsEdge(layout);
+                drops.add(new Drop(riding, Element.AZ.defaultOrder(riding), hideAllowed));
             }
             return Collections.unmodifiableList(drops);
         }

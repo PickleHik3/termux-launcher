@@ -94,9 +94,13 @@ public final class HelpTargets {
                 View divider = tagged(root);
                 add(s, "divider", divider, copy(R.string.help_divider_title, R.string.help_divider_body));
             }
-            View dock = firstShown(R.id.apps_bar_viewpager, R.id.dock_rail_scroll);
+            View dock = firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host);
+            // The rail's copy is about a column of icons down one side; a row moved to the top
+            // edge is still a row and keeps the dock's.
+            boolean rail = dock != null && dock.getId() == R.id.place_apps_bar_host
+                && dock.getHeight() > dock.getWidth();
             add(s, "dock", dock, copy(R.string.help_dock_title,
-                dock != null && dock.getId() == R.id.dock_rail_scroll ? R.string.help_rail_body : R.string.help_dock_body));
+                rail ? R.string.help_rail_body : R.string.help_dock_body));
             add(s, "az", firstOfType(root, AzScrubRowView.class), copy(R.string.help_az_title, R.string.help_az_body));
             // The pane itself is the control the touch grammar is about, so it is its own box.
             add(s, "terminal", finder.activePane(), copy(R.string.help_topic_terminal_title,

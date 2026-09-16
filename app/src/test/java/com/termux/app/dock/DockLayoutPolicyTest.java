@@ -96,7 +96,10 @@ public class DockLayoutPolicyTest {
         return DockLayoutPolicy.DockInputs.builder()
             .preferencesAvailable(true)
             .capsule(capsule)
+            // The parameter is the shipped meaning of "off the dock": a rail down one side. A row
+            // standing along the top is off the dock too and is covered by its own test below.
             .appsRowOnEdge(appsRowOnEdge)
+            .appsOnRail(appsRowOnEdge)
             .density(DENSITY)
             .barHeightScale(preset)
             .dockHorizontalInsetDp(INSET_DP)
@@ -183,6 +186,33 @@ public class DockLayoutPolicyTest {
         assertEquals(AppDrawerGestureArbiter.Pull.LEFT, l.railPull);
         assertEquals(61, l.railEdgeInsetPx);
         assertEquals(61 + 160, l.railWidthPx);
+    }
+
+    @Test
+    public void appsRowOnTheTopEdge_collapsesTheDockRowButKeepsItsBand() {
+        DockLayout top = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .appsRowOnEdge(true)
+            .appsOnRail(false)
+            .build());
+        // Nothing on the dock and no rail either: the row stands along the top instead.
+        assertFalse(top.appsRowEnabled);
+        assertFalse(top.railActive);
+        assertEquals(0, top.appsBarHeightPx);
+        // The band it claims up there is the height it had at the bottom.
+        assertEquals(169, top.appsRowBandPx);
+    }
+
+    @Test
+    public void railAxis_isOneFixedIconAndItsAirPerSlot() {
+        DockLayout l = compute();
+        // 38dp icon and 10dp of air either side, at density 2.75.
+        assertEquals(105, l.railIconSizePx);
+        assertEquals(28, l.railIconSpacingPx);
+        assertEquals(105 + 2 * 28, l.railSlotLengthPx);
+        assertEquals(l.railWidthPx - l.railEdgeInsetPx, l.railBandPx);
+        assertEquals(0, DockLayoutPolicy.railSlotOffsetPx(0, DENSITY));
+        assertEquals(l.railSlotLengthPx, DockLayoutPolicy.railSlotOffsetPx(1, DENSITY));
+        assertEquals(3 * l.railSlotLengthPx, DockLayoutPolicy.railSlotOffsetPx(3, DENSITY));
     }
 
     @Test
