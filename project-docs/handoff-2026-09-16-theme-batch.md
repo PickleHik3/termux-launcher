@@ -64,6 +64,23 @@ Design consequence recorded in the SPEC P3 outcome: a BOTTOM status bar always s
 dock stack whatever order it is given. Installed on pong 10:35, **not yet checked on the phone**:
 the P1/P2/P3 phone lists live in the SPEC's "Defects found on pong" and outcome sections.
 
+### Second pong round (11:00–11:40)
+
+- Rail: one more fix (`b76e2355`, the vertical render gate measured its own stale height); then
+  verified — icons in a column, scrolls, survives the reload-style broadcast.
+- Bottom order (P3) verified with the developer's stored non-default order.
+- Extra-key colours: the fill never rendered (MaterialButton re-applies its transparent style tint
+  over a custom background); fixed `0637698c`, defaults now `primary`/`secondary`/`tertiary`;
+  verified as filled pills.
+- P4 `0b7a3364` (developer decision): side stacks flank the canvas only — keyboard, dock rows and
+  status bar stay full width (verified); a side rail opens the drawer with a horizontal swipe toward
+  the centre, plane grows out of the rail. **Not verified**: adb swipes did not open the drawer
+  (adb gestures also stopped lifting editor bands after the first tries, so this is not evidence of
+  a bug) — needs a finger. Minor artifact seen: a clipped rail icon peeks below the rail beside
+  the dock's top edge; clip the canvas band.
+- Still unchecked on device: dock glass width after returning the row to the bottom (P1 part 2),
+  the top plank and the ride rule (P2), the narrow-canvas notice, landscape.
+
 ## Decisions taken without the developer (change freely)
 
 - Trim rule keeps one space when a wrapped row ended in spaces and the next row starts mid-word.
