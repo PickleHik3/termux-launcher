@@ -81,6 +81,17 @@ the P1/P2/P3 phone lists live in the SPEC's "Defects found on pong" and outcome 
 - Still unchecked on device: dock glass width after returning the row to the bottom (P1 part 2),
   the top plank and the ride rule (P2), the narrow-canvas notice, landscape.
 
+### Third pong round (12:15–12:45)
+
+Developer found: apps row on TOP filled the whole terminal with the plank and one giant icon; a
+side column could not be lifted in the miniature by finger. P5 `0990b194`: the plank's glass was
+`match_parent` inside a wrap host (measured the whole column), the apps bar's row-height hint was
+0 off the dock so the icon fell back to the host height (now a band hint, capped at two rail
+slots), the miniature claimed side columns before the bottom rows and drew a 6 dp grip (now
+TOP, BOTTOM, LEFT, RIGHT and a grip hit rect as wide as the band). Verified on pong 12:41: TOP
+apps row is one row deep with normal icons, terminal below, A–Z stays at the bottom. Drawer swipe
+from a side rail and its animation confirmed by the developer by finger.
+
 ## Decisions taken without the developer (change freely)
 
 - Trim rule keeps one space when a wrapped row ended in spaces and the next row starts mid-word.
