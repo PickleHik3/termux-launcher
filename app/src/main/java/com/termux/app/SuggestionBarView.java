@@ -7405,9 +7405,13 @@ public final class SuggestionBarView extends GridLayout
         if (vertical) {
             // A tolerance below one icon, not an exact fit: the host's band is a rounded 58dp
             // less two rounded 10dp paddings, which can land a pixel or two under the icon.
+            // The rail's own height is wrap_content and, before the first vertical render, still
+            // the one-row height of the previous form; gate the length on the host instead.
             int minStableWidth = Math.max(1, railIconSizePx() - dp(4));
             int minStableLength = Math.max(1, railSlotLengthPx());
-            return getWidth() >= minStableWidth && getHeight() >= minStableLength;
+            View host = getParent() instanceof View ? (View) getParent() : null;
+            int lengthPx = host != null ? Math.max(host.getHeight(), getHeight()) : getHeight();
+            return getWidth() >= minStableWidth && lengthPx >= minStableLength;
         }
         int minStableWidth = Math.max(1, dp(120));
         int minStableHeight = Math.max(1, dp(24));
