@@ -39,6 +39,8 @@ public final class PlaceArrangeSnapshot {
         final float dockHeightScale;
         final float keyboardHeightScale;
         final int keyboardChinDp;
+        /** Each element's position in its edge's stack, by {@link Element#ordinal()}. */
+        final int[] slotOrders;
 
         Entry(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
               @NonNull PlaceOrientation orientation) {
@@ -56,6 +58,9 @@ public final class PlaceArrangeSnapshot {
             dockHeightScale = places.dockHeightScale(place, orientation);
             keyboardHeightScale = places.keyboardHeightScale(place, orientation);
             keyboardChinDp = places.keyboardChinDp(place, orientation);
+            slotOrders = new int[Element.values().length];
+            for (Element element : Element.values())
+                slotOrders[element.ordinal()] = places.slotOrder(place, orientation, element);
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
@@ -71,6 +76,8 @@ public final class PlaceArrangeSnapshot {
             places.setDockHeightScale(place, orientation, dockHeightScale);
             places.setKeyboardHeightScale(place, orientation, keyboardHeightScale);
             places.setKeyboardChinDp(place, orientation, keyboardChinDp);
+            for (Element element : Element.values())
+                places.setSlotOrder(place, orientation, element, slotOrders[element.ordinal()]);
         }
 
         void appendTo(@NonNull StringBuilder out) {
@@ -85,7 +92,9 @@ public final class PlaceArrangeSnapshot {
                 .append(widgetColumns).append('x').append(widgetRows).append(',')
                 .append(dockHeightScale).append(',')
                 .append(keyboardHeightScale).append(',')
-                .append(keyboardChinDp).append('|');
+                .append(keyboardChinDp).append(',');
+            for (int order : slotOrders) out.append(order).append(';');
+            out.append('|');
         }
     }
 

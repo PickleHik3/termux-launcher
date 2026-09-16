@@ -201,7 +201,7 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void azBarEdgeDefaultsToBottomAndStandsOnlyInLandscape() {
+    public void azBarEdgeDefaultsToBottomAndStandsOnEveryEdge() {
         PlaceLayoutStore store = store();
         assertEquals(Edge.BOTTOM,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).azBarEdge);
@@ -210,7 +210,7 @@ public class PlaceLayoutStoreTest {
 
         store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.LEFT);
         store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.LEFT);
-        assertEquals("a side value stored for portrait reads as the bottom", Edge.BOTTOM,
+        assertEquals("portrait stands a column of its own now", Edge.LEFT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).azBarEdge);
         assertEquals(Edge.LEFT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).azBarEdge);
@@ -286,17 +286,16 @@ public class PlaceLayoutStoreTest {
                 store.resolve(place, PlaceOrientation.LANDSCAPE).appsRow);
             assertFalse(place + " status", store.isStatusCompact(place));
         }
-        // The old side is folded into both orientations; portrait, which has no column, reads
-        // the stored side as its bottom row.
+        // The old side is folded into both orientations, and portrait stands a column now too.
         assertEquals(RowPlacement.LEFT,
             store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE).extraKeys);
-        assertEquals(RowPlacement.BOTTOM,
+        assertEquals(RowPlacement.LEFT,
             store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).extraKeys);
         assertTrue(store.wasKeyboardOpen(PaneWallPage.DISPLAY));
         // There is no hidden status bar any more, and the display's keyboard memory has moved.
         assertFalse(prefs.contains("x11_hide_status_bar"));
         assertFalse(prefs.contains("x11_keyboard_shown"));
-        assertEquals(3, prefs.getInt("place.migrated", 0));
+        assertEquals(4, prefs.getInt("place.migrated", 0));
 
         // A second store over the same preferences must not fold anything again: the user's own
         // choices since the migration stand.
@@ -326,13 +325,13 @@ public class PlaceLayoutStoreTest {
         // Version 2 still runs: the extra-keys master was off, so it folds to Hidden everywhere.
         assertEquals(RowPlacement.HIDDEN,
             store.resolve(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT).extraKeys);
-        assertEquals(3, prefs.getInt("place.migrated", 0));
+        assertEquals(4, prefs.getInt("place.migrated", 0));
     }
 
     @Test
     public void aFreshInstallHasNothingToFoldAndSaysSo() {
         PlaceLayoutStore store = store();
-        assertEquals(3, prefs.getInt("place.migrated", 0));
+        assertEquals(4, prefs.getInt("place.migrated", 0));
         assertFalse(prefs.contains("place.terminal.landscape.apps_row"));
         assertEquals(RowPlacement.LEFT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
@@ -352,14 +351,15 @@ public class PlaceLayoutStoreTest {
 
 
     @Test
-    public void portraitStandsASideStoredForItBackOnTop() {
-        // The page no longer offers a column in portrait; a value written before it went, or by
-        // hand, must not stand one either. Landscape keeps every edge.
+    public void portraitKeepsASideStoredForIt() {
+        // Portrait used to refuse a column and read a side back as the top. Every edge stands in
+        // both orientations now; a canvas too narrow for a column is the Layout editor's to warn
+        // about rather than the store's to overrule.
         PlaceLayoutStore store = store();
         store.setStatusBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.RIGHT);
         store.setStatusBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Edge.RIGHT);
 
-        assertEquals(Edge.TOP,
+        assertEquals(Edge.RIGHT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT).statusBarEdge);
         assertEquals(Edge.RIGHT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).statusBarEdge);
@@ -369,9 +369,9 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void portraitStandsASideRowBackAlongTheBottom() {
-        // The apps row and the extra keys can be a column only in landscape; a side stored for
-        // portrait reads as the bottom row, and hidden stays hidden.
+    public void portraitKeepsASideRowStoredForIt() {
+        // The apps row and the extra keys stand in a column in either orientation now, and hidden
+        // still stays hidden.
         PlaceLayoutStore store = store();
         store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.LEFT);
         store.setExtraKeys(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.RIGHT);
@@ -379,12 +379,150 @@ public class PlaceLayoutStoreTest {
         store.setExtraKeys(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
 
         PlaceLayout portrait = store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
-        assertEquals(RowPlacement.BOTTOM, portrait.appsRow);
-        assertEquals(RowPlacement.BOTTOM, portrait.extraKeys);
+        assertEquals(RowPlacement.LEFT, portrait.appsRow);
+        assertEquals(RowPlacement.RIGHT, portrait.extraKeys);
         assertEquals(RowPlacement.RIGHT,
             store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).appsRow);
         assertEquals(RowPlacement.HIDDEN,
             store.resolve(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT).extraKeys);
+    }
+
+    // ------------------------------------------------------------------ slots and stack order
+
+    @Test
+    public void everySlotReadsBackTheKeyItHasAlwaysBeenStoredUnder() {
+        PlaceLayoutStore store = store();
+        assertEquals("place.terminal.landscape.status_bar", PlaceLayoutStore.arrangementKey(
+            PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Element.STATUS.storageKey()));
+        assertEquals("place.terminal.landscape.apps_row", PlaceLayoutStore.arrangementKey(
+            PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Element.APPS.storageKey()));
+        assertEquals("place.terminal.landscape.az_bar", PlaceLayoutStore.arrangementKey(
+            PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Element.AZ.storageKey()));
+        assertEquals("place.terminal.landscape.extra_keys", PlaceLayoutStore.arrangementKey(
+            PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Element.EXTRA_KEYS.storageKey()));
+        assertEquals("place.home.portrait.apps_row_order", PlaceLayoutStore.arrangementKey(
+            PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT,
+            PlaceLayoutStore.orderKeyName(Element.APPS)));
+
+        // Written the old way, read back as a slot.
+        store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.RIGHT);
+        assertEquals(new Slot(false, Edge.RIGHT, Element.APPS.defaultOrder(Edge.RIGHT)),
+            store.slot(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Element.APPS));
+        // Written as a slot, read back the old way.
+        store.setSlot(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS,
+            new Slot(false, Edge.LEFT, 1));
+        assertEquals(RowPlacement.LEFT,
+            store.extraKeys(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        assertEquals("left", prefs.getString("place.terminal.portrait.extra_keys", null));
+        assertEquals(1, prefs.getInt("place.terminal.portrait.extra_keys_order", -1));
+    }
+
+    @Test
+    public void aStoredPlacementWidensToEveryEdgeAndToHidden() {
+        // The four spellings the rows have always been stored as still read, in both orientations,
+        // and "top" — which the old three-way placement had no room for — reads as the top edge.
+        for (String value : new String[] {"bottom", "left", "right", "top", "hidden"}) {
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                prefs.edit().putString("place.terminal." + orientation.storageValue() + ".apps_row",
+                    value).commit();
+                Slot slot = store().slot(PaneWallPage.TERMINAL, orientation, Element.APPS);
+                if ("hidden".equals(value)) {
+                    assertTrue(value, slot.hidden);
+                    assertEquals(value, Edge.BOTTOM, slot.edge);
+                } else {
+                    assertFalse(value, slot.hidden);
+                    assertEquals(value, Edge.parse(value, Edge.TOP), slot.edge);
+                }
+            }
+        }
+        // A value nobody recognises still falls back to what the place has always shown.
+        prefs.edit().putString("place.terminal.landscape.apps_row", "sideways").commit();
+        assertEquals(Edge.LEFT,
+            store().slot(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Element.APPS).edge);
+    }
+
+    @Test
+    public void anAbsentOrderKeyIsTheStackTheLauncherAlreadyDraws() {
+        PlaceLayoutStore store = store();
+        for (PaneWallPage place : PaneWallPage.values()) {
+            PlaceLayout portrait = store.resolve(place, PlaceOrientation.PORTRAIT);
+            // Portrait ships the status bar on the top and the three rows on the bottom.
+            assertEquals(place + " status", new Slot(false, Edge.TOP, 0),
+                portrait.slot(Element.STATUS));
+            assertEquals(place + " keys", new Slot(false, Edge.BOTTOM, 0),
+                portrait.slot(Element.EXTRA_KEYS));
+            assertEquals(place + " az", new Slot(false, Edge.BOTTOM, 1), portrait.slot(Element.AZ));
+            assertEquals(place + " apps", new Slot(false, Edge.BOTTOM, 2),
+                portrait.slot(Element.APPS));
+            assertEquals(place + " bottom stack",
+                java.util.Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS),
+                EdgeStackPolicy.stack(portrait, Edge.BOTTOM));
+
+            // Landscape ships the pinned apps as the left rail, so they take the rail's band.
+            PlaceLayout landscape = store.resolve(place, PlaceOrientation.LANDSCAPE);
+            assertEquals(place + " rail", new Slot(false, Edge.LEFT, 1),
+                landscape.slot(Element.APPS));
+            assertEquals(place + " left stack", java.util.Arrays.asList(Element.APPS),
+                EdgeStackPolicy.stack(landscape, Edge.LEFT));
+        }
+        assertFalse("nothing is written until something is re-ordered",
+            prefs.contains("place.terminal.portrait.apps_row_order"));
+    }
+
+    @Test
+    public void anOrderFollowsTheEdgeTheElementIsMovedTo() {
+        PlaceLayoutStore store = store();
+        // No order of its own: the default is read against whichever edge it is standing on.
+        assertEquals(Element.AZ.defaultOrder(Edge.BOTTOM),
+            store.slotOrder(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Element.AZ));
+        store.setAzBarEdge(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Edge.RIGHT);
+        assertEquals(Element.AZ.defaultOrder(Edge.RIGHT),
+            store.slotOrder(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Element.AZ));
+
+        store.setSlotOrder(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Element.AZ, 0);
+        assertEquals(0,
+            store.slotOrder(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, Element.AZ));
+        assertEquals("the other orientation is untouched", Element.AZ.defaultOrder(Edge.BOTTOM),
+            store.slotOrder(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Element.AZ));
+    }
+
+    @Test
+    public void clearingPutsAReorderBackToo() {
+        PlaceLayoutStore store = store();
+        store.setSlot(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, Element.EXTRA_KEYS,
+            new Slot(false, Edge.RIGHT, 0));
+        assertTrue(prefs.contains("place.terminal.landscape.extra_keys_order"));
+        store.clear(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
+        assertFalse(prefs.contains("place.terminal.landscape.extra_keys_order"));
+        assertEquals(Element.EXTRA_KEYS.defaultOrder(Edge.BOTTOM),
+            store.slotOrder(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE,
+                Element.EXTRA_KEYS));
+    }
+
+    @Test
+    public void reachingVersionFourWritesNothingButTheVersion() {
+        // Every placement key keeps its value and no order key appears: an install that was on
+        // version three renders exactly as it did.
+        prefs.edit()
+            .putInt("place.migrated", 3)
+            .putString("place.terminal.landscape.apps_row", "right")
+            .putString("place.home.portrait.status_bar", "bottom")
+            .commit();
+        java.util.Map<String, ?> before = new java.util.HashMap<>(prefs.getAll());
+
+        store();
+
+        java.util.Map<String, ?> after = prefs.getAll();
+        assertEquals(before.size() + 0, after.size());
+        for (java.util.Map.Entry<String, ?> entry : before.entrySet()) {
+            if ("place.migrated".equals(entry.getKey())) continue;
+            assertEquals(entry.getKey(), entry.getValue(), after.get(entry.getKey()));
+        }
+        assertEquals(4, prefs.getInt("place.migrated", 0));
+        for (Element element : Element.values()) {
+            assertFalse(element.toString(),
+                prefs.contains("place.terminal.landscape." + element.storageKey() + "_order"));
+        }
     }
 
     // ------------------------------------------------------------------ the three sizes
@@ -484,7 +622,7 @@ public class PlaceLayoutStoreTest {
 
         PlaceLayoutStore store = store();
 
-        assertEquals(3, prefs.getInt("place.migrated", 0));
+        assertEquals(4, prefs.getInt("place.migrated", 0));
         for (PaneWallPage place : PaneWallPage.values()) {
             assertEquals(place + " portrait keyboard", 1.2f,
                 store.keyboardHeightScale(place, PlaceOrientation.PORTRAIT), 0.0001f);
@@ -536,7 +674,7 @@ public class PlaceLayoutStoreTest {
 
         PlaceLayoutStore store = store();
 
-        assertEquals(3, prefs.getInt("place.migrated", 0));
+        assertEquals(4, prefs.getInt("place.migrated", 0));
         assertEquals(1.3f,
             store.keyboardHeightScale(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE), 0.0001f);
     }

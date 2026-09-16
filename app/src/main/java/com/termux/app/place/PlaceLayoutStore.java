@@ -14,6 +14,7 @@ import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
+import java.util.EnumMap;
 import java.util.Locale;
 
 /**
@@ -37,17 +38,28 @@ import java.util.Locale;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the scoped ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 3;
+    @VisibleForTesting static final int MIGRATION_VERSION = 4;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
     private static final String PREFIX = "place.";
 
-    private static final String KEY_STATUS_BAR = "status_bar";
-    private static final String KEY_APPS_ROW = "apps_row";
+    private static final String KEY_STATUS_BAR = Element.STATUS.storageKey();
+    private static final String KEY_APPS_ROW = Element.APPS.storageKey();
     private static final String KEY_AZ_ROW = "az_row";
-    private static final String KEY_AZ_BAR = "az_bar";
-    private static final String KEY_EXTRA_KEYS = "extra_keys";
+    private static final String KEY_AZ_BAR = Element.AZ.storageKey();
+    private static final String KEY_EXTRA_KEYS = Element.EXTRA_KEYS.storageKey();
+
+    /**
+     * An element's position in its edge's stack sits beside its placement:
+     * {@code place.<place>.<orientation>.<placement key>_order}. Absent means the stack the
+     * launcher has always drawn ({@link Element#defaultOrder}), so an updated install renders
+     * identically without anything being written for it.
+     */
+    private static final String ORDER_SUFFIX = "_order";
+
+    /** A row placement that is not an edge at all. */
+    private static final String VALUE_HIDDEN = "hidden";
     private static final String KEY_KEYBOARD_MODE = "keyboard_mode";
     private static final String KEY_KEYBOARD_FORM = "keyboard_form";
     private static final String KEY_WIDGET_COLUMNS = "widget_columns";
@@ -72,8 +84,19 @@ public final class PlaceLayoutStore {
     private static final String[] ARRANGEMENT_KEYS = {
         KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS, KEY_KEYBOARD_MODE,
         KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS,
-        KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN
+        KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN,
+        // The stack positions ride with the placements they belong to, so the Layout editor's
+        // Discard and its per-place reset put a re-order back the same way they put a move back.
+        orderKeyName(Element.STATUS), orderKeyName(Element.APPS), orderKeyName(Element.AZ),
+        orderKeyName(Element.EXTRA_KEYS)
     };
+
+    /** The unscoped key one element's stack position is stored under. */
+    @VisibleForTesting
+    @NonNull
+    static String orderKeyName(@NonNull Element element) {
+        return element.storageKey() + ORDER_SUFFIX;
+    }
 
     @NonNull private final TermuxAppSharedPreferences mPreferences;
     @Nullable private final SharedPreferences mStore;
@@ -112,34 +135,131 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public PlaceLayout resolve(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        RowPlacement appsRow = appsRow(place, orientation);
-        RowPlacement extraKeys = mPreferences.shouldShowTerminalToolbar()
-            ? extraKeys(place, orientation) : RowPlacement.HIDDEN;
-        return new PlaceLayout(
-            statusBarEdge(place, orientation),
-            appsRow,
-            azRowShown(place, orientation),
-            azBarEdge(place, orientation),
-            extraKeys,
+        EnumMap<Element, Slot> slots = new EnumMap<>(Element.class);
+        for (Element element : Element.values()) slots.put(element, slot(place, orientation, element));
+        // The terminal's own toolbar switch can still have put the extra keys away everywhere.
+        if (!mPreferences.shouldShowTerminalToolbar()) {
+            slots.put(Element.EXTRA_KEYS, slots.get(Element.EXTRA_KEYS).withHidden(true));
+        }
+        return new PlaceLayout(slots,
             keyboardMode(place, orientation),
             keyboardForm(place, orientation),
             widgetColumns(place, orientation),
             widgetRows(place, orientation));
     }
 
+    // ---------------------------------------------------------------- slots
+
+    /**
+     * Where one element stands on a place in an orientation, as the store holds it: the placement
+     * key it has always had, and the sibling order key beside it. The toolbar switch is not folded
+     * in here — {@link #resolve} does that — so a slot read back is exactly what was written.
+     */
+    @NonNull
+    public Slot slot(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+                     @NonNull Element element) {
+        int order = slotOrder(place, orientation, element);
+        switch (element) {
+            case STATUS:
+                // Never hidden: the wall's pager rides it, so it only ever moves.
+                return new Slot(false, statusBarEdge(place, orientation), order);
+            case AZ:
+                return new Slot(!azRowShown(place, orientation), azBarEdge(place, orientation),
+                    order);
+            case APPS:
+            case EXTRA_KEYS:
+            default:
+                return new Slot(VALUE_HIDDEN.equals(readString(place, orientation,
+                    element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS)),
+                    elementEdge(place, orientation, element), order);
+        }
+    }
+
+    /** Moves one element: its edge, whether it is put away, and where it sits in the stack. */
+    public void setSlot(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+                        @NonNull Element element, @NonNull Slot slot) {
+        switch (element) {
+            case STATUS:
+                setStatusBarEdge(place, orientation, slot.edge);
+                break;
+            case AZ:
+                setAzRowShown(place, orientation, !slot.hidden);
+                setAzBarEdge(place, orientation, slot.edge);
+                break;
+            case APPS:
+                writeString(place, orientation, KEY_APPS_ROW, rowValue(slot));
+                break;
+            case EXTRA_KEYS:
+            default:
+                // Placing the extra keys somewhere is also asking to see them, the same way
+                // setExtraKeys means it.
+                if (!slot.hidden && !mPreferences.shouldShowTerminalToolbar()) {
+                    mPreferences.setShowTerminalToolbar(true);
+                }
+                writeString(place, orientation, KEY_EXTRA_KEYS, rowValue(slot));
+                break;
+        }
+        setSlotOrder(place, orientation, element, slot.order);
+    }
+
+    /**
+     * Where an element sits in its edge's stack, 0 outermost. Nothing is written until the user
+     * re-orders something: an absent key is the stack the launcher has always drawn, read against
+     * the edge the element is actually on.
+     */
+    public int slotOrder(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+                         @NonNull Element element) {
+        String key = arrangementKey(place, orientation, orderKeyName(element));
+        int fallback = element.defaultOrder(elementEdge(place, orientation, element));
+        if (mStore == null || !mStore.contains(key)) return fallback;
+        return Math.max(0, mStore.getInt(key, fallback));
+    }
+
+    public void setSlotOrder(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+                             @NonNull Element element, int order) {
+        writeInt(arrangementKey(place, orientation, orderKeyName(element)), Math.max(0, order));
+    }
+
+    /**
+     * The edge an element's own placement key names, without reading its order. A row that is put
+     * away names none: the key holds nothing but {@code hidden}, so the edge it would come back to
+     * was never stored and the bottom — where both rows have always started — stands for it.
+     */
+    @NonNull
+    private Edge elementEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+                             @NonNull Element element) {
+        switch (element) {
+            case STATUS: return statusBarEdge(place, orientation);
+            case AZ: return azBarEdge(place, orientation);
+            case APPS:
+            case EXTRA_KEYS:
+            default: {
+                String key = element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS;
+                Edge fallback = element == Element.APPS && orientation == PlaceOrientation.LANDSCAPE
+                    ? Edge.LEFT : Edge.BOTTOM;
+                String raw = readString(place, orientation, key);
+                return VALUE_HIDDEN.equals(raw) ? Edge.BOTTOM : Edge.parse(raw, fallback);
+            }
+        }
+    }
+
+    /** A slot as the pinned apps and the extra keys have always spelled it. */
+    @NonNull
+    private static String rowValue(@NonNull Slot slot) {
+        return slot.hidden ? VALUE_HIDDEN : slot.edge.storageValue();
+    }
+
     /**
      * Always an edge: the bar moves, it never goes away, so the wall's pager always has a grip.
      *
-     * <p>Portrait offers only the top and the bottom. A column down the side of a portrait screen
-     * takes width the terminal does not have and stands past the keyboard, so the option is not
-     * on the page there; a side still stored for portrait — written before it went — reads as the
-     * top rather than standing a column the page can no longer put right.
+     * <p>Every edge is offered in both orientations. A column down the side of a portrait screen
+     * used to be refused here, because it takes width the terminal does not have; it is allowed
+     * now and the Layout editor warns when the canvas it leaves gets narrow, so the model no
+     * longer overrules a choice the user can see the cost of.
      */
     @NonNull
     public Edge statusBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        Edge edge = Edge.parse(readString(place, orientation, KEY_STATUS_BAR), Edge.TOP);
-        if (orientation == PlaceOrientation.PORTRAIT && edge.isOnSide()) return Edge.TOP;
-        return edge;
+        return Edge.parse(readString(place, orientation, KEY_STATUS_BAR), Edge.TOP);
     }
 
     public void setStatusBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
@@ -153,20 +273,24 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public RowPlacement appsRow(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        return rowForOrientation(RowPlacement.parse(readString(place, orientation, KEY_APPS_ROW),
-            orientation == PlaceOrientation.LANDSCAPE ? RowPlacement.LEFT : RowPlacement.BOTTOM),
-            orientation);
+        return placementOf(slot(place, orientation, Element.APPS));
     }
 
     /**
-     * A column down the side is landscape's: portrait has no width to give one, so the page does
-     * not offer it there, and a side still stored for portrait reads as the row along the bottom.
+     * A slot as the three-way row placement the pinned apps and the extra keys were stored as. A
+     * column down the side of a portrait screen used to be refused here; it is allowed in both
+     * orientations now and the Layout editor warns about a narrow canvas instead. The old spelling
+     * has no top row, so a slot on the top edge reads as the bottom until the views that draw
+     * them learn the edge.
      */
     @NonNull
-    private static RowPlacement rowForOrientation(@NonNull RowPlacement placement,
-                                                  @NonNull PlaceOrientation orientation) {
-        return orientation == PlaceOrientation.PORTRAIT && placement.isOnSide()
-            ? RowPlacement.BOTTOM : placement;
+    private static RowPlacement placementOf(@NonNull Slot slot) {
+        if (slot.hidden) return RowPlacement.HIDDEN;
+        switch (slot.edge) {
+            case LEFT: return RowPlacement.LEFT;
+            case RIGHT: return RowPlacement.RIGHT;
+            default: return RowPlacement.BOTTOM;
+        }
     }
 
     public void setAppsRow(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
@@ -190,15 +314,13 @@ public final class PlaceLayoutStore {
      * Where the alphabets bar stands while it rides on its own — with the apps row under it, it
      * always rides along the bottom and this choice is ignored ({@link PlaceChromePolicy#azBarEdge}).
      *
-     * <p>Portrait offers only the top and the bottom, same as the status bar: a column down the
-     * side of a portrait screen takes width the terminal does not have, so a side still stored for
-     * portrait reads as the bottom rather than standing a column the page can no longer put right.
+     * <p>Every edge is offered in both orientations, same as the status bar: a column down the
+     * side of a portrait screen is allowed now, and the Layout editor warns when the canvas it
+     * leaves gets narrow.
      */
     @NonNull
     public Edge azBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation) {
-        Edge edge = Edge.parse(readString(place, orientation, KEY_AZ_BAR), Edge.BOTTOM);
-        if (orientation == PlaceOrientation.PORTRAIT && edge.isOnSide()) return Edge.BOTTOM;
-        return edge;
+        return Edge.parse(readString(place, orientation, KEY_AZ_BAR), Edge.BOTTOM);
     }
 
     public void setAzBarEdge(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
@@ -210,8 +332,7 @@ public final class PlaceLayoutStore {
     @NonNull
     public RowPlacement extraKeys(@NonNull PaneWallPage place,
                                   @NonNull PlaceOrientation orientation) {
-        return rowForOrientation(RowPlacement.parse(readString(place, orientation, KEY_EXTRA_KEYS),
-            RowPlacement.BOTTOM), orientation);
+        return placementOf(slot(place, orientation, Element.EXTRA_KEYS));
     }
 
     /**
@@ -589,6 +710,11 @@ public final class PlaceLayoutStore {
                 editor.remove(dockOverride);
             }
         }
+
+        // Version 4 stood every bar on a stack it can be re-ordered in. There is nothing to fold:
+        // the placement keys keep their values, and an absent order key already reads as the stack
+        // the launcher has always drawn, so an upgraded install renders identically. Writing the
+        // shipped orders out would only freeze numbers that still move with the default stack.
 
         editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
         editor.apply();
