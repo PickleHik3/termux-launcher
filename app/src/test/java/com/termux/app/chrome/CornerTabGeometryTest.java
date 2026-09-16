@@ -302,34 +302,34 @@ public class CornerTabGeometryTest {
     }
 
     /**
-     * The tab's own two corners turn the frame's radius, not one of their own — held back only
-     * where the tab is too short to turn it twice, or where turning it would reach back into the
-     * frame's own arc and be cut by the clip that rounds the tab's outer corner.
+     * The tab's one free corner turns the frame's radius, not one of its own — held back only as a
+     * safety net for a tab too small to hold it, never deeper than the tab is tall and never wider
+     * than the run it has along the top.
      */
     @Test
-    public void theTabsOwnCornersTurnTheFramesRadius() {
+    public void theTabsFreeCornerTurnsTheFramesRadius() {
         assertEquals("the frame's radius, as the frame turns it",
             5f, CornerTabGeometry.tabCornerRadiusPx(5f, HEIGHT, PAIR_WIDTH), 0.001f);
         assertEquals("a square frame gets a square tab",
             0f, CornerTabGeometry.tabCornerRadiusPx(0f, HEIGHT, PAIR_WIDTH), 0.001f);
-        assertEquals("an arc almost as deep as the tab leaves only what is past it",
-            5f, CornerTabGeometry.tabCornerRadiusPx(27f, HEIGHT, PAIR_WIDTH), 0.001f);
-        assertEquals("and one deeper than the tab leaves nothing",
-            0f, CornerTabGeometry.tabCornerRadiusPx(40f, HEIGHT, PAIR_WIDTH), 0.001f);
-        assertEquals("a tab too short to turn it twice halves it",
-            3f, CornerTabGeometry.tabCornerRadiusPx(5f, HEIGHT, 6f), 0.001f);
+        assertEquals("the frame's radius unchanged, even close to the tab's own depth",
+            27f, CornerTabGeometry.tabCornerRadiusPx(27f, HEIGHT, PAIR_WIDTH), 0.001f);
+        assertEquals("a radius deeper than the tab is held back to the tab's own depth",
+            HEIGHT, CornerTabGeometry.tabCornerRadiusPx(40f, HEIGHT, PAIR_WIDTH), 0.001f);
+        assertEquals("a tab too narrow to hold it is held back to the tab's own width",
+            6f, CornerTabGeometry.tabCornerRadiusPx(9f, HEIGHT, 6f), 0.001f);
         for (float radius : RADII) {
             float r = CornerTabGeometry.tabCornerRadiusPx(radius, HEIGHT, PAIR_WIDTH);
-            assertTrue("radius " + radius + " must clear the frame's own arc",
-                r >= 0f && r + radius <= HEIGHT + 0.001f);
+            assertTrue("radius " + radius + " never exceeds the frame's own radius",
+                r >= 0f && r <= radius + 0.001f);
         }
     }
 
     /**
-     * The one line a tab draws, corner by corner: it leaves the frame's own side a radius short of
-     * its far edge, turns, runs across, turns again and drops back to the edge it came out of.
-     * Nothing in it lies along the frame's own side or around its own corner — those are the
-     * frame's line, and drawing them again is the double line this shape exists to stop.
+     * The one line a tab draws, corner by corner: it leaves the frame's own side straight, at the
+     * tab's own top — a T-junction, not an arc — runs across, turns the one free corner and drops
+     * back to the edge it came out of. Nothing in it lies around the frame's own corner — that is
+     * the frame's line, and drawing it again is the double line this shape exists to stop.
      */
     @Test
     public void thePathTurnsAtTheSameFourPointsOnEveryCorner() {
@@ -339,26 +339,51 @@ public class CornerTabGeometryTest {
         layout(CornerZones.TOP_LEFT, frame, 1f);
         CornerTabGeometry.tabPathPoints(CornerZones.TOP_LEFT, frame, mTab, r, mPoints);
         assertPoints("top left", new float[]{
-            0f, HEIGHT - r, r, HEIGHT, PAIR_WIDTH - r, HEIGHT, PAIR_WIDTH, HEIGHT - r,
-            PAIR_WIDTH, 0f});
+            0f, HEIGHT, PAIR_WIDTH - r, HEIGHT, PAIR_WIDTH, HEIGHT - r, PAIR_WIDTH, 0f});
 
         layout(CornerZones.TOP_RIGHT, frame, 1f);
         CornerTabGeometry.tabPathPoints(CornerZones.TOP_RIGHT, frame, mTab, r, mPoints);
         assertPoints("top right", new float[]{
-            600f, HEIGHT - r, 600f - r, HEIGHT, 600f - PAIR_WIDTH + r, HEIGHT,
-            600f - PAIR_WIDTH, HEIGHT - r, 600f - PAIR_WIDTH, 0f});
+            600f, HEIGHT, 600f - PAIR_WIDTH + r, HEIGHT, 600f - PAIR_WIDTH, HEIGHT - r,
+            600f - PAIR_WIDTH, 0f});
 
         layout(CornerZones.BOTTOM_LEFT, frame, 1f);
         CornerTabGeometry.tabPathPoints(CornerZones.BOTTOM_LEFT, frame, mTab, r, mPoints);
         assertPoints("bottom left", new float[]{
-            0f, 800f - HEIGHT + r, r, 800f - HEIGHT, PAIR_WIDTH - r, 800f - HEIGHT,
-            PAIR_WIDTH, 800f - HEIGHT + r, PAIR_WIDTH, 800f});
+            0f, 800f - HEIGHT, PAIR_WIDTH - r, 800f - HEIGHT, PAIR_WIDTH, 800f - HEIGHT + r,
+            PAIR_WIDTH, 800f});
 
         layout(CornerZones.BOTTOM_RIGHT, frame, 1f);
         CornerTabGeometry.tabPathPoints(CornerZones.BOTTOM_RIGHT, frame, mTab, r, mPoints);
         assertPoints("bottom right", new float[]{
-            600f, 800f - HEIGHT + r, 600f - r, 800f - HEIGHT, 600f - PAIR_WIDTH + r, 800f - HEIGHT,
-            600f - PAIR_WIDTH, 800f - HEIGHT + r, 600f - PAIR_WIDTH, 800f});
+            600f, 800f - HEIGHT, 600f - PAIR_WIDTH + r, 800f - HEIGHT, 600f - PAIR_WIDTH,
+            800f - HEIGHT + r, 600f - PAIR_WIDTH, 800f});
+    }
+
+    /**
+     * The first point of every corner's path is on the frame side itself, at the tab's own top —
+     * not offset by the radius, because that edge is a straight join, not an arc. The last point is
+     * on the frame's own edge, where the tab slid out from behind it.
+     */
+    @Test
+    public void theFirstPointIsAStraightJoinAndTheLastIsOnTheFramesEdge() {
+        RectF frame = frame();
+        float r = 5f;
+        for (int corner : CORNERS) {
+            layout(corner, frame, 1f);
+            CornerTabGeometry.tabPathPoints(corner, frame, mTab, r, mPoints);
+            boolean left = CornerZones.isLeft(corner);
+            boolean top = CornerZones.isTop(corner);
+            float frameSide = left ? frame.left : frame.right;
+            float tabTop = top ? mTab.bottom : mTab.top;
+            float frameEdge = top ? mTab.top : mTab.bottom;
+            assertEquals("corner " + corner + ": first point on the frame side",
+                frameSide, mPoints[0], 0.001f);
+            assertEquals("corner " + corner + ": first point at the tab's top, no radius offset",
+                tabTop, mPoints[1], 0.001f);
+            assertEquals("corner " + corner + ": last point on the frame's edge",
+                frameEdge, mPoints[7], 0.001f);
+        }
     }
 
     /**
@@ -374,7 +399,7 @@ public class CornerTabGeometryTest {
             layout(CornerZones.BOTTOM_LEFT, frame, stroke, 1f);
             CornerTabGeometry.tabPathPoints(CornerZones.BOTTOM_LEFT, inner, mTab, 5f, mPoints);
             assertEquals("stroke " + stroke, inner.left, mPoints[0], 0.001f);
-            assertEquals("stroke " + stroke, inner.bottom, mPoints[9], 0.001f);
+            assertEquals("stroke " + stroke, inner.bottom, mPoints[7], 0.001f);
         }
     }
 

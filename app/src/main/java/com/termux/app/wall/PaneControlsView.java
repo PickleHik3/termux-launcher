@@ -493,7 +493,8 @@ public final class PaneControlsView extends View {
             canvas.clipRect(mClip);
         }
 
-        // The tab's own two corners; the frame owns the other two, and the arc between them.
+        // The tab's one free corner; the frame owns the other three, including the arc between the
+        // tab and the frame side, and the edge that meets the frame side is a straight T-junction.
         float radius = CornerTabGeometry.tabCornerRadiusPx(arc, mTab.height(), mTab.width());
         // The fill runs a hair past the edge and is trimmed there by the clip, so no anti-aliased
         // seam opens up between the tab and the border it comes out from behind.

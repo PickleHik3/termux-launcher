@@ -42,7 +42,7 @@ public final class CornerTabGeometry {
     public static final float TAB_OUTLINE_DP = 1f;
 
     /** The points {@link #tabPathPoints} answers with, x and y each. */
-    public static final int PATH_POINTS = 5;
+    public static final int PATH_POINTS = 4;
 
     /**
      * How much of the tab's outer end the frame's corner keeps for itself, in dp. The tab is flush
@@ -84,14 +84,15 @@ public final class CornerTabGeometry {
     }
 
     /**
-     * The radius the tab's own two corners turn — the pair on the edge it shares with the pane's
-     * interior, the only corners it has that the frame does not already own.
+     * The radius the tab's one free corner turns — where its top meets its inner side, toward the
+     * pane interior. The edge that meets the frame side is a straight T-junction now, no arc there,
+     * so this is the tab's only corner of its own.
      *
-     * <p>It is the frame's own inner radius, so the tab reads as the frame grown rather than as a
-     * box tacked onto it, held back only where the tab is too small to turn it: never more than
-     * half the tab's width, and never so deep that the corner would reach back into the frame's own
-     * arc, where the clip would cut it. A frame rounded almost as deep as the tab is tall gets what
-     * is left of the tab past that arc.
+     * <p>It is the frame's own inner radius exactly, so that one corner reads as the frame's radius
+     * followed through rather than a radius of the tab's own choosing. The clamp below is a safety
+     * net only, for a tab too small to hold that radius: never deeper than the tab itself, never
+     * wider than the run it has along the top. Every tab the surface editor actually produces is
+     * larger than its own radius, so in practice this returns {@code innerRadiusPx} unchanged.
      *
      * @param innerRadiusPx the frame's inner radius, from {@link #innerRadiusPx}
      * @param tabDepthPx how deep the tab is, out of the edge it came from
@@ -99,8 +100,9 @@ public final class CornerTabGeometry {
      */
     public static float tabCornerRadiusPx(float innerRadiusPx, float tabDepthPx, float tabWidthPx) {
         float radius = Math.max(0f, innerRadiusPx);
-        float clear = Math.max(0f, tabDepthPx) - radius;
-        return Math.max(0f, Math.min(Math.min(radius, clear), Math.max(0f, tabWidthPx) / 2f));
+        float depth = Math.max(0f, tabDepthPx);
+        float width = Math.max(0f, tabWidthPx);
+        return Math.max(0f, Math.min(radius, Math.min(depth, width)));
     }
 
     /**
@@ -215,11 +217,12 @@ public final class CornerTabGeometry {
 
     /**
      * The tab's <em>free</em> boundary: the line it shares with the pane's interior, from the
-     * frame's own side to the frame's own edge. Five points, x then y, in the order the outline is
-     * drawn — the frame's side, the two ends of the straight run across the tab, the far end of the
-     * second corner, and the point on the edge the tab slid out of. The two turns between them are
-     * quadratics through the sharp corners the points bracket, {@code (outer, top)} and
-     * {@code (inner, top)}.
+     * frame's own side to the frame's own edge. Four points, x then y, in the order the outline is
+     * drawn — the frame's side at the tab's top, the far end of the straight run across the tab,
+     * the far end of the one corner it turns, and the point on the edge the tab slid out of. The
+     * first leg is a straight line — a T-junction, not an arc, where the tab meets the frame side —
+     * and the one turn between the second and third points is a quadratic through the sharp corner
+     * they bracket, {@code (inner, top)}.
      *
      * <p>Everything else of the tab's outline is the frame's own stroke: the outer side and the
      * outer corner are the frame's, which is why the frame's line may never be drawn again under
@@ -227,7 +230,7 @@ public final class CornerTabGeometry {
      *
      * @param inner the frame the tab lives in, from {@link #innerBounds}
      * @param tab where the tab is, from {@link #layout}
-     * @param radiusPx the radius its two corners turn, from {@link #tabCornerRadiusPx}
+     * @param radiusPx the radius its one free corner turns, from {@link #tabCornerRadiusPx}
      * @param out at least {@code PATH_POINTS * 2} floats
      */
     public static void tabPathPoints(int corner, @NonNull RectF inner, @NonNull RectF tab,
@@ -242,16 +245,16 @@ public final class CornerTabGeometry {
         float topY = top ? tab.bottom : tab.top;
         float dirY = top ? 1f : -1f;
         float slideY = top ? tab.top : tab.bottom;
+        // A straight T-junction where the tab meets the frame side: no arc, no offset by the
+        // radius, just the point on that side at the tab's top.
         out[0] = outerX;
-        out[1] = topY - dirY * radius;
-        out[2] = outerX + dirX * radius;
+        out[1] = topY;
+        out[2] = innerX - dirX * radius;
         out[3] = topY;
-        out[4] = innerX - dirX * radius;
-        out[5] = topY;
+        out[4] = innerX;
+        out[5] = topY - dirY * radius;
         out[6] = innerX;
-        out[7] = topY - dirY * radius;
-        out[8] = innerX;
-        out[9] = slideY;
+        out[7] = slideY;
     }
 
     /**
@@ -266,10 +269,9 @@ public final class CornerTabGeometry {
         float topY = CornerZones.isTop(corner) ? tab.bottom : tab.top;
         out.reset();
         out.moveTo(scratch[0], scratch[1]);
-        out.quadTo(scratch[0], topY, scratch[2], scratch[3]);
-        out.lineTo(scratch[4], scratch[5]);
-        out.quadTo(scratch[6], topY, scratch[6], scratch[7]);
-        out.lineTo(scratch[8], scratch[9]);
+        out.lineTo(scratch[2], scratch[3]);
+        out.quadTo(scratch[4], topY, scratch[4], scratch[5]);
+        out.lineTo(scratch[6], scratch[7]);
     }
 
     /**
@@ -287,14 +289,13 @@ public final class CornerTabGeometry {
         boolean top = CornerZones.isTop(corner);
         float topY = top ? tab.bottom : tab.top;
         float overshoot = Math.max(0f, overshootPx);
-        float farY = top ? Math.min(scratch[9], inner.top - overshoot)
-            : Math.max(scratch[9], inner.bottom + overshoot);
+        float farY = top ? Math.min(scratch[7], inner.top - overshoot)
+            : Math.max(scratch[7], inner.bottom + overshoot);
         out.reset();
         out.moveTo(scratch[0], scratch[1]);
-        out.quadTo(scratch[0], topY, scratch[2], scratch[3]);
-        out.lineTo(scratch[4], scratch[5]);
-        out.quadTo(scratch[6], topY, scratch[6], scratch[7]);
-        out.lineTo(scratch[8], farY);
+        out.lineTo(scratch[2], scratch[3]);
+        out.quadTo(scratch[4], topY, scratch[4], scratch[5]);
+        out.lineTo(scratch[6], farY);
         out.lineTo(scratch[0], farY);
         out.close();
     }
