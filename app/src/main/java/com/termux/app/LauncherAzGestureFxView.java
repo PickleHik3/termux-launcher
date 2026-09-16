@@ -3,7 +3,6 @@ package com.termux.app;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Configuration;
-import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -26,6 +25,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
+import com.termux.app.place.PlaceLayout;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,10 +38,6 @@ import java.util.List;
  * instead. Every number the strip is drawn from comes from {@link AzFloatingStripPolicy}.
  */
 public final class LauncherAzGestureFxView extends View {
-
-    private interface FloatUpdate {
-        void accept(float value);
-    }
 
     public enum InteractionMode {
         LETTER_TRACK,
@@ -56,9 +52,6 @@ public final class LauncherAzGestureFxView extends View {
     private final Paint glassStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edgeDwellPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint pageIndicatorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    /** Soft underglow blur for the active page tick; lazily built once the density is known. */
-    private BlurMaskFilter pageTickGlow;
     private final Paint previewFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final FocusOutlineRenderer.RenderPaints focusedIconOutlinePaints =
         new FocusOutlineRenderer.RenderPaints();
@@ -82,37 +75,14 @@ public final class LauncherAzGestureFxView extends View {
     private int edgeDwellShaderCoreColor;
     private int edgeDwellShaderOuterColor;
     private int edgeDwellShaderEndColor;
-    private float[] pageIndicatorWidths = new float[0];
-    private float[] pageIndicatorCenters = new float[0];
 
     private int glassTintColor = 0xFF86A7FF;
     private int edgeTintColor = 0xFF7CE2FF;
-    private int overflowGlowTintColor = 0xFF98F0FF;
 
     private boolean dragActive;
     private float targetRawX;
 
     private boolean hasFocus;
-    private boolean interactionOverflowActive;
-    private boolean interactionCanPageLeft;
-    private boolean interactionCanPageRight;
-    private int interactionCurrentPageIndex;
-    private int interactionPageCount = 1;
-    private int interactionDynamicPageIndex = -1;
-    private float interactionPageIndicatorPosition;
-    @Nullable private ValueAnimator interactionPageIndicatorAnimator;
-    private boolean interactionShowsPageIndicators;
-    private boolean interactionUseSubtlePageIndicators;
-    private float subtlePageIndicatorAttention = 1f;
-    private boolean subtlePageIndicatorFadeScheduled;
-    @Nullable private ValueAnimator subtlePageIndicatorAttentionAnimator;
-    private final Runnable fadeSubtlePageIndicatorRunnable = new Runnable() {
-        @Override
-        public void run() {
-            subtlePageIndicatorFadeScheduled = false;
-            animateSubtlePageIndicatorAttentionTo(PINNED_INDICATOR_IDLE_ATTENTION);
-        }
-    };
     private float edgeDwellProgress;
     private float edgeDwellRawX;
     private float edgeDwellRawY;
@@ -169,9 +139,6 @@ public final class LauncherAzGestureFxView extends View {
     @Nullable private ValueAnimator breathAnimator;
 
     @NonNull private InteractionMode interactionMode = InteractionMode.LETTER_TRACK;
-    private static final long PINNED_INDICATOR_IDLE_DELAY_MS = 5000L;
-    private static final long PINNED_INDICATOR_FADE_DURATION_MS = 520L;
-    private static final float PINNED_INDICATOR_IDLE_ATTENTION = 0.42f;
 
     public LauncherAzGestureFxView(Context context) {
         super(context);
@@ -198,7 +165,6 @@ public final class LauncherAzGestureFxView extends View {
         glassStrokePaint.setStrokeJoin(Paint.Join.ROUND);
 
         edgePaint.setStyle(Paint.Style.FILL);
-        pageIndicatorPaint.setStyle(Paint.Style.FILL);
         previewFillPaint.setStyle(Paint.Style.FILL);
         previewLabelPaint.setTextAlign(Paint.Align.LEFT);
         previewLabelPaint.setSubpixelText(true);
@@ -208,7 +174,6 @@ public final class LauncherAzGestureFxView extends View {
     public void setColors(int glassTintColor, int edgeTintColor) {
         this.glassTintColor = enforceGlassVisibility(glassTintColor, 0.78f);
         this.edgeTintColor = enforceGlassVisibility(edgeTintColor, 0.84f);
-        this.overflowGlowTintColor = boostColor(this.edgeTintColor, 1.05f, 1.18f);
         edgeDwellShader = null;
         invalidate();
     }
@@ -247,9 +212,9 @@ public final class LauncherAzGestureFxView extends View {
     }
 
     /**
-     * The edge the alphabets bar stands on. Everything the strip draws is laid out in the canonical
-     * bottom-bar frame and mapped back through this, so what is drawn and what the gesture
-     * hit-tests cannot drift apart on any edge.
+     * The edge the alphabets bar stands on. The band itself arrives as a screen rectangle, so all
+     * this decides is which way it rises into place and which side of it the focused app's name
+     * reads on — both of them "away from the bar", on whichever edge it is.
      */
     public void setBarFrame(@NonNull AzBarFrame frame) {
         barFrame = frame;
@@ -262,53 +227,6 @@ public final class LauncherAzGestureFxView extends View {
         } else {
             appsRowRawBounds.setEmpty();
         }
-    }
-
-    public void setInteractionOverflowState(
-        boolean active,
-        boolean pageLeft,
-        boolean pageRight,
-        float currentPagePosition,
-        int pageCount,
-        boolean showPageIndicators,
-        boolean useSubtlePageIndicators,
-        int dynamicPageIndex
-    ) {
-        interactionDynamicPageIndex = dynamicPageIndex;
-        int newPageCount = Math.max(1, pageCount);
-        float newPagePosition = clamp(currentPagePosition, 0f, newPageCount - 1f);
-        int newPageIndex = Math.min(Math.max(0, Math.round(newPagePosition)), newPageCount - 1);
-        boolean directPosition = Math.abs(newPagePosition - newPageIndex) > 0.001f;
-        boolean pagePositionChanged = Math.abs(newPagePosition - interactionPageIndicatorPosition) > 0.001f
-            || interactionPageCount != newPageCount
-            || interactionUseSubtlePageIndicators != useSubtlePageIndicators
-            || interactionShowsPageIndicators != showPageIndicators;
-        boolean shouldAnimatePage = active
-            && interactionOverflowActive
-            && interactionPageCount == newPageCount
-            && interactionCurrentPageIndex != newPageIndex;
-        interactionOverflowActive = active;
-        interactionCanPageLeft = pageLeft;
-        interactionCanPageRight = pageRight;
-        interactionCurrentPageIndex = newPageIndex;
-        interactionPageCount = newPageCount;
-        interactionShowsPageIndicators = showPageIndicators;
-        interactionUseSubtlePageIndicators = useSubtlePageIndicators;
-        if (!active || !showPageIndicators || !useSubtlePageIndicators) {
-            cancelSubtlePageIndicatorIdleFade();
-            subtlePageIndicatorAttention = 1f;
-        } else if (directPosition || pagePositionChanged || shouldAnimatePage) {
-            showSubtlePageIndicatorAttention();
-        } else {
-            scheduleSubtlePageIndicatorIdleFade();
-        }
-        if (directPosition) {
-            setInteractionPageIndicatorPosition(newPagePosition);
-        } else {
-            animateInteractionPageIndicatorTo(newPageIndex, shouldAnimatePage);
-        }
-        refreshVisibility();
-        invalidate();
     }
 
     public void setEdgeDwellProgress(float progress, float rawX, float rawY) {
@@ -515,7 +433,7 @@ public final class LauncherAzGestureFxView extends View {
         invalidate();
     }
 
-    public void clearDrag(boolean keepOverflowAffordance) {
+    public void clearDrag() {
         setFocusedIconOutline(null, null);
         dragActive = false;
         hasFocus = false;
@@ -526,20 +444,6 @@ public final class LauncherAzGestureFxView extends View {
         }
         hasPreviewPosition = false;
         interactionMode = InteractionMode.LETTER_TRACK;
-        if (!keepOverflowAffordance) {
-            interactionOverflowActive = false;
-            interactionCanPageLeft = false;
-            interactionCanPageRight = false;
-            interactionCurrentPageIndex = 0;
-            interactionPageCount = 1;
-            interactionDynamicPageIndex = -1;
-            interactionPageIndicatorPosition = 0f;
-            cancelPageIndicatorAnimations();
-            cancelSubtlePageIndicatorIdleFade();
-            subtlePageIndicatorAttention = 1f;
-            interactionShowsPageIndicators = false;
-            interactionUseSubtlePageIndicators = false;
-        }
         refreshVisibility();
         invalidate();
     }
@@ -563,14 +467,12 @@ public final class LauncherAzGestureFxView extends View {
     }
 
     private void refreshVisibility() {
-        boolean shouldDrawInteractionOverflow = interactionOverflowActive
-            && (interactionCanPageLeft || interactionCanPageRight || interactionPageCount > 1);
         boolean shouldDrawFocusRing = focusedIconRingEnabled
             && dragActive
             && interactionMode == InteractionMode.ICON_TRACK_LOCKED
             && hasFocus
             && !focusRawRect.isEmpty();
-        setVisibility(shouldDrawInteractionOverflow || edgeDwellProgress > 0.01f
+        setVisibility(edgeDwellProgress > 0.01f
             || focusedAppPreviewProgress > 0.01f || shouldDrawFocusRing
             || floatingStrip != null || floatingStripProgress > 0.01f ? VISIBLE : GONE);
     }
@@ -615,8 +517,6 @@ public final class LauncherAzGestureFxView extends View {
         floatingStripIcons.clear();
         floatingStripVisuals.clear();
         floatingStrip = null;
-        cancelPageIndicatorAnimations();
-        cancelSubtlePageIndicatorIdleFade();
     }
 
     @Override
@@ -624,8 +524,6 @@ public final class LauncherAzGestureFxView extends View {
         super.onDraw(canvas);
         getLocationOnScreen(locationOnScreen);
 
-        boolean shouldDrawInteractionOverflow = interactionOverflowActive
-            && (interactionCanPageLeft || interactionCanPageRight || interactionPageCount > 1);
         boolean drawFocusRing = focusedIconRingEnabled
             && dragActive
             && interactionMode == InteractionMode.ICON_TRACK_LOCKED
@@ -633,8 +531,8 @@ public final class LauncherAzGestureFxView extends View {
             && !focusRawRect.isEmpty();
         boolean drawStrip = floatingStripProgress > 0.01f && floatingStrip != null
             && renderLayer == RenderLayer.OVERLAY;
-        if (!shouldDrawInteractionOverflow && edgeDwellProgress <= 0.01f
-            && focusedAppPreviewProgress <= 0.01f && !drawFocusRing && !drawStrip) {
+        if (edgeDwellProgress <= 0.01f && focusedAppPreviewProgress <= 0.01f
+            && !drawFocusRing && !drawStrip) {
             return;
         }
         if (drawStrip) {
@@ -642,14 +540,6 @@ public final class LauncherAzGestureFxView extends View {
         }
         if (edgeDwellProgress > 0.01f && renderLayer == RenderLayer.OVERLAY) {
             drawEdgeDwellBloom(canvas);
-        }
-        if (shouldDrawInteractionOverflow) {
-            if (renderLayer == RenderLayer.UNDERLAY && !interactionUseSubtlePageIndicators) {
-                drawEdgeGlowAmbient(canvas);
-            }
-            if (renderLayer == RenderLayer.OVERLAY) {
-                drawInteractionPageIndicators(canvas);
-            }
         }
         if (drawFocusRing && renderLayer == RenderLayer.OVERLAY) {
             drawFocusedIconRing(canvas);
@@ -708,11 +598,10 @@ public final class LauncherAzGestureFxView extends View {
         float iconSize = strip.iconSizePx;
         float plankPadding = dp(9f);
         float plankRadius = (iconSize * 0.5f) + plankPadding;
-        AzScrubGesture.Bounds plank = barFrame.toScreen(new AzScrubGesture.Bounds(
-            strip.left - plankPadding, strip.top - plankPadding,
-            strip.right + plankPadding, strip.bottom + plankPadding));
-        tmpRect.set(plank.left + offsetX, plank.top + offsetY,
-            plank.right + offsetX, plank.bottom + offsetY);
+        // The band is already a screen rectangle — one row of icons, whichever edge it grew out
+        // of — so the only thing the edge still decides here is which way it rises into place.
+        tmpRect.set(strip.left - plankPadding + offsetX, strip.top - plankPadding + offsetY,
+            strip.right + plankPadding + offsetX, strip.bottom + plankPadding + offsetY);
 
         int save = canvas.save();
         // Rises the last few pixels into place, like the preview bubble beside it — away from the
@@ -747,10 +636,8 @@ public final class LauncherAzGestureFxView extends View {
                 continue;
             }
             boolean focused = slot == floatingStripFocusedSlot;
-            float canonicalCx = strip.slotCenterX(slot);
-            float canonicalCy = strip.centerY();
-            float cx = barFrame.screenX(canonicalCx, canonicalCy) + offsetX;
-            float cy = barFrame.screenY(canonicalCx, canonicalCy) + offsetY;
+            float cx = strip.slotCenterX(slot) + offsetX;
+            float cy = strip.centerY() + offsetY;
             float drawnSize = focused ? iconSize * 1.06f : iconSize;
             if (focused) {
                 previewRect.set(cx - (iconSize * 0.5f), cy - (iconSize * 0.5f),
@@ -863,11 +750,15 @@ public final class LauncherAzGestureFxView extends View {
         invalidate();
     }
 
-    /** Portrait reads the focused app's name above its icon, landscape below it. */
+    /**
+     * Which side of the band the focused app's name reads on: the far side from the bar, and within
+     * that the orientation's own answer. The policy owns it, so the view only has to say which edge
+     * the bar is on and which way up the screen is.
+     */
     @NonNull
     private AzFloatingStripPolicy.LabelSide labelSide() {
-        return AzFloatingStripPolicy.labelSide(getResources().getConfiguration().orientation
-            == Configuration.ORIENTATION_LANDSCAPE);
+        return AzFloatingStripPolicy.labelSideFor(barFrame.edge(),
+            getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
     }
 
     private void drawFocusedAppPreviewIcon(Canvas canvas) {
@@ -875,17 +766,13 @@ public final class LauncherAzGestureFxView extends View {
             return;
         }
         float progress = clamp01(focusedAppPreviewProgress);
-        // Down a column the band is a stack, not a row: the name is placed against the focused
-        // icon rather than against the band's top, and it may use the whole width to do it.
-        boolean stackedBand = barFrame.isVertical();
-        boolean haveFocusRect = hasFocus && !focusRawRect.isEmpty();
-        boolean anchorOnIcon = stackedBand && haveFocusRect;
-        float rowTop = (anchorOnIcon ? focusRawRect.top : appsRowRawBounds.top)
-            - locationOnScreen[1];
-        float rowBottom = (anchorOnIcon ? focusRawRect.bottom : appsRowRawBounds.bottom)
-            - locationOnScreen[1];
-        float rowLeft = stackedBand ? 0f : appsRowRawBounds.left - locationOnScreen[0];
-        float rowRight = stackedBand ? getWidth() : appsRowRawBounds.right - locationOnScreen[0];
+        // The band the name belongs to is a row of icons on every edge, so the bubble sits over it
+        // (or under it off a top bar) and centres on the icon it is naming. It used to stack up the
+        // screen off a column, which drew it over the very matches it was labelling.
+        float rowTop = appsRowRawBounds.top - locationOnScreen[1];
+        float rowBottom = appsRowRawBounds.bottom - locationOnScreen[1];
+        float rowLeft = appsRowRawBounds.left - locationOnScreen[0];
+        float rowRight = appsRowRawBounds.right - locationOnScreen[0];
         float focusCx = hasPreviewPosition
             ? previewDisplayRawX - locationOnScreen[0]
             : (hasFocus && !focusRawRect.isEmpty()
@@ -921,22 +808,20 @@ public final class LauncherAzGestureFxView extends View {
         float aboveTop = rowTop - bubbleSize - verticalGap - labelReserve;
         float belowTop = rowBottom + verticalGap
             + (labelSide == AzFloatingStripPolicy.LabelSide.ABOVE ? labelReserveAbove : 0f);
-        boolean nameBelowBand = barFrame.awayDirectionY() < 0f;
+        boolean nameBelowBand = barFrame.edge() == PlaceLayout.Edge.TOP;
         float top = nameBelowBand ? belowTop : aboveTop;
-        // At the top of a column there is no room above the icon, so the bubble drops below it
-        // rather than being clamped onto the icon it is naming.
-        if (!nameBelowBand && stackedBand && top < dp(8f)) {
+        // Never off the top, and — because a band level with a thumb near either end of a column
+        // can be close to both — never off the bottom either; the label under it has to stay on
+        // screen too.
+        if (!nameBelowBand && top < dp(8f)) {
             top = belowTop;
         }
         if (top < dp(8f)) {
             top = dp(8f);
         }
-        if (!barFrame.isCanonical()) {
-            // And never off the bottom either: the label under it has to stay on screen too.
-            float labelBelow = labelSide == AzFloatingStripPolicy.LabelSide.BELOW
-                ? labelReserveAbove : 0f;
-            top = Math.min(top, Math.max(dp(8f), getHeight() - bubbleSize - labelBelow - dp(8f)));
-        }
+        float labelBelow = labelSide == AzFloatingStripPolicy.LabelSide.BELOW
+            ? labelReserveAbove : 0f;
+        top = Math.min(top, Math.max(dp(8f), getHeight() - bubbleSize - labelBelow - dp(8f)));
         top += focusedAppPreviewLaunchDismissing
             ? lerp(dp(-8f), 0f, progress)
             : lerp(dp(6f), 0f, progress);
@@ -1130,244 +1015,6 @@ public final class LauncherAzGestureFxView extends View {
         canvas.drawCircle(cx, cy, ringRadius, glassStrokePaint);
     }
 
-    private void drawEdgeGlowAmbient(Canvas canvas) {
-        if (appsRowRawBounds.isEmpty()) {
-            return;
-        }
-        float top = appsRowRawBounds.top - locationOnScreen[1];
-        float bottom = appsRowRawBounds.bottom - locationOnScreen[1];
-        int saveCount = canvas.save();
-        canvas.clipRect(0f, top, getWidth(), bottom);
-
-        float glowHeight = Math.max(dp(34f), bottom - top);
-        float edgeWidth = Math.max(dp(24f), getWidth() * 0.062f);
-        float spread = Math.max(dp(20f), edgeWidth * 1.18f);
-        float radius = Math.max(dp(18f), glowHeight * 0.30f);
-
-        if (interactionCanPageLeft) {
-            drawEdgeGlowAmbient(canvas, 0f, top, edgeWidth, bottom, radius, spread, false);
-        }
-        if (interactionCanPageRight) {
-            drawEdgeGlowAmbient(canvas, getWidth() - edgeWidth, top, getWidth(), bottom, radius, spread, true);
-        }
-        canvas.restoreToCount(saveCount);
-    }
-
-    private void drawEdgeGlowAmbient(Canvas canvas, float left, float top, float right, float bottom, float radius, float spread, boolean rightEdge) {
-        RectF glow = new RectF(left, top, right, bottom);
-        if (rightEdge) {
-            glow.left -= spread * 0.28f;
-            glow.right += spread;
-        } else {
-            glow.left -= spread;
-            glow.right += spread * 0.28f;
-        }
-        glow.top -= dp(10f);
-        glow.bottom += dp(10f);
-        edgePaint.setColor(withAlpha(overflowGlowTintColor, 68));
-        canvas.drawRoundRect(glow, radius, radius, edgePaint);
-
-        RectF innerGlow = new RectF(glow);
-        innerGlow.inset(spread * 0.30f, dp(6f));
-        edgePaint.setColor(withAlpha(overflowGlowTintColor, 44));
-        canvas.drawRoundRect(innerGlow, Math.max(dp(16f), radius - dp(6f)), Math.max(dp(16f), radius - dp(6f)), edgePaint);
-    }
-
-    private void drawInteractionPageIndicators(Canvas canvas) {
-        if (!interactionOverflowActive || interactionPageCount <= 1 || appsRowRawBounds.isEmpty()) {
-            return;
-        }
-        boolean subtle = interactionUseSubtlePageIndicators;
-        float attention = subtle ? clamp01(subtlePageIndicatorAttention) : 1f;
-        // Both dock styles use the same "minimal ticks" indicator centred on the top edge.
-        drawPageTicksIndicator(canvas, interactionPageIndicatorPosition, interactionPageCount, attention, interactionDynamicPageIndex);
-    }
-
-    /**
-     * "Minimal ticks" page indicator (per the design spec): a row of small horizontal tick marks
-     * centred on the dock's top edge. The active tick brightens and widens with a soft underglow;
-     * inactive ticks are dim and short. Everything keys off proximity to the fractional page
-     * position, so the brightness/width morph is continuous across a swipe (adjacent ticks share the
-     * transition at the midpoint). Pure function of (position, page count, accent); fades with the
-     * indicator's attention. Applies to both dock styles.
-     */
-    // Toned-down warm amber for the dynamic "most-used" page tick: distinguishable from the
-    // dock-blended ticks, but harmonized rather than a loud neon.
-    private static final int DYNAMIC_PAGE_TICK_COLOR = 0xFFE0A338;
-
-    private void drawPageTicksIndicator(Canvas canvas, float activePagePosition, int totalPages, float attention, int dynamicPageIndex) {
-        if (totalPages <= 1 || getWidth() <= 0) {
-            return;
-        }
-        float master = clamp01(attention);
-        if (master <= 0.01f) {
-            return;
-        }
-
-        float wInactive = dp(13f);
-        float wActive = dp(24f);
-        float h = dp(2.5f);
-        float r = h * 0.5f;
-        float gap = dp(4f);
-        float cx = getWidth() * 0.5f;
-        float cy = dp(3.5f); // flush against the dock's top rim
-        float pos = clamp(activePagePosition, 0f, totalPages - 1f);
-
-        // Per-tick widths (the active page's tick widens), then laid out left-to-right with a
-        // CONSTANT gap so the spacing reads evenly no matter which page is active.
-        ensurePageIndicatorScratchCapacity(totalPages);
-        float[] widths = pageIndicatorWidths;
-        float sumW = 0f;
-        for (int p = 0; p < totalPages; p++) {
-            float prox = Math.max(0f, 1f - Math.abs(p - pos));
-            widths[p] = wInactive + ((wActive - wInactive) * prox);
-            sumW += widths[p];
-        }
-        float maxW = getWidth() - dp(36f);
-        float total = sumW + (totalPages - 1) * gap;
-        if (total > maxW && totalPages > 1) {
-            gap = Math.max(dp(4f), (maxW - sumW) / (totalPages - 1));
-            total = sumW + (totalPages - 1) * gap;
-        }
-        float[] centers = pageIndicatorCenters;
-        float x = cx - (total * 0.5f);
-        for (int p = 0; p < totalPages; p++) {
-            centers[p] = x + (widths[p] * 0.5f);
-            x += widths[p] + gap;
-        }
-
-        // Blend into the dock: a slightly-brighter shade of the dock's own surface tint, so the
-        // ticks and glow harmonize with the capsule instead of contrasting against it.
-        int accent = boostColor(glassTintColor, 1.0f, 1.18f);
-        boolean dynamicActive = dynamicPageIndex >= 0 && Math.abs(pos - dynamicPageIndex) < 0.5f;
-        int glowColor = dynamicActive ? DYNAMIC_PAGE_TICK_COLOR : accent;
-
-        // Soft glow: a blurred capsule that hugs the active tick (same pill shape, slightly larger),
-        // following the fractional position across a swipe — a gentle dock-toned highlight.
-        int lo = (int) Math.floor(pos);
-        int hi = Math.min(totalPages - 1, lo + 1);
-        float frac = pos - lo;
-        float glowCx = centers[lo] + (centers[hi] - centers[lo]) * frac;
-        float glowW = (widths[lo] + (widths[hi] - widths[lo]) * frac) + dp(8f);
-        float glowH = h + dp(7f);
-        float glowR = glowH * 0.5f;
-        if (pageTickGlow == null) {
-            pageTickGlow = new BlurMaskFilter(dp(5f), BlurMaskFilter.Blur.NORMAL);
-        }
-        pageIndicatorPaint.setStyle(Paint.Style.FILL);
-        pageIndicatorPaint.setColor(withAlpha(glowColor, Math.round(70f * master)));
-        pageIndicatorPaint.setMaskFilter(pageTickGlow);
-        tmpRect.set(glowCx - glowW * 0.5f, cy - glowH * 0.5f, glowCx + glowW * 0.5f, cy + glowH * 0.5f);
-        canvas.drawRoundRect(tmpRect, glowR, glowR, pageIndicatorPaint);
-        pageIndicatorPaint.setMaskFilter(null);
-
-        // Ticks: alpha interpolates by proximity to the active position; inactive floor kept legible.
-        for (int p = 0; p < totalPages; p++) {
-            float prox = Math.max(0f, 1f - Math.abs(p - pos));
-            float alpha = 0.40f + (0.60f * prox);
-            int tickColor = accent;
-            if (p == dynamicPageIndex) {
-                tickColor = DYNAMIC_PAGE_TICK_COLOR;
-                // Extra idle damp: the warm tint only reads when this page is active; sleeping it
-                // must not steal attention.
-                alpha *= (0.55f + (0.45f * prox));
-            }
-            float left = centers[p] - (widths[p] * 0.5f);
-            pageIndicatorPaint.setColor(withAlpha(tickColor, Math.round(255f * alpha * master)));
-            tmpRect.set(left, cy - r, left + widths[p], cy + r);
-            canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
-        }
-    }
-
-    private void ensurePageIndicatorScratchCapacity(int totalPages) {
-        if (pageIndicatorWidths.length >= totalPages) {
-            return;
-        }
-        pageIndicatorWidths = new float[totalPages];
-        pageIndicatorCenters = new float[totalPages];
-    }
-
-    private void animateInteractionPageIndicatorTo(int pageIndex, boolean animate) {
-        if (interactionPageIndicatorAnimator != null) {
-            interactionPageIndicatorAnimator.cancel();
-            interactionPageIndicatorAnimator = null;
-        }
-        if (!animate) {
-            interactionPageIndicatorPosition = pageIndex;
-            return;
-        }
-        interactionPageIndicatorAnimator = createPageIndicatorAnimator(
-            interactionPageIndicatorPosition,
-            pageIndex,
-            value -> interactionPageIndicatorPosition = value
-        );
-        interactionPageIndicatorAnimator.start();
-    }
-
-    private void setInteractionPageIndicatorPosition(float pagePosition) {
-        if (interactionPageIndicatorAnimator != null) {
-            interactionPageIndicatorAnimator.cancel();
-            interactionPageIndicatorAnimator = null;
-        }
-        interactionPageIndicatorPosition = pagePosition;
-    }
-
-    private void showSubtlePageIndicatorAttention() {
-        cancelSubtlePageIndicatorIdleFade();
-        subtlePageIndicatorAttention = 1f;
-        scheduleSubtlePageIndicatorIdleFade();
-    }
-
-    private void scheduleSubtlePageIndicatorIdleFade() {
-        if (!subtlePageIndicatorFadeScheduled
-            && interactionUseSubtlePageIndicators
-            && interactionShowsPageIndicators
-            && interactionOverflowActive) {
-            subtlePageIndicatorFadeScheduled = true;
-            postDelayed(fadeSubtlePageIndicatorRunnable, PINNED_INDICATOR_IDLE_DELAY_MS);
-        }
-    }
-
-    private void animateSubtlePageIndicatorAttentionTo(float target) {
-        if (!interactionUseSubtlePageIndicators || !interactionShowsPageIndicators || !interactionOverflowActive) {
-            subtlePageIndicatorAttention = 1f;
-            return;
-        }
-        if (subtlePageIndicatorAttentionAnimator != null) {
-            subtlePageIndicatorAttentionAnimator.cancel();
-            subtlePageIndicatorAttentionAnimator = null;
-        }
-        ValueAnimator animator = ValueAnimator.ofFloat(subtlePageIndicatorAttention, clamp01(target));
-        subtlePageIndicatorAttentionAnimator = animator;
-        animator.setDuration(PINNED_INDICATOR_FADE_DURATION_MS);
-        animator.setInterpolator(new DecelerateInterpolator(1.35f));
-        animator.addUpdateListener(animation -> {
-            subtlePageIndicatorAttention = (float) animation.getAnimatedValue();
-            invalidate();
-        });
-        animator.start();
-    }
-
-    private void cancelSubtlePageIndicatorIdleFade() {
-        removeCallbacks(fadeSubtlePageIndicatorRunnable);
-        subtlePageIndicatorFadeScheduled = false;
-        if (subtlePageIndicatorAttentionAnimator != null) {
-            subtlePageIndicatorAttentionAnimator.cancel();
-            subtlePageIndicatorAttentionAnimator = null;
-        }
-    }
-
-    private ValueAnimator createPageIndicatorAnimator(float start, float end, @NonNull FloatUpdate update) {
-        ValueAnimator animator = ValueAnimator.ofFloat(start, end);
-        animator.setDuration(210L);
-        animator.setInterpolator(new DecelerateInterpolator(1.4f));
-        animator.addUpdateListener(animation -> {
-            update.accept((float) animation.getAnimatedValue());
-            invalidate();
-        });
-        return animator;
-    }
-
     private void animateFocusedAppPreviewTo(float target, boolean launchDismiss) {
         float boundedTarget = clamp01(target);
         if (focusedAppPreviewAnimator != null) {
@@ -1412,13 +1059,6 @@ public final class LauncherAzGestureFxView extends View {
             }
         });
         focusedAppPreviewAnimator.start();
-    }
-
-    private void cancelPageIndicatorAnimations() {
-        if (interactionPageIndicatorAnimator != null) {
-            interactionPageIndicatorAnimator.cancel();
-            interactionPageIndicatorAnimator = null;
-        }
     }
 
     private float dp(float value) {

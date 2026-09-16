@@ -15,6 +15,8 @@ import android.view.View;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
+import com.termux.app.launcher.az.AzScrubGesture;
+import com.termux.app.place.PlaceLayout.Edge;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -64,7 +66,7 @@ public class LauncherAzGestureFxViewTest {
         view.layout(0, 0, 1080, 900);
         assertEquals(View.GONE, view.getVisibility());
 
-        AzFloatingStripPolicy.Strip strip = AzFloatingStripPolicy.layout(0f, 1080f, 800f, 540f, 3,
+        AzFloatingStripPolicy.Strip strip = bottomStrip(3,
             context.getResources().getDisplayMetrics().density);
         view.setFloatingStrip(strip, icons(3));
         assertEquals(View.VISIBLE, view.getVisibility());
@@ -86,7 +88,7 @@ public class LauncherAzGestureFxViewTest {
         view.setRenderLayer(LauncherAzGestureFxView.RenderLayer.OVERLAY);
         view.layout(0, 0, 1080, 900);
         List<Drawable> artwork = icons(3);
-        AzFloatingStripPolicy.Strip strip = AzFloatingStripPolicy.layout(0f, 1080f, 800f, 540f, 3,
+        AzFloatingStripPolicy.Strip strip = bottomStrip(3,
             context.getResources().getDisplayMetrics().density);
         view.setFloatingStrip(strip, artwork);
         view.setFloatingStripFocusedSlot(1);
@@ -103,7 +105,7 @@ public class LauncherAzGestureFxViewTest {
         Context context = ApplicationProvider.getApplicationContext();
         LauncherAzGestureFxView view = new LauncherAzGestureFxView(context);
         view.layout(0, 0, 1080, 900);
-        AzFloatingStripPolicy.Strip strip = AzFloatingStripPolicy.layout(0f, 1080f, 800f, 540f, 2,
+        AzFloatingStripPolicy.Strip strip = bottomStrip(2,
             context.getResources().getDisplayMetrics().density);
         view.setFloatingStrip(strip, icons(2));
         view.setFloatingStripFocusedSlot(5);
@@ -119,7 +121,7 @@ public class LauncherAzGestureFxViewTest {
         view.setRenderLayer(LauncherAzGestureFxView.RenderLayer.OVERLAY);
         view.layout(0, 0, 1080, 900);
 
-        AzFloatingStripPolicy.Strip strip = AzFloatingStripPolicy.layout(0f, 1080f, 800f, 540f, 1, density);
+        AzFloatingStripPolicy.Strip strip = bottomStrip(1, density);
         int iconSize = Math.max(1, Math.round(strip.iconSizePx));
         // The exact bitmaps do not matter here — what matters is that these two specific instances
         // (not equal copies) are the ones LauncherAzGestureFxView is told to draw for the focused
@@ -155,6 +157,13 @@ public class LauncherAzGestureFxViewTest {
             withoutVisual.bitmapsDrawn.contains(crispMask));
         assertTrue("with no visual to fall back to, the round rect wraps the icon instead",
             withoutVisual.drewRoundRectOfRadius(fallbackRadius));
+    }
+
+    /** A band off a bottom bar, the frame the strip was written for. */
+    private static AzFloatingStripPolicy.Strip bottomStrip(int count, float density) {
+        return AzFloatingStripPolicy.layout(Edge.BOTTOM,
+            new AzScrubGesture.Bounds(0f, 800f, 1080f, 860f),
+            new AzScrubGesture.Bounds(0f, 0f, 1080f, 900f), 540f, 830f, count, density);
     }
 
     private static List<Drawable> icons(int count) {

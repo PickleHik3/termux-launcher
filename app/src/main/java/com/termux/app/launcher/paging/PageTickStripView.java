@@ -2,6 +2,7 @@ package com.termux.app.launcher.paging;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
@@ -26,9 +27,12 @@ import androidx.annotation.Nullable;
 public class PageTickStripView extends View {
 
     @NonNull private final Paint tickPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    @NonNull private final RectF tick = new RectF();
     private int pageCount = 1;
     private float pagePosition;
+    private int dynamicPageIndex = -1;
     private boolean verticalForm;
+    private int accentColor = 0xFFFFFFFF;
 
     public PageTickStripView(@NonNull Context context) {
         this(context, null);
@@ -37,7 +41,6 @@ public class PageTickStripView extends View {
     public PageTickStripView(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         tickPaint.setStyle(Paint.Style.FILL);
-        tickPaint.setColor(0x66FFFFFF);
     }
 
     /** Which way the ticks run: down the strip for a rail, across it for a row. */
@@ -51,11 +54,33 @@ public class PageTickStripView extends View {
         return verticalForm;
     }
 
-    /** The colour the ticks are drawn in — the row's own launcher text colour, dimmed. */
-    public void setTickColor(int color) {
-        if (tickPaint.getColor() == color) return;
-        tickPaint.setColor(color);
+    /**
+     * The colour the active page's tick is drawn in; the rest of them are the same colour muted.
+     * It is the launcher's gesture accent put through the two steps the dock's own ticks took to
+     * reach it, so moving the row does not change the indicator's colour.
+     */
+    public void setAccentColor(int gestureAccentColor) {
+        int resolved = accentFrom(gestureAccentColor);
+        if (accentColor == resolved) return;
+        accentColor = resolved;
         invalidate();
+    }
+
+    public int getAccentColor() {
+        return accentColor;
+    }
+
+    /** The colour one tick is drawn in at this fractional page position, alpha included. */
+    public int tickColorAt(int page) {
+        float proximity = PageTickStrip.proximity(page, pagePosition);
+        float alpha = PageTickStrip.alphaFor(proximity);
+        int color = accentColor;
+        if (page == dynamicPageIndex) {
+            color = PageTickStrip.DYNAMIC_TICK_COLOR;
+            alpha *= PageTickStrip.dynamicDampFor(proximity);
+        }
+        int opacity = Math.max(0, Math.min(255, Math.round(255f * alpha)));
+        return (color & 0x00FFFFFF) | (opacity << 24);
     }
 
     /**
@@ -65,12 +90,28 @@ public class PageTickStripView extends View {
      * @return whether anything changed, so the caller can skip an invalidate it does not need
      */
     public boolean setPages(int pageCount, float position) {
+        return setPages(pageCount, position, -1);
+    }
+
+    /**
+     * As {@link #setPages(int, float)}, plus which page (if any) is the dynamic "most-used" one,
+     * whose tick carries its own warm tint instead of the accent.
+     */
+    public boolean setPages(int pageCount, float position, int dynamicPage) {
         int count = Math.max(1, pageCount);
-        if (this.pageCount == count && Math.abs(this.pagePosition - position) < 0.001f) return false;
+        float bounded = Math.max(0f, Math.min(position, count - 1f));
+        int dynamic = dynamicPage >= 0 && dynamicPage < count ? dynamicPage : -1;
+        if (this.pageCount == count && this.dynamicPageIndex == dynamic
+            && Math.abs(this.pagePosition - bounded) < 0.001f) return false;
         this.pageCount = count;
-        this.pagePosition = position;
+        this.pagePosition = bounded;
+        this.dynamicPageIndex = dynamic;
         invalidate();
         return true;
+    }
+
+    public int getDynamicPageIndex() {
+        return dynamicPageIndex;
     }
 
     public int getPageCount() {
@@ -93,8 +134,8 @@ public class PageTickStripView extends View {
         float thickness = PageTickStrip.THICKNESS_DP * density;
         float radius = thickness * 0.5f;
         float across = (verticalForm ? getWidth() : getHeight()) * 0.5f;
-        RectF tick = new RectF();
         for (int page = 0; page < centers.length; page++) {
+            tickPaint.setColor(tickColorAt(page));
             float half = lengths[page] * 0.5f;
             if (verticalForm) {
                 tick.set(across - radius, centers[page] - half, across + radius, centers[page] + half);
@@ -103,5 +144,30 @@ public class PageTickStripView extends View {
             }
             canvas.drawRoundRect(tick, radius, radius, tickPaint);
         }
+    }
+
+    /**
+     * The accent the ticks are drawn from: the launcher's gesture accent lifted to stay legible on
+     * glass and then warmed the way the dock's FX layer warmed it, so nothing about the colour
+     * changed when the ticks stopped being the dock's.
+     */
+    private static int accentFrom(int gestureAccentColor) {
+        return boost(glassVisible(gestureAccentColor, 0.78f), 1.0f, 1.18f);
+    }
+
+    private static int glassVisible(int color, float minValue) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        hsv[1] = Math.max(0.42f, hsv[1]);
+        hsv[2] = Math.max(minValue, hsv[2]);
+        return Color.HSVToColor((color >>> 24) == 0 ? 0xE8 : (color >>> 24), hsv);
+    }
+
+    private static int boost(int color, float satMul, float valMul) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * satMul));
+        hsv[2] = Math.max(0f, Math.min(1f, hsv[2] * valMul));
+        return Color.HSVToColor((color >>> 24) == 0 ? 0xFF : (color >>> 24), hsv);
     }
 }

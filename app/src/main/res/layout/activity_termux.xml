@@ -719,9 +719,12 @@
                             android:clipToPadding="false" />
                     </FrameLayout>
 
-                    <!-- The air between the icons and the letters. It belongs to the row, so it
-                         travels with it rather than being a band of the stack in its own right. -->
-                    <View
+                    <!-- The dock row's page ticks, in the band that has always been named for
+                         them: the same PageTickStripView the row carries to every other edge, so
+                         there is one indicator and it reads the same wherever the row stands. The
+                         ticks used to be painted by the FX layer over the glass, which is why a
+                         row moved off the dock ended up with two of them. -->
+                    <com.termux.app.launcher.paging.PageTickStripView
                         android:id="@+id/apps_bar_indicator_band"
                         android:layout_width="match_parent"
                         android:layout_height="3dp"

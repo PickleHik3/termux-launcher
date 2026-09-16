@@ -2,6 +2,7 @@ package com.termux.app.terminal;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.launcher.paging.PageTickStrip;
 import com.termux.app.place.Element;
 
 import java.util.ArrayList;
@@ -103,12 +104,13 @@ public final class AccessoryStackLayoutPolicy {
         return valuePoints[segment] + ((valuePoints[segment + 1] - valuePoints[segment]) * fraction);
     }
 
-    public static int computePageIndicatorBandHeightPx(boolean azEnabled, float density) {
-        if (!azEnabled)
+    public static int computePageIndicatorBandHeightPx(boolean appsRowEnabled, float density) {
+        if (!appsRowEnabled)
             return 0;
-        // Pure spacing between the icon row and the A-Z row (the page-indicator ticks draw at the
-        // dock's top rim, not in this band) — kept tight so the gap matches the other inter-row gaps.
-        return Math.round(Math.max(0f, density) * 3f);
+        // The band the page ticks stand in, which is what it was always named for: the dock's row
+        // carries the same strip every other edge does instead of the FX layer painting a second
+        // set over the glass. It is the row's own furniture, so it goes when the row does.
+        return PageTickStrip.bandPx(density);
     }
 
     /** The letters' own band: the glyphs and the 1dp of air the row draws them in. */

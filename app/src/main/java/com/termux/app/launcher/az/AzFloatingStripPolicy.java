@@ -4,14 +4,22 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.paging.DockPagingModel;
+import com.termux.app.place.PlaceLayout.Edge;
 
 /**
- * The floating strip of matches the standalone A–Z index shows above the letters, as arithmetic:
- * how many icons a width holds, where the band sits under the thumb, where each one sits, which of them a page shows, which side the
- * label reads on, and the curve the focused icon breathes to.
+ * The floating strip of matches the standalone A–Z index shows beside the letters, as arithmetic:
+ * how many icons a length holds, where the band grows out of the bar, where each icon sits, which of
+ * them a page shows, which side the label reads on, and the curve the focused icon breathes to.
  *
- * <p>Pure: no {@code View}, no {@code Context}, no {@code Canvas}, no clock. The activity asks for a
- * {@link Strip} and hands the same rectangle to {@link AzScrubGesture.Geometry} as the icon track,
+ * <p>The band is <em>always a row of icons reading left to right</em>, and it always grows
+ * <em>away from the bar, towards the middle of the screen</em>: up off a bottom bar, down off a top
+ * one, left off a right-hand column and right off a left-hand one. That is the whole of what the
+ * edge decides — the axis never turns, so the matches read the same way round wherever the index
+ * stands, and the band can never be drawn over the letters it came from.
+ *
+ * <p>Pure: no {@code View}, no {@code Context}, no {@code Canvas}, no clock. It answers in the space
+ * its rectangles were given in, which for the standalone index is the screen. The activity asks for
+ * a {@link Strip} and hands the same rectangle to {@link AzScrubGesture.Geometry} as the icon track,
  * so upward lock, icon tracking, edge paging and release-to-launch are the row's proven machinery
  * with a different rectangle under them. {@code LauncherAzGestureFxView} just draws the answer.
  *
@@ -130,18 +138,61 @@ public final class AzFloatingStripPolicy {
         }
     }
 
-    /** How many icons fit in a host of this width, between the strip's side margins. */
-    public static int slotsForWidth(float hostWidthPx, float density) {
+    /** How many icons fit in a run of this length. The length is already clear of the margins. */
+    public static int slotsForLength(float usableLengthPx, float density) {
         float d = Math.max(0f, density);
-        float usable = hostWidthPx - (2f * SIDE_MARGIN_DP * d);
         float icon = ICON_SIZE_DP * d;
         float pitch = icon + (SLOT_SPACING_DP * d);
-        if (usable < icon || pitch <= 0f) {
+        if (usableLengthPx < icon || pitch <= 0f) {
             return 1;
         }
         // n icons take n*icon + (n-1)*spacing, i.e. n*pitch - spacing.
-        int slots = (int) Math.floor((usable + (SLOT_SPACING_DP * d)) / pitch);
+        int slots = (int) Math.floor((usableLengthPx + (SLOT_SPACING_DP * d)) / pitch);
         return Math.max(1, Math.min(MAX_SLOTS, slots));
+    }
+
+    /** How many icons fit in a host of this width, between the strip's side margins. */
+    public static int slotsForWidth(float hostWidthPx, float density) {
+        return slotsForLength(hostWidthPx - (2f * SIDE_MARGIN_DP * Math.max(0f, density)), density);
+    }
+
+    /** Which way the matches grow out of the bar, on screen: always towards the screen's middle. */
+    public enum Growth { UP, DOWN, LEFT, RIGHT }
+
+    @NonNull
+    public static Growth growthFor(@NonNull Edge barEdge) {
+        switch (barEdge) {
+            case TOP: return Growth.DOWN;
+            case LEFT: return Growth.RIGHT;
+            case RIGHT: return Growth.LEFT;
+            case BOTTOM:
+            default: return Growth.UP;
+        }
+    }
+
+    /**
+     * The run the band has to lay its icons out in, clear of the bar and of the canvas's margins.
+     *
+     * <p>Off a top or bottom bar the band runs across the canvas, so the run is the canvas's width.
+     * Off a column it runs from the bar towards the far side, so the run is what is left of the
+     * canvas once the bar and the air beside it are taken off — which is what stops a band ever
+     * being laid out longer than the space it is allowed to grow into.
+     */
+    public static float availableLengthPx(@NonNull Edge barEdge, @NonNull AzScrubGesture.Bounds bar,
+                                          @NonNull AzScrubGesture.Bounds canvas, float density) {
+        float d = Math.max(0f, density);
+        float gap = ANCHOR_GAP_DP * d;
+        float margin = SIDE_MARGIN_DP * d;
+        switch (barEdge) {
+            case LEFT:
+                return Math.max(0f, (canvas.right - margin) - (bar.right + gap));
+            case RIGHT:
+                return Math.max(0f, (bar.left - gap) - (canvas.left + margin));
+            case TOP:
+            case BOTTOM:
+            default:
+                return Math.max(0f, canvas.width() - (2f * margin));
+        }
     }
 
     /** How many pages a candidate list fills at that slot count. Always at least one. */
@@ -162,38 +213,87 @@ public final class AzFloatingStripPolicy {
     }
 
     /**
-     * Lays a strip of {@code visibleCount} icons out centred on {@code anchorXPx} — the letter
-     * under the thumb, so the matches appear where the finger already is rather than in the middle
-     * of the bar — and resting above {@code anchorTopPx}, the top of the letters, so the strip
-     * floats clear of them. A band that would run past either side margin slides back inside it,
-     * so a letter at the end of the row still gets its whole strip.
+     * Lays the page's icons out as one row, growing out of the bar towards the middle of the
+     * screen and never touching the bar it came from.
      *
-     * @return null when there is nothing to show
+     * <p>Along the bar the band follows the finger — centred on the letter being held for a row,
+     * level with it for a column — so the matches appear where the thumb already is. Across the
+     * bar it is pinned a fixed gap clear of the letters. Either way it is clamped inside
+     * {@code canvas} with the strip's own margin, and a band that would run past an end slides back
+     * inside it rather than being cropped.
+     *
+     * @param bar       the letters' own rectangle, the thing the band must not cover
+     * @param canvas    the space the band is allowed to occupy
+     * @param anchorXPx where the finger is across the screen; the band follows it off a row
+     * @param anchorYPx where the finger is down the screen; the band follows it off a column
+     * @return null when there is nothing to show, or nowhere to show it
      */
     @Nullable
-    public static Strip layout(float hostLeftPx, float hostWidthPx, float anchorTopPx,
-                               float anchorXPx, int visibleCount, float density) {
-        if (visibleCount <= 0 || hostWidthPx <= 0f) {
+    public static Strip layout(@NonNull Edge barEdge, @NonNull AzScrubGesture.Bounds bar,
+                               @NonNull AzScrubGesture.Bounds canvas, float anchorXPx,
+                               float anchorYPx, int visibleCount, float density) {
+        if (visibleCount <= 0 || bar.isEmpty() || canvas.isEmpty()) {
             return null;
         }
         float d = Math.max(0f, density);
-        int slots = Math.min(Math.max(1, visibleCount), slotsForWidth(hostWidthPx, d));
         float icon = ICON_SIZE_DP * d;
         float spacing = SLOT_SPACING_DP * d;
-        float bandWidth = (slots * icon) + ((slots - 1) * spacing);
-        float minLeft = hostLeftPx + (SIDE_MARGIN_DP * d);
-        float maxLeft = hostLeftPx + hostWidthPx - (SIDE_MARGIN_DP * d) - bandWidth;
-        float left = anchorXPx - (bandWidth * 0.5f);
-        // A band wider than the margins allow (a sliver of a host) keeps the left margin instead.
-        left = maxLeft < minLeft ? minLeft : Math.max(minLeft, Math.min(maxLeft, left));
-        float bottom = anchorTopPx - (ANCHOR_GAP_DP * d);
-        return new Strip(left, bottom - icon, left + bandWidth, bottom, icon, spacing, slots);
+        float gap = ANCHOR_GAP_DP * d;
+        float margin = SIDE_MARGIN_DP * d;
+        int slots = Math.min(Math.max(1, visibleCount),
+            slotsForLength(availableLengthPx(barEdge, bar, canvas, d), d));
+        float band = (slots * icon) + ((slots - 1) * spacing);
+        float left;
+        float top;
+        switch (barEdge) {
+            case LEFT:
+                left = slide(bar.right + gap, bar.right + gap, canvas.right - margin - band);
+                top = slide(anchorYPx - (icon * 0.5f), canvas.top + margin,
+                    canvas.bottom - margin - icon);
+                break;
+            case RIGHT:
+                left = slide(bar.left - gap - band, canvas.left + margin, bar.left - gap - band);
+                top = slide(anchorYPx - (icon * 0.5f), canvas.top + margin,
+                    canvas.bottom - margin - icon);
+                break;
+            case TOP:
+                left = slide(anchorXPx - (band * 0.5f), canvas.left + margin,
+                    canvas.right - margin - band);
+                top = bar.bottom + gap;
+                break;
+            case BOTTOM:
+            default:
+                left = slide(anchorXPx - (band * 0.5f), canvas.left + margin,
+                    canvas.right - margin - band);
+                top = bar.top - gap - icon;
+                break;
+        }
+        return new Strip(left, top, left + band, top + icon, icon, spacing, slots);
+    }
+
+    /**
+     * Slides a band back inside {@code [lo, hi]}. A band too long for the room it is given keeps
+     * the low end rather than being centred on nothing, which is what a sliver of a canvas leaves.
+     */
+    private static float slide(float value, float lo, float hi) {
+        return hi < lo ? lo : Math.max(lo, Math.min(hi, value));
     }
 
     /** Portrait reads the name above the icon, landscape below it. */
     @NonNull
     public static LabelSide labelSide(boolean landscape) {
         return landscape ? LabelSide.BELOW : LabelSide.ABOVE;
+    }
+
+    /**
+     * Which side of the band the focused app's name reads on. It always reads on the far side from
+     * the bar, so it never lands in the gap between the letters and the matches they produced: under
+     * the band for a top bar, over it everywhere else, where the orientation decides as it always
+     * has.
+     */
+    @NonNull
+    public static LabelSide labelSideFor(@NonNull Edge barEdge, boolean landscape) {
+        return barEdge == Edge.TOP ? LabelSide.BELOW : labelSide(landscape);
     }
 
     /**

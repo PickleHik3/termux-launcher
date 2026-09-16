@@ -11,9 +11,15 @@ import com.termux.app.place.PlaceLayout.Edge;
  * <p>The canonical frame is the bar the gesture was built for: a horizontal row along the bottom
  * with the icon track above it. "Along" the bar is canonical x, growing the way the letters read;
  * "away" from the bar is canonical −y, so the icon track sits at a smaller y than the letters do,
- * exactly as it does for a bottom bar. Every positional decision in {@link AzScrubGesture} and
- * {@link AzFloatingStripPolicy} — the upward lock, the capture wedge, the return band, the strip's
- * slots, the paging ends — is therefore written once and holds on all four edges.
+ * exactly as it does for a bottom bar. Every positional decision in {@link AzScrubGesture} — the
+ * upward lock, the capture wedge, the return band — is therefore written once and holds on all four
+ * edges.
+ *
+ * <p>The matches themselves are not in this frame: {@link AzFloatingStripPolicy} lays them out on
+ * the screen as one row of icons growing away from the bar, because "reads left to right" is a
+ * property of the screen and not of the bar. What the frame still decides for them is the direction
+ * they rise from ({@link #awayDirectionX}/{@link #awayDirectionY}) and which side of the band the
+ * focused app's name reads on.
  *
  * <p>What each edge does to the screen:
  *
