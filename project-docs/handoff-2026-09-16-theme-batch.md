@@ -31,13 +31,12 @@ Feature worktrees `../wt-trim-copy`, `../wt-keyboard-theme`, `../wt-extra-keys`,
   - Extra keys greying on the Home place verified: mouse-mode and add-pane keys dimmed; place
     switches, keyboard and session browser usable. Coloured place-switch keys were not visible
     because the container carries an old saved layout (no migration by design).
-  - Keyboard: every chip still drew in the same translucent grey — no letter/function tiers, Enter
-    not in the accent colour — before and after the glass alpha rebalance in `e86162a4`. So the
-    glass path was not the reason. Candidates: a pinned keyboard colour scheme in the container's
-    prefs (`run-as` is blocked there), the palette-signature gate in
-    `TermuxInAppKeyboard.refreshMaterialPalette`, or the chip draw path in `Keyboard2View`
-    ignoring `key_action`/`key_function` for `role="action"` keys. **The keyboard redesign is
-    unverified on device.**
+  - Keyboard: at first every chip drew in the same translucent grey. Root cause: the shipped
+    layout `termux_launcher_qwerty.xml` defines its own bottom row without `role` attributes, so
+    ctrl/alt/space/enter parsed as `Role.Normal` and never reached the action/function/space
+    paints. Fixed in `517d6307`: `Keyboard2View.tierFor` classifies role-less keys from their
+    value and the layout carries the roles. **Verified on pong 2026-09-16 07:15**: Enter in the
+    accent colour, function keys one tone below the letters.
   - Not looked at: light mode, the colour popup, the starship/oh-my-posh pills, herdr.
 
 ## Decisions taken without the developer (change freely)
