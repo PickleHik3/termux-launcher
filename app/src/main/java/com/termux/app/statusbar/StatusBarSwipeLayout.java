@@ -273,10 +273,17 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     @Override public boolean onInterceptTouchEvent(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
         if (gesture == null) return false;
+        StatusBarGesturePolicy.Claim claim = gesture.claim();
+        // The fold works from anywhere on the bar, so it starts over the clock, a chip or a tile
+        // as readily as over bare chrome. Taking the stream the moment it is claimed is what keeps
+        // those children usable: they get their CANCEL, exactly as a scroll container's children
+        // do, so the finger that folded the bar never also opens what it started on. A tap is
+        // untouched — it never travels far enough to make this claim.
+        if (claim == StatusBarGesturePolicy.Claim.EXPAND_SWIPE
+            || claim == StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE) return true;
         // A wall drag can start on the clock or a tile, which own their own touches until the
         // intent along the bar is clear; taking the stream then delivers them their CANCEL.
-        return mWallDragActive
-            && gesture.claim() == StatusBarGesturePolicy.Claim.WALL_PAGING;
+        return mWallDragActive && claim == StatusBarGesturePolicy.Claim.WALL_PAGING;
     }
 
     @Override
@@ -354,13 +361,20 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         Listener listener = mListener;
         boolean blocked = mAnotherSurfaceEngaged
             || (listener != null && listener.isStatusGestureBlocked());
-        // The drag across the bar toggles its own form and works along the bar's whole length.
-        // In the EXPANDED form the top slot above keeps its own touch — the clock, the tiles and
-        // any pinned card are targets, not bar chrome.
-        boolean inTopSlot = isInsideView(findViewById(R.id.terminal_top_widget_area), event);
-        boolean formEligible = !blocked
-            && !(mState == TopStatusBarState.EXPANDED && inTopSlot)
-            && mExpansionAllowed;
+        // The drag across the bar toggles its own form and works from anywhere on it, open or
+        // folded, whichever edge it stands on. The one surface it yields to is a child that
+        // answers drags on the fold's own axis — a card that scrolls across the bar, a hosted
+        // widget whose insides are not ours to read — because there the same finger means two
+        // things and the child asked first. Children that only take taps and children that scroll
+        // along the bar (the window strip) keep both: the fold claims the stream and cancels
+        // theirs, which is what onInterceptTouchEvent is for.
+        //
+        // This used to be a blanket veto over the whole widget slot while the bar was open. On a
+        // top bar that slot sits above the row and the veto never showed, because the finger comes
+        // off the row. On a bottom bar the slot is the band the open bar grew upward into, so it
+        // is exactly where a downward fold starts — and the bar could be opened but never closed.
+        boolean childOwnsFoldAxis = isInsideFoldAxisOwner(this, event);
+        boolean formEligible = !blocked && !childOwnsFoldAxis && mExpansionAllowed;
         // The wall takes a drag along the bar from anywhere on it except the window strip, whose
         // chips scroll first and hand over their own surplus distance. It works over the clock,
         // the tiles and the stat widgets too: a drag along the bar on one of those is not a tap.
@@ -457,6 +471,31 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 || child.isLongClickable() || child.isFocusable()) return true;
             if (child instanceof ViewGroup
                 && isInsideInteractiveChild((ViewGroup) child, event)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether a child under this DOWN answers drags on the axis the bar folds along — the only
+     * thing that takes the fold away from the bar.
+     *
+     * <p>Scrolling is asked of the child on that axis alone, so the window strip, which scrolls
+     * along the bar, is not one of them: its chips and the fold never want the same finger. A
+     * hosted app widget is one whatever it contains, because what it does with a drag is the
+     * provider's business and we cannot ask it.
+     */
+    private boolean isInsideFoldAxisOwner(ViewGroup parent, MotionEvent event) {
+        boolean acrossIsVertical = !StatusBarGesturePolicy.isVertical(mEdge);
+        for (int i = parent.getChildCount() - 1; i >= 0; i--) {
+            View child = parent.getChildAt(i);
+            if (child.getVisibility() != VISIBLE || !isInsideView(child, event)) continue;
+            if (child instanceof AppWidgetHostView) return true;
+            boolean scrollsAcross = acrossIsVertical
+                ? child.canScrollVertically(-1) || child.canScrollVertically(1)
+                : child.canScrollHorizontally(-1) || child.canScrollHorizontally(1);
+            if (scrollsAcross) return true;
+            if (child instanceof ViewGroup
+                && isInsideFoldAxisOwner((ViewGroup) child, event)) return true;
         }
         return false;
     }

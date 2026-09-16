@@ -81,7 +81,7 @@ public class StatusBarGesturePolicyTest {
             verticalPolicy(true, true, TopStatusBarState.EXPANDED).move(12, 30));
         assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
             verticalPolicy(true, true, TopStatusBarState.COMPACT).move(12, -30));
-        // Or armed for neither, which is what the top slot's own area reports.
+        // Or armed for neither, which is what a child owning the fold's own axis reports.
         assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
             verticalPolicy(true, false, TopStatusBarState.COMPACT).move(12, 30));
     }
@@ -135,6 +135,45 @@ public class StatusBarGesturePolicyTest {
         // Without the wall the older, quicker rule stands: one slop of vertical travel decides.
         assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
             wallPolicy(false, false).move(10, 1));
+    }
+
+    /** The stream the layout arms on an edge: the fold is armed wherever the edge allows one. */
+    private static StatusBarGesturePolicy edgePolicy(Edge edge, TopStatusBarState state) {
+        return new StatusBarGesturePolicy(new StatusBarGesturePolicy.Down(0, 10, 10, 10, 10,
+            100, state, false, true, false, false,
+            StatusBarGesturePolicy.expansionAllowed(edge), false, 8, edge));
+    }
+
+    /** Moves the finger {@code delta} across the bar on {@code edge} and reports the claim. */
+    private static StatusBarGesturePolicy.Claim across(StatusBarGesturePolicy policy, Edge edge,
+                                                       float delta) {
+        boolean vertical = StatusBarGesturePolicy.isVertical(edge);
+        return policy.move(vertical ? 10 + delta : 10, vertical ? 10 : 10 + delta);
+    }
+
+    @Test public void theFoldRunsAgainstTheGrowthOnEveryEdgeThatGrows() {
+        // One rule, four edges: a drag away from the bar's own edge opens it, one back towards
+        // that edge folds it. The bottom bar is the case this was written for — its panel grows
+        // upward, so the fold is the downward drag, and nothing about it is a special case.
+        for (Edge edge : Edge.values()) {
+            boolean grows = StatusBarGesturePolicy.expansionAllowed(edge);
+            float open = 40f * StatusBarGesturePolicy.expandSign(edge);
+            assertEquals(edge + " opens away from its edge",
+                grows ? StatusBarGesturePolicy.Claim.EXPAND_SWIPE
+                    : StatusBarGesturePolicy.Claim.CHILD_OWNED,
+                across(edgePolicy(edge, TopStatusBarState.COMPACT), edge, open));
+            assertEquals(edge + " folds back towards it",
+                grows ? StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE
+                    : StatusBarGesturePolicy.Claim.CHILD_OWNED,
+                across(edgePolicy(edge, TopStatusBarState.EXPANDED), edge, -open));
+            // And the drag with nowhere to go is nobody's, on every edge.
+            assertEquals(edge + " cannot open twice",
+                StatusBarGesturePolicy.Claim.CHILD_OWNED,
+                across(edgePolicy(edge, TopStatusBarState.EXPANDED), edge, open));
+            assertEquals(edge + " cannot fold twice",
+                StatusBarGesturePolicy.Claim.CHILD_OWNED,
+                across(edgePolicy(edge, TopStatusBarState.COMPACT), edge, -open));
+        }
     }
 
     @Test public void expansionIsAllowedOnlyAlongTopOrBottom() {

@@ -32,9 +32,9 @@ public final class StatusBarGesturePolicy {
         public final boolean anotherSurfaceEngaged;
         /**
          * A drag across the bar from this point may change its form. Unlike {@link #eligible()}
-         * it survives an interactive child under the finger: the drag works along the bar's
-         * entire length, window chips included. The layout computes it from the DOWN point and
-         * the bar state.
+         * it survives an interactive child under the finger: the drag works from anywhere on the
+         * bar, folded or open, window chips and the clock included, and only a child that answers
+         * drags on the fold's own axis takes it away. The layout computes it from the DOWN point.
          */
         public final boolean formEligible;
         /**
