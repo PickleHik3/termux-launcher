@@ -2,6 +2,9 @@ package com.termux.app.place;
 
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,10 +37,21 @@ import java.util.List;
  * edge's whole reach is the display cutout — kept once by the padded content root every stack now
  * stands inside — plus those bands, which is exactly what {@link EdgeStackPolicy#contentInsets}
  * answers.
+ *
+ * <p>A stack that is one sheet of glass also draws the hairlines between its bands
+ * ({@link #setSeparatorCount}), over the boundaries it laid its children out on rather than as
+ * bands of their own, so a separator costs the stack no height.
  */
 public class EdgeStackView extends LinearLayout {
 
     @NonNull private Edge mEdge = Edge.TOP;
+
+    /** How many hairlines to draw, from {@link EdgeStackPolicy#separatorsFor}; 0 draws none. */
+    private int mSeparatorCount;
+    private int mSeparatorColor = Color.TRANSPARENT;
+    private int mSeparatorThicknessPx;
+    private int mSeparatorInsetPx;
+    @Nullable private Paint mSeparatorPaint;
 
     public EdgeStackView(@NonNull Context context) {
         this(context, null);
@@ -95,5 +109,82 @@ public class EdgeStackView extends LinearLayout {
             moved = true;
         }
         return moved;
+    }
+
+    /**
+     * How many hairlines this stack draws between its bands — {@link
+     * EdgeStackPolicy#separatorsFor}'s answer, which is one per gap and none at either end. A
+     * stack whose bands each carry their own glass is left at zero.
+     */
+    public void setSeparatorCount(int count) {
+        int wanted = Math.max(0, count);
+        if (mSeparatorCount == wanted) return;
+        mSeparatorCount = wanted;
+        invalidate();
+    }
+
+    /** The count last given, for the arrangement tests and for a caller re-asking. */
+    public int getSeparatorCount() {
+        return mSeparatorCount;
+    }
+
+    /**
+     * The hairline's look: the dock's own outline colour at the material's alpha, a hairline thick,
+     * and held off the sheet's sides by the same inset the bands themselves keep.
+     */
+    public void setSeparatorAppearance(int color, int thicknessPx, int insetPx) {
+        int thickness = Math.max(0, thicknessPx);
+        int inset = Math.max(0, insetPx);
+        if (mSeparatorColor == color && mSeparatorThicknessPx == thickness
+            && mSeparatorInsetPx == inset) return;
+        mSeparatorColor = color;
+        mSeparatorThicknessPx = thickness;
+        mSeparatorInsetPx = inset;
+        invalidate();
+    }
+
+    @Override
+    protected void dispatchDraw(@NonNull Canvas canvas) {
+        super.dispatchDraw(canvas);
+        drawSeparators(canvas);
+    }
+
+    /**
+     * One hairline in each gap between two bands that are actually drawn, walking outwards from the
+     * first child. A band that is gone or has collapsed to nothing is not a band: two hairlines
+     * would land on the same pixel and the stack would look like it had a rim.
+     */
+    private void drawSeparators(@NonNull Canvas canvas) {
+        if (mSeparatorCount <= 0 || mSeparatorThicknessPx <= 0
+            || Color.alpha(mSeparatorColor) == 0) return;
+        boolean column = getOrientation() == HORIZONTAL;
+        View previous = null;
+        int drawn = 0;
+        for (int index = 0; index < getChildCount() && drawn < mSeparatorCount; index++) {
+            View child = getChildAt(index);
+            if (child.getVisibility() == GONE) continue;
+            if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
+            if (previous != null) {
+                if (mSeparatorPaint == null) {
+                    mSeparatorPaint = new Paint();
+                    mSeparatorPaint.setStyle(Paint.Style.FILL);
+                }
+                mSeparatorPaint.setColor(mSeparatorColor);
+                int gap = column
+                    ? (previous.getRight() + child.getLeft()) / 2
+                    : (previous.getBottom() + child.getTop()) / 2;
+                int from = gap - (mSeparatorThicknessPx / 2);
+                int to = from + mSeparatorThicknessPx;
+                if (column) {
+                    canvas.drawRect(from, mSeparatorInsetPx, to,
+                        getHeight() - mSeparatorInsetPx, mSeparatorPaint);
+                } else {
+                    canvas.drawRect(mSeparatorInsetPx, from,
+                        getWidth() - mSeparatorInsetPx, to, mSeparatorPaint);
+                }
+                drawn++;
+            }
+            previous = child;
+        }
     }
 }

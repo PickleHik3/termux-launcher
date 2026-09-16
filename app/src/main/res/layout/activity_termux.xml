@@ -681,8 +681,9 @@
                  Declared top to bottom in the shipped order, so the screen before the first
                  arrangement pass is the one the chain drew. Each row stands in a host of its own,
                  so the furniture that has to travel with it — the indicator band under the apps
-                 row, the keybind strip in the letters' slot, the divider over the keys — moves
-                 with it instead of anchoring to a sibling that is no longer beside it. -->
+                 row, the keybind strip in the letters' slot — moves with it instead of anchoring
+                 to a sibling that is no longer beside it. The hairlines between the rows belong to
+                 the stack, which is the only thing that knows which gaps are between two bands. -->
             <com.termux.app.place.EdgeStackView
                 android:id="@+id/accessory_row_stack"
                 android:layout_width="match_parent"
@@ -774,14 +775,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="37.5dp"
                         android:background="@android:color/transparent"/>
-
-                    <View
-                        android:id="@+id/extrakeys_divider"
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_gravity="top"
-                        android:layout_marginTop="5dp"
-                        android:visibility="gone" />
                 </FrameLayout>
             </com.termux.app.place.EdgeStackView>
 

@@ -53,6 +53,17 @@ public final class DockLayoutPolicy {
     public static final float DOCK_RAIL_ICON_SIZE_DP = 38f;
     public static final float DOCK_RAIL_ICON_SPACING_DP = 10f;
 
+    /**
+     * The air a pinned-apps row standing by itself keeps around its icons and its page ticks, on
+     * every edge and in both forms — the one place the row's vertical padding is decided.
+     *
+     * <p>Sharing a container the row keeps the dock's own paddings, which are the space between
+     * three rows on one sheet of glass. Alone on a plank of its own they were that space spent
+     * twice over: the plank's air around the sheet, then the row's air inside it, for a bar that is
+     * one icon tall. Screen space is worth more than the margin.
+     */
+    public static final float LONE_ROW_AIR_DP = 4f;
+
     /** Everything the dock's numbers are a function of, snapshotted by the caller. */
     public static final class DockInputs {
         /** False before the preference store is attached; the rows collapse to zero then. */
@@ -66,6 +77,12 @@ public final class DockLayoutPolicy {
         public final boolean appsRowOnEdge;
         /** Of those, the ones that stand as a column on a side edge: the rail. */
         public final boolean appsOnRail;
+        /**
+         * The row shares its container with nothing else — the only dock row on the bottom edge, or
+         * the only bar on its plank off the dock, which a rail always is. It is what swaps the
+         * dock's own paddings for {@link #LONE_ROW_AIR_DP}; the icon is the same size either way.
+         */
+        public final boolean appsRowAlone;
         public final float density;
         /** The dock size preset, as stored (a raw scale, not a progress). */
         public final float barHeightScale;
@@ -99,6 +116,7 @@ public final class DockLayoutPolicy {
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
             this.appsOnRail = b.appsOnRail;
+            this.appsRowAlone = b.appsRowAlone;
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
@@ -123,6 +141,7 @@ public final class DockLayoutPolicy {
             private boolean capsule;
             private boolean appsRowOnEdge;
             private boolean appsOnRail;
+            private boolean appsRowAlone;
             private float density = 1f;
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
@@ -146,6 +165,7 @@ public final class DockLayoutPolicy {
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
+            public Builder appsRowAlone(boolean v) { this.appsRowAlone = v; return this; }
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
@@ -208,9 +228,16 @@ public final class DockLayoutPolicy {
         // 6dp above equals 3dp below plus the fixed 3dp icon/A-Z band.
         out.defaultAppsTopPaddingPx = Math.round(density * 6f);
         out.defaultAppsBottomPaddingPx = Math.round(density * 3f);
-        out.appsTopPaddingPx = capsule ? out.capsuleAppsTopPaddingPx : out.defaultAppsTopPaddingPx;
-        out.appsBottomPaddingPx =
+        // The paddings a row sharing its container keeps, which is what the dock's three rows on one
+        // sheet have always been spaced by. A row standing alone keeps the constant air instead —
+        // the one definition of the row's vertical padding, whichever edge and form it is in.
+        int sharedTopPaddingPx =
+            capsule ? out.capsuleAppsTopPaddingPx : out.defaultAppsTopPaddingPx;
+        int sharedBottomPaddingPx =
             capsule ? out.capsuleAppsBottomPaddingPx : out.defaultAppsBottomPaddingPx;
+        int loneAirPx = loneRowAirPx(density);
+        out.appsTopPaddingPx = in.appsRowAlone ? loneAirPx : sharedTopPaddingPx;
+        out.appsBottomPaddingPx = in.appsRowAlone ? loneAirPx : sharedBottomPaddingPx;
         out.capsuleBottomGapPx = Math.round(density * 6f);
 
         // Row metrics. The pinned-apps row collapses when the apps stand on a screen edge, where
@@ -226,11 +253,17 @@ public final class DockLayoutPolicy {
             // The band a lying-down apps row claims, whichever edge it lies on. The dock's own
             // height is that band while the row is the dock's; a row standing along the top is the
             // same band in another stack, and the dock collapses to nothing.
-            out.appsRowBandPx = in.appsRowEnabledPref
+            int sharedBandPx = in.appsRowEnabledPref
                 ? appsBarHeightPx(capsule, sizeProgress, defaultDockProgress,
-                    in.baseToolbarHeightPx, out.appsTopPaddingPx, out.appsBottomPaddingPx,
+                    in.baseToolbarHeightPx, sharedTopPaddingPx, sharedBottomPaddingPx,
                     density, Math.max(0, in.additionalAppsBarHeightPx))
                 : 0;
+            // The icons are the same size alone: the band is re-formed around the hint the shared
+            // paddings answered with, so only the air either side of them changes.
+            out.appsRowBandPx = !in.appsRowAlone || sharedBandPx <= 0
+                ? sharedBandPx
+                : Math.max(0, sharedBandPx - sharedTopPaddingPx - sharedBottomPaddingPx)
+                    + out.appsTopPaddingPx + out.appsBottomPaddingPx;
             out.appsBarHeightPx = appsRowEnabled ? out.appsRowBandPx : 0;
             out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
                 azRowEnabled, in.rowOverAz, in.rowUnderAz, density);
@@ -264,11 +297,13 @@ public final class DockLayoutPolicy {
             : AppDrawerGestureArbiter.Pull.NONE;
         out.railEdgeInsetPx =
             in.railOnRight ? in.displayCutoutInsetRightPx : in.displayCutoutInsetLeftPx;
-        // The docked edge's cutout inset PLUS a column wide enough for an icon and its two margins
-        // (not the larger of the two, which left the icons hard against the display edge).
+        // The docked edge's cutout inset PLUS a column wide enough for an icon and the row's own
+        // air either side of it, mirrored onto this axis (not the larger of the two, which left the
+        // icons hard against the display edge). The floor is a column still worth aiming a thumb
+        // at, which is what the air alone no longer guarantees.
         out.railWidthPx = out.railEdgeInsetPx
             + Math.max(Math.round(density * DOCK_RAIL_MIN_WIDTH_DP),
-                Math.round(density * (DOCK_RAIL_ICON_SIZE_DP + 2 * DOCK_RAIL_EDGE_MARGIN_DP)));
+                railIconSizePx(density) + 2 * loneAirPx);
 
         // The rail's own axis, so the vertical form of the pinned-apps row and the column it
         // stands in are sized from one place rather than each measuring its own icons.
@@ -280,6 +315,14 @@ public final class DockLayoutPolicy {
         out.compactStatusBarHeightPx = Math.round(density * (capsule ? 30f : 32f));
 
         return out.build();
+    }
+
+    /**
+     * {@link #LONE_ROW_AIR_DP} in pixels: the air a pinned-apps row standing by itself keeps around
+     * its icons and its ticks — above and below a row lying down, left and right of a rail.
+     */
+    public static int loneRowAirPx(float density) {
+        return Math.round(Math.max(0f, density) * LONE_ROW_AIR_DP);
     }
 
     /** One rail icon's size, the same on every side and independent of the dock's size preset. */

@@ -89,7 +89,6 @@ public class TermuxActivityInAppKeyboardGeometryTest {
             R.id.inapp_keyboard_key_corner_radius_slider);
         FrameLayout keyboardHost = mActivity.findViewById(R.id.inapp_keyboard_view_host);
         View toolbarPager = mActivity.findViewById(R.id.terminal_toolbar_view_pager);
-        View divider = mActivity.findViewById(R.id.extrakeys_divider);
 
         assertNotNull(keyboardContainer);
         assertNotNull(suggestionHost);
@@ -112,8 +111,8 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         // parent-bottom fallback, RelativeLayout drops the ABOVE anchor entirely and the whole
         // toolbar stack collapses to the top of the dock.
         assertTrue(rowStackParams.alignWithParent);
-        assertSame("the keys and the hairline over them travel together",
-            divider.getParent(), toolbarPager.getParent());
+        // Updated for P8: the hairline over the keys is no longer a view of theirs — the stack
+        // draws one in each gap between two of its bands, so it can never sit on the dock's rim.
         assertSame(mActivity.findViewById(R.id.terminal_toolbar_host), toolbarPager.getParent());
         int[] toolbarOnlyLayerIds = {
             R.id.accessory_surface_host,

@@ -270,6 +270,59 @@ public final class EdgeStackPolicy {
     }
 
     /**
+     * The hairlines a stack of bands sharing one sheet of glass draws: one in the gap between each
+     * pair of adjacent bands, and none at either end of the stack.
+     *
+     * <p>A separator separates two things. At a stack's outer edge there is nothing on the other
+     * side of it, so a hairline there is the sheet's own rim drawn twice — which is what the
+     * extra-keys divider became the moment the keys could be the outermost band, cutting across the
+     * dock's top edge. A stack holding one band draws none, for the same reason.
+     *
+     * <p>Only a stack that <em>is</em> one sheet asks for these: the dock's own rows, and the plank
+     * a lying-down row off the dock shares with the index riding it. Bands standing in a screen
+     * edge's stack each carry their own glass, and a hairline between two of those would be a line
+     * floating in the air between two sheets.
+     *
+     * @param bands the stack's bands, outermost first, the way {@link #stack} counts them
+     */
+    @NonNull
+    public static List<Separator> separatorsFor(@NonNull List<Element> bands) {
+        if (bands.size() < 2) return Collections.emptyList();
+        List<Separator> between = new ArrayList<>(bands.size() - 1);
+        for (int index = 0; index + 1 < bands.size(); index++)
+            between.add(new Separator(bands.get(index), bands.get(index + 1)));
+        return Collections.unmodifiableList(between);
+    }
+
+    /** One hairline, named by the pair of bands it sits between. */
+    public static final class Separator {
+        /** The band on the glass side of the line. */
+        @NonNull public final Element outer;
+        /** The band on the content side of it. */
+        @NonNull public final Element inner;
+
+        public Separator(@NonNull Element outer, @NonNull Element inner) {
+            this.outer = outer;
+            this.inner = inner;
+        }
+
+        @Override public boolean equals(@Nullable Object other) {
+            if (this == other) return true;
+            if (!(other instanceof Separator)) return false;
+            Separator that = (Separator) other;
+            return outer == that.outer && inner == that.inner;
+        }
+
+        @Override public int hashCode() {
+            return outer.hashCode() * 31 + inner.hashCode();
+        }
+
+        @Override public String toString() {
+            return outer + "|" + inner;
+        }
+    }
+
+    /**
      * Where an element sits in the stack of the edge it draws on: its own slot's number. Asked
      * about an edge the element does not hold, it answers with the band it would take there, which
      * is what a caller previewing a drop reads.

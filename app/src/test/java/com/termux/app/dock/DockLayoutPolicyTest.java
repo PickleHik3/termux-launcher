@@ -160,8 +160,9 @@ public class DockLayoutPolicyTest {
     public void rail_ownsOneEdgeOnlyWhenTheAppsRowStandsOnOne() {
         DockLayout l = compute();
         assertEquals(appsRowOnEdge, l.railActive);
-        // 38dp icon + 2 × 10dp margin beats the 52dp floor, so the column is 58dp plus the cutout.
-        assertEquals("railWidthPx", cutoutPx + 160, l.railWidthPx);
+        // Updated for P8: the column is the icon and the lone row's own 4dp of air either side,
+        // mirrored onto this axis — 46dp, which the 52dp thumb floor wins, plus the cutout.
+        assertEquals("railWidthPx", cutoutPx + 143, l.railWidthPx);
         assertEquals("railEdgeInsetPx", cutoutPx, l.railEdgeInsetPx);
         assertEquals(appsRowOnEdge ? AppDrawerGestureArbiter.Pull.RIGHT
             : AppDrawerGestureArbiter.Pull.NONE, l.railPull);
@@ -190,7 +191,7 @@ public class DockLayoutPolicyTest {
         assertTrue(l.railActive);
         assertEquals(AppDrawerGestureArbiter.Pull.LEFT, l.railPull);
         assertEquals(61, l.railEdgeInsetPx);
-        assertEquals(61 + 160, l.railWidthPx);
+        assertEquals(61 + 143, l.railWidthPx);
     }
 
     @Test
@@ -211,6 +212,36 @@ public class DockLayoutPolicyTest {
         assertEquals(0, top.appsBarHeightHintPx);
         assertEquals(169 - top.appsTopPaddingPx - top.appsBottomPaddingPx, top.appsRowBandHintPx);
         assertTrue(top.appsRowBandHintPx > 0);
+    }
+
+    @Test
+    public void aRowStandingAloneKeepsASliverOfAirAndTheSameIcon() {
+        // The complaint: a row on a plank of its own was spaced like a row on a dock with two
+        // others under it — the dock's paddings inside the sheet, the plank's margin outside it.
+        DockLayout shared = DockLayoutPolicy.compute(inputs(2.18f, true, false).build());
+        DockLayout alone = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .appsRowAlone(true).build());
+        int airPx = DockLayoutPolicy.loneRowAirPx(DENSITY);
+        assertEquals("4dp at density 2.75", 11, airPx);
+        assertEquals(airPx, alone.appsTopPaddingPx);
+        assertEquals(airPx, alone.appsBottomPaddingPx);
+        // The icon is the same size either way: only the air around it changed.
+        assertEquals(shared.appsRowBandHintPx, alone.appsRowBandHintPx);
+        assertEquals(shared.appsRowBandHintPx + (2 * airPx), alone.appsRowBandPx);
+        assertTrue("and the band is tighter for it",
+            alone.appsRowBandPx < shared.appsRowBandPx);
+        // The shipped dock shares its sheet with the letters and the keys, so it does not move.
+        assertEquals(21, shared.appsTopPaddingPx);
+        assertEquals(13, shared.appsBottomPaddingPx);
+        assertEquals(169, shared.appsRowBandPx);
+    }
+
+    @Test
+    public void aCollapsedRowStaysCollapsedWhenItStandsAlone() {
+        DockLayout l = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .appsRowEnabledPref(false).appsRowAlone(true).build());
+        assertEquals(0, l.appsRowBandPx);
+        assertEquals(0, l.appsBarHeightPx);
     }
 
     @Test
@@ -251,7 +282,7 @@ public class DockLayoutPolicyTest {
         assertFalse(l.railActive);
         assertEquals(AppDrawerGestureArbiter.Pull.NONE, l.railPull);
         // The column itself is still measurable; only the pull and the rail's activity gate on it.
-        assertEquals(160, l.railWidthPx);
+        assertEquals(143, l.railWidthPx);
     }
 
     @Test

@@ -3771,19 +3771,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         edgeFx.setVisibility(View.VISIBLE);
     }
 
-    /** The subtle hairline between the A–Z row and the extra-keys (3rd) row, per the design. */
-    private void configureExtraKeysDivider(boolean visible, float materialAlpha) {
-        View divider = findViewById(R.id.extrakeys_divider);
-        if (divider == null) {
-            return;
-        }
-        if (!visible || materialAlpha <= 0f) {
-            divider.setVisibility(View.GONE);
-            return;
-        }
-        divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(),
-            Math.round(70f * Math.max(0f, Math.min(1f, materialAlpha)))));
-        divider.setVisibility(View.VISIBLE);
+    /**
+     * The subtle hairlines between the bands of a stack that is one sheet of glass: the dock's own
+     * rows, and the plank a row off the dock shares with the index riding it. Which gaps get one is
+     * {@link EdgeStackPolicy#separatorsFor}'s answer, applied by the arrangement walk; this is only
+     * the look, re-applied whenever the glass under it changes.
+     *
+     * <p>It used to be a view pinned to the top of the extra-keys host, which drew a line across
+     * the dock's own top edge the moment the keys became the outermost band.
+     */
+    private void configureStackSeparators(float materialAlpha) {
+        int alpha = Math.round(70f * Math.max(0f, Math.min(1f, materialAlpha)));
+        int color = alpha <= 0 ? Color.TRANSPARENT
+            : withAlphaComponent(resolveAccessoryOutlineColor(), alpha);
+        int thicknessPx = Math.max(1, Math.round(dpToPx(1)));
+        DockLayout dockLayout = getDockLayout();
+        int dockInsetPx = dockLayout.capsule
+            ? dockLayout.capsuleExtraKeysInsetPx : dockLayout.horizontalInsetPx;
+        setSeparatorLook(R.id.accessory_row_stack, color, thicknessPx, dockInsetPx);
+        // The plank already stands inside the dock's own side gap, so its hairline keeps only what
+        // is left of the same inset — the line is held off the sheet's sides by the one figure.
+        setSeparatorLook(R.id.place_off_dock_plank_bars, color, thicknessPx,
+            Math.max(0, dockInsetPx - dockLayout.horizontalInsetPx));
+    }
+
+    private void setSeparatorLook(int stackId, int color, int thicknessPx, int insetPx) {
+        View stack = findViewById(stackId);
+        if (stack instanceof com.termux.app.place.EdgeStackView)
+            ((com.termux.app.place.EdgeStackView) stack)
+                .setSeparatorAppearance(color, thicknessPx, insetPx);
     }
 
     /**
@@ -5475,7 +5491,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mKeyboardGeometry.completePendingOpenReveal(state);
             mKeyboardGeometry.completePendingCloseGeometry(state);
             configureAccessoryTopEdgeFx(false, state.barAlpha);
-            configureExtraKeysDivider(false, 0f);
+            configureStackSeparators(0f);
             resetAzOverflowAffordanceState();
             if (mDockPlankController != null) {
                 mDockPlankController.setEnabled(false);
@@ -5549,10 +5565,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshOffDockGlass();
 
         configureAccessoryTopEdgeFx(true, state.barAlpha);
-        // Thin material hairline at the seam between the A–Z row and the extra-keys row.
-        configureExtraKeysDivider(
-            state.extraKeysRowEnabled && (state.appsRowEnabled || state.azRowEnabled),
-            state.barAlpha);
+        // Thin material hairlines at the seams between the bands on one sheet of glass. Which
+        // seams there are is the arrangement's answer, not this pass's.
+        configureStackSeparators(state.barAlpha);
         applyDecorNavBarSurfaceState(state);
         applyInAppKeyboardSurfaceState(state);
         // Wallpaper passthrough feeds every glass surface from the shared pre-blurred wallpaper, so
@@ -9396,16 +9411,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setPageIndicator(wantHost ? indicator : dockIndicator);
         if (!wantHost && dockIndicator != null) dockIndicator.setVerticalForm(false);
         if (wantHost) {
-            DockLayout dockLayout = getDockLayout();
-            int edgeMarginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
+            DockLayout dockLayout = dockLayoutFor(layout);
             int indicatorBandPx = PageTickStrip.bandPx(getResources().getDisplayMetrics().density);
             if (indicator != null) indicator.setVerticalForm(PageTickStrip.verticalOn(edge));
             if (edge.isOnSide()) {
                 // The band the rail itself claims: the cutout under it is the padded content
                 // root's, so the two are never counted twice. Padded on all four sides with the
-                // rail's own margin.
-                int verticalPadPx = Math.round(dpToPx(10));
-                scroll.setPadding(edgeMarginPx, verticalPadPx, edgeMarginPx, verticalPadPx);
+                // row's own air, mirrored onto this axis — a rail shares its column with nothing,
+                // so it is a lone row standing up.
+                int airPx = DockLayoutPolicy.loneRowAirPx(
+                    getResources().getDisplayMetrics().density);
+                scroll.setPadding(airPx, airPx, airPx, airPx);
                 setBandSize(scroll, dockLayout.railBandPx, ViewGroup.LayoutParams.MATCH_PARENT);
                 setBandSize(indicator, indicatorBandPx, ViewGroup.LayoutParams.MATCH_PARENT);
                 setBandSize(host, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -9763,6 +9779,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (Map.Entry<com.termux.app.place.EdgeStackView, List<View>> entry : bars.entrySet())
                 moved |= entry.getKey().setStack(entry.getValue());
         }
+        // The hairlines. Only the two stacks that are one sheet of glass draw any: every band in a
+        // screen edge's stack carries its own, and a line between two of those would float in the
+        // air between them.
+        if (plankBars != null)
+            plankBars.setSeparatorCount(EdgeStackPolicy.separatorsFor(
+                offDockPlankElements(layout, plankEdge)).size());
+        com.termux.app.place.EdgeStackView dockRows = findViewById(R.id.accessory_row_stack);
+        if (dockRows != null)
+            dockRows.setSeparatorCount(EdgeStackPolicy.separatorsFor(
+                AccessoryStackLayoutPolicy.dockRows(
+                    EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM))).size());
         return moved;
     }
 
@@ -9801,6 +9828,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The air a plank keeps <em>outside</em> its sheet of glass. A plank carrying two bars keeps
+     * the margin every bar off the dock has always kept from the screen. A plank that is one lone
+     * row keeps its air inside the sheet instead ({@link DockLayoutPolicy#LONE_ROW_AIR_DP}), so the
+     * sheet is exactly the bar and the row is not spaced twice over — which is what a row on its
+     * own plank read as: the plank's margin, then the dock's own row padding inside it.
+     */
+    private int offDockPlankAirPx(@NonNull List<Element> onPlank) {
+        return onPlank.size() > 1 ? azBarHostMarginPx() : 0;
+    }
+
+    /**
+     * Whether the pinned-apps row shares its container with another band: the dock's other rows
+     * along the bottom, or the index riding its plank off the dock. A rail shares one with nothing.
+     * It is what decides the air around the row's icons and its ticks.
+     */
+    private boolean isAppsRowAlone(@NonNull PlaceLayout layout) {
+        if (!PlaceChromePolicy.appsShown(layout)) return false;
+        if (PlaceChromePolicy.appsEdge(layout) == PlaceLayout.Edge.BOTTOM)
+            return AccessoryStackLayoutPolicy.dockRows(
+                EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM)).size() <= 1;
+        return offDockPlankElements(layout, offDockPlankEdge(layout)).size() <= 1;
+    }
+
+    /**
      * The glass sheet's own thickness: the bars standing on the plank, without the air around
      * them. It is what the corner radius is clamped to, so it is kept from the pass that sized the
      * plank rather than measured off a view that may not have been laid out yet.
@@ -9828,14 +9879,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int glassHeightPx = 0;
         if (want) {
             mOffDockPlankEdge = edge;
-            glassHeightPx = getDockLayout().appsRowBandPx
+            List<Element> onPlank = offDockPlankElements(layout, edge);
+            DockLayout dockLayout = dockLayoutFor(layout);
+            glassHeightPx = dockLayout.appsRowBandPx
                 + PageTickStrip.bandPx(getResources().getDisplayMetrics().density)
-                + (offDockPlankElements(layout, edge).contains(Element.AZ)
-                    ? azBarThicknessPx() : 0);
-            int sideInsetPx = getDockLayout().horizontalInsetPx;
-            int airPx = azBarHostMarginPx();
-            // Padding rather than margins: the glass fills the padded box, so the air around the
-            // plank is outside the sheet and the sheet is exactly what the radius rounds.
+                + (onPlank.contains(Element.AZ) ? azBarThicknessPx() : 0);
+            int sideInsetPx = dockLayout.horizontalInsetPx;
+            int airPx = offDockPlankAirPx(onPlank);
+            // Padding rather than margins: the glass fills the padded box, so whatever air the
+            // plank keeps is outside the sheet and the sheet is exactly what the radius rounds.
+            // A lone row keeps none here — its air is inside the sheet instead.
             updateViewPadding(host, sideInsetPx, airPx, sideInsetPx, airPx);
         }
         boolean changed = (host.getVisibility() == View.VISIBLE) != want
@@ -9888,7 +9941,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean appsOffDock = PlaceChromePolicy.appsShown(layout)
             && PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM;
         int appsRowPx = dockLayout.appsRowBandPx
-            + (onPlank.isEmpty() ? 0 : 2 * azBarHostMarginPx())
+            + (onPlank.isEmpty() ? 0 : 2 * offDockPlankAirPx(onPlank))
             + (appsOffDock ? indicatorBandPx : 0);
         int azRowPx = onPlank.contains(Element.AZ)
             ? azBarThicknessPx()
@@ -10446,7 +10499,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         moved |= updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
         moved |= updateViewHorizontalMargins(R.id.terminal_toolbar_view_pager, extraKeysInset);
-        moved |= updateViewHorizontalMargins(R.id.extrakeys_divider, extraKeysInset);
         moved |= updateViewPadding(R.id.apps_bar_viewpager, 0, appsTopPadding, 0, appsBottomPadding);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
@@ -10480,8 +10532,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private DockLayoutPolicy.DockInputs buildDockInputs(int additionalAppsBarHeightPx) {
+        return buildDockInputs(additionalAppsBarHeightPx, currentPlaceLayout());
+    }
+
+    /**
+     * As {@link #buildDockInputs(int)}, for an arrangement the caller already has. The passes that
+     * are handed a layout size the dock from that one rather than re-reading the store, so the
+     * numbers a bar is given and the arrangement it is being given them for are never a pass apart.
+     */
+    @NonNull
+    private DockLayoutPolicy.DockInputs buildDockInputs(int additionalAppsBarHeightPx,
+                                                        @NonNull PlaceLayout layout) {
         boolean preferencesAvailable = mPreferences != null;
-        PlaceLayout layout = currentPlaceLayout();
         List<Element> bottomStack = EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM);
         return DockLayoutPolicy.DockInputs.builder()
             .preferencesAvailable(preferencesAvailable)
@@ -10489,6 +10551,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .appsRowOnEdge(PlaceChromePolicy.appsShown(layout)
                 && PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM)
             .appsOnRail(PlaceChromePolicy.appsRailShown(layout))
+            // A row with nothing beside it in its container keeps a sliver of air instead of the
+            // dock's own row paddings, which are the space between three rows on one sheet.
+            .appsRowAlone(isAppsRowAlone(layout))
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
@@ -10519,6 +10584,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private DockLayout getDockLayout() {
         return DockLayoutPolicy.compute(buildDockInputs(0));
+    }
+
+    /** The dock's geometry for an arrangement the caller is applying, rather than the stored one. */
+    @NonNull
+    private DockLayout dockLayoutFor(@NonNull PlaceLayout layout) {
+        return DockLayoutPolicy.compute(buildDockInputs(0, layout));
     }
 
     @NonNull

@@ -8,6 +8,11 @@ import android.view.ViewParent;
 import android.widget.LinearLayout;
 
 import com.termux.R;
+import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.launcher.model.AppRef;
+import com.termux.app.launcher.model.PinnedAppItem;
+import com.termux.app.launcher.model.PinnedItem;
+import com.termux.app.launcher.paging.PageTickStrip;
 import com.termux.app.place.EdgeStackView;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.app.place.Element;
@@ -15,7 +20,11 @@ import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.Slot;
 
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.Test;
@@ -24,6 +33,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.Config;
+import org.robolectric.util.ReflectionHelpers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -408,5 +418,121 @@ public class TermuxActivityEdgeStackLayoutTest {
         ExtraKeysView again = activity.lendExtraKeysPage(0);
         assertSame("one view per page, lent rather than rebuilt", keys, again);
         assertNull("lending takes it out of whatever was holding it", again.getParent());
+    }
+
+    // ------------------------------------------------------ the air around a row standing alone
+
+    /** A bar holding enough to stand anywhere, where the activity's own setup would have put it. */
+    private static SuggestionBarView lendBar(TermuxActivity activity) {
+        SuggestionBarView bar = new SuggestionBarView(activity, null);
+        List<PinnedItem> pinned = new ArrayList<>();
+        for (int i = 0; i < 6; i++)
+            pinned.add(new PinnedAppItem(new AppRef("com.example.app" + i, "Main")));
+        ReflectionHelpers.setField(bar, "pinnedItems", pinned);
+        ViewGroup plank = activity.findViewById(R.id.apps_bar_plank_layer);
+        plank.addView(bar, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        ReflectionHelpers.setField(activity, "mSuggestionBarView", bar);
+        return bar;
+    }
+
+    /** The screen with a preference store attached, so the rows have their real heights. */
+    private TermuxActivity dressed() {
+        TermuxActivity activity = inflate();
+        TermuxAppSharedPreferences preferences =
+            TermuxAppSharedPreferences.build(activity, false);
+        assertNotNull(preferences);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+        lendBar(activity);
+        return activity;
+    }
+
+    /** Stands the row on {@code edge} the way one whole layout pass would. */
+    private static void standRow(TermuxActivity activity, PlaceLayout layout) {
+        activity.applyEdgeStacks(layout);
+        activity.syncPinnedAppsHost(layout);
+        activity.syncOffDockPlank(layout);
+        // The ticks are INVISIBLE rather than gone on one page: the row claims the same band
+        // whether or not it happens to be paging.
+        activity.findViewById(R.id.place_apps_bar_indicator).setVisibility(View.INVISIBLE);
+    }
+
+    @Test
+    public void aLoneRowOnItsPlankIsTheIconTheTicksAndTheAir() {
+        // The complaint: the plank kept a bar's margin outside its sheet AND the dock's own row
+        // padding inside it, so a row of one icon claimed the better part of an inch.
+        TermuxActivity activity = dressed();
+        standRow(activity, layoutWith(Element.APPS, Edge.TOP));
+        laidOutColumn(activity, 1080, 1370);
+
+        float density = activity.getResources().getDisplayMetrics().density;
+        int airPx = DockLayoutPolicy.loneRowAirPx(density);
+        int stripPx = PageTickStrip.bandPx(density);
+        View plank = activity.findViewById(R.id.place_off_dock_plank_host);
+        View scroll = activity.findViewById(R.id.place_apps_bar_scroll);
+        View ticks = activity.findViewById(R.id.place_apps_bar_indicator);
+
+        assertEquals("the air is inside the sheet now, not around it", 0, plank.getPaddingTop());
+        assertEquals(0, plank.getPaddingBottom());
+        assertEquals(airPx, scroll.getPaddingTop());
+        assertEquals(airPx, scroll.getPaddingBottom());
+        assertEquals("the ticks claim their band", stripPx, ticks.getHeight());
+
+        int iconPx = scroll.getHeight() - (2 * airPx);
+        assertTrue("there is an icon in there: " + iconPx, iconPx > 0);
+        assertEquals("the plank is the icon, the ticks and one air either side",
+            iconPx + stripPx + (2 * airPx), plank.getHeight());
+    }
+
+    @Test
+    public void aPlankSharedWithTheIndexKeepsTheAirItAlwaysHad() {
+        TermuxActivity activity = dressed();
+        standRow(activity, layoutWith(Element.APPS, Element.AZ, Edge.TOP));
+        laidOutColumn(activity, 1080, 1370);
+
+        float density = activity.getResources().getDisplayMetrics().density;
+        int marginPx = Math.round(density * DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP);
+        View plank = activity.findViewById(R.id.place_off_dock_plank_host);
+        View scroll = activity.findViewById(R.id.place_apps_bar_scroll);
+        assertEquals("two bars on one sheet keep the margin every bar off the dock keeps",
+            marginPx, plank.getPaddingTop());
+        assertEquals(marginPx, plank.getPaddingBottom());
+        assertTrue("and the row keeps the dock's own padding inside it",
+            scroll.getPaddingTop() > DockLayoutPolicy.loneRowAirPx(density));
+    }
+
+    @Test
+    public void aRailKeepsTheSameAirTurnedOnItsSide() {
+        TermuxActivity activity = dressed();
+        standRow(activity, layoutWith(Element.APPS, Edge.LEFT));
+        int airPx = DockLayoutPolicy.loneRowAirPx(
+            activity.getResources().getDisplayMetrics().density);
+        View scroll = activity.findViewById(R.id.place_apps_bar_scroll);
+        assertEquals(airPx, scroll.getPaddingLeft());
+        assertEquals(airPx, scroll.getPaddingRight());
+        assertEquals(airPx, scroll.getPaddingTop());
+        assertEquals(airPx, scroll.getPaddingBottom());
+    }
+
+    // ------------------------------------------------------------------ the seams on the plank
+
+    @Test
+    public void thePlankSeparatesTwoBarsAndNeverOne() {
+        TermuxActivity activity = inflate();
+        EdgeStackView plankBars = activity.findViewById(R.id.place_off_dock_plank_bars);
+
+        activity.applyEdgeStacks(layoutWith(Element.APPS, Element.AZ, Edge.TOP));
+        assertEquals("one gap between the two bars on the sheet", 1,
+            plankBars.getSeparatorCount());
+
+        activity.applyEdgeStacks(layoutWith(Element.APPS, Edge.TOP));
+        assertEquals("a lone bar has nothing to be separated from", 0,
+            plankBars.getSeparatorCount());
+
+        // Every band in a screen edge's stack carries its own glass, so none of those are seamed.
+        for (int id : new int[] {R.id.place_edge_stack_top, R.id.place_edge_stack_bottom,
+            R.id.place_edge_stack_left, R.id.place_edge_stack_right}) {
+            assertEquals(0, ((EdgeStackView) activity.findViewById(id)).getSeparatorCount());
+        }
     }
 }
