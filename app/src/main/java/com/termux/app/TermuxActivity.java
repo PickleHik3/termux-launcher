@@ -119,6 +119,8 @@ import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.drawer.AppDrawerPullGeometry;
 import com.termux.app.launcher.drawer.DockRailScrollView;
+import com.termux.app.launcher.paging.PageTickStrip;
+import com.termux.app.launcher.paging.PageTickStripView;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.folder.FolderRenameController;
 import com.termux.app.launcher.folder.FolderRenameModel;
@@ -2057,6 +2059,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : getDockLayout().horizontalInsetPx;
     }
 
+    /**
+     * The air a side stack keeps at each end: the terminal frame's own vertical inset, so a rail
+     * and a standing alphabets index begin and end level with the edge of the frame beside them
+     * instead of running the raw height of the canvas band.
+     *
+     * <p>Padding on the stack rather than on each bar inside it: one answer, applied once, and
+     * every band the user puts on that edge inherits it without knowing the number. Derived from
+     * {@link #terminalFrameInsetPx(boolean)} — the same call the frame and the pane host are laid
+     * out with — so there is nothing to keep in step.
+     */
+    void applySideStackFrameInset(int verticalInsetPx) {
+        int inset = Math.max(0, verticalInsetPx);
+        for (int id : new int[] {R.id.place_edge_stack_left, R.id.place_edge_stack_right}) {
+            View stack = findViewById(id);
+            if (stack == null) continue;
+            if (stack.getPaddingTop() == inset && stack.getPaddingBottom() == inset) continue;
+            stack.setPadding(stack.getPaddingLeft(), inset, stack.getPaddingRight(), inset);
+        }
+    }
+
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
         boolean framed = mPreferences != null
@@ -2097,6 +2119,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the terminal: the pane borders land exactly where the terminal border was.
         int borderVerticalInsetPx = terminalFrameInsetPx(true, preferBorder || glass);
         int borderHorizontalInsetPx = terminalFrameInsetPx(false, preferBorder || glass);
+        // The side stacks flank the canvas, so their bars start and end where the terminal's own
+        // frame does rather than at the raw edges of the band it sits in.
+        applySideStackFrameInset(borderVerticalInsetPx);
 
         ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
         if (borderParams instanceof ViewGroup.MarginLayoutParams) {
@@ -6875,8 +6900,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The bar's own view inside a host, filling whatever box the host's padding leaves it. */
     @NonNull
-    private AzScrubRowView installAzBarRow(@NonNull FrameLayout host,
-                                           @Nullable AzScrubRowView existing) {
+    AzScrubRowView installAzBarRow(@NonNull FrameLayout host,
+                                   @Nullable AzScrubRowView existing) {
         AzScrubRowView row = existing;
         if (row == null || row.getParent() != host) {
             row = new AzScrubRowView(this);
@@ -6900,8 +6925,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>On the shared plank it is neither: a plain band of the letters' own thickness, with the
      * plank around it carrying the air and the inset for both bars at once.
      */
-    private void layoutAzBarHost(@NonNull FrameLayout host, @NonNull PlaceLayout.Edge edge,
-                                 boolean onPlank) {
+    void layoutAzBarHost(@NonNull FrameLayout host, @NonNull PlaceLayout.Edge edge,
+                         boolean onPlank) {
         int thicknessPx = azBarThicknessPx();
         if (onPlank) {
             // A band of the shared plank: no air of its own between it and the row it rides, and
@@ -6941,32 +6966,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             updateViewPadding(host, sideInsetPx, 0, sideInsetPx, 0);
             return;
         }
-        // The root is already clear of the system bars — the column lives inside that — so only
-        // the launcher's own chrome is compensated here: a status bar standing along the top and
-        // the dock's rows along the bottom. A status bar, rail or extra-keys column on this same
-        // side is answered by the stack the host stands in and never by the ends: the bar stands
-        // beside them, so counting one of them here cost the bar its whole length.
-        int topPadPx = AzBarHostGeometry.columnTopPaddingPx(marginPx, azBarTopChromeHeightPx());
-        int bottomPadPx =
-            AzBarHostGeometry.columnBottomPaddingPx(marginPx, azBarBottomChromeHeightPx());
-        updateViewPadding(host, marginPx, topPadPx, marginPx, bottomPadPx);
-    }
-
-    /** How much of the container's top a status bar standing along it holds. */
-    private int azBarTopChromeHeightPx() {
-        View windowBar = findViewById(R.id.terminal_window_bar_host);
-        if (windowBar == null || windowBar.getVisibility() != View.VISIBLE
-            || mStatusBarEdge != PlaceLayout.Edge.TOP) {
-            return 0;
-        }
-        return Math.max(0, windowBar.getHeight());
-    }
-
-    /** How much of the container's bottom the dock and whatever stands under it hold. */
-    private int azBarBottomChromeHeightPx() {
-        View stack = findViewById(R.id.accessory_stack_container);
-        if (stack == null || stack.getVisibility() != View.VISIBLE) return 0;
-        return Math.max(0, stack.getHeight());
+        // The band the stack hands it, end to end: the capsule and the letters run the whole
+        // usable length of the column, which the stack has already held off the terminal frame's
+        // own inset. Nothing else crosses it — a status bar, a rail or an extra-keys column on
+        // this side stands *beside* the bar, on the same stack — and compensating for the chrome
+        // above and below the canvas, as this used to, cost the bar two thirds of its length.
+        updateViewPadding(host, marginPx, 0, marginPx, 0);
     }
 
     /**
@@ -9400,9 +9405,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *     derived from
      */
     private boolean syncPinnedAppsHost() {
-        DockRailScrollView host = findViewById(R.id.place_apps_bar_host);
+        LinearLayout host = findViewById(R.id.place_apps_bar_host);
+        DockRailScrollView scroll = findViewById(R.id.place_apps_bar_scroll);
+        PageTickStripView indicator = findViewById(R.id.place_apps_bar_indicator);
         ViewGroup plank = findViewById(R.id.apps_bar_plank_layer);
-        if (host == null || plank == null || mSuggestionBarView == null) return false;
+        if (host == null || scroll == null || plank == null || mSuggestionBarView == null)
+            return false;
         PlaceLayout layout = currentPlaceLayout();
         PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(layout);
         boolean offDock = PlaceChromePolicy.appsShown(layout)
@@ -9413,7 +9421,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && (!edge.isOnSide() || mSuggestionBarView.hasPinnedItems());
         boolean wasShown = host.getVisibility() == View.VISIBLE;
 
-        ViewGroup wanted = wantHost ? host : plank;
+        ViewGroup wanted = wantHost ? scroll : plank;
         boolean moved = mSuggestionBarView.getParent() != wanted;
         if (moved) {
             ViewParent parent = mSuggestionBarView.getParent();
@@ -9424,47 +9432,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The axis is the host's, not the view's: the same bar lies down on the dock and on the
         // top edge, and stands up on a side.
         boolean turned = mSuggestionBarView.setVerticalForm(wantHost && edge.isOnSide());
-        // A rail's pull is sideways and the scrolling host arbitrates it, so the rail itself claims
-        // nothing: a drag down the rail scrolls the pinned apps instead of opening the drawer.
+        // A rail's drawer pull is sideways and the scrolling host arbitrates it, so the rail itself
+        // claims none: its own up-and-down axis is where its pages are.
         mSuggestionBarView.setDrawerPull(wantHost && edge.isOnSide()
             ? AppDrawerGestureArbiter.Pull.NONE : AppDrawerPullGeometry.pullFor(edge));
 
-        host.setDrawerPullListener(wantHost && edge.isOnSide()
+        scroll.setDrawerPullListener(wantHost && edge.isOnSide()
             ? mDockRailDrawerPullListener : null);
+        // The ticks are the row's off the dock and the FX layers' on it, so the bar is handed the
+        // strip only while it stands somewhere else.
+        mSuggestionBarView.setPageIndicator(wantHost ? indicator : null);
         if (wantHost) {
             DockLayout dockLayout = getDockLayout();
             int edgeMarginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
-            ViewGroup.LayoutParams params = host.getLayoutParams();
+            int indicatorBandPx = PageTickStrip.bandPx(getResources().getDisplayMetrics().density);
+            if (indicator != null) indicator.setVerticalForm(edge.isOnSide());
             if (edge.isOnSide()) {
                 // The band the rail itself claims: the cutout under it is the padded content
                 // root's, so the two are never counted twice. Padded on all four sides with the
                 // rail's own margin.
                 int verticalPadPx = Math.round(dpToPx(10));
-                host.setPadding(edgeMarginPx, verticalPadPx, edgeMarginPx, verticalPadPx);
-                if (params != null && (params.width != dockLayout.railBandPx
-                        || params.height != ViewGroup.LayoutParams.MATCH_PARENT)) {
-                    params.width = dockLayout.railBandPx;
-                    params.height = ViewGroup.LayoutParams.MATCH_PARENT;
-                    host.setLayoutParams(params);
-                }
+                scroll.setPadding(edgeMarginPx, verticalPadPx, edgeMarginPx, verticalPadPx);
+                setBandSize(scroll, dockLayout.railBandPx, ViewGroup.LayoutParams.MATCH_PARENT);
+                setBandSize(indicator, indicatorBandPx, ViewGroup.LayoutParams.MATCH_PARENT);
+                setBandSize(host, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
             } else {
                 // Lying along the top: the dock's own row height and its own side inset, so a row
                 // moved to the top edge reads exactly as it did at the bottom.
                 int contentInset = Math.round((dockLayout.capsule
                     ? dockLayout.capsuleContentInsetPx : dockLayout.horizontalInsetPx) * 0.82f);
-                host.setPadding(contentInset, dockLayout.appsTopPaddingPx,
+                scroll.setPadding(contentInset, dockLayout.appsTopPaddingPx,
                     contentInset, dockLayout.appsBottomPaddingPx);
-                if (params != null && (params.width != ViewGroup.LayoutParams.MATCH_PARENT
-                        || params.height != dockLayout.appsRowBandPx)) {
-                    params.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    params.height = dockLayout.appsRowBandPx;
-                    host.setLayoutParams(params);
-                }
+                setBandSize(scroll, ViewGroup.LayoutParams.MATCH_PARENT, dockLayout.appsRowBandPx);
+                setBandSize(indicator, ViewGroup.LayoutParams.MATCH_PARENT, indicatorBandPx);
+                setBandSize(host, ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
             }
-            host.setClipToPadding(false);
-            // A column measures to its icons and scrolls past them; a row along the top is filled
-            // to the band it was given, the way the dock fills its own.
-            host.setFillViewport(!edge.isOnSide());
+            // The strip lies under a row and stands on the inner side of a rail — the side the
+            // terminal is on — so it reads as part of the bar rather than as the screen's edge.
+            host.setOrientation(edge.isOnSide()
+                ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+            orderAppsBarBands(host, scroll, indicator, edge != PlaceLayout.Edge.RIGHT);
+            scroll.setClipToPadding(false);
+            // Every form fills its host now: a rail pages by the column's length rather than
+            // running past the end of it, so there is nothing left for the scroll to reach.
+            scroll.setFillViewport(true);
             // The band the row claims wherever it lies, not the dock's own row height: off the
             // dock that has collapsed to nothing, and a row with no hint sizes its icons to
             // whatever host it was lent to.
@@ -9481,6 +9494,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxActivityRootView != null)
             ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         return true;
+    }
+
+    /** One band of the pinned-apps host, sized across and along without replacing its params. */
+    private static void setBandSize(@Nullable View band, int width, int height) {
+        if (band == null) return;
+        ViewGroup.LayoutParams params = band.getLayoutParams();
+        if (params == null || (params.width == width && params.height == height)) return;
+        params.width = width;
+        params.height = height;
+        band.setLayoutParams(params);
+    }
+
+    /**
+     * Which of the two bands comes first: the row, then its ticks, everywhere but a right-hand
+     * rail, where the inner side — the one the terminal is on — is the left one.
+     */
+    private static void orderAppsBarBands(@NonNull LinearLayout host, @NonNull View row,
+                                          @Nullable View indicator, boolean rowFirst) {
+        if (indicator == null) return;
+        int wanted = rowFirst ? 1 : 0;
+        if (host.indexOfChild(indicator) == wanted) return;
+        host.removeView(indicator);
+        host.addView(indicator, Math.min(wanted, host.getChildCount()));
     }
 
     /** Whether the place on screen stands the extra keys in a column on a screen edge. */
@@ -9838,6 +9874,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (want) {
             mOffDockPlankEdge = edge;
             glassHeightPx = getDockLayout().appsRowBandPx
+                + PageTickStrip.bandPx(getResources().getDisplayMetrics().density)
                 + (offDockPlankElements(layout, edge).contains(Element.AZ)
                     ? azBarThicknessPx() : 0);
             int sideInsetPx = getDockLayout().horizontalInsetPx;
@@ -9880,17 +9917,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float density = getResources().getDisplayMetrics().density;
         boolean capsule = isRoundedDockStyle();
         boolean compact = isStatusBarCompact();
+        // The page ticks are a band of the row's own host off the dock, so they are part of what
+        // the row claims wherever it stands — on the dock the FX layers draw them over the glass
+        // and they cost nothing.
+        int indicatorBandPx = PageTickStrip.bandPx(getResources().getDisplayMetrics().density);
         // Only a rail that actually shows icons claims a band; an empty rail is gone, and the
         // content then keeps just the cutout on that side like any other edge.
-        int appsColumnPx = isDockRailShown() ? dockLayout.railBandPx : 0;
+        int appsColumnPx = isDockRailShown() ? dockLayout.railBandPx + indicatorBandPx : 0;
         // Off the dock the index gets a host of its own; on it, it is the dock's own row.
         boolean lettersOffDock = isAzRowEnabled() && azBarEdge() != PlaceLayout.Edge.BOTTOM;
         PlaceLayout layout = currentPlaceLayout();
         List<Element> onPlank = offDockPlankElements(layout, offDockPlankEdge(layout));
         // The plank carries the air either side of it once, for both bars: the row's band grows by
         // it and the index riding the plank claims only the letters themselves.
+        boolean appsOffDock = PlaceChromePolicy.appsShown(layout)
+            && PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM;
         int appsRowPx = dockLayout.appsRowBandPx
-            + (onPlank.isEmpty() ? 0 : 2 * azBarHostMarginPx());
+            + (onPlank.isEmpty() ? 0 : 2 * azBarHostMarginPx())
+            + (appsOffDock ? indicatorBandPx : 0);
         int azRowPx = onPlank.contains(Element.AZ)
             ? azBarThicknessPx()
             : lettersOffDock
@@ -9946,6 +9990,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyPlaceSystemImeOwner();
         boolean stacksMoved = applyEdgeStacksAndInvalidate(layout);
+        // A bar that has just arrived on a side has to meet the terminal frame straight away; the
+        // appearance pass owns the same number but does not necessarily run on this one.
+        applySideStackFrameInset(terminalFrameInsetPx(true));
         applyStatusBarEdge(layout);
         applyWidgetGridPreference();
         boolean columnChanged = syncPinnedAppsHost();

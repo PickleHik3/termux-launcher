@@ -160,13 +160,29 @@ public final class AppDrawerGestureArbiter {
     }
 
     /**
-     * Evaluates the move point against the snapshot taken at {@link #begin}.
+     * Evaluates the move point against the snapshot taken at {@link #begin}, for a surface whose
+     * pages run across it — every row that lies down.
      *
      * @param slopPx {@code ViewConfiguration.getScaledTouchSlop()}
      * @return the (possibly newly latched) claim
      */
     @NonNull
     public Claim evaluate(float x, float y, float slopPx) {
+        return evaluate(x, y, slopPx, false);
+    }
+
+    /**
+     * The same, told which way this surface's pages run.
+     *
+     * <p>A rail pages up and down, because up and down is the axis its slots are laid along; its
+     * drawer pull runs sideways and is the scrolling host's to claim, so the two never contest one
+     * drag. The dominance cone is the one the lying-down row is already tuned with, applied to
+     * whichever axis the pages are on, and the pull's own axis is still never the page's.
+     *
+     * @param pageVertical whether a page swipe on this surface travels up and down
+     */
+    @NonNull
+    public Claim evaluate(float x, float y, float slopPx, boolean pageVertical) {
         if (mClaim != Claim.PENDING) return mClaim;
 
         float dx = x - mDownX;
@@ -186,11 +202,14 @@ public final class AppDrawerGestureArbiter {
                 return mClaim;
             }
         }
-        // The page swipe belongs to the portrait dock's pager. A horizontal pull is the landscape
-        // rail, which has no pager and whose sideways axis is the pull's own: running this test
-        // there would latch — and so deaden — every sideways drag that fell short of the drawer's
+        // The page swipe runs along the row's own slots. It is never run on the pull's own axis:
+        // there it would latch — and so deaden — every drag that fell short of the drawer's
         // slightly longer threshold, which is most of a slow swipe.
-        if (!isHorizontal(mEligibility.pull) && adx >= slopPx && adx > ady * PAGE_DOMINANCE) {
+        float alongPage = pageVertical ? ady : adx;
+        float acrossPage = pageVertical ? adx : ady;
+        boolean pullOwnsPageAxis = pageVertical
+            ? mEligibility.pull == Pull.DOWN : isHorizontal(mEligibility.pull);
+        if (!pullOwnsPageAxis && alongPage >= slopPx && alongPage > acrossPage * PAGE_DOMINANCE) {
             mClaim = Claim.PAGE_SWIPE;
             return mClaim;
         }

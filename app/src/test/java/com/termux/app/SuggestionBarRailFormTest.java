@@ -212,16 +212,21 @@ public class SuggestionBarRailFormTest {
     }
 
     @Test
-    public void theRailIsOnePage() {
+    public void theRailPagesByTheColumnItWasGiven() {
+        // Was "the rail is one page": one page holding every pinned item ran past the bottom of
+        // the canvas and the icons down there were clipped away with nothing able to reach them.
         SuggestionBarView rail = new SuggestionBarView(context, null);
         rail.setVerticalForm(true);
         rail.setMaxButtonCount(4);
         ReflectionHelpers.setField(rail, "pinnedItems", pinned(11));
+        int column = 5 * DockLayoutPolicy.railSlotLengthPx(density());
+        measureAndLayout(rail, railBarWidthPx(), column);
 
-        assertEquals("the column holds everything pinned", 11,
+        assertEquals("as many slots as the column holds", 5,
             (int) ReflectionHelpers.callInstanceMethod(rail, "computePinnedItemsPerPage"));
-        assertEquals("so there is nothing left to page to", 1,
+        assertEquals("and the rest are pages behind it", 3,
             (int) ReflectionHelpers.callInstanceMethod(rail, "getPinnedPagesCount"));
+        assertTrue(rail.hasPinnedOverflowPages());
     }
 
     @Test

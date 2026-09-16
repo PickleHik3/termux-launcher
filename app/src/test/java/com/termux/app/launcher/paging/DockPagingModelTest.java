@@ -340,4 +340,30 @@ public class DockPagingModelTest {
             return icons[index];
         }
     }
+
+    // ------------------------------------------------------------------- the rail
+
+    /**
+     * A rail's page is however many of its fixed-pitch slots the column holds. The defect it fixes:
+     * one page held every pinned item whatever the column's length, so the run past the bottom of
+     * the canvas was clipped away and the last icons could not be reached at all.
+     */
+    @Test
+    public void aRailPagesByTheColumnItWasGiven() {
+        // The phone of record: a 1362 px canvas band and the rail's own 58dp slot at 2.75x.
+        int slotPx = 160;
+        assertEquals(8, DockPagingModel.railItemsPerPage(1362, slotPx));
+        assertEquals(2, DockPagingModel.realPinnedPageCount(14,
+            DockPagingModel.railItemsPerPage(1362, slotPx)));
+        // Whole slots only: a column that holds seven and a bit holds seven.
+        assertEquals(7, DockPagingModel.railItemsPerPage(7 * slotPx + slotPx - 1, slotPx));
+    }
+
+    @Test
+    public void aRailAlwaysHasASlotToDrawIn() {
+        assertEquals(1, DockPagingModel.railItemsPerPage(0, 160));
+        assertEquals(1, DockPagingModel.railItemsPerPage(40, 160));
+        assertEquals(1, DockPagingModel.railItemsPerPage(-100, 160));
+        assertEquals(1, DockPagingModel.railItemsPerPage(1362, 0));
+    }
 }
