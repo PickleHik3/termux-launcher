@@ -316,6 +316,43 @@ public class TermuxActivityBottomStackOrderTest {
         assertEquals(APPS_PX + BAND_PX + KEYS_PX + STATUS_PX + AZ_PX, rows.getHeight());
     }
 
+    /**
+     * The developer's order — extra keys, apps row, letters reading up from the dock's rim — with
+     * the apps row carrying the air the dock gives its icons. The seam between the row and the keys
+     * used to be drawn on the child boundary, which is the keys' own rim: the line sat hard against
+     * them and a whole row padding away from the icons. It belongs to the gap, so it goes in the
+     * middle of it, for every adjacent pair.
+     */
+    @Test
+    public void everySeamSitsInTheMiddleOfTheGapBetweenTwoBandsContent() {
+        int airTop = 17;
+        int airBottom = 8;
+        activity.findViewById(R.id.apps_bar_viewpager).setPadding(0, airTop, 0, airBottom);
+        activity.applyEdgeStacks(bottom(Element.EXTRA_KEYS, Element.APPS, Element.AZ));
+        layoutContainer();
+
+        assertEquals(2, rows.getSeparatorCount());
+        int[] seams = rows.separatorCenters();
+        assertEquals(2, seams.length);
+
+        // Walking down the stack: the keys, then the apps row's host, then the letters.
+        int keysBottom = topIn(rows, activity.findViewById(R.id.terminal_toolbar_view_pager))
+            + KEYS_PX;
+        int ticksTop = topIn(rows, activity.findViewById(R.id.apps_bar_indicator_band));
+        int iconsBottom = topIn(rows, activity.findViewById(R.id.apps_bar_viewpager))
+            + APPS_PX - airBottom;
+        int lettersTop = topIn(rows, activity.findViewById(R.id.apps_bar_az_row));
+
+        assertEquals("the keys and the row's ticks split their gap",
+            (keysBottom + ticksTop) / 2, seams[0]);
+        assertEquals("the icons and the letters split theirs",
+            (iconsBottom + lettersTop) / 2, seams[1]);
+        // The defect, in the one gap this arrangement leaves: the line used to be drawn on the
+        // child boundary, which is the letters' own rim.
+        assertTrue("the seam is hard against neither band: " + seams[1],
+            seams[1] > iconsBottom && seams[1] < lettersTop);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /** Everything on the bottom edge in the order given, outermost (on the dock's rim) last. */

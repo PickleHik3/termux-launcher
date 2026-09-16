@@ -126,6 +126,83 @@ public class EdgeStackViewTest {
         assertEquals(given, children(stack));
     }
 
+    // ------------------------------------------------ the hairline between two adjacent bands
+
+    /** A band: the host the stack holds, with one bar inside it keeping the air of its own. */
+    private android.widget.FrameLayout band(int airStartPx, int airEndPx, boolean column) {
+        android.widget.FrameLayout host = new android.widget.FrameLayout(mActivity);
+        View bar = new View(mActivity);
+        if (column) bar.setPadding(airStartPx, 0, airEndPx, 0);
+        else bar.setPadding(0, airStartPx, 0, airEndPx);
+        host.addView(bar, new android.widget.FrameLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        return host;
+    }
+
+    /** Where the band's content starts and ends along the axis, read off the bar it holds. */
+    private int[] content(View band, boolean column) {
+        View bar = ((android.view.ViewGroup) band).getChildAt(0);
+        return column
+            ? new int[] {band.getLeft() + bar.getLeft() + bar.getPaddingLeft(),
+                band.getLeft() + bar.getRight() - bar.getPaddingRight()}
+            : new int[] {band.getTop() + bar.getTop() + bar.getPaddingTop(),
+                band.getTop() + bar.getBottom() - bar.getPaddingBottom()};
+    }
+
+    @Test public void theHairlineSplitsTheGapBetweenTwoBandsContent() {
+        // The complaint: the apps row keeps its icons off its own rims and the extra keys do not,
+        // so a line on the child boundary sat hard against the keys. It belongs to the gap, so it
+        // goes in the middle of it, whatever air each side happens to keep.
+        int thickness = 64;
+        for (Edge edge : Edge.values()) {
+            boolean column = edge.isOnSide();
+            EdgeStackView stack = stack(edge);
+            List<View> given = Arrays.asList(
+                band(0, 0, column), band(30, 6, column), band(12, 0, column));
+            stack.setStack(given);
+            stack.setSeparatorCount(2);
+            stack.setSeparatorAppearance(0xFF000000, 1, 0);
+            for (int i = 0; i < stack.getChildCount(); i++) {
+                View child = stack.getChildAt(i);
+                child.setLayoutParams(new LinearLayout.LayoutParams(
+                    column ? thickness : android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    column ? android.view.ViewGroup.LayoutParams.MATCH_PARENT : thickness));
+            }
+            int along = thickness * given.size();
+            stack.measure(
+                View.MeasureSpec.makeMeasureSpec(column ? along : 480, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(column ? 480 : along, View.MeasureSpec.EXACTLY));
+            stack.layout(0, 0, column ? along : 480, column ? 480 : along);
+
+            int[] centers = stack.separatorCenters();
+            assertEquals(edge + ": one hairline per gap", 2, centers.length);
+            for (int gap = 0; gap < 2; gap++) {
+                int[] outer = content(stack.getChildAt(gap), column);
+                int[] inner = content(stack.getChildAt(gap + 1), column);
+                assertEquals(edge + " gap " + gap + ": the middle of the visible gap",
+                    (outer[1] + inner[0]) / 2, centers[gap]);
+            }
+        }
+    }
+
+    @Test public void twoBandsWithNoAirBetweenThemKeepTheBoundaryTheyAlwaysHad() {
+        // The shipped stacks: nothing to split, so the line lands exactly where it always did.
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        List<View> given = Arrays.asList(band(0, 0, false), band(0, 0, false));
+        stack.setStack(given);
+        stack.setSeparatorCount(1);
+        for (int i = 0; i < stack.getChildCount(); i++) {
+            stack.getChildAt(i).setLayoutParams(new LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, 40));
+        }
+        stack.measure(View.MeasureSpec.makeMeasureSpec(480, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(80, View.MeasureSpec.EXACTLY));
+        stack.layout(0, 0, 480, 80);
+        assertEquals(1, stack.separatorCenters().length);
+        assertEquals(stack.getChildAt(0).getBottom(), stack.separatorCenters()[0]);
+    }
+
     @Test public void aStackCarriesNoPaddingOfItsOwn() {
         // The cutout used to be each side stack's own padding, from the days when the two stood
         // outside the padded content root; they stand inside the canvas band now, so the root keeps
