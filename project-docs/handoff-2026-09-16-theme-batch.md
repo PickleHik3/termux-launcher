@@ -54,6 +54,16 @@ checked on device: landscape rail positions, a side status bar beside the rail, 
 TOP, extra keys on a side edge, the narrow-canvas notice, Discard/↺ after a re-order. Known
 visual gap: a bar off the dock (TOP row) draws straight over the wallpaper with no glass sheet.
 
+### Defect fixes after the first pong round (same day)
+
+Four defects the developer found (rail icons piled and hidden after reload; bottom order never
+rendered; A–Z dragged along to TOP with a seam and no radius; dock glass short after a move) →
+P1 `9caaf19b`, P2 `6e4f9eb4`, P3 `b673929a`, all on dev; suite green (4,422 app tests). Decision
+taken by the developer: the A–Z index rides the apps row only when both sit on the same edge.
+Design consequence recorded in the SPEC P3 outcome: a BOTTOM status bar always stands above the
+dock stack whatever order it is given. Installed on pong 10:35, **not yet checked on the phone**:
+the P1/P2/P3 phone lists live in the SPEC's "Defects found on pong" and outcome sections.
+
 ## Decisions taken without the developer (change freely)
 
 - Trim rule keeps one space when a wrapped row ended in spaces and the next row starts mid-word.
