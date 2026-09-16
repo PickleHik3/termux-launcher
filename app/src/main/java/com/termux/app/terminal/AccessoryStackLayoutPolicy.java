@@ -13,38 +13,56 @@ public final class AccessoryStackLayoutPolicy {
 
     private AccessoryStackLayoutPolicy() {}
 
-    // ---------------------------------------------------------------- the dock's own rows
+    // ---------------------------------------------------------------- the dock's own bands
 
     /**
-     * The dock's own rows within one bottom-edge stack, outermost (against the dock's rim) first —
-     * the order {@code EdgeStackPolicy.stack(layout, BOTTOM)} gives, with anything that is not a
-     * dock row left out. Today that is the status bar, which stands above the whole dock on the
-     * terminal's own height rather than on its glass.
+     * Whether a bottom status bar wears a sheet of glass of its own instead of standing on the
+     * dock's. It does exactly when it is the band touching the canvas — the <em>last</em> of
+     * {@code EdgeStackPolicy.stack(layout, BOTTOM)}, which counts outermost (against the screen's
+     * rim) first — because there its sheet meets the terminal with no dock glass above it to
+     * double. Ordered anywhere else it is a band between dock rows, and the dock's sheet is
+     * already under it.
+     *
+     * <p>The innermost band is also the only place a bottom status bar has ever rendered, so that
+     * arrangement comes out at the pixels it always had.
      */
-    @NonNull
-    public static List<Element> dockRows(@NonNull List<Element> bottomStack) {
-        List<Element> rows = new ArrayList<>(3);
-        for (Element element : bottomStack) {
-            if (element == Element.APPS || element == Element.AZ
-                || element == Element.EXTRA_KEYS) rows.add(element);
-        }
-        return Collections.unmodifiableList(rows);
+    public static boolean statusKeepsOwnGlass(@NonNull List<Element> bottomStack) {
+        int status = bottomStack.indexOf(Element.STATUS);
+        return status >= 0 && status == bottomStack.size() - 1;
     }
 
     /**
-     * Whether a dock row stands over the letters, which is what takes their crown away. Read off
-     * the resolved order rather than off "the apps row is shown": re-ordered, it can be the extra
-     * keys standing over the letters, or nothing at all with the apps row under them.
+     * The bands standing on the dock's own sheet of glass, outermost (against the dock's rim)
+     * first — {@code EdgeStackPolicy.stack(layout, BOTTOM)}'s order, less a status bar that kept a
+     * sheet of its own ({@link #statusKeepsOwnGlass}). It is what the hairlines are counted over,
+     * what decides the letters' crown and chin, and what "the apps row stands alone" is read off.
+     */
+    @NonNull
+    public static List<Element> plankBands(@NonNull List<Element> bottomStack) {
+        boolean ownGlass = statusKeepsOwnGlass(bottomStack);
+        List<Element> bands = new ArrayList<>(bottomStack.size());
+        for (Element element : bottomStack) {
+            if (ownGlass && element == Element.STATUS) continue;
+            bands.add(element);
+        }
+        return Collections.unmodifiableList(bands);
+    }
+
+    /**
+     * Whether another band stands over the letters on the dock's own sheet, which is what takes
+     * their crown away. Read off the resolved order rather than off "the apps row is shown":
+     * re-ordered it can be the extra keys standing over the letters, or the status bar, or nothing
+     * at all with the apps row under them.
      */
     public static boolean rowOverAz(@NonNull List<Element> bottomStack) {
-        List<Element> rows = dockRows(bottomStack);
+        List<Element> rows = plankBands(bottomStack);
         int az = rows.indexOf(Element.AZ);
         return az >= 0 && az < rows.size() - 1;
     }
 
-    /** Whether a dock row stands under the letters, which is what takes their chin away. */
+    /** Whether a band stands under the letters, which is what takes their chin away. */
     public static boolean rowUnderAz(@NonNull List<Element> bottomStack) {
-        return dockRows(bottomStack).indexOf(Element.AZ) > 0;
+        return plankBands(bottomStack).indexOf(Element.AZ) > 0;
     }
 
     public static int computeCombinedHeight(int toolbarHeightPx, int appsBarHeightPx, int azRowHeightPx, int appsBarGapPx) {

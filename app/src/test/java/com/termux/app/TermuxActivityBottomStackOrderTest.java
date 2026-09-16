@@ -25,12 +25,13 @@ import java.util.EnumMap;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The dock's own rows stand in one ordered stack, so every bottom order renders.
+ * The whole bottom edge stands in one ordered stack, so every bottom order renders.
  *
  * <p>They used to hang off each other by {@code layout_above} — apps over the indicator band over
  * the letters over the extra-keys pager over the keyboard — which is an order written into the
@@ -45,11 +46,12 @@ public class TermuxActivityBottomStackOrderTest {
 
     private static final int WIDTH = 1080;
     private static final int HEIGHT = 700;
-    /** The four bands, given distinct heights so a swapped pair cannot pass by coincidence. */
+    /** The bands, given distinct heights so a swapped pair cannot pass by coincidence. */
     private static final int APPS_PX = 160;
     private static final int BAND_PX = 9;
     private static final int AZ_PX = 52;
     private static final int KEYS_PX = 103;
+    private static final int STATUS_PX = 64;
     private static final int KEYBOARD_PX = 300;
 
     private TermuxActivity activity;
@@ -69,6 +71,7 @@ public class TermuxActivityBottomStackOrderTest {
         show(R.id.apps_bar_indicator_band, BAND_PX);
         show(R.id.apps_bar_az_row, AZ_PX);
         show(R.id.terminal_toolbar_view_pager, KEYS_PX);
+        show(R.id.terminal_window_bar_host, STATUS_PX);
         show(R.id.inapp_keyboard_container, KEYBOARD_PX);
     }
 
@@ -224,19 +227,90 @@ public class TermuxActivityBottomStackOrderTest {
     // ---------------------------------------------------------------- the status bar
 
     @Test
-    public void aBottomStatusBarKeepsItsOwnStackAboveTheWholeAccessoryStack() {
-        // It stands on the terminal's own height rather than on the dock's glass, which is where
-        // it has always stood; the dock's rows are the ones the accessory stack holds.
-        PlaceLayout layout = bottom(Element.APPS, Element.AZ, Element.EXTRA_KEYS)
-            .withSlot(Element.STATUS, new Slot(false, Edge.BOTTOM, 3));
-        activity.applyEdgeStacks(layout);
+    public void theStatusBarStandsWhereItsOrderPutsItAmongTheDocksRows() {
+        // The defect P9 fixed: the bar had a stack of its own above the whole dock, so this order
+        // — apps, extra keys, status, letters, reading down the screen — drew as status, apps,
+        // extra keys, letters however the user arranged it.
+        activity.applyEdgeStacks(
+            bottom(Element.APPS, Element.EXTRA_KEYS, Element.STATUS, Element.AZ));
 
-        EdgeStackView above = activity.findViewById(R.id.place_edge_stack_bottom);
-        assertEquals(1, above.getChildCount());
-        assertSame(activity.findViewById(R.id.terminal_window_bar_host), above.getChildAt(0));
-        assertSame("still the content column's last band",
-            activity.findViewById(R.id.terminal_content_column), above.getParent());
-        assertEquals("and the dock keeps all three of its own rows", 3, rows.getChildCount());
+        assertEquals(4, rows.getChildCount());
+        assertSame(activity.findViewById(R.id.apps_bar_row_host), rows.getChildAt(0));
+        assertSame(activity.findViewById(R.id.terminal_toolbar_host), rows.getChildAt(1));
+        assertSame("the bar stands between the keys and the letters, as ordered",
+            activity.findViewById(R.id.terminal_window_bar_host), rows.getChildAt(2));
+        assertSame(activity.findViewById(R.id.apps_bar_az_host), rows.getChildAt(3));
+
+        layoutContainer();
+        int keyboardTop = HEIGHT - KEYBOARD_PX;
+        assertBand(R.id.apps_bar_az_row, keyboardTop - AZ_PX, keyboardTop);
+        assertBand(R.id.terminal_window_bar_host, keyboardTop - AZ_PX - STATUS_PX,
+            keyboardTop - AZ_PX);
+        assertBand(R.id.terminal_toolbar_view_pager,
+            keyboardTop - AZ_PX - STATUS_PX - KEYS_PX, keyboardTop - AZ_PX - STATUS_PX);
+
+        assertTrue("on the plank it wears no glass of its own",
+            activity.statusBarStandsOnTheDockPlank());
+        assertEquals("four bands on one sheet, so a hairline in each of the three gaps",
+            3, rows.getSeparatorCount());
+    }
+
+    @Test
+    public void theBandTouchingTheCanvasKeepsItsOwnGlassAndTodaysPixels() {
+        // Status innermost, which is the only placement a bottom bar has ever had: it stands over
+        // the whole dock on a sheet of its own, and the dock's three rows are seamed as before.
+        activity.applyEdgeStacks(
+            bottom(Element.STATUS, Element.APPS, Element.AZ, Element.EXTRA_KEYS));
+
+        assertEquals(4, rows.getChildCount());
+        assertSame(activity.findViewById(R.id.terminal_window_bar_host), rows.getChildAt(0));
+        assertSame(activity.findViewById(R.id.apps_bar_row_host), rows.getChildAt(1));
+        assertSame(activity.findViewById(R.id.apps_bar_az_host), rows.getChildAt(2));
+        assertSame(activity.findViewById(R.id.terminal_toolbar_host), rows.getChildAt(3));
+
+        layoutContainer();
+        // The same pixels the chain drew, with the bar sitting exactly on top of them.
+        int keyboardTop = HEIGHT - KEYBOARD_PX;
+        assertBand(R.id.terminal_toolbar_view_pager, keyboardTop - KEYS_PX, keyboardTop);
+        assertBand(R.id.apps_bar_az_row, keyboardTop - KEYS_PX - AZ_PX, keyboardTop - KEYS_PX);
+        assertBand(R.id.apps_bar_indicator_band, keyboardTop - KEYS_PX - AZ_PX - BAND_PX,
+            keyboardTop - KEYS_PX - AZ_PX);
+        assertBand(R.id.apps_bar_viewpager, keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX,
+            keyboardTop - KEYS_PX - AZ_PX - BAND_PX);
+        assertBand(R.id.terminal_window_bar_host,
+            keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX - STATUS_PX,
+            keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX);
+
+        assertFalse("it is not on the dock's sheet, so it keeps its own",
+            activity.statusBarStandsOnTheDockPlank());
+        assertEquals("and no hairline floats between the two sheets", 2, rows.getSeparatorCount());
+    }
+
+    @Test
+    public void theWholeBottomStackStandsAboveTheKeyboardInEveryForm() {
+        activity.applyEdgeStacks(
+            bottom(Element.APPS, Element.EXTRA_KEYS, Element.STATUS, Element.AZ));
+        View keyboard = activity.findViewById(R.id.inapp_keyboard_container);
+        View statusBar = activity.findViewById(R.id.terminal_window_bar_host);
+
+        // Docked: the keyboard is the stack's own bottom child and every band is over it.
+        layoutContainer();
+        assertTrue(topIn(container, rows) + rows.getHeight() <= topIn(container, keyboard));
+        assertTrue(topIn(container, statusBar) + statusBar.getHeight()
+            <= topIn(container, keyboard));
+        assertEquals(APPS_PX + BAND_PX + KEYS_PX + STATUS_PX + AZ_PX, rows.getHeight());
+
+        // Closed.
+        keyboard.setVisibility(View.GONE);
+        layoutContainer();
+        assertEquals("keyboard down", HEIGHT, topIn(container, rows) + rows.getHeight());
+
+        // Floating or split: the controller lifts the keyboard container out of the stack, and
+        // the bands — the status bar with them — land on the stack's own bottom.
+        ((ViewGroup) keyboard.getParent()).removeView(keyboard);
+        layoutContainer();
+        assertEquals("keyboard lifted out", HEIGHT, topIn(container, rows) + rows.getHeight());
+        assertEquals(APPS_PX + BAND_PX + KEYS_PX + STATUS_PX + AZ_PX, rows.getHeight());
     }
 
     // ---------------------------------------------------------------- helpers

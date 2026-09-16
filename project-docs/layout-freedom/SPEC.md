@@ -155,17 +155,15 @@ row's crown and chin are read off the resolved order (`DockLayoutPolicy.DockInpu
 `rowUnderAz` replaced `extraKeysRowShown`), so whichever band the user puts over or under the
 letters does the job the apps row and the extra keys used to.
 
-`place_edge_stack_bottom` stayed where it is, the last band of `terminal_content_column`, and the
-walk splits the one bottom stack between the two: the dock's rows go into the accessory stack,
-everything else stands above the whole of it. It is the accessory stack that keeps the rows above
-the in-app keyboard in all three forms, that wears the dock's glass
-(`accessory_surface_host` fills it), and whose height is computed arithmetic — dock rows plus
-keyboard, capped by `computeMaxAccessoryStackHeightPx`, which *subtracts* a bottom status bar's
-height from the ceiling. Folding the status bar in would have rewritten that arithmetic and put
-dock glass behind a bar that has its own; keeping it out makes the shipped screen a zero-diff.
-The cost, and it is the honest one: a bottom status bar always stands above the dock whatever
-order it is given, which is the L1 default (status innermost) and the only placement it has ever
-had.
+~~`place_edge_stack_bottom` stayed where it is, the last band of `terminal_content_column`, and the
+walk splits the one bottom stack between the two~~ — **reversed by P9 (2026-09-16).** P3 kept a
+second bottom stack in the content column holding the status bar alone, so the dock's rows went
+into the accessory stack and the bar stood above the whole of it whatever order it was given. That
+was a deliberate limitation, and it was the bug the developer reported: only the L1 default (status
+innermost) ever drew. The arithmetic P3 did not want to rewrite is rewritten in P9 and comes out at
+the same pixels; `place_edge_stack_bottom` is gone. What P3 got right and P9 kept: it is the
+accessory stack that holds the bottom edge above the in-app keyboard in all three forms, and it is
+`accessory_surface_host` that wears the dock's glass.
 
 ## P4 outcome (2026-09-16)
 
@@ -413,3 +411,58 @@ and the plank's seam count. `EdgeStackPolicyTest` covers `separatorsFor` pure;
 Honest boundary: none of this is device-verified. The two judgement calls a look on the phone should
 settle are the plank now sitting flush against the edge of its stack (its air moved inside the
 glass) and the new seam between the dock's apps row and its letters.
+
+## P9 outcome (2026-09-16)
+
+**The bottom edge is one stack, and the status bar is a band of it.** `edgeStack(BOTTOM)` is
+`accessory_row_stack` now — for every element, the status bar included — so `applyEdgeStacks` fills
+each edge from one `EdgeStackPolicy.stack(layout, edge)` walk with no split and no per-element
+stack lookup (`edgeStackFor` is gone, and with it the `Map` of lists the walk kept per edge).
+`place_edge_stack_bottom` is **deleted** rather than left empty: it existed only to hold the status
+bar above the dock, nothing else ever landed in it, and an empty `EdgeStackView` in the content
+column is a wrap_content band that measures on every pass to answer zero. `terminal_content_column`
+is the top stack and the canvas band, and the canvas is still the weighted residual.
+
+**The glass rule: the band touching the canvas keeps a sheet of its own.** A bottom status bar
+ordered innermost — the only placement it has ever had — stands over the whole dock and wears the
+dock's wash and blur on `terminal_window_bar_background`, exactly as it did; the dock's own sheet is
+started below it (`dockGlassTopInsetPx` → `withDockGlassTopInset`, applied to
+`accessory_surface_host` in both the keyboard-up and keyboard-down cases), so nothing is drawn
+twice. Ordered anywhere else it is a band of the plank: no wash, no `RealtimeBlurView`, and no
+wallpaper frost crop of its own (`WallpaperFrostPainter` gates the pane frost on
+`Surfaces.statusBarOnDockPlank()`), because the dock's sheet is already under it.
+`AccessoryStackLayoutPolicy.statusKeepsOwnGlass` is the rule and `plankBands` is what it produces —
+the bottom stack less a status bar that kept its own sheet. `dockRows` became `plankBands`, and
+every caller of it now counts the status bar as a band: P8's `separatorsFor` puts a hairline in each
+gap (four bands on the plank → three), the letters' crown and chin are lost to a status bar over or
+under them the same way they are to any row, and `isAppsRowAlone` sees it as company.
+
+**The height arithmetic moved rather than changed.** `bottomStatusBandPx()` — the bar's own layout
+height plus the air the style keeps under it — is added to the accessory stack's content height and
+is no longer subtracted from `computeMaxAccessoryStackHeightPx`'s ceiling. The two cancel: the
+terminal slice the ceiling protects is the same inequality it always was, and the band the bar takes
+off the canvas is the same band, moved from the content column into the container below it.
+`shouldShowAccessoryStack` grew a third input so a bottom status bar keeps the stack on screen with
+every dock row hidden and the keyboard down — where it used to live in the content column and the
+whole accessory container was `GONE`. The bar's expand/collapse animator drives the stack with it
+(`applyTopStatusBarInteractiveHeight` re-adds the stack, without the terminal resize), because the
+container's height is arithmetic rather than `wrap_content`. The keyboard reveal gate and its three
+fail-safes are untouched, and the system-bar glass strip is still TOP-only
+(`applyTerminalWindowBarBackdropInsets`).
+
+Tests: `TermuxActivityBottomStackOrderTest` — the default order still lands on the pixels the old
+`layout_above` chain drew (the oracle, unchanged); the developer's order (apps, extra keys, status,
+letters reading down) puts the four hosts in exactly that order with the bar between the keys and
+the letters, on the plank, three seams; status innermost keeps its own glass, two seams and the same
+pixels the dock has always drawn with the bar on top; and the whole stack — the bar with it — stands
+above the keyboard docked, gone and lifted out. `AccessoryStackLayoutPolicyTest` covers
+`statusKeepsOwnGlass`/`plankBands` pure and the crown and chin a status bar takes.
+Updated with a reason: `TermuxActivityEdgeStackLayoutTest`'s four `place_edge_stack_bottom`
+assertions (the id is gone; the bottom edge's stack is `accessory_row_stack`, the content column has
+two children, and the bottom stack is the one screen stack that does carry seams), and
+`TermuxActivityInAppKeyboardGeometryTest`'s `shouldShowAccessoryStack` arity.
+
+Honest boundary: none of this is device-verified. Three judgement calls a look on the phone should
+settle — the seam between the status bar and the row beside it on the plank, whether a status bar
+with no wash of its own reads as part of the dock or as a hole in it, and the fold gesture on a
+bottom bar now that the dock's container resizes under it rather than the terminal above it.
