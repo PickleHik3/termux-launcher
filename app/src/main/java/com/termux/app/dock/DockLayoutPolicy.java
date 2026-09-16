@@ -55,13 +55,17 @@ public final class DockLayoutPolicy {
     public static final float DOCK_RAIL_ICON_SPACING_DP = 10f;
 
     /**
-     * The air a pinned-apps row standing by itself keeps around its icons and its page ticks, on
-     * every edge and in both forms — the one place the row's vertical padding is decided.
+     * The air a pinned-apps row standing by itself keeps around its icons, on every edge and in
+     * both forms — the one place the row's vertical padding is decided.
      *
      * <p>Sharing a container the row keeps the dock's own paddings, which are the space between
      * three rows on one sheet of glass. Alone on a plank of its own they were that space spent
      * twice over: the plank's air around the sheet, then the row's air inside it, for a bar that is
      * one icon tall. Screen space is worth more than the margin.
+     *
+     * <p>It is the whole of the air on the side without the ticks; the side with them is the
+     * strip's own band and nothing added to it. A lone row is asymmetric for it, which is what a
+     * bar with nothing beside it can afford to be.
      */
     public static final float LONE_ROW_AIR_DP = 4f;
 
@@ -267,13 +271,18 @@ public final class DockLayoutPolicy {
         // hairlines enclose and the row read bottom-heavy. The strip draws inside the air now and
         // the row is symmetric about its icon on every edge it lies on.
         int stripBandPx = in.appsRowPageStripShown ? PageTickStrip.bandPx(density) : 0;
-        // Alone the row keeps its sliver; sharing, it keeps the letters' crown on both sides —
-        // unless the ticks need more than that, in which case their own band is the air on both
-        // sides. The one place the row's air is decided, whichever edge and form it is in.
+        // Sharing, the row keeps the letters' crown on both sides — unless the ticks need more
+        // than that, in which case their own band is the air on both sides and the icon sits in
+        // the middle of it. Alone it keeps its sliver on the side without ticks and the strip's
+        // own band on the side with them, and nothing more: a plank of one bar should be as short
+        // as it can be, and there is no second band for it to read symmetric against. The one
+        // place the row's air is decided, whichever edge and form it is in.
         int airPx = rowAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
+        int tickSideAirPx = rowTickSideAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
         out.appsRowStripBandPx = stripBandPx;
         out.appsTopPaddingPx = airPx;
         out.appsBottomPaddingPx = airPx;
+        out.appsRowTickSideAirPx = tickSideAirPx;
         out.capsuleBottomGapPx = Math.round(density * 6f);
 
         out.iconScale = in.preferencesAvailable
@@ -310,7 +319,7 @@ public final class DockLayoutPolicy {
             out.appsRowBandPx = iconBaselinePx <= 0
                 ? 0
                 : (in.appsRowAlone ? iconBaselinePx : out.appsRowIconPx)
-                    + out.appsTopPaddingPx + out.appsBottomPaddingPx;
+                    + airPx + tickSideAirPx;
             // The dock's own row view is the band less the strip's share of it: the ticks stand
             // in the host beside the pager rather than inside it, and between them they are the
             // band. Nothing is reserved for the strip on top of the air.
@@ -330,8 +339,7 @@ public final class DockLayoutPolicy {
         // band rather than off the dock's own row, so a row lying down on another edge — where the
         // dock's row has collapsed to nothing — still knows how tall its icons may be, and so that
         // the strip's share of the air does not read as a shorter icon.
-        out.appsRowBandHintPx =
-            Math.max(0, out.appsRowBandPx - out.appsTopPaddingPx - out.appsBottomPaddingPx);
+        out.appsRowBandHintPx = Math.max(0, out.appsRowBandPx - airPx - tickSideAirPx);
         out.appsBarHeightHintPx = appsRowEnabled ? out.appsRowBandHintPx : 0;
 
         // The apps rail.
@@ -381,15 +389,31 @@ public final class DockLayoutPolicy {
     }
 
     /**
-     * The air a pinned-apps row that lies down keeps on each side of its icons: the ticks' own
-     * band ({@link PageTickStrip#BAND_DP}) while the row carries them, because the strip stands in
-     * that air rather than beside it, and the plain air of the row's form when it does not.
+     * The air a pinned-apps row that lies down keeps on the side of its icons the ticks do <em>not
+     * </em> stand on.
      *
-     * <p>Equal on both sides by construction — the ticks take the centre-facing one — so a row is
-     * symmetric about its icon and the icon sits in the middle of the band whichever edge it lies
-     * on.
+     * <p>Sharing its container it is the ticks' own band ({@link PageTickStrip#BAND_DP}) while the
+     * row carries them and the plain crown when it does not — the same figure as
+     * {@link #rowTickSideAirPx}, so the row is symmetric about its icon and the icon sits in the
+     * middle of what the two hairlines around it enclose.
+     *
+     * <p>A row standing alone has no such pair to read against: it keeps its sliver here whether
+     * or not it carries ticks, and the strip's band is all the air on the other side. The plank is
+     * then the icon and as little as the two sides can be.
      */
     public static int rowAirPx(boolean alone, boolean pageStripShown, float density) {
+        if (alone) return loneRowAirPx(density);
+        return Math.max(sharedRowAirPx(density),
+            pageStripShown ? PageTickStrip.bandPx(density) : 0);
+    }
+
+    /**
+     * The air on the side the ticks stand on: their own band while the row carries them, because
+     * the strip stands in that air rather than beside it, and the row's plain air when it does
+     * not. Never less than the plain air, so a row is never tighter on the ticks' side than on the
+     * other.
+     */
+    public static int rowTickSideAirPx(boolean alone, boolean pageStripShown, float density) {
         int base = alone ? loneRowAirPx(density) : sharedRowAirPx(density);
         return Math.max(base, pageStripShown ? PageTickStrip.bandPx(density) : 0);
     }

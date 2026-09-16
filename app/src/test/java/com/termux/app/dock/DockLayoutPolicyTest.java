@@ -1,6 +1,7 @@
 package com.termux.app.dock;
 
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.launcher.paging.PageTickStrip;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 
 import org.junit.Test;
@@ -181,6 +182,9 @@ public class DockLayoutPolicyTest {
         assertEquals(airPx, l.appsTopPaddingPx);
         assertEquals("the air is the same on both sides, so the icon is in the middle of it",
             l.appsTopPaddingPx, l.appsBottomPaddingPx);
+        assertEquals("including the side the ticks take, which is what a lone row gives up",
+            airPx, l.appsRowTickSideAirPx);
+        assertEquals(airPx, DockLayoutPolicy.rowTickSideAirPx(false, stripShown, DENSITY));
         assertEquals("band = icon + 2 x air", expectedIconPx + (2 * airPx), l.appsRowBandPx);
         // The box the icon is centred in is the icon: the air is the padding around it.
         assertEquals(expectedIconPx, l.appsRowBandHintPx);
@@ -321,20 +325,28 @@ public class DockLayoutPolicyTest {
         DockLayout aloneNoTicks = DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .appsRowAlone(true).appsRowPageStripShown(false).build());
         int sliverPx = DockLayoutPolicy.loneRowAirPx(DENSITY);
+        int stripPx = PageTickStrip.bandPx(DENSITY);
         assertEquals("4dp at density 2.75", 11, sliverPx);
+        assertEquals("9dp at density 2.75", 25, stripPx);
         assertEquals(sliverPx, aloneNoTicks.appsTopPaddingPx);
-        assertEquals(sliverPx, aloneNoTicks.appsBottomPaddingPx);
+        assertEquals(sliverPx, aloneNoTicks.appsRowTickSideAirPx);
         assertEquals(135 + (2 * sliverPx), aloneNoTicks.appsRowBandPx);
-        // Updated for Q8 with a reason: a lone row showing its ticks is symmetric about its icons
-        // like any other, so the band the ticks stand in is its air on both sides.
-        assertEquals(25, alone.appsTopPaddingPx);
-        assertEquals(25, alone.appsBottomPaddingPx);
+        // Updated for Q9 with a reason: a lone row is asymmetric on purpose. It has no second band
+        // to read symmetric against and its plank should be as short as it can be, so it keeps its
+        // sliver on the side without ticks and the strip's own band — nothing added to it — on the
+        // side with them.
+        assertEquals(sliverPx, alone.appsTopPaddingPx);
+        assertEquals(sliverPx, alone.appsBottomPaddingPx);
+        assertEquals(stripPx, alone.appsRowTickSideAirPx);
+        assertEquals("the strip fills that side, so the row keeps nothing of it",
+            0, alone.appsRowPaddingBesideTicksPx());
         // The icon is the same size either way: only the air around it changes.
         assertEquals(shared.appsRowIconPx, alone.appsRowIconPx);
         // P8's baseline, untouched: a lone row is still formed around the preset's own baseline
         // rather than around the icon, so the box its icons stand in is the one it drew.
         assertEquals(135, alone.appsRowBandHintPx);
-        assertEquals(135 + 50, alone.appsRowBandPx);
+        assertEquals("band = icon box + 4dp + the ticks' 9dp band",
+            135 + sliverPx + stripPx, alone.appsRowBandPx);
         // Updated for Q7 with a reason: the shared row is the tighter of the two now. Its band is
         // the icon and its air, where the lone row's is a baseline that still carries the preset's
         // leftover around the same icon.
@@ -342,6 +354,7 @@ public class DockLayoutPolicyTest {
             shared.appsRowBandPx < alone.appsRowBandPx);
         assertEquals(25, shared.appsTopPaddingPx);
         assertEquals(25, shared.appsBottomPaddingPx);
+        assertEquals(25, shared.appsRowTickSideAirPx);
         assertEquals(shared.appsRowIconPx + 50, shared.appsRowBandPx);
     }
 

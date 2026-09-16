@@ -230,13 +230,13 @@ public class TermuxActivityPageIndicatorTest {
     }
 
     /**
-     * A row lying along the top edge is the dock's own band turned over: the ticks stand on its
-     * centre-facing side, which up there is under the icons, and the band they stand in is that
-     * side's air rather than one added to it. So the icon is in the middle of the band on that
-     * edge too, and the plank the row stands on is the band and nothing more.
+     * A row lying alone along the top edge, next to the canvas: the ticks stand on the canvas
+     * side, which up there is under the icons, and the band they stand in is that side's air
+     * rather than one added to it. Standing alone it keeps its sliver over the icons and the
+     * strip's band under them, so the plank is the band and nothing more.
      */
     @Test
-    public void aRowLyingOnTheTopEdgeIsSymmetricAboutItsIconToo() {
+    public void aLoneRowLyingOnTheTopEdgeIsItsIconItsSliverAndTheTicks() {
         TermuxActivity activity = inflate();
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
         assertNotNull(preferences);
@@ -251,20 +251,23 @@ public class TermuxActivityPageIndicatorTest {
 
         DockLayout dock = activity.dockLayoutFor(layoutWithAppsOn(Edge.TOP));
         float density = activity.getResources().getDisplayMetrics().density;
-        int airPx = DockLayoutPolicy.rowAirPx(false, true, density);
+        int airPx = DockLayoutPolicy.rowAirPx(true, true, density);
+        int stripPx = PageTickStrip.bandPx(density);
+        assertEquals("the sliver a lone row keeps on the side without ticks",
+            DockLayoutPolicy.loneRowAirPx(density), airPx);
         assertTrue("the row has to have a band for this to mean anything",
             dock.appsRowBandHintPx > 0);
-        assertEquals("the band is the icons' box and its air on each side",
-            dock.appsRowBandHintPx + (2 * airPx), dock.appsRowBandPx);
+        assertEquals("the band is the icons' box, the sliver and the ticks' own band",
+            dock.appsRowBandHintPx + airPx + stripPx, dock.appsRowBandPx);
 
-        // The ticks trail the row up here, so the air under the icons is their band and the row
-        // keeps the whole of the air over them.
+        // The row is the band next to the canvas up here, so the ticks take the canvas side, which
+        // is under the icons, and that whole side is their band.
         assertTrue("the ticks stand under the icons on the top edge",
             host.indexOfChild(strip) > host.indexOfChild(row));
         assertEquals(dock.appsRowStripBandPx, strip.getLayoutParams().height);
         assertEquals(dock.appsRowViewBandPx(), row.getLayoutParams().height);
-        assertEquals("air over the icons", airPx, row.getPaddingTop());
-        assertEquals("and the same under them", airPx,
+        assertEquals("the sliver over the icons", airPx, row.getPaddingTop());
+        assertEquals("and the ticks' band under them, with nothing added to it", stripPx,
             row.getPaddingBottom() + strip.getLayoutParams().height);
         assertEquals("the host is the band, with nothing reserved for the strip",
             dock.appsRowBandPx, row.getLayoutParams().height + strip.getLayoutParams().height);
