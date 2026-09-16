@@ -138,41 +138,19 @@ public final class PlaceLayout {
         }
     }
 
-    /**
-     * Every element's slot: the whole truth about what stands where on this place. The fields
-     * under it are derived views over this map, kept so that callers written against the old
-     * model still read.
-     */
+    /** Every element's slot: the whole truth about what stands where on this place. */
     @NonNull private final Map<Element, Slot> mSlots;
 
-    /** @deprecated read {@code slot(Element.STATUS).edge}. */
-    @NonNull public final Edge statusBarEdge;
-    /** @deprecated read {@code slot(Element.APPS)}; a slot on the top edge reads as BOTTOM here. */
-    @NonNull public final RowPlacement appsRow;
-    /** @deprecated read {@code !slot(Element.AZ).hidden}. */
-    public final boolean azRowShown;
-    /**
-     * Where the alphabets bar stands when it rides on its own; ignored while it sits under the
-     * apps row, where it always rides along the bottom regardless of what is stored here.
-     *
-     * @deprecated read {@code slot(Element.AZ).edge}, or
-     *     {@link PlaceChromePolicy#azBarEdge} for the edge it actually draws on.
-     */
-    @NonNull public final Edge azBarEdge;
-    /**
-     * @deprecated read {@code slot(Element.EXTRA_KEYS)}; a slot on the top edge reads as BOTTOM
-     *     here.
-     */
-    @NonNull public final RowPlacement extraKeys;
     @NonNull public final KeyboardMode keyboardMode;
     @NonNull public final KeyboardForm keyboardForm;
     public final int widgetColumns;
     public final int widgetRows;
 
     /**
-     * The arrangement as the old model spelled it. Kept so that every caller and test written
-     * before slots existed still builds one; it fills each element's slot with the position that
-     * element has always been drawn at ({@link Element#defaultOrder}).
+     * The arrangement spelled the terse way: one edge or row placement per element, each landing
+     * in the position that element has always been drawn at ({@link Element#defaultOrder}). It
+     * cannot say "the top edge" for the pinned apps or the extra keys — the slots constructor is
+     * the one that can — so it is a convenience, not the model.
      */
     public PlaceLayout(@NonNull Edge statusBarEdge, @NonNull RowPlacement appsRow,
                        boolean azRowShown, @NonNull Edge azBarEdge, @NonNull RowPlacement extraKeys,
@@ -195,11 +173,6 @@ public final class PlaceLayout {
         }
         mSlots = Collections.unmodifiableMap(copy);
 
-        this.statusBarEdge = copy.get(Element.STATUS).edge;
-        this.appsRow = placementOf(copy.get(Element.APPS));
-        this.azRowShown = !copy.get(Element.AZ).hidden;
-        this.azBarEdge = copy.get(Element.AZ).edge;
-        this.extraKeys = placementOf(copy.get(Element.EXTRA_KEYS));
         this.keyboardMode = keyboardMode;
         this.keyboardForm = keyboardForm;
         this.widgetColumns = widgetColumns;
@@ -250,21 +223,6 @@ public final class PlaceLayout {
         Edge edge = placement == RowPlacement.LEFT ? Edge.LEFT
             : placement == RowPlacement.RIGHT ? Edge.RIGHT : Edge.BOTTOM;
         return Slot.on(edge, element);
-    }
-
-    /**
-     * A slot as the old three-way row placement. The old model had no top row for the pinned apps
-     * or the extra keys, so a slot standing on the top edge reads as the bottom until the views
-     * that draw them learn the edge.
-     */
-    @NonNull
-    private static RowPlacement placementOf(@NonNull Slot slot) {
-        if (slot.hidden) return RowPlacement.HIDDEN;
-        switch (slot.edge) {
-            case LEFT: return RowPlacement.LEFT;
-            case RIGHT: return RowPlacement.RIGHT;
-            default: return RowPlacement.BOTTOM;
-        }
     }
 
     @Override

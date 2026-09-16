@@ -116,7 +116,7 @@ public final class TourViewTargets implements TourTargets {
                 return paneCornerRect();
             // Both dock styles are the same view; landscape swaps it for the rail.
             case DOCK:
-                return rectInOverlay(firstShown(R.id.apps_bar_viewpager, R.id.dock_rail_scroll),
+                return rectInOverlay(firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host),
                     "neither the dock nor the landscape rail is on screen");
             // The row lives in the dock, above the content or down a side column, one at a time.
             case AZ_ROW:

@@ -546,12 +546,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The terminal extra keys view.
      */
-    /** One entry per key page of the terminal toolbar pager, in page order. */
+    /**
+     * One entry per key page, in page order, owned here rather than by the pager: the pager holds
+     * page 0 while the keys are the dock's bottom row, and lends it to the portable host on every
+     * other edge ({@link #lendExtraKeysPage}).
+     */
     final java.util.List<ExtraKeysView> mExtraKeysViews = new java.util.ArrayList<>();
     ExtraKeysView mExtraKeysView;
-
-    /** The extra keys column, while the place on screen stands the keys on an edge. */
-    @Nullable private ExtraKeysView mColumnExtraKeysView;
 
     SuggestionBarView mSuggestionBarView;
     private boolean mSuggestionBarExplicitSearchActive;
@@ -1158,7 +1159,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         createWidgetPaneController();
         setTerminalWindowBar();
         setTerminalToolbarView(savedInstanceState);
-        updateDockRailView();
+        syncPinnedAppsHost();
         initializeInAppKeyboard(savedInstanceState);
         // Only a fresh launch may enter adjust mode: after process death the system re-delivers
         // the original launch intent with the extra still set, which must not re-enter it.
@@ -5708,7 +5709,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastDisplayCutoutInsetLeft = cutoutInsets.left;
         mLastDisplayCutoutInsetRight = cutoutInsets.right;
         mLastNavigationBarInsetBottom = insetsCompat.getInsets(Type.navigationBars()).bottom;
-        syncExtraKeysColumn();
+        syncExtraKeysHost();
+        syncPinnedAppsHost();
         syncAzBarHosts();
         // The arithmetic below counts the bands on each edge, so the bars stand in their stacks
         // first: the answer and the screen can never disagree, not even on the frame before the
@@ -6515,7 +6517,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
         mSuggestionBarView.setAppCatalogChangedListener(() -> {
             syncAzScrubLettersAndTint();
-            updateDockRailView();
+            syncPinnedAppsHost();
         });
         mSuggestionBarView.setFolderRenameHost(new SuggestionBarView.FolderRenameHost() {
             @Override public void beginFolderRename(long revision, @NonNull String folderId,
@@ -7118,7 +7120,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
         mSuggestionBarView.setAppCatalogChangedListener(() -> {
             syncAzScrubLettersAndTint();
-            updateDockRailView();
+            syncPinnedAppsHost();
         });
         mSuggestionBarView.setOverflowInteractionListener(new SuggestionBarView.OverflowInteractionListener() {
             @Override
@@ -9270,11 +9272,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The rail is active and has at least one icon to show, so it occupies its edge column. */
     private boolean isDockRailShown() {
         return isDockRailActive() && mSuggestionBarView != null
-            && !mSuggestionBarView.getDockRailEntries().isEmpty();
-    }
-
-    private boolean isDockRailOnRight() {
-        return PlaceChromePolicy.appsRailOnRight(currentPlaceLayout());
+            && mSuggestionBarView.hasPinnedItems();
     }
 
     /**
@@ -9320,76 +9318,96 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
 
     /**
-     * Rebuilds the landscape dock rail: the pinned dock apps as a vertical icon column that owns
-     * one screen edge (the horizontal dock rows stay collapsed in landscape). The rail sits beside
-     * the padded content root, so it lives in the same column the terminal is inset from.
+     * Lends the one pinned-apps view to the host the place asks for: the dock's plank layer while
+     * the row is the dock's own, or the portable host standing in an edge stack while it is not —
+     * turned on its side for a left or right edge, which is the rail.
+     *
+     * <p>One view, moved rather than mirrored, so pinning, folders, the icon cache, the drag
+     * pickup and the paging all follow it across. The rail used to be a second tree of plain
+     * {@code ImageView}s rebuilt on every pass, which is why it could do none of those.
+     *
+     * @return whether the portable host appeared or went, which the content's edge padding is
+     *     derived from
      */
-    private void updateDockRailView() {
-        DockRailScrollView railScroll = findViewById(R.id.dock_rail_scroll);
-        LinearLayout railList = findViewById(R.id.dock_rail_list);
-        if (railScroll == null || railList == null)
-            return;
-        if (!isDockRailActive() || mSuggestionBarView == null) {
-            railScroll.setDrawerPullListener(null);
-            boolean wasShown = railScroll.getVisibility() == View.VISIBLE;
-            railScroll.setVisibility(View.GONE);
-            railList.removeAllViews();
-            if (wasShown && mTermuxActivityRootView != null)
-                ViewCompat.requestApplyInsets(mTermuxActivityRootView);
-            return;
+    private boolean syncPinnedAppsHost() {
+        DockRailScrollView host = findViewById(R.id.place_apps_bar_host);
+        ViewGroup plank = findViewById(R.id.apps_bar_plank_layer);
+        if (host == null || plank == null || mSuggestionBarView == null) return false;
+        PlaceLayout layout = currentPlaceLayout();
+        PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(layout);
+        boolean offDock = PlaceChromePolicy.appsShown(layout)
+            && edge != PlaceLayout.Edge.BOTTOM;
+        // A rail with nothing pinned claims no column at all; a row keeps its band and its
+        // invitation to pin something, the way the dock's own row always has.
+        boolean wantHost = offDock
+            && (!edge.isOnSide() || mSuggestionBarView.hasPinnedItems());
+        boolean wasShown = host.getVisibility() == View.VISIBLE;
+
+        ViewGroup wanted = wantHost ? host : plank;
+        boolean moved = mSuggestionBarView.getParent() != wanted;
+        if (moved) {
+            ViewParent parent = mSuggestionBarView.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(mSuggestionBarView);
+            wanted.addView(mSuggestionBarView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
-        DockLayout dockLayout = getDockLayout();
-        // The band the rail itself claims. The cutout it used to carry is the edge stack's now,
-        // so the rail is a plain column of icons and the two are never counted twice.
-        int railBandPx = dockRailBandPx(dockLayout);
-        ViewGroup.LayoutParams scrollParams = railScroll.getLayoutParams();
-        if (scrollParams != null && scrollParams.width != railBandPx) {
-            scrollParams.width = railBandPx;
-            railScroll.setLayoutParams(scrollParams);
+        // The axis is the host's, not the view's: the same bar lies down on the dock and on the
+        // top edge, and stands up on a side.
+        boolean turned = mSuggestionBarView.setVerticalForm(wantHost && edge.isOnSide());
+
+        host.setDrawerPullListener(wantHost && edge.isOnSide()
+            ? mDockRailDrawerPullListener : null);
+        if (wantHost) {
+            DockLayout dockLayout = getDockLayout();
+            int edgeMarginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
+            ViewGroup.LayoutParams params = host.getLayoutParams();
+            if (edge.isOnSide()) {
+                // The band the rail itself claims: the cutout under it is the edge stack's, so the
+                // two are never counted twice. Padded on all four sides with the rail's own margin.
+                int verticalPadPx = Math.round(dpToPx(10));
+                host.setPadding(edgeMarginPx, verticalPadPx, edgeMarginPx, verticalPadPx);
+                if (params != null && (params.width != dockLayout.railBandPx
+                        || params.height != ViewGroup.LayoutParams.MATCH_PARENT)) {
+                    params.width = dockLayout.railBandPx;
+                    params.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                    host.setLayoutParams(params);
+                }
+            } else {
+                // Lying along the top: the dock's own row height and its own side inset, so a row
+                // moved to the top edge reads exactly as it did at the bottom.
+                int contentInset = Math.round((dockLayout.capsule
+                    ? dockLayout.capsuleContentInsetPx : dockLayout.horizontalInsetPx) * 0.82f);
+                host.setPadding(contentInset, dockLayout.appsTopPaddingPx,
+                    contentInset, dockLayout.appsBottomPaddingPx);
+                if (params != null && (params.width != ViewGroup.LayoutParams.MATCH_PARENT
+                        || params.height != dockLayout.appsRowBandPx)) {
+                    params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                    params.height = dockLayout.appsRowBandPx;
+                    host.setLayoutParams(params);
+                }
+            }
+            host.setClipToPadding(false);
+            // A column measures to its icons and scrolls past them; a row along the top is filled
+            // to the band it was given, the way the dock fills its own.
+            host.setFillViewport(!edge.isOnSide());
+            mSuggestionBarView.setDockRowHeightHintPx(edge.isOnSide()
+                ? 0 : dockLayout.appsBarHeightHintPx);
         }
-        railScroll.setDrawerPullListener(mDockRailDrawerPullListener);
-        // Padded on all four sides rather than only vertically: every side carries the rail's own
-        // margin — the root already holds the rail's column clear of the status and navigation
-        // bars, and the stack holds it past the cutout, so the rail pads for neither again.
-        int verticalPadPx = Math.round(dpToPx(10));
-        int edgeMarginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
-        railScroll.setPadding(edgeMarginPx, verticalPadPx, edgeMarginPx, verticalPadPx);
-        railScroll.setClipToPadding(false);
-        railList.removeAllViews();
-        int iconSizePx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_ICON_SIZE_DP));
-        int spacingPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_ICON_SPACING_DP));
-        for (com.termux.app.launcher.model.LauncherAppEntry entry
-                : mSuggestionBarView.getDockRailEntries()) {
-            Drawable railArtwork =
-                com.termux.app.launcher.data.LauncherAppDataProvider.artworkFor(this, entry);
-            if (railArtwork == null)
-                continue;
-            ImageView iconView = new ImageView(this);
-            iconView.setImageDrawable(railArtwork);
-            iconView.setContentDescription(entry.label);
-            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(iconSizePx, iconSizePx);
-            iconParams.topMargin = spacingPx;
-            iconParams.bottomMargin = spacingPx;
-            railList.addView(iconView, iconParams);
-            iconView.setOnClickListener(v -> mSuggestionBarView.launchEntryFromRail(entry, v));
-        }
-        int visibility = railList.getChildCount() > 0 ? View.VISIBLE : View.GONE;
-        if (railScroll.getVisibility() != visibility) {
-            railScroll.setVisibility(visibility);
-            // The content root's edge padding is decided from whether the rail shows, so a rail that
-            // just gained or lost its last icon needs the insets pass to run again.
-            if (mTermuxActivityRootView != null)
-                ViewCompat.requestApplyInsets(mTermuxActivityRootView);
-        }
+        // A move or a turn both change what the slots are, and neither is something a layout pass
+        // works out on its own.
+        if (moved || turned) mSuggestionBarView.reload();
+        if (wasShown == wantHost) return false;
+        host.setVisibility(wantHost ? View.VISIBLE : View.GONE);
+        // The content root's edge padding is decided from whether the host stands, so a rail that
+        // just gained or lost its last icon needs the insets pass to run again.
+        if (mTermuxActivityRootView != null)
+            ViewCompat.requestApplyInsets(mTermuxActivityRootView);
+        return true;
     }
 
     /** Whether the place on screen stands the extra keys in a column on a screen edge. */
     private boolean isExtraKeysColumnActive() {
         return PlaceChromePolicy.extraKeysColumnShown(currentPlaceLayout());
-    }
-
-    private boolean isExtraKeysColumnOnRight() {
-        return PlaceChromePolicy.extraKeysColumnOnRight(currentPlaceLayout());
     }
 
     /** The keys' width in the column: the row's height turned on its side. */
@@ -9411,70 +9429,140 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Fills, sizes and places the extra keys column the place on screen asks for, or takes it down.
-     * It sits beside the padded content root like the rail, so the place is inset from it rather
-     * than covered by it. Returns whether the column appeared or went, which the row and the
-     * terminal then have to be re-laid for.
+     * The one {@link ExtraKeysView} for a key page, built the first time it is asked for and lent
+     * out ever after — to the toolbar pager while the keys are the dock's bottom row, to the
+     * portable host standing in an edge stack while they stand anywhere else. It comes out of
+     * whatever was holding it, so the caller can simply add it.
+     *
+     * <p>One view per page rather than one per place it might go: a latched modifier, the colours
+     * the Appearance editor picked and the eligibility greying are all state on the view, and a
+     * second instance is a second answer to every one of them.
      */
-    private boolean syncExtraKeysColumn() {
-        FrameLayout column = findViewById(R.id.place_extra_keys_column);
-        if (column == null) return false;
-        boolean wasShown = column.getVisibility() == View.VISIBLE;
-        if (!isExtraKeysColumnActive()) {
+    @NonNull
+    public ExtraKeysView lendExtraKeysPage(int page) {
+        ExtraKeysView keys = getExtraKeysView(page);
+        if (keys == null) {
+            keys = (ExtraKeysView) getLayoutInflater().inflate(
+                R.layout.view_terminal_toolbar_extra_keys, null, false);
+            setExtraKeysView(keys, page);
+        }
+        ViewParent parent = keys.getParent();
+        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(keys);
+        return keys;
+    }
+
+    /** The edge the lent-out keys were last built for, so a sync that moves nothing rebuilds nothing. */
+    @Nullable private PlaceLayout.Edge mExtraKeysHostEdge;
+
+    /**
+     * Stands the extra keys on the edge the place asks for, or hands them back to the toolbar
+     * pager. Off the dock the keys are the same page-0 view the pager holds, lent to a host of its
+     * own that the edge stacks move; on the dock they are the pager's first page again, which is
+     * what keeps the swipe across to the text input.
+     *
+     * @return whether the host appeared or went, which the row and the terminal are re-laid for
+     */
+    private boolean syncExtraKeysHost() {
+        FrameLayout host = findViewById(R.id.place_extra_keys_host);
+        if (host == null) return false;
+        PlaceLayout layout = currentPlaceLayout();
+        PlaceLayout.Edge edge = PlaceChromePolicy.extraKeysEdge(layout);
+        boolean offDock = PlaceChromePolicy.extraKeysShown(layout)
+            && edge != PlaceLayout.Edge.BOTTOM;
+        boolean wasShown = host.getVisibility() == View.VISIBLE;
+        if (!offDock) {
             if (!wasShown) return false;
-            column.setVisibility(View.GONE);
+            host.removeAllViews();
+            host.setVisibility(View.GONE);
+            mExtraKeysHostEdge = null;
+            // The keys go home to the pager, which builds its pages around the same instance.
+            rebuildTerminalToolbarPages();
             if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
             return true;
         }
-        ExtraKeysView keys = mColumnExtraKeysView;
-        if (keys == null || keys.getParent() != column) {
-            column.removeAllViews();
-            keys = (ExtraKeysView) getLayoutInflater().inflate(
-                R.layout.view_terminal_toolbar_extra_keys, column, false);
-            keys.setVertical(true);
+        ExtraKeysView keys = getExtraKeysView(0);
+        boolean rebuild = keys == null || keys.getParent() != host || mExtraKeysHostEdge != edge;
+        if (rebuild) {
+            keys = lendExtraKeysPage(0);
+            host.removeAllViews();
+            keys.setVertical(edge.isOnSide());
             keys.setExtraKeysViewClient(getTermuxTerminalExtraKeys(0));
             keys.setButtonTextAllCaps(mProperties != null && mProperties.shouldExtraKeysTextBeAllCaps());
             applyExtraKeysFeedbackAccent(keys);
             keys.reload(getTermuxTerminalExtraKeys(0).getExtraKeysInfo(), mTerminalToolbarDefaultHeight);
-            column.addView(keys);
-            mColumnExtraKeysView = keys;
+            host.addView(keys);
             applyExtraKeysPlaceEligibility(keys);
+            mExtraKeysHostEdge = edge;
         }
-        // Padded like the rail, with its own margin on every side. The stack it stands in carries
-        // the cutout and every band outside it, and the root is already padded away from the
-        // status and navigation bars — the column lives inside both — so it pads for neither
-        // again; adding them here left a bar's height of dead space at each end and squeezed the
-        // keys well under the height they ask for.
         int marginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
-        int verticalPadPx = Math.round(dpToPx(10));
-        column.setPadding(marginPx, verticalPadPx, marginPx, verticalPadPx);
-        ViewGroup.LayoutParams columnParams = column.getLayoutParams();
-        if (columnParams != null && columnParams.width != extraKeysColumnBandPx()) {
-            columnParams.width = extraKeysColumnBandPx();
-            column.setLayoutParams(columnParams);
+        int keysThicknessPx = extraKeysColumnKeysWidthPx();
+        ViewGroup.LayoutParams hostParams = host.getLayoutParams();
+        if (edge.isOnSide()) {
+            // Padded like the rail, with its own margin on every side. The stack it stands in
+            // carries the cutout and every band outside it, and the root is already padded away
+            // from the status and navigation bars — the column lives inside both — so it pads for
+            // neither again; adding them here left a bar's height of dead space at each end and
+            // squeezed the keys well under the height they ask for.
+            int verticalPadPx = Math.round(dpToPx(10));
+            host.setPadding(marginPx, verticalPadPx, marginPx, verticalPadPx);
+            if (hostParams != null && (hostParams.width != extraKeysColumnBandPx()
+                    || hostParams.height != ViewGroup.LayoutParams.MATCH_PARENT)) {
+                hostParams.width = extraKeysColumnBandPx();
+                hostParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                host.setLayoutParams(hostParams);
+            }
+            // The keys are centred in the column at their preferred height, shrinking only when
+            // the column is too short for all of them.
+            View container = findViewById(R.id.terminal_root_container);
+            int availablePx = container == null ? 0
+                : container.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+            int keyCount = keys.getRowCount();
+            int keyHeightPx = ExtraKeysColumnGeometry.keyHeightPx(availablePx, keyCount,
+                Math.round(dpToPx(ExtraKeysColumnGeometry.KEY_HEIGHT_DP)));
+            int keysHeightPx = keyHeightPx * keyCount;
+            ViewGroup.LayoutParams keysParams = keys.getLayoutParams();
+            if (!(keysParams instanceof FrameLayout.LayoutParams)
+                || keysParams.width != keysThicknessPx || keysParams.height != keysHeightPx
+                || ((FrameLayout.LayoutParams) keysParams).gravity != Gravity.CENTER_VERTICAL) {
+                keys.setLayoutParams(new FrameLayout.LayoutParams(keysThicknessPx, keysHeightPx,
+                    Gravity.CENTER_VERTICAL));
+            }
+        } else {
+            // Lying along the top: the same band the row claims at the bottom, filled the same way.
+            host.setPadding(0, 0, 0, 0);
+            if (hostParams != null && (hostParams.width != ViewGroup.LayoutParams.MATCH_PARENT
+                    || hostParams.height != keysThicknessPx)) {
+                hostParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                hostParams.height = keysThicknessPx;
+                host.setLayoutParams(hostParams);
+            }
+            ViewGroup.LayoutParams keysParams = keys.getLayoutParams();
+            if (!(keysParams instanceof FrameLayout.LayoutParams)
+                || keysParams.width != ViewGroup.LayoutParams.MATCH_PARENT
+                || keysParams.height != ViewGroup.LayoutParams.MATCH_PARENT) {
+                keys.setLayoutParams(new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            }
         }
-        // The keys are centred in the column at their preferred height, shrinking only when the
-        // column is too short for all of them.
-        View container = findViewById(R.id.terminal_root_container);
-        int availablePx = container == null ? 0
-            : container.getHeight() - column.getPaddingTop() - column.getPaddingBottom();
-        int keyCount = keys.getRowCount();
-        int keyHeightPx = ExtraKeysColumnGeometry.keyHeightPx(availablePx, keyCount,
-            Math.round(dpToPx(ExtraKeysColumnGeometry.KEY_HEIGHT_DP)));
-        int keysWidthPx = extraKeysColumnKeysWidthPx();
-        int keysHeightPx = keyHeightPx * keyCount;
-        ViewGroup.LayoutParams keysParams = keys.getLayoutParams();
-        if (!(keysParams instanceof FrameLayout.LayoutParams)
-            || keysParams.width != keysWidthPx || keysParams.height != keysHeightPx
-            || ((FrameLayout.LayoutParams) keysParams).gravity != Gravity.CENTER_VERTICAL) {
-            keys.setLayoutParams(new FrameLayout.LayoutParams(keysWidthPx, keysHeightPx,
-                Gravity.CENTER_VERTICAL));
-        }
+        host.setClipToPadding(false);
         if (wasShown) return false;
-        column.setVisibility(View.VISIBLE);
-        // The content root's edge padding is decided from the column, so the insets pass reruns.
+        host.setVisibility(View.VISIBLE);
+        // The content root's edge padding is decided from the host, so the insets pass reruns.
         if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         return true;
+    }
+
+    /**
+     * Rebuilds the toolbar pager's pages around the key views the activity owns. Every page is
+     * thrown away and re-instantiated, which is how the first page gets its view back after a
+     * place had it standing on another edge.
+     */
+    private void rebuildTerminalToolbarPages() {
+        ViewPager pager = getTerminalToolbarViewPager();
+        if (pager == null || pager.getAdapter() == null) return;
+        int page = Math.min(pager.getCurrentItem(), getExtraKeysPageCount());
+        pager.getAdapter().notifyDataSetChanged();
+        pager.setCurrentItem(page, false);
     }
 
     /**
@@ -9509,13 +9597,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The one view that draws an element on a given edge, or null where the element is still the
-     * dock's to draw. The pinned apps along the bottom are the dock's own row and the alphabets
-     * index rides it; the extra keys along the bottom are the toolbar pager. Those three are the
-     * accessory stack's, which L3 ports into the bottom stack — until then they are not this
-     * walk's to move, and an element whose slot puts it on the top edge with no view of its own
-     * simply keeps the bottom row it has always had ({@link PlaceLayout#appsRow} reads a top slot
-     * as the bottom for exactly that reason).
+     * The one view that draws an element on a given edge, or null where the element is the dock's
+     * to draw. Along the bottom the pinned apps are the dock's own row, the alphabets index rides
+     * it and the extra keys are the toolbar pager's first page: all three stay in the accessory
+     * stack, which is what keeps the bottom bars sitting above the in-app keyboard. On every other
+     * edge the same views are lent to a portable host, and that host is what this walk moves.
      */
     @Nullable
     private View edgeStackHost(@NonNull Element element, @NonNull PlaceLayout.Edge edge) {
@@ -9525,11 +9611,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case AZ:
                 return edge == PlaceLayout.Edge.BOTTOM ? null : findViewById(R.id.place_az_bar_host);
             case EXTRA_KEYS:
-                return edge == PlaceLayout.Edge.BOTTOM || edge == PlaceLayout.Edge.TOP
-                    ? null : findViewById(R.id.place_extra_keys_column);
+                return edge == PlaceLayout.Edge.BOTTOM
+                    ? null : findViewById(R.id.place_extra_keys_host);
             case APPS:
             default:
-                return edge.isOnSide() ? findViewById(R.id.dock_rail_scroll) : null;
+                return edge == PlaceLayout.Edge.BOTTOM
+                    ? null : findViewById(R.id.place_apps_bar_host);
         }
     }
 
@@ -9542,9 +9629,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * into its new stack is what takes it out of its old one, and a host no arrangement asks for
      * is left where it last stood with its visibility off.
      *
+     * <p>Package-visible so the arrangement test can drive the walk against the real
+     * {@code activity_termux.xml} rather than re-deriving where each bar ought to land.
+     *
      * @return whether anything actually moved
      */
-    private boolean applyEdgeStacks(@NonNull PlaceLayout layout) {
+    boolean applyEdgeStacks(@NonNull PlaceLayout layout) {
         boolean moved = false;
         for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
             com.termux.app.place.EdgeStackView stack = edgeStack(edge);
@@ -9578,10 +9668,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (right != null) right.setCutoutPx(mLastDisplayCutoutInsetRight);
     }
 
-    /** The band the rail claims, without the cutout the stack under it already carries. */
-    private int dockRailBandPx(@NonNull DockLayout dockLayout) {
-        return Math.max(0, dockLayout.railWidthPx - dockLayout.railEdgeInsetPx);
-    }
 
     /**
      * Every band's thickness, measured where the activity already knows it, for the policy to add
@@ -9596,7 +9682,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean compact = isStatusBarCompact();
         // Only a rail that actually shows icons claims a band; an empty rail is gone, and the
         // content then keeps just the cutout on that side like any other edge.
-        int appsColumnPx = isDockRailShown() ? dockRailBandPx(dockLayout) : 0;
+        int appsColumnPx = isDockRailShown() ? dockLayout.railBandPx : 0;
         // Off the dock the index gets a host of its own; on it, it is the dock's own row.
         boolean lettersOffDock = isAzRowEnabled() && azBarEdge() != PlaceLayout.Edge.BOTTOM;
         int azRowPx = lettersOffDock
@@ -9609,7 +9695,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
                         PlaceLayout.Edge.LEFT, capsule, compact, density)
                     + statusBarColumnOuterMarginPx())
-            .apps(dockLayout.appsBarHeightPx, appsColumnPx)
+            .apps(dockLayout.appsRowBandPx, appsColumnPx)
             .az(azRowPx, lettersOffDock ? azBarHostBandPx() : 0)
             .extraKeys(extraKeysColumnKeysWidthPx(),
                 isExtraKeysColumnActive() ? extraKeysColumnBandPx() : 0)
@@ -9654,8 +9740,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean stacksMoved = applyEdgeStacksAndInvalidate(layout);
         applyStatusBarEdge(layout);
         applyWidgetGridPreference();
-        updateDockRailView();
-        boolean columnChanged = syncExtraKeysColumn();
+        boolean columnChanged = syncPinnedAppsHost();
+        columnChanged |= syncExtraKeysHost();
         columnChanged |= syncAzBarHosts();
         // The keys follow the wall, but their meanings do not: a key with nothing to act on where
         // the wall has landed is drawn dead until the wall moves again.
@@ -9733,7 +9819,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyStatusBarEdge(@NonNull PlaceLayout layout) {
         View host = findViewById(R.id.terminal_window_bar_host);
         if (!(host instanceof ViewGroup)) return;
-        PlaceLayout.Edge edge = layout.statusBarEdge;
+        PlaceLayout.Edge edge = layout.slot(Element.STATUS).edge;
         boolean edgeChanged = edge != mStatusBarEdge;
         if (!edgeChanged && mStatusBarEdgeApplied) {
             // The edge has not moved, but a column is measured against the screen's height, which
@@ -10185,7 +10271,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return DockLayoutPolicy.DockInputs.builder()
             .preferencesAvailable(preferencesAvailable)
             .capsule(isRoundedDockStyle())
-            .appsRowOnEdge(PlaceChromePolicy.appsRailShown(layout))
+            .appsRowOnEdge(PlaceChromePolicy.appsShown(layout)
+                && PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM)
+            .appsOnRail(PlaceChromePolicy.appsRailShown(layout))
             .density(getResources().getDisplayMetrics().density)
             .barHeightScale(preferencesAvailable
                 ? mPreferences.getAppLauncherBarHeightScale() : DockLayoutPolicy.sizePreset(2))
@@ -10195,7 +10283,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .configuredCornerRadiusDp(preferencesAvailable
                 ? mPreferences.getAppLauncherDockCornerRadius()
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS)
-            .appsRowEnabledPref(layout.appsRow != PlaceLayout.RowPlacement.HIDDEN)
+            .appsRowEnabledPref(PlaceChromePolicy.appsShown(layout))
             .azRowEnabledPref(PlaceChromePolicy.azRowOnDock(layout))
             // Which row ends up on the dock's rim, so the A-Z row knows whether to carry a chin.
             .extraKeysRowShown(PlaceChromePolicy.extraKeysRowShown(layout))
@@ -12179,13 +12267,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The first key page — the one the styling and geometry passes speak for. While the place on
-     * screen stands the keys in a column, the column is the page: its modifiers are the ones held.
+     * The first key page — the one the styling and geometry passes speak for. There is one of it
+     * wherever the place stands the keys, so nothing has to ask which surface is holding it.
      */
     private ExtraKeysView getExtraKeysView() {
-        if (mColumnExtraKeysView != null && isExtraKeysColumnActive()) {
-            return mColumnExtraKeysView;
-        }
         return mExtraKeysView;
     }
 
@@ -12235,19 +12320,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mProperties == null) return;
         mProperties.loadTermuxPropertiesFromDisk();
         rebuildExtraKeysPageClients();
-        ViewPager pager = getTerminalToolbarViewPager();
-        if (pager != null && pager.getAdapter() != null) {
-            int page = Math.min(pager.getCurrentItem(), getExtraKeysPageCount());
-            mExtraKeysViews.clear();
-            mExtraKeysView = null;
-            pager.getAdapter().notifyDataSetChanged();
-            pager.setCurrentItem(page, false);
-        }
-        // The column is built from the same keys, so it is rebuilt with them.
-        View column = findViewById(R.id.place_extra_keys_column);
-        if (column instanceof ViewGroup) ((ViewGroup) column).removeAllViews();
-        mColumnExtraKeysView = null;
-        syncExtraKeysColumn();
+        View staleHost = findViewById(R.id.place_extra_keys_host);
+        if (staleHost instanceof ViewGroup) ((ViewGroup) staleHost).removeAllViews();
+        mExtraKeysViews.clear();
+        mExtraKeysView = null;
+        rebuildTerminalToolbarPages();
+        // A place standing the keys off the dock holds the same page-0 view, so its host is
+        // emptied first and filled again from whatever the reload just built.
+        View host = findViewById(R.id.place_extra_keys_host);
+        if (host instanceof ViewGroup) ((ViewGroup) host).removeAllViews();
+        mExtraKeysHostEdge = null;
+        syncExtraKeysHost();
         setTerminalToolbarHeight();
     }
 
@@ -12300,7 +12383,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (currentWallPlace() == mAppliedExtraKeysPlace) return;
         mAppliedExtraKeysPlace = currentWallPlace();
         for (ExtraKeysView view : mExtraKeysViews) applyExtraKeysPlaceEligibility(view);
-        applyExtraKeysPlaceEligibility(mColumnExtraKeysView);
     }
 
     private void applyExtraKeysPlaceEligibility(@Nullable ExtraKeysView extraKeysView) {

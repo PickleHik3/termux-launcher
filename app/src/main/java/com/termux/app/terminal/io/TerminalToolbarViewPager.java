@@ -54,8 +54,12 @@ public class TerminalToolbarViewPager {
             View layout;
             int keyPages = mActivity.getExtraKeysPageCount();
             if (position < keyPages) {
-                layout = inflater.inflate(R.layout.view_terminal_toolbar_extra_keys, collection, false);
-                ExtraKeysView extraKeysView = (ExtraKeysView) layout;
+                // The page is the activity's own key view, lent here: the same instance the
+                // portable host takes when the place stands the keys on another edge, so a latched
+                // modifier and the picked colours survive the move either way.
+                ExtraKeysView extraKeysView = mActivity.lendExtraKeysPage(position);
+                extraKeysView.setVertical(false);
+                layout = extraKeysView;
                 extraKeysView.setExtraKeysViewClient(mActivity.getTermuxTerminalExtraKeys(position));
                 extraKeysView.setButtonTextAllCaps(mActivity.getProperties().shouldExtraKeysTextBeAllCaps());
                 // Left swipe from the last key page reaches the text input; from an earlier one it
@@ -124,6 +128,9 @@ public class TerminalToolbarViewPager {
 
         @Override
         public void destroyItem(@NonNull ViewGroup collection, int position, @NonNull Object view) {
+            // A key page may already have been lent to the portable host, in which case it is no
+            // longer a child here and this is a no-op — which is exactly what is wanted: the view
+            // belongs to the activity, not to the pager.
             collection.removeView((View) view);
         }
     }

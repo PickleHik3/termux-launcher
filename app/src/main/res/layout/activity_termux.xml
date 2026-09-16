@@ -974,26 +974,25 @@
             android:clipChildren="false"
             android:clipToPadding="false">
 
-            <!-- Vertical dock rail. updateDockRailView() sizes and populates it. -->
+            <!-- The pinned apps standing off the dock: the one SuggestionBarView is lent to this
+                 host whenever the row is not the dock's own, turned on its side for a left or
+                 right edge. A ScrollView because a rail can hold more icons than the screen is
+                 tall; syncPinnedAppsHost() sizes it and applyEdgeStacks() moves it. -->
             <com.termux.app.launcher.drawer.DockRailScrollView
-                android:id="@+id/dock_rail_scroll"
+                android:id="@+id/place_apps_bar_host"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
+                android:fillViewport="true"
                 android:scrollbars="none"
                 android:overScrollMode="never"
-                android:visibility="gone">
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:visibility="gone" />
 
-                <LinearLayout
-                    android:id="@+id/dock_rail_list"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center_horizontal" />
-            </com.termux.app.launcher.drawer.DockRailScrollView>
-
-            <!-- The extra keys standing off the dock; syncExtraKeysHost() fills and sizes it. -->
+            <!-- The extra keys standing off the dock: the toolbar pager's own first-page
+                 ExtraKeysView is lent to this host. syncExtraKeysHost() fills and sizes it. -->
             <FrameLayout
-                android:id="@+id/place_extra_keys_column"
+                android:id="@+id/place_extra_keys_host"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"

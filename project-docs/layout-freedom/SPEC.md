@@ -93,12 +93,49 @@ was not attempted — the bottom instance is a `ViewPager` page and unifying it 
 extra keys out of the pager, which is the text-input page's swipe. Both belong with L3's port of
 the accessory stack into the bottom `EdgeStackView`.
 
+## L3 outcome (2026-09-16)
+
+Two bars became one portable view each, and the top edge renders.
+
+**Pinned apps.** `SuggestionBarView` has a vertical form (`setVerticalForm`): one column instead of
+one row, slots at the rail's own pitch (`DockLayoutPolicy.railSlotLengthPx` = 38dp icon + 10dp of
+air either side, `TOP`-aligned so the last slot does not swallow the slack), a fixed rail icon size
+rather than a share of a row's height, and one page holding every pinned item while its host
+scrolls. The one bar is *lent* to whichever host the place asks for — `apps_bar_plank_layer` for a
+bottom row, `place_apps_bar_host` (a `DockRailScrollView` that `applyEdgeStacks` moves between the
+stacks) for every other edge. `updateDockRailView`, the `dock_rail_scroll`/`dock_rail_list` tree and
+`SuggestionBarView.getDockRailEntries`/`launchEntryFromRail` are gone: the rail was a second tree of
+plain `ImageView`s rebuilt on every pass, which is why it had no long-press pinning, no folders, no
+drag pickup and no icon cache. It has all four now because it is the row.
+
+**Extra keys.** One `ExtraKeysView` per key page, owned by the activity (`lendExtraKeysPage`) and
+lent out: to `TerminalToolbarViewPager`'s page 0 while the keys are the dock's bottom row — which is
+what keeps the swipe across to the text-input page untouched — and to `place_extra_keys_host` on
+every other edge, vertical on a side and lying down along the top. `mColumnExtraKeysView` and the
+second `ExtraKeysView` it held are gone, so `setPickMode`, `KeyUsabilityPolicy`, `refreshKeyStyles`
+and a latched modifier are one view's state wherever the keys stand.
+`ExtraKeysColumnGeometry` is **not** dead — it still sizes and centres the keys in a side column —
+and stayed.
+
+**TOP rows render.** `PlaceLayout` lost its five derived fields (`statusBarEdge`, `appsRow`,
+`azRowShown`, `azBarEdge`, `extraKeys`); the slots map is the only model. `PlaceChromePolicy` is
+rewritten on `EdgeStackPolicy.edgeOf`/`isShown`, so a top slot is a top edge rather than being
+folded into the bottom. The A–Z index rides the pinned apps row wherever that row *lies down*
+(`azRidesAppsRow`) — top or bottom; a rail leaves the index standing alone, which is what landscape
+has always done. `DockLayoutPolicy` grew `appsOnRail` beside `appsRowOnEdge` (now "off the dock",
+top included) and outputs `appsRowBandPx` (the band a lying-down row claims wherever it lies),
+`railBandPx`, `railIconSizePx`, `railIconSpacingPx`, `railSlotLengthPx`.
+
+Honest boundary: none of this is device-verified. A row or a column standing off the dock still has
+no glass sheet of its own — the rail never had one either — so a top apps row draws over the
+wallpaper rather than over dock glass. `contentInsets` already summed and needed nothing new.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |
 |---|---|---|---|
-| L1 | `feat/layout-policy` | `Slot`/`Element`/`EdgeStackPolicy`, `PlaceLayout` widened, store v4 + order keys, pure tests | current batch merged |
-| L2 | `feat/layout-hosts` | `EdgeStackView` hosts in the XML; status bar, extra keys (single view), A–Z re-parented; `contentInsets` replaces the `max()` chains | L1 |
-| L3 | `feat/layout-rail` | `SuggestionBarView` vertical form; `updateDockRailView` deleted | L2 |
-| L4 | `feat/layout-miniature` | miniature and `MiniatureDragPolicy` on `EdgeStackPolicy` (edge + insertion index), portrait side columns with the narrow-canvas warning | L1 (parallel with L2) |
+| L1 ✅ | `feat/layout-policy` | `Slot`/`Element`/`EdgeStackPolicy`, `PlaceLayout` widened, store v4 + order keys, pure tests | current batch merged |
+| L2 ✅ | `feat/layout-hosts` | `EdgeStackView` hosts in the XML; status bar, extra keys (single view), A–Z re-parented; `contentInsets` replaces the `max()` chains | L1 |
+| L3 ✅ | `feat/layout-rail` | `SuggestionBarView` vertical form; `updateDockRailView` deleted; one `ExtraKeysView` per edge; TOP rows render | L2 |
+| L4 ✅ | `feat/layout-miniature` | miniature and `MiniatureDragPolicy` on `EdgeStackPolicy` (edge + insertion index), portrait side columns with the narrow-canvas warning | L1 (parallel with L2) |
 | L5 | integ | docs/en, release note, Waydroid + pong checks | L2–L4 |
