@@ -752,6 +752,58 @@ public class PlaceMiniatureViewTest {
                 Element.STATUS));
     }
 
+    // ---- Side columns --------------------------------------------------------------------------
+
+    /** The shipped arrangement with the pinned apps standing as a column down the left. */
+    private static PlaceLayout appsOnTheLeft() {
+        return layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM)
+            .withSlot(Element.APPS, Slot.on(Edge.LEFT, 0));
+    }
+
+    @Test
+    public void aSideColumnStandsBetweenTheRowsTheWayTheScreenDoes() {
+        // The defect: the columns were claimed before the bottom rows, so a rail ran the whole
+        // height of the phone — past the dock and into its corner, taking the grip that lifts it
+        // down there — while the dock's rows were narrowed by it. The screen has done neither
+        // since the canvas band.
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(appsOnTheLeft(), PlaceOrientation.PORTRAIT);
+
+        RectF column = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        assertNotNull(column);
+        assertNotNull(canvas);
+        assertNotNull(keys);
+        assertEquals("the column flanks the canvas", canvas.top, column.top, 0.5f);
+        assertEquals(canvas.bottom, column.bottom, 0.5f);
+        assertTrue("the dock's row keeps the whole width", keys.left <= column.left + 0.5f);
+    }
+
+    @Test
+    public void aSideColumnCarriesItsGripInsideItselfAndLiftsFromRightAcrossIt() {
+        ScrollingParent parent = parent();
+        PlaceMiniatureView view = inParent(parent, 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(appsOnTheLeft(), PlaceOrientation.PORTRAIT);
+
+        RectF column = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(column);
+        assertNotNull(grip);
+        assertTrue("the grip rides inside the column it lifts",
+            column.contains(grip.centerX(), grip.centerY()));
+
+        // A column the picture draws is a few dp wide; the grip has to be the width of the band
+        // rather than of the glyph, or no fingertip lands on it.
+        touch(view, MotionEvent.ACTION_DOWN, column.centerX(), grip.centerY());
+        assertEquals(PlaceMiniatureView.Block.APPS_ROW, view.draggedBar());
+        assertEquals(Element.APPS,
+            PlaceMiniatureView.barOf(view.draggedBar()).element());
+        assertTrue("the preference list is told to keep out", parent.disallowedIntercept);
+    }
+
     @Test
     public void thePictureNamesEveryBarAndWhereItStands() {
         PlaceMiniatureView view = sized();

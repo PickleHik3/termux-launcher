@@ -200,6 +200,42 @@ Honest boundary: none of this is device-verified. The close drag started from in
 is still the plane's own vertical gesture whatever edge the drawer came from; it settles back into
 the seed rectangle either way, so a rail's drawer still shrinks into the rail.
 
+## P5 outcome (2026-09-16)
+
+**The top stack is one row deep again.** `place_off_dock_plank_glass` was `match_parent` inside a
+`wrap_content` host, and a plain `View` handed an at-most spec takes every pixel it is offered — so
+the glass measured the whole content column, the plank wrapped to *that*, `place_edge_stack_top`
+wrapped to the plank, and `terminal_canvas_band`'s weight had nothing left to take: no terminal at
+all, and the sheet drawn over the whole screen. The plank host is a `RelativeLayout` now and the
+glass is pinned `layout_alignTop`/`alignBottom` to `place_off_dock_plank_bars`, so the sheet is
+exactly the bars, the host wraps them plus their air, and the canvas is the residual it was meant
+to be. Nothing in the column's own params changed — they were already right.
+
+**And one icon is no longer drawn across the terminal.** `DockLayoutPolicy.appsBarHeightHintPx` is
+taken off `appsBarHeightPx`, which collapses to zero the moment the row stands off the dock, so
+every caller of `SuggestionBarView.setDockRowHeightHintPx` handed a top row a hint of nothing and
+the bar fell back to sizing its icon against the host it was lent to — the swallowed plank.
+`DockLayout` grew `appsRowBandHintPx`, the same figure taken off `appsRowBandPx` (the band the row
+claims wherever it lies), and all four call sites pass it. `iconSizePx()` falls back to the measured
+host only when no band was given, and then never past `DockLayoutPolicy.maxRowBandPx` — two rail
+slots, which every preset's real band stays well inside. The canvas band also clips now: a rail
+holds more icons than the screen is tall and scrolls them, and unclipped the scrolled ones drew out
+past the canvas to sit beside the dock.
+
+**A side band can be lifted.** `PlaceMiniatureView.CLAIM_ORDER` claimed the side columns before the
+bottom rows, so a rail ran the whole height of the phone — past the dock and into its bottom corner,
+taking the grip that lifts it down there with it, while the dock's rows were narrowed by a column
+the screen has not narrowed them with since P4. The order is `TOP, BOTTOM, LEFT, RIGHT` now: the
+rows take the whole width, the columns stand between them and flank the canvas exactly as the canvas
+band does. (The canvas rect is unchanged either way — a vertical claim never reads the width.) The
+grip's hit rectangle is also the band's thickness across (`gripTouchInto`), because a column the
+picture draws is a few dp wide and a grip drawn to fit inside it is far narrower than a fingertip;
+along the band it is clamped to the band's own ends so it cannot take the next band's taps. A press
+anywhere else on a band is still a tap, as it has always been.
+
+Honest boundary: none of this is device-verified. The four Robolectric tests measure the real
+`activity_termux.xml` and the real miniature, not the phone.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |

@@ -408,7 +408,7 @@
                  takes the dock's own corner radius. syncOffDockPlank() sizes and glazes it and
                  applyEdgeStacks() moves it, with the bars inside it in the same order the edge's
                  stack gives them. -->
-            <FrameLayout
+            <RelativeLayout
                 android:id="@+id/place_off_dock_plank_host"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -417,11 +417,18 @@
                 android:visibility="gone">
 
                 <!-- The glass sheet is exactly the plank, so it is the thing the rounded outline
-                     clips; the host around it stays unclipped for the wave's lift. -->
+                     clips; the host around it stays unclipped for the wave's lift. It is pinned to
+                     the bars rather than filling the host: a sheet that matched the host measured
+                     the host, because a plain View under an at-most spec takes every pixel it is
+                     offered, and the plank then swallowed the whole content column and left the
+                     terminal nothing. The bars are the one thing with a height of its own, so the
+                     host wraps them and the glass follows. -->
                 <FrameLayout
                     android:id="@+id/place_off_dock_plank_glass"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                    android:layout_height="0dp"
+                    android:layout_alignTop="@+id/place_off_dock_plank_bars"
+                    android:layout_alignBottom="@+id/place_off_dock_plank_bars">
 
                     <com.github.mmin18.widget.RealtimeBlurView
                         android:id="@+id/place_off_dock_plank_blur"
@@ -446,7 +453,7 @@
                     app:edgeStackEdge="top"
                     android:clipChildren="false"
                     android:clipToPadding="false" />
-            </FrameLayout>
+            </RelativeLayout>
             </com.termux.app.place.EdgeStackView>
 
             <!-- The canvas band: the one horizontal row of the content column, holding the left
@@ -454,15 +461,17 @@
                  only — the top stack, the bottom stack, the dock's rows and the in-app keyboard
                  keep the whole width, the way the miniature has always drawn it. The terminal is
                  the weighted residual between the two stacks, so what EdgeStackPolicy.contentInsets
-                 answers for the sides is structure rather than padding anyone applies. -->
+                 answers for the sides is structure rather than padding anyone applies. It clips:
+                 a rail holds more icons than the screen is tall and scrolls them, and an unclipped
+                 band let the scrolled ones out past the canvas to sit beside the dock. -->
             <LinearLayout
                 android:id="@+id/terminal_canvas_band"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
                 android:orientation="horizontal"
-                android:clipChildren="false"
-                android:clipToPadding="false">
+                android:clipChildren="true"
+                android:clipToPadding="true">
 
             <!-- The left stack. applyEdgeStacks() re-parents the bars between the two side stacks
                  and orders them; what is declared inside this one is only where they start. -->

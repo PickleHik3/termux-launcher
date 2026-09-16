@@ -244,6 +244,11 @@ public final class DockLayoutPolicy {
         }
         out.appsBarHeightHintPx =
             Math.max(0, out.appsBarHeightPx - out.appsTopPaddingPx - out.appsBottomPaddingPx);
+        // The same figure taken off the band rather than off the dock's own row, so a row lying
+        // down on another edge — where the dock's row has collapsed to nothing — still knows how
+        // tall its icons may be.
+        out.appsRowBandHintPx =
+            Math.max(0, out.appsRowBandPx - out.appsTopPaddingPx - out.appsBottomPaddingPx);
 
         out.iconScale = in.preferencesAvailable
             ? iconScaleFor(capsule, capsule ? sizeProgress : defaultDockProgress)
@@ -301,6 +306,17 @@ public final class DockLayoutPolicy {
      */
     public static int railSlotOffsetPx(int index, float density) {
         return Math.max(0, index) * railSlotLengthPx(density);
+    }
+
+    /**
+     * The deepest a row lying down is ever drawn: two rail slots. Every preset's band, the tuning
+     * drag's extra height included, sits well inside it. It is a backstop rather than a limit — the
+     * row is told {@link DockLayout#appsRowBandHintPx} on every pass — for the frames where nothing
+     * has told the row its band yet and the only figure it has is the host it was lent to, which
+     * off the dock can be a whole content column rather than a row.
+     */
+    public static int maxRowBandPx(float density) {
+        return 2 * railSlotLengthPx(density);
     }
 
     /**
