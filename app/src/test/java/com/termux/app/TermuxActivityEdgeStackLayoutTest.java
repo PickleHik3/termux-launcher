@@ -148,13 +148,17 @@ public class TermuxActivityEdgeStackLayoutTest {
     }
 
     @Test
-    public void theBottomEdgeLeavesBothRowsToTheDock() {
+    public void theBottomEdgeLeavesTheDocksOwnRowsToTheAccessoryStack() {
         // The accessory stack is what keeps the bottom bars sitting above the in-app keyboard, so
-        // a bottom slot must not pull either host into the bottom stack.
+        // a bottom slot stands the rows in the ordered stack down there, not in the one above the
+        // dock — which is the status bar's, and only the status bar's.
         TermuxActivity activity = inflate();
         activity.applyEdgeStacks(layoutWith(Element.APPS, Edge.BOTTOM));
         EdgeStackView bottom = activity.findViewById(R.id.place_edge_stack_bottom);
         assertEquals(0, bottom.getChildCount());
+        EdgeStackView rows = activity.findViewById(R.id.accessory_row_stack);
+        assertEquals(3, rows.getChildCount());
+        assertSame(activity.findViewById(R.id.apps_bar_row_host), rows.getChildAt(0));
     }
 
     @Test

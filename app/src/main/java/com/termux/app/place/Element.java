@@ -51,9 +51,9 @@ public enum Element {
      *       {@code EdgeStackView} holds {@code terminal_window_bar_host} and
      *       {@code place_az_bar_host} in.</li>
      *   <li><b>Bottom:</b> the extra keys, the alphabets row, the pinned apps, then the status
-     *       bar. {@code activity_termux.xml} chains {@code apps_bar_viewpager} above
-     *       {@code apps_bar_az_row} above {@code terminal_toolbar_view_pager}, and a bottom status
-     *       bar stands in the bottom {@code EdgeStackView}, which is above the whole dock.</li>
+     *       bar. That was the {@code layout_above} chain {@code activity_termux.xml} drew before
+     *       the dock's rows stood in {@code accessory_row_stack}; a bottom status bar stands in
+     *       the bottom {@code EdgeStackView}, which is above the whole dock.</li>
      *   <li><b>Left and right:</b> the status bar, the apps rail, the extra keys column, then the
      *       alphabets bar. A column's lead-in says which: the status column starts at the cutout
      *       (the stack's own cutout padding), then the rail, the extra keys and the alphabets bar

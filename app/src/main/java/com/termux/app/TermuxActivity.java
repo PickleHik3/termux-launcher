@@ -192,6 +192,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -9656,27 +9657,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The one view that draws an element on a given edge, or null where the element is the dock's
-     * to draw. Along the bottom the pinned apps are the dock's own row, the alphabets index rides
-     * it and the extra keys are the toolbar pager's first page: all three stay in the accessory
-     * stack, which is what keeps the bottom bars sitting above the in-app keyboard. On every other
-     * edge the same views are lent to a portable host, and that host is what this walk moves.
+     * The one view that draws an element on a given edge. Along the bottom each bar is the dock's
+     * own — the pinned apps row, the letters, and the toolbar pager whose first page is the extra
+     * keys — and each stands in a host of its own inside the accessory stack, which is what keeps
+     * the bottom bars sitting above the in-app keyboard. On every other edge the same views are
+     * lent to a portable host. Either way it is a host this walk moves, never the bar itself.
+     *
+     * <p>Null only before the layout has been inflated.
      */
     @Nullable
     private View edgeStackHost(@NonNull Element element, @NonNull PlaceLayout.Edge edge) {
+        boolean bottom = edge == PlaceLayout.Edge.BOTTOM;
         switch (element) {
             case STATUS:
                 return findViewById(R.id.terminal_window_bar_host);
             case AZ:
-                return edge == PlaceLayout.Edge.BOTTOM ? null : findViewById(R.id.place_az_bar_host);
+                return findViewById(bottom ? R.id.apps_bar_az_host : R.id.place_az_bar_host);
             case EXTRA_KEYS:
-                return edge == PlaceLayout.Edge.BOTTOM
-                    ? null : findViewById(R.id.place_extra_keys_host);
+                return findViewById(
+                    bottom ? R.id.terminal_toolbar_host : R.id.place_extra_keys_host);
             case APPS:
             default:
-                return edge == PlaceLayout.Edge.BOTTOM
-                    ? null : findViewById(R.id.place_apps_bar_host);
+                return findViewById(bottom ? R.id.apps_bar_row_host : R.id.place_apps_bar_host);
         }
+    }
+
+    /**
+     * The stack one element stands in on one edge. Three edges have one each; the bottom has two,
+     * because the dock's own rows have to stand inside the accessory stack — above the in-app
+     * keyboard, on the dock's glass — while anything else along the bottom stands on the
+     * terminal's own height above all of it. The two together are the bottom edge, and the one
+     * ordered walk is split between them.
+     */
+    @Nullable
+    private com.termux.app.place.EdgeStackView edgeStackFor(@NonNull Element element,
+                                                            @NonNull PlaceLayout.Edge edge) {
+        if (edge == PlaceLayout.Edge.BOTTOM && element != Element.STATUS)
+            return findViewById(R.id.accessory_row_stack);
+        return edgeStack(edge);
     }
 
     /**
@@ -9704,30 +9722,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.EdgeStackView plankBars =
             findViewById(R.id.place_off_dock_plank_bars);
         for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
-            com.termux.app.place.EdgeStackView stack = edgeStack(edge);
-            if (stack == null) continue;
             boolean planked = plankHost != null && plankBars != null && edge == plankEdge;
             List<Element> onPlank = planked
                 ? offDockPlankElements(layout, edge) : Collections.<Element>emptyList();
-            List<View> bars = new ArrayList<>(4);
+            // One list per stack this edge writes into — the bottom edge has two — each filled in
+            // the policy's order, so a stack always gets its own bands outermost first.
+            Map<com.termux.app.place.EdgeStackView, List<View>> bars = new LinkedHashMap<>(4);
             List<View> plankContents = new ArrayList<>(2);
             for (Element element : EdgeStackPolicy.stack(layout, edge)) {
                 View host = edgeStackHost(element, edge);
-                if (host == null) continue;
+                com.termux.app.place.EdgeStackView stack = edgeStackFor(element, edge);
+                if (host == null || stack == null) continue;
+                List<View> into = bars.get(stack);
+                if (into == null) bars.put(stack, into = new ArrayList<>(4));
                 if (onPlank.contains(element)) {
                     // The plank stands where its outermost bar would have, and the bars it holds
                     // are its children instead of the stack's.
-                    if (!bars.contains(plankHost)) bars.add(plankHost);
+                    if (!into.contains(plankHost)) into.add(plankHost);
                     if (!plankContents.contains(host)) plankContents.add(host);
-                } else if (!bars.contains(host)) {
-                    bars.add(host);
+                } else if (!into.contains(host)) {
+                    into.add(host);
                 }
             }
             if (planked) {
                 plankBars.setEdge(edge);
                 moved |= plankBars.setStack(plankContents);
             }
-            moved |= stack.setStack(bars);
+            for (Map.Entry<com.termux.app.place.EdgeStackView, List<View>> entry : bars.entrySet())
+                moved |= entry.getKey().setStack(entry.getValue());
         }
         return moved;
     }
@@ -9741,7 +9763,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private PlaceLayout.Edge offDockPlankEdge(@NonNull PlaceLayout layout) {
         if (!PlaceChromePolicy.appsShown(layout)) return null;
         PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(layout);
-        if (edge.isOnSide() || edgeStackHost(Element.APPS, edge) == null) return null;
+        if (edge.isOnSide() || edge == PlaceLayout.Edge.BOTTOM) return null;
         return edge;
     }
 
@@ -10446,6 +10468,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private DockLayoutPolicy.DockInputs buildDockInputs(int additionalAppsBarHeightPx) {
         boolean preferencesAvailable = mPreferences != null;
         PlaceLayout layout = currentPlaceLayout();
+        List<Element> bottomStack = EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM);
         return DockLayoutPolicy.DockInputs.builder()
             .preferencesAvailable(preferencesAvailable)
             .capsule(isRoundedDockStyle())
@@ -10463,8 +10486,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS)
             .appsRowEnabledPref(PlaceChromePolicy.appsShown(layout))
             .azRowEnabledPref(PlaceChromePolicy.azRowOnDock(layout))
-            // Which row ends up on the dock's rim, so the A-Z row knows whether to carry a chin.
-            .extraKeysRowShown(PlaceChromePolicy.extraKeysRowShown(layout))
+            // Which rows end up over and under the letters — the resolved order, not the switches —
+            // so the A-Z row knows whether to carry a crown and a chin.
+            .rowOverAz(AccessoryStackLayoutPolicy.rowOverAz(bottomStack))
+            .rowUnderAz(AccessoryStackLayoutPolicy.rowUnderAz(bottomStack))
             .baseToolbarHeightPx(getDockBaseToolbarHeightPx())
             .additionalAppsBarHeightPx(additionalAppsBarHeightPx)
             .railOnRight(PlaceChromePolicy.appsRailOnRight(layout))

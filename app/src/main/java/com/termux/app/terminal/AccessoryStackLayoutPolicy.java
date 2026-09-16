@@ -1,8 +1,50 @@
 package com.termux.app.terminal;
 
+import androidx.annotation.NonNull;
+
+import com.termux.app.place.Element;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 public final class AccessoryStackLayoutPolicy {
 
     private AccessoryStackLayoutPolicy() {}
+
+    // ---------------------------------------------------------------- the dock's own rows
+
+    /**
+     * The dock's own rows within one bottom-edge stack, outermost (against the dock's rim) first —
+     * the order {@code EdgeStackPolicy.stack(layout, BOTTOM)} gives, with anything that is not a
+     * dock row left out. Today that is the status bar, which stands above the whole dock on the
+     * terminal's own height rather than on its glass.
+     */
+    @NonNull
+    public static List<Element> dockRows(@NonNull List<Element> bottomStack) {
+        List<Element> rows = new ArrayList<>(3);
+        for (Element element : bottomStack) {
+            if (element == Element.APPS || element == Element.AZ
+                || element == Element.EXTRA_KEYS) rows.add(element);
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    /**
+     * Whether a dock row stands over the letters, which is what takes their crown away. Read off
+     * the resolved order rather than off "the apps row is shown": re-ordered, it can be the extra
+     * keys standing over the letters, or nothing at all with the apps row under them.
+     */
+    public static boolean rowOverAz(@NonNull List<Element> bottomStack) {
+        List<Element> rows = dockRows(bottomStack);
+        int az = rows.indexOf(Element.AZ);
+        return az >= 0 && az < rows.size() - 1;
+    }
+
+    /** Whether a dock row stands under the letters, which is what takes their chin away. */
+    public static boolean rowUnderAz(@NonNull List<Element> bottomStack) {
+        return dockRows(bottomStack).indexOf(Element.AZ) > 0;
+    }
 
     public static int computeCombinedHeight(int toolbarHeightPx, int appsBarHeightPx, int azRowHeightPx, int appsBarGapPx) {
         int toolbar = Math.max(0, toolbarHeightPx);
@@ -73,45 +115,48 @@ public final class AccessoryStackLayoutPolicy {
     private static final float AZ_ROW_LETTER_BAND_DP = 19f;
 
     /**
-     * Dead space the A-Z row carries under its letters when it is the dock's bottom row, so the
-     * letters are not hard against the rim and the row is not a 19dp strip to hit. With the
-     * extra-keys row present that row is the one on the rim, and the A-Z row keeps its band alone.
+     * Dead space the A-Z row carries under its letters when it is the row on the dock's bottom rim,
+     * so the letters are not hard against it and the row is not a 19dp strip to hit. With another
+     * dock row under it that row is the one on the rim, and the A-Z row keeps its band alone.
+     *
+     * <p>{@code rowUnderAz} is read off the resolved bottom stack ({@link #rowUnderAz}), not off
+     * the extra keys: whichever band the user put under the letters does the same job.
      */
     private static final float AZ_ROW_CHIN_DP = 10f;
 
-    public static int computeAzRowChinPaddingPx(boolean azEnabled, boolean extraKeysRowEnabled,
+    public static int computeAzRowChinPaddingPx(boolean azEnabled, boolean rowUnderAz,
                                                 float density) {
-        if (!azEnabled || extraKeysRowEnabled)
+        if (!azEnabled || rowUnderAz)
             return 0;
         return Math.round(Math.max(0f, density) * AZ_ROW_CHIN_DP);
     }
 
     /**
-     * Air above the letters when the A-Z row is the dock's top row. With the apps row above it the
-     * indicator band and that row's own bottom padding keep the letters off the dock's top rim;
-     * without it the 19dp band would stand 1dp under the rim, so the row carries the air itself.
+     * Air above the letters when the A-Z row is the dock's top row. With another dock row over it
+     * that row's own bottom padding keeps the letters off the dock's top rim; without one the 19dp
+     * band would stand 1dp under the rim, so the row carries the air itself.
      */
     private static final float AZ_ROW_CROWN_DP = 6f;
 
-    public static int computeAzRowCrownPaddingPx(boolean azEnabled, boolean appsRowEnabled,
+    public static int computeAzRowCrownPaddingPx(boolean azEnabled, boolean rowOverAz,
                                                  float density) {
-        if (!azEnabled || appsRowEnabled)
+        if (!azEnabled || rowOverAz)
             return 0;
         return Math.round(Math.max(0f, density) * AZ_ROW_CROWN_DP);
     }
 
     /**
-     * The A-Z row's full height: the letter band, plus the crown over it when no apps row stands
+     * The A-Z row's full height: the letter band, plus the crown over it when no dock row stands
      * above and the chin under it when the row sits on the dock's bottom rim. Both are drawn as
      * padding, so the letters keep their place in the band and the extra height is touchable air.
      */
-    public static int computeAzRowHeightPx(boolean azEnabled, boolean appsRowEnabled,
-                                           boolean extraKeysRowEnabled, float density) {
+    public static int computeAzRowHeightPx(boolean azEnabled, boolean rowOverAz,
+                                           boolean rowUnderAz, float density) {
         if (!azEnabled)
             return 0;
         return Math.round(Math.max(0f, density) * AZ_ROW_LETTER_BAND_DP)
-            + computeAzRowCrownPaddingPx(azEnabled, appsRowEnabled, density)
-            + computeAzRowChinPaddingPx(azEnabled, extraKeysRowEnabled, density);
+            + computeAzRowCrownPaddingPx(azEnabled, rowOverAz, density)
+            + computeAzRowChinPaddingPx(azEnabled, rowUnderAz, density);
     }
 
     public static int computeTerminalToolbarHeightPx(int baseHeightPx, int rowCount, float scaleFactor) {
