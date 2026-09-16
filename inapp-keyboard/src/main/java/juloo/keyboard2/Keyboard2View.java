@@ -544,6 +544,62 @@ public class Keyboard2View extends View
         && v.getKeyevent() == KeyEvent.KEYCODE_ENTER;
   }
 
+  /** Paint tiers a key can draw with; see [tierFor]. */
+  enum KeyTier { LETTER, FUNCTION, ACTION, SPACE_BAR, SUGGESTION }
+
+  /**
+   * The paint tier of a key. Layouts may omit [role] (the shipped launcher layout and most user
+   * layouts do), so a [Normal] key is classified from its own value: enter is the action key,
+   * modifiers, non-printing key events and layout/config events are function keys, the space
+   * editing key is the space bar, everything else is a letter key.
+   */
+  static KeyTier tierFor(KeyboardData.Key k)
+  {
+    switch (k.role)
+    {
+      case Action: return isEnterKey(k) ? KeyTier.ACTION : KeyTier.FUNCTION;
+      case Space_bar: return KeyTier.SPACE_BAR;
+      case Suggestion: return KeyTier.SUGGESTION;
+      default: break;
+    }
+    KeyValue v = k.keys[0];
+    if (v == null)
+      return KeyTier.LETTER;
+    switch (v.getKind())
+    {
+      case Keyevent:
+        switch (v.getKeyevent())
+        {
+          case KeyEvent.KEYCODE_ENTER: return KeyTier.ACTION;
+          case KeyEvent.KEYCODE_ESCAPE: case KeyEvent.KEYCODE_TAB:
+          case KeyEvent.KEYCODE_DEL: case KeyEvent.KEYCODE_FORWARD_DEL:
+          case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
+          case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_DPAD_RIGHT:
+          case KeyEvent.KEYCODE_MOVE_HOME: case KeyEvent.KEYCODE_MOVE_END:
+          case KeyEvent.KEYCODE_PAGE_UP: case KeyEvent.KEYCODE_PAGE_DOWN:
+          case KeyEvent.KEYCODE_INSERT:
+            return KeyTier.FUNCTION;
+          default: return KeyTier.LETTER;
+        }
+      case Modifier: case Event: return KeyTier.FUNCTION;
+      case Editing:
+        return v.getEditing() == KeyValue.Editing.SPACE_BAR ? KeyTier.SPACE_BAR : KeyTier.FUNCTION;
+      default: return KeyTier.LETTER;
+    }
+  }
+
+  private Theme.Computed.Key paintFor(KeyboardData.Key k)
+  {
+    switch (tierFor(k))
+    {
+      case ACTION: return _tc.key_action;
+      case FUNCTION: return _tc.key_function;
+      case SPACE_BAR: return _tc.key_space_bar;
+      case SUGGESTION: return _tc.key_suggestion;
+      default: return _tc.key;
+    }
+  }
+
   private static int parseKeyId(String keyId)
   {
     int colon = keyId.indexOf(':');
@@ -1475,14 +1531,7 @@ public class Keyboard2View extends View
         if (isKeyDown)
           tc_key = _tc.key_activated;
         else
-          switch (k.role)
-          {
-            case Action: tc_key = isEnterKey(k) ? _tc.key_action : _tc.key_function; break;
-            case Space_bar: tc_key = _tc.key_space_bar; break;
-            case Suggestion: tc_key = _tc.key_suggestion; break;
-            default:
-            case Normal: tc_key = _tc.key; break;
-          }
+          tc_key = paintFor(k);
         if (hintOverride != null && _hintFadeAnimator != null)
         {
           hintOverride = fadeHintOverride(hintOverride, schemeOverride, tc_key);

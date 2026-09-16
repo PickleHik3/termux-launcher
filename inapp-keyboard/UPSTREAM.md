@@ -176,6 +176,8 @@ fails when the catalogue has gone stale.
   layout switch, config — see `bottom_row.xml`), with no way to give the actual action key a
   different look from the rest. Since re-splitting that role in every layout's `role=` attribute
   would be a layout change, `Keyboard2View.isEnterKey` tells them apart at draw time instead, from
+
+- `Keyboard2View.tierFor` (2026-09-16): a `Normal`-role key is classified from its value (enter → action tier, modifiers/non-printing key events/layout events → function tier, the space editing key → space bar) because the shipped `termux_launcher_qwerty.xml` bottom row and user layouts omit `role`; the bottom row in that layout now also carries `role="action"`/`role="space_bar"` like upstream's `bottom_row.xml`.
   a key's own value (`Kind.Keyevent` with `KEYCODE_ENTER`) rather than its role, and picks
   `key_action` (the filled Material action-button look) only for that key, `key_function`
   (function-key look) for the rest of the Action role. Space_bar no longer borrows the Action
