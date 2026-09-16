@@ -53,9 +53,9 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps, the same one a terminal pane holds. */
     private static final float CORNER_DP = CornerZones.PANE_SIZE_DP;
-    /** The tab: five 30dp buttons 8dp apart, 5dp of padding, 3dp in from the trailing edge. */
+    /** The tab: five 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
     private static final float TAB_WIDTH_DP = 192f;
-    private static final float TAB_INSET_DP = 3f;
+    private static final float TAB_INSET_DP = 0f;
     /** The middle of the gap between Settings and Edit. */
     private static final float TAB_SPLIT_DP = 39f;
 
