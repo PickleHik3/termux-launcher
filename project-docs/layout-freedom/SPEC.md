@@ -130,6 +130,17 @@ Honest boundary: none of this is device-verified. A row or a column standing off
 no glass sheet of its own — the rail never had one either — so a top apps row draws over the
 wallpaper rather than over dock glass. `contentInsets` already summed and needed nothing new.
 
+## Defects found on pong (2026-09-16) and the fix plan
+
+Review page `.lavish/layout-fixes.html`. Decisions: the A–Z index rides the apps row only when
+both sit on the same edge (moving only the row never moves the index); fix all three phases.
+
+| Phase | Branch | Fixes | Depends on |
+|---|---|---|---|
+| P1 | `fix/layout-p1` | rail render gates axis-aware in `SuggestionBarView` (icons piled, hidden after reload); dock glass width no longer frozen to a stale pixel width in `applyAccessoryLayerBounds` | — |
+| P2 | `fix/layout-p2` | one shared plank with the Appearance radius for a lying-down row off the dock; `azRidesAppsRow` same-edge rule; `withDrop` moves a riding index with the row | — |
+| P3 | `fix/layout-p3` | the bottom dock rows join `place_edge_stack_bottom` (ordered container above the keyboard) so every bottom order renders; `AccessoryStackLayoutPolicy` reads the resolved order | P2 |
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |
