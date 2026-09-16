@@ -88,18 +88,30 @@ public final class PageTickStrip {
     }
 
     /**
-     * Which side of the bar the strip stands on, as the index it takes in the bar's own host.
+     * Which side of the bar the strip stands on, as the index it takes in the bar's own host:
+     * {@code true} when the ticks lead the row along the host's axis (the lower coordinate),
+     * {@code false} when they follow it.
      *
-     * <p>One rule for all four edges: the strip stands on the row's <em>centre-facing</em> side,
-     * the same side the drawer, the status lens and the A-Z match band all open towards. Above the
-     * row on the bottom edge, below it on the top, right of a left-hand rail and left of a
-     * right-hand one — so the ticks always read as the row's inner rim rather than as something
-     * wedged between the row and whatever band comes next. The strip therefore leads its host on
-     * the two edges whose inner side is the lower coordinate: the bottom edge and a right-hand
-     * rail.
+     * <p>The ticks stand on the row's <em>outer</em> side — the side of it the screen edge its
+     * stack stands on is. Below the row on the bottom edge, above it on the top, outboard on a
+     * side rail. There the strip reads as the bar's own rim against the screen rather than as a
+     * divider wedged between the row and the band beyond it, which is what it became the moment
+     * the arrangement could stand another band there.
+     *
+     * <p>One arrangement is the exception: the row standing immediately next to the canvas, with
+     * nothing between it and the terminal, the widgets or the display pane. Its outer side is
+     * then the one with a neighbour on it and its canvas side is the free one, so the ticks take
+     * the canvas side — above the icons on the bottom edge, under them on the top, inboard on a
+     * rail — which is where they have always stood on the shipped arrangement.
+     *
+     * @param nextToCanvas the row is the innermost band of its edge's stack
      */
-    public static boolean leadsRow(PlaceLayout.Edge edge) {
-        return edge == PlaceLayout.Edge.RIGHT || edge == PlaceLayout.Edge.BOTTOM;
+    public static boolean ticksLeadRow(PlaceLayout.Edge edge, boolean nextToCanvas) {
+        // The two edges whose canvas-facing side is the lower coordinate, which is the side a
+        // leading band takes: the bottom edge and a right-hand rail.
+        boolean canvasSideLeads =
+            edge == PlaceLayout.Edge.RIGHT || edge == PlaceLayout.Edge.BOTTOM;
+        return nextToCanvas == canvasSideLeads;
     }
 
     /** Which way the ticks run: down the strip for a rail, across it for a row. */

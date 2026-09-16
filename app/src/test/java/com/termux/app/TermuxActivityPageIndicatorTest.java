@@ -155,7 +155,9 @@ public class TermuxActivityPageIndicatorTest {
     }
 
     @Test
-    public void theStripTakesTheSameSideOfTheRowOnEveryEdge() {
+    public void aRowNextToTheCanvasKeepsItsTicksOnTheCanvasSideOnEveryEdge() {
+        // Every one of these arrangements stands the row innermost on its edge, so the exception
+        // is the rule here: the ticks take the side the terminal is on.
         for (Edge edge : Edge.values()) {
             TermuxActivity activity = inflate();
             SuggestionBarView bar = standOn(activity, edge);
@@ -166,7 +168,7 @@ public class TermuxActivityPageIndicatorTest {
             int stripIndex = host.indexOfChild(bound);
             assertTrue(edge + ": the row and its ticks are both bands of the host",
                 rowIndex >= 0 && stripIndex >= 0);
-            if (PageTickStrip.leadsRow(edge)) {
+            if (PageTickStrip.ticksLeadRow(edge, true)) {
                 assertTrue(edge + ": the ticks stand on the terminal's side of the bar",
                     stripIndex < rowIndex);
             } else {
@@ -176,6 +178,55 @@ public class TermuxActivityPageIndicatorTest {
             assertEquals(edge + ": the ticks run the way the row does",
                 PageTickStrip.verticalOn(edge), bound.isVerticalForm());
         }
+    }
+
+    /**
+     * The mirror of the bottom edge's outer-side case: a row lying along the top with the index
+     * standing between it and the terminal. The ticks go to the row's outer side, which up there
+     * is over the icons, rather than into the gap the index is already on the other side of.
+     */
+    @Test
+    public void aTopRowWithABandBetweenItAndTheCanvasPutsItsTicksOverTheIcons() {
+        TermuxActivity activity = inflate();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
+        assertNotNull(preferences);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+
+        SuggestionBarView bar = lendBar(activity);
+        PlaceLayout layout = topRowUnderTheIndex();
+        activity.applyEdgeStacks(layout);
+        activity.syncPinnedAppsHost(layout);
+
+        PageTickStripView strip = bar.boundPageIndicator();
+        assertNotNull(strip);
+        LinearLayout host = (LinearLayout) strip.getParent();
+        View row = bandHolding(host, bar);
+        assertNotNull(row);
+        assertTrue("the ticks stand over the icons on the top edge",
+            host.indexOfChild(strip) < host.indexOfChild(row));
+
+        // Sharing its plank with the index, the row keeps the same air on each side of its icons,
+        // and the ticks stand inside the one over them.
+        DockLayout dock = activity.dockLayoutFor(layout);
+        float density = activity.getResources().getDisplayMetrics().density;
+        int airPx = DockLayoutPolicy.rowAirPx(false, true, density);
+        assertEquals(dock.appsRowStripBandPx, strip.getLayoutParams().height);
+        assertEquals("nothing is left of the air on the ticks' side", 0, row.getPaddingTop());
+        assertEquals("and the whole of it under the icons", airPx, row.getPaddingBottom());
+        assertEquals("the host is the band, with nothing reserved for the strip",
+            dock.appsRowBandPx, row.getLayoutParams().height + strip.getLayoutParams().height);
+    }
+
+    /** The index innermost on the top edge, the row outside it, everything else on the bottom. */
+    private static PlaceLayout topRowUnderTheIndex() {
+        Map<Element, Slot> slots = new EnumMap<>(Element.class);
+        for (Element element : Element.values())
+            slots.put(element, Slot.on(Edge.BOTTOM, element));
+        slots.put(Element.STATUS, new Slot(false, Edge.TOP, 0));
+        slots.put(Element.APPS, new Slot(false, Edge.TOP, 1));
+        slots.put(Element.AZ, new Slot(false, Edge.TOP, 2));
+        return new PlaceLayout(slots, PlaceLayout.KeyboardMode.RESIZE,
+            PlaceLayout.KeyboardForm.DOCKED, 4, 4);
     }
 
     /**

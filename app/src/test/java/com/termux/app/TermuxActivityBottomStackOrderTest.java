@@ -9,6 +9,9 @@ import android.view.ViewParent;
 import com.termux.R;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.launcher.model.AppRef;
+import com.termux.app.launcher.model.PinnedAppItem;
+import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.PageTickStrip;
 import com.termux.app.launcher.paging.PageTickStripView;
 import com.termux.app.place.EdgeStackView;
@@ -28,7 +31,9 @@ import org.robolectric.util.ReflectionHelpers;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
@@ -385,13 +390,19 @@ public class TermuxActivityBottomStackOrderTest {
 
         // Reading down the dock: the extra keys, the apps row, the letters on the rim — the row
         // with a band on each side of it, which is the pair of hairlines the complaint is about.
+        // Updated for Q9 with a reason: the keys stand between the row and the terminal, so the
+        // row is not the band next to the canvas and its ticks take its outer side — under the
+        // icons rather than over them. The air on each side is unchanged.
         PlaceLayout layout = bottom(Element.EXTRA_KEYS, Element.APPS, Element.AZ);
         DockLayout dock = activity.dockLayoutFor(layout);
         activity.applyEdgeStacks(layout);
         activity.applyDockLayout(dock);
+        lendBar(activity);
+        activity.syncPinnedAppsHost(layout);
         // Those two bands keep the same air of their own, so each hairline splits an equal gap and
-        // what is left to measure is the row's own symmetry.
-        int neighbourAirPx = Math.round(density * 6f);
+        // what is left to measure is the row's own symmetry. It is deeper than the ticks' band so
+        // that neither midpoint has to be clamped clear of them — that is its own test.
+        int neighbourAirPx = Math.round(density * 12f);
         activity.findViewById(R.id.terminal_toolbar_view_pager)
             .setPadding(0, 0, 0, neighbourAirPx);
         activity.findViewById(R.id.apps_bar_az_row).setPadding(0, neighbourAirPx, 0, 0);
@@ -408,8 +419,8 @@ public class TermuxActivityBottomStackOrderTest {
 
         View pager = activity.findViewById(R.id.apps_bar_viewpager);
         View host = activity.findViewById(R.id.apps_bar_row_host);
-        assertEquals("nothing is left of the air on the ticks' side", 0, pager.getPaddingTop());
-        assertEquals(airPx, pager.getPaddingBottom());
+        assertEquals("nothing is left of the air on the ticks' side", 0, pager.getPaddingBottom());
+        assertEquals(airPx, pager.getPaddingTop());
 
         int pagerTop = topIn(rows, pager);
         int iconTop = pagerTop + pager.getPaddingTop();
@@ -421,12 +432,12 @@ public class TermuxActivityBottomStackOrderTest {
         assertEquals("and the same under them", airPx,
             hostTop + host.getHeight() - iconBottom);
 
-        // The ticks lead the row on the bottom edge, so they stand in the air above the icons —
-        // the whole of it, which is what the row no longer keeps for itself.
+        // The ticks follow the row here, so they stand in the air under the icons — the whole of
+        // it, which is what the row no longer keeps for itself.
         int ticksTop = topIn(rows, ticks);
-        assertEquals(hostTop, ticksTop);
+        assertEquals("the ticks start where the icons end", iconBottom, ticksTop);
         assertEquals(airPx, ticks.getHeight());
-        assertEquals("the ticks reach the icons and no further", iconTop,
+        assertEquals("and reach the band's own end", hostTop + host.getHeight(),
             ticksTop + ticks.getHeight());
 
         // Three bands on one sheet: a hairline in each gap, and the row is between them.
@@ -439,28 +450,37 @@ public class TermuxActivityBottomStackOrderTest {
 
         // And the hairline stands clear of the ticks it now shares a gap with.
         float thickness = PageTickStrip.THICKNESS_DP * density;
-        float tickTop = ticksTop + ((ticks.getHeight() - thickness) / 2f);
-        assertTrue("the hairline is above the ticks: " + above, above < tickTop);
-        assertTrue("and the ticks are clear of the icons", tickTop + thickness < iconTop);
+        float tickBottom = ticksTop + ((ticks.getHeight() + thickness) / 2f);
+        assertTrue("the hairline is below the ticks: " + below, below > tickBottom);
+        assertTrue("and the ticks are clear of the icons", tickBottom - thickness > iconBottom);
     }
 
     /**
-     * The one arrangement tight enough to put the hairline on the ticks: the letters directly over
-     * the icons, where the letters wear no chin because a row stands under them. The whole gap is
-     * then the ticks' own band, so its middle is the middle of the tick glyphs — a line drawn
-     * there reads as a strike-through. It goes to the far side of them from the icons instead.
+     * The one arrangement tight enough to put the hairline on the ticks: a band hard against the
+     * side of the row the ticks stand on, so the whole gap is the ticks' own band and its middle
+     * is the middle of the tick glyphs — a line drawn there reads as a strike-through. It goes to
+     * the far side of them from the icons instead.
+     *
+     * <p>Updated for Q9 with a reason: the ticks take the row's outer side now, so the tight gap
+     * is the one under the icons rather than the one over them. The clamp reads the same either
+     * way, which is what this proves.
      */
     @Test
-    public void theHairlineNeverCrossesTheTicksEvenWithTheLettersHardOverThem() {
+    public void theHairlineNeverCrossesTheTicksEvenWithTheLettersHardUnderThem() {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
         assertNotNull(preferences);
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
 
-        // Reading down the dock: the extra keys, the letters, the apps row on the rim.
-        PlaceLayout layout = bottom(Element.EXTRA_KEYS, Element.AZ, Element.APPS);
+        // Reading down the dock: the extra keys, the apps row, the letters on the rim.
+        PlaceLayout layout = bottom(Element.EXTRA_KEYS, Element.APPS, Element.AZ);
         DockLayout dock = activity.dockLayoutFor(layout);
         activity.applyEdgeStacks(layout);
         activity.applyDockLayout(dock);
+        lendBar(activity);
+        activity.syncPinnedAppsHost(layout);
+        // The letters hard against the ticks: no crown of their own, so the gap is the band and
+        // nothing else.
+        activity.findViewById(R.id.apps_bar_az_row).setPadding(0, 0, 0, 0);
         PageTickStripView ticks = activity.findViewById(R.id.apps_bar_indicator_band);
         ticks.setVisibility(View.VISIBLE);
         ticks.setPages(3, 0f);
@@ -470,31 +490,128 @@ public class TermuxActivityBottomStackOrderTest {
         View pager = activity.findViewById(R.id.apps_bar_viewpager);
         View host = activity.findViewById(R.id.apps_bar_row_host);
         View letters = activity.findViewById(R.id.apps_bar_az_row);
-        int hostTop = topIn(rows, host);
-        int iconTop = topIn(rows, pager) + pager.getPaddingTop();
+        int hostBottom = topIn(rows, host) + host.getHeight();
+        int iconBottom = topIn(rows, pager) + pager.getHeight() - pager.getPaddingBottom();
         int ticksTop = topIn(rows, ticks);
-        int lettersBottom = topIn(rows, letters) + letters.getHeight();
+        int lettersTop = topIn(rows, letters);
         float thickness = PageTickStrip.THICKNESS_DP * density;
         float markTop = ticksTop + ((ticks.getHeight() - thickness) / 2f);
         float markBottom = markTop + thickness;
         int clearancePx = Math.max(1, Math.round(density));
 
-        assertEquals("a row under them, so the letters wear no chin and keep no air here",
-            hostTop, lettersBottom);
+        assertEquals("the letters keep no air on this side, so the gap is the ticks' band",
+            hostBottom, lettersTop);
         assertTrue("the row has to be on the dock for this to mean anything",
             dock.appsRowIconPx > 0);
 
         int[] seams = rows.separatorCenters();
         assertEquals(2, seams.length);
         int seam = seams[1];
-        assertTrue("the hairline clears the tick glyphs: " + seam + " vs " + markTop,
-            seam <= markTop - clearancePx);
-        assertTrue("and stands between the letters and the ticks: " + seam,
-            seam > lettersBottom);
-        // The ticks are still the air over the icons and nothing else moved.
-        assertEquals("the ticks reach the icons and no further", iconTop,
-            ticksTop + ticks.getHeight());
-        assertTrue("and stop short of them", markBottom < iconTop);
+        assertTrue("the hairline clears the tick glyphs: " + seam + " vs " + markBottom,
+            seam >= markBottom + clearancePx);
+        assertTrue("and stands between the ticks and the letters: " + seam,
+            seam <= lettersTop);
+        // The ticks are still the air under the icons and nothing else moved.
+        assertEquals("the ticks start where the icons end", iconBottom, ticksTop);
+        assertTrue("and stop short of the letters", markBottom < lettersTop);
+    }
+
+    // ------------------------------------------------- which side of the row the ticks stand on
+
+    /**
+     * The row on the dock's rim, with the keys and the letters between it and the terminal: the
+     * ticks stand on its outer side, under the icons, where they read as the bar's own rim against
+     * the screen rather than as a divider in the gap the keys are already on the other side of.
+     */
+    @Test
+    public void aRowWithABandBetweenItAndTheCanvasPutsItsTicksUnderTheIcons() {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
+        assertNotNull(preferences);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+
+        PlaceLayout layout = bottom(Element.AZ, Element.EXTRA_KEYS, Element.APPS);
+        DockLayout dock = activity.dockLayoutFor(layout);
+        activity.applyEdgeStacks(layout);
+        activity.applyDockLayout(dock);
+        lendBar(activity);
+        activity.syncPinnedAppsHost(layout);
+        layoutContainer();
+
+        ViewGroup host = activity.findViewById(R.id.apps_bar_row_host);
+        View pager = activity.findViewById(R.id.apps_bar_viewpager);
+        View ticks = activity.findViewById(R.id.apps_bar_indicator_band);
+        assertTrue("the ticks stand under the icons",
+            host.indexOfChild(ticks) > host.indexOfChild(pager));
+
+        int airPx = DockLayoutPolicy.rowAirPx(false, true,
+            activity.getResources().getDisplayMetrics().density);
+        assertEquals("the whole of the air on the ticks' side is theirs",
+            0, pager.getPaddingBottom());
+        assertEquals("and the row keeps the same air on the other", airPx, pager.getPaddingTop());
+        int hostTop = topIn(rows, host);
+        int iconBottom = topIn(rows, pager) + pager.getHeight() - pager.getPaddingBottom();
+        assertEquals("the ticks reach the band's own end and no further",
+            hostTop + host.getHeight(), iconBottom + ticks.getHeight());
+    }
+
+    /**
+     * The shipped arrangement, where the row is the band next to the terminal: nothing stands on
+     * its canvas side, so the ticks take that one and the gap under the row is plain air with a
+     * hairline through the middle of it.
+     */
+    @Test
+    public void theRowNextToTheCanvasKeepsItsTicksOverTheIcons() {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
+        assertNotNull(preferences);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+
+        PlaceLayout layout = bottom(Element.APPS, Element.AZ, Element.EXTRA_KEYS);
+        DockLayout dock = activity.dockLayoutFor(layout);
+        activity.applyEdgeStacks(layout);
+        activity.applyDockLayout(dock);
+        lendBar(activity);
+        activity.syncPinnedAppsHost(layout);
+        PageTickStripView ticks = activity.findViewById(R.id.apps_bar_indicator_band);
+        ticks.setVisibility(View.VISIBLE);
+        ticks.setPages(3, 0f);
+        layoutContainer();
+
+        ViewGroup host = activity.findViewById(R.id.apps_bar_row_host);
+        View pager = activity.findViewById(R.id.apps_bar_viewpager);
+        assertTrue("the ticks stand over the icons",
+            host.indexOfChild(ticks) < host.indexOfChild(pager));
+        assertEquals("the whole of the air on the ticks' side is theirs", 0,
+            pager.getPaddingTop());
+
+        // The gap under the row holds no ticks at all, so its hairline splits it plainly.
+        int airPx = DockLayoutPolicy.rowAirPx(false, true,
+            activity.getResources().getDisplayMetrics().density);
+        int hostBottom = topIn(rows, host) + host.getHeight();
+        int iconBottom = topIn(rows, pager) + pager.getHeight() - pager.getPaddingBottom();
+        View letters = activity.findViewById(R.id.apps_bar_az_row);
+        int lettersTop = topIn(rows, letters) + letters.getPaddingTop();
+        assertEquals("the row keeps the whole of its air on this side",
+            airPx, hostBottom - iconBottom);
+        int[] seams = rows.separatorCenters();
+        assertEquals(2, seams.length);
+        assertEquals("nothing to clear, so the line is the middle of the gap",
+            (iconBottom + lettersTop) / 2, seams[0]);
+        assertTrue("the row has to be on the dock for this to mean anything",
+            dock.appsRowIconPx > 0);
+    }
+
+    /** A bar holding enough pages to be worth an indicator, lent the way the activity lends it. */
+    private static SuggestionBarView lendBar(TermuxActivity activity) {
+        SuggestionBarView bar = new SuggestionBarView(activity, null);
+        List<PinnedItem> pinned = new ArrayList<>();
+        for (int i = 0; i < 12; i++)
+            pinned.add(new PinnedAppItem(new AppRef("com.example.app" + i, "Main")));
+        ReflectionHelpers.setField(bar, "pinnedItems", pinned);
+        ViewGroup plank = activity.findViewById(R.id.apps_bar_plank_layer);
+        plank.addView(bar, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        ReflectionHelpers.setField(activity, "mSuggestionBarView", bar);
+        return bar;
     }
 
     // ---------------------------------------------------------------- helpers
