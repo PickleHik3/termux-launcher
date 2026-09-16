@@ -6,9 +6,9 @@ package com.termux.app.launcher.az;
  *
  * <p>The bar keeps the same letter band it has on the dock and the same chin beside it, so a bar
  * on any edge is the same thing to hit as the one along the bottom. On a side edge the host is a
- * column like the apps rail and the extra keys column, and it is the innermost of them: its own
- * edge inset is whatever already holds that side, so three or four columns can share one edge with
- * none of them drawn over.
+ * column like the apps rail and the extra keys column, and it is one band on the same edge stack
+ * as them, so three or four columns share one edge with none of them drawn over
+ * ({@link com.termux.app.place.EdgeStackPolicy#contentInsets} adds the bands up).
  *
  * <p>Pure: no views, no resources, only densities and pixels.
  */
@@ -56,8 +56,8 @@ public final class AzBarHostGeometry {
 
     /**
      * How far down a column host the bar starts. The bar stands <em>beside</em> whatever else
-     * holds its edge rather than under it — {@link #edgeInsetPx} already carries it past those
-     * columns — so the only thing above it is chrome that crosses the whole container: a status
+     * holds its edge rather than under it — the edge stack it stands in already carries it past
+     * those bands — so the only thing above it is chrome that crosses the whole container: a status
      * bar standing along the top. Nothing about a column on the same side belongs here.
      */
     public static int columnTopPaddingPx(int marginPx, int topChromeHeightPx) {
@@ -78,20 +78,5 @@ public final class AzBarHostGeometry {
         return Math.max(0, Math.max(0, containerHeightPx)
             - columnTopPaddingPx(marginPx, topChromeHeightPx)
             - columnBottomPaddingPx(marginPx, bottomChromeHeightPx));
-    }
-
-    /**
-     * Where a column host starts, in from its side: past the display cutout, and past the rail,
-     * the extra keys column and the status bar's own column wherever they hold the same side. Each
-     * of those is given as the footprint it already claims, so the bar lands just inside the last
-     * of them.
-     */
-    public static int edgeInsetPx(int cutoutPx, int railFootprintPx, int extraKeysFootprintPx,
-                                  int statusColumnFootprintPx) {
-        int inset = Math.max(0, cutoutPx);
-        inset = Math.max(inset, railFootprintPx);
-        inset = Math.max(inset, extraKeysFootprintPx);
-        inset = Math.max(inset, statusColumnFootprintPx);
-        return Math.max(0, inset);
     }
 }

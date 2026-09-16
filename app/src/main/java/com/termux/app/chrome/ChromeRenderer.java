@@ -441,6 +441,16 @@ public final class ChromeRenderer {
     }
 
     /**
+     * A bar has changed edge, so every crop cut against where a surface used to be is stale. Same
+     * treatment a turn of the screen gets — the cache goes if the frame it was cut from has moved,
+     * and every backdrop is re-cut on the next pass rather than per frame.
+     */
+    public void onArrangementChanged() {
+        mBlurCache.dropIfSourceMoved();
+        mLedger.markAllBackdropsDirty();
+    }
+
+    /**
      * Real memory pressure ({@link ChromePolicy#trimReleasesBlurFrames}): a home app that keeps
      * several full-screen blur bitmaps alive is exactly what aggressive vendor memory killers reap
      * first. Everything released here is rebuilt on demand through the ledger — one decode and

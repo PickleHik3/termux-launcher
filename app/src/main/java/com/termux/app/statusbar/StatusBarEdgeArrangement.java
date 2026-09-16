@@ -17,9 +17,9 @@ import com.termux.app.terminal.TerminalWindowBar;
  * Stands the status bar's own contents on the edge the place asks for.
  *
  * <p>There is one bar, one set of views and one set of ids wherever it goes: the host itself is
- * moved between the content column — where a row along the top or the bottom takes its slice of
- * the terminal's height — and the root container, where a column down a side lives beside the
- * padded content root, in the same band the apps rail and the extra keys column use. Everything
+ * re-parented between the four edge stacks, where a row along the top or the bottom takes its slice
+ * of the terminal's height and a column down a side stands beside the padded content root, in the
+ * same stack the apps rail and the extra keys column stand in. Everything
  * that binds to those views by id (the clock, the stat widgets, the window list, the glass and its
  * wallpaper frost) therefore keeps working untouched.
  *
@@ -32,63 +32,29 @@ public final class StatusBarEdgeArrangement {
     private StatusBarEdgeArrangement() {}
 
     /**
-     * Moves the host into the parent the edge belongs to and gives it that parent's kind of layout
-     * parameters. A row goes into {@code column} — first for the top edge, last for the bottom, so
-     * the terminal keeps the middle; a column goes into {@code container}, in front of the rail so
-     * whatever shares its band draws over it rather than under.
+     * Gives the host the band the edge it now stands on asks for: a row spans its stack and takes
+     * {@code thicknessPx} of its depth, a column spans the screen's height and takes that much of
+     * its width. Which stack the host is in is {@code TermuxActivity.applyEdgeStacks}'s answer —
+     * every edge is an {@code EdgeStackView}, so the parameters are always a stack's.
      *
-     * @return whether the host actually moved
+     * <p>The surface's own screen margins are the style's, not the edge's, and are kept.
      */
-    public static boolean moveHost(@NonNull View host, @NonNull ViewGroup column,
-                                   @NonNull ViewGroup container, @Nullable View contentRoot,
-                                   @NonNull Edge edge, int thicknessPx) {
-        ViewGroup target = StatusBarEdgeGeometry.isVertical(edge) ? container : column;
-        int index = targetIndex(target, column, container, contentRoot, edge);
-        ViewGroup parent = host.getParent() instanceof ViewGroup
-            ? (ViewGroup) host.getParent() : null;
-        boolean moved = parent != target || parent.indexOfChild(host) != index;
-        if (moved && parent != null) parent.removeView(host);
-        ViewGroup.LayoutParams params = layoutParams(host, edge, thicknessPx);
-        if (moved) {
-            target.addView(host, Math.max(0, Math.min(index, target.getChildCount())), params);
-        } else {
-            host.setLayoutParams(params);
-        }
-        return moved;
-    }
-
-    private static int targetIndex(@NonNull ViewGroup target, @NonNull ViewGroup column,
-                                   @NonNull ViewGroup container, @Nullable View contentRoot,
-                                   @NonNull Edge edge) {
-        if (target == column) return edge == Edge.TOP ? 0 : column.getChildCount();
-        // Straight after the padded content root: over the window's ground, under the rail, the
-        // extra keys column, the app drawer plane and the command palette.
-        int after = contentRoot == null ? 0 : container.indexOfChild(contentRoot) + 1;
-        return Math.max(0, after);
-    }
-
-    @NonNull
-    private static ViewGroup.LayoutParams layoutParams(@NonNull View host, @NonNull Edge edge,
-                                                       int thicknessPx) {
-        ViewGroup.MarginLayoutParams existing =
-            host.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
-                ? (ViewGroup.MarginLayoutParams) host.getLayoutParams() : null;
-        ViewGroup.MarginLayoutParams params;
-        if (StatusBarEdgeGeometry.isVertical(edge)) {
-            FrameLayout.LayoutParams frame = new FrameLayout.LayoutParams(thicknessPx,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                (edge == Edge.RIGHT ? Gravity.END : Gravity.START) | Gravity.TOP);
-            params = frame;
-        } else {
-            params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                thicknessPx);
-        }
-        if (existing != null) {
-            // The surface's own screen margins are the style's, not the edge's; keep them.
+    public static void band(@NonNull View host, @NonNull Edge edge, int thicknessPx) {
+        boolean column = StatusBarEdgeGeometry.isVertical(edge);
+        LinearLayout.LayoutParams params =
+            host.getLayoutParams() instanceof LinearLayout.LayoutParams
+                ? (LinearLayout.LayoutParams) host.getLayoutParams()
+                : new LinearLayout.LayoutParams(0, 0);
+        if (host.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
+            && !(host.getLayoutParams() instanceof LinearLayout.LayoutParams)) {
+            ViewGroup.MarginLayoutParams existing =
+                (ViewGroup.MarginLayoutParams) host.getLayoutParams();
             params.setMargins(existing.leftMargin, existing.topMargin, existing.rightMargin,
                 existing.bottomMargin);
         }
-        return params;
+        params.width = column ? thicknessPx : ViewGroup.LayoutParams.MATCH_PARENT;
+        params.height = column ? ViewGroup.LayoutParams.MATCH_PARENT : thicknessPx;
+        host.setLayoutParams(params);
     }
 
     /**

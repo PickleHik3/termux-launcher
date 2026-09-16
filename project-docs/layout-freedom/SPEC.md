@@ -56,6 +56,31 @@ sum) is replaced by stacking; L2 removes `StatusBarEdgeGeometry.sharedColumnLeng
 The miniature draws a bottom status bar outermost while the screen renders it innermost; L4
 fixes the miniature.
 
+## L2 outcome (2026-09-16)
+
+`EdgeStackView` (generic, `app:edgeStackEdge`, orientation from the edge, children given
+outermost-first and reversed for BOTTOM/RIGHT) is inflated four times in `activity_termux.xml`:
+`place_edge_stack_left`/`_right` beside the padded content root, `place_edge_stack_top`/`_bottom`
+inside `terminal_content_column` with `terminal_surface_host` the weighted residual between them.
+`TermuxActivity.applyEdgeStacks` walks `EdgeStackPolicy.stack` for each edge and re-parents the
+bar hosts; it runs from `doSyncPlaceLayout` and again from `applyTerminalOverlayInsets`, so the
+arithmetic and the screen never disagree. `EdgeStackPolicy.contentInsets` replaces the `max()`
+chain, and `railWidthPx`/`extraKeysColumnFootprintPx`/`statusBarColumnFootprintPx`/
+`azBarColumnFootprintPx` — plus `statusBarColumnLeadInPx`, `statusColumnTopOffsetPx`,
+`isStatusColumnShared`, `AzBarHostGeometry.edgeInsetPx` and
+`StatusBarEdgeGeometry.sharedColumnLengthPx`/`columnTopOffsetPx`/`sharesColumn`/`contentInsetPx`/
+`holdsSide` — are gone. Each side stack carries its own display cutout as padding, so every bar is
+a plain band. The A–Z index has one host for every edge off the dock (`place_az_bar_host`) instead
+of a top one and a column one. `StatusBarEdgeArrangement.moveHost` became `band`: the walk owns
+placement, the arrangement owns the band and the turn.
+
+Not done in L2, and honest about it: the pinned apps and the extra keys still render as the dock's
+own rows for a BOTTOM *or* a TOP slot, because `PlaceLayout.appsRow`/`extraKeys` map TOP to BOTTOM
+for every caller including the miniature. A single `ExtraKeysView` shared with the toolbar pager
+was not attempted — the bottom instance is a `ViewPager` page and unifying it means taking the
+extra keys out of the pager, which is the text-input page's swipe. Both belong with L3's port of
+the accessory stack into the bottom `EdgeStackView`.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |

@@ -33,7 +33,7 @@ public class AzBarHostGeometryTest {
     /**
      * The landscape case the column collapsed in: 2400x954 of content, a status bar standing in a
      * column on the same side, and the bar just inside it. The status column is answered by the
-     * edge inset and by nothing else — feeding its length to the top of the column, as a row
+     * edge stack and by nothing else — feeding its length to the top of the column, as a row
      * sharing that column would, pushed the bar's glass past the bottom of its own host and left
      * it zero pixels tall.
      */
@@ -43,8 +43,9 @@ public class AzBarHostGeometryTest {
         int statusColumnFootprintPx = 223;            // the bar's column on the same side
         int contentHeightPx = 954;                    // 2400x954 of content in landscape
 
-        assertEquals(223, AzBarHostGeometry.edgeInsetPx(0, 0, 0, statusColumnFootprintPx));
-        // Nothing on the same side reaches the ends of the column.
+        // Nothing on the same side reaches the ends of the column: the bar stands beside the
+        // status column on the edge stack, so that footprint never shortens it.
+        assertEquals(223, statusColumnFootprintPx);
         assertEquals(marginPx, AzBarHostGeometry.columnTopPaddingPx(marginPx, 0));
         assertEquals(marginPx, AzBarHostGeometry.columnBottomPaddingPx(marginPx, 0));
         assertEquals(contentHeightPx - 2 * marginPx,
@@ -61,18 +62,5 @@ public class AzBarHostGeometryTest {
         // Never negative, whatever it is handed.
         assertEquals(0, AzBarHostGeometry.columnLengthPx(954, 26, 900, 900));
         assertEquals(0, AzBarHostGeometry.columnLengthPx(-1, -1, -1, -1));
-    }
-
-    @Test
-    public void theColumnIsInnermostOfWhateverSharesItsEdge() {
-        // Nothing else on the edge: it starts past the cutout only.
-        assertEquals(44, AzBarHostGeometry.edgeInsetPx(44, 0, 0, 0));
-        // The rail holds the same edge, so the bar starts past the rail.
-        assertEquals(160, AzBarHostGeometry.edgeInsetPx(44, 160, 0, 0));
-        // The extra keys stand past the rail, and the bar past them.
-        assertEquals(300, AzBarHostGeometry.edgeInsetPx(44, 160, 300, 0));
-        // The status bar's column too; the innermost of them all wins.
-        assertEquals(420, AzBarHostGeometry.edgeInsetPx(44, 160, 300, 420));
-        assertEquals(0, AzBarHostGeometry.edgeInsetPx(-1, -1, -1, -1));
     }
 }

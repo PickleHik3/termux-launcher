@@ -225,7 +225,7 @@ public final class TourViewTargets implements TourTargets {
      */
     @Nullable
     private View azRowView() {
-        int[] hostIds = {R.id.place_az_bar_top, R.id.place_az_bar_column, R.id.apps_bar_az_row};
+        int[] hostIds = {R.id.place_az_bar_host, R.id.apps_bar_az_row};
         View fallback = null;
         for (int hostId : hostIds) {
             View host = mFinder.findTourView(hostId);

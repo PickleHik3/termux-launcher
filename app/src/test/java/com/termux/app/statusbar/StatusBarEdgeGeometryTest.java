@@ -38,17 +38,6 @@ public class StatusBarEdgeGeometryTest {
             StatusBarEdgeGeometry.frame(Edge.BOTTOM, W, H, H * 2, 0));
     }
 
-    @Test public void onlyAColumnCostsTheContentAnyWidth() {
-        for (boolean right : new boolean[] {false, true}) {
-            assertEquals(0, StatusBarEdgeGeometry.contentInsetPx(Edge.TOP, right, 76, 44));
-            assertEquals(0, StatusBarEdgeGeometry.contentInsetPx(Edge.BOTTOM, right, 76, 44));
-        }
-        assertEquals(120, StatusBarEdgeGeometry.contentInsetPx(Edge.LEFT, false, 76, 44));
-        assertEquals(0, StatusBarEdgeGeometry.contentInsetPx(Edge.LEFT, true, 76, 44));
-        assertEquals(120, StatusBarEdgeGeometry.contentInsetPx(Edge.RIGHT, true, 76, 44));
-        assertEquals(0, StatusBarEdgeGeometry.contentInsetPx(Edge.RIGHT, false, 76, 44));
-    }
-
     @Test public void theOpenColumnIsWiderThanTheClosedOneAndTheRowIsTaller() {
         for (Edge edge : Edge.values()) {
             assertTrue(edge + " opens", StatusBarEdgeGeometry.thicknessDp(edge, false, false)
@@ -66,23 +55,6 @@ public class StatusBarEdgeGeometryTest {
             StatusBarEdgeGeometry.thicknessDp(Edge.BOTTOM, false, true), 0f);
         // 2.75 is the phone of record's density; the dp rounds to whole pixels.
         assertEquals(88, StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, true, 2.75f));
-    }
-
-    @Test public void whateverElseHoldsTheBarsEdgeStartsUnderIt() {
-        assertTrue(StatusBarEdgeGeometry.sharesColumn(Edge.LEFT, false));
-        assertFalse(StatusBarEdgeGeometry.sharesColumn(Edge.LEFT, true));
-        assertFalse(StatusBarEdgeGeometry.sharesColumn(Edge.TOP, false));
-        assertEquals(300, StatusBarEdgeGeometry.columnTopOffsetPx(Edge.RIGHT, true, 300));
-        assertEquals(0, StatusBarEdgeGeometry.columnTopOffsetPx(Edge.RIGHT, false, 300));
-        assertEquals(0, StatusBarEdgeGeometry.columnTopOffsetPx(Edge.BOTTOM, true, 300));
-    }
-
-    @Test public void aSharedColumnIsSplitEvenlyAndNeverBeyondItself() {
-        assertEquals(1200, StatusBarEdgeGeometry.sharedColumnLengthPx(2400, 2.75f));
-        // A short column still leaves the bar a usable stretch, but never more than it has.
-        assertEquals(330, StatusBarEdgeGeometry.sharedColumnLengthPx(600, 2.75f));
-        assertEquals(200, StatusBarEdgeGeometry.sharedColumnLengthPx(200, 2.75f));
-        assertEquals(0, StatusBarEdgeGeometry.sharedColumnLengthPx(0, 2.75f));
     }
 
     @Test public void contentRidesTheEdgeThatFacesTheTerminal() {

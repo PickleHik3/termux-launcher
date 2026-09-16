@@ -66,8 +66,10 @@ public class EdgeStackPolicyTest {
     // ------------------------------------------------------------------ the shipped oracle
 
     /**
-     * What {@code TermuxActivity.applyTerminalOverlayInsets} computes for one side today
-     * (TermuxActivity.java:5749-5773), with the four footprints it calls out spelled in line:
+     * What {@code TermuxActivity.applyTerminalOverlayInsets} computed for one side before the edge
+     * stacks replaced it, with the four footprints it called out spelled in line. Every one of
+     * them is gone from the activity now, which is why they live here as arithmetic rather than
+     * as calls: this is the oracle the replacement is held to.
      *
      * <ul>
      *   <li>{@code getDockLayout().railWidthPx} — DockLayoutPolicy.java:240-246, the side's cutout
@@ -80,7 +82,7 @@ public class EdgeStackPolicyTest {
      *       margin, and <em>not</em> anything else on that edge — a status column and a rail share
      *       one column lengthwise today rather than standing beside each other.</li>
      *   <li>{@code azBarColumnFootprintPx} — TermuxActivity.java:6835-6839 over
-     *       {@code AzBarHostGeometry.edgeInsetPx}: past the widest of the three above.</li>
+     *       the old {@code AzBarHostGeometry.edgeInsetPx}: past the widest of the three above.</li>
      * </ul>
      */
     private static int legacyContentInsetPx(PlaceLayout layout, boolean right) {
@@ -154,6 +156,39 @@ public class EdgeStackPolicyTest {
                 EdgeStackPolicy.contentInsets(layout, metrics));
         }
         assertEquals("every arrangement, both sides, minus the shared-column ones", 912, compared);
+    }
+
+    @Test
+    public void theShippedDefaultsRenderExactlyAsTheyDidBefore() {
+        // The arrangement a fresh install resolves to on every place (PlaceLayoutStore: status
+        // TOP, the alphabets index on the dock, the extra keys on the dock, the pinned apps along
+        // the bottom in portrait and on the rail in landscape). No default puts a status column on
+        // a side, so none of them meets the one deliberate difference and every one has to land on
+        // the shipped chain's answer to the pixel.
+        PlaceLayout portrait = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        PlaceLayout landscape = layout(Edge.TOP, RowPlacement.LEFT, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        for (PlaceLayout shipped : Arrays.asList(portrait, landscape)) {
+            EdgeStackPolicy.Insets insets = EdgeStackPolicy.contentInsets(shipped, metrics());
+            assertEquals(shipped + " left", legacyContentInsetPx(shipped, false), insets.left);
+            assertEquals(shipped + " right", legacyContentInsetPx(shipped, true), insets.right);
+        }
+
+        // In figures, so a wrong term in the metrics fill cannot pass by cancelling out: portrait
+        // gives up nothing but the camera hole, and landscape the rail's own band on top of it.
+        EdgeStackPolicy.Insets portraitInsets = EdgeStackPolicy.contentInsets(portrait, metrics());
+        assertEquals(CUTOUT_LEFT, portraitInsets.left);
+        assertEquals(CUTOUT_RIGHT, portraitInsets.right);
+        assertEquals(CUTOUT_LEFT + RAIL_THICKNESS,
+            EdgeStackPolicy.contentInsets(landscape, metrics()).left);
+        assertEquals(CUTOUT_RIGHT, EdgeStackPolicy.contentInsets(landscape, metrics()).right);
+
+        // And the bottom stack is the dock, in the order the dock has always drawn it.
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS),
+            EdgeStackPolicy.stack(portrait, Edge.BOTTOM));
+        assertEquals(KEYS_ROW_HEIGHT + AZ_ROW_HEIGHT + APPS_ROW_HEIGHT, portraitInsets.bottom);
+        assertEquals(STATUS_ROW_BAR, portraitInsets.top);
     }
 
     @Test
