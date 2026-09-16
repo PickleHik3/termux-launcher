@@ -14348,11 +14348,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void openLayoutEditor() {
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
             }
-            @Override public void openWidgetGridSettings() {
-                // The grid's two counts are rows in the Layout editor now, beside a picture of the
-                // place they lay out.
-                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
-            }
             @Override public void editWidgets() {
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
             }

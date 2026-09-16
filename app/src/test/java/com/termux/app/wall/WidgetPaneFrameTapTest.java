@@ -53,10 +53,10 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps, the same one a terminal pane holds. */
     private static final float CORNER_DP = CornerZones.PANE_SIZE_DP;
-    /** The tab: five 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
-    private static final float TAB_WIDTH_DP = 192f;
+    /** The tab: four 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
+    private static final float TAB_WIDTH_DP = 154f;
     private static final float TAB_INSET_DP = 0f;
-    /** The middle of the gap between Settings and Edit. */
+    /** The middle of the gap between the pencil and the sliders. */
     private static final float TAB_SPLIT_DP = 39f;
 
     /** What the page asked the launcher for, in order, over a 4 x 5 grid. */
@@ -64,7 +64,6 @@ public class WidgetPaneFrameTapTest {
         final List<String> log = new ArrayList<>();
         int columns = 4;
         int rows = 5;
-        @Override public void openWidgetGridSettings() { log.add("settings"); }
         @Override public void editWidgets() { log.add("edit"); }
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
@@ -108,28 +107,22 @@ public class WidgetPaneFrameTapTest {
         return activity.getResources().getDisplayMetrics().density;
     }
 
-    /** The first button: the settings cog. */
-    private static float cogX(Activity activity) {
+    /** The first button: the edit pencil. */
+    private static float pencilX(Activity activity) {
         float density = density(activity);
         return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + (TAB_SPLIT_DP - 8f) * density;
     }
 
-    /** The second button: the edit pencil. */
-    private static float pencilX(Activity activity) {
+    /** The second button: the sliders that open Appearance. */
+    private static float slidersX(Activity activity) {
         float density = density(activity);
         return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + (TAB_SPLIT_DP + 8f) * density;
     }
 
-    /** The third button: the sliders that open Appearance, centred 96dp into the tab. */
-    private static float slidersX(Activity activity) {
-        float density = density(activity);
-        return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + 96f * density;
-    }
-
-    /** The fourth button: the grid that opens Layout, one button and gap further along. */
+    /** The third button: the grid that opens Layout, one button and gap further along. */
     private static float layoutX(Activity activity) {
         float density = density(activity);
-        return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + 134f * density;
+        return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + 96f * density;
     }
 
     private static float tabCentreY(Activity activity) {
@@ -352,33 +345,33 @@ public class WidgetPaneFrameTapTest {
         page.setHost(calls);
 
         // Nothing is in the corner until the border is tapped.
-        tap(page, cogX(activity), tabCentreY(activity));
+        tap(page, pencilX(activity), tabCentreY(activity));
         assertEquals(Collections.emptyList(), calls.log);
 
         holdCorner(page);
-        tap(page, cogX(activity), tabCentreY(activity));
-        assertEquals(Collections.singletonList("settings"), calls.log);
+        tap(page, pencilX(activity), tabCentreY(activity));
+        assertEquals(Collections.singletonList("edit"), calls.log);
 
         // Out, and away again: the corner goes quiet.
         holdCorner(page);
         holdCorner(page);
-        tap(page, cogX(activity), tabCentreY(activity));
-        assertEquals(Collections.singletonList("settings"), calls.log);
+        tap(page, pencilX(activity), tabCentreY(activity));
+        assertEquals(Collections.singletonList("edit"), calls.log);
     }
 
     @Test
-    public void theTabRunsTheSettingsCogAndTheEditPencil() {
+    public void theTabRunsTheEditPencilAndTheAppearanceSliders() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
         page.setHost(calls);
 
         holdCorner(page);
-        tap(page, cogX(activity), tabCentreY(activity));
-        holdCorner(page);
         tap(page, pencilX(activity), tabCentreY(activity));
+        holdCorner(page);
+        tap(page, slidersX(activity), tabCentreY(activity));
 
-        assertEquals(Arrays.asList("settings", "edit"), calls.log);
+        assertEquals(Arrays.asList("edit", "appearance"), calls.log);
     }
 
     @Test
@@ -454,13 +447,13 @@ public class WidgetPaneFrameTapTest {
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
         assertTrue(page.isControlsTabShown());
 
-        // And the pair is not what is on it: the cog's old spot runs nothing now.
-        tap(page, cogX(activity), tabCentreY(activity));
+        // And the pencil's own spot is not what is on it: it runs nothing now, the grid's size does.
+        tap(page, pencilX(activity), tabCentreY(activity));
         assertEquals(Collections.singletonList("edit"), calls.log);
     }
 
     @Test
-    public void theEditingTabTakesTheCornerFromTheSettingsAndThePencil() {
+    public void theEditingTabTakesTheCornerFromThePencilAndTheSliders() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -469,20 +462,20 @@ public class WidgetPaneFrameTapTest {
         // Editing brings the tab out on its own, and it is the grid's size that is in it now.
         page.applyWidgetEditing(true);
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
-        tap(page, cogX(activity), tabCentreY(activity));
         tap(page, pencilX(activity), tabCentreY(activity));
-        assertEquals("neither the cog nor the pencil is on the editing tab",
+        tap(page, slidersX(activity), tabCentreY(activity));
+        assertEquals("neither the pencil nor the sliders is on the editing tab",
             Collections.emptyList(), calls.log);
 
-        // Leaving editing puts it away and gives the pair back.
+        // Leaving editing puts it away and gives the resting buttons back.
         page.applyWidgetEditing(false);
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
-        tap(page, cogX(activity), tabCentreY(activity));
+        tap(page, pencilX(activity), tabCentreY(activity));
         assertEquals("the editing tab retracted", Collections.emptyList(), calls.log);
 
         holdCorner(page);
-        tap(page, cogX(activity), tabCentreY(activity));
-        assertEquals(Collections.singletonList("settings"), calls.log);
+        tap(page, pencilX(activity), tabCentreY(activity));
+        assertEquals(Collections.singletonList("edit"), calls.log);
     }
 
     /** Out of the square before the timer: the gesture stays the grid's and nothing opens. */
@@ -505,7 +498,7 @@ public class WidgetPaneFrameTapTest {
         assertFalse("a drag never brought the tab out", page.isControlsTabShown());
         assertFalse("and the grid kept the whole gesture",
             child.actions.contains(MotionEvent.ACTION_CANCEL));
-        tap(page, cogX(activity), tabCentreY(activity));
+        tap(page, pencilX(activity), tabCentreY(activity));
         assertEquals(Collections.emptyList(), calls.log);
     }
 

@@ -35,19 +35,17 @@ import com.termux.view.HoldTiming;
  * keeps its app-widget host views across the move.
  *
  * <p>A <em>hold</em> on one of the page's four corners drops the same tab the Display page's
- * corners drop, with the page's own buttons: its settings, the pencil that starts editing the
- * widgets, and the two doors every place carries — Appearance and Layout.
+ * corners drop, with the page's own buttons: the pencil that starts editing the widgets, and the
+ * two doors every place carries — Appearance and Layout.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
- * While a widget is being edited that pair is replaced by the grid's size, which opens the wheels
- * that change it. Everything between the corners is the widgets': a grid that reaches the rim is
- * touchable to its last pixel.
+ * While a widget is being edited those buttons are replaced by the grid's size, which opens the
+ * wheels that change it. Everything between the corners is the widgets': a grid that reaches the
+ * rim is touchable to its last pixel.
  */
 public final class WidgetPaneFrame extends PaneContentFrame {
 
     /** What the page needs from the launcher. */
     public interface Host {
-        /** The cog: open the Layout settings on Home, at the widget grid. */
-        void openWidgetGridSettings();
         /** The pencil: start editing the widgets, exactly as the long-press menu does. */
         void editWidgets();
         default void showHelpOverlay() {}
@@ -64,7 +62,6 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     }
 
     /** The buttons the page's border tab carries. */
-    private static final int ACTION_SETTINGS = 0;
     private static final int ACTION_EDIT = 1;
     private static final int ACTION_GRID_SIZE = 2;
     private static final int ACTION_HELP = 3;
@@ -188,8 +185,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
 
     private void applyRestingActions() {
         if (mControls == null) return;
-        mControls.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
-            PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT),
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
             PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
@@ -213,7 +209,6 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
         else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
         else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
-        else if (id == ACTION_SETTINGS) mHost.openWidgetGridSettings();
         else if (id == ACTION_EDIT) mHost.editWidgets();
     }
 
