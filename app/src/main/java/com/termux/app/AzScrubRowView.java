@@ -114,6 +114,12 @@ public final class AzScrubRowView extends AppCompatTextView {
     private int lastHapticLetterIndex = -1;
     /** Touchable dead space beside the letters, on the side the bar stands on. */
     private int chinPaddingPx;
+    /**
+     * Which face of the bar the matches are on, as {@code AzPreviewTargetPolicy.Side}: false is the
+     * away face, where the pinned apps row has always been, and true the face against the screen's
+     * rim, which is where the row stands once the user orders it outside the letters.
+     */
+    private boolean previewTrackOutward;
     /** Touchable air beside the letters, on the side away from the rim the bar stands on. */
     private int crownPaddingPx;
     /**
@@ -229,6 +235,18 @@ public final class AzScrubRowView extends AppCompatTextView {
                 setPadding(0, crown, 0, chin);
                 break;
         }
+    }
+
+    /**
+     * Which side of the letters the matches fill, so the overshoot that picks one of them is
+     * measured towards the band it is picking from rather than always off the bar's away face.
+     *
+     * @param outward {@code AzPreviewTargetPolicy.Side#isOutward()} for the place on screen
+     */
+    public void setPreviewTrackOutward(boolean outward) {
+        if (previewTrackOutward == outward)
+            return;
+        previewTrackOutward = outward;
     }
 
     /** The band the letters are drawn in: the bar's thickness without the chin and crown beside them. */
@@ -598,8 +616,14 @@ public final class AzScrubRowView extends AppCompatTextView {
         // Measured against the letter band, not the whole bar: the chin beside the letters is
         // touchable space, and letting it stretch the step would retune the drag-up selection
         // behind the user's back the moment the extra-keys row is hidden.
+        //
+        // The overshoot is how far past the bar the finger has carried, towards the matches. That
+        // is off the away face for the arrangement this was written for, and off the rim face when
+        // the stack puts the row outside the letters, so the step is signed rather than negated.
+        float barThicknessPx = isVerticalBar() ? getWidth() : getHeight();
+        float overshoot = previewTrackOutward ? (awayRaw - barThicknessPx) : -awayRaw;
         int selectionIndex = Math.max(0,
-            (int) ((-awayRaw) / Math.max(dp(12f), letterBandThicknessPx() / 2f)));
+            (int) (overshoot / Math.max(dp(12f), letterBandThicknessPx() / 2f)));
         currentSelectionIndex = selectionIndex;
 
         switch (event.getActionMasked()) {

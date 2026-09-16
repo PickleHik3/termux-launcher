@@ -120,6 +120,8 @@ public final class LauncherAzGestureFxView extends View {
      * screen it is drawn on. A bottom bar is that frame already, so this rests as the identity.
      */
     @NonNull private AzBarFrame barFrame = AzBarFrame.bottom(0f, 0f);
+    /** True while the band the matches fill stands between the letters and the screen's rim. */
+    private boolean previewTrackOutward;
     @NonNull private final List<Drawable> floatingStripIcons = new ArrayList<>();
     /**
      * Per-slot contour visuals, parallel to {@link #floatingStripIcons}: resolved once by the caller
@@ -227,6 +229,18 @@ public final class LauncherAzGestureFxView extends View {
         } else {
             appsRowRawBounds.setEmpty();
         }
+    }
+
+    /**
+     * Which side of the letters the band being drawn stands on
+     * ({@code AzPreviewTargetPolicy.Side}). The name reads on the far side of the band from the
+     * letters, so a row the user ordered outside them turns the bubble over with it; without this
+     * the name would be drawn into the gap it came from, over the very letters it is naming.
+     */
+    public void setPreviewTrackOutward(boolean outward) {
+        if (previewTrackOutward == outward) return;
+        previewTrackOutward = outward;
+        invalidate();
     }
 
     public void setEdgeDwellProgress(float progress, float rawX, float rawY) {
@@ -808,7 +822,7 @@ public final class LauncherAzGestureFxView extends View {
         float aboveTop = rowTop - bubbleSize - verticalGap - labelReserve;
         float belowTop = rowBottom + verticalGap
             + (labelSide == AzFloatingStripPolicy.LabelSide.ABOVE ? labelReserveAbove : 0f);
-        boolean nameBelowBand = barFrame.edge() == PlaceLayout.Edge.TOP;
+        boolean nameBelowBand = previewTrackOutward != (barFrame.edge() == PlaceLayout.Edge.TOP);
         float top = nameBelowBand ? belowTop : aboveTop;
         // Never off the top, and — because a band level with a thumb near either end of a column
         // can be close to both — never off the bottom either; the label under it has to stay on
