@@ -83,15 +83,16 @@ public class TermuxActivityBottomStackOrderTest {
         layoutContainer();
 
         // Read off the layout_above chain this replaced: the keyboard on the parent's bottom, the
-        // extra keys over it, the letters over those, the indicator band over them, the apps row
-        // over that.
+        // extra keys over it, the letters over those, then the apps row's own host. Updated for
+        // Q6: the ticks stand on the row's centre-facing side, so inside that host they are above
+        // the icons rather than under them — the host spans the same pixels either way.
         int keyboardTop = HEIGHT - KEYBOARD_PX;
         assertBand(R.id.terminal_toolbar_view_pager, keyboardTop - KEYS_PX, keyboardTop);
         assertBand(R.id.apps_bar_az_row, keyboardTop - KEYS_PX - AZ_PX, keyboardTop - KEYS_PX);
-        assertBand(R.id.apps_bar_indicator_band, keyboardTop - KEYS_PX - AZ_PX - BAND_PX,
+        assertBand(R.id.apps_bar_indicator_band, keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX,
+            keyboardTop - KEYS_PX - AZ_PX - APPS_PX);
+        assertBand(R.id.apps_bar_viewpager, keyboardTop - KEYS_PX - AZ_PX - APPS_PX,
             keyboardTop - KEYS_PX - AZ_PX);
-        assertBand(R.id.apps_bar_viewpager, keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX,
-            keyboardTop - KEYS_PX - AZ_PX - BAND_PX);
     }
 
     @Test
@@ -119,7 +120,9 @@ public class TermuxActivityBottomStackOrderTest {
         assertSame(activity.findViewById(R.id.apps_bar_row_host), rows.getChildAt(2));
 
         int keyboardTop = HEIGHT - KEYBOARD_PX;
-        assertBand(R.id.apps_bar_viewpager, keyboardTop - APPS_PX - BAND_PX, keyboardTop - BAND_PX);
+        assertBand(R.id.apps_bar_indicator_band, keyboardTop - APPS_PX - BAND_PX,
+            keyboardTop - APPS_PX);
+        assertBand(R.id.apps_bar_viewpager, keyboardTop - APPS_PX, keyboardTop);
         assertBand(R.id.apps_bar_az_row, keyboardTop - APPS_PX - BAND_PX - AZ_PX,
             keyboardTop - APPS_PX - BAND_PX);
         assertBand(R.id.terminal_toolbar_view_pager,
@@ -177,7 +180,7 @@ public class TermuxActivityBottomStackOrderTest {
 
     @Test
     public void theFurnitureTravelsWithItsOwnRow() {
-        assertSame("the air under the icons belongs to the apps row",
+        assertSame("the ticks over the icons belong to the apps row",
             activity.findViewById(R.id.apps_bar_row_host),
             activity.findViewById(R.id.apps_bar_indicator_band).getParent());
         assertSame("the keybind strip keeps the letters' slot",
@@ -273,10 +276,10 @@ public class TermuxActivityBottomStackOrderTest {
         int keyboardTop = HEIGHT - KEYBOARD_PX;
         assertBand(R.id.terminal_toolbar_view_pager, keyboardTop - KEYS_PX, keyboardTop);
         assertBand(R.id.apps_bar_az_row, keyboardTop - KEYS_PX - AZ_PX, keyboardTop - KEYS_PX);
-        assertBand(R.id.apps_bar_indicator_band, keyboardTop - KEYS_PX - AZ_PX - BAND_PX,
+        assertBand(R.id.apps_bar_indicator_band, keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX,
+            keyboardTop - KEYS_PX - AZ_PX - APPS_PX);
+        assertBand(R.id.apps_bar_viewpager, keyboardTop - KEYS_PX - AZ_PX - APPS_PX,
             keyboardTop - KEYS_PX - AZ_PX);
-        assertBand(R.id.apps_bar_viewpager, keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX,
-            keyboardTop - KEYS_PX - AZ_PX - BAND_PX);
         assertBand(R.id.terminal_window_bar_host,
             keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX - STATUS_PX,
             keyboardTop - KEYS_PX - AZ_PX - BAND_PX - APPS_PX);

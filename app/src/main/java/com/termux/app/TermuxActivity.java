@@ -9456,7 +9456,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // band on the bottom edge, the portable host's band everywhere else. The dock used to paint
         // its own ticks from the FX layer over the glass, which is what made two of them.
         mSuggestionBarView.setPageIndicator(wantHost ? indicator : dockIndicator);
-        if (!wantHost && dockIndicator != null) dockIndicator.setVerticalForm(false);
+        if (!wantHost && dockIndicator != null) {
+            dockIndicator.setVerticalForm(false);
+            // The dock's own pair follows the same rule as the portable host's: the ticks stand on
+            // the row's centre-facing side, which on the bottom edge is above the icons.
+            orderAppsBarBands(findViewById(R.id.apps_bar_row_host),
+                findViewById(R.id.apps_bar_viewpager), dockIndicator,
+                !PageTickStrip.leadsRow(PlaceLayout.Edge.BOTTOM));
+        }
         if (wantHost) {
             DockLayout dockLayout = dockLayoutFor(layout);
             int indicatorBandPx = PageTickStrip.bandPx(getResources().getDisplayMetrics().density);
@@ -9485,10 +9492,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 setBandSize(host, ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT);
             }
-            // The strip lies under a row and stands on the inner side of a rail — the side the
-            // terminal is on — so it reads as part of the bar rather than as the screen's edge.
-            // Which of the two leads the host is PageTickStrip's answer, the same one the dock's
-            // band gets by standing under the dock's row.
+            // The strip stands on the row's centre-facing side on every edge — the side the
+            // terminal is on — so it reads as the bar's inner rim rather than as a band wedged
+            // between the row and whatever comes next. Which of the two leads the host is
+            // PageTickStrip's answer, the same one the dock's own band is ordered by.
             host.setOrientation(edge.isOnSide()
                 ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
             orderAppsBarBands(host, scroll, indicator, !PageTickStrip.leadsRow(edge));
@@ -9525,12 +9532,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Which of the two bands comes first: the row, then its ticks, everywhere but a right-hand
-     * rail, where the inner side — the one the terminal is on — is the left one.
+     * Which of the two bands comes first, from {@link PageTickStrip#leadsRow}: the ticks lead on
+     * the two edges whose centre-facing side is the lower coordinate — the bottom edge and a
+     * right-hand rail — and follow the row on the other two.
      */
-    private static void orderAppsBarBands(@NonNull LinearLayout host, @NonNull View row,
+    private static void orderAppsBarBands(@Nullable LinearLayout host, @Nullable View row,
                                           @Nullable View indicator, boolean rowFirst) {
-        if (indicator == null) return;
+        if (host == null || row == null || indicator == null) return;
         int wanted = rowFirst ? 1 : 0;
         if (host.indexOfChild(indicator) == wanted) return;
         host.removeView(indicator);
