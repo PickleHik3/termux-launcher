@@ -11,6 +11,8 @@ import android.widget.ScrollView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.launcher.notifications.NotificationSwipePolicy;
+
 /**
  * The landscape dock rail, and the only surface the app drawer can be pulled from there.
  *
@@ -50,7 +52,19 @@ public final class DockRailScrollView extends ScrollView {
         void onDrawerDragCancel();
     }
 
+    /**
+     * Asked once, at {@code ACTION_DOWN}: whether the finger landed on a pinned icon wearing a
+     * notification badge. The rail's pull and that icon's quick reply run the same way here, so the
+     * reply is given the axis first and the rail waits out its short window.
+     */
+    public interface QuickReplyProbe {
+        boolean isBadgedIconAt(float rawX, float rawY);
+    }
+
     @Nullable private DrawerPullListener mListener;
+    @Nullable private QuickReplyProbe mQuickReplyProbe;
+    private boolean mQuickReplyHoldsPull;
+    private float mDownRawY;
     @NonNull private final AppDrawerGestureArbiter mArbiter = new AppDrawerGestureArbiter();
     @NonNull private AppDrawerGestureArbiter.Pull mPull = AppDrawerGestureArbiter.Pull.NONE;
     @Nullable private VelocityTracker mVelocityTracker;
@@ -70,6 +84,10 @@ public final class DockRailScrollView extends ScrollView {
         mListener = listener;
     }
 
+    public void setQuickReplyProbe(@Nullable QuickReplyProbe probe) {
+        mQuickReplyProbe = probe;
+    }
+
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         DrawerPullListener listener = mListener;
@@ -77,6 +95,9 @@ public final class DockRailScrollView extends ScrollView {
             case MotionEvent.ACTION_DOWN:
                 releaseVelocityTracker();
                 mDownRawX = event.getRawX();
+                mDownRawY = event.getRawY();
+                mQuickReplyHoldsPull = listener != null && mQuickReplyProbe != null
+                    && mQuickReplyProbe.isBadgedIconAt(event.getRawX(), event.getRawY());
                 if (listener == null) {
                     mArbiter.reset();
                     mPull = AppDrawerGestureArbiter.Pull.NONE;
@@ -94,6 +115,7 @@ public final class DockRailScrollView extends ScrollView {
                     if (listener != null) listener.onDrawerDrag(projectOntoPull(event.getRawX()));
                     return true;
                 }
+                if (mQuickReplyHoldsPull && !handedOffByQuickReply(event)) break;
                 if (listener != null
                     && mArbiter.evaluate(event.getRawX(), event.getRawY(), mSlopPx)
                         == AppDrawerGestureArbiter.Claim.DRAWER_DRAG) {
@@ -122,6 +144,27 @@ public final class DockRailScrollView extends ScrollView {
                 break;
         }
         return super.dispatchTouchEvent(event);
+    }
+
+    /**
+     * Whether a badged icon's quick reply has travelled far enough to give the rail its pull back.
+     * Until it has, the rail simply lets the stream reach the icon; afterwards the plane grows from
+     * where the finger is rather than from the icon it started on.
+     */
+    private boolean handedOffByQuickReply(@NonNull MotionEvent event) {
+        float span = AppDrawerPullGeometry.travelSpanPx(mPull,
+            getResources().getDisplayMetrics().widthPixels,
+            getResources().getDisplayMetrics().heightPixels);
+        if (!NotificationSwipePolicy.handsOffAlongPull(mPull, event.getRawX() - mDownRawX,
+            event.getRawY() - mDownRawY, span)) return false;
+        mQuickReplyHoldsPull = false;
+        mDownRawX = event.getRawX();
+        mDownRawY = event.getRawY();
+        mArbiter.begin(event.getRawX(), event.getRawY(),
+            mListener == null ? AppDrawerGestureArbiter.Eligibility.allClear()
+                : mListener.captureDrawerEligibility());
+        mArbiter.claimDrawer();
+        return true;
     }
 
     /**
@@ -157,6 +200,7 @@ public final class DockRailScrollView extends ScrollView {
     }
 
     private void endGesture() {
+        mQuickReplyHoldsPull = false;
         mArbiter.reset();
         mPull = AppDrawerGestureArbiter.Pull.NONE;
         releaseVelocityTracker();

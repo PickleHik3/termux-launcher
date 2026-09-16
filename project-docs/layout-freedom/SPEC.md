@@ -466,3 +466,61 @@ Honest boundary: none of this is device-verified. Three judgement calls a look o
 settle — the seam between the status bar and the row beside it on the plank, whether a status bar
 with no wash of its own reads as part of the dock or as a hole in it, and the fold gesture on a
 bottom bar now that the dock's container resizes under it rather than the terminal above it.
+
+## P10 outcome (2026-09-16)
+
+**The lens opens towards the middle of the screen.** `StatusBarLensPolicy` — until now the place
+icons' arithmetic — also answers where the bar's expanded surfaces go, from the edge it stands on:
+`growthFor` (top → down, bottom → up, left → right, right → left), `card` (anchored clear of the bar
+by the drop gap, centred on the canvas along the *other* axis, and clamped inside the canvas),
+`widthCapPx` (off a column, the run between the bar and the far side, so a 360dp card cannot be
+drawn over the bar it came from) and `enterOffsetXPx`/`enterOffsetYPx` (the card slides in out of
+its bar). `StatusCardHost` is the consumer: it takes the edge (`setEdge`), keeps the platform's own
+anchored drop for a top bar so the shipped screen is a zero-diff, and places the other three
+itself. Tapping the system stats or the weather on a bottom bar used to drop a card off the bottom
+of the screen. The bar's own chevron hint was already edge-aware (`StatusBarGesturePolicy.
+expandSign`) and needed nothing.
+
+**And the bar's row keeps the screen edge it stands on.** Swiping a bottom bar open moved its row —
+the sessions chip, the window pills, the stats — 70dp up off the screen's edge and put the clock
+underneath it, because the row rode the bar's *inner* edge and the widget slot the outer one, a
+geometric mirror of the top bar. The rule is now the reading order rather than the mirror: the
+status row is the panel's lower band and the modular slot the upper one on both row edges
+(`StatusBarLensPolicy.rowOffsetPx`, `slotLeadsRow`), so a bottom bar's row stays where the compact
+bar left it and the clock's band grows upward above it. `StatusBarEdgeGeometry.innerEdgeOffsetPx`
+is gone with the mirror, and the slot's clip no longer has two cases. A bar down a side never rests
+expanded (`StatusBarGesturePolicy.expansionAllowed`), so none of this reaches it.
+
+**A badged icon's quick reply turns with the row, and shares the axis it now wants.**
+`NotificationSwipePolicy` is the new pure rule: quick reply is a swipe *towards the middle of the
+screen* starting on a pinned icon that wears a notification badge — up off the dock, down off a top
+row, inward off a rail. On the bottom edge the drawer is pulled the other way, so nothing is shared
+and the reply commits on the move it arms on, byte for byte what every install has. On the other
+three the drawer's pull runs the same way and they share the drag in time instead: the **DOWN
+decides** (only a finger that lands on a badge arms a reply; everywhere else the toward-centre axis
+is the drawer's exactly as today), a **short flick commits** on release (`FLICK_DP` 24dp inside the
+platform long-press timeout), and a **long drag hands off** — past 45 % of the drawer's own travel
+span the reply stands down and the plane grows from where the finger is, so a badged icon is never
+the one place on the row the drawer refuses to open from. A swipe along the bar is still the pages',
+and an ordinary tap or long press on a badged icon is untouched.
+
+Both hosts that arbitrate the pull run the same gate: `SuggestionBarView` for a row (its DOWN probe
+is `isBadgedIconAt`, fed by the press-target map the context binding fills) and `DockRailScrollView`
+for a rail, which is the outermost handler on a side and now takes a `QuickReplyProbe`.
+`AppDrawerGestureArbiter` gained `claimDrawer()`, the one-way latch's hand-off door.
+
+Tests: `StatusBarLensPolicyTest` grew six (growth per edge, the card's anchor per edge, the two
+clamps, the column width cap, the slide-in offsets, the row's offset per edge and the slot's side);
+`NotificationSwipePolicyTest` is eight pure cases covering every rule above;
+`SuggestionBarQuickReplyTest` (five, Robolectric) covers the row — held then handed off from the
+hand-off point with exactly one child cancel, an unbadged pull claiming as ever, an along-bar swipe
+still paging, a rail lending nothing, and the DOWN probe; `DockRailQuickReplyTest` (two) covers the
+rail's own gate. Updated with a reason: `StatusBarEdgeArrangementTest.aBottomRowKeepsItsClockAtThe
+FootWhereTheRowIsNot` became `theClockLeadsTheRowOnBothRowEdges` — it asserted the mirror — and
+`StatusBarEdgeGeometryTest` lost its `innerEdgeOffsetPx` case with the method.
+
+Honest boundary: none of this is device-verified. Three judgement calls a look on the phone should
+settle — a bottom bar's card rising off it, a side bar's card standing beside the column at the
+capped width, and whether 24dp of flick inside the long-press timeout is the right window for a
+quick reply on a top row. The hand-off is reasoned from the arithmetic and exercised at the view
+seam in Robolectric, not felt under a thumb.

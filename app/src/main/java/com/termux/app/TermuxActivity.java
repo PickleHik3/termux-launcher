@@ -3424,13 +3424,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // below where the curve becomes tight.
                 int targetEdgeMargin = Math.round(dpToPx(collapsed ? 0 : capsule ? 3 : 2));
                 int targetRowHeight = Math.round(dpToPx(collapsed && capsule ? 22 : 24));
-                // The row rides the bar's inner edge — the one facing the terminal — whichever
-                // edge the bar stands on, so a bottom bar's row is the mirror of a top bar's.
-                boolean atTop = mStatusBarEdge == PlaceLayout.Edge.BOTTOM;
-                int targetGravity = collapsed ? Gravity.CENTER_VERTICAL
-                    : atTop ? Gravity.TOP : Gravity.BOTTOM;
-                int targetTopMargin = atTop ? targetEdgeMargin : 0;
-                int targetBottomMargin = atTop ? 0 : targetEdgeMargin;
+                // The row keeps the screen edge its bar stands on: a bottom bar's row stays at
+                // the foot of the panel and the clock's band grows upward above it, which is the
+                // reading order a top bar has always had. Mirroring it is what used to lift a
+                // bottom bar's row clear off the screen's edge the moment the bar opened.
+                int targetGravity = collapsed ? Gravity.CENTER_VERTICAL : Gravity.BOTTOM;
+                int targetTopMargin = 0;
+                int targetBottomMargin = targetEdgeMargin;
                 boolean rowChanged = rowParams.bottomMargin != targetBottomMargin
                     || rowParams.topMargin != targetTopMargin
                     || rowParams.height != targetRowHeight
@@ -9444,9 +9444,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // claims none: its own up-and-down axis is where its pages are.
         mSuggestionBarView.setDrawerPull(wantHost && edge.isOnSide()
             ? AppDrawerGestureArbiter.Pull.NONE : AppDrawerPullGeometry.pullFor(edge));
+        // The quick reply on a badged icon turns with the row too, and on three of the four edges
+        // it shares its axis with the pull above — which is why the row is told the edge itself.
+        mSuggestionBarView.setAppsEdge(edge);
 
         scroll.setDrawerPullListener(wantHost && edge.isOnSide()
             ? mDockRailDrawerPullListener : null);
+        scroll.setQuickReplyProbe(wantHost && edge.isOnSide()
+            ? mSuggestionBarView::isBadgedIconAt : null);
         // One indicator, handed to the row by whichever host the row is standing in: the dock's own
         // band on the bottom edge, the portable host's band everywhere else. The dock used to paint
         // its own ticks from the FX layer over the glass, which is what made two of them.
@@ -15430,8 +15435,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             stackedClock.setAlpha(expansion);
         }
         if (topWidgets != null && !vertical) {
-            // The slot slides in from the bar's outer edge, and shows only the stretch of itself
-            // the row has not reached: the top of a top bar's slot, the foot of a bottom bar's.
+            // The slot stands above the row on both row edges, so what it shows is always the
+            // stretch the row has not reached — its own top down to the row's crown. It slides in
+            // the way the bar is growing: down out of a top bar, up out of a bottom one.
             float sign = com.termux.app.statusbar.StatusBarGesturePolicy.expandSign(mStatusBarEdge);
             topWidgets.setVisibility(View.VISIBLE);
             topWidgets.setAlpha(expansion);
@@ -15440,9 +15446,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int widgetHeight = topWidgets.getHeight() > 0
                 ? topWidgets.getHeight() : rowGeometry.clockClipBottom;
             int clear = Math.max(0, Math.min(widgetHeight, rowGeometry.clockClipBottom));
-            topWidgets.setClipBounds(sign > 0f
-                ? new Rect(0, 0, clipRight, clear)
-                : new Rect(0, widgetHeight - clear, clipRight, widgetHeight));
+            topWidgets.setClipBounds(new Rect(0, 0, clipRight, clear));
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             // The clip radius must follow the CURRENT interactive height, not the endpoint it is
@@ -15482,9 +15486,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             FrameLayout.LayoutParams params =
                 (FrameLayout.LayoutParams) statusRow.getLayoutParams();
             params.gravity = Gravity.TOP;
-            // The row rides the bar's inner edge, which is the bottom of a top bar and the top of
-            // a bottom one; the geometry above is written for the first and mirrored for the other.
-            params.topMargin = com.termux.app.statusbar.StatusBarEdgeGeometry.innerEdgeOffsetPx(
+            // The row keeps the bar's own screen edge, so the offset the resize geometry measured
+            // from the panel's foot is the answer on a top bar and a bottom one alike.
+            params.topMargin = com.termux.app.statusbar.StatusBarLensPolicy.rowOffsetPx(
                 mStatusBarEdge, surfaceHeight, geometry.height, geometry.top);
             params.bottomMargin = 0;
             params.width = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -16426,6 +16430,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ensureStatsController().start(statsInterval(STATS_CARD_INTERVAL_MS), true);
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
+        mStatusCardHost.setEdge(mStatusBarEdge);
         mStatusCardHost.show(anchor, mStatsCardView, statusCardStyleProvider(), () -> {
             setWidgetAccent(anchor, false);
             if (mStatsController != null
@@ -16593,6 +16598,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ensureWeatherController().refreshIfStale();
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
+        mStatusCardHost.setEdge(mStatusBarEdge);
         mStatusCardHost.show(anchor, mWeatherCardView, statusCardStyleProvider(),
             () -> setWidgetAccent(anchor, false));
     }

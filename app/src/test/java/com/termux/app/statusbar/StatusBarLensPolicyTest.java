@@ -1,5 +1,8 @@
 package com.termux.app.statusbar;
 
+import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.statusbar.StatusBarLensPolicy.Growth;
+import com.termux.app.statusbar.StatusBarLensPolicy.Placement;
 import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
@@ -8,6 +11,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /** The place icons: where each sits and how present it is as the wall moves. */
 public class StatusBarLensPolicyTest {
@@ -51,5 +56,87 @@ public class StatusBarLensPolicyTest {
         assertEquals(197f, StatusBarLensPolicy.iconX(0.5f, home, leftPeek, rightPeek, size), 0.001f);
         assertEquals(-3f, StatusBarLensPolicy.iconX(-0.5f, home, leftPeek, rightPeek, size), 0.001f);
         assertEquals(-45f, StatusBarLensPolicy.iconX(-1.5f, home, leftPeek, rightPeek, size), 0.001f);
+    }
+
+    // ------------------------------------------------- the lens opens towards the screen's middle
+
+    /** The phone of record: 1080x2400, a 96dp bar at density 2.75, a 360dp card 4dp clear of it. */
+    private static final int W = 1080;
+    private static final int H = 2400;
+    private static final int BAR = 264;
+    private static final int COLUMN = 209;
+    private static final int CARD_W = 990;
+    private static final int CARD_H = 600;
+    private static final int GAP = 11;
+
+    @Test public void everyEdgeOpensTowardsTheMiddleOfTheScreen() {
+        assertEquals(Growth.DOWN, StatusBarLensPolicy.growthFor(Edge.TOP));
+        assertEquals(Growth.UP, StatusBarLensPolicy.growthFor(Edge.BOTTOM));
+        assertEquals(Growth.RIGHT, StatusBarLensPolicy.growthFor(Edge.LEFT));
+        assertEquals(Growth.LEFT, StatusBarLensPolicy.growthFor(Edge.RIGHT));
+        assertTrue(StatusBarLensPolicy.isVertical(Growth.UP));
+        assertTrue(StatusBarLensPolicy.isVertical(Growth.DOWN));
+        assertFalse(StatusBarLensPolicy.isVertical(Growth.LEFT));
+        assertFalse(StatusBarLensPolicy.isVertical(Growth.RIGHT));
+    }
+
+    @Test public void aCardIsAnchoredClearOfTheBarAndCentredAcrossIt() {
+        // A top bar drops its card below itself, centred on the canvas's width.
+        assertEquals(new Placement((W - CARD_W) / 2, BAR + GAP),
+            StatusBarLensPolicy.card(Growth.DOWN, 0, 0, W, BAR,
+                CARD_W, CARD_H, GAP, 0, 0, W, H));
+        // A bottom bar raises the same card above itself — the whole of it on screen, which is
+        // what a card that always dropped downward was not.
+        assertEquals(new Placement((W - CARD_W) / 2, H - BAR - GAP - CARD_H),
+            StatusBarLensPolicy.card(Growth.UP, 0, H - BAR, W, H,
+                CARD_W, CARD_H, GAP, 0, 0, W, H));
+        // A column lays the card out on the perpendicular axis: beside the bar, centred on height,
+        // at the width the run beside the bar allows.
+        int besideColumn = StatusBarLensPolicy.widthCapPx(Growth.RIGHT, 0, COLUMN, GAP, 0, W, 33);
+        assertEquals(W - COLUMN - GAP - 33, besideColumn);
+        assertEquals(new Placement(COLUMN + GAP, (H - CARD_H) / 2),
+            StatusBarLensPolicy.card(Growth.RIGHT, 0, 0, COLUMN, H,
+                besideColumn, CARD_H, GAP, 0, 0, W, H));
+        // A row's card is capped by the canvas alone, which is what every card has always had.
+        assertEquals(W - 66, StatusBarLensPolicy.widthCapPx(Growth.DOWN, 0, W, GAP, 0, W, 33));
+    }
+
+    @Test public void aCardTooBigForTheRoomBesideTheBarIsMovedRatherThanLost() {
+        // A 360dp card off a right-hand column would start at -130: clamped to the canvas instead.
+        assertEquals(new Placement(0, (H - CARD_H) / 2),
+            StatusBarLensPolicy.card(Growth.LEFT, W - COLUMN, 0, W, H,
+                CARD_W, CARD_H, GAP, 0, 0, W, H));
+        // And one taller than the run above a bottom bar rests on the canvas's own top edge.
+        assertEquals(new Placement((W - CARD_W) / 2, 0),
+            StatusBarLensPolicy.card(Growth.UP, 0, H - BAR, W, H,
+                CARD_W, H, GAP, 0, 0, W, H));
+    }
+
+    @Test public void theCardSlidesInOutOfTheBarItCameFrom() {
+        assertEquals(-8f, StatusBarLensPolicy.enterOffsetYPx(Growth.DOWN, 8f), 0.001f);
+        assertEquals(8f, StatusBarLensPolicy.enterOffsetYPx(Growth.UP, 8f), 0.001f);
+        assertEquals(0f, StatusBarLensPolicy.enterOffsetYPx(Growth.LEFT, 8f), 0.001f);
+        assertEquals(-8f, StatusBarLensPolicy.enterOffsetXPx(Growth.RIGHT, 8f), 0.001f);
+        assertEquals(8f, StatusBarLensPolicy.enterOffsetXPx(Growth.LEFT, 8f), 0.001f);
+        assertEquals(0f, StatusBarLensPolicy.enterOffsetXPx(Growth.UP, 8f), 0.001f);
+    }
+
+    @Test public void theStatusRowKeepsTheScreenEdgeItsBarStandsOn() {
+        // 40px down inside a 96px bar on a top bar, and the same on a bottom one: the row stays at
+        // the panel's foot while the clock's band grows upward above it. It used to be mirrored to
+        // 32, which lifted a bottom bar's row clear off the screen's edge the moment it opened.
+        assertEquals(40, StatusBarLensPolicy.rowOffsetPx(Edge.TOP, 96, 24, 40));
+        assertEquals(40, StatusBarLensPolicy.rowOffsetPx(Edge.BOTTOM, 96, 24, 40));
+        // Never past the panel's own end.
+        assertEquals(72, StatusBarLensPolicy.rowOffsetPx(Edge.BOTTOM, 96, 24, 90));
+        // A column's row runs out the rest of the bar rather than sitting in it.
+        assertEquals(90, StatusBarLensPolicy.rowOffsetPx(Edge.LEFT, 96, 24, 90));
+    }
+
+    @Test public void theClockLeadsTheRowOnEitherRowEdgeAndOnNeitherColumn() {
+        assertTrue(StatusBarLensPolicy.slotLeadsRow(Edge.TOP));
+        assertTrue(StatusBarLensPolicy.slotLeadsRow(Edge.BOTTOM));
+        assertFalse(StatusBarLensPolicy.slotLeadsRow(Edge.LEFT));
+        assertFalse(StatusBarLensPolicy.slotLeadsRow(Edge.RIGHT));
     }
 }

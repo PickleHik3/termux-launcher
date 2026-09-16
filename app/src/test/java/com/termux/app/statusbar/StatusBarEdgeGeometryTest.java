@@ -56,13 +56,4 @@ public class StatusBarEdgeGeometryTest {
         // 2.75 is the phone of record's density; the dp rounds to whole pixels.
         assertEquals(88, StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, true, 2.75f));
     }
-
-    @Test public void contentRidesTheEdgeThatFacesTheTerminal() {
-        // A top bar's row sits 40px down inside a 96px bar; a bottom bar's mirrors that, so both
-        // sit the same distance from the terminal.
-        assertEquals(40, StatusBarEdgeGeometry.innerEdgeOffsetPx(Edge.TOP, 96, 24, 40));
-        assertEquals(32, StatusBarEdgeGeometry.innerEdgeOffsetPx(Edge.BOTTOM, 96, 24, 40));
-        assertEquals(40, StatusBarEdgeGeometry.innerEdgeOffsetPx(Edge.LEFT, 96, 24, 40));
-        assertEquals(32, StatusBarEdgeGeometry.innerEdgeOffsetPx(Edge.RIGHT, 96, 24, 40));
-    }
 }

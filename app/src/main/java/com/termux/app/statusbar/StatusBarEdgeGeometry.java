@@ -117,21 +117,4 @@ public final class StatusBarEdgeGeometry {
                 return new Frame(0, 0, width, Math.min(height, thickness));
         }
     }
-
-    /**
-     * The bar's own thickness laid across the screen the other way: a row's frame is measured
-     * from the top, a bottom row's from the bottom, and a column's content is always anchored at
-     * the top of its column. This is the offset of a child of length {@code childLengthPx} that
-     * rides the bar's inner edge — the one facing the terminal — while the bar grows.
-     */
-    public static int innerEdgeOffsetPx(@NonNull Edge edge, int barLengthPx, int childLengthPx,
-                                        int restingOffsetPx) {
-        int span = Math.max(0, barLengthPx);
-        int child = Math.max(0, childLengthPx);
-        int resting = Math.max(0, restingOffsetPx);
-        // A bar that opens away from its edge keeps its content on the moving inner edge; one that
-        // opens back towards the origin mirrors that offset about the bar's own length.
-        if (StatusBarGesturePolicy.expandSign(edge) > 0f) return resting;
-        return Math.max(0, span - child - resting);
-    }
 }
