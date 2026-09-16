@@ -254,6 +254,40 @@ public final class ExtraKeyEligibility {
         return band == null ? Band.LAUNCHER : band;
     }
 
+    /**
+     * The place a key switches the wall to, or null when the key is not a place switch. The three
+     * switches are what the row draws as tinted glyphs rather than as caps, with the one for the
+     * place in front at full strength; {@code wall.go} counts when it names its place outright.
+     */
+    @Nullable
+    public static PaneWallPage placeSwitchTarget(@Nullable String keyValue) {
+        if (keyValue == null
+                || !keyValue.startsWith(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX))
+            return null;
+        switch (toolNameOf(keyValue)) {
+            case LauncherToolRegistry.TOOL_WALL_WIDGETS: return PaneWallPage.WIDGETS;
+            case LauncherToolRegistry.TOOL_WALL_TERMINAL: return PaneWallPage.TERMINAL;
+            case LauncherToolRegistry.TOOL_WALL_DISPLAY: return PaneWallPage.DISPLAY;
+            case LauncherToolRegistry.TOOL_WALL_GO: return namedPlace(keyValue);
+            default: return null;
+        }
+    }
+
+    /** The place a {@code tool:wall.go:place=<name>} key names, or null when it names none. */
+    @Nullable
+    private static PaneWallPage namedPlace(@NonNull String keyValue) {
+        for (String argument : keyValue.split(":")) {
+            if (!argument.startsWith("place="))
+                continue;
+            String name = argument.substring("place=".length());
+            for (PaneWallPage place : PaneWallPage.values()) {
+                if (place.toolName().equals(name))
+                    return place;
+            }
+        }
+        return null;
+    }
+
     /** Whether the classification has an explicit answer for a tool, for the coverage test. */
     public static boolean classifies(@NonNull String toolName) {
         return TOOLS.containsKey(toolName);
