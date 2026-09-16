@@ -7781,23 +7781,43 @@ public final class SuggestionBarView extends GridLayout
         return getResources().getDisplayMetrics().density;
     }
 
-    private int iconSizePx() {
+    /**
+     * One icon's size in the form the bar is standing in. Package-visible so the clamp below can
+     * be tested against a host far taller than a row.
+     */
+    int iconSizePx() {
         // A rail icon is a fixed size on every side: its column has no row height to be a share of.
         if (vertical)
             return railIconSizePx();
-        int availableHeight = rowHeightHintPx() > 0 ? rowHeightHintPx() : getHeight();
-        if (availableHeight <= 0) {
-            ViewParent parent = getParent();
-            if (parent instanceof View) {
-                availableHeight = ((View) parent).getHeight();
-            }
-        }
+        // The row's own band is the answer whenever the dock has handed one over. Only when it has
+        // not does the measured host decide, and then it is capped: a plank measured before it was
+        // sized, or a stack that swallowed the whole content column, is a host several screens tall
+        // and must not scale one pinned icon across it.
+        int availableHeight = rowHeightHintPx();
+        if (availableHeight <= 0) availableHeight = measuredRowHeightPx();
         if (availableHeight <= 0) {
             return Math.max(dp(20), Math.round(24f * iconScale * getResources().getDisplayMetrics().density));
         }
         int usableHeight = Math.max(dp(24), availableHeight - dp(2));
         int candidate = Math.round(usableHeight * resolveIconFillRatio());
         return clamp(candidate, dp(20), Math.max(dp(20), usableHeight));
+    }
+
+    /**
+     * The height this row was actually laid out at, for the passes that run before the dock has
+     * told it its band — bounded by the deepest a row is ever drawn
+     * ({@link com.termux.app.dock.DockLayoutPolicy#maxRowBandPx}), so an oversized host gives an
+     * oversized icon no longer.
+     */
+    private int measuredRowHeightPx() {
+        int height = getHeight();
+        if (height <= 0) {
+            ViewParent parent = getParent();
+            if (parent instanceof View) height = ((View) parent).getHeight();
+        }
+        if (height <= 0) return 0;
+        return Math.min(height,
+            com.termux.app.dock.DockLayoutPolicy.maxRowBandPx(screenDensity()));
     }
 
     private float resolveIconFillRatio() {

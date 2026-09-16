@@ -7136,7 +7136,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         DockLayout dockLayout = getDockLayout();
         mSuggestionBarView.setIconScale(dockLayout.iconScale);
-        mSuggestionBarView.setDockRowHeightHintPx(dockLayout.appsBarHeightHintPx);
+        mSuggestionBarView.setDockRowHeightHintPx(dockLayout.appsRowBandHintPx);
         mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
@@ -9465,8 +9465,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A column measures to its icons and scrolls past them; a row along the top is filled
             // to the band it was given, the way the dock fills its own.
             host.setFillViewport(!edge.isOnSide());
+            // The band the row claims wherever it lies, not the dock's own row height: off the
+            // dock that has collapsed to nothing, and a row with no hint sizes its icons to
+            // whatever host it was lent to.
             mSuggestionBarView.setDockRowHeightHintPx(edge.isOnSide()
-                ? 0 : dockLayout.appsBarHeightHintPx);
+                ? 0 : dockLayout.appsRowBandHintPx);
         }
         // A move or a turn both change what the slots are, and neither is something a layout pass
         // works out on its own.
@@ -10544,9 +10547,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         moved |= updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
         moved |= applyDockRowHorizontalInsets();
         if (mSuggestionBarView != null) {
-            moved |= layout.appsBarHeightHintPx != mAppliedDockRowHeightHintPx;
-            mAppliedDockRowHeightHintPx = layout.appsBarHeightHintPx;
-            mSuggestionBarView.setDockRowHeightHintPx(layout.appsBarHeightHintPx);
+            moved |= layout.appsRowBandHintPx != mAppliedDockRowHeightHintPx;
+            mAppliedDockRowHeightHintPx = layout.appsRowBandHintPx;
+            mSuggestionBarView.setDockRowHeightHintPx(layout.appsRowBandHintPx);
         }
         return moved;
     }

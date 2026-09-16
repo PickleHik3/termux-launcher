@@ -311,6 +311,89 @@ public class TermuxActivityEdgeStackLayoutTest {
             ((EdgeStackView) activity.findViewById(R.id.place_edge_stack_bottom)).getChildCount());
     }
 
+    // ------------------------------------------------------------------ the height distribution
+
+    /** The content column, measured and laid out at one phone's worth of space. */
+    private static LinearLayout laidOutColumn(TermuxActivity activity, int width, int height) {
+        LinearLayout column = activity.findViewById(R.id.terminal_content_column);
+        column.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        column.layout(0, 0, width, height);
+        return column;
+    }
+
+    /** Stands the pinned-apps host where {@link TermuxActivity#syncPinnedAppsHost} would. */
+    private static void standAppsRow(TermuxActivity activity, int width, int height) {
+        View host = activity.findViewById(R.id.place_apps_bar_host);
+        host.setVisibility(View.VISIBLE);
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        params.width = width;
+        params.height = height;
+        host.setLayoutParams(params);
+    }
+
+    @Test
+    public void aTopRowIsOneRowDeepAndLeavesTheCanvasTheRest() {
+        // The defect: the plank's glass sheet matched its host, and a plain View offered an
+        // at-most spec takes every pixel of it — so the plank measured the whole content column,
+        // the top stack wrapped to that, and the canvas band's weight had nothing left to take.
+        TermuxActivity activity = inflate();
+        PlaceLayout layout = layoutWith(Element.APPS, Edge.TOP);
+        activity.applyEdgeStacks(layout);
+        activity.syncOffDockPlank(layout);
+        standAppsRow(activity, ViewGroup.LayoutParams.MATCH_PARENT, 160);
+
+        LinearLayout column = laidOutColumn(activity, 1080, 1370);
+        View top = activity.findViewById(R.id.place_edge_stack_top);
+        View plank = activity.findViewById(R.id.place_off_dock_plank_host);
+        View bars = activity.findViewById(R.id.place_off_dock_plank_bars);
+        View glass = activity.findViewById(R.id.place_off_dock_plank_glass);
+        View band = activity.findViewById(R.id.terminal_canvas_band);
+        View surface = activity.findViewById(R.id.terminal_surface_host);
+        View bottom = activity.findViewById(R.id.place_edge_stack_bottom);
+
+        assertEquals("the sheet is exactly the bars", bars.getHeight(), glass.getHeight());
+        assertEquals("and the plank is the bars plus their air",
+            plank.getHeight() - plank.getPaddingTop() - plank.getPaddingBottom(),
+            bars.getHeight());
+        assertEquals("the top stack holds nothing deeper", plank.getHeight(), top.getHeight());
+        assertTrue("a row, not a screen: " + top.getHeight(), top.getHeight() < 2 * 160);
+        assertTrue("the terminal still has a canvas", surface.getHeight() > 0);
+        assertEquals(column.getHeight() - top.getHeight() - bottom.getHeight(),
+            band.getHeight());
+        assertEquals(band.getHeight(), surface.getHeight());
+    }
+
+    @Test
+    public void aLeftRailIsTheCanvasBandsHeightAndTheRowsKeepTheWidth() {
+        TermuxActivity activity = inflate();
+        PlaceLayout layout = layoutWith(Element.APPS, Edge.LEFT);
+        activity.applyEdgeStacks(layout);
+        activity.syncOffDockPlank(layout);
+        standAppsRow(activity, 140, ViewGroup.LayoutParams.MATCH_PARENT);
+
+        LinearLayout column = laidOutColumn(activity, 1080, 1370);
+        View rail = activity.findViewById(R.id.place_apps_bar_host);
+        View band = activity.findViewById(R.id.terminal_canvas_band);
+        View surface = activity.findViewById(R.id.terminal_surface_host);
+        assertEquals("the rail flanks the canvas and nothing else",
+            band.getHeight(), rail.getHeight());
+        assertEquals("and takes its width off the terminal alone",
+            band.getWidth() - rail.getWidth(), surface.getWidth());
+        assertEquals("the column keeps the whole width", 1080, column.getWidth());
+        assertEquals(1080, band.getWidth());
+    }
+
+    @Test
+    public void theCanvasBandClipsWhatScrollsInsideIt() {
+        // A rail holds more icons than the screen is tall; unclipped, the scrolled ones drew on
+        // past the canvas and sat beside the dock.
+        TermuxActivity activity = inflate();
+        ViewGroup band = activity.findViewById(R.id.terminal_canvas_band);
+        assertTrue(band.getClipChildren());
+        assertTrue(band.getClipToPadding());
+    }
+
     @Test
     public void oneKeyViewIsLentBetweenThePagerAndThePortableHost() {
         // The pager's first page and the bar standing on another edge are the same instance, so a

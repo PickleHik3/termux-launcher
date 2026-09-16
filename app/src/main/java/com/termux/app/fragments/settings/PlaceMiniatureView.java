@@ -90,7 +90,7 @@ public final class PlaceMiniatureView extends View {
         Block.STATUS_BAR, Block.APPS_ROW, Block.ALPHABETS_ROW, Block.EXTRA_KEYS};
 
     /** The order the edges claim their strips in; see {@link #computeBlocks}. */
-    private static final Edge[] CLAIM_ORDER = {Edge.TOP, Edge.LEFT, Edge.RIGHT, Edge.BOTTOM};
+    private static final Edge[] CLAIM_ORDER = {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT};
 
     /** Portrait: narrow and tall; landscape: wide and short — a phone silhouette either way. */
     private static final float PORTRAIT_ASPECT = 9f / 19.5f;
@@ -160,6 +160,8 @@ public final class PlaceMiniatureView extends View {
      *  two different shapes, only within one draw-then-move-on sequence. */
     private final RectF mScratchRectA = new RectF();
     private final RectF mScratchRectB = new RectF();
+    /** The hit rectangle {@link #gripTouchInto} builds for whichever grip is being tested. */
+    private final RectF mScratchGripTouch = new RectF();
     private final Map<Block, RectF> mBlockRects = new EnumMap<>(Block.class);
     private final Map<Block, RectF> mLegendRects = new EnumMap<>(Block.class);
     private RectF mRemaining = new RectF();
@@ -521,9 +523,12 @@ public final class PlaceMiniatureView extends View {
         }
         // One loop over the model instead of a hand-written running order: each edge is a stack,
         // outermost first, and a band claims its share of whatever the bands outside it left.
-        // The edges are claimed in the order the screen itself does — a top row spans the whole
-        // width, the side columns stand between the rows, and the bottom stack comes last, which
-        // is what puts a bottom status bar above the dock rather than under it.
+        // The edges are claimed in the order the screen itself does: the rows take the whole width
+        // first — top, then bottom, which is what puts a bottom status bar above the dock rather
+        // than under it — and the side columns then stand in what is left between them, flanking
+        // the canvas and nothing else, the way P4 made the screen do it. Claimed the other way a
+        // column ran the height of the phone, past the dock and into its corner, and took the
+        // grip that lifts it down there with it.
         for (Edge edge : CLAIM_ORDER) {
             for (Element element : EdgeStackPolicy.stack(mLayout, edge))
                 takeEdgeStrip(blockOf(element), edge, MiniatureDragPolicy.bandFraction(element));
@@ -1597,13 +1602,12 @@ public final class PlaceMiniatureView extends View {
      */
     @Nullable
     private Block gripAt(float x, float y) {
-        float slop = dp(GRIP_TOUCH_SLOP_DP);
         Block best = null;
         float bestDistance = Float.MAX_VALUE;
         for (Map.Entry<Block, RectF> entry : mGripRects.entrySet()) {
             RectF grip = entry.getValue();
-            if (x < grip.left - slop || x > grip.right + slop
-                || y < grip.top - slop || y > grip.bottom + slop) continue;
+            gripTouchInto(entry.getKey(), grip, mScratchGripTouch);
+            if (!mScratchGripTouch.contains(x, y)) continue;
             float dx = grip.centerX() - x;
             float dy = grip.centerY() - y;
             float distance = dx * dx + dy * dy;
@@ -1613,6 +1617,33 @@ public final class PlaceMiniatureView extends View {
             }
         }
         return best;
+    }
+
+    /**
+     * What a finger has to land on to lift this bar: the grip glyph with the touch slop around it,
+     * widened across the whole thickness of the band it rides. A column the picture draws is a few
+     * dp wide, so a grip drawn to fit inside it is far narrower than a fingertip — this makes the
+     * end of the band the target, whichever way the band stands, while the rest of it stays a tap.
+     */
+    private void gripTouchInto(@NonNull Block bar, @NonNull RectF grip, @NonNull RectF out) {
+        float slop = dp(GRIP_TOUCH_SLOP_DP);
+        out.set(grip.left - slop, grip.top - slop, grip.right + slop, grip.bottom + slop);
+        RectF band = mBlockRects.get(bar);
+        if (band == null || band.isEmpty()) return;
+        // Across the band: the wider of the glyph's slop and the band itself, so a thin column is
+        // still a fingertip wide. Along it: never past the band's own ends, or the slop would reach
+        // into the band standing next to it and take its taps.
+        if (isBarVertical(bar)) {
+            out.left = Math.min(out.left, band.left);
+            out.right = Math.max(out.right, band.right);
+            out.top = Math.max(out.top, band.top);
+            out.bottom = Math.min(out.bottom, band.bottom);
+            return;
+        }
+        out.top = Math.min(out.top, band.top);
+        out.bottom = Math.max(out.bottom, band.bottom);
+        out.left = Math.max(out.left, band.left);
+        out.right = Math.min(out.right, band.right);
     }
 
     /**

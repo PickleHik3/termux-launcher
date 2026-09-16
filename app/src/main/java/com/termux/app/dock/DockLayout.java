@@ -79,6 +79,13 @@ public final class DockLayout {
      * where the dock has collapsed and this is the only height there is.
      */
     public final int appsRowBandPx;
+    /**
+     * That band's usable (icon) height: {@link #appsRowBandPx} minus the row's own vertical
+     * padding. It is what the row sizes its icons against wherever it lies down, so a row standing
+     * off the dock — where {@link #appsBarHeightHintPx} is zero because the dock's row collapsed —
+     * still has a ceiling of its own instead of scaling to whatever host it was lent to.
+     */
+    public final int appsRowBandHintPx;
 
     /** The top pane's compact height in the active style, read by the drawer's top-band clip. */
     public final int compactStatusBarHeightPx;
@@ -124,6 +131,7 @@ public final class DockLayout {
         this.railIconSpacingPx = Math.max(0, b.railIconSpacingPx);
         this.railSlotLengthPx = Math.max(0, b.railSlotLengthPx);
         this.appsRowBandPx = Math.max(0, b.appsRowBandPx);
+        this.appsRowBandHintPx = Math.max(0, b.appsRowBandHintPx);
         this.compactStatusBarHeightPx = b.compactStatusBarHeightPx;
         this.mConfiguredCornerRadiusDp = b.configuredCornerRadiusDp;
     }
@@ -187,6 +195,7 @@ public final class DockLayout {
         int railIconSpacingPx;
         int railSlotLengthPx;
         int appsRowBandPx;
+        int appsRowBandHintPx;
         int compactStatusBarHeightPx;
         int configuredCornerRadiusDp;
 

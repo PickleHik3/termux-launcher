@@ -202,6 +202,29 @@ public class DockLayoutPolicyTest {
         assertEquals(0, top.appsBarHeightPx);
         // The band it claims up there is the height it had at the bottom.
         assertEquals(169, top.appsRowBandPx);
+        // And the row still knows how tall its icons may be. The dock's own hint is zero up here —
+        // the dock has no row — and a row with no hint scales its icons to whatever host it was
+        // lent to, which off the dock is a plank rather than a row.
+        assertEquals(0, top.appsBarHeightHintPx);
+        assertEquals(169 - top.appsTopPaddingPx - top.appsBottomPaddingPx, top.appsRowBandHintPx);
+        assertTrue(top.appsRowBandHintPx > 0);
+    }
+
+    @Test
+    public void onTheDockTheBandHintIsTheRowHint() {
+        DockLayout onDock = DockLayoutPolicy.compute(inputs(2.18f, true, false).build());
+        assertTrue(onDock.appsRowEnabled);
+        assertEquals(onDock.appsBarHeightHintPx, onDock.appsRowBandHintPx);
+    }
+
+    @Test
+    public void aRowIsNeverDeeperThanTwoRailSlots() {
+        // The ceiling a row falls back on before anything has told it its band, so a host that has
+        // swallowed a content column cannot make one pinned icon that tall. Every preset's real
+        // band stays well inside it.
+        DockLayout l = compute();
+        assertEquals(2 * l.railSlotLengthPx, DockLayoutPolicy.maxRowBandPx(DENSITY));
+        assertTrue(l.appsRowBandPx < DockLayoutPolicy.maxRowBandPx(DENSITY));
     }
 
     @Test
