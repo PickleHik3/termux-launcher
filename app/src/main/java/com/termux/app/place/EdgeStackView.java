@@ -30,9 +30,10 @@ import java.util.List;
  * on the bottom and the right the outermost band is the <em>last</em> one a {@link LinearLayout}
  * lays out, so the order is reversed on the way in. Callers never have to know which.
  *
- * <p>The stack carries the display cutout on its own side as padding ({@link #setCutoutPx}), so
- * every bar in it is a plain band of its own thickness and the edge's whole reach is the cutout
- * plus those bands — exactly what {@link EdgeStackPolicy#contentInsets} answers.
+ * <p>A stack holds nothing but bands: every bar in it is a plain band of its own thickness, and the
+ * edge's whole reach is the display cutout — kept once by the padded content root every stack now
+ * stands inside — plus those bands, which is exactly what {@link EdgeStackPolicy#contentInsets}
+ * answers.
  */
 public class EdgeStackView extends LinearLayout {
 
@@ -69,15 +70,6 @@ public class EdgeStackView extends LinearLayout {
     public void setEdge(@NonNull Edge edge) {
         mEdge = edge;
         setOrientation(edge.isOnSide() ? HORIZONTAL : VERTICAL);
-    }
-
-    /** How far in from its own side the stack starts: the display cutout under it, and nothing else. */
-    public void setCutoutPx(int cutoutPx) {
-        int cutout = Math.max(0, cutoutPx);
-        int left = mEdge == Edge.LEFT ? cutout : 0;
-        int right = mEdge == Edge.RIGHT ? cutout : 0;
-        if (getPaddingLeft() == left && getPaddingRight() == right) return;
-        setPadding(left, 0, right, 0);
     }
 
     /**

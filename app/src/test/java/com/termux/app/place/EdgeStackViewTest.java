@@ -126,22 +126,14 @@ public class EdgeStackViewTest {
         assertEquals(given, children(stack));
     }
 
-    @Test public void theCutoutIsTheStacksOwnPaddingOnItsOwnSide() {
-        EdgeStackView left = stack(Edge.LEFT);
-        left.setCutoutPx(44);
-        assertEquals(44, left.getPaddingLeft());
-        assertEquals(0, left.getPaddingRight());
-
-        EdgeStackView right = stack(Edge.RIGHT);
-        right.setCutoutPx(44);
-        assertEquals(44, right.getPaddingRight());
-        assertEquals(0, right.getPaddingLeft());
-
-        // Nothing horizontal to carry on a row's edge, and never a negative one.
-        EdgeStackView top = stack(Edge.TOP);
-        top.setCutoutPx(44);
-        assertEquals(0, top.getPaddingLeft());
-        left.setCutoutPx(-9);
-        assertEquals(0, left.getPaddingLeft());
+    @Test public void aStackCarriesNoPaddingOfItsOwn() {
+        // The cutout used to be each side stack's own padding, from the days when the two stood
+        // outside the padded content root; they stand inside the canvas band now, so the root keeps
+        // the camera hole once and a stack is nothing but its bands.
+        for (Edge edge : Edge.values()) {
+            EdgeStackView stack = stack(edge);
+            assertEquals(edge + " left", 0, stack.getPaddingLeft());
+            assertEquals(edge + " right", 0, stack.getPaddingRight());
+        }
     }
 }

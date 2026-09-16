@@ -449,10 +449,61 @@
             </FrameLayout>
             </com.termux.app.place.EdgeStackView>
 
-            <FrameLayout
-                android:id="@+id/terminal_surface_host"
+            <!-- The canvas band: the one horizontal row of the content column, holding the left
+                 stack, the terminal and the right stack. A side rail therefore flanks the canvas
+                 only — the top stack, the bottom stack, the dock's rows and the in-app keyboard
+                 keep the whole width, the way the miniature has always drawn it. The terminal is
+                 the weighted residual between the two stacks, so what EdgeStackPolicy.contentInsets
+                 answers for the sides is structure rather than padding anyone applies. -->
+            <LinearLayout
+                android:id="@+id/terminal_canvas_band"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+            <!-- The left stack. applyEdgeStacks() re-parents the bars between the two side stacks
+                 and orders them; what is declared inside this one is only where they start. -->
+            <com.termux.app.place.EdgeStackView
+                android:id="@+id/place_edge_stack_left"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                app:edgeStackEdge="left"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <!-- The pinned apps standing off the dock: the one SuggestionBarView is lent to
+                     this host whenever the row is not the dock's own, turned on its side for a left
+                     or right edge. A ScrollView because a rail can hold more icons than the screen
+                     is tall; syncPinnedAppsHost() sizes it and applyEdgeStacks() moves it. -->
+                <com.termux.app.launcher.drawer.DockRailScrollView
+                    android:id="@+id/place_apps_bar_host"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:fillViewport="true"
+                    android:scrollbars="none"
+                    android:overScrollMode="never"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:visibility="gone" />
+
+                <!-- The extra keys standing off the dock: the toolbar pager's own first-page
+                     ExtraKeysView is lent to this host. syncExtraKeysHost() fills and sizes it. -->
+                <FrameLayout
+                    android:id="@+id/place_extra_keys_host"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:visibility="gone" />
+
+            </com.termux.app.place.EdgeStackView>
+
+            <FrameLayout
+                android:id="@+id/terminal_surface_host"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:clipChildren="false"
                 android:clipToPadding="false">
@@ -495,6 +546,15 @@
                     android:layout_height="match_parent"
                     android:visibility="gone" />
             </FrameLayout>
+
+            <com.termux.app.place.EdgeStackView
+                android:id="@+id/place_edge_stack_right"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                app:edgeStackEdge="right"
+                android:clipChildren="false"
+                android:clipToPadding="false" />
+            </LinearLayout>
 
             <!-- The bottom edge above the dock, inside the content column so its bars stand on the
                  terminal's own height — which is exactly where a bottom status bar has always
@@ -1043,57 +1103,6 @@
             android:focusable="false"
             android:visibility="gone" />
         </RelativeLayout>
-
-        <!-- The two side stacks. Siblings of the padded content root, so their bars occupy the
-             display-cutout column the terminal is inset from; each carries the cutout on its own
-             side as padding, so every bar inside it is a plain band of its own thickness and the
-             edge's whole reach is what EdgeStackPolicy.contentInsets answers.
-             applyEdgeStacks() re-parents the bars between the two and orders them; what is
-             declared inside the left one is only where they start. -->
-        <com.termux.app.place.EdgeStackView
-            android:id="@+id/place_edge_stack_left"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="start"
-            app:edgeStackEdge="left"
-            android:clipChildren="false"
-            android:clipToPadding="false">
-
-            <!-- The pinned apps standing off the dock: the one SuggestionBarView is lent to this
-                 host whenever the row is not the dock's own, turned on its side for a left or
-                 right edge. A ScrollView because a rail can hold more icons than the screen is
-                 tall; syncPinnedAppsHost() sizes it and applyEdgeStacks() moves it. -->
-            <com.termux.app.launcher.drawer.DockRailScrollView
-                android:id="@+id/place_apps_bar_host"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:fillViewport="true"
-                android:scrollbars="none"
-                android:overScrollMode="never"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:visibility="gone" />
-
-            <!-- The extra keys standing off the dock: the toolbar pager's own first-page
-                 ExtraKeysView is lent to this host. syncExtraKeysHost() fills and sizes it. -->
-            <FrameLayout
-                android:id="@+id/place_extra_keys_host"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:visibility="gone" />
-
-        </com.termux.app.place.EdgeStackView>
-
-        <com.termux.app.place.EdgeStackView
-            android:id="@+id/place_edge_stack_right"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="end"
-            app:edgeStackEdge="right"
-            android:clipChildren="false"
-            android:clipToPadding="false" />
-
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
              deliberately NOT part of the accessory stack: the drawer animates with transforms only,

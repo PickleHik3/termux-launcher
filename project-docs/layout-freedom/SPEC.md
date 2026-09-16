@@ -167,6 +167,39 @@ The cost, and it is the honest one: a bottom status bar always stands above the 
 order it is given, which is the L1 default (status innermost) and the only placement it has ever
 had.
 
+## P4 outcome (2026-09-16)
+
+**The side stacks flank the canvas only.** `terminal_content_column` grew a middle row,
+`terminal_canvas_band` — left stack, `terminal_surface_host`, right stack — and
+`place_edge_stack_left`/`_right` moved into it from `terminal_root_container`. A rail therefore
+takes its width off the terminal and nothing else: the status bar's chips, the dock's rows and the
+in-app keyboard keep the whole width, which is what the miniature has drawn since L4. The canvas is
+the weighted residual of the band exactly as it is of the column, so the horizontal half of
+`EdgeStackPolicy.contentInsets` is now structure rather than a padding anyone applies — the root
+keeps only what is left of that answer, the display cutout, and `EdgeStackView.setCutoutPx` is gone
+with the days when a stack stood outside the padded root. Four numbers followed the band: a side
+status column no longer cancels the root's padding with negative margins, its content length is the
+band's height, its row and its stacked clock no longer add the system status-bar inset twice, and
+the lens keeps no system-bar clearance of its own. A side bar is a plain band from the top of the
+canvas to the bottom of it.
+
+**The drawer turns with the row.** `AppDrawerPullGeometry` is the one place the edge decides both
+halves: `pullFor` (left rail → swipe right, right rail → swipe left, top and bottom → pull down) and
+`seedFor` (the rectangle the plane grows out of and shrinks back into — the rail's column, the
+plank, or the dock's glass). `AppDrawerController.beginDrag` takes the pull and the seed, freezes
+both with the rest of the capture, sizes the open travel off the screen's width for a rail, rounds
+the seed by its short side and skips the dock's hop sideways. The arbiter already had the axis
+(`Pull.RIGHT`/`LEFT`, wired to `DockRailScrollView` since the landscape rail); what it lacked was a
+row that stood down. `SuggestionBarView` is told its pull (`setDrawerPull`) instead of deriving it
+from the orientation, and in the rail form it arbitrates nothing at all — so a drag down the rail
+scrolls the pinned apps instead of opening the drawer, and a sideways drag reaches the scrolling
+host that owns the pull. A row on the top edge pulls down from the top and the plane grows out of
+its plank.
+
+Honest boundary: none of this is device-verified. The close drag started from inside an open plane
+is still the plane's own vertical gesture whatever edge the drawer came from; it settles back into
+the seed rectangle either way, so a rail's drawer still shrinks into the rail.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |
