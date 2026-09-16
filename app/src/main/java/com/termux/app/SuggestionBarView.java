@@ -2908,8 +2908,6 @@ public final class SuggestionBarView extends GridLayout
             }
             entries = pageEntries;
             buttonCount = perPage;
-            pinnedItemsPerPage = 1;
-            pinnedPageIndex = 0;
             renderStartCol = 0;
         }
 
@@ -2932,10 +2930,14 @@ public final class SuggestionBarView extends GridLayout
                 }
                 entries = entriesForPinnedItems(pinnedForSlots);
             }
-        } else {
-            pinnedItemsPerPage = 1;
-            pinnedPageIndex = 0;
         }
+        // Nothing else writes the pinned row's paging. The A-Z matches, a typed line's suggestions
+        // and an empty row all borrow the same slots, and each of them used to reset
+        // pinnedItemsPerPage and pinnedPageIndex on its way past — so the page the icons were on
+        // was lost to whatever happened to render next, and the row came back on its first page
+        // with no gesture having asked for it. A surface that is not the pinned one renders its
+        // own entries into its own buttonCount and leaves the row's page where the finger left it;
+        // the pinned branch above is the only writer, and it clamps rather than zeroes.
 
         int surfaceRenderSignature = computeSurfaceRenderSignature(entries, azPreview, pinnedSurface, buttonCount);
         if (surfaceRenderSignature != 0 && surfaceRenderSignature == lastSurfaceRenderSignature && getChildCount() > 0) {
