@@ -55,28 +55,17 @@ public final class AzBarHostGeometry {
     }
 
     /**
-     * How far down a column host the bar starts. The bar stands <em>beside</em> whatever else
-     * holds its edge rather than under it — the edge stack it stands in already carries it past
-     * those bands — so the only thing above it is chrome that crosses the whole container: a status
-     * bar standing along the top. Nothing about a column on the same side belongs here.
+     * A column host's length: the whole band the stack hands it. Nothing is taken off either end
+     * any more — the edge stack it stands in carries the terminal frame's own inset, so the bar
+     * begins and ends level with the frame beside it, and the launcher's other chrome is beside
+     * the column rather than above or below it.
+     *
+     * <p>It used to subtract a top status bar's height and the dock's, which was true while the
+     * side stacks stood outside the content column. Since they flank the canvas alone, both of
+     * those are outside the band already and subtracting them cost the bar two thirds of its
+     * length: the letters bunched into the top of the column under a stub of a capsule.
      */
-    public static int columnTopPaddingPx(int marginPx, int topChromeHeightPx) {
-        return Math.max(0, marginPx) + Math.max(0, topChromeHeightPx);
-    }
-
-    /** The same at the other end: the margin, and the dock and whatever stands under it. */
-    public static int columnBottomPaddingPx(int marginPx, int bottomChromeHeightPx) {
-        return Math.max(0, marginPx) + Math.max(0, bottomChromeHeightPx);
-    }
-
-    /**
-     * How far the bar's glass and letters run down a column of this height — what the container
-     * leaves between the two paddings. Zero only when the chrome really does fill the container.
-     */
-    public static int columnLengthPx(int containerHeightPx, int marginPx, int topChromeHeightPx,
-                                     int bottomChromeHeightPx) {
-        return Math.max(0, Math.max(0, containerHeightPx)
-            - columnTopPaddingPx(marginPx, topChromeHeightPx)
-            - columnBottomPaddingPx(marginPx, bottomChromeHeightPx));
+    public static int columnLengthPx(int containerHeightPx) {
+        return Math.max(0, containerHeightPx);
     }
 }

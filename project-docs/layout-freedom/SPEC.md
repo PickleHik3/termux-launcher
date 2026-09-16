@@ -236,6 +236,57 @@ anywhere else on a band is still a tap, as it has always been.
 Honest boundary: none of this is device-verified. The four Robolectric tests measure the real
 `activity_termux.xml` and the real miniature, not the phone.
 
+## P6 outcome (2026-09-16)
+
+**A rail pages.** `SuggestionBarView.computePinnedItemsPerPage` answered "every pinned item" for
+the vertical form and `getPinnedPagesCount` answered one, so a column shorter than its content ran
+past the bottom of the canvas band — which clips since P5 — and the icons down there were
+unreachable. Both now go through `DockPagingModel.railItemsPerPage(usableLengthPx, slotLengthPx)`:
+as many whole `railSlotLengthPx` slots as the bar's own box holds, and the rest are pages behind
+it. The swipe turned with the row rather than being written twice —
+`AppDrawerGestureArbiter.evaluate` takes a `pageVertical` flag and applies the same dominance cone
+to whichever axis the pages are on, and `swipeVisualOffsetX` became `swipeVisualOffsetPx` along a
+`pageAxisLengthPx()` that is the width lying down and the height standing up (the clip, the commit
+distance, the rubber-band, the settle and the preview page all read it). The two gestures cannot
+contest a drag: the rail's drawer pull is horizontal and `DockRailScrollView` claims it in
+`dispatchTouchEvent` before the bar sees the stream, while the bar's own `Pull` is `NONE` and its
+pages are vertical. `setFillViewport(true)` on every edge, because a page now fits the column by
+construction and there is nothing left to scroll to.
+
+**The indicator rides with the row.** Off the dock there was no layer drawing ticks at all — the
+FX views (`apps_bar_az_fx_underlay/_overlay`) are children of `accessory_stack_container` and paint
+over the dock's glass — which is why a TOP row paged silently and a rail had nothing to show. The
+portable host is now a `LinearLayout` (`place_apps_bar_host`) holding the scrolling host
+(`place_apps_bar_scroll`, the id the bar used to have) and a `PageTickStripView`
+(`place_apps_bar_indicator`), exactly as `apps_bar_row_host` holds the dock's row and its band; the
+stack moves the pair. `PageTickStrip` is the pure geometry — the dock's own 13/24/2.5/4 dp ticks,
+the nearest one widened by proximity to the fractional page — and the view draws it along whichever
+axis it is given. `SuggestionBarView.setPageIndicator` binds it and `publishPageIndicator` feeds it
+from the paths that already existed (`notifyOverflowPagePositionChanged`, the layout pass), so no
+new per-frame work. On a row the strip lies under it; on a rail it stands on the inner side, the
+side the terminal is on. It is `INVISIBLE` rather than `GONE` with one page, and its band is added
+to `buildEdgeStackMetrics` and to the plank's glass height, so the row claims the same thickness
+whether or not it happens to be paging.
+
+**Side stacks meet the terminal frame.** `applySideStackFrameInset(terminalFrameInsetPx(true))`
+pads `place_edge_stack_left/right` at both ends from `applyTerminalBorderAppearance` and from
+`doSyncPlaceLayout` — one answer, derived from the same call the frame and the pane host are laid
+out with, applied to the stack so every band on that edge inherits it without knowing the number.
+
+**And the alphabets column is its whole band again.** `layoutAzBarHost` still subtracted a top
+status bar's height and the accessory stack's from a column that has stood *inside* the canvas
+band since P4, where neither of them is: on pong that left `place_az_bar_host_glass` 454 px of a
+1362 px column, with the letters bunched into the top third under a stub of a capsule. The column
+keeps only its side margins now; `AzBarHostGeometry.columnTopPaddingPx`/`columnBottomPaddingPx`
+are gone and `columnLengthPx` takes the band alone. The letters were never the bug —
+`AzLetterTrack` has divided the length by the letter count on both axes since L2 — so the capsule
+spanning the frame-aligned column is the pitch fixed.
+
+Honest boundary: none of this is device-verified. The eight Robolectric tests in
+`TermuxActivityRailPagingTest` measure the real `activity_termux.xml`; the arithmetic is covered
+pure in `DockPagingModelTest` and `PageTickStripTest`. `SuggestionBarRailFormTest.theRailIsOnePage`
+became `theRailPagesByTheColumnItWasGiven` — it asserted the defect.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |

@@ -131,6 +131,7 @@ import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.DockPagingModel;
+import com.termux.app.launcher.paging.PageTickStripView;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -439,6 +440,10 @@ public final class SuggestionBarView extends GridLayout
      * caller that is not the launcher on the shipped behaviour.
      */
     @Nullable private AppDrawerGestureArbiter.Pull drawerPull;
+    /** The page ticks this row carries off the dock; null while it is the dock's own row. */
+    @Nullable private PageTickStripView pageIndicator;
+    /** The column length the rail's page count was last worked out from. */
+    private int railPagedAtLengthPx;
     /**
      * The latched owner of the current stream, mirrored from {@link #gestureArbiter} at the two
      * points it is consulted. Replaces the {@code horizontalIntent} boolean the move handler used to
@@ -451,7 +456,7 @@ public final class SuggestionBarView extends GridLayout
     private float drawerTransitionProgress = 0f;
     private float swipePagePosition = 0f;
     private boolean swipePageDragging = false;
-    private float swipeVisualOffsetX = 0f;
+    private float swipeVisualOffsetPx = 0f;
     private float swipeDragProgress = 0f;
     private int swipePreviewDirection = 0;
     private int swipePreviewPageIndex = -1;
@@ -687,17 +692,25 @@ public final class SuggestionBarView extends GridLayout
         if (suppressDrawUntilStableLayout) {
             return;
         }
-        if (swipePageDragging && Math.abs(swipeVisualOffsetX) > 0.5f) {
+        if (swipePageDragging && Math.abs(swipeVisualOffsetPx) > 0.5f) {
             int currentAlpha = clamp(Math.round(255f * (1f - (0.10f * swipeDragProgress))), 0, 255);
-            // Horizontal-only clip: contain the page-swap to this row's own width so the capsule
-            // dock's inset interior is respected (incoming/outgoing pages don't slide over the
-            // rounded border). Y stays generous so vertical badge / A-Z label overflow still draws
-            // (clipChildren is intentionally false). On the edge-to-edge default dock the row spans
-            // the screen, so this clip is a no-op.
+            // Clipped along the paging axis only: the page-swap is contained to the bar's own
+            // length so the capsule dock's inset interior is respected (incoming and outgoing pages
+            // do not slide over the rounded border). The other axis stays generous, because the
+            // badges and the A-Z labels overflow that way and clipChildren is deliberately false
+            // for them. On the edge-to-edge default dock the row spans the screen and the clip is a
+            // no-op; standing up the two axes simply swap.
             int clipSave = canvas.save();
-            canvas.clipRect(0f, (float) -getHeight(), (float) getWidth(), (float) (getHeight() * 2));
+            if (vertical) {
+                canvas.clipRect((float) -getWidth(), 0f,
+                    (float) (getWidth() * 2), (float) getHeight());
+            } else {
+                canvas.clipRect(0f, (float) -getHeight(),
+                    (float) getWidth(), (float) (getHeight() * 2));
+            }
             canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), currentAlpha);
-            canvas.translate(swipeVisualOffsetX, 0f);
+            canvas.translate(vertical ? 0f : swipeVisualOffsetPx,
+                vertical ? swipeVisualOffsetPx : 0f);
             super.dispatchDraw(canvas);
             canvas.restore();
             drawSwipePreviewPage(canvas);
@@ -714,6 +727,31 @@ public final class SuggestionBarView extends GridLayout
         // its full budget again.
         if (changed) deferredRenderAttempts = 0;
         scheduleStableDrawReleaseIfPossible();
+        if (changed) resyncRailPagingForLength();
+        // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
+        publishPageIndicator();
+    }
+
+    /**
+     * A rail pages by the length of the column it was given, so a column that changed length is a
+     * different number of pages — the keyboard coming up, the canvas band resizing, a turn of the
+     * screen. Re-rendered only when the fit actually moved, never on every layout pass.
+     */
+    private void resyncRailPagingForLength() {
+        if (!vertical) {
+            railPagedAtLengthPx = 0;
+            return;
+        }
+        int length = railUsableLengthPx();
+        if (length <= 0 || length == railPagedAtLengthPx) return;
+        int wasPerPage = railPagedAtLengthPx <= 0 ? -1
+            : DockPagingModel.railItemsPerPage(railPagedAtLengthPx, railSlotLengthPx());
+        railPagedAtLengthPx = length;
+        if (wasPerPage == DockPagingModel.railItemsPerPage(length, railSlotLengthPx())) {
+            publishPageIndicator();
+            return;
+        }
+        post(this::reload);
     }
 
     public void setMaxButtonCount(int maxButtonCount) {
@@ -734,6 +772,9 @@ public final class SuggestionBarView extends GridLayout
         invalidateRenderedIconCaches();
         lastSurfaceRenderSignature = 0;
         childLayoutPending = true;
+        // The turn changes what a page is, so the length the last fit was worked out from is not
+        // the length this form pages by.
+        railPagedAtLengthPx = 0;
         requestLayout();
         return true;
     }
@@ -2256,27 +2297,26 @@ public final class SuggestionBarView extends GridLayout
                     appDrawerGestureListener.onDrawerDrag(event.getRawY());
                 return true;
             }
-            // A rail arbitrates nothing of its own: its sideways pull belongs to the scrolling
-            // host above it, its vertical axis is that host's scroll, and it has one page holding
-            // every pinned item, so the page swipe has nothing left to switch to either.
-            if (vertical) {
-                // fall through to the children: the icons, and the host's own scroll
-            } else if (isGestureOwnedByChild()) {
+            // A rail claims no drawer pull of its own — that runs sideways and belongs to the
+            // scrolling host above it — but its pages run up and down, which is the axis its slots
+            // are laid along, so the page test is told which way to look.
+            if (isGestureOwnedByChild()) {
                 gestureClaim = toGestureClaim(gestureArbiter.claimChild());
             } else {
                 int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
                 gestureClaim = toGestureClaim(
-                    gestureArbiter.evaluate(event.getRawX(), event.getRawY(), slop));
+                    gestureArbiter.evaluate(event.getRawX(), event.getRawY(), slop, vertical));
             }
             if (gestureClaim == GESTURE_CLAIM_DRAWER_DRAG) {
                 beginDrawerDrag(event);
                 return true;
             }
-            float dx = event.getX() - swipeDownX;
+            float along = vertical
+                ? event.getY() - swipeDownY : event.getX() - swipeDownX;
             if (gestureClaim == GESTURE_CLAIM_PAGE_SWIPE && TextUtils.isEmpty(lastInput.trim())) {
                 suppressContextLongPressForSwipe = true;
                 cancelPendingContextLongPresses();
-                applySwipePageDragFeedback(dx);
+                applySwipePageDragFeedback(along);
             }
         } else if (action == MotionEvent.ACTION_UP) {
             int claim = gestureClaim;
@@ -2292,18 +2332,25 @@ public final class SuggestionBarView extends GridLayout
                 swipeVelocityTracker.addMovement(event);
                 swipeVelocityTracker.computeCurrentVelocity(1000);
             }
-            float dx = event.getX() - swipeDownX;
-            float dy = event.getY() - swipeDownY;
-            float vx = swipeVelocityTracker == null ? 0f : swipeVelocityTracker.getXVelocity();
+            // Along the paging axis and across it: the same two numbers whichever way the bar
+            // stands, so the commit test — which wants the travel dominated by the paging axis —
+            // is the one piece of arithmetic for a row and a rail alike.
+            float dx = vertical
+                ? event.getY() - swipeDownY : event.getX() - swipeDownX;
+            float dy = vertical
+                ? event.getX() - swipeDownX : event.getY() - swipeDownY;
+            float vx = swipeVelocityTracker == null ? 0f
+                : (vertical ? swipeVelocityTracker.getYVelocity()
+                    : swipeVelocityTracker.getXVelocity());
             int committedPageDelta = DockPagingModel.commitPageDelta(dx, dy, vx,
                 resolvePageSwipeCommitDistancePx(), density());
             if (pagingLogEnabled()) {
-                logPaging("up dx=" + dx + " dy=" + dy + " vx=" + vx
+                logPaging("up along=" + dx + " across=" + dy + " v=" + vx
                     + " commit=" + committedPageDelta + " claim=" + claim
                     + " pinnedPage=" + pinnedPageIndex + " previewPage=" + swipePreviewPageIndex
                     + " animating=" + pageSwitchAnimating + " dragging=" + swipePageDragging
                     + " commitDistancePx=" + resolvePageSwipeCommitDistancePx()
-                    + " width=" + getWidth());
+                    + " axisLength=" + pageAxisLengthPx());
             }
             if (claim == GESTURE_CLAIM_PAGE_SWIPE && committedPageDelta != 0
                 && TextUtils.isEmpty(lastInput.trim())) {
@@ -6582,7 +6629,7 @@ public final class SuggestionBarView extends GridLayout
         float easedProgress = DockPagingModel.dragEasedProgress(dx, resolvePageSwipeCommitDistancePx());
 
         swipePageDragging = true;
-        swipeVisualOffsetX = DockPagingModel.dragVisualOffsetPx(dx, getWidth(), density());
+        swipeVisualOffsetPx = DockPagingModel.dragVisualOffsetPx(dx, pageAxisLengthPx(), density());
         swipeDragProgress = easedProgress;
         prepareSwipePagePreview(pageDelta);
 
@@ -6594,7 +6641,16 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private float resolvePageSwipeCommitDistancePx() {
-        return DockPagingModel.commitDistancePx(getWidth(), density());
+        return DockPagingModel.commitDistancePx(pageAxisLengthPx(), density());
+    }
+
+    /**
+     * The bar's length along the axis its pages travel on: across a row, down a rail. Every piece
+     * of the swipe — the commit distance, the rubber-banding, the preview page's offset — is a
+     * fraction of this, so the gesture feels the same whichever way the bar stands.
+     */
+    private int pageAxisLengthPx() {
+        return vertical ? getHeight() : getWidth();
     }
 
     private boolean hasGesturePageSurface() {
@@ -6721,14 +6777,23 @@ public final class SuggestionBarView extends GridLayout
             int center = clamp(Math.round(computeAzAnchorPosition(activeAzLetter, slotCount)), 0, slotCount - 1);
             azColumns = buildAzPriorityColumnsAround(center, slotCount);
         }
-        float pageOffset = swipeVisualOffsetX + (swipePreviewDirection * getWidth());
+        float pageOffset = swipeVisualOffsetPx + (swipePreviewDirection * pageAxisLengthPx());
         int iconSize = iconSizePx();
         for (int i = 0; i < swipePreviewEntries.size() && i < slotCount; i++) {
             int col = azColumns != null ? azColumns[i] : i;
-            float left = pageOffset + ((getWidth() * col) / (float) slotCount);
-            float right = pageOffset + ((getWidth() * (col + 1)) / (float) slotCount);
-            float cx = (left + right) * 0.5f;
-            float cy = getHeight() * 0.5f;
+            float cx;
+            float cy;
+            if (vertical) {
+                // A rail's slots are a fixed pitch measured from the top, not an even share of the
+                // column, so the preview page is laid out the way the page it previews will be.
+                cx = getWidth() * 0.5f;
+                cy = pageOffset + (railSlotLengthPx() * (col + 0.5f));
+            } else {
+                float left = pageOffset + ((getWidth() * col) / (float) slotCount);
+                float right = pageOffset + ((getWidth() * (col + 1)) / (float) slotCount);
+                cx = (left + right) * 0.5f;
+                cy = getHeight() * 0.5f;
+            }
             LauncherAppEntry entry = swipePreviewEntries.get(i);
             PinnedItem pinnedItem = (activeAzLetter == null && i < swipePreviewPinnedItems.size())
                 ? swipePreviewPinnedItems.get(i)
@@ -6858,7 +6923,7 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void clearSwipePagePreview() {
-        swipeVisualOffsetX = 0f;
+        swipeVisualOffsetPx = 0f;
         swipeDragProgress = 0f;
         swipePreviewDirection = 0;
         swipePreviewPageIndex = -1;
@@ -6921,9 +6986,10 @@ public final class SuggestionBarView extends GridLayout
         setTranslationX(0f);
         setAlpha(1f);
 
-        final float startOffset = swipeVisualOffsetX;
-        final float targetOffset = -direction * Math.max(1f, getWidth());
-        final float distanceRatio = clamp01(Math.abs(targetOffset - startOffset) / Math.max(1f, getWidth()));
+        final float startOffset = swipeVisualOffsetPx;
+        final float targetOffset = -direction * Math.max(1f, pageAxisLengthPx());
+        final float distanceRatio =
+            clamp01(Math.abs(targetOffset - startOffset) / Math.max(1f, pageAxisLengthPx()));
         final long settleDuration = clamp(Math.round(duration * (0.72f + (0.28f * distanceRatio))), 240, 420);
         swipePageDragging = true;
         final PageCommitOnce commit = new PageCommitOnce(updateContent, "swipe-preview");
@@ -6932,8 +6998,9 @@ public final class SuggestionBarView extends GridLayout
         settle.setDuration(settleDuration);
         settle.setInterpolator(pageSettleInterpolator());
         settle.addUpdateListener(animation -> {
-            swipeVisualOffsetX = (Float) animation.getAnimatedValue();
-            swipeDragProgress = clamp01(Math.abs(swipeVisualOffsetX) / Math.max(1f, getWidth() * 0.42f));
+            swipeVisualOffsetPx = (Float) animation.getAnimatedValue();
+            swipeDragProgress =
+                clamp01(Math.abs(swipeVisualOffsetPx) / Math.max(1f, pageAxisLengthPx() * 0.42f));
             invalidate();
         });
         settle.addListener(new AnimatorListenerAdapter() {
@@ -6990,7 +7057,7 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void animateSwipePageDragBack() {
-        if (!swipePageDragging && Math.abs(swipeVisualOffsetX) < 0.5f && Math.abs(getTranslationX()) < 0.5f) {
+        if (!swipePageDragging && Math.abs(swipeVisualOffsetPx) < 0.5f && Math.abs(getTranslationX()) < 0.5f) {
             clearSwipePagePreview();
             setTranslationX(0f);
             setAlpha(1f);
@@ -7002,15 +7069,16 @@ public final class SuggestionBarView extends GridLayout
         notifyOverflowPagePositionChanged();
         animate().cancel();
         setListenerSafe(null);
-        final float startOffset = swipeVisualOffsetX;
+        final float startOffset = swipeVisualOffsetPx;
         cancelSwipePreviewAnimations();
         swipePreviewReboundAnimator = ValueAnimator.ofFloat(startOffset, 0f);
-        long reboundDuration = clamp(Math.round(150f + (70f * clamp01(Math.abs(startOffset) / Math.max(1f, getWidth() * 0.38f)))), 150, 220);
+        long reboundDuration = clamp(Math.round(150f + (70f * clamp01(Math.abs(startOffset)
+            / Math.max(1f, pageAxisLengthPx() * 0.38f)))), 150, 220);
         swipePreviewReboundAnimator.setDuration(reboundDuration);
         swipePreviewReboundAnimator.setInterpolator(pageSettleInterpolator());
         swipePreviewReboundAnimator.addUpdateListener(animation -> {
-            swipeVisualOffsetX = (Float) animation.getAnimatedValue();
-            swipeDragProgress = startOffset == 0f ? 0f : Math.abs(swipeVisualOffsetX / startOffset);
+            swipeVisualOffsetPx = (Float) animation.getAnimatedValue();
+            swipeDragProgress = startOffset == 0f ? 0f : Math.abs(swipeVisualOffsetPx / startOffset);
             invalidate();
         });
         swipePreviewReboundAnimator.addListener(new AnimatorListenerAdapter() {
@@ -7041,6 +7109,42 @@ public final class SuggestionBarView extends GridLayout
         if (overflowInteractionListener != null) {
             overflowInteractionListener.onOverflowPagePositionChanged(swipePagePosition);
         }
+        publishPageIndicator();
+    }
+
+    /**
+     * The strip of page ticks that rides with this row when it stands off the dock. On the dock
+     * the ticks belong to the FX layers, which paint them over the glass while a finger owns the
+     * row; no other edge has such a layer, which is why a top row paged silently and a rail — one
+     * page holding everything — could not page at all.
+     */
+    public void setPageIndicator(@Nullable PageTickStripView indicator) {
+        if (pageIndicator == indicator) return;
+        pageIndicator = indicator;
+        publishPageIndicator();
+    }
+
+    /**
+     * Hands the strip what it draws: how many pages the row has and where between them it stands.
+     * Cheap and idempotent — the strip invalidates only on a real change — so every path that can
+     * move the row between pages ends here instead of each of them knowing about the strip.
+     */
+    void publishPageIndicator() {
+        PageTickStripView indicator = pageIndicator;
+        if (indicator == null) return;
+        boolean overflow = hasPinnedOverflowPages();
+        indicator.setVerticalForm(vertical);
+        indicator.setTickColor(resolvePageIndicatorTickColor());
+        indicator.setPages(overflow ? getPinnedVisiblePageCount() : 1,
+            overflow ? getPinnedVisualPagePosition() : 0f);
+        // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
+        // gained a page would otherwise grow by it and shove the terminal.
+        indicator.setVisibility(overflow ? VISIBLE : INVISIBLE);
+    }
+
+    /** The ticks in the row's own text colour, dimmed the way the dock's own ticks are. */
+    private int resolvePageIndicatorTickColor() {
+        return (resolveLauncherTextColor() & 0x00FFFFFF) | 0x99000000;
     }
 
     private void setRowInteractionActive(boolean active) {
@@ -7662,19 +7766,47 @@ public final class SuggestionBarView extends GridLayout
         button.setColorFilter(resolveLauncherTextColor());
     }
 
-    private int computePinnedItemsPerPage() {
-        // Standing up there is one page: the column holds every pinned item and the host scrolls.
-        if (vertical) return Math.max(1, pinnedItemCount());
+    /**
+     * Slots one page holds. Lying down that is the user's own icons-per-page; standing up the
+     * slots are a fixed pitch, so it is however many of them the column's length holds.
+     *
+     * <p>A rail used to answer "every pinned item", which made it one page as tall as its content
+     * however short the column was: the run past the bottom of the canvas was clipped away and the
+     * last icons were simply unreachable. It pages now, the way the row it is has always paged.
+     */
+    int computePinnedItemsPerPage() {
+        if (vertical)
+            return DockPagingModel.railItemsPerPage(railUsableLengthPx(), railSlotLengthPx());
         return DockPagingModel.pinnedItemsPerPage(maxButtonCount);
+    }
+
+    /**
+     * The length the rail's slots are laid along: the bar's own box, which is its host's minus the
+     * padding the host keeps. Falls back to the host while the bar is between a re-parent and its
+     * first layout, so the first render of a moved rail pages by the column it is about to fill
+     * rather than by nothing.
+     */
+    private int railUsableLengthPx() {
+        int length = getHeight();
+        if (length <= 0) length = getMeasuredHeight();
+        if (length <= 0) {
+            ViewParent parent = getParent();
+            if (parent instanceof View) {
+                View host = (View) parent;
+                length = host.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+            }
+        }
+        return Math.max(0, length);
     }
 
     /** Pages occupied by the user's persisted pinned items (excludes the dynamic most-used page). */
     private int getRealPinnedPagesCount() {
-        if (vertical) return 1;
-        // Pass maxButtonCount rather than the pinnedItemsPerPage field: the field is 1 until the
-        // first successful pinned render and after az/non-pinned renders, so feeding it here would
-        // report one page per pinned item (the "dozens of empty page ticks" failure).
-        return DockPagingModel.realPinnedPageCount(pinnedItemCount(), maxButtonCount);
+        // Pass the slot count rather than maxButtonCount: lying down the field is 1 until the first
+        // successful pinned render and after az/non-pinned renders, so feeding *that* here would
+        // report one page per pinned item (the "dozens of empty page ticks" failure), while
+        // standing up maxButtonCount is the wrong number entirely — the column decides.
+        return DockPagingModel.realPinnedPageCount(pinnedItemCount(),
+            vertical ? computePinnedItemsPerPage() : maxButtonCount);
     }
 
     private int pinnedItemCount() {
@@ -7682,12 +7814,8 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private int getPinnedPagesCount() {
-        // One page standing up, to match the whole column computePinnedItemsPerPage hands over.
-        // Paged by maxButtonCount instead, a rail showed its first few icons and hid the rest
-        // behind page ticks nothing on a column can swipe.
-        if (vertical) return 1;
-        return DockPagingModel.pinnedPageCount(pinnedItemCount(), maxButtonCount,
-            hasMostUsedDynamicPage());
+        return DockPagingModel.pinnedPageCount(pinnedItemCount(),
+            vertical ? computePinnedItemsPerPage() : maxButtonCount, hasMostUsedDynamicPage());
     }
 
     /**

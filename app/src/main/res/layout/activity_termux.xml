@@ -483,20 +483,39 @@
                 android:clipChildren="false"
                 android:clipToPadding="false">
 
-                <!-- The pinned apps standing off the dock: the one SuggestionBarView is lent to
-                     this host whenever the row is not the dock's own, turned on its side for a left
-                     or right edge. A ScrollView because a rail can hold more icons than the screen
-                     is tall; syncPinnedAppsHost() sizes it and applyEdgeStacks() moves it. -->
-                <com.termux.app.launcher.drawer.DockRailScrollView
+                <!-- The pinned apps standing off the dock, and the page indicator that belongs to
+                     them. One host for the pair, exactly as apps_bar_row_host is the dock's own
+                     row plus its indicator band: the ticks travel with the row instead of being a
+                     band of the stack, so whichever edge the row is given it arrives with them.
+                     syncPinnedAppsHost() turns and sizes both and applyEdgeStacks() moves this. -->
+                <LinearLayout
                     android:id="@+id/place_apps_bar_host"
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
-                    android:fillViewport="true"
-                    android:scrollbars="none"
-                    android:overScrollMode="never"
+                    android:orientation="horizontal"
                     android:clipChildren="false"
                     android:clipToPadding="false"
-                    android:visibility="gone" />
+                    android:visibility="gone">
+
+                    <!-- The one SuggestionBarView is lent to this, turned on its side for a left or
+                         right edge. A ScrollView because a rail that pages still has to give way
+                         when a font scale or a short canvas leaves a page taller than the column. -->
+                    <com.termux.app.launcher.drawer.DockRailScrollView
+                        android:id="@+id/place_apps_bar_scroll"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:fillViewport="true"
+                        android:scrollbars="none"
+                        android:overScrollMode="never"
+                        android:clipChildren="false"
+                        android:clipToPadding="false" />
+
+                    <com.termux.app.launcher.paging.PageTickStripView
+                        android:id="@+id/place_apps_bar_indicator"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <!-- The extra keys standing off the dock: the toolbar pager's own first-page
                      ExtraKeysView is lent to this host. syncExtraKeysHost() fills and sizes it. -->
