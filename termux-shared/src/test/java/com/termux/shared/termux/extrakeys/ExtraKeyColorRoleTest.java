@@ -142,13 +142,13 @@ public class ExtraKeyColorRoleTest {
         for (ExtraKeyButton key : row) {
             switch (key.getKey()) {
                 case "tool:wall.widgets":
-                    assertSame(ExtraKeyColorRole.PRIMARY_CONTAINER, key.getColor());
+                    assertSame(ExtraKeyColorRole.PRIMARY, key.getColor());
                     break;
                 case "tool:wall.terminal":
-                    assertSame(ExtraKeyColorRole.SECONDARY_CONTAINER, key.getColor());
+                    assertSame(ExtraKeyColorRole.SECONDARY, key.getColor());
                     break;
                 case "tool:wall.display":
-                    assertSame(ExtraKeyColorRole.TERTIARY_CONTAINER, key.getColor());
+                    assertSame(ExtraKeyColorRole.TERTIARY, key.getColor());
                     break;
                 default:
                     // Everything else ships with the row's own styling.

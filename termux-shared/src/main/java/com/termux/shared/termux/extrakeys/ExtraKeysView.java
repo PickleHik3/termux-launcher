@@ -13,6 +13,7 @@ import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -396,6 +397,13 @@ public final class ExtraKeysView extends GridLayout {
      * normally transparent — so this is the one shape a key ever shows.
      */
     private static final float COLORED_KEY_CORNER_RADIUS_DP = 12f;
+
+    /**
+     * How far a coloured cap sits in from its cell, so two coloured keys standing side by side
+     * show a gap between their pills instead of touching.
+     */
+    private static final float COLORED_KEY_INSET_HORIZONTAL_DP = 2f;
+    private static final float COLORED_KEY_INSET_VERTICAL_DP = 3f;
 
     @Nullable private KeyUsabilityPolicy mUsabilityPolicy;
     @Nullable private KeyPickListener mKeyPickListener;
@@ -1119,7 +1127,15 @@ public final class ExtraKeysView extends GridLayout {
         cap.setShape(GradientDrawable.RECTANGLE);
         cap.setCornerRadius(dpToPx(COLORED_KEY_CORNER_RADIUS_DP));
         cap.setColor(colors[0]);
-        button.setBackground(cap);
+        int insetH = Math.round(dpToPx(COLORED_KEY_INSET_HORIZONTAL_DP));
+        int insetV = Math.round(dpToPx(COLORED_KEY_INSET_VERTICAL_DP));
+        button.setBackground(new InsetDrawable(cap, insetH, insetV, insetH, insetV));
+        // The first time a MaterialButton is given a background of its own, it treats its style's
+        // backgroundTint (transparent, for the borderless style every key uses) as still binding
+        // and DrawableCompat#setTintList's it straight onto that new drawable — which paints the
+        // role's fill straight back out, leaving only the label colour to show the role at all.
+        // Nothing else here wants a tint, so drop it and let the cap's own colour render.
+        button.setBackgroundTintList(null);
     }
 
     /** The colour a key is painted in: what the editor is previewing, else what it was given. */
