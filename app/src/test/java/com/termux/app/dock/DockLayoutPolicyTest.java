@@ -1,6 +1,7 @@
 package com.termux.app.dock;
 
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -37,29 +38,33 @@ public class DockLayoutPolicyTest {
     @Parameterized.Parameters(name = "{0} preset={1} capsule={2} appsRowOnEdge={3} cutout={4}")
     public static List<Object[]> cases() {
         // preset, capsule, appsRowOnEdge, appsBar, hint, azRow, band, inset, capsuleContentInset,
-        // appsTop, appsBottom, combined, compactStatusBar, iconScale
+        // appsTop, appsBottom, combined, compactStatusBar, iconScale, icon
         // With the apps row on an edge the letters are the dock's top row and wear a 6dp crown
         // (17px): 52 -> 69, and the stack grows with it.
         // The band under the apps row is the page ticks' own strip (9dp = 25px) rather than the
         // 3dp of air it used to be, because the dock's row carries the same indicator every other
         // edge does instead of the FX layer painting one over the glass.
+        // Q7: a shared row's band is the icon and 6dp of air on each side (17px at this density),
+        // so `appsBar` is `icon + 34` and `hint` — the box the icon is centred in — is the icon
+        // itself. The `icon` column is the snapshot of what each preset drew before this rule and
+        // must not move: the preset scales the icon, and only the air around it was trimmed.
         Object[][] rows = {
-            {1.72f, false, false, 132, 107, 52, 25, 0, 67, 17, 8, 312, 88, 1.3068f},
-            {1.72f, false, true, 0, 0, 69, 0, 0, 67, 17, 8, 172, 88, 1.3068f},
-            {1.72f, true, false, 132, 107, 52, 25, 28, 67, 17, 8, 312, 83, 1.7252f},
-            {1.72f, true, true, 0, 0, 69, 0, 28, 67, 17, 8, 172, 83, 1.7252f},
-            {1.95f, false, false, 148, 123, 52, 25, 0, 67, 17, 8, 328, 88, 1.487604f},
-            {1.95f, false, true, 0, 0, 69, 0, 0, 67, 17, 8, 172, 88, 1.487604f},
-            {1.95f, true, false, 149, 120, 52, 25, 28, 67, 19, 10, 329, 83, 1.9633334f},
-            {1.95f, true, true, 0, 0, 69, 0, 28, 67, 19, 10, 172, 83, 1.9633334f},
-            {2.18f, false, false, 166, 141, 52, 25, 0, 67, 17, 8, 346, 88, 1.68f},
-            {2.18f, false, true, 0, 0, 69, 0, 0, 67, 17, 8, 172, 88, 1.68f},
-            {2.18f, true, false, 169, 135, 52, 25, 28, 67, 21, 13, 349, 83, 2.21312f},
-            {2.18f, true, true, 0, 0, 69, 0, 28, 67, 21, 13, 172, 83, 2.21312f},
-            {2.45f, false, false, 183, 158, 52, 25, 0, 67, 17, 8, 363, 88, 1.89072f},
-            {2.45f, false, true, 0, 0, 69, 0, 0, 67, 17, 8, 172, 88, 1.89072f},
-            {2.45f, true, false, 190, 151, 52, 25, 28, 67, 24, 15, 370, 83, 2.508f},
-            {2.45f, true, true, 0, 0, 69, 0, 28, 67, 24, 15, 172, 83, 2.508f},
+            {1.72f, false, false, 109, 75, 52, 25, 0, 67, 17, 17, 289, 88, 1.3068f, 75},
+            {1.72f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.3068f, 75},
+            {1.72f, true, false, 117, 83, 52, 25, 28, 67, 17, 17, 297, 83, 1.7252f, 83},
+            {1.72f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 1.7252f, 83},
+            {1.95f, false, false, 125, 91, 52, 25, 0, 67, 17, 17, 305, 88, 1.487604f, 91},
+            {1.95f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.487604f, 91},
+            {1.95f, true, false, 130, 96, 52, 25, 28, 67, 17, 17, 310, 83, 1.9633334f, 96},
+            {1.95f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 1.9633334f, 96},
+            {2.18f, false, false, 144, 110, 52, 25, 0, 67, 17, 17, 324, 88, 1.68f, 110},
+            {2.18f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.68f, 110},
+            {2.18f, true, false, 142, 108, 52, 25, 28, 67, 17, 17, 322, 83, 2.21312f, 108},
+            {2.18f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 2.21312f, 108},
+            {2.45f, false, false, 162, 128, 52, 25, 0, 67, 17, 17, 342, 88, 1.89072f, 128},
+            {2.45f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.89072f, 128},
+            {2.45f, true, false, 156, 122, 52, 25, 28, 67, 17, 17, 336, 83, 2.508f, 122},
+            {2.45f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 2.508f, 122},
         };
         List<Object[]> cases = new ArrayList<>();
         for (int cutoutPx : new int[]{0, 44}) {
@@ -86,7 +91,9 @@ public class DockLayoutPolicyTest {
     @Parameterized.Parameter(11) public int expectedCombinedPx;
     @Parameterized.Parameter(12) public int expectedCompactStatusPx;
     @Parameterized.Parameter(13) public float expectedIconScale;
-    @Parameterized.Parameter(14) public int cutoutPx;
+    /** What each preset's icon has always been: the pin that keeps this change to the air alone. */
+    @Parameterized.Parameter(14) public int expectedIconPx;
+    @Parameterized.Parameter(15) public int cutoutPx;
 
     private DockLayout compute() {
         return DockLayoutPolicy.compute(inputs(preset, capsule, appsRowOnEdge)
@@ -147,6 +154,58 @@ public class DockLayoutPolicyTest {
         assertEquals("capsuleHorizontalMarginPx", 28, l.capsuleHorizontalMarginPx);
     }
 
+    /**
+     * The rule the whole table is an instance of: a row sharing its container is one icon and the
+     * letters' own crown on each side of it, on every preset step and in both styles. The icon is
+     * pinned to what it drew before the rule, so nothing but the air moved.
+     */
+    @Test
+    public void aSharedRowIsTheIconAndTheLettersCrownOnEachSide() {
+        DockLayout l = compute();
+        int airPx = DockLayoutPolicy.sharedRowAirPx(DENSITY);
+        assertEquals("6dp at density 2.75", 17, airPx);
+        assertEquals("the air is the letters' crown, one constant for both",
+            AccessoryStackLayoutPolicy.AZ_ROW_CROWN_DP, DockLayoutPolicy.SHARED_ROW_AIR_DP, 0f);
+        assertEquals("appsRowIconPx", expectedIconPx, l.appsRowIconPx);
+        assertEquals(airPx, l.appsTopPaddingPx);
+        assertEquals(airPx, l.appsBottomPaddingPx);
+        assertEquals("band = icon + 2 x air", expectedIconPx + (2 * airPx), l.appsRowBandPx);
+        // The box the icon is centred in is the icon: the air is the padding around it.
+        assertEquals(expectedIconPx, l.appsRowBandHintPx);
+        // And the strip stands beside that air rather than growing it — the row's host is the
+        // band plus the ticks' own band, which is what P7 added.
+        assertEquals(expectedIconPx + (2 * airPx) + l.indicatorBandHeightPx,
+            l.appsRowBandPx + l.indicatorBandHeightPx);
+    }
+
+    /**
+     * The proof that the icon did not move: the bands this file pinned before the rule changed —
+     * the extra-keys row scaled, less the legacy paddings — put through the same fill ratio the
+     * row has always sized its icons by. Those are the numbers in the {@code icon} column.
+     */
+    @Test
+    public void theIconIsExactlyWhatTheLegacyBandLeftForIt() {
+        int[] legacyDefaultHints = {107, 123, 141, 158};
+        int[] legacyCapsuleHints = {107, 120, 135, 151};
+        int[] defaultIcons = {75, 91, 110, 128};
+        int[] capsuleIcons = {83, 96, 108, 122};
+        for (int i = 0; i < DockLayoutPolicy.sizePresetCount(); i++) {
+            float scale = DockLayoutPolicy.sizePreset(i);
+            assertEquals("default preset " + i, defaultIcons[i],
+                DockLayoutPolicy.dockIconSizePx(legacyDefaultHints[i],
+                    DockLayoutPolicy.defaultDockIconScaleForProgress(
+                        DockLayoutPolicy.defaultDockSizeProgress(scale)), DENSITY));
+            assertEquals("capsule preset " + i, capsuleIcons[i],
+                DockLayoutPolicy.dockIconSizePx(legacyCapsuleHints[i],
+                    DockLayoutPolicy.capsuleDockIconScaleForProgress(
+                        DockLayoutPolicy.sizeProgress(scale)), DENSITY));
+            assertEquals(defaultIcons[i], DockLayoutPolicy.compute(
+                inputs(scale, false, false).build()).appsRowIconPx);
+            assertEquals(capsuleIcons[i], DockLayoutPolicy.compute(
+                inputs(scale, true, false).build()).appsRowIconPx);
+        }
+    }
+
     @Test
     public void iconScaleAndProgress_followTheStyleCurve() {
         DockLayout l = compute();
@@ -205,12 +264,13 @@ public class DockLayoutPolicyTest {
         assertFalse(top.railActive);
         assertEquals(0, top.appsBarHeightPx);
         // The band it claims up there is the height it had at the bottom.
-        assertEquals(169, top.appsRowBandPx);
+        assertEquals(142, top.appsRowBandPx);
         // And the row still knows how tall its icons may be. The dock's own hint is zero up here —
         // the dock has no row — and a row with no hint scales its icons to whatever host it was
         // lent to, which off the dock is a plank rather than a row.
         assertEquals(0, top.appsBarHeightHintPx);
-        assertEquals(169 - top.appsTopPaddingPx - top.appsBottomPaddingPx, top.appsRowBandHintPx);
+        assertEquals(142 - top.appsTopPaddingPx - top.appsBottomPaddingPx, top.appsRowBandHintPx);
+        assertEquals(top.appsRowIconPx, top.appsRowBandHintPx);
         assertTrue(top.appsRowBandHintPx > 0);
     }
 
@@ -225,15 +285,20 @@ public class DockLayoutPolicyTest {
         assertEquals("4dp at density 2.75", 11, airPx);
         assertEquals(airPx, alone.appsTopPaddingPx);
         assertEquals(airPx, alone.appsBottomPaddingPx);
-        // The icon is the same size either way: only the air around it changed.
-        assertEquals(shared.appsRowBandHintPx, alone.appsRowBandHintPx);
-        assertEquals(shared.appsRowBandHintPx + (2 * airPx), alone.appsRowBandPx);
-        assertTrue("and the band is tighter for it",
-            alone.appsRowBandPx < shared.appsRowBandPx);
-        // The shipped dock shares its sheet with the letters and the keys, so it does not move.
-        assertEquals(21, shared.appsTopPaddingPx);
-        assertEquals(13, shared.appsBottomPaddingPx);
-        assertEquals(169, shared.appsRowBandPx);
+        // The icon is the same size either way: only the air around it changes.
+        assertEquals(shared.appsRowIconPx, alone.appsRowIconPx);
+        // P8's numbers, untouched: a lone row is still formed around the preset's own baseline
+        // with 4dp either side of it, so the plank draws exactly the band it drew.
+        assertEquals(135, alone.appsRowBandHintPx);
+        assertEquals(135 + (2 * airPx), alone.appsRowBandPx);
+        // Updated for Q7 with a reason: the shared row is the tighter of the two now. Its band is
+        // the icon and 6dp, where the lone row's is a baseline that still carries the preset's
+        // leftover around the same icon.
+        assertTrue("and the shared row is the tighter for it",
+            shared.appsRowBandPx < alone.appsRowBandPx);
+        assertEquals(17, shared.appsTopPaddingPx);
+        assertEquals(17, shared.appsBottomPaddingPx);
+        assertEquals(shared.appsRowIconPx + 34, shared.appsRowBandPx);
     }
 
     @Test
@@ -293,7 +358,7 @@ public class DockLayoutPolicyTest {
         // The band belongs to the apps row, not to the gap between two rows: it is where the page
         // ticks stand, and the row still has pages with the letters switched off.
         assertEquals(25, noAz.indicatorBandHeightPx);
-        assertEquals(169, noAz.appsBarHeightPx);
+        assertEquals(142, noAz.appsBarHeightPx);
 
         DockLayout noApps = DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .appsRowEnabledPref(false).rowOverAz(false).build());
@@ -321,11 +386,17 @@ public class DockLayoutPolicyTest {
     }
 
     @Test
-    public void additionalAppsBarHeight_growsTheRowAndNegativeValuesAreIgnored() {
-        int base = DockLayoutPolicy.compute(inputs(2.18f, true, false).build()).appsBarHeightPx;
-        assertEquals(base + 30, DockLayoutPolicy.compute(inputs(2.18f, true, false)
-            .additionalAppsBarHeightPx(30).build()).appsBarHeightPx);
-        assertEquals(base, DockLayoutPolicy.compute(inputs(2.18f, true, false)
+    public void additionalAppsBarHeight_growsTheIconAndNegativeValuesAreIgnored() {
+        DockLayout base = DockLayoutPolicy.compute(inputs(2.18f, true, false).build());
+        DockLayout grown = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .additionalAppsBarHeightPx(30).build());
+        // Updated for Q7 with a reason: the drag used to add its pixels to the band, which grew
+        // the icon and the air together. The air is a constant now, so the drag lands where the
+        // size preset does — on the icon — and the band follows it.
+        assertTrue(grown.appsRowIconPx > base.appsRowIconPx);
+        assertEquals(grown.appsRowIconPx + 34, grown.appsBarHeightPx);
+        assertTrue(grown.appsBarHeightPx > base.appsBarHeightPx);
+        assertEquals(base.appsBarHeightPx, DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .additionalAppsBarHeightPx(-30).build()).appsBarHeightPx);
     }
 

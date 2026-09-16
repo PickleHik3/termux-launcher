@@ -9535,6 +9535,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // whatever host it was lent to.
             mSuggestionBarView.setDockRowHeightHintPx(edge.isOnSide()
                 ? 0 : dockLayout.appsRowBandHintPx);
+            // And the icon itself, which is what the band was formed around rather than what is
+            // left of it: a rail's icons are the rail's own fixed size.
+            mSuggestionBarView.setDockIconSizePx(edge.isOnSide() ? 0 : dockLayout.appsRowIconPx);
         }
         // A move or a turn both change what the slots are, and neither is something a layout pass
         // works out on its own.
@@ -10729,8 +10732,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return DockLayoutPolicy.compute(buildDockInputs(additionalAppsBarHeightPx));
     }
 
-    /** The two row hints last handed over, since neither setter reads back out of a view. */
+    /** The row figures last handed over, since none of these setters reads back out of a view. */
     private int mAppliedDockRowHeightHintPx = Integer.MIN_VALUE;
+    private int mAppliedDockIconSizePx = Integer.MIN_VALUE;
     private int mAppliedAzRowChinPaddingPx = Integer.MIN_VALUE;
     private int mAppliedAzRowCrownPaddingPx = Integer.MIN_VALUE;
 
@@ -10755,6 +10759,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             moved |= layout.appsRowBandHintPx != mAppliedDockRowHeightHintPx;
             mAppliedDockRowHeightHintPx = layout.appsRowBandHintPx;
             mSuggestionBarView.setDockRowHeightHintPx(layout.appsRowBandHintPx);
+            moved |= layout.appsRowIconPx != mAppliedDockIconSizePx;
+            mAppliedDockIconSizePx = layout.appsRowIconPx;
+            mSuggestionBarView.setDockIconSizePx(layout.appsRowIconPx);
         }
         return moved;
     }

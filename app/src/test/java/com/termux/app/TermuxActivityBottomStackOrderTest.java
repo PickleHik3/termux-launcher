@@ -7,6 +7,8 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 
 import com.termux.R;
+import com.termux.app.dock.DockLayout;
+import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.place.EdgeStackView;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
@@ -20,6 +22,9 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.Config;
+import org.robolectric.util.ReflectionHelpers;
+
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -353,7 +358,61 @@ public class TermuxActivityBottomStackOrderTest {
             seams[1] > iconsBottom && seams[1] < lettersTop);
     }
 
+    /**
+     * The air the row's icons stand in, on the arrangement the complaint was made on: the status
+     * bar innermost, then the keys, the apps row and the letters on the dock's rim. The row used
+     * to carry about twice the air of the bands beside it — its band was the extra-keys row scaled
+     * by the size preset and the icon a fill ratio of what was left, so the leftover was air. It
+     * is the icon and the letters' own crown on each side now, and the ticks stand beside that air
+     * rather than inside it.
+     */
+    @Test
+    public void theSharedRowsIconStandsInSixDpOfAirOnEachSide() {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
+        assertNotNull(preferences);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+
+        PlaceLayout layout = bottomStack(
+            Element.STATUS, Element.EXTRA_KEYS, Element.APPS, Element.AZ);
+        DockLayout dock = activity.dockLayoutFor(layout);
+        activity.applyEdgeStacks(layout);
+        activity.applyDockLayout(dock);
+        layoutContainer();
+
+        float density = activity.getResources().getDisplayMetrics().density;
+        int airPx = DockLayoutPolicy.sharedRowAirPx(density);
+        assertTrue("the row has to be on the dock for this to mean anything",
+            dock.appsRowIconPx > 0 && dock.appsBarHeightPx > 0);
+        assertEquals("the band is the icon and its air", dock.appsRowIconPx + (2 * airPx),
+            dock.appsBarHeightPx);
+
+        View pager = activity.findViewById(R.id.apps_bar_viewpager);
+        View ticks = activity.findViewById(R.id.apps_bar_indicator_band);
+        View letters = activity.findViewById(R.id.apps_bar_az_host);
+        assertEquals(airPx, pager.getPaddingTop());
+        assertEquals(airPx, pager.getPaddingBottom());
+
+        int pagerTop = topIn(rows, pager);
+        int iconTop = pagerTop + pager.getPaddingTop();
+        int iconBottom = pagerTop + pager.getHeight() - pager.getPaddingBottom();
+        assertEquals("the icon box is the icon", dock.appsRowIconPx, iconBottom - iconTop);
+        // The ticks lead the row on the bottom edge, so they are the band above the icons.
+        int ticksBottom = topIn(rows, ticks) + ticks.getHeight();
+        assertEquals("ticks -> icon", airPx, iconTop - ticksBottom);
+        // And the seam with the band on the dock's rim is the same air on the other side.
+        assertEquals("icon -> seam", airPx, topIn(rows, letters) - iconBottom);
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    /** Everything on the bottom edge, innermost (nearest the canvas) first — nothing anywhere else. */
+    private static PlaceLayout bottomStack(Element... innermostFirst) {
+        Map<Element, Slot> slots = new EnumMap<>(Element.class);
+        for (int i = 0; i < innermostFirst.length; i++)
+            slots.put(innermostFirst[i], new Slot(false, Edge.BOTTOM, innermostFirst.length - i));
+        return new PlaceLayout(slots, PlaceLayout.KeyboardMode.RESIZE,
+            PlaceLayout.KeyboardForm.DOCKED, 4, 4);
+    }
 
     /** Everything on the bottom edge in the order given, outermost (on the dock's rim) last. */
     private static PlaceLayout bottom(Element... innermostFirst) {
