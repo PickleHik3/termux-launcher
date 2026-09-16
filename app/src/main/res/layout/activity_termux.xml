@@ -699,6 +699,18 @@
                     android:clipChildren="false"
                     android:clipToPadding="false">
 
+                    <!-- The dock row's page ticks, in the band that has always been named for
+                         them: the same PageTickStripView the row carries to every other edge, so
+                         there is one indicator and it reads the same wherever the row stands. It
+                         stands on the row's centre-facing side, which on the bottom edge is above
+                         the icons (PageTickStrip.leadsRow); syncPinnedAppsHost orders the pair, so
+                         this is only where they start. -->
+                    <com.termux.app.launcher.paging.PageTickStripView
+                        android:id="@+id/apps_bar_indicator_band"
+                        android:layout_width="match_parent"
+                        android:layout_height="3dp"
+                        android:visibility="gone" />
+
                     <FrameLayout
                         android:id="@+id/apps_bar_viewpager"
                         android:layout_width="match_parent"
@@ -716,17 +728,6 @@
                             android:clipChildren="false"
                             android:clipToPadding="false" />
                     </FrameLayout>
-
-                    <!-- The dock row's page ticks, in the band that has always been named for
-                         them: the same PageTickStripView the row carries to every other edge, so
-                         there is one indicator and it reads the same wherever the row stands. The
-                         ticks used to be painted by the FX layer over the glass, which is why a
-                         row moved off the dock ended up with two of them. -->
-                    <com.termux.app.launcher.paging.PageTickStripView
-                        android:id="@+id/apps_bar_indicator_band"
-                        android:layout_width="match_parent"
-                        android:layout_height="3dp"
-                        android:visibility="gone" />
                 </LinearLayout>
 
                 <FrameLayout

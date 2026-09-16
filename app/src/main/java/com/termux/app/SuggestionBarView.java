@@ -466,6 +466,8 @@ public final class SuggestionBarView extends GridLayout
     private float swipePagePosition = 0f;
     private boolean swipePageDragging = false;
     private float swipeVisualOffsetPx = 0f;
+    /** One-way latch for {@link #standChildrenDownForPageSwipe}, cleared at each {@code DOWN}. */
+    private boolean pageSwipeChildrenStoodDown;
     private float swipeDragProgress = 0f;
     private int swipePreviewDirection = 0;
     private int swipePreviewPageIndex = -1;
@@ -2359,6 +2361,7 @@ public final class SuggestionBarView extends GridLayout
             swipeDownRawY = event.getRawY();
             gestureClaim = GESTURE_CLAIM_PENDING;
             quickReplyHandedOff = false;
+            pageSwipeChildrenStoodDown = false;
             gestureArbiter.begin(swipeDownRawX, swipeDownRawY, captureDrawerEligibility());
         } else if (action == MotionEvent.ACTION_MOVE) {
             setRowInteractionActive(true);
@@ -2395,6 +2398,7 @@ public final class SuggestionBarView extends GridLayout
             if (gestureClaim == GESTURE_CLAIM_PAGE_SWIPE && TextUtils.isEmpty(lastInput.trim())) {
                 suppressContextLongPressForSwipe = true;
                 cancelPendingContextLongPresses();
+                standChildrenDownForPageSwipe(event);
                 applySwipePageDragFeedback(along);
             }
         } else if (action == MotionEvent.ACTION_UP) {
@@ -2604,6 +2608,32 @@ public final class SuggestionBarView extends GridLayout
             case CHILD_OWNED: return GESTURE_CLAIM_CHILD_OWNED;
             case PENDING:
             default: return GESTURE_CLAIM_PENDING;
+        }
+    }
+
+    /**
+     * The children's stand-down when the row claims the stream for a page swipe: <b>exactly one</b>
+     * synthetic {@code ACTION_CANCEL}, at the moment of the claim, for the same reason
+     * {@link #beginDrawerDrag} sends one. The icon the finger came down on has already played its
+     * press-down lift, and a committed swipe consumes the release itself — so without this the icon
+     * never sees an UP, {@code animateLaunchReleaseBounce} never runs, and it is left standing
+     * above the row it belongs to, scaled up, looking permanently pressed. The commit's own
+     * re-render used to tidy it away, which is the only reason this was ever invisible; a render
+     * that defers — the dock's first frames, and every frame of the state the row-mute fix was
+     * about — leaves the ghost on screen.
+     *
+     * <p>The latch is what guarantees "exactly one": a drag can only enter the claim once, and a
+     * second cancel would land on children that have no interaction left to cancel.
+     */
+    private void standChildrenDownForPageSwipe(@NonNull MotionEvent event) {
+        if (pageSwipeChildrenStoodDown) return;
+        pageSwipeChildrenStoodDown = true;
+        MotionEvent cancel = MotionEvent.obtain(event);
+        cancel.setAction(MotionEvent.ACTION_CANCEL);
+        try {
+            super.dispatchTouchEvent(cancel);
+        } finally {
+            cancel.recycle();
         }
     }
 

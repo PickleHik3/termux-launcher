@@ -76,12 +76,13 @@ public class PageTickStripTest {
     }
 
     @Test
-    public void theTicksTakeTheInnerSideOfTheBarOnEveryEdge() {
-        // The stack's own rule: the row is the outermost band and the ticks the inner one, so the
-        // strip leads its host exactly where a stack reverses.
+    public void theTicksTakeTheCentreFacingSideOfTheBarOnEveryEdge() {
+        // One rule: the strip stands on the side of the row the terminal is on, the way every
+        // other "towards the middle" affordance opens. The two edges whose centre-facing side is
+        // the lower coordinate are the ones the strip leads its host on.
         assertTrue("left of a right-hand rail, towards the terminal",
             PageTickStrip.leadsRow(Edge.RIGHT));
-        assertFalse("under the dock's own row", PageTickStrip.leadsRow(Edge.BOTTOM));
+        assertTrue("above the dock's own row", PageTickStrip.leadsRow(Edge.BOTTOM));
         assertFalse("under a row lying along the top", PageTickStrip.leadsRow(Edge.TOP));
         assertFalse("right of a left-hand rail", PageTickStrip.leadsRow(Edge.LEFT));
 

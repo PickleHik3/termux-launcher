@@ -90,14 +90,16 @@ public final class PageTickStrip {
     /**
      * Which side of the bar the strip stands on, as the index it takes in the bar's own host.
      *
-     * <p>One rule for all four edges, and it is the stack's own: the row is the outermost band and
-     * the ticks are the inner one, so the strip leads the host exactly where a stack reverses —
-     * a right-hand rail (the ticks are left of it, towards the terminal) and the bottom dock (the
-     * ticks are under the icons, between the row and whatever band comes next). On the top edge and
-     * on a left rail the row leads and the ticks follow it.
+     * <p>One rule for all four edges: the strip stands on the row's <em>centre-facing</em> side,
+     * the same side the drawer, the status lens and the A-Z match band all open towards. Above the
+     * row on the bottom edge, below it on the top, right of a left-hand rail and left of a
+     * right-hand one — so the ticks always read as the row's inner rim rather than as something
+     * wedged between the row and whatever band comes next. The strip therefore leads its host on
+     * the two edges whose inner side is the lower coordinate: the bottom edge and a right-hand
+     * rail.
      */
     public static boolean leadsRow(PlaceLayout.Edge edge) {
-        return edge == PlaceLayout.Edge.RIGHT;
+        return edge == PlaceLayout.Edge.RIGHT || edge == PlaceLayout.Edge.BOTTOM;
     }
 
     /** Which way the ticks run: down the strip for a rail, across it for a row. */

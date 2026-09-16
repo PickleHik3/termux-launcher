@@ -164,10 +164,11 @@ public class TermuxActivityPageIndicatorTest {
             assertTrue(edge + ": the row and its ticks are both bands of the host",
                 rowIndex >= 0 && stripIndex >= 0);
             if (PageTickStrip.leadsRow(edge)) {
-                assertTrue(edge + ": the ticks stand on the terminal's side of the rail",
+                assertTrue(edge + ": the ticks stand on the terminal's side of the bar",
                     stripIndex < rowIndex);
             } else {
-                assertTrue(edge + ": the ticks sit under the row", stripIndex > rowIndex);
+                assertTrue(edge + ": the ticks stand on the terminal's side of the bar",
+                    stripIndex > rowIndex);
             }
             assertEquals(edge + ": the ticks run the way the row does",
                 PageTickStrip.verticalOn(edge), bound.isVerticalForm());

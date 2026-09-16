@@ -52,6 +52,8 @@ public class EdgeStackView extends LinearLayout {
     private int mSeparatorThicknessPx;
     private int mSeparatorInsetPx;
     @Nullable private Paint mSeparatorPaint;
+    /** The draw pass's own buffer for {@link #separatorCenters}, so a frame allocates nothing. */
+    @Nullable private int[] mSeparatorScratch;
 
     public EdgeStackView(@NonNull Context context) {
         this(context, null);
@@ -158,33 +160,127 @@ public class EdgeStackView extends LinearLayout {
         if (mSeparatorCount <= 0 || mSeparatorThicknessPx <= 0
             || Color.alpha(mSeparatorColor) == 0) return;
         boolean column = getOrientation() == HORIZONTAL;
+        if (mSeparatorPaint == null) {
+            mSeparatorPaint = new Paint();
+            mSeparatorPaint.setStyle(Paint.Style.FILL);
+        }
+        mSeparatorPaint.setColor(mSeparatorColor);
+        if (mSeparatorScratch == null || mSeparatorScratch.length < mSeparatorCount)
+            mSeparatorScratch = new int[mSeparatorCount];
+        int count = fillSeparatorCenters(mSeparatorScratch);
+        for (int at = 0; at < count; at++) {
+            int gap = mSeparatorScratch[at];
+            int from = gap - (mSeparatorThicknessPx / 2);
+            int to = from + mSeparatorThicknessPx;
+            if (column) {
+                canvas.drawRect(from, mSeparatorInsetPx, to,
+                    getHeight() - mSeparatorInsetPx, mSeparatorPaint);
+            } else {
+                canvas.drawRect(mSeparatorInsetPx, from,
+                    getWidth() - mSeparatorInsetPx, to, mSeparatorPaint);
+            }
+        }
+    }
+
+    /**
+     * Where each hairline sits along the stack's axis, in the stack's own coordinates, walking
+     * outwards from the first child: <b>the middle of the visible gap between the two bands'
+     * content</b>, not the boundary their bounds happen to share.
+     *
+     * <p>The bands of one sheet do not carry the same air. The apps row keeps its icons off its own
+     * rims and the extra keys do not, so a line drawn on the child boundary sat hard against the
+     * keys and a comfortable distance from the icons — a seam that looked like it belonged to one
+     * of the two rows. Splitting the gap is the one rule that gives every pair the same answer
+     * whatever air each side happens to keep, and it moves nothing: a band is the size it was.
+     *
+     * <p>Two bands with no air between them leave no gap to split, so the line lands exactly where
+     * it always did. That is every stack the shipped screen draws, which is why the default dock is
+     * unchanged to the pixel.
+     */
+    @NonNull
+    public int[] separatorCenters() {
+        int[] centers = new int[Math.max(0, mSeparatorCount)];
+        int drawn = fillSeparatorCenters(centers);
+        return drawn == centers.length ? centers : java.util.Arrays.copyOf(centers, drawn);
+    }
+
+    /** {@link #separatorCenters} into a buffer the draw pass keeps, so a frame allocates nothing. */
+    private int fillSeparatorCenters(@NonNull int[] out) {
+        boolean column = getOrientation() == HORIZONTAL;
+        int wanted = Math.min(out.length, Math.max(0, mSeparatorCount));
         View previous = null;
         int drawn = 0;
-        for (int index = 0; index < getChildCount() && drawn < mSeparatorCount; index++) {
+        for (int index = 0; index < getChildCount() && drawn < wanted; index++) {
             View child = getChildAt(index);
             if (child.getVisibility() == GONE) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (previous != null) {
-                if (mSeparatorPaint == null) {
-                    mSeparatorPaint = new Paint();
-                    mSeparatorPaint.setStyle(Paint.Style.FILL);
-                }
-                mSeparatorPaint.setColor(mSeparatorColor);
-                int gap = column
-                    ? (previous.getRight() + child.getLeft()) / 2
-                    : (previous.getBottom() + child.getTop()) / 2;
-                int from = gap - (mSeparatorThicknessPx / 2);
-                int to = from + mSeparatorThicknessPx;
-                if (column) {
-                    canvas.drawRect(from, mSeparatorInsetPx, to,
-                        getHeight() - mSeparatorInsetPx, mSeparatorPaint);
-                } else {
-                    canvas.drawRect(mSeparatorInsetPx, from,
-                        getWidth() - mSeparatorInsetPx, to, mSeparatorPaint);
-                }
-                drawn++;
+                out[drawn++] = (contentEnd(previous, column) + contentStart(child, column)) / 2;
             }
             previous = child;
         }
+        return drawn;
+    }
+
+    /**
+     * Where a band's content begins along the axis, in the stack's coordinates: the band's own
+     * padding, or — a band being a host and the bar inside it being the content — the air that bar
+     * keeps at the same end. One level, and the same level for every band, so the rule never has to
+     * know which band it is looking at.
+     */
+    private static int contentStart(@NonNull View band, boolean column) {
+        int start = column ? band.getLeft() : band.getTop();
+        int inset = column ? band.getPaddingLeft() : band.getPaddingTop();
+        View bar = drawnChildAt(band, column, true);
+        if (bar != null) {
+            inset = (column ? bar.getLeft() : bar.getTop())
+                + (column ? bar.getPaddingLeft() : bar.getPaddingTop());
+        }
+        int extent = column ? band.getWidth() : band.getHeight();
+        return start + Math.max(0, Math.min(inset, extent));
+    }
+
+    /** {@link #contentStart}'s answer at the band's other end. */
+    private static int contentEnd(@NonNull View band, boolean column) {
+        int end = column ? band.getRight() : band.getBottom();
+        int extent = column ? band.getWidth() : band.getHeight();
+        int inset = column ? band.getPaddingRight() : band.getPaddingBottom();
+        View bar = drawnChildAt(band, column, false);
+        if (bar != null) {
+            inset = extent - (column ? bar.getRight() : bar.getBottom())
+                + (column ? bar.getPaddingRight() : bar.getPaddingBottom());
+        }
+        return end - Math.max(0, Math.min(inset, extent));
+    }
+
+    /**
+     * The bar standing at one end of a band: the drawn child reaching nearest that end. A child
+     * that is gone or has collapsed to nothing is not a bar — the apps row's own host holds a
+     * collapsed pager whenever the row stands somewhere else.
+     */
+    @Nullable
+    private static View drawnChildAt(@NonNull View band, boolean column, boolean atStart) {
+        if (!(band instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) band;
+        View found = null;
+        for (int index = 0; index < group.getChildCount(); index++) {
+            View child = group.getChildAt(index);
+            if (child.getVisibility() == GONE) continue;
+            if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
+            if (found == null) {
+                found = child;
+                continue;
+            }
+            if (atStart) {
+                int mine = column ? child.getLeft() : child.getTop();
+                int best = column ? found.getLeft() : found.getTop();
+                if (mine < best) found = child;
+            } else {
+                int mine = column ? child.getRight() : child.getBottom();
+                int best = column ? found.getRight() : found.getBottom();
+                if (mine > best) found = child;
+            }
+        }
+        return found;
     }
 }
