@@ -480,6 +480,20 @@ public final class SuggestionBarView extends GridLayout
     private long stableLayoutSuppressedSinceUptimeMs = 0L;
     private static final int MAX_DEFERRED_RENDER_ATTEMPTS = 8;
     private int deferredRenderAttempts;
+    /**
+     * When a render was first turned away for want of stable bounds, and nothing has rendered
+     * since. It is the row's own clock: draw suppression keeps a separate one, which a release
+     * resets while the row may well still be deferring.
+     */
+    private long renderDeferredSinceUptimeMs = 0L;
+    /**
+     * Set once the row has waited out the anti-flicker window, or spent its retries, without ever
+     * reaching the height the dock's hint asked for. The hint stops deciding then: it is somebody
+     * else's idea of the band, and a home screen holding its icons back for a height it may never
+     * be given is worse off than one drawn a few pixels small. A new size, or a new hint, gives it
+     * its say back.
+     */
+    private boolean rowHeightHintWaived = false;
     private int lastSurfaceRenderSignature = 0;
     private boolean pendingPinnedMutationFeedback = false;
     private boolean suppressContextLongPressForSwipe = false;
@@ -724,8 +738,13 @@ public final class SuggestionBarView extends GridLayout
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
         // A genuine layout pass is new information: the bounded defer in renderButtons may try
-        // its full budget again.
-        if (changed) deferredRenderAttempts = 0;
+        // its full budget again, and the dock's height hint gets its say back now that the row is
+        // a size it never had when the hint was overruled.
+        if (changed) {
+            deferredRenderAttempts = 0;
+            renderDeferredSinceUptimeMs = 0L;
+            rowHeightHintWaived = false;
+        }
         scheduleStableDrawReleaseIfPossible();
         if (changed) resyncRailPagingForLength();
         // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
@@ -925,6 +944,9 @@ public final class SuggestionBarView extends GridLayout
         if (vertical) {
             return;
         }
+        // A new hint is a new question, so it is asked afresh even if the last one was overruled.
+        rowHeightHintWaived = false;
+        renderDeferredSinceUptimeMs = 0L;
         invalidateRenderedIconCaches();
         childLayoutPending = true;
         requestLayout();
@@ -1523,8 +1545,12 @@ public final class SuggestionBarView extends GridLayout
         if (shouldSkipAzPreviewRender(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates)) {
             return;
         }
-        renderButtons(activeAzCandidates, true);
-        captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
+        // Only a render that happened is remembered. Recording a page the row was turned away from
+        // is what made the second scrub of the same letter do nothing at all: the fingerprint said
+        // those matches were already up while the row still held whatever it had before.
+        if (renderButtons(activeAzCandidates, true)) {
+            captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
+        }
         // The matches are the row's content now, so they are what the ticks count.
         publishPageIndicator();
     }
@@ -2665,37 +2691,54 @@ public final class SuggestionBarView extends GridLayout
         return new ArrayList<>();
     }
 
-    private void renderButtons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
+    /**
+     * Builds the row's slots. Returns whether it actually rendered: a caller that remembers what it
+     * put on screen — the A–Z preview's page fingerprint — must not remember a page that was only
+     * deferred, or the repeat scrub is skipped as already shown while the row still holds the old
+     * one.
+     */
+    private boolean renderButtons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
+        if (renderDeferredSinceUptimeMs == 0L && !hasStableRenderBounds()) {
+            renderDeferredSinceUptimeMs = SystemClock.uptimeMillis();
+        }
+        waiveRowHeightHintIfOverdue();
         if (!hasStableRenderBounds()) {
-            suppressDrawUntilStableLayout = true;
-            childLayoutPending = true;
-            if (stableLayoutSuppressedSinceUptimeMs == 0L) {
-                stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
-            }
-            if (pendingDeferredRender) {
-                return;
+            // A gate on the home screen is anti-flicker, never a mute switch: a row with nothing in
+            // it yet stays dark until its bounds settle, but a row that is already showing icons
+            // keeps showing them. One frame of icons at the wrong size beats a blank dock.
+            if (getChildCount() == 0) {
+                suppressDrawUntilStableLayout = true;
+                childLayoutPending = true;
+                if (stableLayoutSuppressedSinceUptimeMs == 0L) {
+                    stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
+                }
             }
             // Bounded, not clock-bounded: a dock that can never stabilize (hidden, or measured
             // 1x1 in a test fixture) must stop reposting, or the main queue never drains and
             // Robolectric's idle() livelocks. The next real reload or size change retries.
-            if (deferredRenderAttempts >= MAX_DEFERRED_RENDER_ATTEMPTS) {
-                return;
+            if (!pendingDeferredRender && deferredRenderAttempts < MAX_DEFERRED_RENDER_ATTEMPTS) {
+                deferredRenderAttempts++;
+                pendingDeferredRender = true;
+                final List<LauncherAppEntry> deferredEntries = new ArrayList<>(entries);
+                final boolean deferredAzPreview = azPreview;
+                post(() -> {
+                    pendingDeferredRender = false;
+                    if (!hostVisible || !isAttachedToWindow()) {
+                        scheduleStableDrawReleaseIfPossible();
+                        return;
+                    }
+                    renderButtons(deferredEntries, deferredAzPreview);
+                });
             }
-            deferredRenderAttempts++;
-            pendingDeferredRender = true;
-            final List<LauncherAppEntry> deferredEntries = new ArrayList<>(entries);
-            final boolean deferredAzPreview = azPreview;
-            post(() -> {
-                pendingDeferredRender = false;
-                if (!hostVisible || !isAttachedToWindow()) {
-                    return;
-                }
-                renderButtons(deferredEntries, deferredAzPreview);
-            });
-            return;
+            // Every way out of a deferral ends here. The gate's only way back is its timeout, and
+            // the timeout only runs while something keeps asking — a give-up that asked nobody is
+            // what left the row muted with no layout pass coming to free it.
+            scheduleStableDrawReleaseIfPossible();
+            return false;
         }
         pendingDeferredRender = false;
         deferredRenderAttempts = 0;
+        renderDeferredSinceUptimeMs = 0L;
         int buttonCount = Math.max(1, maxButtonCount);
         int renderStartCol = 0;
         List<PinnedItem> pinnedForSlots = new ArrayList<>();
@@ -2760,7 +2803,9 @@ public final class SuggestionBarView extends GridLayout
             } else {
                 invalidate();
             }
-            return;
+            // The page asked for is the page already on screen, so as far as any caller keeping
+            // track of what it rendered is concerned, this rendered it.
+            return true;
         }
 
         boolean keepCurrentFrameVisible = hasStableDisplayLayout() && surfaceRenderSignature != 0 && surfaceRenderSignature != lastSurfaceRenderSignature;
@@ -2947,6 +2992,7 @@ public final class SuggestionBarView extends GridLayout
         } else {
             invalidate();
         }
+        return true;
     }
 
     public int getTerminalSearchResultCount() {
@@ -6581,15 +6627,16 @@ public final class SuggestionBarView extends GridLayout
         notifyOverflowPagePositionChanged();
         final int direction = pageDelta > 0 ? 1 : -1;
         final long duration = computePinnedPageAnimDuration(velocityPxPerSec);
+        final boolean[] rendered = new boolean[1];
         Runnable updateContent = () -> {
             activeAzPageIndex = targetPage;
             if (activeAzLetter != null) {
                 refreshActiveAzCandidates(activeAzLetter);
             }
-            renderButtons(activeAzCandidates, true);
+            rendered[0] = renderButtons(activeAzCandidates, true);
         };
         Runnable completed = () -> {
-            if (activeAzLetter != null) {
+            if (rendered[0] && activeAzLetter != null) {
                 captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
             }
         };
@@ -7016,32 +7063,42 @@ public final class SuggestionBarView extends GridLayout
                 if (cancelled) return;
                 if (swipePreviewSettleAnimator == animation) swipePreviewSettleAnimator = null;
                 commit.runFrom("settle end");
-                pageSwitchAnimating = false;
-                swipePageDragging = false;
-                swipePagePosition = resolveCurrentSwipePagePosition();
-                clearSwipePagePreview();
-                setTranslationX(0f);
-                setAlpha(1f);
-                setRowInteractionActive(false);
+                finishSwipeSettle();
                 if (onCompleted != null) onCompleted.run();
-                invalidate();
             }
 
             @Override
             public void onAnimationCancel(Animator animation) {
                 cancelled = true;
                 if (swipePreviewSettleAnimator == animation) swipePreviewSettleAnimator = null;
-                // Whoever cancelled owns the visual state that follows (a new gesture, a reset);
-                // the page the swipe asked for is committed here either way. The in-flight latch
-                // is not visual state, though — no switch is in flight once this animator is
-                // cancelled, and leaving it set made the next qualified swipe get consumed at
-                // ACTION_UP and then dropped with no animation at all.
+                // The page the swipe asked for is committed here either way, and the slide is torn
+                // down the same way it would have been had it finished. Whoever cancelled sets up
+                // whatever comes next — a new gesture, a reset — and does so after this returns,
+                // so it still owns the state it cares about; what it must never inherit is half a
+                // slide, which is a row left translated off its own page with frozen ticks.
                 commit.runFrom("settle cancel");
-                pageSwitchAnimating = false;
-                swipePagePosition = resolveCurrentSwipePagePosition();
+                finishSwipeSettle();
             }
         });
         settle.start();
+    }
+
+    /**
+     * The one way a page settle ends, whichever way it ended: run to its last frame, or cut short
+     * by a new gesture or a host reset. Both listeners land here, so an interrupted slide can never
+     * leave the row translated off its own page, a neighbouring page still staged behind it, or the
+     * ticks counting a page the row is no longer on.
+     */
+    private void finishSwipeSettle() {
+        pageSwitchAnimating = false;
+        swipePageDragging = false;
+        swipePagePosition = resolveCurrentSwipePagePosition();
+        clearSwipePagePreview();
+        setTranslationX(0f);
+        setAlpha(1f);
+        setRowInteractionActive(false);
+        publishPageIndicator();
+        invalidate();
     }
 
     /** Stops whichever swipe-preview animation is running: the settle, the rebound, or both. */
@@ -7514,6 +7571,9 @@ public final class SuggestionBarView extends GridLayout
         setScaleY(1f);
         setAlpha(1f);
         pageSwitchAnimating = false;
+        // The reset moved the row back onto a whole page, so the ticks are told the same way every
+        // other path that moves it tells them.
+        publishPageIndicator();
         clearAzFocusedEntry();
         List<View> animatedViews = new ArrayList<>(launchTouchAnimators.keySet());
         for (View view : animatedViews) {
@@ -7572,7 +7632,30 @@ public final class SuggestionBarView extends GridLayout
         if (getWidth() < minStableWidth || getHeight() < minStableHeight) {
             return false;
         }
-        return rowHeightHintPx() <= 0 || getHeight() >= Math.max(minStableHeight, rowHeightHintPx() - dp(4));
+        // The floors above are the row's own, and they are the ones that never lapse. The hint is
+        // the dock's idea of the band the row was given — furniture the row is not (the page-tick
+        // strip) sits in that band too, and a hint handed over ahead of the next layout pass
+        // describes a row that does not exist yet — so it only ever holds the first frame back,
+        // and {@link #waiveRowHeightHintIfOverdue} decides when it has held long enough.
+        int hint = rowHeightHintWaived ? 0 : rowHeightHintPx();
+        return hint <= 0 || getHeight() >= Math.max(minStableHeight, hint - dp(4));
+    }
+
+    /**
+     * Lets the dock's height hint go once it has had its say and the row is still not the height it
+     * asked for — either the anti-flicker window has run out or the deferred renders have. The
+     * standing form has no equivalent to waive: a rail is gated on its own icon and slot metrics,
+     * which are constants rather than a figure another view hands it.
+     */
+    private void waiveRowHeightHintIfOverdue() {
+        if (rowHeightHintWaived || vertical || rowHeightHintPx() <= 0) {
+            return;
+        }
+        boolean windowSpent = renderDeferredSinceUptimeMs != 0L
+            && SystemClock.uptimeMillis() - renderDeferredSinceUptimeMs >= STABLE_LAYOUT_MAX_SUPPRESS_MS;
+        if (windowSpent || deferredRenderAttempts >= MAX_DEFERRED_RENDER_ATTEMPTS) {
+            rowHeightHintWaived = true;
+        }
     }
 
     /**
@@ -7627,6 +7710,7 @@ public final class SuggestionBarView extends GridLayout
         if (!hostVisible || !suppressDrawUntilStableLayout || stableLayoutRerenderPosted) {
             return;
         }
+        waiveRowHeightHintIfOverdue();
         // The timeout must be able to expire even while render bounds never stabilize (e.g. the
         // bar stuck at a collapsed height after a crash-restart mid-layout) — otherwise draw
         // suppression holds the bar blank indefinitely.
@@ -7645,10 +7729,14 @@ public final class SuggestionBarView extends GridLayout
                 releaseStableDrawSuppression();
                 return;
             }
-            if (!hostVisible || !isAttachedToWindow() || !hasStableRenderBounds()) {
+            if (!hostVisible || !isAttachedToWindow()) {
                 return;
             }
-            if (!hasStableChildLayout()) {
+            // Bounds that were stable when this was posted and are not now, or slots not placed
+            // apart yet: keep asking. The chain must run until the timeout fires, because the
+            // timeout is the only thing that can free a row whose bounds never settle — a check
+            // that returned here without re-posting left the gate closed for good.
+            if (!hasStableRenderBounds() || !hasStableChildLayout()) {
                 if (suppressDrawUntilStableLayout) {
                     postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
                 }
