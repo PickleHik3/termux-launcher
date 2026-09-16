@@ -12817,6 +12817,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final com.termux.app.wall.PaneWallPage place = currentWallPlace();
         extraKeysView.setKeyUsabilityPolicy(
             value -> com.termux.app.terminal.io.ExtraKeyEligibility.isUsable(value, place));
+        // The place switches show where the wall is standing: the switch for the place in front
+        // keeps its role's full colour and the other two are held back.
+        extraKeysView.setPlaceSwitchPolicy(value -> {
+            com.termux.app.wall.PaneWallPage target =
+                com.termux.app.terminal.io.ExtraKeyEligibility.placeSwitchTarget(value);
+            if (target == null) return ExtraKeysView.PlaceFocus.NOT_A_PLACE;
+            return target == place
+                ? ExtraKeysView.PlaceFocus.FOCUSED
+                : ExtraKeysView.PlaceFocus.UNFOCUSED;
+        });
     }
 
     /**

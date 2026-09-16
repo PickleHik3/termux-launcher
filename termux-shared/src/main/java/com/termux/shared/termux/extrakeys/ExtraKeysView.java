@@ -383,6 +383,25 @@ public final class ExtraKeysView extends GridLayout {
         boolean isKeyUsable(@NonNull String keyValue);
     }
 
+    /** Where a key stands relative to the place the wall is showing. */
+    public enum PlaceFocus {
+        /** Not a place switch: the key is drawn like any other. */
+        NOT_A_PLACE,
+        /** Switches to the place now in front. */
+        FOCUSED,
+        /** Switches to one of the places behind it. */
+        UNFOCUSED
+    }
+
+    /**
+     * Which keys switch the wall to a place, and which place is in front. As with usability, the
+     * row itself knows nothing about places: the host answers, and the row draws the answer.
+     */
+    public interface PlaceSwitchPolicy {
+        /** @param keyValue the key or macro the button sends, exactly as configured. */
+        @NonNull PlaceFocus placeFocusOf(@NonNull String keyValue);
+    }
+
     /** A key tapped while the row is in pick mode, instead of the key firing. */
     public interface KeyPickListener {
         void onExtraKeyPicked(int keyIndex, @NonNull ExtraKeyButton buttonInfo,
@@ -405,7 +424,16 @@ public final class ExtraKeysView extends GridLayout {
     private static final float COLORED_KEY_INSET_HORIZONTAL_DP = 2f;
     private static final float COLORED_KEY_INSET_VERTICAL_DP = 3f;
 
+    /**
+     * How bright a place switch's glyph is while its place is not the one in front: the role's own
+     * colour held back to 57%. Alpha rather than a dimmer tone of the role, because a role can be
+     * any of them — including the two fixed ones, which have no tonal palette to step down — and
+     * alpha is the one dimming that keeps every one of them on its own hue.
+     */
+    private static final int UNFOCUSED_PLACE_GLYPH_ALPHA = 145;
+
     @Nullable private KeyUsabilityPolicy mUsabilityPolicy;
+    @Nullable private PlaceSwitchPolicy mPlaceSwitchPolicy;
     @Nullable private KeyPickListener mKeyPickListener;
     /** While true a tap picks the key for the editor instead of firing it, and nothing is dead. */
     private boolean mPickMode;
@@ -1115,6 +1143,18 @@ public final class ExtraKeysView extends GridLayout {
             return;
         }
         ExtraKeyColorRole role = roleFor(button, info);
+        PlaceFocus placeFocus = placeFocusOf(info);
+        if (placeFocus != PlaceFocus.NOT_A_PLACE) {
+            // The place switches wear no cap at all: three filled pills standing together read as
+            // their own widget rather than as part of the row. Their role paints the glyph instead,
+            // full strength for the place in front and held back for the ones behind it.
+            int glyph = role == null ? mButtonTextColor : roleColors(role)[0];
+            button.setTextColor(placeFocus == PlaceFocus.FOCUSED
+                ? glyph
+                : withAlpha(glyph, UNFOCUSED_PLACE_GLYPH_ALPHA));
+            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+            return;
+        }
         if (role == null) {
             button.setTextColor(activeText ? mButtonActiveTextColor : mButtonTextColor);
             button.setBackground(new ColorDrawable(mButtonBackgroundColor));
@@ -1171,6 +1211,24 @@ public final class ExtraKeysView extends GridLayout {
      */
     public void setKeyUsabilityPolicy(@Nullable KeyUsabilityPolicy policy) {
         mUsabilityPolicy = policy;
+        restateEveryKey();
+    }
+
+    /** Where this key stands relative to the place in front. */
+    @NonNull
+    private PlaceFocus placeFocusOf(@Nullable ExtraKeyButton info) {
+        if (mPlaceSwitchPolicy == null || info == null || info.getKey() == null)
+            return PlaceFocus.NOT_A_PLACE;
+        return mPlaceSwitchPolicy.placeFocusOf(info.getKey());
+    }
+
+    /**
+     * Which keys switch places, and which of them points at the place in front. Setting a policy
+     * restates every key once; the host sets it again whenever the wall settles somewhere else,
+     * which is what moves the bright glyph from one switch to another.
+     */
+    public void setPlaceSwitchPolicy(@Nullable PlaceSwitchPolicy policy) {
+        mPlaceSwitchPolicy = policy;
         restateEveryKey();
     }
 

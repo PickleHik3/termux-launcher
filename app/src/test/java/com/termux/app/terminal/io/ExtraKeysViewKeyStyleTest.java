@@ -46,7 +46,10 @@ import java.util.List;
 public class ExtraKeysViewKeyStyleTest {
 
     private static final String ROW =
-        "[['ESC', {key: 'TAB', color: 'primary_container'}, {key: 'tool:wall.widgets'}]]";
+        "[['ESC', {key: 'TAB', color: 'primary_container'},"
+            + " {key: 'tool:wall.widgets', color: 'primary'},"
+            + " {key: 'tool:wall.terminal', color: 'secondary'},"
+            + " {key: 'tool:wall.display', color: 'tertiary'}]]";
 
     private ExtraKeysView view;
     private android.content.Context context;
@@ -220,6 +223,61 @@ public class ExtraKeysViewKeyStyleTest {
         view.setKeyUsabilityPolicy(value -> false);
         int expected = view.getButtonBackgroundColor();
         assertEquals(expected, centerPixel(button(0).getBackground()));
+    }
+
+    @Test
+    public void aPlaceSwitchCarriesNoCapAndWearsItsAccentOnTheGlyph() {
+        showing("tool:wall.terminal");
+
+        for (int index : new int[] {2, 3, 4}) {
+            assertTrue("a place switch sits on the row's own glass, like a plain key",
+                button(index).getBackground() instanceof ColorDrawable);
+            assertEquals("and paints nothing of its own behind the glyph",
+                view.getButtonBackgroundColor(), centerPixel(button(index).getBackground()));
+        }
+
+        assertEquals("the place in front is at full strength",
+            ExtraKeyColorRole.SECONDARY.background(context), button(3).getCurrentTextColor());
+        assertEquals("the ones behind it keep the hue and lose the brightness",
+            dimmed(ExtraKeyColorRole.PRIMARY), button(2).getCurrentTextColor());
+        assertEquals(dimmed(ExtraKeyColorRole.TERTIARY), button(4).getCurrentTextColor());
+    }
+
+    @Test
+    public void theBrightSwitchFollowsTheWallToItsNextPlace() {
+        showing("tool:wall.terminal");
+        assertEquals(dimmed(ExtraKeyColorRole.TERTIARY), button(4).getCurrentTextColor());
+
+        showing("tool:wall.display");
+        assertEquals(ExtraKeyColorRole.TERTIARY.background(context),
+            button(4).getCurrentTextColor());
+        assertEquals(dimmed(ExtraKeyColorRole.SECONDARY), button(3).getCurrentTextColor());
+        assertEquals(dimmed(ExtraKeyColorRole.PRIMARY), button(2).getCurrentTextColor());
+    }
+
+    @Test
+    public void aColouredKeyThatIsNotAPlaceSwitchStillWearsItsCap() {
+        showing("tool:wall.terminal");
+        assertTrue("only the place switches lost their cap",
+            button(1).getBackground() instanceof InsetDrawable);
+        assertEquals(ExtraKeyColorRole.PRIMARY_CONTAINER.background(context),
+            capOf(button(1).getBackground()).getColor().getDefaultColor());
+    }
+
+    /** Tells the row which place switch points at the place in front. */
+    private void showing(final String focusedKeyValue) {
+        view.setPlaceSwitchPolicy(value -> {
+            if (!value.startsWith("tool:wall."))
+                return ExtraKeysView.PlaceFocus.NOT_A_PLACE;
+            return value.equals(focusedKeyValue)
+                ? ExtraKeysView.PlaceFocus.FOCUSED
+                : ExtraKeysView.PlaceFocus.UNFOCUSED;
+        });
+    }
+
+    /** A role's colour as an unfocused place switch shows it: the same hue, held back to 57%. */
+    private int dimmed(ExtraKeyColorRole role) {
+        return (145 << 24) | (role.background(context) & 0x00FFFFFF);
     }
 
     /** What {@code drawable} actually renders at its centre, tint and all. */

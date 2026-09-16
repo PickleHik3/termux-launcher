@@ -2,6 +2,7 @@ package com.termux.app.terminal.io;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -154,6 +155,27 @@ public class ExtraKeyEligibilityTest {
             assertTrue(ExtraKeyEligibility.isUsable("tool:something.new", place));
         }
         assertFalse(ExtraKeyEligibility.classifies("something.new"));
+    }
+
+    // ------------------------------------------------------------------------- the place switches
+
+    @Test
+    public void thePlaceSwitchesNameTheirPlaceAndNothingElseDoes() {
+        assertSame(PaneWallPage.WIDGETS,
+            ExtraKeyEligibility.placeSwitchTarget(key(LauncherToolRegistry.TOOL_WALL_WIDGETS)));
+        assertSame(PaneWallPage.TERMINAL,
+            ExtraKeyEligibility.placeSwitchTarget(key(LauncherToolRegistry.TOOL_WALL_TERMINAL)));
+        assertSame(PaneWallPage.DISPLAY,
+            ExtraKeyEligibility.placeSwitchTarget(key(LauncherToolRegistry.TOOL_WALL_DISPLAY)));
+        // wall.go counts only when it says where it is going.
+        assertSame(PaneWallPage.DISPLAY, ExtraKeyEligibility.placeSwitchTarget(
+            key(LauncherToolRegistry.TOOL_WALL_GO) + ":place=display"));
+        assertNull(ExtraKeyEligibility.placeSwitchTarget(
+            key(LauncherToolRegistry.TOOL_WALL_GO)));
+        assertNull(ExtraKeyEligibility.placeSwitchTarget(
+            key(LauncherToolRegistry.TOOL_PANE_SPLIT)));
+        assertNull(ExtraKeyEligibility.placeSwitchTarget("ESC"));
+        assertNull(ExtraKeyEligibility.placeSwitchTarget(null));
     }
 
     // ------------------------------------------------------------------------ the coverage gate
