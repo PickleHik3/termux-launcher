@@ -222,9 +222,11 @@ public class EdgeStackPolicyTest {
     // ------------------------------------------------------------------ the stack itself
 
     /**
-     * The order {@code PlaceMiniatureView.computeBlocks} claims its strips in
-     * (PlaceMiniatureView.java:509-547): outermost first, the status bar before anything else, a
-     * top A&#8211;Z band right under it, then the side columns rail-first, then the bottom stack.
+     * The order {@code PlaceMiniatureView.computeBlocks} claimed its strips in before it read the
+     * stack: outermost first, the status bar before anything else, a top A&#8211;Z band right
+     * under it, then the side columns rail-first, then the bottom stack. The miniature loops over
+     * {@link EdgeStackPolicy#stack} now, so this is the shipped picture rather than a second
+     * ordering, and it is kept as the record of what that picture was.
      */
     private static List<Element> miniatureOrder(PlaceLayout layout, Edge edge) {
         List<Element> claimed = new ArrayList<>(4);
@@ -253,11 +255,12 @@ public class EdgeStackPolicyTest {
     public void stackReproducesTheMiniaturesStripOrder() {
         for (PlaceLayout layout : everyOldArrangement()) {
             for (Edge edge : Edge.values()) {
-                // The miniature draws a bottom status bar outermost; the launcher itself draws it
+                // The miniature used to draw a bottom status bar outermost; the launcher draws it
                 // innermost — StatusBarEdgeArrangement puts a bottom bar last in
                 // terminal_content_column, which stands above the whole dock. The default stack
-                // follows the launcher, so the one arrangement the two disagree on is skipped
-                // here and pinned by aBottomStatusBarIsTheInnermostBandOfTheBottomStack.
+                // follows the launcher, the picture follows the stack, and the one arrangement the
+                // old order got wrong is skipped here and pinned by
+                // aBottomStatusBarIsTheInnermostBandOfTheBottomStack.
                 if (edge == Edge.BOTTOM && layout.statusBarEdge == Edge.BOTTOM) continue;
                 assertEquals(layout + " " + edge, miniatureOrder(layout, edge),
                     EdgeStackPolicy.stack(layout, edge));
@@ -425,6 +428,92 @@ public class EdgeStackPolicyTest {
             RowPlacement.BOTTOM);
         assertEquals(Arrays.asList(Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT),
             edgesOffered(EdgeStackPolicy.targets(alone, Element.AZ, PlaceOrientation.PORTRAIT)));
+    }
+
+    // ------------------------------------------------------------------ what a drop leaves
+
+    @Test
+    public void aDropNumbersEveryBandOnTheEdgeItLandedOn() {
+        PlaceLayout stacked = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS),
+            EdgeStackPolicy.stack(stacked, Edge.BOTTOM));
+
+        PlaceLayout dropped = EdgeStackPolicy.withDrop(stacked, Element.APPS, Edge.BOTTOM, 0);
+        assertEquals(Arrays.asList(Element.APPS, Element.EXTRA_KEYS, Element.AZ),
+            EdgeStackPolicy.stack(dropped, Edge.BOTTOM));
+        // Every band on the edge carries its new number, since a stack is read by comparing them.
+        assertEquals(0, dropped.slot(Element.APPS).order);
+        assertEquals(1, dropped.slot(Element.EXTRA_KEYS).order);
+        assertEquals(2, dropped.slot(Element.AZ).order);
+        assertEquals("the edge costs exactly what it did before",
+            EdgeStackPolicy.contentInsets(stacked, metrics()),
+            EdgeStackPolicy.contentInsets(dropped, metrics()));
+    }
+
+    @Test
+    public void aDropOnAnotherEdgeLeavesTheEdgeItCameFromAlone() {
+        PlaceLayout stacked = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        PlaceLayout moved = EdgeStackPolicy.withDrop(stacked, Element.APPS, Edge.LEFT, 0);
+        assertEquals(Arrays.asList(Element.APPS), EdgeStackPolicy.stack(moved, Edge.LEFT));
+        assertEquals("what is left of the bottom keeps its order",
+            Arrays.asList(Element.EXTRA_KEYS, Element.AZ),
+            EdgeStackPolicy.stack(moved, Edge.BOTTOM));
+        assertEquals(Arrays.asList(Element.STATUS), EdgeStackPolicy.stack(moved, Edge.TOP));
+    }
+
+    @Test
+    public void anIndexPastTheEndOfAStackIsTheInnermostBand() {
+        PlaceLayout stacked = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        PlaceLayout innermost = EdgeStackPolicy.withDrop(stacked, Element.STATUS, Edge.BOTTOM, 99);
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS, Element.STATUS),
+            EdgeStackPolicy.stack(innermost, Edge.BOTTOM));
+        assertTrue("and the top it left is bare", EdgeStackPolicy.stack(innermost, Edge.TOP)
+            .isEmpty());
+    }
+
+    @Test
+    public void aDropBringsAHiddenBarBackWithoutTouchingWhatWasAlreadyThere() {
+        PlaceLayout away = layout(Edge.TOP, RowPlacement.HIDDEN, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ),
+            EdgeStackPolicy.stack(away, Edge.BOTTOM));
+
+        PlaceLayout back = EdgeStackPolicy.withDrop(away, Element.APPS, Edge.BOTTOM, 1);
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.APPS, Element.AZ),
+            EdgeStackPolicy.stack(back, Edge.BOTTOM));
+        assertFalse("a bar dropped on an edge is a bar on screen", back.slot(Element.APPS).hidden);
+    }
+
+    @Test
+    public void aReOrderedRowTakesTheRidingIndexWithIt() {
+        // The index rides the pinned apps row, so it is a band of the bottom like any other here.
+        // Its stored edge follows the edge it is drawn on, without which the drop the user made is
+        // not the stack they end up with.
+        PlaceLayout riding = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.LEFT,
+            RowPlacement.BOTTOM);
+        assertEquals(Edge.LEFT, riding.slot(Element.AZ).edge);
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS),
+            EdgeStackPolicy.stack(riding, Edge.BOTTOM));
+
+        PlaceLayout dropped = EdgeStackPolicy.withDrop(riding, Element.EXTRA_KEYS, Edge.BOTTOM, 1);
+        assertEquals(Arrays.asList(Element.AZ, Element.EXTRA_KEYS, Element.APPS),
+            EdgeStackPolicy.stack(dropped, Edge.BOTTOM));
+        assertEquals(Edge.BOTTOM, dropped.slot(Element.AZ).edge);
+    }
+
+    @Test
+    public void onlyABarThatMayHideIsPutAway() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertTrue(EdgeStackPolicy.withAway(layout, Element.APPS).slot(Element.APPS).hidden);
+        assertEquals("the wall's pager rides the status bar, so it never goes away",
+            layout, EdgeStackPolicy.withAway(layout, Element.STATUS));
+        // It keeps the edge it would come back to.
+        assertEquals(Edge.BOTTOM,
+            EdgeStackPolicy.withAway(layout, Element.APPS).slot(Element.APPS).edge);
     }
 
     @Test
