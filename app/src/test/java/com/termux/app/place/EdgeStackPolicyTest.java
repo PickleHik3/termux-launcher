@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -591,6 +592,28 @@ public class EdgeStackPolicyTest {
             EdgeStackPolicy.thicknessPx(Element.EXTRA_KEYS, Edge.BOTTOM, metrics));
         assertEquals(EXTRA_KEYS_COLUMN,
             EdgeStackPolicy.thicknessPx(Element.EXTRA_KEYS, Edge.RIGHT, metrics));
+    }
+
+    // ---------------------------------------------------------------- the seams
+
+    @Test
+    public void separators_sitBetweenAdjacentBandsAndNeverAtAnEnd() {
+        List<Element> three = Arrays.asList(
+            Element.EXTRA_KEYS, Element.AZ, Element.APPS);
+        List<EdgeStackPolicy.Separator> seams = EdgeStackPolicy.separatorsFor(three);
+        assertEquals(2, seams.size());
+        assertEquals(new EdgeStackPolicy.Separator(Element.EXTRA_KEYS, Element.AZ), seams.get(0));
+        assertEquals(new EdgeStackPolicy.Separator(Element.AZ, Element.APPS), seams.get(1));
+
+        // One band, and the empty stack: a separator separates two things, and at a stack's outer
+        // edge there is nothing on the other side of the line.
+        assertTrue(EdgeStackPolicy.separatorsFor(
+            Arrays.asList(Element.EXTRA_KEYS)).isEmpty());
+        assertTrue(EdgeStackPolicy.separatorsFor(new ArrayList<Element>()).isEmpty());
+
+        // The plank: the row and the index riding it, one seam between them.
+        assertEquals(1, EdgeStackPolicy.separatorsFor(
+            Arrays.asList(Element.APPS, Element.AZ)).size());
     }
 
     /**

@@ -180,9 +180,32 @@ public class TermuxActivityBottomStackOrderTest {
         assertSame("the keybind strip keeps the letters' slot",
             activity.findViewById(R.id.apps_bar_az_host),
             activity.findViewById(R.id.keybind_hint_dock_row).getParent());
-        assertSame("the divider is the extra keys' own top edge",
-            activity.findViewById(R.id.terminal_toolbar_host),
-            activity.findViewById(R.id.extrakeys_divider).getParent());
+        // Updated for P8: the hairline is not furniture of the extra keys any more. It was drawn
+        // at the top of their host whatever stood above it, so with the keys as the outermost band
+        // it cut across the dock's own top edge. The stack draws the seams instead.
+        assertEquals("the extra-keys divider id is gone", 0,
+            activity.getResources().getIdentifier(
+                "extrakeys_divider", "id", activity.getPackageName()));
+    }
+
+    // ---------------------------------------------------------------- the seams
+
+    @Test
+    public void theStackSeparatesItsBandsAndNeverItsOwnEdges() {
+        // Three bands on one sheet of glass: a hairline in each gap, and none at either end.
+        activity.applyEdgeStacks(bottom(Element.APPS, Element.AZ, Element.EXTRA_KEYS));
+        assertEquals(2, rows.getSeparatorCount());
+
+        // Re-ordered, it is still one per gap — the line belongs to the gap, not to a row.
+        activity.applyEdgeStacks(bottom(Element.AZ, Element.EXTRA_KEYS, Element.APPS));
+        assertEquals(2, rows.getSeparatorCount());
+
+        // A lone band has nothing to be separated from, which is the defect: the extra keys drew
+        // their divider across the dock's rim.
+        activity.applyEdgeStacks(bottom(Element.EXTRA_KEYS)
+            .withSlot(Element.APPS, new Slot(true, Edge.BOTTOM, 2))
+            .withSlot(Element.AZ, new Slot(true, Edge.BOTTOM, 1)));
+        assertEquals(0, rows.getSeparatorCount());
     }
 
     @Test

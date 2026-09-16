@@ -362,3 +362,54 @@ required, so a finger passing through should not flip a page, but that is reason
 | L3 ✅ | `feat/layout-rail` | `SuggestionBarView` vertical form; `updateDockRailView` deleted; one `ExtraKeysView` per edge; TOP rows render | L2 |
 | L4 ✅ | `feat/layout-miniature` | miniature and `MiniatureDragPolicy` on `EdgeStackPolicy` (edge + insertion index), portrait side columns with the narrow-canvas warning | L1 (parallel with L2) |
 | L5 | integ | docs/en, release note, Waydroid + pong checks | L2–L4 |
+
+## P8 outcome (2026-09-16)
+
+**A row standing alone is the icon and a sliver of air.** The plank a lying-down row off the dock
+stands on kept a bar's margin *outside* its sheet of glass (`DOCK_RAIL_EDGE_MARGIN_DP`) and the
+dock's own row paddings *inside* it — paddings that exist to space three rows sharing one sheet —
+so a bar one icon tall claimed ~90 px of a 1080 px phone before its ticks. `DockLayoutPolicy` now
+owns the row's vertical padding in one place: `LONE_ROW_AIR_DP` (4dp) around the icon and the tick
+strip whenever the row is the only band in its container, and today's paddings whenever it shares
+one. `DockInputs.appsRowAlone` is the switch, resolved from the arrangement by
+`TermuxActivity.isAppsRowAlone` — the only dock row on the bottom edge, or the only bar on its
+plank, which a rail always is. `appsRowBandPx` is re-formed around the same
+`appsRowBandHintPx`, so the icon is the same size either way and only the air moved. The plank
+keeps its outer margin only while it carries two bars (`offDockPlankAirPx`), so a lone row's air is
+inside the sheet the glass rounds rather than counted twice; `buildEdgeStackMetrics` reads the same
+answer, so the content inset and the screen agree. The rail is the same constant mirrored onto its
+own axis: 4dp of padding instead of 10, and `railWidthPx` is the icon plus that air, floored at the
+52dp a thumb still needs — 58dp → 52dp. The shipped bottom dock shares its sheet with the letters
+and the keys, so every number of it is unchanged.
+
+`syncPinnedAppsHost`/`syncOffDockPlank` also size the dock from the arrangement they are *given*
+(`dockLayoutFor`) rather than re-reading the store, so the numbers a bar is handed and the
+arrangement it is being handed them for can no longer be a pass apart.
+
+**A separator belongs between two bands, never on a rim.** `extrakeys_divider` was a view pinned to
+the top of the extra-keys host, drawn there whatever stood above it — so with the keys as the
+outermost band it cut across the dock's own top edge. It is gone, and the rule is one policy method:
+`EdgeStackPolicy.separatorsFor(bands)` gives one `Separator` per gap between adjacent bands and none
+at either end, so a stack of three has two and a lone band has none. `EdgeStackView` draws them in
+`dispatchDraw` at the boundaries it laid its children out on — over the seam rather than as a band
+of its own, so no stack grows by a hairline — with the old divider's look
+(`resolveAccessoryOutlineColor` at 70 × the material alpha, 1dp, held off the sides by the dock's
+extra-keys inset). Only the two stacks that *are* one sheet ask for any: `accessory_row_stack` and
+`place_off_dock_plank_bars`. Every band in a screen edge's stack carries its own glass, and a line
+between two of those would float in the air between two sheets. The visible consequence of one rule
+instead of one view: the shipped dock gains a seam between the apps row and the letters, where the
+old divider only ever drew between the letters and the keys.
+
+Tests: `DockLayoutPolicyTest` grew the lone-row air (paddings, the unchanged hint, the tighter band,
+the shipped dock pinned as the oracle) and the collapsed-row case; updated with a reason —
+`railWidthPx` 160 → 143 at density 2.75. `TermuxActivityEdgeStackLayoutTest` grew four Robolectric
+cases on the real XML: a lone plank measuring exactly icon + tick band + 2 × air with no air of its
+own, a shared plank keeping the margin it always had, a rail with the same air on all four sides,
+and the plank's seam count. `EdgeStackPolicyTest` covers `separatorsFor` pure;
+`TermuxActivityBottomStackOrderTest` covers the dock stack's counts (three bands → two, re-ordered
+→ two, one band → none) and asserts the `extrakeys_divider` id no longer resolves.
+`TermuxActivityInAppKeyboardGeometryTest` lost its divider-parent assertion with a one-line reason.
+
+Honest boundary: none of this is device-verified. The two judgement calls a look on the phone should
+settle are the plank now sitting flush against the edge of its stack (its air moved inside the
+glass) and the new seam between the dock's apps row and its letters.
