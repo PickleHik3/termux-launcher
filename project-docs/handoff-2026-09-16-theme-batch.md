@@ -118,6 +118,29 @@ Checklist: exactly one strip on each edge with the accent on the current page; d
 right (else move the band into the row's top padding); RIGHT column hold → matches run left of the
 finger, name above the focused icon; LEFT/TOP mirrored; BOTTOM unchanged.
 
+### Afternoon rounds (14:20–15:45)
+
+- P8 `4266ff35`: a lone apps row gets ~4 dp air (default dock byte-identical); separators only
+  between adjacent bands in one stack (`EdgeStackPolicy.separatorsFor`), `extrakeys_divider` gone.
+  Judgement calls for the developer: the lone row's air sits inside the glass; the default dock
+  now shows a seam between the apps row and the letters.
+- Corner hold `6a09dbe8`: `CornerHoldArbiter` — the widget frame never cancelled the grid's 400 ms
+  long press once the 300 ms corner hold claimed, so both fired on Home.
+- P9 `6ce2afa0`: a BOTTOM status bar is a band of `accessory_row_stack` and honours its order;
+  own glass only when it touches the canvas; `place_edge_stack_bottom` deleted.
+- Row mute `df93a6cd`: the apps row went blank after a page swipe and the A–Z scrub stopped
+  filtering — a latched draw suppression with no release path; now never latched on a rendered
+  row, the release chain always re-posts, the dock hint is waived when overdue, one
+  `finishSwipeSettle`.
+- P10: status stats/weather cards and the expanded bar grow toward the centre per edge
+  (`StatusBarLensPolicy`), the bar's own row stays at its edge when expanded (TOP unchanged);
+  `NotificationSwipePolicy`: quick reply = toward-centre swipe from a badged icon, 24 dp flick
+  commits, past 45 % of the drawer travel it hands off to the drawer pull; BOTTOM unchanged.
+  Judgement call to relay: on TOP the row already sits at the panel's bottom with the clock above,
+  so "row stays at the edge" was applied as "row is the lower band on both row edges" — TOP is
+  byte-identical; pinning the TOP row to the screen edge would be a visible change, not done.
+All device checks for these are the developer's (phone in use); nothing here is device-verified.
+
 ## Decisions taken without the developer (change freely)
 
 - Trim rule keeps one space when a wrapped row ended in spaces and the next row starts mid-word.
