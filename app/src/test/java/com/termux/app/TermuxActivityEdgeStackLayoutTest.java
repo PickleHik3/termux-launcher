@@ -464,29 +464,30 @@ public class TermuxActivityEdgeStackLayoutTest {
         laidOutColumn(activity, 1080, 1370);
 
         float density = activity.getResources().getDisplayMetrics().density;
-        // Updated for Q8 with a reason: the ticks stand in the row's air rather than in a band
-        // beside it, so the air on each side of the icons is their band and the row is symmetric
-        // about them here too. P8's 4dp sliver is what a row showing no ticks still keeps.
+        // Updated for Q9 with a reason: a lone row keeps its 4dp sliver on the side without ticks
+        // and the strip's own band — nothing added to it — on the side with them. It is asymmetric
+        // where a shared row is not, because the plank should be as short as it can be.
         int airPx = DockLayoutPolicy.rowAirPx(true, true, density);
         int stripPx = PageTickStrip.bandPx(density);
-        assertEquals(stripPx, airPx);
-        assertTrue(airPx > DockLayoutPolicy.loneRowAirPx(density));
+        assertEquals(DockLayoutPolicy.loneRowAirPx(density), airPx);
+        assertEquals(stripPx, DockLayoutPolicy.rowTickSideAirPx(true, true, density));
+        assertTrue(stripPx > airPx);
         View plank = activity.findViewById(R.id.place_off_dock_plank_host);
         View scroll = activity.findViewById(R.id.place_apps_bar_scroll);
         View ticks = activity.findViewById(R.id.place_apps_bar_indicator);
 
         assertEquals("the air is inside the sheet now, not around it", 0, plank.getPaddingTop());
         assertEquals(0, plank.getPaddingBottom());
-        // The ticks trail the row on the top edge, so they are the air under the icons and the
-        // row keeps the whole of the air over them.
+        // The row is the band next to the canvas up here, so the ticks take the canvas side, which
+        // on the top edge is under the icons. The row keeps its sliver over them and nothing here.
         assertEquals(airPx, scroll.getPaddingTop());
         assertEquals(0, scroll.getPaddingBottom());
         assertEquals("the ticks claim their band", stripPx, ticks.getHeight());
 
         int iconPx = scroll.getHeight() - airPx;
         assertTrue("there is an icon in there: " + iconPx, iconPx > 0);
-        assertEquals("the plank is the icon and one air either side, the ticks inside it",
-            iconPx + (2 * airPx), plank.getHeight());
+        assertEquals("the plank is the icon, its sliver and the ticks' band",
+            iconPx + airPx + stripPx, plank.getHeight());
     }
 
     @Test

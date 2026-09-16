@@ -9485,14 +9485,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setPageIndicator(wantHost ? indicator : dockIndicator);
         if (!wantHost && dockIndicator != null) {
             dockIndicator.setVerticalForm(false);
-            // The dock's own pair follows the same rule as the portable host's: the ticks stand on
-            // the row's centre-facing side, which on the bottom edge is above the icons.
+            // The dock's own pair follows the same rule as the portable host's: the ticks stand
+            // on the row's outer side unless the row is the band next to the canvas.
             orderAppsBarBands(findViewById(R.id.apps_bar_row_host),
                 findViewById(R.id.apps_bar_viewpager), dockIndicator,
-                !PageTickStrip.leadsRow(PlaceLayout.Edge.BOTTOM));
+                !PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM,
+                    isAppsRowNextToCanvas(layout)));
         }
         if (wantHost) {
             DockLayout dockLayout = dockLayoutFor(layout);
+            boolean nextToCanvas = isAppsRowNextToCanvas(layout);
             int indicatorBandPx = PageTickStrip.bandPx(getResources().getDisplayMetrics().density);
             if (indicator != null) indicator.setVerticalForm(PageTickStrip.verticalOn(edge));
             if (edge.isOnSide()) {
@@ -9512,10 +9514,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // moved to the top edge reads exactly as it did at the bottom.
                 int contentInset = Math.round((dockLayout.capsule
                     ? dockLayout.capsuleContentInsetPx : dockLayout.horizontalInsetPx) * 0.82f);
-                // The ticks' band is the air on the row's centre-facing side, which up here is
-                // under the icons, so the row itself keeps only what is left of the air on that
-                // side. Between them the pair is the band, and the icon is in the middle of it.
-                boolean ticksLead = PageTickStrip.leadsRow(edge);
+                // The ticks' band is the air on whichever side the rule puts them, so the row
+                // itself keeps only what is left of the air on that side. Between them the pair
+                // is the band.
+                boolean ticksLead = PageTickStrip.ticksLeadRow(edge, nextToCanvas);
                 int besideTicks = dockLayout.appsRowPaddingBesideTicksPx();
                 scroll.setPadding(contentInset,
                     ticksLead ? besideTicks : dockLayout.appsTopPaddingPx,
@@ -9528,13 +9530,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 setBandSize(host, ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT);
             }
-            // The strip stands on the row's centre-facing side on every edge — the side the
-            // terminal is on — so it reads as the bar's inner rim rather than as a band wedged
-            // between the row and whatever comes next. Which of the two leads the host is
-            // PageTickStrip's answer, the same one the dock's own band is ordered by.
+            // The strip stands on the row's outer side — the side the screen edge is on — so it
+            // reads as the bar's own rim rather than as a band wedged between the row and
+            // whatever comes next; the row next to the canvas has no such neighbour and keeps the
+            // ticks on its canvas side. Which of the two leads the host is PageTickStrip's
+            // answer, the same one the dock's own band is ordered by.
             host.setOrientation(edge.isOnSide()
                 ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-            orderAppsBarBands(host, scroll, indicator, !PageTickStrip.leadsRow(edge));
+            orderAppsBarBands(host, scroll, indicator,
+                !PageTickStrip.ticksLeadRow(edge, nextToCanvas));
             scroll.setClipToPadding(false);
             // Every form fills its host now: a rail pages by the column's length rather than
             // running past the end of it, so there is nothing left for the scroll to reach.
@@ -9571,9 +9575,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Which of the two bands comes first, from {@link PageTickStrip#leadsRow}: the ticks lead on
-     * the two edges whose centre-facing side is the lower coordinate — the bottom edge and a
-     * right-hand rail — and follow the row on the other two.
+     * Which of the two bands comes first, from {@link PageTickStrip#ticksLeadRow}: the ticks take
+     * the row's outer side, and its canvas side only where the row is the band next to the canvas.
      */
     private static void orderAppsBarBands(@Nullable LinearLayout host, @Nullable View row,
                                           @Nullable View indicator, boolean rowFirst) {
@@ -9832,6 +9835,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     boolean applyEdgeStacks(@NonNull PlaceLayout layout) {
         boolean moved = false;
+        // Which side of the row its page ticks take is a property of the arrangement, and the pass
+        // that pads the dock's own row is handed the dock's numbers rather than the place's.
+        // Remembered here, where the arrangement arrives.
+        mAppsRowNextToCanvas = isAppsRowNextToCanvas(layout);
         PlaceLayout.Edge plankEdge = offDockPlankEdge(layout);
         View plankHost = findViewById(R.id.place_off_dock_plank_host);
         com.termux.app.place.EdgeStackView plankBars =
@@ -9925,6 +9932,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int offDockPlankAirPx(@NonNull List<Element> onPlank) {
         return onPlank.size() > 1 ? azBarHostMarginPx() : 0;
+    }
+
+    /**
+     * Whether the pinned-apps row is the band immediately next to the canvas on the edge it stands
+     * on: nothing between it and the terminal, the widgets or the display pane. Read off that
+     * edge's stack, whose last band is the innermost one.
+     *
+     * <p>It is what decides which side of the row its page ticks stand on
+     * ({@link PageTickStrip#ticksLeadRow}) — everywhere else they take the row's outer side.
+     */
+    private boolean isAppsRowNextToCanvas(@NonNull PlaceLayout layout) {
+        List<Element> stack =
+            EdgeStackPolicy.stack(layout, PlaceChromePolicy.appsEdge(layout));
+        return !stack.isEmpty() && stack.get(stack.size() - 1) == Element.APPS;
     }
 
     /**
@@ -10623,10 +10644,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int surfaceInset = layout.horizontalInsetPx;
         int contentInset = layout.capsule ? layout.capsuleContentInsetPx : surfaceInset;
         int extraKeysInset = layout.capsule ? layout.capsuleExtraKeysInsetPx : surfaceInset;
-        // The ticks stand on the row's centre-facing side, which on the dock is over the icons,
-        // and the band they stand in is that side's air rather than a band added to it: the pager
-        // keeps whatever is left of the air there, which is nothing while the strip fills it.
-        boolean ticksLeadDockRow = PageTickStrip.leadsRow(PlaceLayout.Edge.BOTTOM);
+        // The band the ticks stand in is that side's air rather than a band added to it: the
+        // pager keeps whatever is left of the air there, which is nothing while the strip fills
+        // it. Which side that is follows the row's place in the bottom stack.
+        boolean ticksLeadDockRow =
+            PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM, mAppsRowNextToCanvas);
         int appsTopPadding = ticksLeadDockRow
             ? layout.appsRowPaddingBesideTicksPx() : layout.appsTopPaddingPx;
         int appsBottomPadding = ticksLeadDockRow
@@ -10749,6 +10771,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private DockLayout buildDockLayout(int additionalAppsBarHeightPx) {
         return DockLayoutPolicy.compute(buildDockInputs(additionalAppsBarHeightPx));
     }
+
+    /**
+     * Whether the pinned-apps row is the band next to the canvas, as the last arrangement had it.
+     * The shipped order is the one that is, which is what the dock draws before any pass has run.
+     */
+    private boolean mAppsRowNextToCanvas = true;
 
     /** The row figures last handed over, since none of these setters reads back out of a view. */
     private int mAppliedDockRowHeightHintPx = Integer.MIN_VALUE;

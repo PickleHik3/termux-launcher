@@ -76,16 +76,33 @@ public class PageTickStripTest {
     }
 
     @Test
-    public void theTicksTakeTheCentreFacingSideOfTheBarOnEveryEdge() {
-        // One rule: the strip stands on the side of the row the terminal is on, the way every
-        // other "towards the middle" affordance opens. The two edges whose centre-facing side is
-        // the lower coordinate are the ones the strip leads its host on.
-        assertTrue("left of a right-hand rail, towards the terminal",
-            PageTickStrip.leadsRow(Edge.RIGHT));
-        assertTrue("above the dock's own row", PageTickStrip.leadsRow(Edge.BOTTOM));
-        assertFalse("under a row lying along the top", PageTickStrip.leadsRow(Edge.TOP));
-        assertFalse("right of a left-hand rail", PageTickStrip.leadsRow(Edge.LEFT));
+    public void theTicksTakeTheRowsOuterSideOnEveryEdge() {
+        // The rule everywhere but next to the canvas: the strip stands on the side of the row the
+        // screen edge its stack stands on is, so it reads as the bar's own rim rather than as a
+        // divider between the row and the band beyond it. A strip leads its host when that side
+        // is the lower coordinate.
+        assertTrue("above a row lying along the top", PageTickStrip.ticksLeadRow(Edge.TOP, false));
+        assertTrue("left of a left-hand rail, outboard",
+            PageTickStrip.ticksLeadRow(Edge.LEFT, false));
+        assertFalse("under the dock's own row", PageTickStrip.ticksLeadRow(Edge.BOTTOM, false));
+        assertFalse("right of a right-hand rail, outboard",
+            PageTickStrip.ticksLeadRow(Edge.RIGHT, false));
+    }
 
+    @Test
+    public void theRowNextToTheCanvasKeepsItsTicksOnTheCanvasSide() {
+        // The one exception: nothing stands between the row and the terminal, so the free side is
+        // the canvas side and the ticks take it — which is where the shipped arrangement has
+        // always drawn them.
+        assertTrue("above the dock's own row", PageTickStrip.ticksLeadRow(Edge.BOTTOM, true));
+        assertTrue("left of a right-hand rail, towards the terminal",
+            PageTickStrip.ticksLeadRow(Edge.RIGHT, true));
+        assertFalse("under a row lying along the top", PageTickStrip.ticksLeadRow(Edge.TOP, true));
+        assertFalse("right of a left-hand rail", PageTickStrip.ticksLeadRow(Edge.LEFT, true));
+    }
+
+    @Test
+    public void theStripRunsTheWayItsRowDoes() {
         assertTrue(PageTickStrip.verticalOn(Edge.LEFT));
         assertTrue(PageTickStrip.verticalOn(Edge.RIGHT));
         assertFalse(PageTickStrip.verticalOn(Edge.TOP));
