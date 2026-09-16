@@ -47,24 +47,23 @@ public enum Element {
      * against the views themselves rather than chosen:
      *
      * <ul>
-     *   <li><b>Top:</b> the status bar, then the alphabets bar. {@code StatusBarEdgeArrangement}
-     *       puts a top bar at index 0 of {@code terminal_content_column} and
-     *       {@code place_az_bar_top} is the next child of it.</li>
+     *   <li><b>Top:</b> the status bar, then the alphabets bar — the order the top
+     *       {@code EdgeStackView} holds {@code terminal_window_bar_host} and
+     *       {@code place_az_bar_host} in.</li>
      *   <li><b>Bottom:</b> the extra keys, the alphabets row, the pinned apps, then the status
      *       bar. {@code activity_termux.xml} chains {@code apps_bar_viewpager} above
      *       {@code apps_bar_az_row} above {@code terminal_toolbar_view_pager}, and a bottom status
-     *       bar is the <em>last</em> child of the content column, which stands above the whole
-     *       dock.</li>
+     *       bar stands in the bottom {@code EdgeStackView}, which is above the whole dock.</li>
      *   <li><b>Left and right:</b> the status bar, the apps rail, the extra keys column, then the
      *       alphabets bar. A column's lead-in says which: the status column starts at the cutout
-     *       ({@code statusBarColumnLeadInPx}), the rail at the cutout too, the extra keys past the
-     *       rail, and {@code AzBarHostGeometry.edgeInsetPx} past all three.</li>
+     *       (the stack's own cutout padding), then the rail, the extra keys and the alphabets bar
+     *       as the next three bands of that stack.</li>
      * </ul>
      *
-     * <p>The two side stacks are the one place the shipped launcher does not really stack: a
-     * status column and a rail on the same edge share one column lengthwise instead of standing
-     * beside each other. This model stacks them, which is the change the Layout-freedom work is
-     * for; see {@link EdgeStackPolicy#contentInsets}.
+     * <p>The two side stacks were the one place the shipped launcher did not really stack: a
+     * status column and a rail on the same edge shared one column lengthwise instead of standing
+     * beside each other. They stack now, which is the change the Layout-freedom work was for; see
+     * {@link EdgeStackPolicy#contentInsets}.
      */
     public int defaultOrder(@NonNull Edge edge) {
         switch (edge) {

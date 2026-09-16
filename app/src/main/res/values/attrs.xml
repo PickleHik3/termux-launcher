@@ -10,4 +10,14 @@
         <attr name="realtimeIsCircle" format="boolean" />
         <attr name="downsampleFactorOptimization" format="boolean" />
     </declare-styleable>
+
+    <declare-styleable name="EdgeStackView">
+        <!-- Which screen edge this stack holds; the values are PlaceLayout.Edge's ordinals. -->
+        <attr name="edgeStackEdge" format="enum">
+            <enum name="top" value="0" />
+            <enum name="bottom" value="1" />
+            <enum name="left" value="2" />
+            <enum name="right" value="3" />
+        </attr>
+    </declare-styleable>
 </resources>

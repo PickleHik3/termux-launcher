@@ -97,6 +97,8 @@ import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperBackdropView;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.place.EdgeStackPolicy;
+import com.termux.app.place.Element;
 import com.termux.app.place.ExtraKeysColumnGeometry;
 import com.termux.app.place.KeyboardOnEnter;
 import com.termux.app.place.KeyboardOverlayPolicy;
@@ -556,14 +558,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     AzScrubRowView mAzScrubRowView;
     /** The edge the alphabets bar is standing on right now, as last applied from the place. */
     @NonNull private PlaceLayout.Edge mAzBarEdge = PlaceLayout.Edge.BOTTOM;
-    /** The bar's own view in each host away from the dock, built the first time it is needed. */
-    @Nullable private AzScrubRowView mAzBarTopRowView;
-    @Nullable private AzScrubRowView mAzBarColumnRowView;
+    /** The bar's own view in its host away from the dock, built the first time it is needed. */
+    @Nullable private AzScrubRowView mAzBarHostRowView;
     /** The one scrub callback, moved to whichever bar the place has put on screen. */
     @Nullable private AzScrubRowView.ScrubCallback mAzScrubCallback;
-    private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider mAzBarTopOutline =
-        new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
-    private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider mAzBarColumnOutline =
+    private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider mAzBarHostOutline =
         new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
     @Nullable private View mAzTerminalToolbarView;
     LauncherAzGestureFxView mLauncherAzGestureFxUnderlayView;
@@ -3266,11 +3265,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int outerMargin = statusBarColumnOuterMarginPx();
             int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
             boolean vertical = isStatusBarVertical();
-            // A column stands past the camera hole, exactly where the content beside it is inset
-            // to: the two used to be reckoned from different origins, which left the cutout's
-            // width as an empty gap between the bar and the terminal.
-            int columnLeadIn = vertical ? statusBarColumnLeadInPx(
-                mStatusBarEdge == PlaceLayout.Edge.RIGHT) : 0;
+            // A column keeps only its own air from the band beside it. The camera hole it used to
+            // start past is the edge stack's padding now, so the bar is a plain band and the two
+            // can never be reckoned from different origins again.
+            int columnLeadIn = vertical ? outerMargin : 0;
             int leftMargin = vertical
                 ? (mStatusBarEdge == PlaceLayout.Edge.LEFT ? columnLeadIn : 0) : sideMargin;
             int rightMargin = vertical
@@ -3451,8 +3449,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The row inside a bar standing in a column: under the system status bar and under the stacked
-     * clock while the bar is open, and as long as the column leaves it — half of a column it
-     * shares with the apps rail or the extra keys, the whole of one it does not.
+     * clock while the bar is open, and as long as the column leaves it.
      */
     private void applyStatusColumnRowGeometry(@NonNull FrameLayout.LayoutParams params,
                                               @NonNull View statusRow, boolean collapsed) {
@@ -3491,29 +3488,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return clock.getMeasuredHeight() + Math.round(dpToPx(6));
     }
 
-    /** Whether the apps rail or the extra keys stand in the same column as the bar. */
-    private boolean isStatusColumnShared() {
-        if (!isStatusBarVertical()) return false;
-        return (isDockRailShown() && com.termux.app.statusbar.StatusBarEdgeGeometry
-                .sharesColumn(mStatusBarEdge, isDockRailOnRight()))
-            || (isExtraKeysColumnActive() && com.termux.app.statusbar.StatusBarEdgeGeometry
-                .sharesColumn(mStatusBarEdge, isExtraKeysColumnOnRight()));
-    }
-
     /** The margin a floating column keeps from the edge it stands on; docked hugs it. */
     private int statusBarColumnOuterMarginPx() {
         return isRoundedDockStyle() ? Math.round(dpToPx(2)) : 0;
     }
 
-    /** How far in a column starts: past the camera hole on its side, plus its own margin. */
-    private int statusBarColumnLeadInPx(boolean right) {
-        return (right ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft)
-            + statusBarColumnOuterMarginPx();
-    }
-
     /**
-     * How far down its column the bar's content reaches. The bar has the top of the column; what
-     * shares it starts underneath, which is the whole of the merge rule on a side edge.
+     * How far down its column the bar's content reaches: the whole of it. The bar used to give the
+     * lower half of a column back to a rail or an extra-keys column holding the same side; they
+     * stand beside it on the edge stack now, so nothing shares its length with it.
      *
      * <p>Measured down the bar's own surface, which runs the display's length, and stopping at the
      * navigation bar: the content never stands under a system bar even though the glass does.
@@ -3525,32 +3508,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // first layout.
         int columnPx = container == null ? 0
             : container.getHeight() + mLastStatusBarInsetTop + mLastNavigationBarInsetBottom;
-        int usable = Math.max(0, columnPx - mLastNavigationBarInsetBottom);
-        if (usable <= 0) return 0;
-        return isStatusColumnShared()
-            ? com.termux.app.statusbar.StatusBarEdgeGeometry.sharedColumnLengthPx(usable,
-                getResources().getDisplayMetrics().density)
-            : usable;
-    }
-
-    /**
-     * What a rail or extra-keys column sharing the bar's edge starts below, in the container's own
-     * coordinates: the bar's content is measured down the display, the rail lives inside the root's
-     * padding, so the status bar's inset comes back off.
-     */
-    private int statusColumnTopOffsetPx(boolean right) {
-        if (!isStatusBarVertical()) return 0;
-        int offset = com.termux.app.statusbar.StatusBarEdgeGeometry.columnTopOffsetPx(mStatusBarEdge,
-            right, statusColumnContentLengthPx());
-        return offset == 0 ? 0 : Math.max(0, offset - mLastStatusBarInsetTop);
-    }
-
-    /** How far in from one side the bar's own column reaches; zero for a bar standing in a row. */
-    private int statusBarColumnFootprintPx(boolean right) {
-        if (!isStatusBarVertical()) return 0;
-        return com.termux.app.statusbar.StatusBarEdgeGeometry.contentInsetPx(mStatusBarEdge, right,
-            targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact()),
-            statusBarColumnLeadInPx(right));
+        return Math.max(0, columnPx - mLastNavigationBarInsetBottom);
     }
 
     /**
@@ -5743,40 +5701,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         // Keep content out of the camera hole now that the window draws under the cutout. Only the
-        // horizontal insets matter: the top cutout is already covered by the status-bar inset.
-        // In landscape the dock rail claims one edge column, so the content inset on that side
-        // grows to the rail's width (which itself never shrinks below the cutout inset).
+        // horizontal insets reach the content root: the top cutout is already covered by the
+        // status-bar inset, and what stands along the top and the bottom takes its slice of the
+        // content column's height structurally rather than as padding.
         androidx.core.graphics.Insets cutoutInsets = insetsCompat.getInsets(Type.displayCutout());
         mLastDisplayCutoutInsetLeft = cutoutInsets.left;
         mLastDisplayCutoutInsetRight = cutoutInsets.right;
         mLastNavigationBarInsetBottom = insetsCompat.getInsets(Type.navigationBars()).bottom;
-        // Only a rail that actually shows icons claims its column; an empty rail is gone, and the
-        // content then keeps just the cutout inset on that side like any other edge.
-        boolean railActive = isDockRailShown();
-        boolean railOnRight = isDockRailOnRight();
-        int railWidthPx = railActive ? getDockLayout().railWidthPx : 0;
-        int leftContentInsetPx = railActive && !railOnRight ? railWidthPx : cutoutInsets.left;
-        int rightContentInsetPx = railActive && railOnRight ? railWidthPx : cutoutInsets.right;
-        // The Display place's extra keys column claims its edge the same way, standing past the
-        // rail when the two share one.
-        leftContentInsetPx = Math.max(leftContentInsetPx, extraKeysColumnFootprintPx(false));
-        rightContentInsetPx = Math.max(rightContentInsetPx, extraKeysColumnFootprintPx(true));
-        // A status bar standing in a column claims its band the same way, and shares it with the
-        // two above when they hold the same edge.
-        leftContentInsetPx = Math.max(leftContentInsetPx, statusBarColumnFootprintPx(false));
-        rightContentInsetPx = Math.max(rightContentInsetPx, statusBarColumnFootprintPx(true));
         syncExtraKeysColumn();
-        // The alphabets bar's own column is the innermost of them, so it is measured after the
-        // three above and claims the band just inside whichever of them share its edge.
         syncAzBarHosts();
-        leftContentInsetPx = Math.max(leftContentInsetPx, azBarColumnFootprintPx(false));
-        rightContentInsetPx = Math.max(rightContentInsetPx, azBarColumnFootprintPx(true));
+        // The arithmetic below counts the bands on each edge, so the bars stand in their stacks
+        // first: the answer and the screen can never disagree, not even on the frame before the
+        // first arrangement pass.
+        applyEdgeStacksAndInvalidate(currentPlaceLayout());
+        // One answer for all four edges: what stands on each of them, summed, rather than a chain
+        // of max() in which every column carried the reach of every column outside it. The two
+        // side stacks carry the cutout themselves, which is why it is in the metrics rather than
+        // added here.
+        EdgeStackPolicy.Insets content =
+            EdgeStackPolicy.contentInsets(currentPlaceLayout(), buildEdgeStackMetrics());
+        applyEdgeStackCutouts();
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
         if (rootRelativeLayout != null
-            && (rootRelativeLayout.getPaddingLeft() != leftContentInsetPx
-                || rootRelativeLayout.getPaddingRight() != rightContentInsetPx)) {
-            rootRelativeLayout.setPadding(leftContentInsetPx, rootRelativeLayout.getPaddingTop(),
-                rightContentInsetPx, rootRelativeLayout.getPaddingBottom());
+            && (rootRelativeLayout.getPaddingLeft() != content.left
+                || rootRelativeLayout.getPaddingRight() != content.right)) {
+            rootRelativeLayout.setPadding(content.left, rootRelativeLayout.getPaddingTop(),
+                content.right, rootRelativeLayout.getPaddingBottom());
         }
 
         applyTerminalSurfaceAppearance();
@@ -6813,29 +6763,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return AzBarHostGeometry.thicknessPx(getResources().getDisplayMetrics().density);
     }
 
-    /** True while the bar stands in a column on that side of the screen. */
-    private boolean isAzBarColumnOn(boolean right) {
-        return mAzBarEdge == (right ? PlaceLayout.Edge.RIGHT : PlaceLayout.Edge.LEFT);
-    }
-
-    /**
-     * Where the bar's column starts, in from its edge: past the cutout, and past the rail, the
-     * extra keys column and the status bar's column wherever they hold the same side. The bar is
-     * the innermost of them, so none of the others gives up anything for it.
-     */
-    private int azBarColumnEdgeInsetPx(boolean right) {
-        int railPx = isDockRailShown() && isDockRailOnRight() == right
-            ? getDockLayout().railWidthPx : 0;
-        return AzBarHostGeometry.edgeInsetPx(
-            right ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft,
-            railPx, extraKeysColumnFootprintPx(right), statusBarColumnFootprintPx(right));
-    }
-
-    /** How far in from one side the bar's column reaches, which is the content's inset there. */
-    private int azBarColumnFootprintPx(boolean right) {
-        if (!isAzBarColumnOn(right) || !isAzRowEnabled()) return 0;
-        return AzBarHostGeometry.footprintPx(azBarColumnEdgeInsetPx(right), azBarHostMarginPx(),
-            azBarThicknessPx());
+    /** The band the bar claims wherever it stands off the dock: itself, and its air either side. */
+    private int azBarHostBandPx() {
+        return AzBarHostGeometry.footprintPx(0, azBarHostMarginPx(), azBarThicknessPx());
     }
 
     /**
@@ -6849,31 +6779,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * @return whether a host appeared or went, which the content's edge padding is derived from
      */
     private boolean syncAzBarHosts() {
-        FrameLayout topHost = findViewById(R.id.place_az_bar_top);
-        FrameLayout columnHost = findViewById(R.id.place_az_bar_column);
-        if (topHost == null || columnHost == null) return false;
+        FrameLayout host = findViewById(R.id.place_az_bar_host);
+        if (host == null) return false;
         boolean lettersShown = isAzRowEnabled();
         PlaceLayout.Edge edge = lettersShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
-        boolean wantTop = lettersShown && edge == PlaceLayout.Edge.TOP;
-        boolean wantColumn = lettersShown && edge.isOnSide();
+        boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
         boolean changed = mAzBarEdge != edge
-            || (topHost.getVisibility() == View.VISIBLE) != wantTop
-            || (columnHost.getVisibility() == View.VISIBLE) != wantColumn;
+            || (host.getVisibility() == View.VISIBLE) != wantHost;
         mAzBarEdge = edge;
 
-        if (wantTop) {
-            mAzBarTopRowView = installAzBarRow(topHost, mAzBarTopRowView);
-            layoutAzBarTopHost(topHost);
+        if (wantHost) {
+            mAzBarHostRowView = installAzBarRow(host, mAzBarHostRowView);
+            layoutAzBarHost(host, edge);
         }
-        topHost.setVisibility(wantTop ? View.VISIBLE : View.GONE);
-        if (wantColumn) {
-            mAzBarColumnRowView = installAzBarRow(columnHost, mAzBarColumnRowView);
-            layoutAzBarColumnHost(columnHost, edge == PlaceLayout.Edge.RIGHT);
-        }
-        columnHost.setVisibility(wantColumn ? View.VISIBLE : View.GONE);
+        host.setVisibility(wantHost ? View.VISIBLE : View.GONE);
 
-        AzScrubRowView next = wantTop ? mAzBarTopRowView
-            : (wantColumn ? mAzBarColumnRowView : findViewById(R.id.apps_bar_az_row));
+        AzScrubRowView next = wantHost ? mAzBarHostRowView
+            : findViewById(R.id.apps_bar_az_row);
         if (next != null) {
             if (next != mAzScrubRowView) {
                 // The scrub follows the bar rather than being wired to each of them: one gesture,
@@ -6897,19 +6819,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return changed;
     }
 
-    /** The material behind whichever host is up, re-read from the dock's own surface tuning. */
+    /** The material behind the host while it is up, re-read from the dock's own surface tuning. */
     private void refreshAzBarHostsGlass() {
-        int thicknessPx = azBarThicknessPx();
-        View topHost = findViewById(R.id.place_az_bar_top);
-        if (topHost != null && topHost.getVisibility() == View.VISIBLE) {
-            applyAzBarHostGlass(R.id.place_az_bar_top_glass, R.id.place_az_bar_top_blur,
-                R.id.place_az_bar_top_surface, mAzBarTopOutline, thicknessPx);
-        }
-        View columnHost = findViewById(R.id.place_az_bar_column);
-        if (columnHost != null && columnHost.getVisibility() == View.VISIBLE) {
-            applyAzBarHostGlass(R.id.place_az_bar_column_glass, R.id.place_az_bar_column_blur,
-                R.id.place_az_bar_column_surface, mAzBarColumnOutline, thicknessPx);
-        }
+        View host = findViewById(R.id.place_az_bar_host);
+        if (host == null || host.getVisibility() != View.VISIBLE) return;
+        applyAzBarHostGlass(R.id.place_az_bar_host_glass, R.id.place_az_bar_host_blur,
+            R.id.place_az_bar_host_surface, mAzBarHostOutline, azBarThicknessPx());
     }
 
     /** The bar's own view inside a host, filling whatever box the host's padding leaves it. */
@@ -6930,57 +6845,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The top host: a plank of the bar's own thickness, inset from the screen's sides like the dock
-     * and clear of whatever the content column already puts above it.
+     * The one host, sized for the edge it is standing on. A row is a plank of the bar's own
+     * thickness, inset from the screen's sides like the dock; a column is a band of the same
+     * thickness running the content's height, clear of a status bar standing along the top and of
+     * the dock at the bottom. The edge stack it lives in carries the cutout and everything outside
+     * it, so the host itself is only ever the bar and its own air.
      */
-    private void layoutAzBarTopHost(@NonNull FrameLayout host) {
+    private void layoutAzBarHost(@NonNull FrameLayout host, @NonNull PlaceLayout.Edge edge) {
         int marginPx = azBarHostMarginPx();
         int thicknessPx = azBarThicknessPx();
-        ViewGroup.LayoutParams params = host.getLayoutParams();
-        if (params instanceof LinearLayout.LayoutParams) {
-            LinearLayout.LayoutParams linear = (LinearLayout.LayoutParams) params;
-            if (linear.height != thicknessPx || linear.topMargin != marginPx
-                || linear.bottomMargin != marginPx) {
-                linear.height = thicknessPx;
-                linear.topMargin = marginPx;
-                linear.bottomMargin = marginPx;
-                host.setLayoutParams(linear);
-            }
+        boolean column = edge.isOnSide();
+        LinearLayout.LayoutParams params =
+            host.getLayoutParams() instanceof LinearLayout.LayoutParams
+                ? (LinearLayout.LayoutParams) host.getLayoutParams()
+                : new LinearLayout.LayoutParams(0, 0);
+        int width = column ? azBarHostBandPx() : LinearLayout.LayoutParams.MATCH_PARENT;
+        int height = column ? LinearLayout.LayoutParams.MATCH_PARENT : thicknessPx;
+        int topMargin = column ? 0 : marginPx;
+        if (params.width != width || params.height != height
+            || params.topMargin != topMargin || params.bottomMargin != topMargin
+            || host.getLayoutParams() != params) {
+            params.width = width;
+            params.height = height;
+            params.topMargin = topMargin;
+            params.bottomMargin = topMargin;
+            host.setLayoutParams(params);
         }
-        int sideInsetPx = getDockLayout().horizontalInsetPx;
-        updateViewPadding(host, sideInsetPx, 0, sideInsetPx, 0);
-    }
-
-    /**
-     * The side host: the innermost column on its edge, running the content's own height — clear of
-     * a status bar standing along the top and of the dock at the bottom.
-     */
-    private void layoutAzBarColumnHost(@NonNull FrameLayout host, boolean right) {
-        int marginPx = azBarHostMarginPx();
-        int thicknessPx = azBarThicknessPx();
-        int edgeInsetPx = azBarColumnEdgeInsetPx(right);
-        ViewGroup.LayoutParams params = host.getLayoutParams();
-        if (params instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
-            int widthPx = AzBarHostGeometry.footprintPx(edgeInsetPx, marginPx, thicknessPx);
-            int gravity = (right ? Gravity.END : Gravity.START) | Gravity.TOP;
-            if (frame.width != widthPx || frame.gravity != gravity) {
-                frame.width = widthPx;
-                frame.gravity = gravity;
-                host.setLayoutParams(frame);
-            }
+        if (!column) {
+            int sideInsetPx = getDockLayout().horizontalInsetPx;
+            updateViewPadding(host, sideInsetPx, 0, sideInsetPx, 0);
+            return;
         }
         // The root is already clear of the system bars — the column lives inside that — so only
         // the launcher's own chrome is compensated here: a status bar standing along the top and
         // the dock's rows along the bottom. A status bar, rail or extra-keys column on this same
-        // side is answered by the edge inset above and never by the ends: the bar stands beside
-        // them, so counting one of them here cost the bar its whole length.
-        int edgePadPx = edgeInsetPx + marginPx;
+        // side is answered by the stack the host stands in and never by the ends: the bar stands
+        // beside them, so counting one of them here cost the bar its whole length.
         int topPadPx = AzBarHostGeometry.columnTopPaddingPx(marginPx, azBarTopChromeHeightPx());
         int bottomPadPx =
             AzBarHostGeometry.columnBottomPaddingPx(marginPx, azBarBottomChromeHeightPx());
-        updateViewPadding(host, right ? marginPx : edgePadPx, topPadPx,
-            right ? edgePadPx : marginPx, bottomPadPx);
+        updateViewPadding(host, marginPx, topPadPx, marginPx, bottomPadPx);
     }
 
     /** How much of the container's top a status bar standing along it holds. */
@@ -9435,31 +9339,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         DockLayout dockLayout = getDockLayout();
-        int railWidthPx = dockLayout.railWidthPx;
+        // The band the rail itself claims. The cutout it used to carry is the edge stack's now,
+        // so the rail is a plain column of icons and the two are never counted twice.
+        int railBandPx = dockRailBandPx(dockLayout);
         ViewGroup.LayoutParams scrollParams = railScroll.getLayoutParams();
-        if (scrollParams != null && scrollParams.width != railWidthPx) {
-            scrollParams.width = railWidthPx;
+        if (scrollParams != null && scrollParams.width != railBandPx) {
+            scrollParams.width = railBandPx;
             railScroll.setLayoutParams(scrollParams);
         }
-        if (scrollParams instanceof FrameLayout.LayoutParams) {
-            int gravity = (isDockRailOnRight() ? Gravity.END : Gravity.START) | Gravity.TOP;
-            FrameLayout.LayoutParams frameParams = (FrameLayout.LayoutParams) scrollParams;
-            if (frameParams.gravity != gravity) {
-                frameParams.gravity = gravity;
-                railScroll.setLayoutParams(frameParams);
-            }
-        }
         railScroll.setDrawerPullListener(mDockRailDrawerPullListener);
-        // Padded on all four sides rather than only vertically: the docked edge carries its cutout
-        // inset plus a margin, and the ends carry their own margin — the root already holds the
-        // rail's column clear of the status and navigation bars, so the rail does not pad for them
-        // a second time.
+        // Padded on all four sides rather than only vertically: every side carries the rail's own
+        // margin — the root already holds the rail's column clear of the status and navigation
+        // bars, and the stack holds it past the cutout, so the rail pads for neither again.
         int verticalPadPx = Math.round(dpToPx(10));
         int edgeMarginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
-        int dockedEdgePadPx = dockLayout.railEdgeInsetPx + edgeMarginPx;
-        railScroll.setPadding(isDockRailOnRight() ? edgeMarginPx : dockedEdgePadPx,
-            Math.max(verticalPadPx, statusColumnTopOffsetPx(isDockRailOnRight()) + verticalPadPx),
-            isDockRailOnRight() ? dockedEdgePadPx : edgeMarginPx, verticalPadPx);
+        railScroll.setPadding(edgeMarginPx, verticalPadPx, edgeMarginPx, verticalPadPx);
         railScroll.setClipToPadding(false);
         railList.removeAllViews();
         int iconSizePx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_ICON_SIZE_DP));
@@ -9509,16 +9403,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mProperties == null ? 1f : mProperties.getTerminalToolbarHeightScaleFactor());
     }
 
-    /** The column starts past the cutout, or past the rail when the rail holds the same edge. */
-    private int extraKeysColumnEdgeInsetPx(boolean right) {
-        if (isDockRailShown() && isDockRailOnRight() == right) return getDockLayout().railWidthPx;
-        return right ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft;
-    }
-
-    /** How far in from its edge the column reaches — what the content on that side is inset by. */
-    private int extraKeysColumnFootprintPx(boolean right) {
-        if (!isExtraKeysColumnActive() || isExtraKeysColumnOnRight() != right) return 0;
-        return ExtraKeysColumnGeometry.footprintPx(extraKeysColumnEdgeInsetPx(right),
+    /** The band the column claims: the keys, and their air either side. */
+    private int extraKeysColumnBandPx() {
+        return ExtraKeysColumnGeometry.footprintPx(0,
             Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP)),
             extraKeysColumnKeysWidthPx());
     }
@@ -9539,7 +9426,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
             return true;
         }
-        boolean right = isExtraKeysColumnOnRight();
         ExtraKeysView keys = mColumnExtraKeysView;
         if (keys == null || keys.getParent() != column) {
             column.removeAllViews();
@@ -9554,26 +9440,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mColumnExtraKeysView = keys;
             applyExtraKeysPlaceEligibility(keys);
         }
-        // Padded like the rail: the docked edge carries its inset plus a margin, and the keys stay
-        // clear of the status and navigation bars.
+        // Padded like the rail, with its own margin on every side. The stack it stands in carries
+        // the cutout and every band outside it, and the root is already padded away from the
+        // status and navigation bars — the column lives inside both — so it pads for neither
+        // again; adding them here left a bar's height of dead space at each end and squeezed the
+        // keys well under the height they ask for.
         int marginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
-        int edgePadPx = extraKeysColumnEdgeInsetPx(right) + marginPx;
         int verticalPadPx = Math.round(dpToPx(10));
-        // The column's own ends carry only their margin, and the bar's content where they share a
-        // column. The root is already padded away from the status and navigation bars — the column
-        // lives inside that — so adding them here left a bar's height of dead space at each end
-        // and squeezed the keys well under the height they ask for.
-        column.setPadding(right ? marginPx : edgePadPx,
-            Math.max(verticalPadPx, statusColumnTopOffsetPx(right) + verticalPadPx),
-            right ? edgePadPx : marginPx, verticalPadPx);
+        column.setPadding(marginPx, verticalPadPx, marginPx, verticalPadPx);
         ViewGroup.LayoutParams columnParams = column.getLayoutParams();
-        if (columnParams instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams frameParams = (FrameLayout.LayoutParams) columnParams;
-            int gravity = (right ? Gravity.END : Gravity.START) | Gravity.TOP;
-            if (frameParams.gravity != gravity) {
-                frameParams.gravity = gravity;
-                column.setLayoutParams(frameParams);
-            }
+        if (columnParams != null && columnParams.width != extraKeysColumnBandPx()) {
+            columnParams.width = extraKeysColumnBandPx();
+            column.setLayoutParams(columnParams);
         }
         // The keys are centred in the column at their preferred height, shrinking only when the
         // column is too short for all of them.
@@ -9617,6 +9495,127 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mInAppKeyboard.setPlaceOwnsSystemIme(isWidgetsPageShowing() || display, display);
     }
 
+    // ---------------------------------------------------------------- the edge stacks
+
+    /** The stack holding one edge, or null before the layout has been inflated. */
+    @Nullable
+    private com.termux.app.place.EdgeStackView edgeStack(@NonNull PlaceLayout.Edge edge) {
+        switch (edge) {
+            case TOP: return findViewById(R.id.place_edge_stack_top);
+            case BOTTOM: return findViewById(R.id.place_edge_stack_bottom);
+            case LEFT: return findViewById(R.id.place_edge_stack_left);
+            default: return findViewById(R.id.place_edge_stack_right);
+        }
+    }
+
+    /**
+     * The one view that draws an element on a given edge, or null where the element is still the
+     * dock's to draw. The pinned apps along the bottom are the dock's own row and the alphabets
+     * index rides it; the extra keys along the bottom are the toolbar pager. Those three are the
+     * accessory stack's, which L3 ports into the bottom stack — until then they are not this
+     * walk's to move, and an element whose slot puts it on the top edge with no view of its own
+     * simply keeps the bottom row it has always had ({@link PlaceLayout#appsRow} reads a top slot
+     * as the bottom for exactly that reason).
+     */
+    @Nullable
+    private View edgeStackHost(@NonNull Element element, @NonNull PlaceLayout.Edge edge) {
+        switch (element) {
+            case STATUS:
+                return findViewById(R.id.terminal_window_bar_host);
+            case AZ:
+                return edge == PlaceLayout.Edge.BOTTOM ? null : findViewById(R.id.place_az_bar_host);
+            case EXTRA_KEYS:
+                return edge == PlaceLayout.Edge.BOTTOM || edge == PlaceLayout.Edge.TOP
+                    ? null : findViewById(R.id.place_extra_keys_column);
+            case APPS:
+            default:
+                return edge.isOnSide() ? findViewById(R.id.dock_rail_scroll) : null;
+        }
+    }
+
+    /**
+     * Stands every movable bar on the edge the place asks for, in the order the policy gives it.
+     * One pass over the four stacks: a bar is a single view that changes parent, so nothing is
+     * built or thrown away and everything bound to it by id follows it across.
+     *
+     * <p>Nothing is ever taken out of a stack — a bar belongs to exactly one edge, so being put
+     * into its new stack is what takes it out of its old one, and a host no arrangement asks for
+     * is left where it last stood with its visibility off.
+     *
+     * @return whether anything actually moved
+     */
+    private boolean applyEdgeStacks(@NonNull PlaceLayout layout) {
+        boolean moved = false;
+        for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
+            com.termux.app.place.EdgeStackView stack = edgeStack(edge);
+            if (stack == null) continue;
+            List<View> bars = new ArrayList<>(4);
+            for (Element element : EdgeStackPolicy.stack(layout, edge)) {
+                View host = edgeStackHost(element, edge);
+                if (host != null && !bars.contains(host)) bars.add(host);
+            }
+            moved |= stack.setStack(bars);
+        }
+        return moved;
+    }
+
+    /**
+     * The walk, plus the one thing a re-parent costs: every glass crop is cut against where its
+     * surface was, so a bar that has changed edge invalidates them all — the way a turn of the
+     * screen does, and on the same pass rather than per frame.
+     */
+    private boolean applyEdgeStacksAndInvalidate(@NonNull PlaceLayout layout) {
+        boolean moved = applyEdgeStacks(layout);
+        if (moved) mChrome.onArrangementChanged();
+        return moved;
+    }
+
+    /** The display cutout each side stack starts past; the content's inset counts the same one. */
+    private void applyEdgeStackCutouts() {
+        com.termux.app.place.EdgeStackView left = edgeStack(PlaceLayout.Edge.LEFT);
+        if (left != null) left.setCutoutPx(mLastDisplayCutoutInsetLeft);
+        com.termux.app.place.EdgeStackView right = edgeStack(PlaceLayout.Edge.RIGHT);
+        if (right != null) right.setCutoutPx(mLastDisplayCutoutInsetRight);
+    }
+
+    /** The band the rail claims, without the cutout the stack under it already carries. */
+    private int dockRailBandPx(@NonNull DockLayout dockLayout) {
+        return Math.max(0, dockLayout.railWidthPx - dockLayout.railEdgeInsetPx);
+    }
+
+    /**
+     * Every band's thickness, measured where the activity already knows it, for the policy to add
+     * up. Each figure is the band the bar itself claims — its own margins included, never the
+     * cutout, which the stacks carry and the policy adds once.
+     */
+    @NonNull
+    private EdgeStackPolicy.Metrics buildEdgeStackMetrics() {
+        DockLayout dockLayout = getDockLayout();
+        float density = getResources().getDisplayMetrics().density;
+        boolean capsule = isRoundedDockStyle();
+        boolean compact = isStatusBarCompact();
+        // Only a rail that actually shows icons claims a band; an empty rail is gone, and the
+        // content then keeps just the cutout on that side like any other edge.
+        int appsColumnPx = isDockRailShown() ? dockRailBandPx(dockLayout) : 0;
+        // Off the dock the index gets a host of its own; on it, it is the dock's own row.
+        boolean lettersOffDock = isAzRowEnabled() && azBarEdge() != PlaceLayout.Edge.BOTTOM;
+        int azRowPx = lettersOffDock
+            ? AzBarHostGeometry.rowHeightPx(azBarHostMarginPx(), azBarThicknessPx())
+            : dockLayout.azRowHeightPx;
+        return EdgeStackPolicy.Metrics.builder()
+            .cutout(mLastDisplayCutoutInsetLeft, mLastDisplayCutoutInsetRight)
+            .status(com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
+                        PlaceLayout.Edge.TOP, capsule, compact, density),
+                com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
+                        PlaceLayout.Edge.LEFT, capsule, compact, density)
+                    + statusBarColumnOuterMarginPx())
+            .apps(dockLayout.appsBarHeightPx, appsColumnPx)
+            .az(azRowPx, lettersOffDock ? azBarHostBandPx() : 0)
+            .extraKeys(extraKeysColumnKeysWidthPx(),
+                isExtraKeysColumnActive() ? extraKeysColumnBandPx() : 0)
+            .build();
+    }
+
     private void syncPlaceLayout() {
         Trace.beginSection("Place.syncLayout");
         try {
@@ -9652,6 +9651,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (appliedForm != mInAppKeyboard.getForm()) syncDisplayTouchpad();
         }
         applyPlaceSystemImeOwner();
+        boolean stacksMoved = applyEdgeStacksAndInvalidate(layout);
         applyStatusBarEdge(layout);
         applyWidgetGridPreference();
         updateDockRailView();
@@ -9660,7 +9660,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The keys follow the wall, but their meanings do not: a key with nothing to act on where
         // the wall has landed is drawn dead until the wall moves again.
         applyExtraKeysPlaceEligibility();
-        if (arrangementChanged || columnChanged) {
+        if (arrangementChanged || columnChanged || stacksMoved) {
             // Rows collapse or come back with a column or a rail, and the render state that hides
             // them is derived rather than stored, so both are rebuilt here.
             setTerminalToolbarHeight();
@@ -9750,11 +9750,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStatusBarEdgeApplied = true;
         // The XML already stands the bar along the top; a place that wants it there costs nothing.
         if (first && edge == PlaceLayout.Edge.TOP) return;
-        ViewGroup column = findViewById(R.id.terminal_content_column);
-        ViewGroup container = findViewById(R.id.terminal_root_container);
-        if (column == null || container == null) return;
-        com.termux.app.statusbar.StatusBarEdgeArrangement.moveHost(host, column, container,
-            findViewById(R.id.activity_termux_root_relative_layout), edge,
+        // Which stack the host now stands in is the arrangement walk's answer; this only gives it
+        // the band that edge asks for and turns its contents to face the right way.
+        com.termux.app.statusbar.StatusBarEdgeArrangement.band(host, edge,
             targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact()));
         com.termux.app.statusbar.StatusBarEdgeArrangement.apply((ViewGroup) host, edge);
         if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
@@ -9769,9 +9767,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalWindowBarBackdropInsets();
         setTopStatusBarCollapsed(isStatusBarCompact(), false);
         refreshTerminalWindowBar();
-        // The bar's column is a content inset like the rail's, and the rail and the extra keys
-        // start below it when they share its edge; the arrangement pass this runs inside re-derives
-        // both, and the insets pass re-derives what the content gives up.
+        // The bar's column is a band on its edge like the rail's; the insets pass re-derives what
+        // the content gives up to the whole stack.
         if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
     }
 
@@ -9791,8 +9788,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : findViewById(R.id.terminal_window_bar_host);
         int windowBarPx = windowBarHost != null && windowBarHost.getVisibility() == View.VISIBLE
             ? windowBarHost.getHeight() : 0;
-        View azBarTop = findViewById(R.id.place_az_bar_top);
+        View azBarTop = findViewById(R.id.place_az_bar_host);
         int azBarTopPx = azBarTop != null && azBarTop.getVisibility() == View.VISIBLE
+            && mAzBarEdge == PlaceLayout.Edge.TOP
             ? AzBarHostGeometry.rowHeightPx(azBarHostMarginPx(), azBarThicknessPx()) : 0;
         int minTerminalPx = Math.round(dpToPx(72));
         return Math.max(0, rootHeightPx - windowBarPx - azBarTopPx - minTerminalPx

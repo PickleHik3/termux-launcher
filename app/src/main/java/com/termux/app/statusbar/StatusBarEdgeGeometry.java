@@ -10,9 +10,10 @@ import com.termux.app.place.PlaceLayout.Edge;
  *
  * <p>A bar along the top or the bottom is a row and costs the terminal height, which the content
  * column above and below it already accounts for; a bar down the left or the right is a column and
- * costs width, which is the same content-inset seam the apps rail and the extra keys column use.
- * The column starts past whatever already holds that edge — the display cutout, or the rail — so
- * three things can share one edge without any of them being drawn over.
+ * costs width, which is the same band on the same edge stack the apps rail and the extra keys
+ * column stand in. The stack starts past the display cutout and every band on an edge stands
+ * beside the ones outside it, so several things share one edge without any of them being drawn
+ * over — {@link com.termux.app.place.EdgeStackPolicy#contentInsets} adds them up.
  *
  * <p>Pure: no views, no resources, only densities and pixels.
  */
@@ -76,11 +77,6 @@ public final class StatusBarEdgeGeometry {
         return StatusBarGesturePolicy.isVertical(edge);
     }
 
-    /** Whether the bar holds the left or the right edge of the screen. */
-    public static boolean holdsSide(@NonNull Edge edge, boolean right) {
-        return edge == (right ? Edge.RIGHT : Edge.LEFT);
-    }
-
     public static float thicknessDp(@NonNull Edge edge, boolean capsule, boolean compact) {
         if (isVertical(edge)) {
             if (compact) return capsule ? COLUMN_COMPACT_CAPSULE_DP : COLUMN_COMPACT_DOCKED_DP;
@@ -120,52 +116,6 @@ public final class StatusBarEdgeGeometry {
             default:
                 return new Frame(0, 0, width, Math.min(height, thickness));
         }
-    }
-
-    /**
-     * How far in from one side the bar reaches, which is what the content there is inset by. A row
-     * costs no width at all, and a column costs nothing on the side it does not stand on.
-     */
-    public static int contentInsetPx(@NonNull Edge edge, boolean right, int thicknessPx,
-                                     int edgeInsetPx) {
-        if (!holdsSide(edge, right)) return 0;
-        return Math.max(0, edgeInsetPx) + Math.max(0, thicknessPx);
-    }
-
-    /**
-     * Whether a rail or extra-keys column on this side shares the bar's edge. They then stand in
-     * one column — one blended surface — with the bar nearest the top.
-     */
-    public static boolean sharesColumn(@NonNull Edge edge, boolean otherOnRight) {
-        return holdsSide(edge, otherOnRight);
-    }
-
-    /**
-     * How far down its column a rail or extra-keys column starts. The bar has the top of a column
-     * they share, so whatever else stands there begins under the bar's content rather than beside
-     * it; on any other edge nothing moves.
-     */
-    public static int columnTopOffsetPx(@NonNull Edge edge, boolean otherOnRight,
-                                        int barContentLengthPx) {
-        return sharesColumn(edge, otherOnRight) ? Math.max(0, barContentLengthPx) : 0;
-    }
-
-    /**
-     * How much of a shared column the bar's own content takes. The apps rail and the extra keys
-     * are lists that scroll to whatever length they need; the bar's content is a fixed handful of
-     * chips, so an even split is the honest division and it never leaves either side unusable.
-     */
-    public static final float SHARED_COLUMN_SHARE = 0.5f;
-
-    /** The bar's content never takes less than this of a column it shares, nor more than it has. */
-    public static final float SHARED_COLUMN_MIN_DP = 120f;
-
-    /** How far down a column the bar's content reaches when something else shares that column. */
-    public static int sharedColumnLengthPx(int columnLengthPx, float density) {
-        int column = Math.max(0, columnLengthPx);
-        int wanted = Math.max(Math.round(SHARED_COLUMN_MIN_DP * density),
-            Math.round(column * SHARED_COLUMN_SHARE));
-        return Math.min(column, wanted);
     }
 
     /**

@@ -60,38 +60,37 @@ public class StatusBarEdgeArrangementTest {
         mActivity.setContentView(mContainer);
     }
 
-    @Test public void aRowTakesTheTopOrTheBottomOfTheContentColumn() {
-        StatusBarEdgeArrangement.moveHost(mHost, mColumn, mContainer, mContentRoot, Edge.TOP, 96);
-        assertSame(mColumn, mHost.getParent());
-        assertEquals(0, mColumn.indexOfChild(mHost));
+    @Test public void aRowSpansItsStackAndTakesTheThicknessOffItsDepth() {
+        StatusBarEdgeArrangement.band(mHost, Edge.TOP, 96);
         assertEquals(96, mHost.getLayoutParams().height);
         assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, mHost.getLayoutParams().width);
 
-        StatusBarEdgeArrangement.moveHost(mHost, mColumn, mContainer, mContentRoot, Edge.BOTTOM, 96);
-        assertSame(mColumn, mHost.getParent());
-        assertEquals("last, so the terminal keeps the middle and the dock is right below",
-            mColumn.getChildCount() - 1, mColumn.indexOfChild(mHost));
+        StatusBarEdgeArrangement.band(mHost, Edge.BOTTOM, 32);
+        assertEquals(32, mHost.getLayoutParams().height);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, mHost.getLayoutParams().width);
     }
 
-    @Test public void aColumnStandsBesideTheContentRootInFrontOfTheRail() {
-        StatusBarEdgeArrangement.moveHost(mHost, mColumn, mContainer, mContentRoot, Edge.RIGHT, 76);
-        assertSame(mContainer, mHost.getParent());
-        assertEquals(mContainer.indexOfChild(mContentRoot) + 1, mContainer.indexOfChild(mHost));
-        assertEquals("in front of the rail, which draws over it where they share a column",
-            true, mContainer.indexOfChild(mHost) < mContainer.indexOfChild(mRail));
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) mHost.getLayoutParams();
-        assertEquals(76, params.width);
-        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, params.height);
-        assertEquals(Gravity.END | Gravity.TOP, params.gravity);
+    @Test public void aColumnSpansTheScreenAndTakesItsThicknessOffTheWidth() {
+        StatusBarEdgeArrangement.band(mHost, Edge.RIGHT, 76);
+        assertEquals(76, mHost.getLayoutParams().width);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, mHost.getLayoutParams().height);
 
-        StatusBarEdgeArrangement.moveHost(mHost, mColumn, mContainer, mContentRoot, Edge.LEFT, 76);
-        assertEquals(Gravity.START | Gravity.TOP,
-            ((FrameLayout.LayoutParams) mHost.getLayoutParams()).gravity);
-
-        // And back to a row, in the column it came from.
-        StatusBarEdgeArrangement.moveHost(mHost, mColumn, mContainer, mContentRoot, Edge.TOP, 32);
-        assertSame(mColumn, mHost.getParent());
+        // And back to a row: one host, one set of params, turned rather than rebuilt.
+        StatusBarEdgeArrangement.band(mHost, Edge.TOP, 32);
         assertEquals(32, mHost.getLayoutParams().height);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, mHost.getLayoutParams().width);
+    }
+
+    @Test public void theStylesOwnScreenMarginsSurviveTheTurn() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 96);
+        params.setMargins(7, 5, 7, 3);
+        mHost.setLayoutParams(params);
+        StatusBarEdgeArrangement.band(mHost, Edge.LEFT, 76);
+        LinearLayout.LayoutParams after = (LinearLayout.LayoutParams) mHost.getLayoutParams();
+        assertEquals(7, after.leftMargin);
+        assertEquals(5, after.topMargin);
+        assertEquals(3, after.bottomMargin);
     }
 
     @Test public void aColumnStandsTheSameContentOnItsSideAndTheRowStandsItBack() {

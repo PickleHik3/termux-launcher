@@ -16,16 +16,16 @@ import java.util.List;
  * instead of each spelling the arrangement out again.
  *
  * <p>An edge is a stack: {@link #stack} lists what is on it outermost first, and an edge's content
- * inset is simply the sum of those bands' thicknesses. That replaces the hand-written {@code max()}
+ * inset is simply the sum of those bands' thicknesses. That replaced the hand-written {@code max()}
  * chain in {@code TermuxActivity.applyTerminalOverlayInsets}, where each column carried the whole
- * reach of every column outside it and the widest won.
+ * reach of every column outside it and the widest won. One {@link EdgeStackView} per edge is what
+ * draws the answer.
  *
- * <p><b>One deliberate difference from the shipped chain.</b> Today a status bar standing in a
- * column on the same edge as the apps rail or the extra keys does not stand <em>beside</em> them:
- * the two share one column, the bar taking the top half of it
- * ({@code StatusBarEdgeGeometry.sharedColumnLengthPx}), so the edge costs the wider of the two
- * rather than both. Here they stack like everything else and the edge costs both. That merge is
- * what the Layout-freedom work replaces with an order the user can set; every other arrangement
+ * <p><b>One deliberate difference from the shipped chain.</b> A status bar standing in a column on
+ * the same edge as the apps rail or the extra keys used not to stand <em>beside</em> them: the two
+ * shared one column, the bar taking the top half of it, so the edge cost the wider of the two
+ * rather than both. They stack like everything else now and the edge costs both. That merge is
+ * what the Layout-freedom work replaced with an order the user can set; every other arrangement
  * the old model could express comes out byte-for-byte the same.
  *
  * <p>Two rules are kept from the old model and are not ours to change:

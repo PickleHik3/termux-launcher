@@ -81,6 +81,17 @@
             android:clipChildren="false"
             android:clipToPadding="false">
 
+            <!-- The top edge's stack: every bar the place stands along the top, outermost first,
+                 in the order EdgeStackPolicy.stack gives them. TermuxActivity.applyEdgeStacks()
+                 re-parents them; what is declared inside here is only where they start. -->
+            <com.termux.app.place.EdgeStackView
+                android:id="@+id/place_edge_stack_top"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:edgeStackEdge="top"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
             <!-- App-owned top glass pane: the modular widget slot above the bottom-aligned
                  window row. The glass backdrop is extended behind the system status bar in
                  applyTerminalOverlayInsets(). -->
@@ -363,7 +374,7 @@
                  the status bar wherever that is on top and takes its slice of the terminal's
                  height between the side columns. syncAzBarHosts() sizes, glazes and fills it. -->
             <FrameLayout
-                android:id="@+id/place_az_bar_top"
+                android:id="@+id/place_az_bar_host"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:clipChildren="false"
@@ -373,23 +384,24 @@
                 <!-- The glass sheet is exactly the plank, so it is the thing the rounded
                      outline clips; the host around it stays unclipped for the wave's lift. -->
                 <FrameLayout
-                    android:id="@+id/place_az_bar_top_glass"
+                    android:id="@+id/place_az_bar_host_glass"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent">
 
                     <com.github.mmin18.widget.RealtimeBlurView
-                        android:id="@+id/place_az_bar_top_blur"
+                        android:id="@+id/place_az_bar_host_blur"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         app:realtimeBlurRadius="10dp"
                         app:realtimeOverlayColor="@android:color/transparent" />
 
                     <View
-                        android:id="@+id/place_az_bar_top_surface"
+                        android:id="@+id/place_az_bar_host_surface"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
                 </FrameLayout>
             </FrameLayout>
+            </com.termux.app.place.EdgeStackView>
 
             <FrameLayout
                 android:id="@+id/terminal_surface_host"
@@ -437,6 +449,18 @@
                     android:layout_height="match_parent"
                     android:visibility="gone" />
             </FrameLayout>
+
+            <!-- The bottom edge's stack, inside the content column so its bars stand on the
+                 terminal's own height above the dock — which is exactly where a bottom status bar
+                 has always been. The dock's own rows (apps, A-Z, extra keys) are still the
+                 accessory stack below; L3 ports them into this one. -->
+            <com.termux.app.place.EdgeStackView
+                android:id="@+id/place_edge_stack_bottom"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:edgeStackEdge="bottom"
+                android:clipChildren="false"
+                android:clipToPadding="false" />
         </LinearLayout>
 
         <RelativeLayout
@@ -935,68 +959,56 @@
             android:visibility="gone" />
         </RelativeLayout>
 
-        <!-- Landscape-only vertical dock rail. A sibling of the padded content root so it can
-             occupy the display-cutout column the terminal is inset from. updateDockRailView()
-             sizes and populates it, and moves the gravity to the preferred edge. -->
-        <com.termux.app.launcher.drawer.DockRailScrollView
-            android:id="@+id/dock_rail_scroll"
+        <!-- The two side stacks. Siblings of the padded content root, so their bars occupy the
+             display-cutout column the terminal is inset from; each carries the cutout on its own
+             side as padding, so every bar inside it is a plain band of its own thickness and the
+             edge's whole reach is what EdgeStackPolicy.contentInsets answers.
+             applyEdgeStacks() re-parents the bars between the two and orders them; what is
+             declared inside the left one is only where they start. -->
+        <com.termux.app.place.EdgeStackView
+            android:id="@+id/place_edge_stack_left"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:layout_gravity="start"
-            android:scrollbars="none"
-            android:overScrollMode="never"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:id="@+id/dock_rail_list"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center_horizontal" />
-        </com.termux.app.launcher.drawer.DockRailScrollView>
-
-        <!-- The extra keys, standing in a column on one edge when the place on screen asks for
-             that. A sibling of the padded content root like the rail, for the same reason;
-             syncExtraKeysColumn() fills, sizes and places it. -->
-        <FrameLayout
-            android:id="@+id/place_extra_keys_column"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="start"
-            android:clipToPadding="false"
-            android:visibility="gone" />
-
-        <!-- The alphabets bar standing in a column on one edge. A sibling of the padded content
-             root like the rail and the extra keys column, and the innermost of them: it starts past
-             whatever else holds its edge, so several columns share one side without overdrawing.
-             syncAzBarHosts() sizes, glazes, places and fills it. -->
-        <FrameLayout
-            android:id="@+id/place_az_bar_column"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_gravity="start"
+            app:edgeStackEdge="left"
             android:clipChildren="false"
-            android:clipToPadding="false"
-            android:visibility="gone">
+            android:clipToPadding="false">
 
+            <!-- Vertical dock rail. updateDockRailView() sizes and populates it. -->
+            <com.termux.app.launcher.drawer.DockRailScrollView
+                android:id="@+id/dock_rail_scroll"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:scrollbars="none"
+                android:overScrollMode="never"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/dock_rail_list"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal" />
+            </com.termux.app.launcher.drawer.DockRailScrollView>
+
+            <!-- The extra keys standing off the dock; syncExtraKeysHost() fills and sizes it. -->
             <FrameLayout
-                android:id="@+id/place_az_bar_column_glass"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:id="@+id/place_extra_keys_column"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
-                    android:id="@+id/place_az_bar_column_blur"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    app:realtimeBlurRadius="10dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+        </com.termux.app.place.EdgeStackView>
 
-                <View
-                    android:id="@+id/place_az_bar_column_surface"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-            </FrameLayout>
-        </FrameLayout>
+        <com.termux.app.place.EdgeStackView
+            android:id="@+id/place_edge_stack_right"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            app:edgeStackEdge="right"
+            android:clipChildren="false"
+            android:clipToPadding="false" />
 
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
