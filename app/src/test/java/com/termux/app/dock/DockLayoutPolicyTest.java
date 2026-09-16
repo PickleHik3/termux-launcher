@@ -44,26 +44,31 @@ public class DockLayoutPolicyTest {
         // The band under the apps row is the page ticks' own strip (9dp = 25px) rather than the
         // 3dp of air it used to be, because the dock's row carries the same indicator every other
         // edge does instead of the FX layer painting one over the glass.
-        // Q7: a shared row's band is the icon and 6dp of air on each side (17px at this density),
-        // so `appsBar` is `icon + 34` and `hint` — the box the icon is centred in — is the icon
-        // itself. The `icon` column is the snapshot of what each preset drew before this rule and
-        // must not move: the preset scales the icon, and only the air around it was trimmed.
+        // Q7: a shared row's band is the icon and its air on each side, and `hint` — the box the
+        // icon is centred in — is the icon itself. The `icon` column is the snapshot of what each
+        // preset drew before that rule and must not move: the preset scales the icon, and only the
+        // air around it ever changes.
+        // Q8: that air is the band the page ticks stand in (9dp = 25px here) wherever the row
+        // carries them, because the strip draws inside the air instead of stacking on it. The row
+        // view is the band less the strip's share of it, so `appsBar` is `icon + 25` and the host
+        // — the pair of them — is `icon + 50`, 9px shorter than the `icon + 34` plus a 25px band
+        // it used to be. A rail carries no strip across its row axis, so its columns keep 17.
         Object[][] rows = {
-            {1.72f, false, false, 109, 75, 52, 25, 0, 67, 17, 17, 289, 88, 1.3068f, 75},
+            {1.72f, false, false, 100, 75, 52, 25, 0, 67, 25, 25, 280, 88, 1.3068f, 75},
             {1.72f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.3068f, 75},
-            {1.72f, true, false, 117, 83, 52, 25, 28, 67, 17, 17, 297, 83, 1.7252f, 83},
+            {1.72f, true, false, 108, 83, 52, 25, 28, 67, 25, 25, 288, 83, 1.7252f, 83},
             {1.72f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 1.7252f, 83},
-            {1.95f, false, false, 125, 91, 52, 25, 0, 67, 17, 17, 305, 88, 1.487604f, 91},
+            {1.95f, false, false, 116, 91, 52, 25, 0, 67, 25, 25, 296, 88, 1.487604f, 91},
             {1.95f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.487604f, 91},
-            {1.95f, true, false, 130, 96, 52, 25, 28, 67, 17, 17, 310, 83, 1.9633334f, 96},
+            {1.95f, true, false, 121, 96, 52, 25, 28, 67, 25, 25, 301, 83, 1.9633334f, 96},
             {1.95f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 1.9633334f, 96},
-            {2.18f, false, false, 144, 110, 52, 25, 0, 67, 17, 17, 324, 88, 1.68f, 110},
+            {2.18f, false, false, 135, 110, 52, 25, 0, 67, 25, 25, 315, 88, 1.68f, 110},
             {2.18f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.68f, 110},
-            {2.18f, true, false, 142, 108, 52, 25, 28, 67, 17, 17, 322, 83, 2.21312f, 108},
+            {2.18f, true, false, 133, 108, 52, 25, 28, 67, 25, 25, 313, 83, 2.21312f, 108},
             {2.18f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 2.21312f, 108},
-            {2.45f, false, false, 162, 128, 52, 25, 0, 67, 17, 17, 342, 88, 1.89072f, 128},
+            {2.45f, false, false, 153, 128, 52, 25, 0, 67, 25, 25, 333, 88, 1.89072f, 128},
             {2.45f, false, true, 0, 0, 69, 0, 0, 67, 17, 17, 172, 88, 1.89072f, 128},
-            {2.45f, true, false, 156, 122, 52, 25, 28, 67, 17, 17, 336, 83, 2.508f, 122},
+            {2.45f, true, false, 147, 122, 52, 25, 28, 67, 25, 25, 327, 83, 2.508f, 122},
             {2.45f, true, true, 0, 0, 69, 0, 28, 67, 17, 17, 172, 83, 2.508f, 122},
         };
         List<Object[]> cases = new ArrayList<>();
@@ -110,6 +115,9 @@ public class DockLayoutPolicyTest {
             // standing along the top is off the dock too and is covered by its own test below.
             .appsRowOnEdge(appsRowOnEdge)
             .appsOnRail(appsRowOnEdge)
+            // A rail's ticks stand in a column beside it, so they are no part of its row axis.
+            // Every row that lies down carries them inside its own air.
+            .appsRowPageStripShown(!appsRowOnEdge)
             .density(DENSITY)
             .barHeightScale(preset)
             .dockHorizontalInsetDp(INSET_DP)
@@ -156,26 +164,53 @@ public class DockLayoutPolicyTest {
 
     /**
      * The rule the whole table is an instance of: a row sharing its container is one icon and the
-     * letters' own crown on each side of it, on every preset step and in both styles. The icon is
-     * pinned to what it drew before the rule, so nothing but the air moved.
+     * same air on each side of it, on every preset step and in both styles — the band the page
+     * ticks stand in while it carries them, and the letters' own crown while it does not. The icon
+     * is pinned to what it drew before the rule, so nothing but the air moved.
      */
     @Test
-    public void aSharedRowIsTheIconAndTheLettersCrownOnEachSide() {
+    public void aSharedRowIsTheIconAndTheSameAirOnEachSide() {
+        boolean stripShown = !appsRowOnEdge;
         DockLayout l = compute();
-        int airPx = DockLayoutPolicy.sharedRowAirPx(DENSITY);
-        assertEquals("6dp at density 2.75", 17, airPx);
-        assertEquals("the air is the letters' crown, one constant for both",
+        int airPx = DockLayoutPolicy.rowAirPx(false, stripShown, DENSITY);
+        assertEquals(stripShown ? "9dp at density 2.75" : "6dp at density 2.75",
+            stripShown ? 25 : 17, airPx);
+        assertEquals("the plain air is the letters' crown, one constant for both",
             AccessoryStackLayoutPolicy.AZ_ROW_CROWN_DP, DockLayoutPolicy.SHARED_ROW_AIR_DP, 0f);
         assertEquals("appsRowIconPx", expectedIconPx, l.appsRowIconPx);
         assertEquals(airPx, l.appsTopPaddingPx);
-        assertEquals(airPx, l.appsBottomPaddingPx);
+        assertEquals("the air is the same on both sides, so the icon is in the middle of it",
+            l.appsTopPaddingPx, l.appsBottomPaddingPx);
         assertEquals("band = icon + 2 x air", expectedIconPx + (2 * airPx), l.appsRowBandPx);
         // The box the icon is centred in is the icon: the air is the padding around it.
         assertEquals(expectedIconPx, l.appsRowBandHintPx);
-        // And the strip stands beside that air rather than growing it — the row's host is the
-        // band plus the ticks' own band, which is what P7 added.
-        assertEquals(expectedIconPx + (2 * airPx) + l.indicatorBandHeightPx,
-            l.appsRowBandPx + l.indicatorBandHeightPx);
+        // And the ticks stand inside that air rather than beside it: the strip's band and the
+        // row's own view are the band between them, and the row keeps nothing on that side.
+        assertEquals(stripShown ? 25 : 0, l.appsRowStripBandPx);
+        assertEquals(l.appsRowBandPx, l.appsRowViewBandPx() + l.appsRowStripBandPx);
+        assertEquals(stripShown ? 0 : airPx, l.appsRowPaddingBesideTicksPx());
+    }
+
+    /**
+     * The same rule with the ticks switched off, which is the shape the row had before they were
+     * its air: 6dp of the letters' crown on each side, and no band to share it with.
+     */
+    @Test
+    public void aRowWithNoTicksKeepsThePlainSixDpOfAir() {
+        DockLayout l = DockLayoutPolicy.compute(inputs(preset, capsule, appsRowOnEdge)
+            .appsRowPageStripShown(false)
+            .displayCutoutInsetLeftPx(cutoutPx)
+            .build());
+        int airPx = DockLayoutPolicy.sharedRowAirPx(DENSITY);
+        assertEquals(17, airPx);
+        assertEquals("the icon is the preset's, whatever the air does",
+            expectedIconPx, l.appsRowIconPx);
+        assertEquals(airPx, l.appsTopPaddingPx);
+        assertEquals(airPx, l.appsBottomPaddingPx);
+        assertEquals(expectedIconPx + (2 * airPx), l.appsRowBandPx);
+        assertEquals(0, l.appsRowStripBandPx);
+        assertEquals(0, l.indicatorBandHeightPx);
+        assertEquals(l.appsRowBandPx, l.appsRowViewBandPx());
     }
 
     /**
@@ -263,13 +298,14 @@ public class DockLayoutPolicyTest {
         assertFalse(top.appsRowEnabled);
         assertFalse(top.railActive);
         assertEquals(0, top.appsBarHeightPx);
-        // The band it claims up there is the height it had at the bottom.
-        assertEquals(142, top.appsRowBandPx);
+        // The band it claims up there is the height it had at the bottom, ticks and all.
+        assertEquals(158, top.appsRowBandPx);
+        assertEquals("and it carries them up there too", 25, top.appsRowStripBandPx);
         // And the row still knows how tall its icons may be. The dock's own hint is zero up here —
         // the dock has no row — and a row with no hint scales its icons to whatever host it was
         // lent to, which off the dock is a plank rather than a row.
         assertEquals(0, top.appsBarHeightHintPx);
-        assertEquals(142 - top.appsTopPaddingPx - top.appsBottomPaddingPx, top.appsRowBandHintPx);
+        assertEquals(158 - top.appsTopPaddingPx - top.appsBottomPaddingPx, top.appsRowBandHintPx);
         assertEquals(top.appsRowIconPx, top.appsRowBandHintPx);
         assertTrue(top.appsRowBandHintPx > 0);
     }
@@ -281,24 +317,32 @@ public class DockLayoutPolicyTest {
         DockLayout shared = DockLayoutPolicy.compute(inputs(2.18f, true, false).build());
         DockLayout alone = DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .appsRowAlone(true).build());
-        int airPx = DockLayoutPolicy.loneRowAirPx(DENSITY);
-        assertEquals("4dp at density 2.75", 11, airPx);
-        assertEquals(airPx, alone.appsTopPaddingPx);
-        assertEquals(airPx, alone.appsBottomPaddingPx);
+        // P8's sliver, which is what a lone row that carries no ticks still keeps.
+        DockLayout aloneNoTicks = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .appsRowAlone(true).appsRowPageStripShown(false).build());
+        int sliverPx = DockLayoutPolicy.loneRowAirPx(DENSITY);
+        assertEquals("4dp at density 2.75", 11, sliverPx);
+        assertEquals(sliverPx, aloneNoTicks.appsTopPaddingPx);
+        assertEquals(sliverPx, aloneNoTicks.appsBottomPaddingPx);
+        assertEquals(135 + (2 * sliverPx), aloneNoTicks.appsRowBandPx);
+        // Updated for Q8 with a reason: a lone row showing its ticks is symmetric about its icons
+        // like any other, so the band the ticks stand in is its air on both sides.
+        assertEquals(25, alone.appsTopPaddingPx);
+        assertEquals(25, alone.appsBottomPaddingPx);
         // The icon is the same size either way: only the air around it changes.
         assertEquals(shared.appsRowIconPx, alone.appsRowIconPx);
-        // P8's numbers, untouched: a lone row is still formed around the preset's own baseline
-        // with 4dp either side of it, so the plank draws exactly the band it drew.
+        // P8's baseline, untouched: a lone row is still formed around the preset's own baseline
+        // rather than around the icon, so the box its icons stand in is the one it drew.
         assertEquals(135, alone.appsRowBandHintPx);
-        assertEquals(135 + (2 * airPx), alone.appsRowBandPx);
+        assertEquals(135 + 50, alone.appsRowBandPx);
         // Updated for Q7 with a reason: the shared row is the tighter of the two now. Its band is
-        // the icon and 6dp, where the lone row's is a baseline that still carries the preset's
+        // the icon and its air, where the lone row's is a baseline that still carries the preset's
         // leftover around the same icon.
         assertTrue("and the shared row is the tighter for it",
             shared.appsRowBandPx < alone.appsRowBandPx);
-        assertEquals(17, shared.appsTopPaddingPx);
-        assertEquals(17, shared.appsBottomPaddingPx);
-        assertEquals(shared.appsRowIconPx + 34, shared.appsRowBandPx);
+        assertEquals(25, shared.appsTopPaddingPx);
+        assertEquals(25, shared.appsBottomPaddingPx);
+        assertEquals(shared.appsRowIconPx + 50, shared.appsRowBandPx);
     }
 
     @Test
@@ -358,7 +402,9 @@ public class DockLayoutPolicyTest {
         // The band belongs to the apps row, not to the gap between two rows: it is where the page
         // ticks stand, and the row still has pages with the letters switched off.
         assertEquals(25, noAz.indicatorBandHeightPx);
-        assertEquals(142, noAz.appsBarHeightPx);
+        // The row view is the band less the band the ticks stand in, which is the other 25.
+        assertEquals(133, noAz.appsBarHeightPx);
+        assertEquals(158, noAz.appsRowBandPx);
 
         DockLayout noApps = DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .appsRowEnabledPref(false).rowOverAz(false).build());
@@ -394,7 +440,8 @@ public class DockLayoutPolicyTest {
         // the icon and the air together. The air is a constant now, so the drag lands where the
         // size preset does — on the icon — and the band follows it.
         assertTrue(grown.appsRowIconPx > base.appsRowIconPx);
-        assertEquals(grown.appsRowIconPx + 34, grown.appsBarHeightPx);
+        assertEquals(grown.appsRowIconPx + 25, grown.appsBarHeightPx);
+        assertEquals(grown.appsRowIconPx + 50, grown.appsRowBandPx);
         assertTrue(grown.appsBarHeightPx > base.appsBarHeightPx);
         assertEquals(base.appsBarHeightPx, DockLayoutPolicy.compute(inputs(2.18f, true, false)
             .additionalAppsBarHeightPx(-30).build()).appsBarHeightPx);

@@ -8,6 +8,8 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 
 import com.termux.R;
+import com.termux.app.dock.DockLayout;
+import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
@@ -17,6 +19,7 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.Slot;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -173,6 +176,47 @@ public class TermuxActivityPageIndicatorTest {
             assertEquals(edge + ": the ticks run the way the row does",
                 PageTickStrip.verticalOn(edge), bound.isVerticalForm());
         }
+    }
+
+    /**
+     * A row lying along the top edge is the dock's own band turned over: the ticks stand on its
+     * centre-facing side, which up there is under the icons, and the band they stand in is that
+     * side's air rather than one added to it. So the icon is in the middle of the band on that
+     * edge too, and the plank the row stands on is the band and nothing more.
+     */
+    @Test
+    public void aRowLyingOnTheTopEdgeIsSymmetricAboutItsIconToo() {
+        TermuxActivity activity = inflate();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
+        assertNotNull(preferences);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+
+        SuggestionBarView bar = standOn(activity, Edge.TOP);
+        PageTickStripView strip = bar.boundPageIndicator();
+        assertNotNull(strip);
+        LinearLayout host = (LinearLayout) strip.getParent();
+        View row = bandHolding(host, bar);
+        assertNotNull(row);
+
+        DockLayout dock = activity.dockLayoutFor(layoutWithAppsOn(Edge.TOP));
+        float density = activity.getResources().getDisplayMetrics().density;
+        int airPx = DockLayoutPolicy.rowAirPx(false, true, density);
+        assertTrue("the row has to have a band for this to mean anything",
+            dock.appsRowBandHintPx > 0);
+        assertEquals("the band is the icons' box and its air on each side",
+            dock.appsRowBandHintPx + (2 * airPx), dock.appsRowBandPx);
+
+        // The ticks trail the row up here, so the air under the icons is their band and the row
+        // keeps the whole of the air over them.
+        assertTrue("the ticks stand under the icons on the top edge",
+            host.indexOfChild(strip) > host.indexOfChild(row));
+        assertEquals(dock.appsRowStripBandPx, strip.getLayoutParams().height);
+        assertEquals(dock.appsRowViewBandPx(), row.getLayoutParams().height);
+        assertEquals("air over the icons", airPx, row.getPaddingTop());
+        assertEquals("and the same under them", airPx,
+            row.getPaddingBottom() + strip.getLayoutParams().height);
+        assertEquals("the host is the band, with nothing reserved for the strip",
+            dock.appsRowBandPx, row.getLayoutParams().height + strip.getLayoutParams().height);
     }
 
     @Test

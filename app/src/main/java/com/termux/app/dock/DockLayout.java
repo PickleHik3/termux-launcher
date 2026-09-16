@@ -92,6 +92,13 @@ public final class DockLayout {
      * still has a ceiling of its own instead of scaling to whatever host it was lent to.
      */
     public final int appsRowBandHintPx;
+    /**
+     * The band the row's page ticks stand in, which is part of the row's air on its centre-facing
+     * side rather than a band beside it: a host carrying the strip gives it this and takes it off
+     * the row's own padding on that side, so the two together are {@link #appsTopPaddingPx}. Zero
+     * while the row shows no ticks, and for a rail, whose ticks stand in a column of their own.
+     */
+    public final int appsRowStripBandPx;
 
     /** The top pane's compact height in the active style, read by the drawer's top-band clip. */
     public final int compactStatusBarHeightPx;
@@ -139,6 +146,7 @@ public final class DockLayout {
         this.appsRowBandPx = Math.max(0, b.appsRowBandPx);
         this.appsRowBandHintPx = Math.max(0, b.appsRowBandHintPx);
         this.appsRowIconPx = Math.max(0, b.appsRowIconPx);
+        this.appsRowStripBandPx = Math.max(0, b.appsRowStripBandPx);
         this.compactStatusBarHeightPx = b.compactStatusBarHeightPx;
         this.mConfiguredCornerRadiusDp = b.configuredCornerRadiusDp;
     }
@@ -150,6 +158,23 @@ public final class DockLayout {
     public float capsuleCornerRadiusPx(int surfaceHeightPx) {
         return DockLayoutPolicy.capsuleCornerRadiusPx(mConfiguredCornerRadiusDp, surfaceHeightPx,
             density);
+    }
+
+    /**
+     * The height of the row's own view inside its host: the band less the band the ticks stand in,
+     * which the host gives the strip. A row showing no ticks is the whole band.
+     */
+    public int appsRowViewBandPx() {
+        return Math.max(0, appsRowBandPx - appsRowStripBandPx);
+    }
+
+    /**
+     * The row view's own padding on the side its ticks stand on: the air there, less the band the
+     * strip already fills. Zero wherever the strip's band is the whole of that air, which is what
+     * keeps the host from reserving anything extra for it.
+     */
+    public int appsRowPaddingBesideTicksPx() {
+        return Math.max(0, appsTopPaddingPx - appsRowStripBandPx);
     }
 
     /** The dock's stacked height for the given extra-keys toolbar height. */
@@ -204,6 +229,7 @@ public final class DockLayout {
         int appsRowBandPx;
         int appsRowBandHintPx;
         int appsRowIconPx;
+        int appsRowStripBandPx;
         int compactStatusBarHeightPx;
         int configuredCornerRadiusDp;
 

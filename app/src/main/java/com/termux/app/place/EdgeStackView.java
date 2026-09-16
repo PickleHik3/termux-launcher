@@ -254,9 +254,19 @@ public class EdgeStackView extends LinearLayout {
     }
 
     /**
+     * A child that is its band's own air rather than its content. The page ticks are the one of
+     * these: the strip stands in the air the row keeps on its centre-facing side instead of in a
+     * band beside it, so a hairline splits the gap around the ticks the way it splits any other
+     * air. Counted as content, that air was only ever on one side of the icons and the row read
+     * lopsided between its two hairlines.
+     */
+    public interface Air {}
+
+    /**
      * The bar standing at one end of a band: the drawn child reaching nearest that end. A child
      * that is gone or has collapsed to nothing is not a bar — the apps row's own host holds a
-     * collapsed pager whenever the row stands somewhere else.
+     * collapsed pager whenever the row stands somewhere else — and neither is one that is the
+     * band's {@link Air}.
      */
     @Nullable
     private static View drawnChildAt(@NonNull View band, boolean column, boolean atStart) {
@@ -266,6 +276,7 @@ public class EdgeStackView extends LinearLayout {
         for (int index = 0; index < group.getChildCount(); index++) {
             View child = group.getChildAt(index);
             if (child.getVisibility() == GONE) continue;
+            if (child instanceof Air) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (found == null) {
                 found = child;
