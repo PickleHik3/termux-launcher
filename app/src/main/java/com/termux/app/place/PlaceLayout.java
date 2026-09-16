@@ -3,7 +3,10 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * One place's arrangement, already resolved for one orientation: what stands on which edge, whether
@@ -135,31 +138,133 @@ public final class PlaceLayout {
         }
     }
 
+    /**
+     * Every element's slot: the whole truth about what stands where on this place. The fields
+     * under it are derived views over this map, kept so that callers written against the old
+     * model still read.
+     */
+    @NonNull private final Map<Element, Slot> mSlots;
+
+    /** @deprecated read {@code slot(Element.STATUS).edge}. */
     @NonNull public final Edge statusBarEdge;
+    /** @deprecated read {@code slot(Element.APPS)}; a slot on the top edge reads as BOTTOM here. */
     @NonNull public final RowPlacement appsRow;
+    /** @deprecated read {@code !slot(Element.AZ).hidden}. */
     public final boolean azRowShown;
-    /** Where the alphabets bar stands when it rides on its own; ignored while it sits under the
-     *  apps row, where it always rides along the bottom regardless of what is stored here. */
+    /**
+     * Where the alphabets bar stands when it rides on its own; ignored while it sits under the
+     * apps row, where it always rides along the bottom regardless of what is stored here.
+     *
+     * @deprecated read {@code slot(Element.AZ).edge}, or
+     *     {@link PlaceChromePolicy#azBarEdge} for the edge it actually draws on.
+     */
     @NonNull public final Edge azBarEdge;
+    /**
+     * @deprecated read {@code slot(Element.EXTRA_KEYS)}; a slot on the top edge reads as BOTTOM
+     *     here.
+     */
     @NonNull public final RowPlacement extraKeys;
     @NonNull public final KeyboardMode keyboardMode;
     @NonNull public final KeyboardForm keyboardForm;
     public final int widgetColumns;
     public final int widgetRows;
 
+    /**
+     * The arrangement as the old model spelled it. Kept so that every caller and test written
+     * before slots existed still builds one; it fills each element's slot with the position that
+     * element has always been drawn at ({@link Element#defaultOrder}).
+     */
     public PlaceLayout(@NonNull Edge statusBarEdge, @NonNull RowPlacement appsRow,
                        boolean azRowShown, @NonNull Edge azBarEdge, @NonNull RowPlacement extraKeys,
                        @NonNull KeyboardMode keyboardMode, @NonNull KeyboardForm keyboardForm,
                        int widgetColumns, int widgetRows) {
-        this.statusBarEdge = statusBarEdge;
-        this.appsRow = appsRow;
-        this.azRowShown = azRowShown;
-        this.azBarEdge = azBarEdge;
-        this.extraKeys = extraKeys;
+        this(slotsOf(statusBarEdge, appsRow, azRowShown, azBarEdge, extraKeys), keyboardMode,
+            keyboardForm, widgetColumns, widgetRows);
+    }
+
+    /** The arrangement as slots: an edge and a position for each of the four elements. */
+    public PlaceLayout(@NonNull Map<Element, Slot> slots, @NonNull KeyboardMode keyboardMode,
+                       @NonNull KeyboardForm keyboardForm, int widgetColumns, int widgetRows) {
+        EnumMap<Element, Slot> copy = new EnumMap<>(Element.class);
+        for (Element element : Element.values()) {
+            Slot slot = slots.get(element);
+            if (slot == null) slot = Slot.on(Edge.BOTTOM, element);
+            // The status bar is never hidden; the wall's pager needs something to ride.
+            if (element == Element.STATUS && slot.hidden) slot = slot.withHidden(false);
+            copy.put(element, slot);
+        }
+        mSlots = Collections.unmodifiableMap(copy);
+
+        this.statusBarEdge = copy.get(Element.STATUS).edge;
+        this.appsRow = placementOf(copy.get(Element.APPS));
+        this.azRowShown = !copy.get(Element.AZ).hidden;
+        this.azBarEdge = copy.get(Element.AZ).edge;
+        this.extraKeys = placementOf(copy.get(Element.EXTRA_KEYS));
         this.keyboardMode = keyboardMode;
         this.keyboardForm = keyboardForm;
         this.widgetColumns = widgetColumns;
         this.widgetRows = widgetRows;
+    }
+
+    /** Where one element stands on this place. Never null: every element always has a slot. */
+    @NonNull
+    public Slot slot(@NonNull Element element) {
+        Slot slot = mSlots.get(element);
+        return slot == null ? Slot.on(Edge.BOTTOM, element) : slot;
+    }
+
+    /** Every element's slot, in enum order. */
+    @NonNull
+    public Map<Element, Slot> slots() {
+        return mSlots;
+    }
+
+    /** The same arrangement with one element moved — what a drag in progress reads against. */
+    @NonNull
+    public PlaceLayout withSlot(@NonNull Element element, @NonNull Slot slot) {
+        EnumMap<Element, Slot> next = new EnumMap<>(mSlots);
+        next.put(element, slot);
+        return new PlaceLayout(next, keyboardMode, keyboardForm, widgetColumns, widgetRows);
+    }
+
+    @NonNull
+    private static EnumMap<Element, Slot> slotsOf(@NonNull Edge statusBarEdge,
+                                                  @NonNull RowPlacement appsRow, boolean azRowShown,
+                                                  @NonNull Edge azBarEdge,
+                                                  @NonNull RowPlacement extraKeys) {
+        EnumMap<Element, Slot> slots = new EnumMap<>(Element.class);
+        slots.put(Element.STATUS, Slot.on(statusBarEdge, Element.STATUS));
+        slots.put(Element.APPS, slotOf(appsRow, Element.APPS));
+        slots.put(Element.AZ, azRowShown
+            ? Slot.on(azBarEdge, Element.AZ)
+            : Slot.hiddenFrom(azBarEdge, Element.AZ.defaultOrder(azBarEdge)));
+        slots.put(Element.EXTRA_KEYS, slotOf(extraKeys, Element.EXTRA_KEYS));
+        return slots;
+    }
+
+    @NonNull
+    private static Slot slotOf(@NonNull RowPlacement placement, @NonNull Element element) {
+        if (placement == RowPlacement.HIDDEN) {
+            return Slot.hiddenFrom(Edge.BOTTOM, element.defaultOrder(Edge.BOTTOM));
+        }
+        Edge edge = placement == RowPlacement.LEFT ? Edge.LEFT
+            : placement == RowPlacement.RIGHT ? Edge.RIGHT : Edge.BOTTOM;
+        return Slot.on(edge, element);
+    }
+
+    /**
+     * A slot as the old three-way row placement. The old model had no top row for the pinned apps
+     * or the extra keys, so a slot standing on the top edge reads as the bottom until the views
+     * that draw them learn the edge.
+     */
+    @NonNull
+    private static RowPlacement placementOf(@NonNull Slot slot) {
+        if (slot.hidden) return RowPlacement.HIDDEN;
+        switch (slot.edge) {
+            case LEFT: return RowPlacement.LEFT;
+            case RIGHT: return RowPlacement.RIGHT;
+            default: return RowPlacement.BOTTOM;
+        }
     }
 
     @Override
@@ -167,24 +272,16 @@ public final class PlaceLayout {
         if (this == other) return true;
         if (!(other instanceof PlaceLayout)) return false;
         PlaceLayout that = (PlaceLayout) other;
-        return azRowShown == that.azRowShown
-            && widgetColumns == that.widgetColumns
+        return widgetColumns == that.widgetColumns
             && widgetRows == that.widgetRows
-            && statusBarEdge == that.statusBarEdge
-            && appsRow == that.appsRow
-            && azBarEdge == that.azBarEdge
-            && extraKeys == that.extraKeys
             && keyboardMode == that.keyboardMode
-            && keyboardForm == that.keyboardForm;
+            && keyboardForm == that.keyboardForm
+            && mSlots.equals(that.mSlots);
     }
 
     @Override
     public int hashCode() {
-        int result = statusBarEdge.hashCode();
-        result = 31 * result + appsRow.hashCode();
-        result = 31 * result + (azRowShown ? 1 : 0);
-        result = 31 * result + azBarEdge.hashCode();
-        result = 31 * result + extraKeys.hashCode();
+        int result = mSlots.hashCode();
         result = 31 * result + keyboardMode.hashCode();
         result = 31 * result + keyboardForm.hashCode();
         result = 31 * result + widgetColumns;
@@ -195,11 +292,10 @@ public final class PlaceLayout {
     @NonNull
     @Override
     public String toString() {
-        return "PlaceLayout{status=" + statusBarEdge
-            + ", apps=" + appsRow
-            + ", az=" + azRowShown
-            + ", azEdge=" + azBarEdge
-            + ", keys=" + extraKeys
+        return "PlaceLayout{status=" + slot(Element.STATUS)
+            + ", apps=" + slot(Element.APPS)
+            + ", az=" + slot(Element.AZ)
+            + ", keys=" + slot(Element.EXTRA_KEYS)
             + ", keyboard=" + keyboardMode
             + ", form=" + keyboardForm
             + ", grid=" + widgetColumns + "x" + widgetRows
