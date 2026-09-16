@@ -112,15 +112,15 @@
         android:layout_marginTop="4dp"
         android:layout_marginEnd="6dp" />
 
-    <!-- Shown only while the bars on the side have left the canvas narrow. It says what that
-         costs and blocks nothing: a column down the side of a portrait screen is allowed. -->
+    <!-- The one slot for what the current arrangement costs: a narrow canvas from bars on the
+         side, a status bar itself parked on a side. Neither blocks anything, both can apply at
+         once, and LayoutEditorController.syncNotice fills the text and visibility from the plan. -->
     <TextView
         android:id="@+id/layout_editor_narrow_notice"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:layout_marginEnd="6dp"
-        android:text="@string/termux_layout_editor_narrow_notice"
         android:textColor="?attr/termuxColorOnSurfaceVariant"
         android:textSize="12sp"
         android:visibility="gone" />

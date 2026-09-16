@@ -268,11 +268,34 @@ public final class LayoutEditorController {
         mRestatingToggle = false;
         applyCanvasHeight(card, plan);
         card.miniature.setLayout(plan.shownLayout(), plan.shownOrientation(), plan.place());
-        // Bars down the side of a portrait screen are allowed; this is the one line that says what
-        // they cost, and it goes away as soon as the width does not.
-        card.narrowNotice.setVisibility(plan.warnsNarrowCanvas() ? View.VISIBLE : View.GONE);
+        syncNotice(card, plan);
         syncRows(card, plan);
         syncDirty(card, plan);
+    }
+
+    /**
+     * The one slot below the miniature for what the current arrangement costs: a narrow canvas
+     * from bars down the side of a portrait screen, and a status bar itself parked on a side,
+     * where it never rests expanded. Neither blocks anything — the slot only says what applies,
+     * and both can at once, so they share it rather than fighting over which shows.
+     */
+    private void syncNotice(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
+        boolean narrow = plan.warnsNarrowCanvas();
+        boolean sideStatus = plan.warnsSideStatusBar();
+        if (!narrow && !sideStatus) {
+            card.narrowNotice.setVisibility(View.GONE);
+            return;
+        }
+        Context context = mHost.context();
+        StringBuilder text = new StringBuilder();
+        if (narrow)
+            text.append(context.getString(R.string.termux_layout_editor_narrow_notice));
+        if (sideStatus) {
+            if (text.length() > 0) text.append(' ');
+            text.append(context.getString(R.string.termux_layout_editor_side_status_notice));
+        }
+        card.narrowNotice.setText(text);
+        card.narrowNotice.setVisibility(View.VISIBLE);
     }
 
     /** The revert glyph and Discard, which exist only while there is something to lose. */

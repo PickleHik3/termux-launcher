@@ -8070,20 +8070,21 @@ public final class SuggestionBarView extends GridLayout
      * most-used candidate to fill it. Must NOT call {@link #getPinnedPagesCount()} (recursion).
      */
     private boolean hasMostUsedDynamicPage() {
-        // The rail has no second page to put it on.
-        return !vertical && mostUsedPageEnabled && !resolveMostUsedPageEntries().isEmpty();
+        // A rail pages by the column since P6, exactly like a row: the trailing page is as
+        // reachable there as anywhere else.
+        return mostUsedPageEnabled && !resolveMostUsedPageEntries().isEmpty();
     }
 
     /** The dynamic page is always the trailing page, right after the real pinned pages. */
     private boolean isMostUsedDynamicPage(int pageIndex) {
-        return DockPagingModel.isMostUsedDynamicPage(pageIndex, pinnedItemCount(), maxButtonCount,
-            hasMostUsedDynamicPage());
+        return DockPagingModel.isMostUsedDynamicPage(pageIndex, pinnedItemCount(),
+            vertical ? computePinnedItemsPerPage() : maxButtonCount, hasMostUsedDynamicPage());
     }
 
     /** Page index of the dynamic most-used page, or -1 when it isn't shown. */
     public int getPinnedDynamicPageIndex() {
-        return DockPagingModel.dynamicPageIndex(pinnedItemCount(), maxButtonCount,
-            hasMostUsedDynamicPage());
+        return DockPagingModel.dynamicPageIndex(pinnedItemCount(),
+            vertical ? computePinnedItemsPerPage() : maxButtonCount, hasMostUsedDynamicPage());
     }
 
     /** Top most-used apps (excluding currently pinned), filling one dock page. Cached until dirty. */

@@ -65,6 +65,34 @@ public class DockPagingModelTest {
         assertFalse(DockPagingModel.isMostUsedDynamicPage(0, 0, 3, false));
     }
 
+    // -------------------------------------------------------- rail (vertical) pages
+    //
+    // A rail's per-page slot count is not the row's maxButtonCount but
+    // DockPagingModel.railItemsPerPage(usableLengthPx, slotLengthPx) — SuggestionBarView feeds
+    // that through the same pinned/dynamic-page functions a row uses, so these exercise the
+    // functions with a rail's own perPage the way computePinnedItemsPerPage() does standing up.
+
+    @Test
+    public void aRailPagesTheSameWayARowDoesWithTheColumnsOwnPerPage() {
+        // A 300px column of 100px slots holds 3 items per page; 7 pinned items make 3 real
+        // pages, and the most-used page trails them as page index 3.
+        int perPage = DockPagingModel.railItemsPerPage(300, 100);
+        assertEquals(3, perPage);
+        assertEquals(3, DockPagingModel.realPinnedPageCount(7, perPage));
+        assertEquals(4, DockPagingModel.pinnedPageCount(7, perPage, true));
+        assertEquals(3, DockPagingModel.dynamicPageIndex(7, perPage, true));
+        assertTrue(DockPagingModel.isMostUsedDynamicPage(3, 7, perPage, true));
+        assertFalse(DockPagingModel.isMostUsedDynamicPage(2, 7, perPage, true));
+    }
+
+    @Test
+    public void aRailWithNoRecentEntriesGetsNoExtraPage() {
+        int perPage = DockPagingModel.railItemsPerPage(300, 100);
+        assertEquals(3, DockPagingModel.pinnedPageCount(7, perPage, false));
+        assertEquals(-1, DockPagingModel.dynamicPageIndex(7, perPage, false));
+        assertFalse(DockPagingModel.isMostUsedDynamicPage(3, 7, perPage, false));
+    }
+
     @Test
     public void pinnedPagesStartAtWholeMultiplesOfTheCapacity() {
         assertEquals(0, DockPagingModel.pinnedPageStart(0, 4));
