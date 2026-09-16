@@ -92,6 +92,18 @@ TOP, BOTTOM, LEFT, RIGHT and a grip hit rect as wide as the band). Verified on p
 apps row is one row deep with normal icons, terminal below, A–Z stays at the bottom. Drawer swipe
 from a side rail and its animation confirmed by the developer by finger.
 
+### Fourth pong round (12:55–13:30)
+
+Developer found: TOP row pages but no indicator; side rail no paging and running past the
+terminal frame (clipped icon); side A–Z bunched in the top third with a 454 px capsule. P6
+`f2484201`: `DockPagingModel.railItemsPerPage` + vertical page swipe in the arbiter (drawer pull
+stays horizontal), a `PageTickStripView` that travels with the row's host on every edge, side
+stacks inset by `terminalFrameInsetPx`, A–Z column length = the canvas band (it had subtracted
+top/bottom chrome that no longer flank it). Installed 13:25, phone was locked — **not checked**.
+Checklist: LEFT rail level with the frame, swipe up/down pages, dot strip between rail and
+terminal, sideways drag still opens the drawer; TOP row shows dots under it; RIGHT A–Z capsule
+spans the canvas with letters spread; BOTTOM arrangement unchanged.
+
 ## Decisions taken without the developer (change freely)
 
 - Trim rule keeps one space when a wrapped row ended in spaces and the next row starts mid-word.
