@@ -104,6 +104,20 @@ Checklist: LEFT rail level with the frame, swipe up/down pages, dot strip betwee
 terminal, sideways drag still opens the drawer; TOP row shows dots under it; RIGHT A–Z capsule
 spans the canvas with letters spread; BOTTOM arrangement unchanged.
 
+### Fifth pong round (13:31–14:10)
+
+Developer found: two page indicators with a side rail (the dock FX view's ticks still drawn at
+the bottom with the accent, P6's strip beside the rail without it) and the A–Z scrub preview on a
+side bar rising over the letters. P7 `7410be92`, designed as ownership not patches: one
+`PageTickStripView` per apps-row host on every edge, fed by `SuggestionBarView.publishPageIndicator`
+(the FX view's tick drawing, its animators and the dead ambient glow deleted;
+`apps_bar_indicator_band` is the strip's band, so the dock is ~6 dp taller); `AzFloatingStripPolicy`
+owns the edge and lays the preview out as a row of icons growing toward the screen centre,
+clamped to the canvas. Installed 14:05 while the developer was in another app — **not checked**.
+Checklist: exactly one strip on each edge with the accent on the current page; dock height reads
+right (else move the band into the row's top padding); RIGHT column hold → matches run left of the
+finger, name above the focused icon; LEFT/TOP mirrored; BOTTOM unchanged.
+
 ## Decisions taken without the developer (change freely)
 
 - Trim rule keeps one space when a wrapped row ended in spaces and the next row starts mid-word.
