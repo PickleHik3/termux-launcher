@@ -42,6 +42,7 @@ import juloo.keyboard2.Keyboard2View;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -99,19 +100,21 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(View.GONE, suggestionHost.getVisibility());
         assertEquals(View.GONE, heightAdjustControls.getVisibility());
 
-        RelativeLayout.LayoutParams toolbarParams =
-            (RelativeLayout.LayoutParams) toolbarPager.getLayoutParams();
-        RelativeLayout.LayoutParams dividerParams =
-            (RelativeLayout.LayoutParams) divider.getLayoutParams();
+        // The dock's rows stand in one ordered stack now instead of hanging off each other, so it
+        // is the stack that carries the anchor the chain's last link used to.
+        RelativeLayout.LayoutParams rowStackParams = (RelativeLayout.LayoutParams)
+            mActivity.findViewById(R.id.accessory_row_stack).getLayoutParams();
         assertEquals(R.id.inapp_keyboard_container,
-            toolbarParams.getRules()[RelativeLayout.ABOVE]);
-        assertEquals(0, toolbarParams.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM]);
-        // The keyboard container is GONE whenever the embedded keyboard is hidden. Without the
+            rowStackParams.getRules()[RelativeLayout.ABOVE]);
+        assertEquals(0, rowStackParams.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM]);
+        // The keyboard container is GONE whenever the embedded keyboard is hidden, and the
+        // floating and split forms take it out of the accessory stack altogether. Without the
         // parent-bottom fallback, RelativeLayout drops the ABOVE anchor entirely and the whole
         // toolbar stack collapses to the top of the dock.
-        assertTrue(toolbarParams.alignWithParent);
-        assertEquals(R.id.terminal_toolbar_view_pager,
-            dividerParams.getRules()[RelativeLayout.ALIGN_TOP]);
+        assertTrue(rowStackParams.alignWithParent);
+        assertSame("the keys and the hairline over them travel together",
+            divider.getParent(), toolbarPager.getParent());
+        assertSame(mActivity.findViewById(R.id.terminal_toolbar_host), toolbarPager.getParent());
         int[] toolbarOnlyLayerIds = {
             R.id.accessory_surface_host,
             R.id.apps_bar_az_fx_underlay,

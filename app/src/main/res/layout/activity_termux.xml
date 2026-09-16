@@ -496,10 +496,11 @@
                     android:visibility="gone" />
             </FrameLayout>
 
-            <!-- The bottom edge's stack, inside the content column so its bars stand on the
-                 terminal's own height above the dock — which is exactly where a bottom status bar
-                 has always been. The dock's own rows (apps, A-Z, extra keys) are still the
-                 accessory stack below; L3 ports them into this one. -->
+            <!-- The bottom edge above the dock, inside the content column so its bars stand on the
+                 terminal's own height — which is exactly where a bottom status bar has always
+                 been. The dock's own rows stand in accessory_row_stack instead, because that is
+                 what keeps them above the in-app keyboard and on the dock's glass; the two
+                 together are the bottom edge, and the walk splits the one stack between them. -->
             <com.termux.app.place.EdgeStackView
                 android:id="@+id/place_edge_stack_bottom"
                 android:layout_width="match_parent"
@@ -581,79 +582,117 @@
                 android:focusable="false"
                 android:visibility="gone" />
 
-            <!-- The dock rows hang off each other down to the extra-keys pager, which hangs off
-                 the keyboard container. Every link in that chain can be gone at once (extra keys
-                 off, keyboard closed), and a row whose whole anchor chain is gone falls back to the
-                 parent's bottom — without that it has no vertical rule left and lands at the top of
-                 the stack, with the rows above it pushed up out of the dock. -->
-            <FrameLayout
-                android:id="@+id/apps_bar_viewpager"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_above="@+id/apps_bar_indicator_band"
-                android:layout_alignWithParentIfMissing="true"
-                android:visibility="gone">
+            <!-- The bottom edge's dock rows: the pinned apps, the alphabets index and the extra
+                 keys, standing in the order EdgeStackPolicy.stack(BOTTOM) gives them. They used to
+                 hang off each other by layout_above, which pinned them to the shipped order and
+                 left every other one unrenderable. The stack is anchored above the keyboard
+                 container and falls back to the parent's bottom when that is gone or has been
+                 lifted out by the floating/split keyboard, which is the one thing the old chain's
+                 alignWithParentIfMissing was there for.
 
-                <!-- Transform host owned solely by the dock plank physics: the icon row tilts and
-                     shifts with the glass under it. The bar itself keeps its own page-switch
-                     transforms, and the pager keeps the drawer's lift translation. -->
-                <FrameLayout
-                    android:id="@+id/apps_bar_plank_layer"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipChildren="false"
-                    android:clipToPadding="false" />
-            </FrameLayout>
-
-            <View
-                android:id="@+id/apps_bar_indicator_band"
-                android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_above="@+id/apps_bar_az_row"
-                android:layout_alignWithParentIfMissing="true"
-                android:visibility="gone" />
-
-            <com.termux.app.AzScrubRowView
-                android:id="@+id/apps_bar_az_row"
-                android:layout_width="match_parent"
-                android:layout_height="19dp"
-                android:layout_above="@+id/terminal_toolbar_view_pager"
-                android:layout_alignWithParentIfMissing="true"
-                android:gravity="center_vertical"
-                android:textColor="?attr/termuxColorOnSurfaceVariant"
-                android:elevation="10dp"
-                android:visibility="gone" />
-
-            <!-- Keybind hint row: takes the A-Z row's exact slot while a Ctrl+Alt prefix is
-                 latched, so the hints cost no terminal space at all. Chips are built in
-                 TermuxActivity.showKeybindHintDockRow(). -->
-            <HorizontalScrollView
-                android:id="@+id/keybind_hint_dock_row"
+                 Declared top to bottom in the shipped order, so the screen before the first
+                 arrangement pass is the one the chain drew. Each row stands in a host of its own,
+                 so the furniture that has to travel with it — the indicator band under the apps
+                 row, the keybind strip in the letters' slot, the divider over the keys — moves
+                 with it instead of anchoring to a sibling that is no longer beside it. -->
+            <com.termux.app.place.EdgeStackView
+                android:id="@+id/accessory_row_stack"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_alignTop="@+id/apps_bar_az_row"
-                android:layout_alignBottom="@+id/apps_bar_az_row"
-                android:elevation="11dp"
-                android:scrollbars="none"
-                android:clickable="true"
-                android:visibility="gone" />
-
-            <androidx.viewpager.widget.ViewPager
-                android:id="@+id/terminal_toolbar_view_pager"
-                android:visibility="gone"
-                android:layout_width="match_parent"
-                android:layout_height="37.5dp"
+                app:edgeStackEdge="bottom"
                 android:layout_above="@id/inapp_keyboard_container"
                 android:layout_alignWithParentIfMissing="true"
-                android:background="@android:color/transparent"/>
+                android:clipChildren="false"
+                android:clipToPadding="false">
 
-            <View
-                android:id="@+id/extrakeys_divider"
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_alignTop="@+id/terminal_toolbar_view_pager"
-                android:layout_marginTop="5dp"
-                android:visibility="gone" />
+                <LinearLayout
+                    android:id="@+id/apps_bar_row_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
+
+                    <FrameLayout
+                        android:id="@+id/apps_bar_viewpager"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:visibility="gone">
+
+                        <!-- Transform host owned solely by the dock plank physics: the icon row
+                             tilts and shifts with the glass under it. The bar itself keeps its own
+                             page-switch transforms, and the pager keeps the drawer's lift
+                             translation. -->
+                        <FrameLayout
+                            android:id="@+id/apps_bar_plank_layer"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:clipChildren="false"
+                            android:clipToPadding="false" />
+                    </FrameLayout>
+
+                    <!-- The air between the icons and the letters. It belongs to the row, so it
+                         travels with it rather than being a band of the stack in its own right. -->
+                    <View
+                        android:id="@+id/apps_bar_indicator_band"
+                        android:layout_width="match_parent"
+                        android:layout_height="3dp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <FrameLayout
+                    android:id="@+id/apps_bar_az_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:elevation="10dp"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
+
+                    <com.termux.app.AzScrubRowView
+                        android:id="@+id/apps_bar_az_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="19dp"
+                        android:gravity="center_vertical"
+                        android:textColor="?attr/termuxColorOnSurfaceVariant"
+                        android:elevation="10dp"
+                        android:visibility="gone" />
+
+                    <!-- Keybind hint row: takes the A-Z row's exact slot while a Ctrl+Alt prefix is
+                         latched, so the hints cost no terminal space at all. Chips are built in
+                         TermuxActivity.showKeybindHintDockRow(). -->
+                    <HorizontalScrollView
+                        android:id="@+id/keybind_hint_dock_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:elevation="11dp"
+                        android:scrollbars="none"
+                        android:clickable="true"
+                        android:visibility="gone" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/terminal_toolbar_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
+
+                    <androidx.viewpager.widget.ViewPager
+                        android:id="@+id/terminal_toolbar_view_pager"
+                        android:visibility="gone"
+                        android:layout_width="match_parent"
+                        android:layout_height="37.5dp"
+                        android:background="@android:color/transparent"/>
+
+                    <View
+                        android:id="@+id/extrakeys_divider"
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_gravity="top"
+                        android:layout_marginTop="5dp"
+                        android:visibility="gone" />
+                </FrameLayout>
+            </com.termux.app.place.EdgeStackView>
 
             <com.termux.app.LauncherAzGestureFxView
                 android:id="@+id/apps_bar_az_fx_overlay"

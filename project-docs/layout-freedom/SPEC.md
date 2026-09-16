@@ -141,6 +141,32 @@ both sit on the same edge (moving only the row never moves the index); fix all t
 | P2 | `fix/layout-p2` | one shared plank with the Appearance radius for a lying-down row off the dock; `azRidesAppsRow` same-edge rule; `withDrop` moves a riding index with the row | — |
 | P3 | `fix/layout-p3` | the bottom dock rows join `place_edge_stack_bottom` (ordered container above the keyboard) so every bottom order renders; `AccessoryStackLayoutPolicy` reads the resolved order | P2 |
 
+## P3 outcome (2026-09-16)
+
+The dock's own rows stand in one ordered `EdgeStackView` (`accessory_row_stack`, edge bottom)
+inside `accessory_stack_container`, anchored `layout_above="@id/inapp_keyboard_container"` with
+`alignWithParentIfMissing`, and `applyEdgeStacks` fills it from `EdgeStackPolicy.stack(BOTTOM)`.
+The `layout_above` chain — apps over the indicator band over the letters over the toolbar pager —
+is gone, and with it the reason no bottom order but the shipped one ever drew. Each row travels in
+a host of its own so its furniture goes with it: `apps_bar_row_host` carries the indicator band,
+`apps_bar_az_host` the keybind strip in the letters' slot, `terminal_toolbar_host` the hairline
+over the keys. `AccessoryStackLayoutPolicy` gained `dockRows`/`rowOverAz`/`rowUnderAz` and the A-Z
+row's crown and chin are read off the resolved order (`DockLayoutPolicy.DockInputs.rowOverAz` /
+`rowUnderAz` replaced `extraKeysRowShown`), so whichever band the user puts over or under the
+letters does the job the apps row and the extra keys used to.
+
+`place_edge_stack_bottom` stayed where it is, the last band of `terminal_content_column`, and the
+walk splits the one bottom stack between the two: the dock's rows go into the accessory stack,
+everything else stands above the whole of it. It is the accessory stack that keeps the rows above
+the in-app keyboard in all three forms, that wears the dock's glass
+(`accessory_surface_host` fills it), and whose height is computed arithmetic — dock rows plus
+keyboard, capped by `computeMaxAccessoryStackHeightPx`, which *subtracts* a bottom status bar's
+height from the ceiling. Folding the status bar in would have rewritten that arithmetic and put
+dock glass behind a bar that has its own; keeping it out makes the shipped screen a zero-diff.
+The cost, and it is the honest one: a bottom status bar always stands above the dock whatever
+order it is given, which is the L1 default (status innermost) and the only placement it has ever
+had.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |

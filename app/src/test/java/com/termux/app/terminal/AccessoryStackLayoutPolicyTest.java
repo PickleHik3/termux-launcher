@@ -1,8 +1,16 @@
 package com.termux.app.terminal;
 
+import com.termux.app.place.Element;
+
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class AccessoryStackLayoutPolicyTest {
 
@@ -121,6 +129,59 @@ public class AccessoryStackLayoutPolicyTest {
         int banded = AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, true, 3f);
         assertEquals(banded + 112, AccessoryStackLayoutPolicy.computeCombinedHeight(
             false, true, true, 300, banded, 112, 9));
+    }
+
+    // ---------------------------------------------------------------- crown and chin, in order
+
+    /** A bottom stack, outermost (on the dock's rim) first, the way EdgeStackPolicy gives them. */
+    private static List<Element> stack(Element... outermostFirst) {
+        return Arrays.asList(outermostFirst);
+    }
+
+    @Test
+    public void theDocksOwnRowsAreTheStackWithoutTheStatusBar() {
+        assertEquals(stack(Element.EXTRA_KEYS, Element.AZ, Element.APPS),
+            AccessoryStackLayoutPolicy.dockRows(
+                stack(Element.EXTRA_KEYS, Element.AZ, Element.APPS, Element.STATUS)));
+    }
+
+    @Test
+    public void theShippedOrderPutsARowOverAndUnderTheLetters() {
+        List<Element> shipped = stack(Element.EXTRA_KEYS, Element.AZ, Element.APPS, Element.STATUS);
+        assertTrue(AccessoryStackLayoutPolicy.rowOverAz(shipped));
+        assertTrue(AccessoryStackLayoutPolicy.rowUnderAz(shipped));
+        // Which is the shipped A-Z row: the 19dp band, no crown and no chin.
+        assertEquals(57, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+            AccessoryStackLayoutPolicy.rowOverAz(shipped),
+            AccessoryStackLayoutPolicy.rowUnderAz(shipped), 3f));
+    }
+
+    @Test
+    public void aReorderedStackMovesTheCrownAndTheChinWithTheLetters() {
+        // The letters innermost, with the apps row and the keys under them: a crown, no chin.
+        List<Element> onTop = stack(Element.APPS, Element.EXTRA_KEYS, Element.AZ);
+        assertFalse(AccessoryStackLayoutPolicy.rowOverAz(onTop));
+        assertTrue(AccessoryStackLayoutPolicy.rowUnderAz(onTop));
+
+        // The letters on the rim, under both: a chin, no crown. The status bar never counts —
+        // it stands above the whole dock rather than on its glass.
+        List<Element> onTheRim = stack(Element.AZ, Element.EXTRA_KEYS, Element.APPS,
+            Element.STATUS);
+        assertTrue(AccessoryStackLayoutPolicy.rowOverAz(onTheRim));
+        assertFalse(AccessoryStackLayoutPolicy.rowUnderAz(onTheRim));
+
+        // Alone on the dock: both.
+        List<Element> alone = Collections.singletonList(Element.AZ);
+        assertFalse(AccessoryStackLayoutPolicy.rowOverAz(alone));
+        assertFalse(AccessoryStackLayoutPolicy.rowUnderAz(alone));
+        assertEquals(105, AccessoryStackLayoutPolicy.computeAzRowHeightPx(true, false, false, 3f));
+    }
+
+    @Test
+    public void lettersOffTheBottomEdgeAskForNeither() {
+        List<Element> noLetters = stack(Element.EXTRA_KEYS, Element.APPS);
+        assertFalse(AccessoryStackLayoutPolicy.rowOverAz(noLetters));
+        assertFalse(AccessoryStackLayoutPolicy.rowUnderAz(noLetters));
     }
 
     @Test

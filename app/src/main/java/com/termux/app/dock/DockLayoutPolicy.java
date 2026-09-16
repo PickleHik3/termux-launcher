@@ -77,11 +77,15 @@ public final class DockLayoutPolicy {
         public final boolean appsRowEnabledPref;
         public final boolean azRowEnabledPref;
         /**
-         * Whether the extra-keys row is showing. Not a row this policy sizes — the toolbar owns its
-         * own height — but it decides which row is on the dock's bottom rim, and so whether the A-Z
-         * row carries a chin under its letters.
+         * Whether another of the dock's own rows stands over / under the letters, read off the
+         * resolved bottom stack ({@code AccessoryStackLayoutPolicy.rowOverAz} / {@code rowUnderAz}).
+         * Neither is a row this policy sizes, but between them they decide which row is on the
+         * dock's rim, and so whether the A-Z row carries a crown over its letters and a chin under
+         * them. They are the order the user set rather than "the apps row is shown, the extra-keys
+         * row is shown": re-ordered, the keys can be the band standing over the letters.
          */
-        public final boolean extraKeysRowShown;
+        public final boolean rowOverAz;
+        public final boolean rowUnderAz;
         /** The extra-keys toolbar's single-row height, the apps row's baseline unit. */
         public final int baseToolbarHeightPx;
         /** Extra apps-row height requested by the tuning drag; negative values are ignored. */
@@ -101,7 +105,8 @@ public final class DockLayoutPolicy {
             this.configuredCornerRadiusDp = b.configuredCornerRadiusDp;
             this.appsRowEnabledPref = b.appsRowEnabledPref;
             this.azRowEnabledPref = b.azRowEnabledPref;
-            this.extraKeysRowShown = b.extraKeysRowShown;
+            this.rowOverAz = b.rowOverAz;
+            this.rowUnderAz = b.rowUnderAz;
             this.baseToolbarHeightPx = b.baseToolbarHeightPx;
             this.additionalAppsBarHeightPx = b.additionalAppsBarHeightPx;
             this.railOnRight = b.railOnRight;
@@ -126,9 +131,11 @@ public final class DockLayoutPolicy {
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
             private boolean appsRowEnabledPref;
             private boolean azRowEnabledPref;
-            // Defaults to shown, which is the shape every caller sized against before the A-Z
-            // row's chin existed: no chin unless a caller says the row is the bottom one.
-            private boolean extraKeysRowShown = true;
+            // Nothing over the letters and a row under them: the shape every caller sized
+            // against before the A-Z row's crown and chin existed, so a caller that says nothing
+            // about the order still gets what it always got.
+            private boolean rowOverAz;
+            private boolean rowUnderAz = true;
             private int baseToolbarHeightPx;
             private int additionalAppsBarHeightPx;
             private boolean railOnRight;
@@ -145,7 +152,8 @@ public final class DockLayoutPolicy {
             public Builder configuredCornerRadiusDp(int v) { this.configuredCornerRadiusDp = v; return this; }
             public Builder appsRowEnabledPref(boolean v) { this.appsRowEnabledPref = v; return this; }
             public Builder azRowEnabledPref(boolean v) { this.azRowEnabledPref = v; return this; }
-            public Builder extraKeysRowShown(boolean v) { this.extraKeysRowShown = v; return this; }
+            public Builder rowOverAz(boolean v) { this.rowOverAz = v; return this; }
+            public Builder rowUnderAz(boolean v) { this.rowUnderAz = v; return this; }
             public Builder baseToolbarHeightPx(int v) { this.baseToolbarHeightPx = v; return this; }
             public Builder additionalAppsBarHeightPx(int v) { this.additionalAppsBarHeightPx = v; return this; }
             public Builder railOnRight(boolean v) { this.railOnRight = v; return this; }
@@ -225,11 +233,11 @@ public final class DockLayoutPolicy {
                 : 0;
             out.appsBarHeightPx = appsRowEnabled ? out.appsRowBandPx : 0;
             out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
-                azRowEnabled, appsRowEnabled, in.extraKeysRowShown, density);
+                azRowEnabled, in.rowOverAz, in.rowUnderAz, density);
             out.azRowCrownPaddingPx = AccessoryStackLayoutPolicy.computeAzRowCrownPaddingPx(
-                azRowEnabled, appsRowEnabled, density);
+                azRowEnabled, in.rowOverAz, density);
             out.azRowChinPaddingPx = AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(
-                azRowEnabled, in.extraKeysRowShown, density);
+                azRowEnabled, in.rowUnderAz, density);
             out.indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(
                 appsRowEnabled && azRowEnabled, density);
             out.interRowGapPx = out.indicatorBandHeightPx;

@@ -106,6 +106,8 @@ public class DockLayoutPolicyTest {
             .configuredCornerRadiusDp(CORNER_DP)
             .appsRowEnabledPref(true)
             .azRowEnabledPref(true)
+            // The shipped bottom order: the apps row over the letters, the extra keys under them.
+            .rowOverAz(!appsRowOnEdge)
             .baseToolbarHeightPx(BASE_TOOLBAR_PX)
             .additionalAppsBarHeightPx(0)
             .railOnRight(false);
@@ -235,7 +237,7 @@ public class DockLayoutPolicyTest {
         assertEquals(169, noAz.appsBarHeightPx);
 
         DockLayout noApps = DockLayoutPolicy.compute(inputs(2.18f, true, false)
-            .appsRowEnabledPref(false).build());
+            .appsRowEnabledPref(false).rowOverAz(false).build());
         assertEquals(0, noApps.appsBarHeightPx);
         // No apps row above: the letters wear the 6dp crown the band would otherwise have given.
         assertEquals(17, noApps.azRowCrownPaddingPx);
