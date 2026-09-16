@@ -39,6 +39,21 @@ Feature worktrees `../wt-trim-copy`, `../wt-keyboard-theme`, `../wt-extra-keys`,
     accent colour, function keys one tone below the letters.
   - Not looked at: light mode, the colour popup, the starship/oh-my-posh pills, herdr.
 
+## Layout freedom (same day, after the theme batch)
+
+L1–L4 merged into dev by `e3f1f514` (model `781d6bbc`, miniature `8d44dfd5`, hosts `4985dd32`,
+rail + TOP rows `e3f1f514`); outcomes and the two model decisions (A–Z rides the apps row only
+when it lies down; side status bar stacks beside the rail instead of sharing a column) are in
+`project-docs/layout-freedom/SPEC.md`. Full unit suite green on dev.
+
+Pong gate 2026-09-16 08:40: the default layout renders byte-identical to before; the Layout
+editor lifts a band after a hold, shows the insertion gap on the hovered edge and the hide tray;
+dropping the extra keys on TOP reorders the miniature and the real screen renders the row under
+the status bar with the terminal moved down; dragging it back restores the original layout. Not
+checked on device: landscape rail positions, a side status bar beside the rail, an apps row on
+TOP, extra keys on a side edge, the narrow-canvas notice, Discard/↺ after a re-order. Known
+visual gap: a bar off the dock (TOP row) draws straight over the wallpaper with no glass sheet.
+
 ## Decisions taken without the developer (change freely)
 
 - Trim rule keeps one space when a wrapped row ended in spaces and the next row starts mid-word.
