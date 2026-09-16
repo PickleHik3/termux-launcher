@@ -15,11 +15,10 @@ import com.termux.app.statusbar.WindowActivityRing;
 public final class ChipWatermarkGeometry {
 
     /**
-     * The watermark glyph's size, whatever the title beside it is set in. Taller than the 20 dp
-     * chip on purpose: the rounded outline crops it top and bottom, so it reads as a mark printed
-     * on the chip rather than a small icon floating in it.
+     * The watermark glyph's size, whatever the title beside it is set in. 25% smaller than the
+     * chip originally wore — the one place that scales it, so every caller shrinks together.
      */
-    public static final float GLYPH_SIZE_DP = 21f;
+    public static final float GLYPH_SIZE_DP = 21f * 0.75f;
     /** How far inside the chip's leading edge — trailing, in RTL — the glyph's box starts. */
     public static final float GLYPH_LEADING_INSET_DP = 2f;
     /** How much further in the title starts than it used to, so its first letters clear the glyph. */

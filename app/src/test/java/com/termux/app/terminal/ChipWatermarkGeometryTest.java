@@ -24,23 +24,24 @@ public class ChipWatermarkGeometryTest {
     }
 
     /**
-     * The glyph is taller than the chip and hugs its leading edge, so it is cropped by the outline
-     * rather than floating inside it, and the title is pushed clear of it.
+     * The glyph hugs the leading edge at 75% of its original size, and the title is still pushed
+     * clear of it.
      */
     @Test
-    public void theGlyphHugsTheLeadingEdgeAndOutgrowsTheChip() {
-        assertEquals(21f, ChipWatermarkGeometry.GLYPH_SIZE_DP, .0001f);
+    public void theGlyphHugsTheLeadingEdgeAtThreeQuartersItsOriginalSize() {
+        assertEquals(15.75f, ChipWatermarkGeometry.GLYPH_SIZE_DP, .0001f);
+        assertEquals(21f * 0.75f, ChipWatermarkGeometry.GLYPH_SIZE_DP, .0001f);
         assertEquals(2f, ChipWatermarkGeometry.GLYPH_LEADING_INSET_DP, .0001f);
         assertEquals(5f, ChipWatermarkGeometry.TITLE_NUDGE_DP, .0001f);
-        // Taller than the 20dp chip: the rounded outline is what crops it.
-        assertTrue(ChipWatermarkGeometry.GLYPH_SIZE_DP > 20f);
 
         // Reading left to right, the box starts 2px in and the glyph is centred in it.
-        assertEquals(12.5f,
-            ChipWatermarkGeometry.glyphCentreOnAxis(0f, 60f, 2f, 21f), .0001f);
+        assertEquals(9.875f,
+            ChipWatermarkGeometry.glyphCentreOnAxis(0f, 60f, 2f,
+                ChipWatermarkGeometry.GLYPH_SIZE_DP), .0001f);
         // Reading right to left, the same inset from the other edge.
-        assertEquals(47.5f,
-            ChipWatermarkGeometry.glyphCentreOnAxis(60f, 0f, 2f, 21f), .0001f);
+        assertEquals(50.125f,
+            ChipWatermarkGeometry.glyphCentreOnAxis(60f, 0f, 2f,
+                ChipWatermarkGeometry.GLYPH_SIZE_DP), .0001f);
     }
 
     /** The halo is the chip's own fill with an alpha that can actually hide the glyph. */
