@@ -6,6 +6,8 @@ import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -41,6 +43,12 @@ import com.termux.app.statusbar.StatusBarLensPolicy.Growth;
  * grows <em>towards the middle of the screen</em>, so it drops below a top bar, rises off a bottom
  * one and opens inward off a column, and it slides in out of the bar it came from. A card that
  * always dropped downward fell off the bottom of the screen the moment the bar stood there.
+ *
+ * <p>That placement is run again whenever the card's own content changes size under it, from the
+ * one place — {@link #applyPlacement()}. A card is a live surface: the stats card's process list
+ * arrives a sample after it opens and adds a section's height to it. Placed once from the size it
+ * opened at, a wrap-height popup grows away from its anchored corner — downward off a bottom bar,
+ * over the dock and the keyboard — so the edge nearest the bar is re-pinned on every size change.
  */
 public final class StatusCardHost {
 
@@ -65,6 +73,15 @@ public final class StatusCardHost {
     @Nullable private View mContainer;
     @Nullable private View mDropEdge;
     @NonNull private Edge mEdge = Edge.TOP;
+
+    /** The open card's growth, width budget and focus, kept so a re-placement matches the open. */
+    @NonNull private Growth mGrowth = Growth.DOWN;
+    private int mCardWidthPx;
+    private boolean mCardFocusable;
+    /** The card's last placed rectangle in the window's own coordinates. */
+    @NonNull private final Rect mBounds = new Rect();
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
+    private boolean mPlacementPosted;
 
     /** The edge the status bar stands on; the card opens off it, towards the screen's middle. */
     public void setEdge(@NonNull Edge edge) {
@@ -145,8 +162,17 @@ public final class StatusCardHost {
         PopupWindow popup = mPopup;
         View container = mContainer;
         if (popup == null || container == null || !popup.isShowing()) return;
-        container.requestLayout();
         popup.update();
+        applyPlacement();
+    }
+
+    /**
+     * Where the open card stands, in the window's own coordinates, or {@code null} while none is
+     * open. The placement's only observable answer, so it can be asserted without a screen.
+     */
+    @Nullable
+    public Rect cardBoundsInWindow() {
+        return mPopup != null && !mBounds.isEmpty() ? new Rect(mBounds) : null;
     }
 
     private void show(@NonNull View anchor, @NonNull View content, @NonNull StyleProvider style,
@@ -158,7 +184,10 @@ public final class StatusCardHost {
         int maxWidth = Math.max(dp(context, 200),
             Math.min(portraitMaxWidthPx(context, desiredWidthDp), widthCapPx(anchor, growth)));
 
-        FrameLayout container = new FrameLayout(context);
+        mGrowth = growth;
+        mCardWidthPx = maxWidth;
+        mCardFocusable = focusable;
+        FrameLayout container = new CardFrame(context);
         final float radius = style.cornerRadiusPx();
         container.setBackground(style.cardBackground());
         container.setClipToOutline(true);
@@ -193,6 +222,7 @@ public final class StatusCardHost {
                 mAnchor = null;
                 mContent = null;
                 mContainer = null;
+                mBounds.setEmpty();
             }
             if (dismissCallback != null) dismissCallback.run();
         });
@@ -221,27 +251,12 @@ public final class StatusCardHost {
         }
 
         // Cards open centred on the canvas — the standard place, whichever widget was tapped —
-        // and clear of the bar on the side the lens grows towards.
-        int centeredWidth = maxWidth;
-        if (!focusable || growth != Growth.DOWN) {
-            // A wrap-width popup has no window width to centre on until it is measured, and a card
-            // that opens anywhere but straight down has to know its own height to be placed at all.
-            container.measure(
-                View.MeasureSpec.makeMeasureSpec(maxWidth,
-                    focusable ? View.MeasureSpec.EXACTLY : View.MeasureSpec.AT_MOST),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-            centeredWidth = container.getMeasuredWidth();
-        }
-        if (growth == Growth.DOWN) {
-            // The drop below a top bar is what every install already has: left on the platform's
-            // own anchored path rather than re-derived, so the shipped bar is a zero-diff.
-            int xOffset = windowCenteredXOffset(anchor, centeredWidth);
-            popup.showAsDropDown(anchor, xOffset, dropYOffset(anchor), Gravity.START);
-        } else {
-            StatusBarLensPolicy.Placement placement = placeCard(anchor, growth, centeredWidth,
-                container.getMeasuredHeight());
-            popup.showAtLocation(anchor, Gravity.NO_GRAVITY, placement.x, placement.y);
-        }
+        // and clear of the bar on the side the lens grows towards. The same arithmetic every edge
+        // and every size change goes through, rather than the platform's anchored drop for one of
+        // the four: an anchored popup pins the corner it was hung from, which is the wrong corner
+        // on three edges and stops being re-derived the moment the content grows.
+        applyPlacement();
+        popup.showAtLocation(anchor, Gravity.NO_GRAVITY, mBounds.left, mBounds.top);
         if (animate) {
             if (focusable) container.requestFocus();
             animateIn(container, growth);
@@ -282,6 +297,68 @@ public final class StatusCardHost {
             0, 0, canvasRight, canvasBottom);
     }
 
+    /**
+     * Places the card from its current measured size: the one placement path, run at open and again
+     * on every size change, so the edge nearest the bar never moves once the card is up.
+     */
+    private void applyPlacement() {
+        PopupWindow popup = mPopup;
+        View container = mContainer;
+        View anchor = mAnchor;
+        if (popup == null || container == null || anchor == null) return;
+        measureCard(container);
+        int width = container.getMeasuredWidth();
+        int height = container.getMeasuredHeight();
+        if (popup.isShowing() && width == mBounds.width() && height == mBounds.height()) return;
+        StatusBarLensPolicy.Placement placement = placeCard(anchor, mGrowth, width, height);
+        mBounds.set(placement.x, placement.y, placement.x + width, placement.y + height);
+        if (popup.isShowing()) popup.update(placement.x, placement.y, -1, -1);
+    }
+
+    /** Measures the card the way its window will, so the placement sees the size about to show. */
+    private void measureCard(@NonNull View container) {
+        container.measure(
+            View.MeasureSpec.makeMeasureSpec(mCardWidthPx,
+                mCardFocusable ? View.MeasureSpec.EXACTLY : View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+    }
+
+    /** Coalesces the re-placement: one pass per frame however many children asked for a layout. */
+    private void schedulePlacement() {
+        if (mPlacementPosted || mPopup == null) return;
+        mPlacementPosted = true;
+        mHandler.post(() -> {
+            mPlacementPosted = false;
+            if (mPopup != null) applyPlacement();
+        });
+    }
+
+    /**
+     * The card's own frame, which says when its content has asked for a new size. Content that
+     * arrives late — a process list a sample after the card opened, a stat line appearing — is the
+     * ordinary case for these cards, not an edge one.
+     */
+    private final class CardFrame extends FrameLayout {
+        CardFrame(@NonNull Context context) {
+            super(context);
+        }
+
+        @Override
+        public void requestLayout() {
+            super.requestLayout();
+            schedulePlacement();
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            super.onLayout(changed, left, top, right, bottom);
+            // The window's own pass is the catch-all: a child whose layout request never reached
+            // the frame — the flag is only cleared by a layout, so one request can swallow the
+            // next — still ends up here the moment the card is laid out at its new size.
+            if (changed) schedulePlacement();
+        }
+    }
+
     public void dismiss() {
         if (mPopup != null) {
             PopupWindow popup = mPopup;
@@ -289,6 +366,7 @@ public final class StatusCardHost {
             mAnchor = null;
             mContent = null;
             mContainer = null;
+            mBounds.setEmpty();
             popup.dismiss();
         }
     }
@@ -305,6 +383,7 @@ public final class StatusCardHost {
         mAnchor = null;
         mContent = null;
         mContainer = null;
+        mBounds.setEmpty();
         container.animate().cancel();
         Growth growth = StatusBarLensPolicy.growthFor(mEdge);
         float exit = dp(container.getContext(), 6);
@@ -336,32 +415,6 @@ public final class StatusCardHost {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
             ? new PathInterpolator(0.16f, 1f, 0.3f, 1f)
             : new DecelerateInterpolator(1.8f);
-    }
-
-    /** {@link #DROP_GAP_DP} below the drop edge's bottom, or below the anchor without one. */
-    private int dropYOffset(@NonNull View anchor) {
-        int offset = dp(anchor.getContext(), DROP_GAP_DP);
-        View edge = mDropEdge;
-        if (edge != null && edge.isAttachedToWindow() && anchor.isAttachedToWindow()) {
-            int[] location = new int[2];
-            anchor.getLocationInWindow(location);
-            int anchorBottom = location[1] + anchor.getHeight();
-            edge.getLocationInWindow(location);
-            int edgeBottom = location[1] + edge.getHeight();
-            if (edgeBottom > anchorBottom) offset += edgeBottom - anchorBottom;
-        }
-        return offset;
-    }
-
-    private static int windowCenteredXOffset(@NonNull View anchor, int cardWidth) {
-        // showAsDropDown aligns the popup's start to the anchor's start; shift so the card sits
-        // centred in the window no matter where in the bar the tapped widget lives.
-        int[] location = new int[2];
-        anchor.getLocationInWindow(location);
-        View root = anchor.getRootView();
-        int windowWidth = root != null && root.getWidth() > 0 ? root.getWidth()
-            : anchor.getResources().getDisplayMetrics().widthPixels;
-        return (windowWidth - cardWidth) / 2 - location[0];
     }
 
     private static int portraitMaxWidthPx(@NonNull Context context, int desiredWidthDp) {
