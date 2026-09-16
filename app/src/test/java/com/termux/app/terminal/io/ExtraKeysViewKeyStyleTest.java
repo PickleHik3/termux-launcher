@@ -13,10 +13,13 @@ import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 
@@ -69,14 +72,25 @@ public class ExtraKeysViewKeyStyleTest {
     public void aColouredKeyWearsItsRoleAndTheMatchingLabel() {
         MaterialButton tab = button(1);
         Drawable background = tab.getBackground();
-        assertTrue("a coloured cap is a rounded shape, not a flat fill",
-            background instanceof GradientDrawable);
+        assertTrue("a coloured cap sits inset from its cell",
+            background instanceof InsetDrawable);
+        GradientDrawable cap = capOf(background);
         int expected = ExtraKeyColorRole.PRIMARY_CONTAINER
             .background(context);
-        assertEquals(expected, ((GradientDrawable) background).getColor().getDefaultColor());
+        assertEquals(expected, cap.getColor().getDefaultColor());
         assertEquals(ExtraKeyColorRole.PRIMARY_CONTAINER.label(context),
             tab.getCurrentTextColor());
-        assertTrue(((GradientDrawable) background).getCornerRadius() > 0f);
+        assertTrue(cap.getCornerRadius() > 0f);
+        // MaterialButton re-applies its own (transparent, borderless-style) backgroundTint onto
+        // any background it is first given, the moment that background is set
+        // (MaterialButtonHelper#setBackgroundOverwritten -> setSupportBackgroundTintList) — that
+        // tint is realised as a colour filter over the drawable, which is what actually painted
+        // over the fill and left only the label showing the role. Both must be clear for the cap's
+        // own colour to be what renders.
+        assertNull("a coloured key must not carry a tint that would paint over its fill",
+            tab.getBackgroundTintList());
+        assertNull("nor an already-applied colour filter doing the same thing",
+            cap.getColorFilter());
     }
 
     @Test
@@ -148,7 +162,7 @@ public class ExtraKeysViewKeyStyleTest {
         MaterialButton esc = button(0);
         view.previewKeyColor(esc, ExtraKeyColorRole.ERROR);
         assertEquals(ExtraKeyColorRole.ERROR.background(context),
-            ((GradientDrawable) esc.getBackground()).getColor().getDefaultColor());
+            capOf(esc.getBackground()).getColor().getDefaultColor());
 
         // Previewing "no colour" over a key that has one takes its colour off.
         MaterialButton tab = button(1);
@@ -158,7 +172,7 @@ public class ExtraKeysViewKeyStyleTest {
         view.clearPreviewColors();
         assertTrue(esc.getBackground() instanceof ColorDrawable);
         assertTrue("the stored colour comes back",
-            tab.getBackground() instanceof GradientDrawable);
+            tab.getBackground() instanceof InsetDrawable);
     }
 
     @Test
@@ -167,10 +181,10 @@ public class ExtraKeysViewKeyStyleTest {
         Drawable before = tab.getBackground();
         view.refreshKeyStyles();
         assertNotNull(tab.getBackground());
-        assertTrue(tab.getBackground() instanceof GradientDrawable);
+        assertTrue(tab.getBackground() instanceof InsetDrawable);
         // Same colour, freshly resolved — the point is that the row was not rebuilt.
-        assertEquals(((GradientDrawable) before).getColor().getDefaultColor(),
-            ((GradientDrawable) tab.getBackground()).getColor().getDefaultColor());
+        assertEquals(capOf(before).getColor().getDefaultColor(),
+            capOf(tab.getBackground()).getColor().getDefaultColor());
         assertSame(tab, button(1));
     }
 
@@ -189,6 +203,40 @@ public class ExtraKeysViewKeyStyleTest {
         assertEquals("ESC", view.definitionForChild(0).getKey());
         assertEquals("TAB", view.definitionForChild(1).getKey());
         assertNull(view.definitionForChild(9));
+    }
+
+    @Test
+    public void aDefaultKeyStillPaintsTheRowsFlatColourAfterTheFix() {
+        // A flat ColorDrawable actually rasterises under Robolectric (GradientDrawable's shadow
+        // does not, so the coloured-key equivalent above is asserted on the drawable's resolved
+        // colour and tint state instead); drawing this one is a real pixel-level check that the
+        // fix left the uncoloured look untouched.
+        int expected = view.getButtonBackgroundColor();
+        assertEquals(expected, centerPixel(button(0).getBackground()));
+    }
+
+    @Test
+    public void aDisabledKeyStillPaintsTheRowsFlatColourAfterTheFix() {
+        view.setKeyUsabilityPolicy(value -> false);
+        int expected = view.getButtonBackgroundColor();
+        assertEquals(expected, centerPixel(button(0).getBackground()));
+    }
+
+    /** What {@code drawable} actually renders at its centre, tint and all. */
+    private static int centerPixel(Drawable drawable) {
+        int size = 40;
+        drawable.setBounds(0, 0, size, size);
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        drawable.draw(new Canvas(bitmap));
+        return bitmap.getPixel(size / 2, size / 2);
+    }
+
+    /** The coloured cap a key's background is built from, unwrapping the cell inset. */
+    private static GradientDrawable capOf(Drawable background) {
+        Drawable drawable = background instanceof InsetDrawable
+            ? ((InsetDrawable) background).getDrawable()
+            : background;
+        return (GradientDrawable) drawable;
     }
 
     private MaterialButton button(int index) {
