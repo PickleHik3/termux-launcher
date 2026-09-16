@@ -141,10 +141,32 @@ public class AccessoryStackLayoutPolicyTest {
     }
 
     @Test
-    public void theDocksOwnRowsAreTheStackWithoutTheStatusBar() {
+    public void thePlankIsTheStackWithoutAStatusBarThatKeptItsOwnGlass() {
+        // Updated for P9: dockRows became plankBands, and the status bar is only left out of it
+        // when it is the band touching the canvas — the last of the stack, where it wears a sheet
+        // of its own. That is the shipped bottom arrangement.
+        List<Element> shipped =
+            stack(Element.EXTRA_KEYS, Element.AZ, Element.APPS, Element.STATUS);
+        assertTrue(AccessoryStackLayoutPolicy.statusKeepsOwnGlass(shipped));
         assertEquals(stack(Element.EXTRA_KEYS, Element.AZ, Element.APPS),
-            AccessoryStackLayoutPolicy.dockRows(
-                stack(Element.EXTRA_KEYS, Element.AZ, Element.APPS, Element.STATUS)));
+            AccessoryStackLayoutPolicy.plankBands(shipped));
+    }
+
+    @Test
+    public void aStatusBarOrderedBetweenTheRowsIsABandOfThePlank() {
+        // The developer's order, outermost first: letters on the rim, then the status bar, the
+        // keys and the apps row. The bar is not last, so it stands on the dock's sheet.
+        List<Element> between =
+            stack(Element.AZ, Element.STATUS, Element.EXTRA_KEYS, Element.APPS);
+        assertFalse(AccessoryStackLayoutPolicy.statusKeepsOwnGlass(between));
+        assertEquals(between, AccessoryStackLayoutPolicy.plankBands(between));
+    }
+
+    @Test
+    public void aStatusBarOnAnotherEdgeIsNotInTheBottomStackAtAll() {
+        List<Element> bottom = stack(Element.EXTRA_KEYS, Element.AZ, Element.APPS);
+        assertFalse(AccessoryStackLayoutPolicy.statusKeepsOwnGlass(bottom));
+        assertEquals(bottom, AccessoryStackLayoutPolicy.plankBands(bottom));
     }
 
     @Test
@@ -165,12 +187,19 @@ public class AccessoryStackLayoutPolicyTest {
         assertFalse(AccessoryStackLayoutPolicy.rowOverAz(onTop));
         assertTrue(AccessoryStackLayoutPolicy.rowUnderAz(onTop));
 
-        // The letters on the rim, under both: a chin, no crown. The status bar never counts —
-        // it stands above the whole dock rather than on its glass.
+        // The letters on the rim, under both: a chin, no crown. A status bar touching the canvas
+        // does not count — it wears a sheet of its own rather than standing on the dock's.
         List<Element> onTheRim = stack(Element.AZ, Element.EXTRA_KEYS, Element.APPS,
             Element.STATUS);
         assertTrue(AccessoryStackLayoutPolicy.rowOverAz(onTheRim));
         assertFalse(AccessoryStackLayoutPolicy.rowUnderAz(onTheRim));
+
+        // But ordered onto the plank it is a band like the rows: with only the status bar over the
+        // letters they lose their crown, and with only it under them they lose their chin.
+        List<Element> statusOverAz = stack(Element.AZ, Element.STATUS, Element.APPS);
+        assertTrue(AccessoryStackLayoutPolicy.rowOverAz(statusOverAz));
+        List<Element> statusUnderAz = stack(Element.STATUS, Element.AZ, Element.APPS);
+        assertTrue(AccessoryStackLayoutPolicy.rowUnderAz(statusUnderAz));
 
         // Alone on the dock: both.
         List<Element> alone = Collections.singletonList(Element.AZ);

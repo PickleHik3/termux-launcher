@@ -195,7 +195,6 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -471,6 +470,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull private PlaceLayout.Edge mStatusBarEdge = PlaceLayout.Edge.TOP;
     /** Whether the bar has been stood on that edge at least once since the views were built. */
     private boolean mStatusBarEdgeApplied;
+    /**
+     * Whether the bar is a band of the dock's own sheet of glass: on the bottom edge with another
+     * band ordered above it. Then it draws no glass of its own — the plank's is already under it —
+     * and the dock's sheet covers it. Written by the arrangement walk, which is the one place the
+     * resolved order is known.
+     */
+    private boolean mStatusBarOnDockPlank;
     /** The Display place raised a keyboard the terminal did not have; it goes back down with it. */
     private boolean mDisplayShowedKeyboard;
     /** What the prefix's desktop files looked like when the drawer last listed them. */
@@ -977,6 +983,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean roundedDockStyle() {
             return isRoundedDockStyle();
+        }
+
+        @Override public boolean statusBarOnDockPlank() {
+            return mStatusBarOnDockPlank;
         }
 
         @Override public float statusBarRimCornerRadiusPx() {
@@ -3258,7 +3268,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         Rect bounds = state.keyboardShown && !shouldUseUnifiedDefaultKeyboardGlassSurface(state)
             ? buildToolbarOnlyAccessoryBounds(state) : null;
-        applyAccessoryLayerBounds(R.id.accessory_surface_host, bounds);
+        applyAccessoryLayerBounds(R.id.accessory_surface_host,
+            withDockGlassTopInset(bounds, dockGlassTopInsetPx()));
+    }
+
+    /**
+     * The dock's glass, started below a bottom status bar that kept a sheet of its own. Without
+     * this the dock's sheet would run up behind that bar and the two washes would stack — the bar
+     * stands in the same container as the dock's rows now, not on the terminal's height above it.
+     *
+     * <p>Zero inset gives back exactly what was passed, so every arrangement that has ever shipped
+     * takes the same path it always did.
+     */
+    @Nullable
+    private Rect withDockGlassTopInset(@Nullable Rect bounds, int topInsetPx) {
+        if (topInsetPx <= 0) return bounds;
+        if (bounds != null)
+            return new Rect(bounds.left, bounds.top + topInsetPx, bounds.right, bounds.bottom);
+        View container = findViewById(R.id.accessory_stack_container);
+        if (container == null) return null;
+        ViewGroup.LayoutParams params = container.getLayoutParams();
+        int heightPx = params != null && params.height > 0 ? params.height : container.getHeight();
+        if (heightPx <= topInsetPx) return null;
+        int widthPx = container.getWidth() > 0
+            ? container.getWidth() : getResources().getDisplayMetrics().widthPixels;
+        return new Rect(0, topInsetPx, widthPx, heightPx);
     }
 
     private void applyAccessoryLayerVerticalBounds(int viewId, @Nullable Rect bounds) {
@@ -3862,8 +3896,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return keyboardContainer != null && keyboardContainer.getVisibility() != View.GONE;
     }
 
-    static boolean shouldShowAccessoryStack(boolean toolbarShown, boolean keyboardShown) {
-        return toolbarShown || keyboardShown;
+    /**
+     * Whether the accessory stack is on screen. Since the whole bottom edge stands in it, a status
+     * bar the place put along the bottom keeps it up on its own — the dock's rows can all be
+     * hidden or standing on other edges and the bar still has to be drawn.
+     */
+    static boolean shouldShowAccessoryStack(boolean toolbarShown, boolean keyboardShown,
+                                            boolean bottomStatusBar) {
+        return toolbarShown || keyboardShown || bottomStatusBar;
     }
 
     static int computeAccessoryStackHeight(int dockContentHeight, int terminalFlushPadding,
@@ -5452,7 +5492,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!state.toolbarShown) {
             if (accessoryContainer != null) {
                 accessoryContainer.setVisibility(
-                    shouldShowAccessoryStack(false, state.keyboardShown) ? View.VISIBLE : View.GONE);
+                    shouldShowAccessoryStack(false, state.keyboardShown,
+                        bottomStatusBandPx() > 0) ? View.VISIBLE : View.GONE);
             }
             if (extraKeysBackground != null) {
                 extraKeysBackground.setVisibility(View.GONE);
@@ -5502,7 +5543,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (accessoryContainer != null)
             accessoryContainer.setVisibility(
-                shouldShowAccessoryStack(true, state.keyboardShown) ? View.VISIBLE : View.GONE);
+                shouldShowAccessoryStack(true, state.keyboardShown,
+                    bottomStatusBandPx() > 0) ? View.VISIBLE : View.GONE);
         if (accessorySurfaceHost != null) {
             accessorySurfaceHost.setVisibility(View.VISIBLE);
         }
@@ -9673,12 +9715,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ---------------------------------------------------------------- the edge stacks
 
-    /** The stack holding one edge, or null before the layout has been inflated. */
+    /**
+     * The stack holding one edge, or null before the layout has been inflated. One per edge: the
+     * bottom edge's is the accessory stack's own row stack, because that is the container that
+     * keeps its bands above the in-app keyboard and on the dock's glass, and every band along the
+     * bottom — the status bar included — has to stand where its order says.
+     */
     @Nullable
     private com.termux.app.place.EdgeStackView edgeStack(@NonNull PlaceLayout.Edge edge) {
         switch (edge) {
             case TOP: return findViewById(R.id.place_edge_stack_top);
-            case BOTTOM: return findViewById(R.id.place_edge_stack_bottom);
+            case BOTTOM: return findViewById(R.id.accessory_row_stack);
             case LEFT: return findViewById(R.id.place_edge_stack_left);
             default: return findViewById(R.id.place_edge_stack_right);
         }
@@ -9690,6 +9737,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * keys — and each stands in a host of its own inside the accessory stack, which is what keeps
      * the bottom bars sitting above the in-app keyboard. On every other edge the same views are
      * lent to a portable host. Either way it is a host this walk moves, never the bar itself.
+     *
+     * <p>The status bar is one host on every edge, the bottom included: it is a band of the dock's
+     * stack there like any other.
      *
      * <p>Null only before the layout has been inflated.
      */
@@ -9708,21 +9758,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             default:
                 return findViewById(bottom ? R.id.apps_bar_row_host : R.id.place_apps_bar_host);
         }
-    }
-
-    /**
-     * The stack one element stands in on one edge. Three edges have one each; the bottom has two,
-     * because the dock's own rows have to stand inside the accessory stack — above the in-app
-     * keyboard, on the dock's glass — while anything else along the bottom stands on the
-     * terminal's own height above all of it. The two together are the bottom edge, and the one
-     * ordered walk is split between them.
-     */
-    @Nullable
-    private com.termux.app.place.EdgeStackView edgeStackFor(@NonNull Element element,
-                                                            @NonNull PlaceLayout.Edge edge) {
-        if (edge == PlaceLayout.Edge.BOTTOM && element != Element.STATUS)
-            return findViewById(R.id.accessory_row_stack);
-        return edgeStack(edge);
     }
 
     /**
@@ -9753,31 +9788,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean planked = plankHost != null && plankBars != null && edge == plankEdge;
             List<Element> onPlank = planked
                 ? offDockPlankElements(layout, edge) : Collections.<Element>emptyList();
-            // One list per stack this edge writes into — the bottom edge has two — each filled in
-            // the policy's order, so a stack always gets its own bands outermost first.
-            Map<com.termux.app.place.EdgeStackView, List<View>> bars = new LinkedHashMap<>(4);
+            com.termux.app.place.EdgeStackView stack = edgeStack(edge);
+            // One list per edge, filled in the policy's order, so the stack gets its bands
+            // outermost first. One edge is one stack: the bottom's is the dock's own row stack.
+            List<View> bars = new ArrayList<>(4);
             List<View> plankContents = new ArrayList<>(2);
             for (Element element : EdgeStackPolicy.stack(layout, edge)) {
                 View host = edgeStackHost(element, edge);
-                com.termux.app.place.EdgeStackView stack = edgeStackFor(element, edge);
                 if (host == null || stack == null) continue;
-                List<View> into = bars.get(stack);
-                if (into == null) bars.put(stack, into = new ArrayList<>(4));
                 if (onPlank.contains(element)) {
                     // The plank stands where its outermost bar would have, and the bars it holds
                     // are its children instead of the stack's.
-                    if (!into.contains(plankHost)) into.add(plankHost);
+                    if (!bars.contains(plankHost)) bars.add(plankHost);
                     if (!plankContents.contains(host)) plankContents.add(host);
-                } else if (!into.contains(host)) {
-                    into.add(host);
+                } else if (!bars.contains(host)) {
+                    bars.add(host);
                 }
             }
             if (planked) {
                 plankBars.setEdge(edge);
                 moved |= plankBars.setStack(plankContents);
             }
-            for (Map.Entry<com.termux.app.place.EdgeStackView, List<View>> entry : bars.entrySet())
-                moved |= entry.getKey().setStack(entry.getValue());
+            if (stack != null) moved |= stack.setStack(bars);
         }
         // The hairlines. Only the two stacks that are one sheet of glass draw any: every band in a
         // screen edge's stack carries its own, and a line between two of those would float in the
@@ -9785,11 +9817,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (plankBars != null)
             plankBars.setSeparatorCount(EdgeStackPolicy.separatorsFor(
                 offDockPlankElements(layout, plankEdge)).size());
+        List<Element> bottom = EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM);
+        // A status bar touching the canvas keeps a sheet of its own, so it is not on the dock's
+        // and no hairline belongs between the two sheets. Anywhere else it is a band of the plank
+        // like the rows, and separatorsFor counts it as one.
+        mStatusBarOnDockPlank = bottom.contains(Element.STATUS)
+            && !AccessoryStackLayoutPolicy.statusKeepsOwnGlass(bottom);
         com.termux.app.place.EdgeStackView dockRows = findViewById(R.id.accessory_row_stack);
         if (dockRows != null)
             dockRows.setSeparatorCount(EdgeStackPolicy.separatorsFor(
-                AccessoryStackLayoutPolicy.dockRows(
-                    EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM))).size());
+                AccessoryStackLayoutPolicy.plankBands(bottom)).size());
         return moved;
     }
 
@@ -9840,13 +9877,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Whether the pinned-apps row shares its container with another band: the dock's other rows
-     * along the bottom, or the index riding its plank off the dock. A rail shares one with nothing.
+     * along the bottom — a status bar ordered onto the same plank counts as one of them — or the
+     * index riding its plank off the dock. A rail shares one with nothing.
      * It is what decides the air around the row's icons and its ticks.
      */
     private boolean isAppsRowAlone(@NonNull PlaceLayout layout) {
         if (!PlaceChromePolicy.appsShown(layout)) return false;
         if (PlaceChromePolicy.appsEdge(layout) == PlaceLayout.Edge.BOTTOM)
-            return AccessoryStackLayoutPolicy.dockRows(
+            return AccessoryStackLayoutPolicy.plankBands(
                 EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM)).size() <= 1;
         return offDockPlankElements(layout, offDockPlankEdge(layout)).size() <= 1;
     }
@@ -10075,8 +10113,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Where the status bar stands. Every arrangement keeps a bar — it moves rather than hides, so
      * the wall's paging gesture always has one.
      *
-     * <p>A row along the top or the bottom lives in the content column and takes its slice of the
-     * terminal's height; the bottom one lands directly on the dock and blends into it. A column
+     * <p>A row along the top lives in the content column and takes its slice of the terminal's
+     * height. A row along the bottom is a band of the dock's own stack, standing where its order
+     * puts it among the dock's rows — on the dock's sheet of glass between them, on a sheet of its
+     * own as the band touching the canvas. A column
      * down a side lives beside the padded content root, in the band the apps rail and the extra
      * keys column already share, and the content is inset from it by the same seam. One host, one
      * set of views: the bar is moved rather than rebuilt, so everything bound to it by id follows.
@@ -10124,6 +10164,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The band a status bar standing along the bottom claims inside the dock's stack: the bar
+     * itself plus the air the style keeps under it. Zero on every other edge, and zero while the
+     * window bar is switched off.
+     *
+     * <p>Read off the host's own layout params rather than off the style's target, because the
+     * expand/collapse animator is the writer of that height while it runs and the stack has to
+     * follow it frame by frame instead of jumping to where it will end up.
+     */
+    private int bottomStatusBandPx() {
+        if (mStatusBarEdge != PlaceLayout.Edge.BOTTOM) return 0;
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (host == null || host.getVisibility() != View.VISIBLE) return 0;
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        int thicknessPx = params != null && params.height > 0
+            ? params.height : targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact());
+        return thicknessPx + statusBarColumnOuterMarginPx();
+    }
+
+    /**
+     * How far the dock's own sheet of glass starts below the top of the accessory stack: the band
+     * of a bottom status bar that kept a sheet of its own. Zero everywhere else, which is every
+     * arrangement that shipped.
+     */
+    private int dockGlassTopInsetPx() {
+        return mStatusBarOnDockPlank ? 0 : bottomStatusBandPx();
+    }
+
+    /**
+     * Whether the status bar is a band of the dock's own sheet rather than a bar with a sheet of
+     * its own. Package-visible for the same reason {@link #applyEdgeStacks} is: the arrangement
+     * test reads the walk's answer instead of re-deriving it.
+     */
+    boolean statusBarStandsOnTheDockPlank() {
+        return mStatusBarOnDockPlank;
+    }
+
+    /**
      * Ceiling for the accessory stack: whatever the window holds minus the status inset, the
      * window bar, and a minimum usable terminal slice. Returns MAX_VALUE before first layout.
      */
@@ -10134,8 +10211,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int rootHeightPx = root != null ? root.getHeight() : 0;
         if (rootHeightPx <= 0)
             return Integer.MAX_VALUE;
-        // A bar standing in a column takes no height from the stack at all; only a row does.
-        View windowBarHost = isStatusBarVertical() ? null
+        // A bar standing in a column takes no height from the stack at all; only a row does — and
+        // a row along the bottom is a band of this very stack, counted into what is measured
+        // against the ceiling rather than taken off the ceiling itself. Only a top row is content
+        // the stack has to leave room for.
+        View windowBarHost = isStatusBarVertical()
+            || mStatusBarEdge == PlaceLayout.Edge.BOTTOM ? null
             : findViewById(R.id.terminal_window_bar_host);
         int windowBarPx = windowBarHost != null && windowBarHost.getVisibility() == View.VISIBLE
             ? windowBarHost.getHeight() : 0;
@@ -10215,8 +10296,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the apps row (its icons rescale to the row-height hint); the keyboard's own screen-share
         // cap bounds the rest.
         int maxAccessoryStackPx = computeMaxAccessoryStackHeightPx(accessoryBottomMarginPx);
+        // A status bar standing along the bottom is a band of this stack, wherever in the order it
+        // was put. It is the same height it took off the terminal when it had a stack of its own
+        // above the dock, so the ceiling above and the content below come out where they were.
+        int statusBandPx = bottomStatusBandPx();
         int projectedStackPx = computeAccessoryStackHeight(
-            dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled),
+            dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) + statusBandPx,
             0, state.keyboardHeight);
         // The ceiling exists to keep a usable slice of content under the stack. A floating keyboard
         // takes none of that slice, so only what the stack really costs the content is measured
@@ -10226,8 +10311,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 -(projectedStackPx - keyboardOverlapPx - maxAccessoryStackPx));
         }
         boolean dockMoved = applyDockLayout(dockMetrics);
-        int dockContentHeightPx = state.toolbarShown
-            ? dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0;
+        int dockContentHeightPx = (state.toolbarShown
+            ? dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0)
+            + statusBandPx;
         int accessoryContentHeightPx = computeAccessoryStackHeight(
             dockContentHeightPx, 0, state.keyboardHeight);
         // The embedded keyboard suspends flush absorption: its height is user-scaled and its
@@ -15313,6 +15399,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (vertical) params.width = height;
             else params.height = height;
             host.setLayoutParams(params);
+            // A bar along the bottom is a band of the accessory stack, whose height is arithmetic
+            // rather than wrap_content — so the stack has to be re-added up as the bar grows, or
+            // the fold would open into a container that never made room for it. Without the
+            // terminal resize: that is a SIGWINCH per frame, and the settle at the end owns it.
+            if (mStatusBarEdge == PlaceLayout.Edge.BOTTOM) setTerminalToolbarHeight(false);
         }
         int collapsedHeight = targetStatusBarHeightPx(capsule, true);
         int expandedHeight = targetStatusBarHeightPx(capsule, false);
@@ -15576,12 +15667,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The merge rule: a bar standing on the bottom edge lands on the dock, so it wears the
         // dock's glass rather than its own. Same wash, same blur, no seam between them.
         boolean joinsDock = mStatusBarEdge == PlaceLayout.Edge.BOTTOM;
+        // And ordered between the dock's own rows it wears no glass at all: the plank's sheet is
+        // already under it, so a sheet here would be a second wash and a second blur over the
+        // first. The bar keeps a sheet only as the band touching the canvas, where the dock's
+        // glass is inset below it (dockGlassTopInsetPx) — which is where it has always stood.
+        boolean onPlank = joinsDock && mStatusBarOnDockPlank;
         float opacity = mPreferences == null ? 1f
             : (joinsDock ? mPreferences.getAppBarOpacity() : mPreferences.getStatusBarOpacity())
                 / 100f;
         int blurRadiusDp = joinsDock
             ? getEffectiveExtraKeysBlurRadius() : getEffectiveStatusBarBlurRadius();
-        boolean windowBarBlurEnabled = ChromePolicy.dockBlurEnabled(blurRadiusDp);
+        boolean windowBarBlurEnabled = !onPlank && ChromePolicy.dockBlurEnabled(blurRadiusDp);
         View blur = findViewById(R.id.terminal_window_bar_blur);
         applyRealtimeBlurRadius(blur, blurRadiusDp);
         applyRealtimeBlurDownsampleFactor(blur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
@@ -15598,11 +15694,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The capsule floats below the status bar as its own slab, so its glass spans the full
             // pane height. The default pane merges with the behind-status glass, so it renders only
             // the lower slice and the extension draws the rest.
-            background.setBackground(joinsDock
-                ? mChrome.glass().dockSurface(opacity, 0f, 1f, false)
-                : mChrome.glass().statusBarSurface(opacity,
-                    capsuleStatusBar || isStatusBarVertical()
-                        ? 0f : terminalWindowGlassStatusFraction(host), 1f, true));
+            background.setBackground(onPlank ? null
+                : joinsDock
+                    ? mChrome.glass().dockSurface(opacity, 0f, 1f, false)
+                    : mChrome.glass().statusBarSurface(opacity,
+                        capsuleStatusBar || isStatusBarVertical()
+                            ? 0f : terminalWindowGlassStatusFraction(host), 1f, true));
         }
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();

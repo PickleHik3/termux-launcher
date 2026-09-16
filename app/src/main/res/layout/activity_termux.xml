@@ -584,18 +584,11 @@
                 android:clipToPadding="false" />
             </LinearLayout>
 
-            <!-- The bottom edge above the dock, inside the content column so its bars stand on the
-                 terminal's own height — which is exactly where a bottom status bar has always
-                 been. The dock's own rows stand in accessory_row_stack instead, because that is
-                 what keeps them above the in-app keyboard and on the dock's glass; the two
-                 together are the bottom edge, and the walk splits the one stack between them. -->
-            <com.termux.app.place.EdgeStackView
-                android:id="@+id/place_edge_stack_bottom"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:edgeStackEdge="bottom"
-                android:clipChildren="false"
-                android:clipToPadding="false" />
+            <!-- The content column ends at the canvas band. The whole bottom edge — the status
+                 bar included — stands in accessory_row_stack below, because that is the one
+                 container that keeps its bands above the in-app keyboard and on the dock's glass.
+                 There used to be a second bottom stack here holding only the status bar, which is
+                 what pinned it above the dock whatever order the user gave it. -->
         </LinearLayout>
 
         <RelativeLayout
@@ -670,8 +663,12 @@
                 android:focusable="false"
                 android:visibility="gone" />
 
-            <!-- The bottom edge's dock rows: the pinned apps, the alphabets index and the extra
-                 keys, standing in the order EdgeStackPolicy.stack(BOTTOM) gives them. They used to
+            <!-- The whole bottom edge: the pinned apps, the alphabets index, the extra keys and —
+                 when the place stands it here — the status bar, in the order
+                 EdgeStackPolicy.stack(BOTTOM) gives them. The status bar used to have a stack of
+                 its own in the content column, above all of these whatever order it was given.
+                 The band touching the canvas keeps a sheet of glass of its own; the rest stand on
+                 the dock's (accessory_surface_host, inset below it). They used to
                  hang off each other by layout_above, which pinned them to the shipped order and
                  left every other one unrenderable. The stack is anchored above the keyboard
                  container and falls back to the parent's bottom when that is gone or has been

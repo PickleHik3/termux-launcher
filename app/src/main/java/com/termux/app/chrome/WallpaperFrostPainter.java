@@ -76,9 +76,18 @@ public final class WallpaperFrostPainter {
             statusFrost.setVisibility(View.GONE);
             mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
         }
-        boolean paneApplied = applyCrop(paneFrost,
+        // A bar standing between the dock's own rows is on the dock's sheet, which already carries
+        // this frost: a crop of its own here would draw the same blurred wallpaper a second time,
+        // and with no wash over it — the bar wears no glass on the plank.
+        boolean onPlank = mSurfaces.statusBarOnDockPlank();
+        boolean paneApplied = !onPlank && applyCrop(paneFrost,
             mSurfaces.findChromeView(R.id.terminal_window_bar_host), blurRadiusDp,
             SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
+        if (onPlank) {
+            paneFrost.setImageDrawable(null);
+            paneFrost.setVisibility(View.GONE);
+            mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
+        }
         View statusBlur = mSurfaces.findChromeView(R.id.terminal_status_bar_glass_blur);
         View paneBlur = mSurfaces.findChromeView(R.id.terminal_window_bar_blur);
         if (statusApplied && statusBlur != null) statusBlur.setVisibility(View.GONE);

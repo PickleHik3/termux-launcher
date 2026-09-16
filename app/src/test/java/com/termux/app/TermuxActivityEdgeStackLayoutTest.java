@@ -59,7 +59,9 @@ public class TermuxActivityEdgeStackLayoutTest {
     @Test
     public void everyEdgeHasAStackAndKnowsWhichOneItIs() {
         TermuxActivity activity = inflate();
-        int[] ids = {R.id.place_edge_stack_top, R.id.place_edge_stack_bottom,
+        // Updated for P9: the bottom edge's stack is the dock's own row stack, because the whole
+        // bottom edge — the status bar included — has to stand above the in-app keyboard.
+        int[] ids = {R.id.place_edge_stack_top, R.id.accessory_row_stack,
             R.id.place_edge_stack_left, R.id.place_edge_stack_right};
         Edge[] edges = {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT};
         for (int i = 0; i < ids.length; i++) {
@@ -72,16 +74,16 @@ public class TermuxActivityEdgeStackLayoutTest {
     }
 
     @Test
-    public void theTerminalIsTheResidualBetweenTheTopAndBottomStacks() {
+    public void theTerminalIsTheResidualBelowTheTopStack() {
         TermuxActivity activity = inflate();
         LinearLayout column = activity.findViewById(R.id.terminal_content_column);
         View top = activity.findViewById(R.id.place_edge_stack_top);
         View band = activity.findViewById(R.id.terminal_canvas_band);
-        View bottom = activity.findViewById(R.id.place_edge_stack_bottom);
-        assertEquals(3, column.getChildCount());
+        // Updated for P9: the column ends at the canvas band. The second stack that used to close
+        // it held the status bar alone, above the dock whatever order the place gave it.
+        assertEquals(2, column.getChildCount());
         assertSame(top, column.getChildAt(0));
         assertSame(band, column.getChildAt(1));
-        assertSame(bottom, column.getChildAt(2));
         // The canvas band takes whatever the two stacks leave, which is what makes their thickness
         // a content inset without anyone having to pad for it.
         LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) band.getLayoutParams();
@@ -182,14 +184,12 @@ public class TermuxActivityEdgeStackLayoutTest {
     }
 
     @Test
-    public void theBottomEdgeLeavesTheDocksOwnRowsToTheAccessoryStack() {
+    public void theWholeBottomEdgeStandsInTheAccessoryStack() {
         // The accessory stack is what keeps the bottom bars sitting above the in-app keyboard, so
-        // a bottom slot stands the rows in the ordered stack down there, not in the one above the
-        // dock — which is the status bar's, and only the status bar's.
+        // every bottom slot stands in the ordered stack down there — the status bar included,
+        // which used to have a stack of its own above the dock.
         TermuxActivity activity = inflate();
         activity.applyEdgeStacks(layoutWith(Element.APPS, Edge.BOTTOM));
-        EdgeStackView bottom = activity.findViewById(R.id.place_edge_stack_bottom);
-        assertEquals(0, bottom.getChildCount());
         EdgeStackView rows = activity.findViewById(R.id.accessory_row_stack);
         assertEquals(3, rows.getChildCount());
         assertSame(activity.findViewById(R.id.apps_bar_row_host), rows.getChildAt(0));
@@ -213,7 +213,7 @@ public class TermuxActivityEdgeStackLayoutTest {
     private static View stackOf(TermuxActivity activity, Edge edge) {
         switch (edge) {
             case TOP: return activity.findViewById(R.id.place_edge_stack_top);
-            case BOTTOM: return activity.findViewById(R.id.place_edge_stack_bottom);
+            case BOTTOM: return activity.findViewById(R.id.accessory_row_stack);
             case LEFT: return activity.findViewById(R.id.place_edge_stack_left);
             default: return activity.findViewById(R.id.place_edge_stack_right);
         }
@@ -317,8 +317,8 @@ public class TermuxActivityEdgeStackLayoutTest {
             ((ViewGroup) activity.findViewById(R.id.place_off_dock_plank_bars)).getChildCount());
         EdgeStackView top = activity.findViewById(R.id.place_edge_stack_top);
         assertSame(activity.findViewById(R.id.terminal_window_bar_host), top.getChildAt(0));
-        assertEquals(0,
-            ((EdgeStackView) activity.findViewById(R.id.place_edge_stack_bottom)).getChildCount());
+        assertEquals("and the dock keeps its own three rows", 3,
+            ((EdgeStackView) activity.findViewById(R.id.accessory_row_stack)).getChildCount());
     }
 
     // ------------------------------------------------------------------ the height distribution
@@ -360,7 +360,6 @@ public class TermuxActivityEdgeStackLayoutTest {
         View glass = activity.findViewById(R.id.place_off_dock_plank_glass);
         View band = activity.findViewById(R.id.terminal_canvas_band);
         View surface = activity.findViewById(R.id.terminal_surface_host);
-        View bottom = activity.findViewById(R.id.place_edge_stack_bottom);
 
         assertEquals("the sheet is exactly the bars", bars.getHeight(), glass.getHeight());
         assertEquals("and the plank is the bars plus their air",
@@ -369,8 +368,7 @@ public class TermuxActivityEdgeStackLayoutTest {
         assertEquals("the top stack holds nothing deeper", plank.getHeight(), top.getHeight());
         assertTrue("a row, not a screen: " + top.getHeight(), top.getHeight() < 2 * 160);
         assertTrue("the terminal still has a canvas", surface.getHeight() > 0);
-        assertEquals(column.getHeight() - top.getHeight() - bottom.getHeight(),
-            band.getHeight());
+        assertEquals(column.getHeight() - top.getHeight(), band.getHeight());
         assertEquals(band.getHeight(), surface.getHeight());
     }
 
@@ -530,7 +528,8 @@ public class TermuxActivityEdgeStackLayoutTest {
             plankBars.getSeparatorCount());
 
         // Every band in a screen edge's stack carries its own glass, so none of those are seamed.
-        for (int id : new int[] {R.id.place_edge_stack_top, R.id.place_edge_stack_bottom,
+        // The bottom edge's stack is the dock's own sheet and is covered by the dock-stack test.
+        for (int id : new int[] {R.id.place_edge_stack_top,
             R.id.place_edge_stack_left, R.id.place_edge_stack_right}) {
             assertEquals(0, ((EdgeStackView) activity.findViewById(id)).getSeparatorCount());
         }

@@ -136,10 +136,13 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     @Test
     public void toolbarKeyboardMatrixAndCombinedHeightPreserveToolbarBaseline() {
-        assertFalse(TermuxActivity.shouldShowAccessoryStack(false, false));
-        assertTrue(TermuxActivity.shouldShowAccessoryStack(true, false));
-        assertTrue(TermuxActivity.shouldShowAccessoryStack(false, true));
-        assertTrue(TermuxActivity.shouldShowAccessoryStack(true, true));
+        // Updated for P9: a status bar the place stands along the bottom is a band of this stack,
+        // so it keeps the stack on screen with every dock row hidden and the keyboard down.
+        assertFalse(TermuxActivity.shouldShowAccessoryStack(false, false, false));
+        assertTrue(TermuxActivity.shouldShowAccessoryStack(true, false, false));
+        assertTrue(TermuxActivity.shouldShowAccessoryStack(false, true, false));
+        assertTrue(TermuxActivity.shouldShowAccessoryStack(true, true, false));
+        assertTrue(TermuxActivity.shouldShowAccessoryStack(false, false, true));
 
         assertEquals(147, TermuxActivity.computeAccessoryStackHeight(140, 7, 0));
         assertEquals(420, TermuxActivity.computeAccessoryStackHeight(0, 0, 420));

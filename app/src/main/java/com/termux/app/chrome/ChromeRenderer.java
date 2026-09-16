@@ -66,6 +66,15 @@ public final class ChromeRenderer {
         /** Corner radius baked into the status bar's containing stroke, 0 when it has none. */
         float statusBarRimCornerRadiusPx();
 
+        /**
+         * True while the status bar is a band of the dock's own sheet of glass — ordered onto the
+         * bottom edge with another band above it. The dock's material is already under it there,
+         * so the bar takes no frost, no blur and no wash of its own.
+         */
+        default boolean statusBarOnDockPlank() {
+            return false;
+        }
+
         // ---- the wallpaper the blurred frames are captured from: WallpaperBlurCache.Source
 
         /** Blurs a captured frame with the shared renderer; a fake overrides this to skip the blur. */
