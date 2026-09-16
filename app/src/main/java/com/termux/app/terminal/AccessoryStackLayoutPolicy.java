@@ -53,6 +53,11 @@ public final class AccessoryStackLayoutPolicy {
      * their crown away. Read off the resolved order rather than off "the apps row is shown":
      * re-ordered it can be the extra keys standing over the letters, or the status bar, or nothing
      * at all with the apps row under them.
+     *
+     * <p>This pair is about the letters' <em>air</em> — which side of them already has a neighbour
+     * to keep them off the dock's rim — and not about where the scrub's matches go. That is
+     * {@code AzPreviewTargetPolicy}, which names the apps row wherever the stack put it; a band
+     * over the letters here is as likely to be the extra keys as the row.
      */
     public static boolean rowOverAz(@NonNull List<Element> bottomStack) {
         List<Element> rows = plankBands(bottomStack);

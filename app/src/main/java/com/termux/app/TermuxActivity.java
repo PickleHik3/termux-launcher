@@ -114,6 +114,7 @@ import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzBarHostGeometry;
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
+import com.termux.app.launcher.az.AzPreviewTargetPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
@@ -6830,11 +6831,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Where this place's scrub puts its matches: the pinned apps row wherever the stack has put it,
+     * or the floating strip when there is no row to fill. The one resolver the gesture, the letter
+     * row and the FX layers all read, instead of each assuming the row is the band above.
+     */
+    @NonNull
+    private AzPreviewTargetPolicy.Resolution azPreviewTarget() {
+        return AzPreviewTargetPolicy.resolve(currentPlaceLayout());
+    }
+
+    /**
      * The index standing on its own, because the place put the pinned apps on a rail or hid them.
-     * The matches then ride a floating strip above the letters instead of filling the apps row.
+     * The matches then ride a floating strip beside the letters instead of filling the apps row.
      */
     private boolean isAzIndexStandalone() {
-        return mPreferences != null && PlaceChromePolicy.azIndexStandsAlone(currentPlaceLayout());
+        return mPreferences != null && azPreviewTarget().standsAlone();
     }
 
     /**
@@ -6933,6 +6944,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             } else {
                 next.setBarEdge(edge);
             }
+            // Which face of the bar the matches are on, so the drag that picks one of them is
+            // measured towards the band it is picking from.
+            next.setPreviewTrackOutward(azPreviewTarget().side.isOutward());
         }
         // A host that has just appeared needs its material now; one that was already up gets it
         // on the render pass, so an insets dispatch does not build a fresh drawable for nothing.
@@ -7613,6 +7627,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private AzScrubGesture.Geometry azGestureGeometry(boolean standalone) {
+        AzPreviewTargetPolicy.Resolution target = azPreviewTarget();
         AzBarFrame frame = azBarFrame();
         float azRowLeftRaw = 0f;
         float azRowTopRaw = 0f;
@@ -7628,9 +7643,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             azRowHeightPx = mAzScrubRowView.letterBandThicknessPx();
         }
         // The extra keys are the dock's, so they extend the return band only for a bar that is on
-        // the dock with them; a bar on another edge has nothing under it and says so.
+        // the dock with them; a bar on another edge has nothing under it and says so. And they do
+        // it only while they stand beyond the letters, on the far side from the matches — ordered
+        // between the two they are a band to cross, not ground to fall back onto.
         boolean onDock = mAzBarEdge == PlaceLayout.Edge.BOTTOM;
-        float extraKeysHeightPx = onDock && mAzTerminalToolbarView != null
+        boolean keysBehind = onDock
+            && AzPreviewTargetPolicy.beyondLetters(currentPlaceLayout(), Element.EXTRA_KEYS);
+        float extraKeysHeightPx = keysBehind && mAzTerminalToolbarView != null
             && mAzTerminalToolbarView.getHeight() > 0
             ? mAzTerminalToolbarView.getHeight()
             : 0f;
@@ -7639,9 +7658,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             extraKeysHeightPx,
             frame.toCanonical(toAzBounds(mAzRowRawBounds)),
             frame.toCanonical(toAzBounds(iconTrack)),
-            onDock ? frame.toCanonical(toAzBounds(mExtraKeysRawBounds))
+            keysBehind ? frame.toCanonical(toAzBounds(mExtraKeysRawBounds))
                 : AzScrubGesture.Bounds.EMPTY,
-            getResources().getDisplayMetrics().density);
+            getResources().getDisplayMetrics().density,
+            // The strip always grows away from the bar; the row is wherever the stack put it.
+            standalone ? AzPreviewTargetPolicy.Side.INWARD.sign : target.sign());
     }
 
     /**
@@ -7791,15 +7812,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * above an apps row which is not there.
      */
     private void applyAzFxRowBounds(boolean standalone) {
+        // The strip always floats away from the bar; the row is on whichever side the stack put it,
+        // and the name has to read on the far side of whichever band this is.
+        boolean outward = !standalone && azPreviewTarget().side.isOutward();
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setRowBounds(mAppsRowRawBounds);
+            mLauncherAzGestureFxUnderlayView.setPreviewTrackOutward(outward);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setRowBounds(mAppsRowRawBounds);
+            mLauncherAzGestureFxOverlayView.setPreviewTrackOutward(outward);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
             mLauncherAzGestureFxLabelOverlayView.setRowBounds(
                 standalone ? mAzStripRawBounds : mAppsRowRawBounds);
+            mLauncherAzGestureFxLabelOverlayView.setPreviewTrackOutward(outward);
         }
     }
 
