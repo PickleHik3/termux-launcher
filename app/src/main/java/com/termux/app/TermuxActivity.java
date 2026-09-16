@@ -3172,9 +3172,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewParent parent = view.getParent();
         if (parent instanceof View) {
             View parentView = (View) parent;
-            if (parentView.getWidth() > 0) {
-                targetWidth = parentView.getWidth();
-            }
             if (parentView.getHeight() > 0) {
                 targetHeight = parentView.getHeight();
             }
@@ -3183,11 +3180,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             targetTop = Math.max(0, bounds.top);
             targetHeight = Math.max(0, bounds.height());
         }
-        if (viewId == R.id.accessory_surface_host && targetWidth > 0) {
+        if (viewId == R.id.accessory_surface_host) {
+            // The margins, and MATCH_PARENT for what is left — never the parent's width frozen
+            // into pixels. The dock gets its width back in the same frame a bar leaves a side
+            // edge, and this pass runs before that re-layout: a pixel width read here left the
+            // glass short by the rail's whole band, all of it on the right.
             int horizontalMargin = getDockLayout().horizontalInsetPx;
             targetLeftMargin = horizontalMargin;
             targetRightMargin = horizontalMargin;
-            targetWidth = Math.max(1, targetWidth - (horizontalMargin * 2));
         }
         applyDockSurfaceShape(view, capsuleSurface, targetHeight,
             viewId == R.id.accessory_surface_host);

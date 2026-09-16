@@ -853,12 +853,20 @@ public final class SuggestionBarView extends GridLayout
         requestLayout();
     }
 
+    /**
+     * The dock row's height, for the form that lies down. It is remembered while the bar stands
+     * up — the dock keeps handing its own row height over whichever edge the bar is on — but it
+     * changes nothing there: a rail's icons and slots come from the rail's own metrics.
+     */
     public void setDockRowHeightHintPx(int dockRowHeightHintPx) {
         int clamped = Math.max(0, dockRowHeightHintPx);
         if (this.dockRowHeightHintPx == clamped) {
             return;
         }
         this.dockRowHeightHintPx = clamped;
+        if (vertical) {
+            return;
+        }
         invalidateRenderedIconCaches();
         childLayoutPending = true;
         requestLayout();
@@ -3042,7 +3050,10 @@ public final class SuggestionBarView extends GridLayout
         signature = (31 * signature) + (bandW ? 1 : 0);
         signature = (31 * signature) + DockIconCache.RENDER_PIPELINE_VERSION;
         signature = (31 * signature) + Float.floatToIntBits(iconScale);
-        signature = (31 * signature) + dockRowHeightHintPx;
+        // The axis, and the row height only while there is a row: the dock keeps pushing its own
+        // row height at a bar standing on a side, and that must not read as a new surface.
+        signature = (31 * signature) + (vertical ? 1 : 0);
+        signature = (31 * signature) + rowHeightHintPx();
         signature = (31 * signature) + Math.max(1, buttonCount);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
@@ -3231,6 +3242,16 @@ public final class SuggestionBarView extends GridLayout
     /** How much of the rail's axis one icon takes: the icon, and its air above and below. */
     private int railSlotLengthPx() {
         return com.termux.app.dock.DockLayoutPolicy.railSlotLengthPx(screenDensity());
+    }
+
+    /** One rail icon, across the rail. */
+    private int railIconSizePx() {
+        return com.termux.app.dock.DockLayoutPolicy.railIconSizePx(screenDensity());
+    }
+
+    /** The dock row's height hint, which only the form that lies down is sized by. */
+    private int rowHeightHintPx() {
+        return vertical ? 0 : dockRowHeightHintPx;
     }
 
     private void launchEntry(@NonNull LauncherAppEntry entry, @Nullable TerminalView terminalView) {
@@ -7372,24 +7393,50 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
+    /**
+     * Whether the bar has been given bounds worth rendering into. The floors are the axis's: a
+     * rail is one icon wide and the whole edge long, so the lying-down row's 120dp width floor
+     * would refuse every rail there is and defer the render forever.
+     */
     private boolean hasStableRenderBounds() {
-        int minStableWidth = Math.max(1, dp(120));
-        int minStableHeight = Math.max(1, dp(24));
-        if (!isLaidOut() || getWidth() < minStableWidth || getHeight() < minStableHeight) {
+        if (!isLaidOut()) {
             return false;
         }
-        return dockRowHeightHintPx <= 0 || getHeight() >= Math.max(minStableHeight, dockRowHeightHintPx - dp(4));
+        if (vertical) {
+            // A tolerance below one icon, not an exact fit: the host's band is a rounded 58dp
+            // less two rounded 10dp paddings, which can land a pixel or two under the icon.
+            int minStableWidth = Math.max(1, railIconSizePx() - dp(4));
+            int minStableLength = Math.max(1, railSlotLengthPx());
+            return getWidth() >= minStableWidth && getHeight() >= minStableLength;
+        }
+        int minStableWidth = Math.max(1, dp(120));
+        int minStableHeight = Math.max(1, dp(24));
+        if (getWidth() < minStableWidth || getHeight() < minStableHeight) {
+            return false;
+        }
+        return rowHeightHintPx() <= 0 || getHeight() >= Math.max(minStableHeight, rowHeightHintPx() - dp(4));
     }
 
+    /**
+     * Whether the slots have actually been placed apart from one another. Which way "apart" runs
+     * is the axis's too: a rail's slots differ by their top, a row's by their left.
+     */
     private boolean hasStableChildLayout() {
         if (!childLayoutPending) {
             return true;
         }
         int meaningfulChildren = 0;
-        int firstLeft = Integer.MIN_VALUE;
+        int firstPosition = Integer.MIN_VALUE;
         boolean foundDistinctSlot = false;
-        int minChildWidth = Math.max(dp(18), getWidth() / Math.max(2, maxButtonCount * 2));
-        int minChildHeight = Math.max(dp(18), Math.min(Math.max(dp(18), dockRowHeightHintPx - dp(8)), getHeight()));
+        int minChildWidth;
+        int minChildHeight;
+        if (vertical) {
+            minChildWidth = Math.max(dp(18), Math.min(getWidth(), railIconSizePx() - dp(4)));
+            minChildHeight = Math.max(dp(18), Math.min(railSlotLengthPx(), getHeight()));
+        } else {
+            minChildWidth = Math.max(dp(18), getWidth() / Math.max(2, maxButtonCount * 2));
+            minChildHeight = Math.max(dp(18), Math.min(Math.max(dp(18), rowHeightHintPx() - dp(8)), getHeight()));
+        }
 
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
@@ -7400,9 +7447,10 @@ public final class SuggestionBarView extends GridLayout
             if (child.getWidth() < minChildWidth || child.getHeight() < minChildHeight) {
                 return false;
             }
-            if (firstLeft == Integer.MIN_VALUE) {
-                firstLeft = child.getLeft();
-            } else if (Math.abs(child.getLeft() - firstLeft) >= dp(8)) {
+            int position = vertical ? child.getTop() : child.getLeft();
+            if (firstPosition == Integer.MIN_VALUE) {
+                firstPosition = position;
+            } else if (Math.abs(position - firstPosition) >= dp(8)) {
                 foundDistinctSlot = true;
             }
         }
@@ -7593,6 +7641,7 @@ public final class SuggestionBarView extends GridLayout
 
     /** Pages occupied by the user's persisted pinned items (excludes the dynamic most-used page). */
     private int getRealPinnedPagesCount() {
+        if (vertical) return 1;
         // Pass maxButtonCount rather than the pinnedItemsPerPage field: the field is 1 until the
         // first successful pinned render and after az/non-pinned renders, so feeding it here would
         // report one page per pinned item (the "dozens of empty page ticks" failure).
@@ -7604,6 +7653,10 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private int getPinnedPagesCount() {
+        // One page standing up, to match the whole column computePinnedItemsPerPage hands over.
+        // Paged by maxButtonCount instead, a rail showed its first few icons and hid the rest
+        // behind page ticks nothing on a column can swipe.
+        if (vertical) return 1;
         return DockPagingModel.pinnedPageCount(pinnedItemCount(), maxButtonCount,
             hasMostUsedDynamicPage());
     }
@@ -7613,7 +7666,8 @@ public final class SuggestionBarView extends GridLayout
      * most-used candidate to fill it. Must NOT call {@link #getPinnedPagesCount()} (recursion).
      */
     private boolean hasMostUsedDynamicPage() {
-        return mostUsedPageEnabled && !resolveMostUsedPageEntries().isEmpty();
+        // The rail has no second page to put it on.
+        return !vertical && mostUsedPageEnabled && !resolveMostUsedPageEntries().isEmpty();
     }
 
     /** The dynamic page is always the trailing page, right after the real pinned pages. */
@@ -7701,8 +7755,8 @@ public final class SuggestionBarView extends GridLayout
     private int iconSizePx() {
         // A rail icon is a fixed size on every side: its column has no row height to be a share of.
         if (vertical)
-            return com.termux.app.dock.DockLayoutPolicy.railIconSizePx(screenDensity());
-        int availableHeight = dockRowHeightHintPx > 0 ? dockRowHeightHintPx : getHeight();
+            return railIconSizePx();
+        int availableHeight = rowHeightHintPx() > 0 ? rowHeightHintPx() : getHeight();
         if (availableHeight <= 0) {
             ViewParent parent = getParent();
             if (parent instanceof View) {
