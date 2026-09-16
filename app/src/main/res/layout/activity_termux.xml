@@ -401,6 +401,52 @@
                         android:layout_height="match_parent" />
                 </FrameLayout>
             </FrameLayout>
+
+            <!-- One plank for a pinned-apps row lying down off the dock, and for the alphabets
+                 index while it rides that row: both bars stand on this single sheet of glass
+                 instead of carrying one each, so there is no seam between them and the whole plank
+                 takes the dock's own corner radius. syncOffDockPlank() sizes and glazes it and
+                 applyEdgeStacks() moves it, with the bars inside it in the same order the edge's
+                 stack gives them. -->
+            <FrameLayout
+                android:id="@+id/place_off_dock_plank_host"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:visibility="gone">
+
+                <!-- The glass sheet is exactly the plank, so it is the thing the rounded outline
+                     clips; the host around it stays unclipped for the wave's lift. -->
+                <FrameLayout
+                    android:id="@+id/place_off_dock_plank_glass"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <com.github.mmin18.widget.RealtimeBlurView
+                        android:id="@+id/place_off_dock_plank_blur"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:realtimeBlurRadius="10dp"
+                        app:realtimeOverlayColor="@android:color/transparent" />
+
+                    <View
+                        android:id="@+id/place_off_dock_plank_surface"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+                </FrameLayout>
+
+                <!-- The bars on the plank, outermost first, turned by the edge the plank stands
+                     on — the same stack the four edges use, so the order and the reversal are the
+                     one piece of code. -->
+                <com.termux.app.place.EdgeStackView
+                    android:id="@+id/place_off_dock_plank_bars"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:edgeStackEdge="top"
+                    android:clipChildren="false"
+                    android:clipToPadding="false" />
+            </FrameLayout>
             </com.termux.app.place.EdgeStackView>
 
             <FrameLayout

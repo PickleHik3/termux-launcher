@@ -111,22 +111,36 @@ public class PlaceChromePolicyTest {
     }
 
     @Test
-    public void theBarsStoredEdgeAppliesOnlyWhileItStandsAlone() {
-        // Riding under the apps row: the stored edge is ignored, the bar is always bottom.
-        PlaceLayout ridingRow = layout(RowPlacement.BOTTOM, true, Edge.LEFT, RowPlacement.BOTTOM);
-        assertFalse(PlaceChromePolicy.azIndexStandsAlone(ridingRow));
-        assertEquals(Edge.BOTTOM, PlaceChromePolicy.azBarEdge(ridingRow));
+    public void theIndexRidesTheAppsRowOnlyWhereTheyShareAnEdge() {
+        // The apps row along the bottom with the index stored on the left: it does not ride the
+        // row, it stands on the left, and moving the row alone never drags it across the screen.
+        PlaceLayout apart = layout(RowPlacement.BOTTOM, true, Edge.LEFT, RowPlacement.BOTTOM);
+        assertFalse(PlaceChromePolicy.azRidesAppsRow(apart));
+        assertTrue(PlaceChromePolicy.azIndexStandsAlone(apart));
+        assertEquals(Edge.LEFT, PlaceChromePolicy.azBarEdge(apart));
+
+        // Both along the bottom — the shipped arrangement — is riding, and is unchanged.
+        PlaceLayout riding = layout(RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.BOTTOM);
+        assertTrue(PlaceChromePolicy.azRidesAppsRow(riding));
+        assertFalse(PlaceChromePolicy.azIndexStandsAlone(riding));
+        assertEquals(Edge.BOTTOM, PlaceChromePolicy.azBarEdge(riding));
+
+        // A rail is a column with no slots to fill, so an index sharing that edge stands alone.
+        PlaceLayout rail = layout(RowPlacement.LEFT, true, Edge.LEFT, RowPlacement.BOTTOM);
+        assertFalse(PlaceChromePolicy.azRidesAppsRow(rail));
+        assertTrue(PlaceChromePolicy.azIndexStandsAlone(rail));
 
         // Standing alone: the stored edge is honoured, on every edge.
         for (Edge edge : Edge.values()) {
-            PlaceLayout standalone = layout(RowPlacement.LEFT, true, edge, RowPlacement.BOTTOM);
+            PlaceLayout standalone = layout(RowPlacement.HIDDEN, true, edge, RowPlacement.BOTTOM);
             assertTrue(PlaceChromePolicy.azIndexStandsAlone(standalone));
             assertEquals(edge, PlaceChromePolicy.azBarEdge(standalone));
         }
 
-        // The switch off: standing alone is moot, the bar is bottom.
-        PlaceLayout off = layout(RowPlacement.LEFT, false, Edge.RIGHT, RowPlacement.BOTTOM);
-        assertEquals(Edge.BOTTOM, PlaceChromePolicy.azBarEdge(off));
+        // The switch off: there is no index to place, and nothing rides anything.
+        PlaceLayout off = layout(RowPlacement.BOTTOM, false, Edge.BOTTOM, RowPlacement.BOTTOM);
+        assertFalse(PlaceChromePolicy.azRowShown(off));
+        assertFalse(PlaceChromePolicy.azRidesAppsRow(off));
     }
 
     /**
@@ -153,9 +167,14 @@ public class PlaceChromePolicyTest {
         assertFalse(PlaceChromePolicy.azRowOnDock(withKeys));
         assertTrue(PlaceChromePolicy.dockShown(withKeys));
 
-        // Riding under the apps row is on the dock however the stored edge reads.
-        PlaceLayout riding = layout(RowPlacement.BOTTOM, true, Edge.RIGHT, RowPlacement.HIDDEN);
+        // Riding the apps row along the bottom is on the dock; stored on another edge it is not,
+        // even with that row on the dock under it.
+        PlaceLayout riding = layout(RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.HIDDEN);
         assertTrue(PlaceChromePolicy.azRowOnDock(riding));
         assertTrue(PlaceChromePolicy.dockShown(riding));
+
+        PlaceLayout indexAside = layout(RowPlacement.BOTTOM, true, Edge.RIGHT, RowPlacement.HIDDEN);
+        assertFalse(PlaceChromePolicy.azRowOnDock(indexAside));
+        assertTrue("the apps row still holds the dock", PlaceChromePolicy.dockShown(indexAside));
     }
 }

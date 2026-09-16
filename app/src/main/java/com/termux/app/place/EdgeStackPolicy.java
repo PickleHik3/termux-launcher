@@ -28,10 +28,11 @@ import java.util.List;
  * what the Layout-freedom work replaced with an order the user can set; every other arrangement
  * the old model could express comes out byte-for-byte the same.
  *
- * <p>Two rules are kept from the old model and are not ours to change:
- * the status bar is never hidden (the wall's pager rides it), and the alphabets index riding the
- * pinned apps row ignores its own slot and goes wherever that row goes — any of the four edges
- * now, not just the bottom ({@link PlaceChromePolicy#azBarEdge}).
+ * <p>One rule is kept from the old model and is not ours to change: the status bar is never hidden,
+ * because the wall's pager rides it. The other — the alphabets index following the pinned apps row
+ * about — is gone: the index rides that row only while the two of them hold the same edge
+ * ({@link PlaceChromePolicy#azRidesAppsRow}), so every element here draws on the edge its own slot
+ * names and a row moved on its own leaves the index where it stood.
  *
  * <p>One rule is a renderer fact rather than a policy one, recorded here so the next reader does
  * not look for it: only a status bar standing on {@link Edge#TOP} gets the system-bar glass strip
@@ -232,12 +233,12 @@ public final class EdgeStackPolicy {
     // ---------------------------------------------------------------- the stack
 
     /**
-     * The edge an element actually draws on, which is its own slot's except for the alphabets
-     * index while it rides the pinned apps row: there it goes wherever that row goes.
+     * The edge an element draws on: its own slot's, for every element. The alphabets index riding
+     * the pinned apps row is the two of them holding the same edge, not the row carrying the index
+     * about, so nothing is derived here any more.
      */
     @NonNull
     public static Edge edgeOf(@NonNull PlaceLayout layout, @NonNull Element element) {
-        if (element == Element.AZ) return PlaceChromePolicy.azBarEdge(layout);
         return layout.slot(element).edge;
     }
 
@@ -269,9 +270,9 @@ public final class EdgeStackPolicy {
     }
 
     /**
-     * Where an element sits in the stack of the edge it actually draws on. That is its own slot's
-     * number, except for the alphabets index riding the pinned apps row: its slot is ignored
-     * whole — edge and position alike — and it takes the band it has always had under that row.
+     * Where an element sits in the stack of the edge it draws on: its own slot's number. Asked
+     * about an edge the element does not hold, it answers with the band it would take there, which
+     * is what a caller previewing a drop reads.
      */
     public static int orderOf(@NonNull PlaceLayout layout, @NonNull Element element,
                               @NonNull Edge edge) {
@@ -327,23 +328,17 @@ public final class EdgeStackPolicy {
      * to a place and an orientation, and the editor asks per orientation — even though no edge is
      * currently withheld for it.
      *
-     * <p>The alphabets index riding the pinned apps row has no edge of its own to pick: the one
-     * thing a drag can do with it is put it away, and, once away, bring it back to the row it
-     * rides — on whichever edge that row now stands. An element already standing on an edge does not count itself when the indices for
-     * that edge are counted, since a drop there is a move within the stack.
+     * <p>The alphabets index riding the pinned apps row is offered the same edges as anything
+     * else: riding is the two of them sharing an edge, so the drag that takes the index off the
+     * row is a drop on another edge, and the drag that puts it back is a drop on the row's. An
+     * element already standing on an edge does not count itself when the indices for that edge are
+     * counted, since a drop there is a move within the stack.
      */
     @NonNull
     public static List<Drop> targets(@NonNull PlaceLayout layout, @NonNull Element element,
                                      @NonNull PlaceOrientation orientation) {
         List<Drop> drops = new ArrayList<>(16);
         boolean hideAllowed = element.hideAllowed();
-        if (element == Element.AZ && PlaceChromePolicy.azRidesAppsRow(layout)) {
-            if (layout.slot(Element.AZ).hidden) {
-                Edge riding = PlaceChromePolicy.appsEdge(layout);
-                drops.add(new Drop(riding, Element.AZ.defaultOrder(riding), hideAllowed));
-            }
-            return Collections.unmodifiableList(drops);
-        }
         for (Edge edge : Edge.values()) {
             List<Element> on = stack(layout, edge);
             int slots = on.contains(element) ? on.size() - 1 : on.size();
@@ -366,11 +361,11 @@ public final class EdgeStackPolicy {
      * {@link #stack} breaks the tie with {@link Element#defaultOrder} — so a drop that re-orders
      * an edge has to write every band on it rather than only the one that moved.
      *
-     * <p>An alphabets index riding the pinned apps row is a band of that edge like any other here,
-     * so a drop that re-orders the row it rides also pins its own slot to the edge it is being
-     * drawn on. That is the one thing this writes which the user did not drag: without it the
-     * index keeps the position its stored edge gives it and the drop the user made is not the
-     * stack they end up with.
+     * <p>An alphabets index riding the pinned apps row is a band of that edge like any other here.
+     * Re-ordering the edge they share re-numbers both, and dropping the row alone on another edge
+     * leaves the index on the one it holds — it stops riding and stands there with a bar of its
+     * own, which is what dragging one bar and not the other asks for. Dropping the index back on
+     * the row's edge is what puts it under the row again.
      */
     @NonNull
     public static PlaceLayout withDrop(@NonNull PlaceLayout layout, @NonNull Element element,

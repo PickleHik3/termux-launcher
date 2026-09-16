@@ -35,12 +35,20 @@ public final class PlaceChromePolicy {
     }
 
     /**
-     * The pinned apps lying down as a row, along the top or the bottom — the one arrangement the
-     * alphabets index can ride, since a rail standing in a column has no slots along the index's
-     * own axis to fill with matches.
+     * The index riding the pinned apps row: the two of them on the same edge, with that row lying
+     * down.
+     *
+     * <p>Two things have to hold. The row has to lie along the top or the bottom, since a rail
+     * standing in a column has no slots along the index's own axis to fill with matches. And the
+     * index has to stand on that same edge itself — moving only the row never drags the index
+     * across the screen after it, and an index the user put on another edge keeps a bar of its own
+     * there. Sharing the edge is what riding <em>is</em>, so the index's stored slot is never
+     * overridden and {@link #azBarEdge} is simply what it says.
      */
     public static boolean azRidesAppsRow(@NonNull PlaceLayout layout) {
-        return appsShown(layout) && !appsEdge(layout).isOnSide();
+        if (!appsShown(layout) || !azRowShown(layout)) return false;
+        Edge apps = appsEdge(layout);
+        return !apps.isOnSide() && layout.slot(Element.AZ).edge == apps;
     }
 
     /**
@@ -55,23 +63,21 @@ public final class PlaceChromePolicy {
     /**
      * The index standing on its own, with no apps row to fill: the scrub shows its matches on a
      * floating strip instead of in the row. A rail leaves it standing alone, which is what
-     * landscape has always done.
+     * landscape has always done, and so does an edge of its own.
      */
     public static boolean azIndexStandsAlone(@NonNull PlaceLayout layout) {
         return azRowShown(layout) && !azRidesAppsRow(layout);
     }
 
     /**
-     * The edge the alphabets bar actually draws on. Its stored choice only applies while it stands
-     * alone; riding under the pinned apps takes it to whichever edge that row lies along — the
-     * bottom for every place that has not moved the row, the top for one that has.
+     * The edge the alphabets bar draws on: the one it is stored on, always. Riding the pinned apps
+     * row is the two of them sharing an edge rather than the row carrying the index around, so
+     * there is nothing left here to override — a row moved to another edge leaves the index where
+     * the user left it, and the index joins it again by being dropped on the same edge.
      */
     @NonNull
     public static Edge azBarEdge(@NonNull PlaceLayout layout) {
-        if (azIndexStandsAlone(layout)) return layout.slot(Element.AZ).edge;
-        // Riding: wherever that row stands. With the index switched off there is no bar to place
-        // and the bottom — where one has always come back to — stands for it.
-        return azRidesAppsRow(layout) ? appsEdge(layout) : Edge.BOTTOM;
+        return layout.slot(Element.AZ).edge;
     }
 
     /**
