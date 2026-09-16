@@ -47,6 +47,8 @@ public final class WidgetGridView extends ViewGroup {
     private final int touchSlop;
     private final Runnable emptyLongPressFire = this::fireEmptyLongPress;
     private boolean emptyLongPressPending;
+    /** Whether a pane corner may still claim the finger that is down; see {@link #setHoldExempt}. */
+    private boolean holdExempt;
     private float emptyDownX, emptyDownY;
     private float emptyDownRawX, emptyDownRawY;
 
@@ -70,6 +72,19 @@ public final class WidgetGridView extends ViewGroup {
 
     public void setListener(@Nullable Listener value) { listener = value; }
 
+    /**
+     * The page's frame says a corner square may still take this finger, so the grid and its cells
+     * leave the long press to it: a press that lands in a corner belongs to the corner, and the
+     * grid never opens its menu underneath the tab that hold brings out. It is handed straight
+     * back when the corner gives the gesture up.
+     */
+    public void setHoldExempt(boolean exempt) {
+        if (holdExempt == exempt) return;
+        holdExempt = exempt;
+        if (exempt) cancelEmptyLongPress();
+        for (WidgetCellView cell : cells.values()) cell.setHoldExempt(exempt);
+    }
+
     public void refresh(@NonNull WidgetGridDefinition grid,
                         @NonNull List<LauncherWidgetRecord> snapshot) {
         definition = grid;
@@ -83,6 +98,7 @@ public final class WidgetGridView extends ViewGroup {
             WidgetCellView cell = cells.get(record.appWidgetId);
             if (cell == null) {
                 cell = new WidgetCellView(getContext());
+                cell.setHoldExempt(holdExempt);
                 cell.setId(ViewCompat.generateViewId());
                 cells.put(record.appWidgetId, cell);
                 addView(cell);
@@ -136,9 +152,11 @@ public final class WidgetGridView extends ViewGroup {
             case MotionEvent.ACTION_DOWN:
                 emptyDownX = event.getX(); emptyDownY = event.getY();
                 emptyDownRawX = event.getRawX(); emptyDownRawY = event.getRawY();
-                emptyLongPressPending = true;
-                postDelayed(emptyLongPressFire,
-                    ViewConfiguration.getLongPressTimeout());
+                if (!holdExempt) {
+                    emptyLongPressPending = true;
+                    postDelayed(emptyLongPressFire,
+                        ViewConfiguration.getLongPressTimeout());
+                }
                 return true;
             case MotionEvent.ACTION_MOVE:
                 if (emptyLongPressPending && Math.hypot(event.getX() - emptyDownX,

@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.chrome.CornerHold;
+import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
@@ -109,7 +110,9 @@ public final class X11PaneFrame extends PaneContentFrame {
     /** The corner the finger landed in, from its landing to its lift, held or not. */
     private int mPressedCorner = CornerZones.NONE;
     /** Who owns a finger down in a corner square: the display under it, or this corner. */
-    private final CornerHold mHold = new CornerHold();
+    private final CornerHoldArbiter mHold = new CornerHoldArbiter();
+    /** True only inside {@link #cancelDisplayGesture()}: that cancel is X's, not this frame's. */
+    private boolean mCancellingDisplay;
     /**
      * Its own handler rather than {@link View#postDelayed}: a detached view queues those until it
      * is attached, and the hold has to fire whether or not this page is on screen yet.
@@ -208,6 +211,9 @@ public final class X11PaneFrame extends PaneContentFrame {
      */
     @Override
     public boolean onInterceptTouchEvent(@NonNull android.view.MotionEvent event) {
+        // The cancel the corner sends X when it claims the hold passes back through here: it is
+        // for the child, and reading it as the end of the gesture would undo the claim.
+        if (mCancellingDisplay) return false;
         if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN)
             return onFrameDown(event);
         // Read before the event is played: the hold is claimed by its timer rather than by a
@@ -249,11 +255,11 @@ public final class X11PaneFrame extends PaneContentFrame {
             }
             dismissControls();
         }
-        int corner = cornerAt(mDownX, mDownY);
+        float slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        int corner = mHold.down(mDownX, mDownY, getWidth(), getHeight(),
+            getResources().getDisplayMetrics().density, false, slop);
         if (corner == CornerZones.NONE) return false;
         mPressedCorner = corner;
-        float slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
-        mHold.down(mDownX, mDownY, slop, slop, false);
         mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
         return false;
     }
@@ -294,8 +300,30 @@ public final class X11PaneFrame extends PaneContentFrame {
      */
     private void onHoldElapsed() {
         if (!mHold.holdElapsed()) return;
+        cancelDisplayGesture();
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+    }
+
+    /**
+     * Tell X the touch it has been tracking is over, the moment the corner claims it. A cancel is
+     * the one ending that leaves nothing behind — no tap, no press of its own — which is what a
+     * finger that turned out to be a corner hold owes the display. Waiting for the next event to
+     * intercept is not the same thing: a finger holding still sends none.
+     */
+    private void cancelDisplayGesture() {
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent cancel = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_CANCEL, mDownX, mDownY, 0);
+        mCancellingDisplay = true;
+        try {
+            // Down the frame's own dispatch, so whichever child is holding the stream is the one
+            // told to forget it — and the frame stops being a touch target for it in the bargain.
+            dispatchTouchEvent(cancel);
+        } finally {
+            mCancellingDisplay = false;
+            cancel.recycle();
+        }
     }
 
     /** Out of the corner that was held; the corner it is already out of puts it away again. */
@@ -324,6 +352,7 @@ public final class X11PaneFrame extends PaneContentFrame {
      */
     @Override
     public boolean onTouchEvent(@NonNull android.view.MotionEvent event) {
+        if (mCancellingDisplay) return false;
         if (mRailPressed) return onRailTouch(event);
         if (mPressedAction == PaneControlsView.ACTION_NONE && !mHold.isTracking()) {
             return super.onTouchEvent(event);
