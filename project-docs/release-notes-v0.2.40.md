@@ -60,6 +60,8 @@
 
 ### Appearance and Layout
 
+- Every bar goes on every edge: the status bar, the apps row, the A–Z index and the extra keys can each sit at the top, bottom, left or right of a place, and bars that share an edge can be reordered. Lift a bar in the Layout editor and drop it between two others; thin lines show where it will land. Side columns are allowed in portrait too, with a short notice when the terminal is getting narrow.
+- The apps row on its side is the same row you know: pinning, folders and drag-to-reorder work in the rail too, and it scrolls when you pin more apps than fit.
 - Extra keys can carry a colour: tap a key while its Appearance card is up and pick from your theme's accents, containers, black or white. The colour is a Material role, so it changes with your wallpaper and dark mode. The Home, Terminal and Display keys come coloured out of the box.
 - Extra keys that do nothing on the place in front of you are dimmed: shell keys on the Home place, pane and session keys on the Display place.
 - Every corner tab — Home, Terminal, Display and a lone terminal pane — carries two buttons: Appearance for how the place looks, Layout for where its elements sit and how big they are. The terminal's long-press menu offers the same two.
