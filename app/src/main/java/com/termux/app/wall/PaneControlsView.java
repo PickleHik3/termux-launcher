@@ -136,6 +136,12 @@ public final class PaneControlsView extends View {
         public float radiusPx;
         /** The border it paints — the line the tab lines up inside, 0 when it paints none. */
         public float borderPx;
+        /**
+         * What its interior is tinted with, so the tab fills itself the same way and reads as the
+         * frame grown rather than as a panel laid over it. Transparent when the frame has no tint
+         * of its own, and then the tab falls back to the theme's panel colour.
+         */
+        public int fillColor;
     }
 
     /** Where the tab's frame is now; asked afresh every time the tab is laid out or drawn. */
@@ -169,6 +175,10 @@ public final class PaneControlsView extends View {
     private float mPaneRadiusPx;
     /** The border the page paints — the line the tab lines up inside, 0 when it paints none. */
     private float mPaneBorderPx;
+    /** The tint the page's own interior wears; transparent falls back to the theme's panel. */
+    private int mPaneFillColor;
+    /** Scratch for the tab's path points; never allocated per frame. */
+    private final float[] mPathPoints = new float[CornerTabGeometry.PATH_POINTS * 2];
     /** The corner it comes out of; {@link CornerZones#NONE} until a page or the default says. */
     private int mCorner = CornerZones.NONE;
     private float mProgress;
@@ -215,6 +225,18 @@ public final class PaneControlsView extends View {
     }
 
     /**
+     * What the page's interior is tinted with. The tab fills itself with the same colour at the
+     * same alpha, so it reads as the frame having grown rather than as a panel laid over it; a page
+     * that has no tint of its own passes 0 and the tab falls back to the theme's panel colour,
+     * which is what a page with no glass has always shown.
+     */
+    public void setPaneFill(int color) {
+        if (mPaneFillColor == color) return;
+        mPaneFillColor = color;
+        invalidate();
+    }
+
+    /**
      * Where the tab's frame is, for a caller whose frame is not this view. The source is asked
      * afresh on every layout and every frame drawn, so a pane that moves under a tab already out
      * carries it along; it also answers the shape, which {@link #setPaneBorder} would otherwise
@@ -242,19 +264,8 @@ public final class PaneControlsView extends View {
         mBounds.set(mFrame.bounds);
         mPaneRadiusPx = Math.max(0f, mFrame.radiusPx);
         mPaneBorderPx = Math.max(0f, mFrame.borderPx);
+        mPaneFillColor = mFrame.fillColor;
         return mBounds.width() > 0f && mBounds.height() > 0f;
-    }
-
-    /** How far in from the border's inner edge the tab starts. */
-    private float cornerInsetPx() {
-        return CornerTabGeometry.cornerInsetPx(mPaneRadiusPx, mPaneBorderPx, dp(TAB_HEIGHT_DP),
-            dp(CornerTabGeometry.TAB_OUTLINE_DP));
-    }
-
-    /** How far the outline may flare along the page's edge before it would run into the arc. */
-    private float earReachPx() {
-        return CornerTabGeometry.earReachPx(dp(CornerTabGeometry.TAB_EAR_DP), mPaneRadiusPx,
-            mPaneBorderPx, dp(TAB_HEIGHT_DP), dp(CornerTabGeometry.TAB_OUTLINE_DP));
     }
 
     /** The corner the tab is out of, or coming out of. */
@@ -451,23 +462,8 @@ public final class PaneControlsView extends View {
         }
         for (int i = 0; i < mActions.size(); i++) mWidths[i] = buttonWidth(mActions.get(i));
         CornerTabGeometry.layout(corner(), mBounds, mWidths, mActions.size(), dp(8), dp(5),
-            dp(TAB_HEIGHT_DP), mPaneBorderPx, cornerInsetPx(), dp(3), mProgress, mTab, mButtons);
-    }
-
-    /**
-     * The frame edge the tab slides out of: the border's inner line, not the bounding box, so the
-     * tab comes out from behind the edge the eye reads rather than from behind the pixel column
-     * outside it.
-     */
-    private float edgeY() {
-        return CornerZones.isTop(corner())
-            ? mBounds.top + mPaneBorderPx
-            : mBounds.bottom - mPaneBorderPx;
-    }
-
-    /** The tab's own far edge, the one that carries the rounded pair. */
-    private float innerY() {
-        return CornerZones.isTop(corner()) ? mTab.bottom : mTab.top;
+            dp(TAB_HEIGHT_DP), mPaneBorderPx, dp(3),
+            dp(CornerTabGeometry.TAB_CORNER_HOLD_DP), mProgress, mTab, mButtons);
     }
 
     @Override
@@ -482,16 +478,11 @@ public final class PaneControlsView extends View {
         int surface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
             ContextCompat.getColor(context, R.color.termux_surface_panel));
         int error = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorError, Color.RED);
-        float radius = dp(4);
-        float edge = edgeY();
-        float inner = innerY();
-        float ear = earReachPx();
-        // Which way the tab's far edge lies from the frame edge it came out of.
-        float dir = CornerZones.isTop(corner()) ? 1f : -1f;
         int save = canvas.save();
         // Revealed through the page's own border, and clipped to the shape that border traces on
-        // its inside, so neither the tab's outer corner nor its ears can land on the line. A page
-        // with no border clips to its plain bounding box, which is what this always was.
+        // its inside: that clip is what rounds the tab's outer corner to the frame's own arc, and
+        // what keeps everything the tab paints off the line. A page with no border clips to its
+        // plain bounding box, which is what this always was.
         float arc = CornerTabGeometry.innerRadiusPx(mPaneRadiusPx, mPaneBorderPx);
         CornerTabGeometry.innerBounds(mBounds, mPaneBorderPx, mClip);
         if (arc > 0f) {
@@ -502,30 +493,19 @@ public final class PaneControlsView extends View {
             canvas.clipRect(mClip);
         }
 
+        // The tab's own two corners; the frame owns the other two, and the arc between them.
+        float radius = CornerTabGeometry.tabCornerRadiusPx(arc, mTab.height(), mTab.width());
         // The fill runs a hair past the edge and is trimmed there by the clip, so no anti-aliased
         // seam opens up between the tab and the border it comes out from behind.
-        float fillEdge = edge - dir * dp(1);
-        mPath.reset();
-        mPath.moveTo(mTab.left, fillEdge);
-        mPath.lineTo(mTab.right, fillEdge);
-        mPath.lineTo(mTab.right, inner - dir * radius);
-        mPath.quadTo(mTab.right, inner, mTab.right - radius, inner);
-        mPath.lineTo(mTab.left + radius, inner);
-        mPath.quadTo(mTab.left, inner, mTab.left, inner - dir * radius);
-        mPath.close();
+        CornerTabGeometry.buildTabFill(corner(), mClip, mTab, radius, dp(1), mPathPoints, mPath);
         mPaint.setStyle(Paint.Style.FILL);
-        mPaint.setColor(ColorUtils.setAlphaComponent(surface, Math.round(232f * mProgress)));
+        mPaint.setColor(fillColor(surface));
         canvas.drawPath(mPath, mPaint);
 
-        mPath.reset();
-        mPath.moveTo(mTab.left - ear, edge);
-        mPath.lineTo(mTab.left, edge);
-        mPath.lineTo(mTab.left, inner - dir * radius);
-        mPath.quadTo(mTab.left, inner, mTab.left + radius, inner);
-        mPath.lineTo(mTab.right - radius, inner);
-        mPath.quadTo(mTab.right, inner, mTab.right, inner - dir * radius);
-        mPath.lineTo(mTab.right, edge);
-        mPath.lineTo(mTab.right + ear, edge);
+        // One line around frame and tab together: the frame's own stroke is the tab's outer edge,
+        // so all the tab draws is the boundary it shares with the page's interior. Drawing its
+        // outer edge as well is what used to leave a second line beside the border.
+        CornerTabGeometry.buildTabOutline(corner(), mClip, mTab, radius, mPathPoints, mPath);
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setStrokeWidth(dp(CornerTabGeometry.TAB_OUTLINE_DP));
         mPaint.setStrokeCap(Paint.Cap.ROUND);
@@ -554,6 +534,18 @@ public final class PaneControlsView extends View {
             }
         }
         canvas.restoreToCount(save);
+    }
+
+    /**
+     * What the tab fills itself with: the page's own interior tint at its own alpha, so the tab is
+     * the frame grown rather than a panel over it. A page that answers no tint — no glass, or none
+     * asked for — keeps the theme's panel colour the tab has always used, which is what stands
+     * between the buttons and an opaque terminal underneath.
+     */
+    private int fillColor(int surface) {
+        int fill = Color.alpha(mPaneFillColor) > 0 ? mPaneFillColor
+            : ColorUtils.setAlphaComponent(surface, 232);
+        return ColorUtils.setAlphaComponent(fill, Math.round(Color.alpha(fill) * mProgress));
     }
 
     private void drawText(@NonNull Canvas canvas, @NonNull RectF button, @NonNull Action action,

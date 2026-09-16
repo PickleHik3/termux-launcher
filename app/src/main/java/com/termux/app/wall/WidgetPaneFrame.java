@@ -466,13 +466,15 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         float requestedRadiusPx = PaneGlass.radiusPx(style,
             getResources().getDisplayMetrics().density);
         boolean glass = PaneGlass.apply(style, this, mGlass, requestedRadiusPx);
-        // The tab lines up against the page's own border rather than its bounding box: it starts
-        // inside the rim's line and past the arc that line turns, so no radius can cut it and no
-        // stroke can sit across it. With the glass off there is neither, and it lands flush.
+        // The tab is part of the page's own outline: it sits flush in the corner it came out of,
+        // inside the rim's line, and that line is its outer edge. It fills itself with the page's
+        // own tint, so it reads as the frame grown rather than a panel over it. With the glass off
+        // there is neither line nor tint, and it falls back to the theme's panel colour.
         if (mControls != null) {
             mControls.setPaneBorder(glass ? requestedRadiusPx : 0f, glass
                 ? com.termux.app.GlassRimRenderer.strokePx(
                     getResources().getDisplayMetrics().density) : 0f);
+            mControls.setPaneFill(glass && style != null ? style.paneGlassTintColor() : 0);
         }
         // A page is never a divided pane, so its radius is the surface's own; only the glass
         // shape clips, exactly as on a full-height terminal pane.

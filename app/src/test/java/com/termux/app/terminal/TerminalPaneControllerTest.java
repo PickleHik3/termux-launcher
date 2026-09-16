@@ -215,42 +215,44 @@ public class TerminalPaneControllerTest {
     }
 
     /**
-     * And the tab that corner produces lies inside the pane on both axes, its outer edge past the
-     * pane's own arc — which is what the old flush placement got wrong on a rounded split pane.
+     * And the tab that corner produces lies inside the pane on both axes, flush against the side
+     * its corner is on — its outer edge is the pane's own border, which is what keeps one line
+     * around frame and tab together instead of two beside each other.
      */
     @Test
-    public void dividerTab_landsInsideThePaneMinusItsArc() {
+    public void dividerTab_landsFlushInThePanesOwnCorner() {
         RectF left = new RectF(0f, 0f, 499f, 500f);
         RectF right = new RectF(501f, 0f, 1000f, 500f);
         RectF top = new RectF(0f, 0f, 1000f, 249f);
         RectF bottom = new RectF(0f, 251f, 1000f, 500f);
-        float arc = PaneCornerRadius.radiusPx(6, 14f, 1f);
-        assertTabInsidePane(left, TerminalPaneController.cornerNearestPoint(left, 500f, 5f), arc);
+        assertTabInsidePane(left, TerminalPaneController.cornerNearestPoint(left, 500f, 5f), 0f);
         assertTabInsidePane(right,
-            TerminalPaneController.cornerNearestPoint(right, 500f, 495f), arc);
-        assertTabInsidePane(top, TerminalPaneController.cornerNearestPoint(top, 995f, 250f), arc);
+            TerminalPaneController.cornerNearestPoint(right, 500f, 495f), 0f);
+        assertTabInsidePane(top, TerminalPaneController.cornerNearestPoint(top, 995f, 250f), 0f);
         assertTabInsidePane(bottom,
-            TerminalPaneController.cornerNearestPoint(bottom, 5f, 250f), arc);
-        // A glass pane's deeper arc pushes the tab further in, and it still fits.
-        assertTabInsidePane(left, CornerZones.TOP_RIGHT, 14f);
+            TerminalPaneController.cornerNearestPoint(bottom, 5f, 250f), 0f);
+        // A plain split pane's 1dp stroke, and a glass pane's rim: the tab lands inside the line.
+        assertTabInsidePane(left, CornerZones.TOP_RIGHT, 1f);
+        assertTabInsidePane(left, CornerZones.TOP_RIGHT,
+            TerminalPaneController.paneBorderStrokePx(true, false, 1f));
         // A pane narrower than the tab asked for keeps it inside as well.
-        assertTabInsidePane(new RectF(0f, 0f, 60f, 500f), CornerZones.BOTTOM_LEFT, 6f);
+        assertTabInsidePane(new RectF(0f, 0f, 60f, 500f), CornerZones.BOTTOM_LEFT, 1f);
     }
 
     /** The pane's tab at one corner, laid out the way the overlay lays it out, inside its pane. */
-    private static void assertTabInsidePane(RectF pane, int corner, float insetPx) {
+    private static void assertTabInsidePane(RectF pane, int corner, float borderPx) {
         float[] widths = {30f, 30f, 30f};
         RectF tab = new RectF();
         RectF[] buttons = {new RectF(), new RectF(), new RectF()};
-        CornerTabGeometry.layout(corner, pane, widths, 3, 8f, 5f, 32f, 0f, insetPx, 3f, 1f,
+        CornerTabGeometry.layout(corner, pane, widths, 3, 8f, 5f, 32f, borderPx, 3f, 8f, 1f,
             tab, buttons);
         assertFalse("the tab has to exist to be inside anything", tab.isEmpty());
         if (CornerZones.isLeft(corner)) {
-            assertEquals("the tab starts past the pane's own arc",
-                pane.left + insetPx, tab.left, .001f);
+            assertEquals("the tab is flush inside the pane's own border",
+                pane.left + borderPx, tab.left, .001f);
         } else {
-            assertEquals("the tab starts past the pane's own arc",
-                pane.right - insetPx, tab.right, .001f);
+            assertEquals("the tab is flush inside the pane's own border",
+                pane.right - borderPx, tab.right, .001f);
         }
         assertTrue("never past the pane's sides",
             tab.left >= pane.left - .001f && tab.right <= pane.right + .001f);
