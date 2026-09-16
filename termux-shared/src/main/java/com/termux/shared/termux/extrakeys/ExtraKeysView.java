@@ -1133,6 +1133,10 @@ public final class ExtraKeysView extends GridLayout {
         // the key was given a colour of its own, and the glow (plus the active text colour) carries
         // the pressed / latched indication either way.
         ExtraKeyButton info = mKeyInfo.get(button);
+        // Only the focused place switch carries a glyph glow, and every repaint restates it from
+        // nothing, so each state starts by taking it off: a switch that stops being the place in
+        // front would otherwise keep the halo it had.
+        button.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT);
         boolean usable = isKeyUsable(info);
         if (button.isEnabled() != usable)
             button.setEnabled(usable);
@@ -1148,10 +1152,23 @@ public final class ExtraKeysView extends GridLayout {
             // The place switches wear no cap at all: three filled pills standing together read as
             // their own widget rather than as part of the row. Their role paints the glyph instead,
             // full strength for the place in front and held back for the ones behind it.
-            int glyph = role == null ? mButtonTextColor : roleColors(role)[0];
-            button.setTextColor(placeFocus == PlaceFocus.FOCUSED
-                ? glyph
-                : withAlpha(glyph, UNFOCUSED_PLACE_GLYPH_ALPHA));
+            //
+            // Not the role's own colour, though — a Material scheme draws primary, secondary and
+            // tertiary off one seed, so two of them share a hue outright and all three read as
+            // shades of one thing once there is no cap behind them. The glyph takes the vivid
+            // derivative of the role instead: see PlaceSwitchGlyph. Only these keys.
+            int glyph = placeGlyphColor(button);
+            if (placeFocus == PlaceFocus.FOCUSED) {
+                // Where the wall is standing: the glyph glows in its own colour. A text shadow
+                // layer rather than the row's press bloom, because this one is a resting state and
+                // has to survive every press, latch and repaint the bloom plays over it. The row
+                // sets clipChildren false in its constructor, so the halo spills past the button.
+                button.setTextColor(glyph);
+                button.setShadowLayer(dpToPx(PlaceSwitchGlyph.GLOW_RADIUS_DP), 0f, 0f,
+                    withAlpha(glyph, PlaceSwitchGlyph.GLOW_ALPHA));
+            } else {
+                button.setTextColor(withAlpha(glyph, UNFOCUSED_PLACE_GLYPH_ALPHA));
+            }
             button.setBackground(new ColorDrawable(mButtonBackgroundColor));
             return;
         }
@@ -1212,6 +1229,42 @@ public final class ExtraKeysView extends GridLayout {
     public void setKeyUsabilityPolicy(@Nullable KeyUsabilityPolicy policy) {
         mUsabilityPolicy = policy;
         restateEveryKey();
+    }
+
+    /**
+     * The vivid colour one place switch's glyph is painted in.
+     *
+     * <p>Read across the whole row rather than off this key alone, because the spread that keeps
+     * two switches on the same palette hue apart is a property of the set: the row hands
+     * {@link PlaceSwitchGlyph#vividRow} every switch's role colour in drawing order and takes back
+     * this one's. A handful of keys, restated only when the row, the theme or the place changes.
+     */
+    private int placeGlyphColor(@NonNull MaterialButton button) {
+        int[] sources = new int[getChildCount()];
+        int count = 0;
+        int index = -1;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (!(child instanceof MaterialButton))
+                continue;
+            MaterialButton other = (MaterialButton) child;
+            ExtraKeyButton info = mKeyInfo.get(other);
+            if (placeFocusOf(info) == PlaceFocus.NOT_A_PLACE)
+                continue;
+            ExtraKeyColorRole role = roleFor(other, info);
+            sources[count] = role == null ? mButtonTextColor : roleColors(role)[0];
+            if (other == button)
+                index = count;
+            count++;
+        }
+        boolean darkGlass = PlaceSwitchGlyph.isDarkGlass(mButtonTextColor);
+        if (index < 0) {
+            // Not in the row yet (a key being styled while it is built): its own hue, unspread.
+            ExtraKeyColorRole role = roleFor(button, mKeyInfo.get(button));
+            return PlaceSwitchGlyph.vividFor(
+                role == null ? mButtonTextColor : roleColors(role)[0], darkGlass);
+        }
+        return PlaceSwitchGlyph.vividRow(java.util.Arrays.copyOf(sources, count), darkGlass)[index];
     }
 
     /** Where this key stands relative to the place in front. */

@@ -12,6 +12,9 @@ import com.termux.shared.termux.extrakeys.ExtraKeyColorRole;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.shared.termux.extrakeys.PlaceSwitchGlyph;
+
+import com.google.android.material.color.utilities.Hct;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -237,22 +240,73 @@ public class ExtraKeysViewKeyStyleTest {
         }
 
         assertEquals("the place in front is at full strength",
-            ExtraKeyColorRole.SECONDARY.background(context), button(3).getCurrentTextColor());
-        assertEquals("the ones behind it keep the hue and lose the brightness",
-            dimmed(ExtraKeyColorRole.PRIMARY), button(2).getCurrentTextColor());
-        assertEquals(dimmed(ExtraKeyColorRole.TERTIARY), button(4).getCurrentTextColor());
+            vivid(1), button(3).getCurrentTextColor());
+        assertEquals("the ones behind it keep the colour and lose the brightness",
+            dimmed(0), button(2).getCurrentTextColor());
+        assertEquals(dimmed(2), button(4).getCurrentTextColor());
+    }
+
+    @Test
+    public void theThreePlaceGlyphsAreThreeColoursRatherThanThreeShadesOfOne() {
+        showing("tool:wall.terminal");
+        // The defaults are primary / secondary / tertiary, and a Material scheme draws all three
+        // off one seed: primary and secondary come out on the same hue. Whatever the row does to
+        // make them vivid has to leave three glyphs a thumb can tell apart.
+        int[] glyph = {button(2).getCurrentTextColor(), button(3).getCurrentTextColor(),
+            button(4).getCurrentTextColor()};
+        for (int first = 0; first < glyph.length; first++) {
+            for (int second = first + 1; second < glyph.length; second++) {
+                double apart = PlaceSwitchGlyph.hueDistance(
+                    Hct.fromInt(opaque(glyph[first])).getHue(),
+                    Hct.fromInt(opaque(glyph[second])).getHue());
+                assertTrue("switches " + first + " and " + second + " are " + apart + "° apart",
+                    apart >= PlaceSwitchGlyph.MIN_HUE_SEPARATION - 1d);
+            }
+        }
+    }
+
+    @Test
+    public void theFocusedGlyphGlowsInItsOwnColourAndTheOthersDoNot() {
+        showing("tool:wall.terminal");
+
+        MaterialButton terminal = button(3);
+        assertTrue("the place in front glows", terminal.getShadowRadius() > 0f);
+        assertEquals("a halo, not a drop shadow", 0f, terminal.getShadowDx(), 0f);
+        assertEquals(0f, terminal.getShadowDy(), 0f);
+        assertEquals("the glow is the glyph's own colour",
+            vivid(1) & 0x00FFFFFF, terminal.getShadowColor() & 0x00FFFFFF);
+        assertEquals("at 60%", PlaceSwitchGlyph.GLOW_ALPHA,
+            Color.alpha(terminal.getShadowColor()));
+
+        assertEquals("the places behind it do not glow", 0f, button(2).getShadowRadius(), 0f);
+        assertEquals(0f, button(4).getShadowRadius(), 0f);
     }
 
     @Test
     public void theBrightSwitchFollowsTheWallToItsNextPlace() {
         showing("tool:wall.terminal");
-        assertEquals(dimmed(ExtraKeyColorRole.TERTIARY), button(4).getCurrentTextColor());
+        assertEquals(dimmed(2), button(4).getCurrentTextColor());
 
         showing("tool:wall.display");
-        assertEquals(ExtraKeyColorRole.TERTIARY.background(context),
-            button(4).getCurrentTextColor());
-        assertEquals(dimmed(ExtraKeyColorRole.SECONDARY), button(3).getCurrentTextColor());
-        assertEquals(dimmed(ExtraKeyColorRole.PRIMARY), button(2).getCurrentTextColor());
+        assertEquals(vivid(2), button(4).getCurrentTextColor());
+        assertEquals(dimmed(1), button(3).getCurrentTextColor());
+        assertEquals(dimmed(0), button(2).getCurrentTextColor());
+    }
+
+    @Test
+    public void theGlowMovesWithTheFocusRatherThanBeingLeftBehind() {
+        showing("tool:wall.terminal");
+        assertTrue(button(3).getShadowRadius() > 0f);
+
+        showing("tool:wall.display");
+        assertEquals("the switch that lost the place loses the halo with it",
+            0f, button(3).getShadowRadius(), 0f);
+        assertTrue(button(4).getShadowRadius() > 0f);
+
+        // And a row told nothing about places has no halo anywhere.
+        view.setPlaceSwitchPolicy(null);
+        for (int index = 0; index < 5; index++)
+            assertEquals(0f, button(index).getShadowRadius(), 0f);
     }
 
     @Test
@@ -260,8 +314,12 @@ public class ExtraKeysViewKeyStyleTest {
         showing("tool:wall.terminal");
         assertTrue("only the place switches lost their cap",
             button(1).getBackground() instanceof InsetDrawable);
-        assertEquals(ExtraKeyColorRole.PRIMARY_CONTAINER.background(context),
+        assertEquals("and its colour is the role's own, untouched by the vivid rule",
+            ExtraKeyColorRole.PRIMARY_CONTAINER.background(context),
             capOf(button(1).getBackground()).getColor().getDefaultColor());
+        assertEquals(ExtraKeyColorRole.PRIMARY_CONTAINER.label(context),
+            button(1).getCurrentTextColor());
+        assertEquals("nor does it glow", 0f, button(1).getShadowRadius(), 0f);
     }
 
     /** Tells the row which place switch points at the place in front. */
@@ -275,9 +333,25 @@ public class ExtraKeysViewKeyStyleTest {
         });
     }
 
-    /** A role's colour as an unfocused place switch shows it: the same hue, held back to 57%. */
-    private int dimmed(ExtraKeyColorRole role) {
-        return (145 << 24) | (role.background(context) & 0x00FFFFFF);
+    /**
+     * The colour the place switch at {@code switchIndex} (0 = Home, 1 = Terminal, 2 = Display)
+     * paints its glyph in: its role made vivid, spread off any other switch sharing its hue.
+     */
+    private int vivid(int switchIndex) {
+        return PlaceSwitchGlyph.vividRow(new int[] {
+            ExtraKeyColorRole.PRIMARY.background(context),
+            ExtraKeyColorRole.SECONDARY.background(context),
+            ExtraKeyColorRole.TERTIARY.background(context)
+        }, PlaceSwitchGlyph.isDarkGlass(view.getButtonTextColor()))[switchIndex];
+    }
+
+    /** The same colour as an unfocused switch shows it: held back to 57%. */
+    private int dimmed(int switchIndex) {
+        return (145 << 24) | (vivid(switchIndex) & 0x00FFFFFF);
+    }
+
+    private static int opaque(int color) {
+        return color | 0xFF000000;
     }
 
     /** What {@code drawable} actually renders at its centre, tint and all. */
