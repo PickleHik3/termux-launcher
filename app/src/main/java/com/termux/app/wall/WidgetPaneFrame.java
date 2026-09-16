@@ -3,6 +3,7 @@ package com.termux.app.wall;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
@@ -14,6 +15,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.chrome.CornerHold;
+import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
@@ -81,7 +83,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     /** The corner the finger landed in, from its landing to its lift, held or not. */
     private int mPressedCorner = CornerZones.NONE;
     /** Who owns a finger down in a corner square: the widgets under it, or this corner. */
-    private final CornerHold mHold = new CornerHold();
+    private final CornerHoldArbiter mHold = new CornerHoldArbiter();
     /**
      * Its own handler rather than {@link View#postDelayed}: a detached view queues those until it
      * is attached, and the hold has to fire whether or not this page is on screen yet.
@@ -94,6 +96,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private int mShownCornerAtDown = CornerZones.NONE;
     private boolean mTouchMoved;
     private float mDownX, mDownY;
+    /** True only inside {@link #cancelGridGesture()}: that cancel is the grid's, not the page's. */
+    private boolean mCancellingGrid;
 
     public WidgetPaneFrame(Context context) {
         super(context);
@@ -245,6 +249,9 @@ public final class WidgetPaneFrame extends PaneContentFrame {
      */
     @Override
     public boolean onInterceptTouchEvent(@NonNull MotionEvent event) {
+        // The cancel the corner sends the grid when it claims the hold passes back through here:
+        // it is for the child, and reading it as the end of the gesture would undo the claim.
+        if (mCancellingGrid) return false;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) return onFrameDown(event);
         // Read before the event is played: the hold is claimed by its timer rather than by a
         // touch, so an event arriving after it is the first the grid must not see.
@@ -277,12 +284,15 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             // The editing tab is the mode's own chrome, so only leaving the mode puts it away.
             if (!mEditing) mControls.dismiss();
         }
-        int corner = claimedCorner(mDownX, mDownY, getWidth(), getHeight(),
-            getResources().getDisplayMetrics().density, editChromeWantsPoint(mDownX, mDownY));
+        float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        int corner = mHold.down(mDownX, mDownY, getWidth(), getHeight(),
+            getResources().getDisplayMetrics().density, editChromeWantsPoint(mDownX, mDownY),
+            slop);
+        // Whether the grid may run a long press of its own is settled here, on the landing point,
+        // rather than by whichever timer fires first: a press in a square is the corner's.
+        applyGridHoldExemption();
         if (corner == CornerZones.NONE) return false;
         mPressedCorner = corner;
-        float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
-        mHold.down(mDownX, mDownY, slop, slop, false);
         mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
         return false;
     }
@@ -315,16 +325,54 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             default:
                 break;
         }
+        // A corner that gave the gesture up hands the grid its long press back in the same breath.
+        applyGridHoldExemption();
     }
 
     /**
      * The hold time passed with the finger still in the square. The corner takes the gesture from
-     * here: the hand is told the hold was heard, and every event from now on is this frame's.
+     * here: the grid is told its touch is over, the hand is told the hold was heard, and every
+     * event from now on is this frame's.
      */
     private void onHoldElapsed() {
         if (!mHold.holdElapsed()) return;
+        cancelGridGesture();
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+    }
+
+    /**
+     * Tell the grid the touch it has been tracking is over, the moment the corner claims it. A
+     * cancel is the one ending that leaves nothing behind — no tap, no menu, no half-started drag
+     * — which is what a finger that turned out to be a corner hold owes the widgets. Waiting for
+     * the next event to intercept is not the same thing: a finger that is holding still sends no
+     * events, and the grid's own long press fired into the gap.
+     */
+    private void cancelGridGesture() {
+        long now = SystemClock.uptimeMillis();
+        MotionEvent cancel =
+            MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, mDownX, mDownY, 0);
+        mCancellingGrid = true;
+        try {
+            // Down the frame's own dispatch, so whichever child is holding the stream is the one
+            // told to forget it — and the frame stops being a touch target for it in the bargain.
+            dispatchTouchEvent(cancel);
+        } finally {
+            mCancellingGrid = false;
+            cancel.recycle();
+        }
+    }
+
+    /**
+     * Hold the grid's own long press back for as long as a corner may still claim the finger, and
+     * give it back the moment one cannot. One question, asked of {@link CornerHoldArbiter} after
+     * every event, so the two are never both armed on the same press.
+     */
+    private void applyGridHoldExemption() {
+        if (mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView) {
+            ((com.termux.app.launcher.widget.WidgetPaneView) mGrid)
+                .setHoldExempt(!mHold.contentMayLongPress());
+        }
     }
 
     /** Out of the corner that was held; the corner it is already out of puts it away again. */
@@ -338,6 +386,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         mHoldHandler.removeCallbacks(mHoldElapsed);
         mHold.reset();
         mPressedCorner = CornerZones.NONE;
+        applyGridHoldExemption();
     }
 
     /**
@@ -348,8 +397,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     @androidx.annotation.VisibleForTesting
     static int claimedCorner(float x, float y, int width, int height, float density,
                              boolean editChromeWantsPoint) {
-        if (editChromeWantsPoint) return CornerZones.NONE;
-        return CornerZones.cornerAt(x, y, width, height, CornerZones.paneSizePx(density));
+        return CornerHoldArbiter.cornerFor(x, y, width, height, density, editChromeWantsPoint);
     }
 
     /**
@@ -374,6 +422,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
      */
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
+        if (mCancellingGrid) return false;
         if (mPressedAction == PaneControlsView.ACTION_NONE && !mHold.isTracking()) {
             return super.onTouchEvent(event);
         }

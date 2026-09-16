@@ -57,6 +57,8 @@ public final class WidgetCellView extends FrameLayout {
     @Nullable private View focusedEditor;
     private final Runnable longPressFire = this::fireLongPress;
     private boolean longPressPending;
+    /** Whether a pane corner may still claim the finger that is down; see {@link #setHoldExempt}. */
+    private boolean holdExempt;
     private boolean streamTakenOver;
     private float longPressDownX, longPressDownY;
     private float lastRawX, lastRawY;
@@ -78,6 +80,16 @@ public final class WidgetCellView extends FrameLayout {
     public void setLongPressListener(@Nullable LongPressListener listener) {
         longPressListener = listener;
         if (listener == null) cancelLongPressWatch();
+    }
+
+    /**
+     * A press that landed in one of the page's corner squares is the corner's to claim, so the
+     * cell leaves the long press alone until the corner has given it back. The grid relays this
+     * from the page's frame.
+     */
+    public void setHoldExempt(boolean exempt) {
+        holdExempt = exempt;
+        if (exempt) cancelLongPressWatch();
     }
 
     public void setEditorFocusListener(@Nullable EditorFocusListener listener) {
@@ -261,6 +273,7 @@ public final class WidgetCellView extends FrameLayout {
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 longPressDownX = x; longPressDownY = y;
+                if (holdExempt) break;
                 longPressPending = true;
                 postDelayed(longPressFire,
                     ViewConfiguration.getLongPressTimeout());

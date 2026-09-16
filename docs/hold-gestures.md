@@ -107,6 +107,16 @@ pane frame forwards clearance touches (44ff1f2c), one pane corner radius rule (5
 Widgets/Display corners hold like the terminal's (see "Widgets and Display corners hold too").
 Evidence for the first two: `docs/research/2026-09-15-corner-touch-targets.md`.
 
+2026-09-16, on `fix/corner-hold-widgets`: a hold in a corner of the Widgets page opened the corner
+tab *and* the grid's own add/edit menu, which covered the tab's buttons. The two timers were
+racing — the corner's at three quarters of the system long press, the grid's at the whole of it —
+and a still finger sends no events, so nothing intercepted in the gap between them. Arbitration is
+explicit now: `CornerHoldArbiter` decides on the landing point who owns a press, the grid and its
+cells run no long press of their own while a corner may still claim the finger
+(`WidgetPaneView.setHoldExempt`), and the Widgets and Display frames cancel their content the
+moment the hold fires, as the terminal overlay always did. Taps, drags and scrolls still pass
+through untouched.
+
 ## Device checks on pong
 
 1. tmux: tap the clock at a pane's bottom-right. Nothing opens; tmux gets the click.

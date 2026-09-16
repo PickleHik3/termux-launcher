@@ -103,6 +103,14 @@ public final class WidgetPaneView extends FrameLayout {
     }
     public void setReducedMotion(boolean value) { reducedMotion = value; }
     @NonNull public WidgetGridView grid() { return grid; }
+
+    /**
+     * A pane corner may still claim the finger that is down, so nothing in the grid runs a long
+     * press of its own until it cannot. The page's frame decides that on the landing point and
+     * says so here; two long presses on one finger is the bug this closes, where a hold in a
+     * corner opened the corner tab and the grid's menu on top of it.
+     */
+    public void setHoldExempt(boolean exempt) { grid.setHoldExempt(exempt); }
     @NonNull public WidgetPickerSheetView picker() { return picker; }
     public boolean onBackPressed() {
         if (!picker.isOpen()) return false;

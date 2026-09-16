@@ -20,6 +20,7 @@ import android.widget.FrameLayout;
 import com.termux.R;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.launcher.widget.WidgetEditOverlayView;
+import com.termux.app.launcher.widget.WidgetGridView;
 import com.termux.app.launcher.widget.WidgetPaneView;
 import com.termux.view.HoldTiming;
 
@@ -81,6 +82,22 @@ public class WidgetPaneFrameTapTest {
         activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         WidgetPaneFrame page = (WidgetPaneFrame) LayoutInflater.from(activity)
             .inflate(R.layout.view_widget_pane, null);
+        page.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        page.layout(0, 0, WIDTH, HEIGHT);
+        return page;
+    }
+
+    /**
+     * The same page, in a window. The grid's own long press rides on {@link View#postDelayed},
+     * which a detached view only queues, so the race this file is about can only be driven on an
+     * attached page.
+     */
+    private static WidgetPaneFrame attachedPage(Activity activity) {
+        activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        WidgetPaneFrame page = (WidgetPaneFrame) LayoutInflater.from(activity)
+            .inflate(R.layout.view_widget_pane, null);
+        activity.setContentView(page, new FrameLayout.LayoutParams(WIDTH, HEIGHT));
         page.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         page.layout(0, 0, WIDTH, HEIGHT);
@@ -490,6 +507,95 @@ public class WidgetPaneFrameTapTest {
             child.actions.contains(MotionEvent.ACTION_CANCEL));
         tap(page, cogX(activity), tabCentreY(activity));
         assertEquals(Collections.emptyList(), calls.log);
+    }
+
+    /**
+     * The bug this arbitration closes, on the page the phone showed it on: a hold in a corner
+     * brought the corner tab out <em>and</em> the grid's own add/edit menu, which landed on top of
+     * the tab's buttons. The corner's timer runs at three quarters of the system long press and
+     * the grid's at the whole of it, so both fired on one still finger.
+     */
+    @Test
+    public void aHoldInACornerNeverOpensTheGridsMenu() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = attachedPage(activity);
+        page.setHost(new Calls());
+        List<String> menu = watchGridLongPresses(page);
+
+        holdPastTheGridsOwnTimer(page, WIDTH - 2f, 2f);
+
+        assertTrue("the corner tab came out", page.isControlsTabShown());
+        assertEquals("and the grid's menu never did", Collections.emptyList(), menu);
+    }
+
+    /** The other half of the same rule: everything between the corners is still the grid's. */
+    @Test
+    public void aHoldInTheMiddleOpensTheGridsMenuAndNoTab() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = attachedPage(activity);
+        page.setHost(new Calls());
+        List<String> menu = watchGridLongPresses(page);
+
+        holdPastTheGridsOwnTimer(page, WIDTH / 2f, HEIGHT / 2f);
+
+        assertEquals("the grid kept its own long press",
+            Collections.singletonList("empty"), menu);
+        assertFalse("and no tab came out", page.isControlsTabShown());
+    }
+
+    /**
+     * A finger that leaves the square before the hold fires is the grid's again — including its
+     * long press, which the corner only ever borrowed.
+     */
+    @Test
+    public void leavingTheCornerBeforeTheHoldHandsTheGridItsLongPressBack() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = attachedPage(activity);
+        page.setHost(new Calls());
+        List<String> menu = watchGridLongPresses(page);
+        float slop = ViewConfiguration.get(activity).getScaledTouchSlop();
+
+        // Out of the square, then still in the middle for a second, whole gesture: the corner is
+        // out of the running and the next press is the grid's from its landing.
+        touch(page, MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        touch(page, MotionEvent.ACTION_MOVE, WIDTH / 2f, HEIGHT / 2f);
+        idlePastBothTimers();
+        touch(page, MotionEvent.ACTION_UP, WIDTH / 2f, HEIGHT / 2f);
+        settle();
+        assertFalse("no tab came out of a drag", page.isControlsTabShown());
+
+        holdPastTheGridsOwnTimer(page, WIDTH / 2f, HEIGHT / 2f);
+        assertEquals("the grid's long press works again",
+            Collections.singletonList("empty"), menu);
+    }
+
+    /** What the grid was asked for, in order, over the gestures a test drives. */
+    private static List<String> watchGridLongPresses(WidgetPaneFrame page) {
+        List<String> log = new ArrayList<>();
+        WidgetGridView grid = ((WidgetPaneView) page.grid()).grid();
+        grid.setListener(new WidgetGridView.Listener() {
+            @Override public void onWidgetLongPressed(int appWidgetId, float rawX, float rawY) {
+                log.add("widget");
+            }
+            @Override public void onEmptySpaceLongPressed(float rawX, float rawY) {
+                log.add("empty");
+            }
+        });
+        return log;
+    }
+
+    /** Past the corner's timer and the grid's alike, so a race would show as both answering. */
+    private static void idlePastBothTimers() {
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            Math.max(HoldTiming.holdTimeoutMs(), ViewConfiguration.getLongPressTimeout()) + 50L,
+            TimeUnit.MILLISECONDS);
+    }
+
+    private static void holdPastTheGridsOwnTimer(WidgetPaneFrame page, float x, float y) {
+        touch(page, MotionEvent.ACTION_DOWN, x, y);
+        idlePastBothTimers();
+        touch(page, MotionEvent.ACTION_UP, x, y);
+        settle();
     }
 
     /** A second finger before the timer gives the gesture up: two fingers are never a hold. */
