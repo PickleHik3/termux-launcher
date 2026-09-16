@@ -209,14 +209,34 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * A bar dropped on an edge, or in the tray when {@code edge} is null. Writes the shown
-     * orientation's key for this place, and says whether the live place behind has to follow.
+     * A bar dropped into a gap in an edge's stack, or in the tray when {@code edge} is null.
+     * Writes the shown orientation's keys for this place, and says whether the live place behind
+     * has to follow.
+     *
+     * @param index the position in that edge's stack, 0 outermost, or negative for the band the
+     *     bar has always taken there
      */
     @NonNull
-    public Drop drop(@NonNull MiniatureDragPolicy.Bar bar, @Nullable PlaceLayout.Edge edge) {
-        if (!LayoutChooserModel.applyDrop(mPlaces, mPlace, mShownOrientation, bar, edge))
+    public Drop drop(@NonNull MiniatureDragPolicy.Bar bar, @Nullable PlaceLayout.Edge edge,
+                     int index) {
+        if (!LayoutChooserModel.applyDrop(mPlaces, mPlace, mShownOrientation, bar, edge, index))
             return Drop.NONE;
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /** A bar dropped on an edge without a gap picked. */
+    @NonNull
+    public Drop drop(@NonNull MiniatureDragPolicy.Bar bar, @Nullable PlaceLayout.Edge edge) {
+        return drop(bar, edge, -1);
+    }
+
+    /**
+     * Whether this arrangement has left the canvas narrow enough to say so: bars down the side of
+     * a portrait screen, with little width beside them. The editor shows a line about it and
+     * nothing else — a narrow canvas is allowed, it is only worth knowing about.
+     */
+    public boolean warnsNarrowCanvas() {
+        return MiniatureDragPolicy.warnsNarrowCanvas(shownLayout(), mShownOrientation);
     }
 
     /** Whether anything has moved since the editor opened — the unsaved-changes question. */

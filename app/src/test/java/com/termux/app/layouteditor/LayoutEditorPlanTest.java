@@ -13,6 +13,7 @@ import android.os.Build;
 
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
 import com.termux.app.place.KeyboardOnEnter;
+import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.PlaceArrangeModel;
 import com.termux.app.place.PlaceArrangeModel.Element;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -158,12 +159,50 @@ public class LayoutEditorPlanTest {
     public void aBarDroppedWhereItCannotStandWritesNothing() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
-        // A row has no top position, and the status bar is never hidden.
-        assertEquals(LayoutEditorPlan.Drop.NONE, plan.drop(Bar.APPS_ROW, Edge.TOP));
+        // Every bar stands on every edge now; the status bar never hides, and that is the one
+        // drop left that cannot be made.
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.drop(Bar.STATUS_BAR, null));
-        assertNull(prefs.getString("place.terminal.portrait.apps_row", null));
         assertNull(prefs.getString("place.terminal.portrait.status_bar", null));
         assertFalse("nothing was written, so there is nothing to lose", plan.isDirty());
+
+        assertEquals("a row on the top edge is a placement like any other",
+            LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.APPS_ROW, Edge.TOP));
+        assertEquals("top", prefs.getString("place.terminal.portrait.apps_row", null));
+    }
+
+    /** What stands along the bottom of the Terminal in portrait, outermost first. */
+    private List<String> bottomStack() {
+        List<String> names = new ArrayList<>();
+        for (com.termux.app.place.Element element : EdgeStackPolicy.stack(
+            places.resolve(PaneWallPage.TERMINAL, PORTRAIT), Edge.BOTTOM))
+            names.add(element.name());
+        return names;
+    }
+
+    @Test
+    public void aReOrderIsAnUnsavedChangeAndTheRevertPutsTheStackBack() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        assertEquals("the bottom as it ships, outermost first",
+            Arrays.asList("EXTRA_KEYS", "AZ", "APPS"), bottomStack());
+        assertFalse(plan.isDirty());
+
+        // The pinned apps dropped against the screen edge: same edge, new position.
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.APPS_ROW, Edge.BOTTOM, 0));
+        assertEquals(Arrays.asList("APPS", "EXTRA_KEYS", "AZ"), bottomStack());
+        assertTrue("moving a bar within its edge is a change like any other", plan.isDirty());
+
+        plan.revert();
+        assertFalse(plan.isDirty());
+        assertEquals("the stack is back the way the editor found it",
+            Arrays.asList("EXTRA_KEYS", "AZ", "APPS"), bottomStack());
+    }
+
+    @Test
+    public void aBarDroppedBackIntoItsOwnGapChangesNothing() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        // The extra keys are already the outermost band of the bottom.
+        plan.drop(Bar.EXTRA_KEYS, Edge.BOTTOM, 0);
+        assertFalse("it landed where it already stood", plan.isDirty());
     }
 
     @Test

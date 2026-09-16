@@ -352,4 +352,44 @@ public final class EdgeStackPolicy {
         }
         return Collections.unmodifiableList(drops);
     }
+
+    // ---------------------------------------------------------------- what a drop leaves behind
+
+    /**
+     * The arrangement one drop leaves: {@code element} standing on {@code edge} at {@code index},
+     * and every band on that edge numbered from the screen edge inwards. The editor previews a
+     * drag with this and writes the slots it changed; a caller wanting one band moved without
+     * disturbing the rest asks {@link PlaceLayout#withSlot} itself.
+     *
+     * <p>Orders are per element and not allocated — two elements may hold the same number, and
+     * {@link #stack} breaks the tie with {@link Element#defaultOrder} — so a drop that re-orders
+     * an edge has to write every band on it rather than only the one that moved.
+     *
+     * <p>An alphabets index riding the pinned apps row is a band of that edge like any other here,
+     * so a drop that re-orders the row it rides also pins its own slot to the edge it is being
+     * drawn on. That is the one thing this writes which the user did not drag: without it the
+     * index keeps the position its stored edge gives it and the drop the user made is not the
+     * stack they end up with.
+     */
+    @NonNull
+    public static PlaceLayout withDrop(@NonNull PlaceLayout layout, @NonNull Element element,
+                                       @NonNull Edge edge, int index) {
+        List<Element> stack = new ArrayList<>(stack(layout, edge));
+        stack.remove(element);
+        stack.add(Math.max(0, Math.min(index, stack.size())), element);
+        PlaceLayout next = layout;
+        for (int order = 0; order < stack.size(); order++)
+            next = next.withSlot(stack.get(order), new Slot(false, edge, order));
+        return next;
+    }
+
+    /**
+     * The arrangement putting one element away leaves. It keeps the edge and the position it would
+     * come back to, and the status bar — which the wall's pager rides — is never put away at all.
+     */
+    @NonNull
+    public static PlaceLayout withAway(@NonNull PlaceLayout layout, @NonNull Element element) {
+        if (!element.hideAllowed()) return layout;
+        return layout.withSlot(element, layout.slot(element).withHidden(true));
+    }
 }

@@ -106,6 +106,7 @@ public final class LayoutEditorController {
         final ImageView done;
         final MaterialButtonToggleGroup orientation;
         final PlaceMiniatureView miniature;
+        final TextView narrowNotice;
         final ViewGroup rowsHost;
 
         Card(ViewGroup host, LinearLayout root) {
@@ -116,12 +117,13 @@ public final class LayoutEditorController {
             done = root.findViewById(R.id.layout_editor_done);
             orientation = root.findViewById(R.id.layout_editor_orientation);
             miniature = root.findViewById(R.id.layout_editor_miniature);
+            narrowNotice = root.findViewById(R.id.layout_editor_narrow_notice);
             rowsHost = root.findViewById(R.id.layout_editor_rows_host);
         }
 
         boolean complete() {
             return revert != null && discard != null && done != null && orientation != null
-                && miniature != null && rowsHost != null;
+                && miniature != null && narrowNotice != null && rowsHost != null;
         }
     }
 
@@ -239,16 +241,17 @@ public final class LayoutEditorController {
     // ------------------------------------------------------------------------------- the canvas
 
     /**
-     * A bar dropped on an edge, or in the tray when {@code edge} is null. The write lands on the
-     * orientation the miniature is showing; the live place is re-laid only when that is the
-     * orientation the phone is in.
+     * A bar dropped into a gap in an edge's stack, or in the tray when {@code edge} is null. The
+     * write lands on the orientation the miniature is showing; the live place is re-laid only when
+     * that is the orientation the phone is in.
      */
     @VisibleForTesting
-    void onBarDropped(@NonNull PlaceMiniatureView.Block block, @Nullable PlaceLayout.Edge edge) {
+    void onBarDropped(@NonNull PlaceMiniatureView.Block block, @Nullable PlaceLayout.Edge edge,
+                      int index) {
         MiniatureDragPolicy.Bar bar = PlaceMiniatureView.barOf(block);
         if (mPlan == null || bar == null)
             return;
-        if (mPlan.drop(bar, edge) == LayoutEditorPlan.Drop.LIVE)
+        if (mPlan.drop(bar, edge, index) == LayoutEditorPlan.Drop.LIVE)
             mHost.applyPlaceArrangement();
         sync();
     }
@@ -265,6 +268,9 @@ public final class LayoutEditorController {
         mRestatingToggle = false;
         applyCanvasHeight(card, plan);
         card.miniature.setLayout(plan.shownLayout(), plan.shownOrientation(), plan.place());
+        // Bars down the side of a portrait screen are allowed; this is the one line that says what
+        // they cost, and it goes away as soon as the width does not.
+        card.narrowNotice.setVisibility(plan.warnsNarrowCanvas() ? View.VISIBLE : View.GONE);
         syncRows(card, plan);
         syncDirty(card, plan);
     }

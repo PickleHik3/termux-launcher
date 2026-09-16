@@ -56,6 +56,19 @@ sum) is replaced by stacking; L2 removes `StatusBarEdgeGeometry.sharedColumnLeng
 The miniature draws a bottom status bar outermost while the screen renders it innermost; L4
 fixes the miniature.
 
+## L4 outcome (2026-09-16)
+
+`PlaceMiniatureView.computeBlocks` loops over `EdgeStackPolicy.stack` per edge (edges claimed
+TOP, LEFT, RIGHT, BOTTOM), so the picture and the screen agree — including the bottom status bar,
+which now draws above the dock. `MiniatureDragPolicy` is an adapter over `EdgeStackPolicy.targets`:
+every edge in both orientations, one drop zone per gap in the edge's stack, drawn as insertion
+lines inside the hovered edge's dashed outline. A drop writes through `EdgeStackPolicy.withDrop`
+→ `store.setSlot`, renumbering every band on the edge (a riding A–Z index has its own slot pinned
+to the edge it draws on, or the drop the user made is not the stack they get). The portrait
+refusal became a one-line notice in the editor, shown when the canvas keeps under 60 % of the
+picture's width (`MiniatureDragPolicy.canvasWidthFraction`); nothing is blocked. Rows on the TOP
+edge are storable and drawn on the miniature but still not rendered by the screen until L2.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |

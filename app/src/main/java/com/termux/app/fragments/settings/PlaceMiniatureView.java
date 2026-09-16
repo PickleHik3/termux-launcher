@@ -28,11 +28,11 @@ import androidx.core.graphics.drawable.DrawableCompat;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.Spring;
-import com.termux.app.place.PlaceChromePolicy;
+import com.termux.app.place.EdgeStackPolicy;
+import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
-import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.font.NerdFontSpans;
@@ -73,11 +73,12 @@ public final class PlaceMiniatureView extends View {
     }
 
     /**
-     * Reports a bar dropped on a legal target: the edge it now stands on, or {@code null} for the
-     * tray, which is the same as hidden. Nothing is reported for a release that landed nowhere.
+     * Reports a bar dropped on a legal target: the edge it now stands on and the gap in that
+     * edge's stack it landed in, 0 outermost, or {@code null} and {@code -1} for the tray, which
+     * is the same as hidden. Nothing is reported for a release that landed nowhere.
      */
     public interface OnBarDroppedListener {
-        void onBarDropped(@NonNull Block bar, @Nullable Edge edge);
+        void onBarDropped(@NonNull Block bar, @Nullable Edge edge, int index);
     }
 
     /** Legend order, top to bottom: the way the rows stack on a default portrait screen. */
@@ -88,9 +89,9 @@ public final class PlaceMiniatureView extends View {
     private static final Block[] BARS = {
         Block.STATUS_BAR, Block.APPS_ROW, Block.ALPHABETS_ROW, Block.EXTRA_KEYS};
 
-    private static final float STATUS_BAR_FRACTION = 0.11f;
-    private static final float ROW_FRACTION = 0.15f;
-    private static final float ALPHABETS_FRACTION = 0.08f;
+    /** The order the edges claim their strips in; see {@link #computeBlocks}. */
+    private static final Edge[] CLAIM_ORDER = {Edge.TOP, Edge.LEFT, Edge.RIGHT, Edge.BOTTOM};
+
     /** Portrait: narrow and tall; landscape: wide and short — a phone silhouette either way. */
     private static final float PORTRAIT_ASPECT = 9f / 19.5f;
     private static final float LANDSCAPE_ASPECT = 19.5f / 9f;
@@ -133,6 +134,8 @@ public final class PlaceMiniatureView extends View {
     private static final int GHOST_ALPHA = 190;
     private static final int LIFTED_BAND_ALPHA = 70;
     private static final int SLOT_HOVER_ALPHA = 60;
+    /** The gaps of the hovered edge that the finger is not on; enough to read, not to compete. */
+    private static final int GAP_LINE_ALPHA = 110;
     private static final float GHOST_SCALE = 1.08f;
     /** The dock plank's press constants: a lift and a spring-back are the same kind of motion. */
     private static final float SPRING_STIFFNESS = 320f;
@@ -300,14 +303,31 @@ public final class PlaceMiniatureView extends View {
         return new ArrayList<>(mSlots);
     }
 
-    /** The slot outlined for one edge while a bar is lifted, or null when that edge is illegal. */
+    /**
+     * The outermost gap offered on one edge while a bar is lifted, or null when that edge is
+     * offered none.
+     */
     @Nullable
     @VisibleForTesting
     public MiniatureDragPolicy.Slot slotFor(@NonNull Edge edge) {
+        return slotFor(edge, 0);
+    }
+
+    /** One gap of one edge, counted from the screen edge inwards; null while it is not offered. */
+    @Nullable
+    @VisibleForTesting
+    public MiniatureDragPolicy.Slot slotFor(@NonNull Edge edge, int index) {
         for (MiniatureDragPolicy.Slot slot : mSlots) {
-            if (slot.edge == edge) return slot;
+            if (slot.edge == edge && slot.index == index) return slot;
         }
         return null;
+    }
+
+    /** The gap the finger is over, or null while it is over none; what a release would write. */
+    @Nullable
+    @VisibleForTesting
+    public MiniatureDragPolicy.Slot hoveredSlot() {
+        return mHoverSlot;
     }
 
     /** The rectangle a block is drawn in, in view pixels, or null while it is not on the picture. */
@@ -329,16 +349,8 @@ public final class PlaceMiniatureView extends View {
     /** Whether the arrangement leaves this block off the screen — the legend then marks it so. */
     @VisibleForTesting
     public boolean isBlockHidden(@NonNull Block block) {
-        if (mLayout == null) return false;
-        switch (block) {
-            case APPS_ROW: return mLayout.appsRow == RowPlacement.HIDDEN;
-            case EXTRA_KEYS: return mLayout.extraKeys == RowPlacement.HIDDEN;
-            case ALPHABETS_ROW:
-                return !mLayout.azRowShown;
-            case STATUS_BAR:
-            case CANVAS:
-            default: return false;
-        }
+        Element element = elementOf(block);
+        return mLayout != null && element != null && !EdgeStackPolicy.isShown(mLayout, element);
     }
 
     public void setOnBlockTappedListener(@Nullable OnBlockTappedListener listener) {
@@ -507,41 +519,14 @@ public final class PlaceMiniatureView extends View {
             mSlots.clear();
             return;
         }
-        boolean azShown = !isBlockHidden(Block.ALPHABETS_ROW);
-        // The bar's own edge only applies while it stands alone; riding under the apps row always
-        // reads as bottom regardless of what is stored (PlaceChromePolicy.azBarEdge).
-        Edge azEdge = PlaceChromePolicy.azBarEdge(mLayout);
-
-        takeEdgeStrip(Block.STATUS_BAR, mLayout.statusBarEdge, STATUS_BAR_FRACTION);
-        // A top bar is claimed right after the status bar, before any side column, so it always
-        // reads as the band directly under the status bar.
-        if (azShown && azEdge == Edge.TOP) {
-            takeEdgeStrip(Block.ALPHABETS_ROW, Edge.TOP, ALPHABETS_FRACTION);
-        }
-        // Strips are claimed from the outside in. Two facts, both verified against the device:
-        // (1) a side rail/column pair puts the pinned-apps rail at the screen edge and pads the
-        // extra-keys column in by the rail's width, so a side apps row is claimed before a side
-        // extra-keys row; (2) the bottom stack still reads extra keys, then the A–Z index, then
-        // pinned apps, so a bottom extra-keys row is still claimed before a bottom apps row.
-        if (mLayout.appsRow.isOnSide()) {
-            takeEdgeStrip(Block.APPS_ROW, edgeOf(mLayout.appsRow), ROW_FRACTION);
-        }
-        if (mLayout.extraKeys.isOnSide()) {
-            takeEdgeStrip(Block.EXTRA_KEYS, edgeOf(mLayout.extraKeys), ROW_FRACTION);
-        }
-        // A side bar is innermost of the side columns — the rail and the extra-keys column pad it
-        // in first, same as the device.
-        if (azShown && azEdge.isOnSide()) {
-            takeEdgeStrip(Block.ALPHABETS_ROW, azEdge, ALPHABETS_FRACTION);
-        }
-        if (mLayout.extraKeys == RowPlacement.BOTTOM) {
-            takeEdgeStrip(Block.EXTRA_KEYS, Edge.BOTTOM, ROW_FRACTION);
-        }
-        if (azShown && azEdge == Edge.BOTTOM) {
-            takeEdgeStrip(Block.ALPHABETS_ROW, Edge.BOTTOM, ALPHABETS_FRACTION);
-        }
-        if (mLayout.appsRow == RowPlacement.BOTTOM) {
-            takeEdgeStrip(Block.APPS_ROW, Edge.BOTTOM, ROW_FRACTION);
+        // One loop over the model instead of a hand-written running order: each edge is a stack,
+        // outermost first, and a band claims its share of whatever the bands outside it left.
+        // The edges are claimed in the order the screen itself does — a top row spans the whole
+        // width, the side columns stand between the rows, and the bottom stack comes last, which
+        // is what puts a bottom status bar above the dock rather than under it.
+        for (Edge edge : CLAIM_ORDER) {
+            for (Element element : EdgeStackPolicy.stack(mLayout, edge))
+                takeEdgeStrip(blockOf(element), edge, MiniatureDragPolicy.bandFraction(element));
         }
         mBlockRects.put(Block.CANVAS, new RectF(mRemaining));
         computeContent();
@@ -549,6 +534,42 @@ public final class PlaceMiniatureView extends View {
         computeTrayChips();
         computeSlots();
         updateContentDescription();
+    }
+
+    /** The model's name for one of the miniature's bands, or null for a band with no placement. */
+    @Nullable
+    private static Element elementOf(@NonNull Block block) {
+        switch (block) {
+            case STATUS_BAR: return Element.STATUS;
+            case APPS_ROW: return Element.APPS;
+            case ALPHABETS_ROW: return Element.AZ;
+            case EXTRA_KEYS: return Element.EXTRA_KEYS;
+            case CANVAS:
+            default: return null;
+        }
+    }
+
+    /** The band one element is drawn as. */
+    @NonNull
+    private static Block blockOf(@NonNull Element element) {
+        switch (element) {
+            case STATUS: return Block.STATUS_BAR;
+            case APPS: return Block.APPS_ROW;
+            case AZ: return Block.ALPHABETS_ROW;
+            case EXTRA_KEYS:
+            default: return Block.EXTRA_KEYS;
+        }
+    }
+
+    /**
+     * The edge a band is drawn on. The alphabets index riding the pinned apps row has no edge of
+     * its own — it goes wherever that row goes — which is the model's answer, not a case here.
+     */
+    @NonNull
+    private Edge edgeOfBlock(@NonNull Block block) {
+        Element element = elementOf(block);
+        if (mLayout == null || element == null) return Edge.BOTTOM;
+        return EdgeStackPolicy.edgeOf(mLayout, element);
     }
 
     // ---- Grips, tray and slots -----------------------------------------------------------------
@@ -592,14 +613,7 @@ public final class PlaceMiniatureView extends View {
 
     /** Whether a bar stands as a column rather than a row, which turns its grip with it. */
     private boolean isBarVertical(@NonNull Block bar) {
-        if (mLayout == null) return false;
-        switch (bar) {
-            case STATUS_BAR: return isVerticalEdge(mLayout.statusBarEdge);
-            case APPS_ROW: return mLayout.appsRow.isOnSide();
-            case ALPHABETS_ROW: return PlaceChromePolicy.azBarEdge(mLayout).isOnSide();
-            case EXTRA_KEYS: return mLayout.extraKeys.isOnSide();
-            default: return false;
-        }
+        return mLayout != null && elementOf(bar) != null && edgeOfBlock(bar).isOnSide();
     }
 
     /**
@@ -633,9 +647,14 @@ public final class PlaceMiniatureView extends View {
     }
 
     /**
-     * Where the lifted bar may land. Edge slots sit against the free area inside whatever already
-     * stands on that edge — one edge takes a stack of bars, so a slot is drawn beside its
-     * neighbours rather than over them — and the tray is offered to a bar that may hide.
+     * Where the lifted bar may land: every gap in every edge's stack, and the tray under the phone
+     * for a bar that may hide. An edge with nothing on it offers the one gap it has; an edge
+     * carrying bands offers the gap outside the outermost, one between each pair, and one against
+     * the canvas — so a drop says which band the lifted bar lands above as well as which edge.
+     *
+     * <p>The gaps of one edge cover it end to end: each reaches halfway to its neighbours, and the
+     * innermost reaches a band's thickness into the canvas, so there is no dead strip between two
+     * of them for a finger to fall into.
      */
     private void computeSlots() {
         mSlots.clear();
@@ -646,36 +665,114 @@ public final class PlaceMiniatureView extends View {
             MiniatureDragPolicy.targets(mPlace, mOrientation, mLayout, bar);
         RectF free = mBlockRects.get(Block.CANVAS);
         if (free != null && !free.isEmpty()) {
-            for (Edge edge : targets.edges) mSlots.add(slotAt(edge, free));
+            for (Edge edge : Edge.values())
+                addEdgeSlots(edge, targets.gapsOn(edge), free, bar.element());
         }
         if (targets.tray && !mTrayRect.isEmpty()) {
-            mSlots.add(new MiniatureDragPolicy.Slot(null, mTrayRect.left, mTrayRect.top,
+            mSlots.add(new MiniatureDragPolicy.Slot(null, -1, 0f, mTrayRect.left, mTrayRect.top,
                 mTrayRect.right, mTrayRect.bottom));
         }
     }
 
-    @NonNull
-    private MiniatureDragPolicy.Slot slotAt(@NonNull Edge edge, @NonNull RectF free) {
-        float fraction = mDraggedBar == Block.STATUS_BAR ? STATUS_BAR_FRACTION
-            : mDraggedBar == Block.ALPHABETS_ROW ? ALPHABETS_FRACTION : ROW_FRACTION;
-        boolean vertical = isVerticalEdge(edge);
-        float span = vertical ? free.width() : free.height();
-        float thickness = Math.max(dp(9), Math.min(span * fraction, span * 0.45f));
-        switch (edge) {
-            case TOP:
-                return new MiniatureDragPolicy.Slot(edge, free.left, free.top, free.right,
-                    free.top + thickness);
-            case LEFT:
-                return new MiniatureDragPolicy.Slot(edge, free.left, free.top,
-                    free.left + thickness, free.bottom);
-            case RIGHT:
-                return new MiniatureDragPolicy.Slot(edge, free.right - thickness, free.top,
-                    free.right, free.bottom);
-            case BOTTOM:
-            default:
-                return new MiniatureDragPolicy.Slot(edge, free.left, free.bottom - thickness,
-                    free.right, free.bottom);
+    /** One slot per gap this edge offers, laid along it from the screen edge inwards. */
+    private void addEdgeSlots(@NonNull Edge edge, int gaps, @NonNull RectF free,
+                              @NonNull Element dragged) {
+        if (gaps <= 0 || mLayout == null) return;
+        float[] gapDepths = gapDepths(edge, gaps, free, dragged);
+        float span = edge.isOnSide() ? free.width() : free.height();
+        float thickness = Math.max(dp(9),
+            Math.min(span * MiniatureDragPolicy.bandFraction(dragged), span * 0.45f));
+        float limit = frameDepth(edge);
+        for (int index = 0; index < gaps; index++) {
+            float from = index == 0 ? 0f : (gapDepths[index - 1] + gapDepths[index]) / 2f;
+            float to = index == gaps - 1
+                ? gapDepths[index] + thickness
+                : (gapDepths[index] + gapDepths[index + 1]) / 2f;
+            to = Math.min(limit, Math.max(to, from + dp(2)));
+            mSlots.add(new MiniatureDragPolicy.Slot(edge, index, coordinateAt(edge,
+                gapDepths[index]), slotLeft(edge, free, from, to), slotTop(edge, free, from, to),
+                slotRight(edge, free, from, to), slotBottom(edge, free, from, to)));
         }
+    }
+
+    /**
+     * Where each of an edge's gaps sits, as a distance in from the screen edge: outside the
+     * outermost band, between each pair, and inside the innermost. The lifted bar's own band is
+     * not one of them — it is the thing being moved — and an edge that ends up bare has its one
+     * gap where the canvas starts.
+     */
+    @NonNull
+    private float[] gapDepths(@NonNull Edge edge, int gaps, @NonNull RectF free,
+                              @NonNull Element dragged) {
+        float[] depths = new float[gaps];
+        int at = 0;
+        RectF last = null;
+        for (Element element : EdgeStackPolicy.stack(mLayout, edge)) {
+            if (element == dragged) continue;
+            RectF band = mBlockRects.get(blockOf(element));
+            if (band == null || band.isEmpty()) continue;
+            if (at < gaps) depths[at++] = depthOf(edge, band, true);
+            last = band;
+        }
+        if (at < gaps) {
+            depths[at++] = last == null ? depthOf(edge, free, true) : depthOf(edge, last, false);
+        }
+        // A band too thin to have been drawn leaves its gap on top of the one inside it.
+        for (int rest = at; rest < gaps; rest++) depths[rest] = depths[rest - 1];
+        return depths;
+    }
+
+    /** How far in from the screen edge one of a rectangle's sides stands. */
+    private float depthOf(@NonNull Edge edge, @NonNull RectF rect, boolean outerSide) {
+        switch (edge) {
+            case TOP: return (outerSide ? rect.top : rect.bottom) - mFrameRect.top;
+            case BOTTOM: return mFrameRect.bottom - (outerSide ? rect.bottom : rect.top);
+            case LEFT: return (outerSide ? rect.left : rect.right) - mFrameRect.left;
+            case RIGHT:
+            default: return mFrameRect.right - (outerSide ? rect.right : rect.left);
+        }
+    }
+
+    /** The whole frame, measured the same way, so nothing is laid out past the phone. */
+    private float frameDepth(@NonNull Edge edge) {
+        return edge.isOnSide() ? mFrameRect.width() : mFrameRect.height();
+    }
+
+    /** The view coordinate a depth stands at: a y on a row's edge, an x on a column's. */
+    private float coordinateAt(@NonNull Edge edge, float depth) {
+        switch (edge) {
+            case TOP: return mFrameRect.top + depth;
+            case BOTTOM: return mFrameRect.bottom - depth;
+            case LEFT: return mFrameRect.left + depth;
+            case RIGHT:
+            default: return mFrameRect.right - depth;
+        }
+    }
+
+    // A slot spans its two depths across the edge, and the canvas's own width or height along it,
+    // so two edges overlap at a corner exactly as far as they always have.
+    private float slotLeft(@NonNull Edge edge, @NonNull RectF free, float from, float to) {
+        if (edge == Edge.LEFT) return coordinateAt(edge, from);
+        if (edge == Edge.RIGHT) return coordinateAt(edge, to);
+        return free.left;
+    }
+
+    private float slotRight(@NonNull Edge edge, @NonNull RectF free, float from, float to) {
+        if (edge == Edge.LEFT) return coordinateAt(edge, to);
+        if (edge == Edge.RIGHT) return coordinateAt(edge, from);
+        return free.right;
+    }
+
+    private float slotTop(@NonNull Edge edge, @NonNull RectF free, float from, float to) {
+        if (edge == Edge.TOP) return coordinateAt(edge, from);
+        if (edge == Edge.BOTTOM) return coordinateAt(edge, to);
+        return free.top;
+    }
+
+    private float slotBottom(@NonNull Edge edge, @NonNull RectF free, float from, float to) {
+        if (edge == Edge.TOP) return coordinateAt(edge, to);
+        if (edge == Edge.BOTTOM) return coordinateAt(edge, from);
+        return free.bottom;
     }
 
     /** The policy's name for one of the miniature's bands, or null for a band with no placement. */
@@ -734,18 +831,7 @@ public final class PlaceMiniatureView extends View {
         if (mLayout == null || isBlockHidden(bar)) {
             return getContext().getString(R.string.settings_layout_row_hidden);
         }
-        switch (bar) {
-            case STATUS_BAR:
-                return getContext().getString(LayoutChooserModel.edgeLabel(mLayout.statusBarEdge));
-            case APPS_ROW:
-                return getContext().getString(LayoutChooserModel.rowLabel(mLayout.appsRow));
-            case ALPHABETS_ROW:
-                return getContext().getString(
-                    LayoutChooserModel.edgeLabel(PlaceChromePolicy.azBarEdge(mLayout)));
-            case EXTRA_KEYS:
-            default:
-                return getContext().getString(LayoutChooserModel.rowLabel(mLayout.extraKeys));
-        }
+        return getContext().getString(LayoutChooserModel.edgeLabel(edgeOfBlock(bar)));
     }
 
     /** Decisions that do not need a {@link Canvas} to make, recomputed whenever the blocks move. */
@@ -804,17 +890,6 @@ public final class PlaceMiniatureView extends View {
         if (fontScale <= 0f) fontScale = 1f;
         float clamped = Math.min(fontScale, LEGEND_MAX_FONT_SCALE);
         return LEGEND_TEXT_SP * getResources().getDisplayMetrics().density * clamped;
-    }
-
-    private static boolean isVerticalEdge(@NonNull Edge edge) {
-        return edge == Edge.LEFT || edge == Edge.RIGHT;
-    }
-
-    @NonNull
-    private static Edge edgeOf(@NonNull RowPlacement placement) {
-        if (placement == RowPlacement.LEFT) return Edge.LEFT;
-        if (placement == RowPlacement.RIGHT) return Edge.RIGHT;
-        return Edge.BOTTOM;
     }
 
     /** Claims a strip off the current remaining rect for one edge, shrinking it in place. */
@@ -967,7 +1042,7 @@ public final class PlaceMiniatureView extends View {
         mFillPaint.setColor(bandFill(Block.STATUS_BAR));
         canvas.drawRect(rect, mFillPaint);
 
-        boolean vertical = isVerticalEdge(mLayout.statusBarEdge);
+        boolean vertical = isBarVertical(Block.STATUS_BAR);
         int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
         shrinkForGrip(mScratchRectA, Block.STATUS_BAR, vertical);
         drawClockAndDots(canvas, mScratchRectA, bandOnFill(Block.STATUS_BAR));
@@ -1002,7 +1077,7 @@ public final class PlaceMiniatureView extends View {
         mFillPaint.setColor(bandFill(Block.APPS_ROW));
         canvas.drawRect(rect, mFillPaint);
 
-        boolean vertical = mLayout.appsRow.isOnSide();
+        boolean vertical = isBarVertical(Block.APPS_ROW);
         int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
         shrinkForGrip(mScratchRectA, Block.APPS_ROW, vertical);
         drawAppIcons(canvas, mScratchRectA, bandOnFill(Block.APPS_ROW), active);
@@ -1036,7 +1111,7 @@ public final class PlaceMiniatureView extends View {
 
         // A side bar is a column of upright letters: rotate so the same left-to-right layout below
         // draws them stacked along the column's length instead of squeezed across its thinness.
-        boolean vertical = PlaceChromePolicy.azBarEdge(mLayout).isOnSide();
+        boolean vertical = isBarVertical(Block.ALPHABETS_ROW);
         int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
         shrinkForGrip(mScratchRectA, Block.ALPHABETS_ROW, vertical);
         drawAlphabetLetters(canvas, mScratchRectA, bandOnFill(Block.ALPHABETS_ROW));
@@ -1067,7 +1142,7 @@ public final class PlaceMiniatureView extends View {
         mFillPaint.setColor(bandFill(Block.EXTRA_KEYS));
         canvas.drawRect(rect, mFillPaint);
 
-        boolean vertical = mLayout.extraKeys.isOnSide();
+        boolean vertical = isBarVertical(Block.EXTRA_KEYS);
         int saved = beginBandOrientation(canvas, rect, vertical, mScratchRectA);
         shrinkForGrip(mScratchRectA, Block.EXTRA_KEYS, vertical);
         drawExtraKeyGlyphs(canvas, mScratchRectA, bandOnFill(Block.EXTRA_KEYS));
@@ -1360,23 +1435,55 @@ public final class PlaceMiniatureView extends View {
         mFillPaint.setAlpha(255);
     }
 
-    /** Every edge the lifted bar may stand on, outlined; the one under the finger filled. */
+    /**
+     * Every edge the lifted bar may stand on, outlined as one region the way it always has been,
+     * and — on the edge under the finger — the gaps inside it: a thin line where each would put the
+     * band, the one being dropped into filled and drawn solid. Nothing here animates; the picture
+     * changes when the finger moves to another gap and not otherwise.
+     */
     private void drawSlots(@NonNull Canvas canvas) {
         if (mSlots.isEmpty()) return;
         int accent = themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
         float radius = dp(4);
-        for (MiniatureDragPolicy.Slot slot : mSlots) {
-            if (slot.isTray()) continue; // the tray stands under the phone and draws itself
-            mScratchRectA.set(slot.left, slot.top, slot.right, slot.bottom);
-            if (slot == mHoverSlot) {
-                mFillPaint.setColor(accent);
-                mFillPaint.setAlpha(SLOT_HOVER_ALPHA);
-                canvas.drawRoundRect(mScratchRectA, radius, radius, mFillPaint);
-                mFillPaint.setAlpha(255);
-            }
+        Edge hovered = mHoverSlot == null ? null : mHoverSlot.edge;
+        for (Edge edge : Edge.values()) {
+            if (!edgeRegion(edge, mScratchRectA)) continue;
             mDashPaint.setColor(accent);
             canvas.drawRoundRect(mScratchRectA, radius, radius, mDashPaint);
         }
+        if (hovered == null) return;
+        float stroke = mLinePaint.getStrokeWidth();
+        for (MiniatureDragPolicy.Slot slot : mSlots) {
+            if (slot.edge != hovered) continue;
+            boolean under = slot == mHoverSlot;
+            if (under) {
+                mScratchRectB.set(slot.left, slot.top, slot.right, slot.bottom);
+                mFillPaint.setColor(accent);
+                mFillPaint.setAlpha(SLOT_HOVER_ALPHA);
+                canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
+                mFillPaint.setAlpha(255);
+            }
+            mLinePaint.setColor(accent);
+            mLinePaint.setAlpha(under ? 255 : GAP_LINE_ALPHA);
+            mLinePaint.setStrokeWidth(dp(under ? 2f : 1.2f));
+            if (hovered.isOnSide())
+                canvas.drawLine(slot.line, slot.top, slot.line, slot.bottom, mLinePaint);
+            else canvas.drawLine(slot.left, slot.line, slot.right, slot.line, mLinePaint);
+        }
+        mLinePaint.setAlpha(255);
+        mLinePaint.setStrokeWidth(stroke);
+    }
+
+    /** One edge's gaps as the single region they cover, or false while the edge offers none. */
+    private boolean edgeRegion(@NonNull Edge edge, @NonNull RectF out) {
+        boolean any = false;
+        for (MiniatureDragPolicy.Slot slot : mSlots) {
+            if (slot.edge != edge) continue;
+            if (!any) out.set(slot.left, slot.top, slot.right, slot.bottom);
+            else out.union(slot.left, slot.top, slot.right, slot.bottom);
+            any = true;
+        }
+        return any;
     }
 
     /** Whether the tray is one of the lifted bar's legal targets. */
@@ -1558,7 +1665,9 @@ public final class PlaceMiniatureView extends View {
             return;
         }
         endDrag();
-        if (mDropListener != null) mDropListener.onBarDropped(bar, slot.edge);
+        if (mDropListener != null) {
+            mDropListener.onBarDropped(bar, slot.edge, slot.isTray() ? -1 : slot.index);
+        }
     }
 
     private void springBack() {

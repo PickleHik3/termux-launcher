@@ -17,6 +17,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
@@ -24,6 +25,7 @@ import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
+import com.termux.app.place.Slot;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -110,11 +112,14 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void theStatusBarFollowsItsEdge() {
+        // The A-Z index is off for this one: a band claims its share of what the bands outside it
+        // left, so a bar measured against a bare edge and one measured under another is not the
+        // same height, and the question here is which edge it went to.
         PlaceMiniatureView view = sized();
-        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.HIDDEN),
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN),
             PlaceOrientation.PORTRAIT);
         RectF top = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
-        view.setLayout(layout(Edge.BOTTOM, RowPlacement.HIDDEN, RowPlacement.HIDDEN),
+        view.setLayout(layout(Edge.BOTTOM, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN),
             PlaceOrientation.PORTRAIT);
         RectF bottom = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
         assertNotNull(top);
@@ -333,6 +338,74 @@ public class PlaceMiniatureViewTest {
         assertTrue("pinned apps are innermost", apps.bottom <= az.top + 0.5f);
     }
 
+    @Test
+    public void aBottomStatusBarIsTheInnermostBandOfTheBottomStack() {
+        // The launcher draws it above the whole dock; the picture used to claim it first and draw
+        // it under everything, which is the one arrangement the two disagreed on.
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.BOTTOM, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        RectF status = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        assertNotNull(status);
+        assertNotNull(apps);
+        assertNotNull(az);
+        assertNotNull(keys);
+        assertTrue("the extra keys are still against the screen edge", keys.bottom >= az.bottom);
+        assertTrue("the status bar stands above the pinned apps",
+            status.bottom <= apps.top + 0.5f);
+    }
+
+    @Test
+    public void everyBandOnOneEdgeIsDrawnInTheStackOrder() {
+        // All four down the left: the status column, the rail, the extra keys and then the index,
+        // which is the order a side stack has always been drawn in.
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.LEFT, RowPlacement.LEFT, true, Edge.LEFT, RowPlacement.LEFT),
+            PlaceOrientation.LANDSCAPE);
+        RectF status = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        assertNotNull(status);
+        assertNotNull(apps);
+        assertNotNull(keys);
+        assertNotNull(az);
+        assertTrue("the status column is outermost", status.right <= apps.left + 0.5f);
+        assertTrue("then the rail", apps.right <= keys.left + 0.5f);
+        assertTrue("then the extra keys", keys.right <= az.left + 0.5f);
+        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        assertNotNull(canvas);
+        assertTrue("and the canvas has what is left", az.right <= canvas.left + 0.5f);
+    }
+
+    @Test
+    public void aReorderedStackIsDrawnInItsNewOrder() {
+        PlaceMiniatureView view = sized();
+        PlaceLayout stacked = layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM);
+        view.setLayout(stacked, PlaceOrientation.PORTRAIT);
+        assertTrue("the extra keys start against the screen edge",
+            view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS).bottom
+                >= view.blockRect(PlaceMiniatureView.Block.APPS_ROW).bottom);
+
+        // The pinned apps pulled out to the screen edge, everything else pushed in behind them.
+        view.setLayout(stacked
+            .withSlot(Element.APPS, Slot.on(Edge.BOTTOM, 0))
+            .withSlot(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, 1))
+            .withSlot(Element.AZ, Slot.on(Edge.BOTTOM, 2)), PlaceOrientation.PORTRAIT);
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        assertNotNull(apps);
+        assertNotNull(keys);
+        assertNotNull(az);
+        assertTrue("the pinned apps are outermost now", apps.bottom >= keys.bottom - 0.5f);
+        assertTrue("the extra keys stand above them", keys.bottom <= apps.top + 0.5f);
+        assertTrue("and the index above those", az.bottom <= keys.top + 0.5f);
+    }
+
     // ---- Grips, slots and the drag -------------------------------------------------------------
 
     private static PlaceMiniatureView inParent(ScrollingParent parent, int width, int height) {
@@ -354,13 +427,14 @@ public class PlaceMiniatureViewTest {
         event.recycle();
     }
 
-    /** Writes a drop the way the Layout page's overview does, for one miniature's orientation. */
+    /** Writes a drop the way the Layout editor does, for one miniature's orientation. */
     private static PlaceMiniatureView.OnBarDroppedListener writer(
         PlaceLayoutStore places, PlaceOrientation orientation) {
-        return (bar, edge) -> {
+        return (bar, edge, index) -> {
             MiniatureDragPolicy.Bar dragged = PlaceMiniatureView.barOf(bar);
             assertNotNull(dragged);
-            LayoutChooserModel.applyDrop(places, PaneWallPage.TERMINAL, orientation, dragged, edge);
+            LayoutChooserModel.applyDrop(places, PaneWallPage.TERMINAL, orientation, dragged, edge,
+                index);
         };
     }
 
@@ -431,7 +505,7 @@ public class PlaceMiniatureViewTest {
         assertTrue("the preference list is told to keep out", parent.disallowedIntercept);
         assertNotNull("landscape offers a column down the left", view.slotFor(Edge.LEFT));
         assertNotNull(view.slotFor(Edge.RIGHT));
-        assertNull("a row has no top position", view.slotFor(Edge.TOP));
+        assertNotNull("every bar stands on every edge now", view.slotFor(Edge.TOP));
     }
 
     @Test
@@ -481,7 +555,7 @@ public class PlaceMiniatureViewTest {
         RectF portraitGrip = portrait.gripRect(PlaceMiniatureView.Block.APPS_ROW);
         assertNotNull(portraitGrip);
         touch(portrait, MotionEvent.ACTION_DOWN, portraitGrip.centerX(), portraitGrip.centerY());
-        assertNull("portrait has no room for a column", portrait.slotFor(Edge.LEFT));
+        assertNotNull("portrait offers the side columns too", portrait.slotFor(Edge.LEFT));
         RectF tray = portrait.trayRect();
         touch(portrait, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
         touch(portrait, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
@@ -570,6 +644,67 @@ public class PlaceMiniatureViewTest {
         touch(view, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
         touch(view, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
         assertFalse(prefs().getBoolean("place.terminal.landscape.az_row", true));
+    }
+
+    @Test
+    public void anEdgeOffersAGapBetweenEveryPairOfItsBands() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        // The bottom keeps the A-Z index and the pinned apps while the keys are in the air: a gap
+        // outside the index, one between it and the apps row, and one against the canvas.
+        assertNotNull(view.slotFor(Edge.BOTTOM, 0));
+        assertNotNull(view.slotFor(Edge.BOTTOM, 1));
+        assertNotNull(view.slotFor(Edge.BOTTOM, 2));
+        assertNull("three bands minus the one in the air is three gaps",
+            view.slotFor(Edge.BOTTOM, 3));
+
+        // They run outermost first and cover the edge end to end, so a finger is never between two.
+        MiniatureDragPolicy.Slot outer = view.slotFor(Edge.BOTTOM, 0);
+        MiniatureDragPolicy.Slot inner = view.slotFor(Edge.BOTTOM, 2);
+        assertTrue("the outermost gap is nearest the screen edge", outer.line > inner.line);
+        assertTrue("and they meet", outer.top <= view.slotFor(Edge.BOTTOM, 1).bottom + 0.5f);
+
+        // The finger picks the gap it is on, not merely the edge.
+        touch(view, MotionEvent.ACTION_MOVE, inner.centerX(), inner.centerY());
+        assertNotNull(view.hoveredSlot());
+        assertEquals(2, view.hoveredSlot().index);
+        touch(view, MotionEvent.ACTION_MOVE, outer.centerX(), outer.centerY());
+        assertEquals(0, view.hoveredSlot().index);
+    }
+
+    @Test
+    public void aDropIntoAGapWritesEveryBandOnThatEdgeItsNewPosition() {
+        PlaceLayoutStore places = store();
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        view.setOnBarDroppedListener(writer(places, PlaceOrientation.PORTRAIT));
+
+        // The pinned apps lifted off the innermost band of the bottom and dropped against the
+        // screen edge: every band down there is renumbered, not only the one that moved.
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        MiniatureDragPolicy.Slot outermost = view.slotFor(Edge.BOTTOM, 0);
+        assertNotNull(outermost);
+        touch(view, MotionEvent.ACTION_MOVE, outermost.centerX(), outermost.centerY());
+        touch(view, MotionEvent.ACTION_UP, outermost.centerX(), outermost.centerY());
+
+        assertEquals(0, prefs().getInt("place.terminal.portrait.apps_row_order", -1));
+        assertEquals(1, prefs().getInt("place.terminal.portrait.extra_keys_order", -1));
+        assertEquals(2, prefs().getInt("place.terminal.portrait.az_bar_order", -1));
+        assertEquals("the bar did not leave the bottom", "bottom",
+            prefs().getString("place.terminal.portrait.apps_row", null));
+        assertEquals("nothing on another edge was touched", 0,
+            places.slotOrder(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT,
+                Element.STATUS));
     }
 
     @Test
