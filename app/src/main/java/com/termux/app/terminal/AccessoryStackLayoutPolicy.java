@@ -160,8 +160,12 @@ public final class AccessoryStackLayoutPolicy {
      * Air above the letters when the A-Z row is the dock's top row. With another dock row over it
      * that row's own bottom padding keeps the letters off the dock's top rim; without one the 19dp
      * band would stand 1dp under the rim, so the row carries the air itself.
+     *
+     * <p>It is also the air a pinned-apps row sharing a container keeps around its icons
+     * ({@link com.termux.app.dock.DockLayoutPolicy#SHARED_ROW_AIR_DP}), so two bands of one sheet
+     * are spaced by one number rather than by two that happen to differ.
      */
-    private static final float AZ_ROW_CROWN_DP = 6f;
+    public static final float AZ_ROW_CROWN_DP = 6f;
 
     public static int computeAzRowCrownPaddingPx(boolean azEnabled, boolean rowOverAz,
                                                  float density) {

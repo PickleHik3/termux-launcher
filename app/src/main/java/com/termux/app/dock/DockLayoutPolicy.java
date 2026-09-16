@@ -64,6 +64,18 @@ public final class DockLayoutPolicy {
      */
     public static final float LONE_ROW_AIR_DP = 4f;
 
+    /**
+     * The air a pinned-apps row sharing its container keeps around its icons, above and below.
+     *
+     * <p>It is the letters' own crown ({@link AccessoryStackLayoutPolicy#AZ_ROW_CROWN_DP}) rather
+     * than a number of its own, so the two bands of one sheet breathe alike. It used to be
+     * whatever the size preset left over: the band was derived from the extra-keys row and the
+     * icon was a fill ratio of it, so a bigger icon bought more air as well, and the row carried
+     * about twice the air of the bands beside it. The preset scales the icon now; the air is this,
+     * on every step and in both styles.
+     */
+    public static final float SHARED_ROW_AIR_DP = AccessoryStackLayoutPolicy.AZ_ROW_CROWN_DP;
+
     /** Everything the dock's numbers are a function of, snapshotted by the caller. */
     public static final class DockInputs {
         /** False before the preference store is attached; the rows collapse to zero then. */
@@ -228,17 +240,24 @@ public final class DockLayoutPolicy {
         // 6dp above equals 3dp below plus the fixed 3dp icon/A-Z band.
         out.defaultAppsTopPaddingPx = Math.round(density * 6f);
         out.defaultAppsBottomPaddingPx = Math.round(density * 3f);
-        // The paddings a row sharing its container keeps, which is what the dock's three rows on one
-        // sheet have always been spaced by. A row standing alone keeps the constant air instead —
-        // the one definition of the row's vertical padding, whichever edge and form it is in.
+        // The pair above is the legacy spacing of the dock's three rows on one sheet. It is no
+        // longer any row's padding: it survives only as the baseline the icon's size is read out
+        // of, so a given preset draws exactly the icon it always drew.
         int sharedTopPaddingPx =
             capsule ? out.capsuleAppsTopPaddingPx : out.defaultAppsTopPaddingPx;
         int sharedBottomPaddingPx =
             capsule ? out.capsuleAppsBottomPaddingPx : out.defaultAppsBottomPaddingPx;
         int loneAirPx = loneRowAirPx(density);
-        out.appsTopPaddingPx = in.appsRowAlone ? loneAirPx : sharedTopPaddingPx;
-        out.appsBottomPaddingPx = in.appsRowAlone ? loneAirPx : sharedBottomPaddingPx;
+        int sharedAirPx = sharedRowAirPx(density);
+        // Alone the row keeps its sliver; sharing, it keeps the letters' crown on both sides. The
+        // one place the row's vertical padding is decided, whichever edge and form it is in.
+        out.appsTopPaddingPx = in.appsRowAlone ? loneAirPx : sharedAirPx;
+        out.appsBottomPaddingPx = out.appsTopPaddingPx;
         out.capsuleBottomGapPx = Math.round(density * 6f);
+
+        out.iconScale = in.preferencesAvailable
+            ? iconScaleFor(capsule, capsule ? sizeProgress : defaultDockProgress)
+            : FALLBACK_ICON_SCALE;
 
         // Row metrics. The pinned-apps row collapses when the apps stand on a screen edge, where
         // the rail is the launcher surface instead, and collapses outright before a preference
@@ -250,19 +269,26 @@ public final class DockLayoutPolicy {
         out.appsRowEnabled = appsRowEnabled;
         out.azRowEnabled = azRowEnabled;
         if (in.preferencesAvailable) {
-            // The band a lying-down apps row claims, whichever edge it lies on. The dock's own
-            // height is that band while the row is the dock's; a row standing along the top is the
-            // same band in another stack, and the dock collapses to nothing.
-            int sharedBandPx = in.appsRowEnabledPref
-                ? appsBarHeightPx(capsule, sizeProgress, defaultDockProgress,
+            // The preset's own figure, kept for the one thing it still decides: how big the icon
+            // is. It was the row's band — the extra-keys row scaled, less the legacy paddings —
+            // and the icon was a fill ratio of what that left, so every dp the preset added was
+            // split between the icon and the air around it.
+            int iconBaselinePx = in.appsRowEnabledPref
+                ? Math.max(0, presetBaselineBandPx(capsule, sizeProgress, defaultDockProgress,
                     in.baseToolbarHeightPx, sharedTopPaddingPx, sharedBottomPaddingPx,
                     density, Math.max(0, in.additionalAppsBarHeightPx))
+                    - sharedTopPaddingPx - sharedBottomPaddingPx)
                 : 0;
-            // The icons are the same size alone: the band is re-formed around the hint the shared
-            // paddings answered with, so only the air either side of them changes.
-            out.appsRowBandPx = !in.appsRowAlone || sharedBandPx <= 0
-                ? sharedBandPx
-                : Math.max(0, sharedBandPx - sharedTopPaddingPx - sharedBottomPaddingPx)
+            out.appsRowIconPx = iconBaselinePx <= 0
+                ? 0 : dockIconSizePx(iconBaselinePx, out.iconScale, density);
+            // The band a lying-down apps row claims, whichever edge it lies on: the icon and the
+            // air either side of it, and nothing else. The dock's own height is that band while
+            // the row is the dock's; a row standing along the top is the same band in another
+            // stack, and the dock collapses to nothing. Alone the row is still formed around the
+            // baseline rather than the icon, so P8's numbers are exactly what they were.
+            out.appsRowBandPx = iconBaselinePx <= 0
+                ? 0
+                : (in.appsRowAlone ? iconBaselinePx : out.appsRowIconPx)
                     + out.appsTopPaddingPx + out.appsBottomPaddingPx;
             out.appsBarHeightPx = appsRowEnabled ? out.appsRowBandPx : 0;
             out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
@@ -282,10 +308,6 @@ public final class DockLayoutPolicy {
         // tall its icons may be.
         out.appsRowBandHintPx =
             Math.max(0, out.appsRowBandPx - out.appsTopPaddingPx - out.appsBottomPaddingPx);
-
-        out.iconScale = in.preferencesAvailable
-            ? iconScaleFor(capsule, capsule ? sizeProgress : defaultDockProgress)
-            : FALLBACK_ICON_SCALE;
 
         // The apps rail.
         boolean railActive = in.appsOnRail && in.preferencesAvailable && in.appsRowEnabledPref;
@@ -323,6 +345,32 @@ public final class DockLayoutPolicy {
      */
     public static int loneRowAirPx(float density) {
         return Math.round(Math.max(0f, density) * LONE_ROW_AIR_DP);
+    }
+
+    /**
+     * {@link #SHARED_ROW_AIR_DP} in pixels: the air a pinned-apps row sharing its container keeps
+     * above and below its icons, which is the letters' crown beside it.
+     */
+    public static int sharedRowAirPx(float density) {
+        return Math.round(Math.max(0f, density) * SHARED_ROW_AIR_DP);
+    }
+
+    /**
+     * One pinned icon in the form that lies down: a fill ratio of the row's content box, floored
+     * at a thumb-sized 20dp and never taller than the box it is centred in.
+     *
+     * <p>The row asks the same question of its own host on the frames before the dock has answered
+     * it, so the answer lives here rather than in the view: the band the policy hands over is this
+     * icon and its air, and the two cannot drift apart.
+     */
+    public static int dockIconSizePx(int rowContentHeightPx, float iconScale, float density) {
+        float safeDensity = Math.max(0f, density);
+        int minPx = Math.round(safeDensity * 20f);
+        int usablePx = Math.max(Math.round(safeDensity * 24f),
+            rowContentHeightPx - Math.round(safeDensity * 2f));
+        int candidate = Math.round(
+            usablePx * AccessoryStackLayoutPolicy.computeDockIconFillRatio(iconScale));
+        return Math.max(minPx, Math.min(Math.max(minPx, usablePx), candidate));
     }
 
     /** One rail icon's size, the same on every side and independent of the dock's size preset. */
@@ -363,14 +411,15 @@ public final class DockLayoutPolicy {
     }
 
     /**
-     * Keeps the old row/icon result as each preset's baseline, then allocates enough extra row
-     * height for the new icon curve. This makes the requested icon-size bump real in pixels while
-     * preserving the smallest preset and the fixed A-Z/extra-keys heights.
+     * The preset's baseline row height — the extra-keys row scaled, then grown enough for the icon
+     * curve. It is not the row's band any more (that is the icon and its air): the caller takes the
+     * legacy paddings back off it and sizes the icon from what is left, which is the one thing this
+     * curve still decides.
      */
-    private static int appsBarHeightPx(boolean capsule, float sizeProgress,
-                                       float defaultDockProgress, int baseToolbarHeightPx,
-                                       int appsTopPaddingPx, int appsBottomPaddingPx,
-                                       float density, int additionalAppsBarHeightPx) {
+    private static int presetBaselineBandPx(boolean capsule, float sizeProgress,
+                                           float defaultDockProgress, int baseToolbarHeightPx,
+                                           int appsTopPaddingPx, int appsBottomPaddingPx,
+                                           float density, int additionalAppsBarHeightPx) {
         float baselineHeightFactor = capsule
             ? (1.12f + (sizeProgress * 0.60f))
             : (1.00f + (defaultDockProgress * 0.52f));

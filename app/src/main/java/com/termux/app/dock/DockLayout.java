@@ -74,6 +74,12 @@ public final class DockLayout {
     /** How much of the rail's axis one icon takes, itself and its air either side. */
     public final int railSlotLengthPx;
     /**
+     * One pinned icon in the form that lies down, for the row to draw rather than work out: the
+     * size preset scales this and nothing else, and a shared row's band is exactly it plus
+     * {@link com.termux.app.dock.DockLayoutPolicy#SHARED_ROW_AIR_DP} on each side.
+     */
+    public final int appsRowIconPx;
+    /**
      * The band a lying-down pinned-apps row claims wherever it lies. Equal to
      * {@link #appsBarHeightPx} while the row is the dock's own; non-zero for a row along the top,
      * where the dock has collapsed and this is the only height there is.
@@ -132,6 +138,7 @@ public final class DockLayout {
         this.railSlotLengthPx = Math.max(0, b.railSlotLengthPx);
         this.appsRowBandPx = Math.max(0, b.appsRowBandPx);
         this.appsRowBandHintPx = Math.max(0, b.appsRowBandHintPx);
+        this.appsRowIconPx = Math.max(0, b.appsRowIconPx);
         this.compactStatusBarHeightPx = b.compactStatusBarHeightPx;
         this.mConfiguredCornerRadiusDp = b.configuredCornerRadiusDp;
     }
@@ -196,6 +203,7 @@ public final class DockLayout {
         int railSlotLengthPx;
         int appsRowBandPx;
         int appsRowBandHintPx;
+        int appsRowIconPx;
         int compactStatusBarHeightPx;
         int configuredCornerRadiusDp;
 

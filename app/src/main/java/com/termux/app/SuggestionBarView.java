@@ -133,7 +133,6 @@ import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.DockPagingModel;
 import com.termux.app.launcher.paging.PageTickStripView;
-import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.theme.ThemeUtils;
@@ -275,6 +274,8 @@ public final class SuggestionBarView extends GridLayout
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
     private int dockRowHeightHintPx = 0;
+    /** The icon size the dock resolved for the lying-down form; 0 until it has said. */
+    private int dockIconSizePx = 0;
     private List<String> defaultButtonStrings = new ArrayList<>();
     private final Map<String, WeakReference<View>> launchTargetViews = new HashMap<>();
     private final Map<String, WeakReference<View>> launchTargetViewsByPackage = new HashMap<>();
@@ -994,6 +995,26 @@ public final class SuggestionBarView extends GridLayout
         // A new hint is a new question, so it is asked afresh even if the last one was overruled.
         rowHeightHintWaived = false;
         renderDeferredSinceUptimeMs = 0L;
+        invalidateRenderedIconCaches();
+        childLayoutPending = true;
+        requestLayout();
+        invalidate();
+        scheduleStableDrawReleaseIfPossible();
+    }
+
+    /**
+     * One pinned icon's size in the form that lies down, as the dock resolved it. Zero hands the
+     * question back to the row's own host, which is what a bar with no dock behind it has.
+     */
+    public void setDockIconSizePx(int dockIconSizePx) {
+        int clamped = Math.max(0, dockIconSizePx);
+        if (this.dockIconSizePx == clamped) {
+            return;
+        }
+        this.dockIconSizePx = clamped;
+        if (vertical) {
+            return;
+        }
         invalidateRenderedIconCaches();
         childLayoutPending = true;
         requestLayout();
@@ -8195,18 +8216,21 @@ public final class SuggestionBarView extends GridLayout
         // A rail icon is a fixed size on every side: its column has no row height to be a share of.
         if (vertical)
             return railIconSizePx();
-        // The row's own band is the answer whenever the dock has handed one over. Only when it has
-        // not does the measured host decide, and then it is capped: a plank measured before it was
-        // sized, or a stack that swallowed the whole content column, is a host several screens tall
-        // and must not scale one pinned icon across it.
+        // The dock's own answer, whenever it has given one. The row's band is this icon and its
+        // air, so the icon is handed over rather than read back out of the band: derived from the
+        // band it would be the band less the air less the air again.
+        if (dockIconSizePx > 0)
+            return dockIconSizePx;
+        // Only when it has not does the measured host decide, and then it is capped: a plank
+        // measured before it was sized, or a stack that swallowed the whole content column, is a
+        // host several screens tall and must not scale one pinned icon across it.
         int availableHeight = rowHeightHintPx();
         if (availableHeight <= 0) availableHeight = measuredRowHeightPx();
         if (availableHeight <= 0) {
             return Math.max(dp(20), Math.round(24f * iconScale * getResources().getDisplayMetrics().density));
         }
-        int usableHeight = Math.max(dp(24), availableHeight - dp(2));
-        int candidate = Math.round(usableHeight * resolveIconFillRatio());
-        return clamp(candidate, dp(20), Math.max(dp(20), usableHeight));
+        return com.termux.app.dock.DockLayoutPolicy.dockIconSizePx(
+            availableHeight, iconScale, screenDensity());
     }
 
     /**
@@ -8224,10 +8248,6 @@ public final class SuggestionBarView extends GridLayout
         if (height <= 0) return 0;
         return Math.min(height,
             com.termux.app.dock.DockLayoutPolicy.maxRowBandPx(screenDensity()));
-    }
-
-    private float resolveIconFillRatio() {
-        return AccessoryStackLayoutPolicy.computeDockIconFillRatio(iconScale);
     }
 
     @NonNull
