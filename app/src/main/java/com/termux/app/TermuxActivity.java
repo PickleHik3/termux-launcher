@@ -117,6 +117,7 @@ import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.launcher.drawer.AppDrawerPullGeometry;
 import com.termux.app.launcher.drawer.DockRailScrollView;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.folder.FolderRenameController;
@@ -3276,20 +3277,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
             boolean vertical = isStatusBarVertical();
             // A column keeps only its own air from the band beside it. The camera hole it used to
-            // start past is the edge stack's padding now, so the bar is a plain band and the two
+            // start past is the padded content root's now, so the bar is a plain band and the two
             // can never be reckoned from different origins again.
             int columnLeadIn = vertical ? outerMargin : 0;
             int leftMargin = vertical
                 ? (mStatusBarEdge == PlaceLayout.Edge.LEFT ? columnLeadIn : 0) : sideMargin;
             int rightMargin = vertical
                 ? (mStatusBarEdge == PlaceLayout.Edge.RIGHT ? columnLeadIn : 0) : sideMargin;
-            // And it runs the display's whole length. The root pads the container away from the
-            // status and navigation bars; a column cancels that padding so its surface reaches
-            // both ends of the screen, and keeps its own content clear of the bars instead — the
-            // same trick the top bar's glass plays with the system status bar.
-            int topMargin = vertical ? -mLastStatusBarInsetTop
+            // And it runs the canvas band, not the display: a side stack flanks the terminal
+            // between the top and bottom stacks, so a column reaches exactly as far as the canvas
+            // beside it and cancels nothing. It used to be a sibling of the padded content root and
+            // pulled itself out to both ends of the screen with negative margins for that.
+            int topMargin = vertical ? 0
                 : (mStatusBarEdge == PlaceLayout.Edge.TOP ? outerMargin : 0);
-            int bottomMargin = vertical ? -mLastNavigationBarInsetBottom
+            int bottomMargin = vertical ? 0
                 : (mStatusBarEdge == PlaceLayout.Edge.BOTTOM ? outerMargin : 0);
             boolean sizeStale = mStatusBarCollapseAnimator == null
                 && (vertical ? mlp.width != targetThickness : mlp.height != targetThickness);
@@ -3324,12 +3325,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (stackedClock != null && mStatusBarCollapseAnimator == null) {
                 stackedClock.setAlpha(1f);
                 stackedClock.setVisibility(vertical && !collapsed ? View.VISIBLE : View.GONE);
-                // The column's glass starts at the top of the screen; its clock starts under the
-                // system status bar, like the row it stands above.
+                // The column's glass starts where the canvas does, so its clock starts at the top
+                // of the column itself — the system status bar is already above all of it.
                 if (stackedClock.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
                     ViewGroup.MarginLayoutParams clockParams =
                         (ViewGroup.MarginLayoutParams) stackedClock.getLayoutParams();
-                    int clockTop = vertical ? mLastStatusBarInsetTop : 0;
+                    int clockTop = 0;
                     if (clockParams.topMargin != clockTop) {
                         clockParams.topMargin = clockTop;
                         stackedClock.setLayoutParams(clockParams);
@@ -3458,12 +3459,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The row inside a bar standing in a column: under the system status bar and under the stacked
-     * clock while the bar is open, and as long as the column leaves it.
+     * The row inside a bar standing in a column: under the stacked clock while the bar is open, and
+     * as long as the column leaves it. The system status bar is not in this sum any more — the
+     * column stands in the canvas band, which already starts below it.
      */
     private void applyStatusColumnRowGeometry(@NonNull FrameLayout.LayoutParams params,
                                               @NonNull View statusRow, boolean collapsed) {
-        int top = mLastStatusBarInsetTop + Math.round(dpToPx(8)) + statusColumnClockHeightPx(collapsed);
+        int top = Math.round(dpToPx(8)) + statusColumnClockHeightPx(collapsed);
         int length = Math.max(Math.round(dpToPx(48)), statusColumnContentLengthPx() - top);
         // The bar's foot is the lens's: the place below peeks half past it. The stats stop short
         // of that icon, the way the row's content stops short of the one past its end.
@@ -3508,17 +3510,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * lower half of a column back to a rail or an extra-keys column holding the same side; they
      * stand beside it on the edge stack now, so nothing shares its length with it.
      *
-     * <p>Measured down the bar's own surface, which runs the display's length, and stopping at the
-     * navigation bar: the content never stands under a system bar even though the glass does.
+     * <p>Measured down the canvas band the column stands in, which is the whole of the bar: a side
+     * stack flanks the terminal alone, so no part of the column runs under a system bar or behind
+     * the dock any more.
      */
     private int statusColumnContentLengthPx() {
+        View band = findViewById(R.id.terminal_canvas_band);
+        if (band != null && band.getHeight() > 0) return band.getHeight();
+        // Before the band's first layout, the container it sits in is the nearest honest answer.
         View container = findViewById(R.id.terminal_root_container);
-        // The display's length, not the container's: the column cancels the root's padding, and
-        // reading the host's own height here would settle on whatever it measured before the
-        // first layout.
-        int columnPx = container == null ? 0
-            : container.getHeight() + mLastStatusBarInsetTop + mLastNavigationBarInsetBottom;
-        return Math.max(0, columnPx - mLastNavigationBarInsetBottom);
+        return container == null ? 0 : Math.max(0, container.getHeight());
     }
 
     /**
@@ -5719,7 +5720,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.core.graphics.Insets cutoutInsets = insetsCompat.getInsets(Type.displayCutout());
         mLastDisplayCutoutInsetLeft = cutoutInsets.left;
         mLastDisplayCutoutInsetRight = cutoutInsets.right;
-        mLastNavigationBarInsetBottom = insetsCompat.getInsets(Type.navigationBars()).bottom;
         syncExtraKeysHost();
         syncPinnedAppsHost();
         syncAzBarHosts();
@@ -5729,18 +5729,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // first arrangement pass.
         applyEdgeStacksAndInvalidate(currentPlaceLayout());
         // One answer for all four edges: what stands on each of them, summed, rather than a chain
-        // of max() in which every column carried the reach of every column outside it. The two
-        // side stacks carry the cutout themselves, which is why it is in the metrics rather than
-        // added here.
-        EdgeStackPolicy.Insets content =
-            EdgeStackPolicy.contentInsets(currentPlaceLayout(), buildEdgeStackMetrics());
-        applyEdgeStackCutouts();
+        // of max() in which every column carried the reach of every column outside it.
+        PlaceLayout placeLayout = currentPlaceLayout();
+        EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
+        EdgeStackPolicy.Insets content = EdgeStackPolicy.contentInsets(placeLayout, metrics);
+        // The side stacks stand inside the canvas band now, so the bands they hold are an inset on
+        // the canvas structurally and nobody pads for them. What is left of the horizontal answer
+        // is the display cutout, and that the root keeps: the camera hole is the window's, not the
+        // place's, so every bar on every edge clears it in one place rather than four.
+        int cutoutLeft = content.left
+            - EdgeStackPolicy.stackThicknessPx(placeLayout, PlaceLayout.Edge.LEFT, metrics);
+        int cutoutRight = content.right
+            - EdgeStackPolicy.stackThicknessPx(placeLayout, PlaceLayout.Edge.RIGHT, metrics);
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
         if (rootRelativeLayout != null
-            && (rootRelativeLayout.getPaddingLeft() != content.left
-                || rootRelativeLayout.getPaddingRight() != content.right)) {
-            rootRelativeLayout.setPadding(content.left, rootRelativeLayout.getPaddingTop(),
-                content.right, rootRelativeLayout.getPaddingBottom());
+            && (rootRelativeLayout.getPaddingLeft() != cutoutLeft
+                || rootRelativeLayout.getPaddingRight() != cutoutRight)) {
+            rootRelativeLayout.setPadding(cutoutLeft, rootRelativeLayout.getPaddingTop(),
+                cutoutRight, rootRelativeLayout.getPaddingBottom());
         }
 
         applyTerminalSurfaceAppearance();
@@ -6585,7 +6591,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 @Override
                 public void onDrawerDragBegin(float downRawY) {
-                    getAppDrawerController().beginDrag(downRawY);
+                    // The row pulls down wherever it lies, but the plane grows out of the row
+                    // itself: off the dock that is the plank it stands on, not the dock's glass.
+                    PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(currentPlaceLayout());
+                    getAppDrawerController().beginDrag(downRawY,
+                        AppDrawerGestureArbiter.Pull.DOWN,
+                        AppDrawerPullGeometry.seedFor(edge));
                 }
 
                 @Override
@@ -9321,8 +9332,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
     private int mLastDisplayCutoutInsetLeft;
     private int mLastDisplayCutoutInsetRight;
-    /** Navigation-bar inset, so the rail's scroll range can clear it at the bottom. */
-    private int mLastNavigationBarInsetBottom;
 
     /** The pinned apps stand as a column on a screen edge for the place on screen. */
     private boolean isDockRailActive() {
@@ -9358,7 +9367,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override
             public void onDrawerDragBegin(float downPull) {
-                getAppDrawerController().beginDrag(downPull);
+                getAppDrawerController().beginDrag(downPull, getDockLayout().railPull,
+                    AppDrawerPullGeometry.Seed.RAIL);
             }
 
             @Override
@@ -9414,6 +9424,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The axis is the host's, not the view's: the same bar lies down on the dock and on the
         // top edge, and stands up on a side.
         boolean turned = mSuggestionBarView.setVerticalForm(wantHost && edge.isOnSide());
+        // A rail's pull is sideways and the scrolling host arbitrates it, so the rail itself claims
+        // nothing: a drag down the rail scrolls the pinned apps instead of opening the drawer.
+        mSuggestionBarView.setDrawerPull(wantHost && edge.isOnSide()
+            ? AppDrawerGestureArbiter.Pull.NONE : AppDrawerPullGeometry.pullFor(edge));
 
         host.setDrawerPullListener(wantHost && edge.isOnSide()
             ? mDockRailDrawerPullListener : null);
@@ -9422,8 +9436,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int edgeMarginPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
             ViewGroup.LayoutParams params = host.getLayoutParams();
             if (edge.isOnSide()) {
-                // The band the rail itself claims: the cutout under it is the edge stack's, so the
-                // two are never counted twice. Padded on all four sides with the rail's own margin.
+                // The band the rail itself claims: the cutout under it is the padded content
+                // root's, so the two are never counted twice. Padded on all four sides with the
+                // rail's own margin.
                 int verticalPadPx = Math.round(dpToPx(10));
                 host.setPadding(edgeMarginPx, verticalPadPx, edgeMarginPx, verticalPadPx);
                 if (params != null && (params.width != dockLayout.railBandPx
@@ -9572,8 +9587,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 host.setLayoutParams(hostParams);
             }
             // The keys are centred in the column at their preferred height, shrinking only when
-            // the column is too short for all of them.
-            View container = findViewById(R.id.terminal_root_container);
+            // the column is too short for all of them. The band, not the container: the column
+            // flanks the canvas and stops where the canvas stops.
+            View band = findViewById(R.id.terminal_canvas_band);
+            View container = band != null && band.getHeight() > 0
+                ? band : findViewById(R.id.terminal_root_container);
             int availablePx = container == null ? 0
                 : container.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
             int keyCount = keys.getRowCount();
@@ -9847,15 +9865,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (moved) mChrome.onArrangementChanged();
         return moved;
     }
-
-    /** The display cutout each side stack starts past; the content's inset counts the same one. */
-    private void applyEdgeStackCutouts() {
-        com.termux.app.place.EdgeStackView left = edgeStack(PlaceLayout.Edge.LEFT);
-        if (left != null) left.setCutoutPx(mLastDisplayCutoutInsetLeft);
-        com.termux.app.place.EdgeStackView right = edgeStack(PlaceLayout.Edge.RIGHT);
-        if (right != null) right.setCutoutPx(mLastDisplayCutoutInsetRight);
-    }
-
 
     /**
      * Every band's thickness, measured where the activity already knows it, for the policy to add
@@ -13824,10 +13833,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The icons are chips of the same kit as the badge beside them: same corner.
             lens.setChipRadiusPx(resolveStatusIndicatorCornerRadiusPx(Math.round(dpToPx(20)),
                 isRoundedDockStyle()));
-            // A column's glass runs under the system bars; its place icons do not.
-            boolean columnLens = isStatusBarVertical();
-            lens.setAlongInsets(columnLens ? mLastStatusBarInsetTop : 0,
-                columnLens ? mLastNavigationBarInsetBottom : 0);
+            // Nothing to keep clear of: a column stands in the canvas band, which already starts
+            // below the system status bar and ends above the navigation bar.
+            lens.setAlongInsets(0, 0);
             if (mStatusBarCollapseAnimator == null) {
                 lens.setExpansion(isStatusBarCompact()
                     ? 0f : 1f);

@@ -66,17 +66,56 @@ public class TermuxActivityEdgeStackLayoutTest {
         TermuxActivity activity = inflate();
         LinearLayout column = activity.findViewById(R.id.terminal_content_column);
         View top = activity.findViewById(R.id.place_edge_stack_top);
-        View surface = activity.findViewById(R.id.terminal_surface_host);
+        View band = activity.findViewById(R.id.terminal_canvas_band);
         View bottom = activity.findViewById(R.id.place_edge_stack_bottom);
         assertEquals(3, column.getChildCount());
         assertSame(top, column.getChildAt(0));
-        assertSame(surface, column.getChildAt(1));
+        assertSame(band, column.getChildAt(1));
         assertSame(bottom, column.getChildAt(2));
-        // The terminal takes whatever the two stacks leave, which is what makes their thickness a
-        // content inset without anyone having to pad for it.
-        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) surface.getLayoutParams();
+        // The canvas band takes whatever the two stacks leave, which is what makes their thickness
+        // a content inset without anyone having to pad for it.
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) band.getLayoutParams();
         assertEquals(0, params.height);
         assertEquals(1f, params.weight, 0f);
+    }
+
+    @Test
+    public void theSideStacksFlankTheCanvasAndNothingElse() {
+        // The defect: standing outside the content column, a rail pushed the status bar's chips,
+        // the dock's rows and the in-app keyboard sideways with it. Inside the band it flanks the
+        // terminal alone, which is how the miniature has always drawn it.
+        TermuxActivity activity = inflate();
+        LinearLayout band = activity.findViewById(R.id.terminal_canvas_band);
+        View left = activity.findViewById(R.id.place_edge_stack_left);
+        View surface = activity.findViewById(R.id.terminal_surface_host);
+        View right = activity.findViewById(R.id.place_edge_stack_right);
+        assertEquals(LinearLayout.HORIZONTAL, band.getOrientation());
+        assertEquals(3, band.getChildCount());
+        assertSame(left, band.getChildAt(0));
+        assertSame(surface, band.getChildAt(1));
+        assertSame(right, band.getChildAt(2));
+        // The canvas is the weighted residual of the band, so its inset from the band's own edges
+        // IS EdgeStackPolicy.contentInsets' left and right — the two stacks' thickness — and the
+        // cutout the padded content root keeps outside all of it is the rest of that answer.
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) surface.getLayoutParams();
+        assertEquals(0, params.width);
+        assertEquals(1f, params.weight, 0f);
+    }
+
+    @Test
+    public void everyRowKeepsTheWholeWidthWhateverStandsOnASide() {
+        TermuxActivity activity = inflate();
+        View column = activity.findViewById(R.id.terminal_content_column);
+        View root = activity.findViewById(R.id.activity_termux_root_relative_layout);
+        // The two bands a side rail used to narrow: the top edge's stack, and the accessory stack
+        // that carries the dock's rows and the in-app keyboard.
+        View top = activity.findViewById(R.id.place_edge_stack_top);
+        assertSame(column, top.getParent());
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, top.getLayoutParams().width);
+        View accessory = activity.findViewById(R.id.accessory_stack_container);
+        assertSame(root, accessory.getParent());
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, accessory.getLayoutParams().width);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, column.getLayoutParams().width);
     }
 
     @Test
@@ -89,21 +128,6 @@ public class TermuxActivityEdgeStackLayoutTest {
             assertNotNull(host);
             assertTrue(host + " is a stack's child",
                 host.getParent() instanceof EdgeStackView);
-        }
-    }
-
-    @Test
-    public void theSideStacksStandBesideThePaddedContentRoot() {
-        // Not inside it: a side stack occupies the display-cutout column the content root is
-        // inset from, which is the whole reason it is a sibling rather than a child.
-        TermuxActivity activity = inflate();
-        ViewGroup container = activity.findViewById(R.id.terminal_root_container);
-        View contentRoot = activity.findViewById(R.id.activity_termux_root_relative_layout);
-        for (int id : new int[] {R.id.place_edge_stack_left, R.id.place_edge_stack_right}) {
-            View stack = activity.findViewById(id);
-            assertSame(container, stack.getParent());
-            assertTrue("over the content root's ground",
-                container.indexOfChild(stack) > container.indexOfChild(contentRoot));
         }
     }
 

@@ -121,6 +121,7 @@ import com.termux.app.launcher.drawer.AppDrawerCategory;
 import com.termux.app.launcher.drawer.AppDrawerController;
 import com.termux.app.launcher.drawer.AppDrawerPickupDelegate;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.launcher.drawer.AppDrawerPullGeometry;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry;
 import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.app.launcher.model.AppRef;
@@ -433,6 +434,12 @@ public final class SuggestionBarView extends GridLayout
     private float swipeDownRawY = 0f;
     private final AppDrawerGestureArbiter gestureArbiter = new AppDrawerGestureArbiter();
     /**
+     * Which way the drawer is pulled off this row, from the edge it stands on. Null until a host
+     * says — the row then keeps the orientation rule it has always had, which is what leaves every
+     * caller that is not the launcher on the shipped behaviour.
+     */
+    @Nullable private AppDrawerGestureArbiter.Pull drawerPull;
+    /**
      * The latched owner of the current stream, mirrored from {@link #gestureArbiter} at the two
      * points it is consulted. Replaces the {@code horizontalIntent} boolean the move handler used to
      * recompute from scratch on every event — recomputation is what let one drag hand ownership
@@ -733,6 +740,16 @@ public final class SuggestionBarView extends GridLayout
 
     public boolean isVerticalForm() {
         return vertical;
+    }
+
+    /**
+     * Which way a drag has to travel on this row for the drawer to claim it —
+     * {@link AppDrawerPullGeometry#pullFor} from the edge the pinned apps stand on. A rail passes
+     * {@link AppDrawerGestureArbiter.Pull#NONE}: there the pull runs sideways and is the scrolling
+     * host's to arbitrate, because the rail's own vertical axis is its scroll.
+     */
+    public void setDrawerPull(@NonNull AppDrawerGestureArbiter.Pull pull) {
+        drawerPull = pull;
     }
 
     public void setTextSize(float textSize) {
@@ -2239,9 +2256,12 @@ public final class SuggestionBarView extends GridLayout
                     appDrawerGestureListener.onDrawerDrag(event.getRawY());
                 return true;
             }
-            // The drawer test is inside evaluate() and runs before the page test; a child that has
-            // already taken the stream latches first so neither can steal it back.
-            if (isGestureOwnedByChild()) {
+            // A rail arbitrates nothing of its own: its sideways pull belongs to the scrolling
+            // host above it, its vertical axis is that host's scroll, and it has one page holding
+            // every pinned item, so the page swipe has nothing left to switch to either.
+            if (vertical) {
+                // fall through to the children: the icons, and the host's own scroll
+            } else if (isGestureOwnedByChild()) {
                 gestureClaim = toGestureClaim(gestureArbiter.claimChild());
             } else {
                 int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
@@ -2380,8 +2400,13 @@ public final class SuggestionBarView extends GridLayout
     @NonNull
     private AppDrawerGestureArbiter.Eligibility captureDrawerEligibility() {
         AppDrawerGestureListener listener = appDrawerGestureListener;
-        boolean portrait = getResources().getConfiguration().orientation
-            != Configuration.ORIENTATION_LANDSCAPE;
+        AppDrawerGestureArbiter.Pull pull = drawerPull;
+        if (pull == null) {
+            boolean portrait = getResources().getConfiguration().orientation
+                != Configuration.ORIENTATION_LANDSCAPE;
+            pull = portrait
+                ? AppDrawerGestureArbiter.Pull.DOWN : AppDrawerGestureArbiter.Pull.NONE;
+        }
         // A pickup state or a folder-drag hover left over from the previous gesture means the row is
         // still mid-interaction; the drawer stays out of it.
         boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0;
@@ -2392,7 +2417,7 @@ public final class SuggestionBarView extends GridLayout
             // page swipe stays horizontal — so the veto slot is permanently clear.
             true,
             activeAzLetter == null,
-            portrait,
+            pull,
             listener != null && !listener.isSurfaceEditorActive(),
             listener != null && !listener.isCommandPaletteOpen(),
             noActivePickup,

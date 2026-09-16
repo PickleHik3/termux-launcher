@@ -73,11 +73,13 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
  * <p>Step 6 ({@code SuggestionBarView} arbitration) drives the opening drag through:
  *
  * <ul>
- *   <li>{@link #beginDrag(float)} — the dock's arbiter latched {@code DRAWER_DRAG}; pass the
- *       {@code ACTION_DOWN} raw Y. Captures geometry and takes ownership of the stack.
- *   <li>{@link #updateDrag(float)} — every {@code ACTION_MOVE}, raw Y.
+ *   <li>{@link #beginDrag(float, AppDrawerGestureArbiter.Pull, AppDrawerPullGeometry.Seed)} — the
+ *       row's arbiter latched {@code DRAWER_DRAG}; pass the {@code ACTION_DOWN} point projected
+ *       onto the pull's axis, the pull itself and the rectangle the plane grows out of. Captures
+ *       geometry and takes ownership of the stack.
+ *   <li>{@link #updateDrag(float)} — every {@code ACTION_MOVE}, the same projected coordinate.
  *   <li>{@link #endDrag(float)} — {@code ACTION_UP}, with the release velocity in px/s, positive
- *       downwards. Applies {@link AppDrawerCommitPolicy} and springs to the outcome.
+ *       along the pull. Applies {@link AppDrawerCommitPolicy} and springs to the outcome.
  *   <li>{@link #cancelDrag()} — {@code ACTION_CANCEL}: springs back to where the drag started.
  * </ul>
  *
@@ -343,20 +345,34 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * passed in: a drag that starts with the drawer up is a close, and one that starts on the dock
      * is an open, and there is no third case.
      *
-     * @param downRawY the gesture's {@code ACTION_DOWN} raw screen Y
+     * @param downPull the gesture's {@code ACTION_DOWN} point on the pull's own axis
      */
-    public void beginDrag(float downRawY) {
+    public void beginDrag(float downPull) {
+        beginDrag(downPull, AppDrawerGestureArbiter.Pull.DOWN, AppDrawerPullGeometry.Seed.DOCK);
+    }
+
+    /**
+     * The same, told which way the pull runs and which rectangle the plane grows out of — the
+     * pinned apps row's edge decides both ({@link AppDrawerPullGeometry}). A rail therefore opens
+     * sideways out of the rail's own column and closes back into it, with no dock hop, while the
+     * bottom dock keeps the motion it has always had.
+     *
+     * <p>Both are read once here and frozen for the life of the transition, like every other number
+     * the capture takes: a close drag continues the rectangle the open drag grew.
+     */
+    public void beginDrag(float downPull, @NonNull AppDrawerGestureArbiter.Pull pull,
+                          @NonNull AppDrawerPullGeometry.Seed seed) {
         if (!bindViews()) return;
         // Engaged means the plane is already on screen, so the only gesture that can reach this is
         // the plane's own — and the plane only claims downward drags.
         boolean closing = mEngaged || mOpen;
         // Cold start only: geometry captured mid-transition would bake the transforms already
         // applied to the bands into their captured tops.
-        if (!closing && !captureGeometry()) return;
+        if (!closing && !captureGeometry(pull, seed)) return;
         mDirection = closing
             ? AppDrawerCommitPolicy.Direction.CLOSING
             : AppDrawerCommitPolicy.Direction.OPENING;
-        mDownRawY = downRawY;
+        mDownRawY = downPull;
         mDragging = true;
         mProgress.vel = 0f;
         if (!closing) {
@@ -939,9 +955,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * @return false when the dock has not laid out yet, in which case the drag is refused rather
      *     than run against a zero rect.
      */
-    private boolean captureGeometry() {
+    private boolean captureGeometry(@NonNull AppDrawerGestureArbiter.Pull pull,
+                                    @NonNull AppDrawerPullGeometry.Seed seed) {
         FrameLayout host = mHostLayout;
-        View dock = mHost.findView(R.id.accessory_surface_host);
+        View dock = seedView(seed);
         if (host == null || dock == null || host.getWidth() <= 0 || host.getHeight() <= 0
             || dock.getWidth() <= 0 || dock.getHeight() <= 0) return false;
 
@@ -954,14 +971,18 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // resolveOpenRect) the outer inset all come off the same value.
         DockLayout dockLayout = mHost.dockLayout();
         mRoundedStyle = dockLayout.capsule;
-        mSeedRadiusPx = mRoundedStyle ? dockLayout.capsuleCornerRadiusPx(dock.getHeight()) : 0f;
+        // The seed's short side, which is the dock row's height and the rail column's width: a
+        // capsule is rounded by the band it is, whichever way the band lies.
+        mSeedRadiusPx = mRoundedStyle
+            ? dockLayout.capsuleCornerRadiusPx(Math.min(dock.getWidth(), dock.getHeight())) : 0f;
         mOpenRadiusPx = resolveOpenRadiusPx();
 
         mOpenRect = resolveOpenRect();
 
-        mTravelPx = AppDrawerTransitionGeometry.resolveOpenTravelPx(host.getHeight(),
+        mTravelPx = AppDrawerTransitionGeometry.resolveOpenTravelPx(
+            AppDrawerPullGeometry.travelSpanPx(pull, host.getWidth(), host.getHeight()),
             dp(MIN_TRAVEL_DP), dp(MAX_TRAVEL_DP));
-        mLiftPx = dp(DOCK_LIFT_DP);
+        mLiftPx = AppDrawerPullGeometry.liftPxFor(pull, dp(DOCK_LIFT_DP));
         mSlopPx = ViewConfiguration.get(mHost.context()).getScaledTouchSlop();
 
         mAccessorySurface = dock;
@@ -1073,6 +1094,24 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /** A view's on-screen bounds, in host coordinates. */
+    /**
+     * The view the plane is seeded from. A rail or a lying-down row off the dock is its own
+     * rectangle; anything else is the dock's glass. A seed that has not laid out — a rail with
+     * nothing pinned, say — falls back to the dock rather than refusing the drag.
+     */
+    @Nullable
+    private View seedView(@NonNull AppDrawerPullGeometry.Seed seed) {
+        View view = null;
+        switch (seed) {
+            case RAIL: view = mHost.findView(R.id.place_apps_bar_host); break;
+            case PLANK: view = mHost.findView(R.id.place_off_dock_plank_host); break;
+            case DOCK:
+            default: break;
+        }
+        if (view != null && view.getWidth() > 0 && view.getHeight() > 0) return view;
+        return mHost.findView(R.id.accessory_surface_host);
+    }
+
     @Nullable
     private Frame frameOf(@Nullable View view) {
         if (view == null || mHostLayout == null) return null;
