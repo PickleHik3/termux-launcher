@@ -22,6 +22,9 @@ import android.widget.PopupWindow;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.statusbar.StatusBarLensPolicy.Growth;
+
 /**
  * Hosts the single status-bar detail card. Exactly one is shown at a time; opening a new one
  * dismisses the previous. The card is a {@link PopupWindow} that drops beneath the status bar and
@@ -29,10 +32,15 @@ import androidx.annotation.Nullable;
  * change). Width is constrained to the portrait-screen bounds; the popup itself keeps the card on
  * screen vertically.
  *
- * <p>Every detail card opens in the same place — horizontally centred in the window at
- * {@link #STANDARD_WIDTH_DP}, just below the bar — regardless of which widget was tapped. The bar's
- * widgets are entry points to one shared surface, not owners of their own popups; a card that
+ * <p>Every detail card opens in the same place — centred on the canvas across the bar's own axis
+ * at {@link #STANDARD_WIDTH_DP}, just clear of the bar — regardless of which widget was tapped. The
+ * bar's widgets are entry points to one shared surface, not owners of their own popups; a card that
  * jumped to sit under whichever icon happened to be hit would read as several unrelated windows.
+ *
+ * <p>Which side of the bar "just clear of it" is belongs to {@link StatusBarLensPolicy}: the card
+ * grows <em>towards the middle of the screen</em>, so it drops below a top bar, rises off a bottom
+ * one and opens inward off a column, and it slides in out of the bar it came from. A card that
+ * always dropped downward fell off the bottom of the screen the moment the bar stood there.
  */
 public final class StatusCardHost {
 
@@ -56,6 +64,14 @@ public final class StatusCardHost {
     @Nullable private View mContent;
     @Nullable private View mContainer;
     @Nullable private View mDropEdge;
+    @NonNull private Edge mEdge = Edge.TOP;
+
+    /** The edge the status bar stands on; the card opens off it, towards the screen's middle. */
+    public void setEdge(@NonNull Edge edge) {
+        mEdge = edge;
+    }
+
+    @NonNull public Edge edge() { return mEdge; }
 
     /**
      * The surface whose bottom edge every card drops from — the status bar host. Anchors sit at
@@ -138,7 +154,9 @@ public final class StatusCardHost {
                       @Nullable Runnable onDismiss) {
         dismiss();
         Context context = anchor.getContext();
-        int maxWidth = portraitMaxWidthPx(context, desiredWidthDp);
+        Growth growth = StatusBarLensPolicy.growthFor(mEdge);
+        int maxWidth = Math.max(dp(context, 200),
+            Math.min(portraitMaxWidthPx(context, desiredWidthDp), widthCapPx(anchor, growth)));
 
         FrameLayout container = new FrameLayout(context);
         final float radius = style.cornerRadiusPx();
@@ -202,22 +220,66 @@ public final class StatusCardHost {
             });
         }
 
-        // Cards open centred in the window — the standard place, whichever widget was tapped —
-        // and drop just below the status row.
+        // Cards open centred on the canvas — the standard place, whichever widget was tapped —
+        // and clear of the bar on the side the lens grows towards.
         int centeredWidth = maxWidth;
-        if (!focusable) {
-            // A wrap-width popup has no window width to centre on until it is measured.
+        if (!focusable || growth != Growth.DOWN) {
+            // A wrap-width popup has no window width to centre on until it is measured, and a card
+            // that opens anywhere but straight down has to know its own height to be placed at all.
             container.measure(
-                View.MeasureSpec.makeMeasureSpec(maxWidth, View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.makeMeasureSpec(maxWidth,
+                    focusable ? View.MeasureSpec.EXACTLY : View.MeasureSpec.AT_MOST),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
             centeredWidth = container.getMeasuredWidth();
         }
-        int xOffset = windowCenteredXOffset(anchor, centeredWidth);
-        popup.showAsDropDown(anchor, xOffset, dropYOffset(anchor), Gravity.START);
+        if (growth == Growth.DOWN) {
+            // The drop below a top bar is what every install already has: left on the platform's
+            // own anchored path rather than re-derived, so the shipped bar is a zero-diff.
+            int xOffset = windowCenteredXOffset(anchor, centeredWidth);
+            popup.showAsDropDown(anchor, xOffset, dropYOffset(anchor), Gravity.START);
+        } else {
+            StatusBarLensPolicy.Placement placement = placeCard(anchor, growth, centeredWidth,
+                container.getMeasuredHeight());
+            popup.showAtLocation(anchor, Gravity.NO_GRAVITY, placement.x, placement.y);
+        }
         if (animate) {
             if (focusable) container.requestFocus();
-            animateIn(container);
+            animateIn(container, growth);
         }
+    }
+
+    /** How wide the card may be without covering the bar it grew out of; a row caps at nothing. */
+    private int widthCapPx(@NonNull View anchor, @NonNull Growth growth) {
+        if (StatusBarLensPolicy.isVertical(growth)) return Integer.MAX_VALUE;
+        View bar = mDropEdge != null && mDropEdge.isAttachedToWindow() ? mDropEdge : anchor;
+        int[] location = new int[2];
+        bar.getLocationInWindow(location);
+        View root = anchor.getRootView();
+        int canvasRight = root != null && root.getWidth() > 0 ? root.getWidth()
+            : anchor.getResources().getDisplayMetrics().widthPixels;
+        Context context = anchor.getContext();
+        return StatusBarLensPolicy.widthCapPx(growth, location[0], location[0] + bar.getWidth(),
+            dp(context, DROP_GAP_DP), 0, canvasRight, dp(context, 12));
+    }
+
+    /**
+     * The card's resting top-left in the window's own coordinates: the bar it grew out of, the
+     * window it is clamped inside, and {@link #DROP_GAP_DP} of air between the two.
+     */
+    @NonNull
+    private StatusBarLensPolicy.Placement placeCard(@NonNull View anchor, @NonNull Growth growth,
+                                                    int cardWidth, int cardHeight) {
+        View bar = mDropEdge != null && mDropEdge.isAttachedToWindow() ? mDropEdge : anchor;
+        int[] location = new int[2];
+        bar.getLocationInWindow(location);
+        View root = anchor.getRootView();
+        DisplayMetrics dm = anchor.getResources().getDisplayMetrics();
+        int canvasRight = root != null && root.getWidth() > 0 ? root.getWidth() : dm.widthPixels;
+        int canvasBottom = root != null && root.getHeight() > 0 ? root.getHeight() : dm.heightPixels;
+        return StatusBarLensPolicy.card(growth, location[0], location[1],
+            location[0] + bar.getWidth(), location[1] + bar.getHeight(),
+            cardWidth, cardHeight, dp(anchor.getContext(), DROP_GAP_DP),
+            0, 0, canvasRight, canvasBottom);
     }
 
     public void dismiss() {
@@ -244,20 +306,26 @@ public final class StatusCardHost {
         mContent = null;
         mContainer = null;
         container.animate().cancel();
+        Growth growth = StatusBarLensPolicy.growthFor(mEdge);
+        float exit = dp(container.getContext(), 6);
         container.animate()
             .alpha(0f)
-            .translationY(-dp(container.getContext(), 6))
+            .translationX(StatusBarLensPolicy.enterOffsetXPx(growth, exit))
+            .translationY(StatusBarLensPolicy.enterOffsetYPx(growth, exit))
             .setDuration(EXIT_DURATION_MS)
             .setInterpolator(motionInterpolator())
             .withEndAction(popup::dismiss)
             .start();
     }
 
-    private static void animateIn(@NonNull View container) {
+    private static void animateIn(@NonNull View container, @NonNull Growth growth) {
+        float enter = dp(container.getContext(), 8);
         container.setAlpha(0f);
-        container.setTranslationY(-dp(container.getContext(), 8));
+        container.setTranslationX(StatusBarLensPolicy.enterOffsetXPx(growth, enter));
+        container.setTranslationY(StatusBarLensPolicy.enterOffsetYPx(growth, enter));
         container.animate()
             .alpha(1f)
+            .translationX(0f)
             .translationY(0f)
             .setDuration(ENTER_DURATION_MS)
             .setInterpolator(motionInterpolator())

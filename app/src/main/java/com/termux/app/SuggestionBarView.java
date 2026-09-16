@@ -115,6 +115,7 @@ import com.termux.app.launcher.data.LauncherIconResolver;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.notifications.NotificationBadgeFrame;
 import com.termux.app.launcher.notifications.NotificationCardSurface;
+import com.termux.app.launcher.notifications.NotificationSwipePolicy;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerCategory;
@@ -440,6 +441,14 @@ public final class SuggestionBarView extends GridLayout
      * caller that is not the launcher on the shipped behaviour.
      */
     @Nullable private AppDrawerGestureArbiter.Pull drawerPull;
+    /** The edge the pinned apps stand on; the quick reply and the drawer pull both turn with it. */
+    @NonNull private com.termux.app.place.PlaceLayout.Edge appsEdge =
+        com.termux.app.place.PlaceLayout.Edge.BOTTOM;
+    /** Press target to the package whose badge makes it a quick-reply target, for the DOWN probe. */
+    @NonNull private final Map<View, String> notificationSwipeTargets = new WeakHashMap<>();
+    private final int[] badgedIconLocation = new int[2];
+    /** Set once a badged icon's quick reply has given its stream up to the drawer. */
+    private boolean quickReplyHandedOff;
     /** The page ticks this row carries off the dock; null while it is the dock's own row. */
     @Nullable private PageTickStripView pageIndicator;
     /** The column length the rail's page count was last worked out from. */
@@ -810,6 +819,42 @@ public final class SuggestionBarView extends GridLayout
      */
     public void setDrawerPull(@NonNull AppDrawerGestureArbiter.Pull pull) {
         drawerPull = pull;
+    }
+
+    /**
+     * The edge the pinned apps stand on. The quick reply on a badged icon runs towards the middle
+     * of the screen from it ({@link NotificationSwipePolicy}), which on three of the four edges is
+     * the way the drawer is pulled too — so the row needs the edge itself, not only the pull, to
+     * tell a bottom dock's unambiguous flick up from a shared axis.
+     */
+    public void setAppsEdge(@NonNull com.termux.app.place.PlaceLayout.Edge edge) {
+        appsEdge = edge;
+    }
+
+    @NonNull
+    public com.termux.app.place.PlaceLayout.Edge appsEdge() {
+        return appsEdge;
+    }
+
+    /**
+     * Whether this point, in screen coordinates, lands on a pinned icon that is wearing a
+     * notification badge. The hosts that arbitrate the drawer ask at {@code ACTION_DOWN}, because
+     * that is when the quick reply is decided and the icon's own listener has not run yet.
+     */
+    public boolean isBadgedIconAt(float rawX, float rawY) {
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child == null || child.getVisibility() != View.VISIBLE) continue;
+            String packageName = notificationSwipeTargets.get(resolvePrimaryPressTarget(child));
+            if (packageName == null || !LauncherNotificationBadgeStore.hasBadge(packageName)) {
+                continue;
+            }
+            child.getLocationOnScreen(badgedIconLocation);
+            if (rawX >= badgedIconLocation[0] && rawX <= badgedIconLocation[0] + child.getWidth()
+                && rawY >= badgedIconLocation[1]
+                && rawY <= badgedIconLocation[1] + child.getHeight()) return true;
+        }
+        return false;
     }
 
     public void setTextSize(float textSize) {
@@ -2313,6 +2358,7 @@ public final class SuggestionBarView extends GridLayout
             swipeDownRawX = event.getRawX();
             swipeDownRawY = event.getRawY();
             gestureClaim = GESTURE_CLAIM_PENDING;
+            quickReplyHandedOff = false;
             gestureArbiter.begin(swipeDownRawX, swipeDownRawY, captureDrawerEligibility());
         } else if (action == MotionEvent.ACTION_MOVE) {
             setRowInteractionActive(true);
@@ -2325,6 +2371,11 @@ public final class SuggestionBarView extends GridLayout
                     appDrawerGestureListener.onDrawerDrag(event.getRawY());
                 return true;
             }
+            // A badged icon's quick reply and the drawer's pull run the same way on every edge but
+            // the bottom. The DOWN decides between them: with a badge under the finger the reply
+            // holds the toward-centre axis, and gives it up — from wherever the finger has got to —
+            // only once the drag is long enough to be a drawer pull and nothing else.
+            if (quickReplyHoldsAxis(event)) return super.dispatchTouchEvent(event);
             // A rail claims no drawer pull of its own — that runs sideways and belongs to the
             // scrolling host above it — but its pages run up and down, which is the axis its slots
             // are laid along, so the page test is told which way to look.
@@ -2497,6 +2548,46 @@ public final class SuggestionBarView extends GridLayout
             listener != null && !listener.isCommandPaletteOpen(),
             noActivePickup,
             listener != null && !listener.isAppDrawerEngaged());
+    }
+
+    /**
+     * Whether a badged icon's quick reply still owns this drag, and hands the stream to the drawer
+     * when it does not any more.
+     *
+     * <p>Only a contested edge ever gets here: on the bottom dock the two gestures point opposite
+     * ways and the drawer's own test already refuses a drag running back into the dock. A drag that
+     * leans along the bar falls straight through to the page swipe, so paging off a badged icon is
+     * untouched.
+     */
+    private boolean quickReplyHoldsAxis(@NonNull MotionEvent event) {
+        LongPressPickupState state = activeLongPressPickupState;
+        // A rail claims no pull of its own, so it has no axis to lend and no hand-off to make:
+        // both belong to the scrolling host above it, which runs this same gate.
+        if (quickReplyHandedOff || drawerPull == AppDrawerGestureArbiter.Pull.NONE
+            || state == null || !state.notificationBadged
+            || state.menuShown || state.dragStarted
+            || !NotificationSwipePolicy.contested(appsEdge)) return false;
+        float dx = event.getRawX() - swipeDownRawX;
+        float dy = event.getRawY() - swipeDownRawY;
+        if (!NotificationSwipePolicy.holdsAxis(appsEdge, dx, dy)) return false;
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        AppDrawerGestureArbiter.Pull pull = drawerPull == null
+            ? AppDrawerGestureArbiter.Pull.DOWN : drawerPull;
+        if (!NotificationSwipePolicy.handsOff(appsEdge, dx, dy,
+            AppDrawerPullGeometry.travelSpanPx(pull, metrics.widthPixels, metrics.heightPixels))) {
+            return true;
+        }
+        // Past the reply's window: the peek stands down and the plane grows from here, so a badged
+        // icon is never the one place on the row the drawer refuses to open from. The latch is all
+        // this does — the claim below is the one path that begins a drawer drag.
+        quickReplyHandedOff = true;
+        state.notificationArmed = false;
+        swipeDownX = event.getX();
+        swipeDownY = event.getY();
+        swipeDownRawX = event.getRawX();
+        swipeDownRawY = event.getRawY();
+        gestureArbiter.claimDrawer();
+        return false;
     }
 
     /** The child-owned cases, read live: all three begin <em>during</em> the stream, not before it. */
@@ -4705,6 +4796,14 @@ public final class SuggestionBarView extends GridLayout
         @Nullable Runnable folderEntryPickup
     ) {
         pressTarget.setLongClickable(true);
+        // The DOWN probe the drawer's hosts run needs the badge answer before the icon's own
+        // listener has seen anything, so the binding records which press target carries which
+        // package rather than making the probe walk view types it cannot see into.
+        if (notificationSwipeAction != null && notificationPackage != null) {
+            notificationSwipeTargets.put(pressTarget, notificationPackage);
+        } else {
+            notificationSwipeTargets.remove(pressTarget);
+        }
         pressTarget.setOnLongClickListener(v -> {
             if (suppressContextLongPressForSwipe) {
                 return true;
@@ -4728,24 +4827,30 @@ public final class SuggestionBarView extends GridLayout
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_DOWN) {
                 animateLaunchPressDown(pressTarget);
-                activeLongPressPickupState = new LongPressPickupState(
+                LongPressPickupState down = new LongPressPickupState(
                     pressTarget,
                     pinnedIndex,
                     event.getRawX(),
                     event.getRawY()
                 );
+                down.downAtMs = SystemClock.uptimeMillis();
+                down.notificationBadged = notificationSwipeAction != null
+                    && LauncherNotificationBadgeStore.hasBadge(notificationPackage);
+                activeLongPressPickupState = down;
             } else if (action == MotionEvent.ACTION_MOVE) {
                 LongPressPickupState state = activeLongPressPickupState;
                 if (state != null && state.sourceView == pressTarget && state.notificationSwipeStarted) {
                     return true;
                 }
                 if (state != null && state.sourceView == pressTarget && !state.menuShown
-                    && notificationSwipeAction != null
-                    && LauncherNotificationBadgeStore.hasBadge(notificationPackage)) {
+                    && state.notificationBadged && notificationSwipeAction != null) {
                     float dx = event.getRawX() - state.downRawX;
                     float dy = event.getRawY() - state.downRawY;
                     int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
-                    if (dy <= -(slop * 1.8f) && Math.abs(dy) > Math.abs(dx) * 1.15f) {
+                    boolean armed = NotificationSwipePolicy.armed(appsEdge, dx, dy, slop);
+                    if (armed && NotificationSwipePolicy.commitsOnMove(appsEdge)) {
+                        // The bottom dock: the drawer is pulled the other way, so nothing else can
+                        // want this drag and the card opens the moment the swipe reads as one.
                         state.notificationSwipeStarted = true;
                         suppressContextLongPressForSwipe = true;
                         pressTarget.cancelLongPress();
@@ -4753,6 +4858,14 @@ public final class SuggestionBarView extends GridLayout
                         notificationSwipeAction.run();
                         return true;
                     }
+                    if (armed && !state.notificationArmed) {
+                        // A contested edge: the drawer runs this way too, so the reply only takes
+                        // the icon out of its menu here and waits for the release to decide.
+                        state.notificationArmed = true;
+                        suppressContextLongPressForSwipe = true;
+                        pressTarget.cancelLongPress();
+                    }
+                    if (state.notificationArmed) return true;
                 }
                 if (state != null && state.sourceView == pressTarget && state.menuShown && !state.dragStarted) {
                     float rawX = event.getRawX();
@@ -4825,6 +4938,22 @@ public final class SuggestionBarView extends GridLayout
                     if (state.notificationSwipeStarted) {
                         activeLongPressPickupState = null;
                         suppressContextLongPressForSwipe = false;
+                        return true;
+                    }
+                    if (state.notificationArmed) {
+                        // The short flick's own release: a cancel is the drawer taking the stream
+                        // over, and the reply simply stands down without opening anything.
+                        activeLongPressPickupState = null;
+                        suppressContextLongPressForSwipe = false;
+                        if (action == MotionEvent.ACTION_UP && notificationSwipeAction != null
+                            && NotificationSwipePolicy.commitsOnRelease(appsEdge,
+                                event.getRawX() - state.downRawX,
+                                event.getRawY() - state.downRawY,
+                                NotificationSwipePolicy.flickPx(density()),
+                                SystemClock.uptimeMillis() - state.downAtMs,
+                                ViewConfiguration.getLongPressTimeout())) {
+                            notificationSwipeAction.run();
+                        }
                         return true;
                     }
                     if (action == MotionEvent.ACTION_UP && state.menuShown && !state.dragStarted) {
@@ -5910,6 +6039,11 @@ public final class SuggestionBarView extends GridLayout
         boolean selectionArmed = false;
         boolean leftAnchor = false;
         boolean notificationSwipeStarted = false;
+        /** The DOWN landed on an icon wearing a badge, so a quick reply is this stream's to arm. */
+        boolean notificationBadged = false;
+        /** A toward-centre swipe has armed but not yet committed; only a contested edge gets here. */
+        boolean notificationArmed = false;
+        long downAtMs = 0L;
 
         LongPressPickupState(@NonNull View sourceView, int pinnedIndex, float downRawX, float downRawY) {
             this.sourceView = sourceView;

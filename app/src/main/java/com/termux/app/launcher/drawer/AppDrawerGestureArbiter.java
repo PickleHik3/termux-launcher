@@ -160,6 +160,18 @@ public final class AppDrawerGestureArbiter {
     }
 
     /**
+     * Latches {@link Claim#DRAWER_DRAG} for a stream another surface held first and has now given
+     * up — a badged icon's quick reply, once the finger has travelled past its own short window
+     * ({@code NotificationSwipePolicy.handsOff}). Honours the one-way latch, so it cannot take a
+     * stream a child already owns.
+     */
+    @NonNull
+    public Claim claimDrawer() {
+        if (mClaim == Claim.PENDING) mClaim = Claim.DRAWER_DRAG;
+        return mClaim;
+    }
+
+    /**
      * Evaluates the move point against the snapshot taken at {@link #begin}, for a surface whose
      * pages run across it — every row that lies down.
      *

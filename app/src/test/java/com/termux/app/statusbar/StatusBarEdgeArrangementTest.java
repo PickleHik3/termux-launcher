@@ -200,16 +200,16 @@ public class StatusBarEdgeArrangementTest {
         assertEquals(0, stats.getPaddingTop());
     }
 
-    @Test public void aBottomRowKeepsItsClockAtTheFootWhereTheRowIsNot() {
-        // The row rides the bar's inner edge — the top of a bottom bar — so the widget slot has
-        // to take the outer one, or the two share the same stretch and the clock wears the stats.
+    @Test public void theClockLeadsTheRowOnBothRowEdges() {
+        // Updated with P10: the row keeps the screen edge its bar stands on, so the widget slot
+        // leads it on a bottom bar too — this asserted the mirror that lifted the row off the edge.
         FrameLayout slot = new FrameLayout(mActivity);
         slot.setId(R.id.terminal_top_widget_area);
         mHost.addView(slot, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 68, Gravity.TOP));
+            ViewGroup.LayoutParams.MATCH_PARENT, 68, Gravity.BOTTOM));
 
         StatusBarEdgeArrangement.apply(mHost, Edge.BOTTOM);
-        assertEquals(Gravity.BOTTOM, ((FrameLayout.LayoutParams) slot.getLayoutParams()).gravity);
+        assertEquals(Gravity.TOP, ((FrameLayout.LayoutParams) slot.getLayoutParams()).gravity);
         assertEquals(View.VISIBLE, slot.getVisibility());
 
         StatusBarEdgeArrangement.apply(mHost, Edge.TOP);

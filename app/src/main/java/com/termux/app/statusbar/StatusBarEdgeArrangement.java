@@ -68,16 +68,17 @@ public final class StatusBarEdgeArrangement {
         if (lens != null) lens.setEdge(edge);
 
         // The modular widget slot - the row clock, the media card, a pinned notification - is the
-        // row's. A column shows the stacked clock in its place. In a row the slot keeps the bar's
-        // outer edge and the status row its inner one: the clock stands along the top of a top
-        // bar and along the bottom of a bottom bar, and the two never share a stretch of the bar.
+        // row's. A column shows the stacked clock in its place. In a row the slot leads the status
+        // row ({@code StatusBarLensPolicy.slotLeadsRow}): the row keeps the screen edge the bar
+        // stands on and the slot grows off it towards the middle, so the clock is over the stats
+        // on a top bar and a bottom one alike, and the two never share a stretch of the bar.
         View widgetSlot = host.findViewById(R.id.terminal_top_widget_area);
         if (widgetSlot != null && vertical) widgetSlot.setVisibility(View.GONE);
         if (widgetSlot != null
             && widgetSlot.getLayoutParams() instanceof FrameLayout.LayoutParams) {
             FrameLayout.LayoutParams slotParams =
                 (FrameLayout.LayoutParams) widgetSlot.getLayoutParams();
-            int gravity = edge == Edge.BOTTOM ? Gravity.BOTTOM : Gravity.TOP;
+            int gravity = StatusBarLensPolicy.slotLeadsRow(edge) ? Gravity.TOP : Gravity.BOTTOM;
             if (slotParams.gravity != gravity) {
                 slotParams.gravity = gravity;
                 widgetSlot.setLayoutParams(slotParams);
