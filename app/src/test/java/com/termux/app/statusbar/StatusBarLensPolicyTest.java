@@ -112,6 +112,47 @@ public class StatusBarLensPolicyTest {
                 CARD_W, H, GAP, 0, 0, W, H));
     }
 
+    @Test public void aCardThatGrowsKeepsTheEdgeTheBarPinnedAndStaysOnTheCanvas() {
+        // The same card, twice as tall — the size the stats card takes on once its process list
+        // arrives. Whatever it grows to, the edge facing the bar is the edge that does not move.
+        int taller = CARD_H * 2;
+        Placement up = StatusBarLensPolicy.card(Growth.UP, 0, H - BAR, W, H,
+            CARD_W, CARD_H, GAP, 0, 0, W, H);
+        Placement upGrown = StatusBarLensPolicy.card(Growth.UP, 0, H - BAR, W, H,
+            CARD_W, taller, GAP, 0, 0, W, H);
+        assertEquals("a bottom bar pins the card's bottom", up.y + CARD_H, upGrown.y + taller);
+        assertEquals(H - BAR - GAP, upGrown.y + taller);
+        assertTrue("and the growth runs up the canvas, not off it", upGrown.y >= 0);
+
+        Placement down = StatusBarLensPolicy.card(Growth.DOWN, 0, 0, W, BAR,
+            CARD_W, CARD_H, GAP, 0, 0, W, H);
+        Placement downGrown = StatusBarLensPolicy.card(Growth.DOWN, 0, 0, W, BAR,
+            CARD_W, taller, GAP, 0, 0, W, H);
+        assertEquals("a top bar pins the card's top", down.y, downGrown.y);
+        assertEquals(BAR + GAP, downGrown.y);
+        assertTrue(downGrown.y + taller <= H);
+
+        // Off a column the card grows across the screen instead, and the side facing the bar holds.
+        int narrow = 400;
+        int wide = 700;
+        Placement right = StatusBarLensPolicy.card(Growth.RIGHT, 0, 0, COLUMN, H,
+            narrow, CARD_H, GAP, 0, 0, W, H);
+        Placement rightGrown = StatusBarLensPolicy.card(Growth.RIGHT, 0, 0, COLUMN, H,
+            wide, CARD_H, GAP, 0, 0, W, H);
+        assertEquals("a left-hand column pins the card's left", right.x, rightGrown.x);
+        assertEquals(COLUMN + GAP, rightGrown.x);
+        assertTrue(rightGrown.x + wide <= W);
+
+        Placement left = StatusBarLensPolicy.card(Growth.LEFT, W - COLUMN, 0, W, H,
+            narrow, CARD_H, GAP, 0, 0, W, H);
+        Placement leftGrown = StatusBarLensPolicy.card(Growth.LEFT, W - COLUMN, 0, W, H,
+            wide, CARD_H, GAP, 0, 0, W, H);
+        assertEquals("a right-hand column pins the card's right",
+            left.x + narrow, leftGrown.x + wide);
+        assertEquals(W - COLUMN - GAP, leftGrown.x + wide);
+        assertTrue(leftGrown.x >= 0);
+    }
+
     @Test public void theCardSlidesInOutOfTheBarItCameFrom() {
         assertEquals(-8f, StatusBarLensPolicy.enterOffsetYPx(Growth.DOWN, 8f), 0.001f);
         assertEquals(8f, StatusBarLensPolicy.enterOffsetYPx(Growth.UP, 8f), 0.001f);
