@@ -22,8 +22,16 @@
     <!-- A window chip's "finished" dot. Material has no success role, and the busy accent
          cannot be it: done and running must not be the same colour. -->
     <color name="termux_chip_done">#1B6B3A</color>
-    <!-- The Display place's accent in the status bar: warm, where the theme's roles are cool. -->
-    <color name="termux_place_display">#F0B48A</color>
+    <!--
+      The Display place's accent: warm, where the theme's roles are cool. Now authored the way
+      every other role in this file is — an on-light ink here, its on-dark twin in values-night —
+      so the place keeps one identity across the two modes instead of one colour. It used to be
+      the pale peach in both, which reads 1.46:1 on termux_surface_panel_high: invisible on the
+      light panels the display touchpad and the help overlay stand on. Same HCT hue as the night
+      peach (55°) with a little more chroma, at the tone a light scheme's accent takes, so it is
+      the same warm colour and it clears body text on those panels.
+    -->
+    <color name="termux_place_display">#8D4E19</color>
     <color name="termux_error_container">#FFDAD6</color>
     <color name="termux_on_error_container">#410002</color>
     <!--

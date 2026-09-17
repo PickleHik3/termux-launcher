@@ -14167,6 +14167,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean windowsShown = page != com.termux.app.wall.PaneWallPage.WIDGETS;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) {
+            // The chips are drawn on glass, so they ask the chrome what they are standing on
+            // rather than trusting a role colour authored against an opaque card.
+            bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
             bar.setVisibility(windowsShown && !isStatusBarVertical() ? View.VISIBLE : View.GONE);
             // The plus opens a terminal window; the display's apps come from the drawer.
@@ -14175,6 +14178,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) {
+            windowColumn.setChromeInk(mChrome.ink());
             windowColumn.setPlaceAccent(placeAccent);
             windowColumn.setVisibility(windowsShown && isStatusBarVertical()
                 ? View.VISIBLE : View.GONE);
