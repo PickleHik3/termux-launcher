@@ -95,6 +95,60 @@ public final class GlassInk {
     }
 
     /**
+     * {@link #legible} with the side settled first: the answer is always paler than the surface, or
+     * always darker than it, whichever the chrome is drawing from.
+     *
+     * <p>{@link SchemeTone#contrastTone} keeps the <em>nearest</em> tone that clears the target,
+     * which is the right answer for one colour alone and the wrong one for a set of them. Seeded
+     * with a near-black on-surface colour it darkens; seeded with a pale accent it lightens; and
+     * the launcher's A&ndash;Z row, the drawer's A&ndash;Z rope, the ticks and the orb are seeded
+     * from different role colours and drawn a row apart. Resolved independently they can come out
+     * on opposite sides of the same band — a dark rope beside a pale rail — which is worse than
+     * either of them being wrong. So the side is an input, taken from {@link #isPaleSide} on the
+     * one ink {@link ChromeInk} already settled, and the search runs outward from the band on that
+     * side only.</p>
+     */
+    @ColorInt
+    public static int legibleOn(@ColorInt int surface, @ColorInt int seed, boolean paleSide,
+                                double target, int alpha) {
+        int base = OnGlass.opaque(surface);
+        double band = SchemeTone.tone(base);
+        double seedTone = SchemeTone.tone(seed);
+        boolean onSide = paleSide ? seedTone >= band : seedTone <= band;
+        if (onSide && OnGlass.ratio(seed, base) >= target) return legible(base, seed, target, alpha);
+        double from = paleSide ? Math.max(band, seedTone) : Math.min(band, seedTone);
+        for (double step = 0d; step <= 100d; step += 1d) {
+            double tone = paleSide ? from + step : from - step;
+            if (tone < 0d || tone > 100d) break;
+            int candidate = SchemeTone.toneShift(seed, tone - seedTone);
+            if (OnGlass.ratio(candidate, base) >= target) {
+                return legible(base, candidate, target, alpha);
+            }
+        }
+        // No tone of this hue works on that side of this band at all — a near-white band asked for
+        // a paler ink, say. The side was a preference; the contrast is not.
+        return legible(base, seed, target, alpha);
+    }
+
+    /** {@link #legibleOn} at full opacity. */
+    @ColorInt
+    public static int legibleOn(@ColorInt int surface, @ColorInt int seed, boolean paleSide,
+                                double target) {
+        return legibleOn(surface, seed, paleSide, target, 255);
+    }
+
+    /**
+     * Which side of its band an ink is on: true when it is the paler of the two.
+     *
+     * <p>How everything downstream of a resolved ink learns the chrome's polarity without being
+     * handed it and without asking the mode. {@link ChromeInk#polarity()} decided it; an ink and
+     * the surface it was resolved against carry the decision.</p>
+     */
+    public static boolean isPaleSide(@ColorInt int ink, @ColorInt int surface) {
+        return SchemeTone.tone(ink) >= SchemeTone.tone(OnGlass.opaque(surface));
+    }
+
+    /**
      * What {@code color} at {@code alpha} actually looks like once it is drawn on {@code surface}:
      * the opaque colour a contrast ratio should be measured against. Every assertion about a
      * translucent thing on glass is an assertion about this, not about the colour in the paint.
@@ -215,11 +269,19 @@ public final class GlassInk {
     public static final int HALO_ALPHA_CEILING = 195;
 
     /**
-     * How much better the glyph's edge has to read against the halo than against the bare band
-     * before the halo has earned its alpha. 1.25 is the smallest gain that is visible as an edge at
-     * arm's length on the reporting device's own strip; below it the stroke is only weight.
+     * The headroom, as a multiple of the glyph's own contrast target, at which the halo stops being
+     * needed at all and falls to {@link #HALO_ALPHA_FLOOR}.
+     *
+     * <p>A glyph sitting exactly on its target has nothing in hand: the band it is on is a mean, the
+     * wallpaper under any one letter can be a good deal closer than the mean, and the halo is the
+     * guarantee that the letter still has an edge where that happens. Twice the target is where
+     * that stops mattering — a letter at 6:1 on a band whose local swing is a few percent of
+     * luminance keeps its shape without help — and between the two the halo fades out linearly.
+     * This is what "the alpha follows how much the backdrop needs it" means, and it is why the
+     * reporting device's own strip, where the letters land within a hundredth of 3.0, still gets a
+     * full halo while a letter on a near-black band gets almost none.</p>
      */
-    public static final double HALO_EDGE_GAIN = 1.25d;
+    public static final double HALO_RELIEF = 2.0d;
 
     /** The focused letter's halo, as a fraction of the resting one: the old 215/195, kept. */
     public static final float HALO_FOCUS_GAIN = 215f / 195f;
@@ -234,43 +296,59 @@ public final class GlassInk {
      */
     @ColorInt
     public static int haloInk(@ColorInt int glyphInk, @ColorInt int surface) {
-        return SchemeTone.tone(glyphInk) >= SchemeTone.tone(surface) ? HALO_DARK : HALO_PALE;
+        double band = SchemeTone.tone(OnGlass.opaque(surface));
+        boolean paleGlyph = SchemeTone.tone(glyphInk) >= band;
+        int seed = paleGlyph ? HALO_DARK : HALO_PALE;
+        double seedTone = SchemeTone.tone(seed);
+        if (paleGlyph ? seedTone < band : seedTone > band) return seed;
+        // The band is already past the constant — a dark-theme glass at #1B1A17 is darker than the
+        // near-black itself — so stroking with it would move the halo towards the glyph rather than
+        // away from it. Beyond the constant there is only the extreme.
+        return paleGlyph ? Color.BLACK : Color.WHITE;
     }
 
     /**
-     * The alpha that halo is drawn at: the smallest that earns {@link #HALO_EDGE_GAIN}, capped so
-     * the halo stays quieter against the band than the glyph, floored at
-     * {@link #HALO_ALPHA_FLOOR} so it is never lost.
+     * The alpha that halo is drawn at: as much as the band's closeness to the glyph asks for, never
+     * more than keeps the halo quieter against the band than the glyph itself, never less than
+     * {@link #HALO_ALPHA_FLOOR}.
      *
-     * <p>Searched a step at a time like {@link OnGlass#veilAlphaFor}, and for the same reason: it
-     * runs when a colour or the wallpaper moves, not per glyph and not per frame. The caller caches
-     * it beside the ink it belongs to.</p>
+     * <p>Two numbers decide it. The <em>need</em> is how little headroom the glyph has over
+     * {@code target} on this band — full halo at the target itself, none at {@link #HALO_RELIEF}
+     * times it — which is the part that follows the wallpaper. The <em>ceiling</em> is the last
+     * alpha at which the halo still reads as less against the band than the glyph does, and it is
+     * the part that answers the complaint: past it the ring is the shape and the letter is its
+     * filling, which is what the shipped constant 195 did to a letter that measured 1.21:1.</p>
+     *
+     * <p>The ceiling is searched a step at a time like {@link OnGlass#veilAlphaFor}, and for the
+     * same reason: it runs when a colour or the wallpaper moves, not per glyph and not per frame.
+     * The caller caches the answer beside the ink it belongs to.</p>
      */
-    public static int haloAlpha(@ColorInt int glyphInk, @ColorInt int surface, boolean focused) {
+    public static int haloAlpha(@ColorInt int glyphInk, @ColorInt int surface, boolean focused,
+                                double target) {
         int base = OnGlass.opaque(surface);
         int halo = haloInk(glyphInk, base);
         double glyphOnBand = OnGlass.ratio(glyphInk, base);
-        double wantedEdge = glyphOnBand * HALO_EDGE_GAIN;
-        // The ceiling first: the last alpha at which the halo still reads as less than the glyph
-        // does. Beyond it the ring out-shouts the letter, which is the whole reported fault.
+        double headroom = glyphOnBand / Math.max(1d, target);
+        double need = (HALO_RELIEF - headroom) / (HALO_RELIEF - 1d);
+        need = need < 0d ? 0d : (need > 1d ? 1d : need);
+        int wanted = HALO_ALPHA_FLOOR
+            + Math.round((float) ((HALO_ALPHA_CEILING - HALO_ALPHA_FLOOR) * need));
+        if (focused) wanted = Math.round(wanted * HALO_FOCUS_GAIN);
+        wanted = Math.min(wanted, HALO_ALPHA_CEILING);
+
         int ceiling = 0;
         for (int alpha = 1; alpha <= HALO_ALPHA_CEILING; alpha++) {
             if (OnGlass.ratio(effective(halo, alpha, base), base) > glyphOnBand) break;
             ceiling = alpha;
         }
-        int earned = 0;
-        for (int alpha = 1; alpha <= HALO_ALPHA_CEILING; alpha++) {
-            if (OnGlass.ratio(glyphInk, effective(halo, alpha, base)) >= wantedEdge) {
-                earned = alpha;
-                break;
-            }
-        }
-        int chosen = earned <= 0 ? HALO_ALPHA_CEILING : earned;
-        if (focused) chosen = Math.round(chosen * HALO_FOCUS_GAIN);
-        chosen = Math.min(chosen, HALO_ALPHA_CEILING);
         // The floor outranks the ceiling: the halo is kept even where the band leaves no room for
         // it, because dropping it was the alternative the user did not take.
-        return Math.max(HALO_ALPHA_FLOOR, Math.min(chosen, Math.max(ceiling, HALO_ALPHA_FLOOR)));
+        return Math.max(HALO_ALPHA_FLOOR, Math.min(wanted, Math.max(ceiling, HALO_ALPHA_FLOOR)));
+    }
+
+    /** {@link #haloAlpha(int, int, boolean, double)} at the tier both A&ndash;Z rails belong to. */
+    public static int haloAlpha(@ColorInt int glyphInk, @ColorInt int surface, boolean focused) {
+        return haloAlpha(glyphInk, surface, focused, OnGlass.TARGET_LARGE_TEXT);
     }
 
     /**

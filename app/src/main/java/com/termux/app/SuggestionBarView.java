@@ -7399,7 +7399,7 @@ public final class SuggestionBarView extends GridLayout
         boolean azPages = hasAzOverflowPages();
         boolean overflow = azPages || hasPinnedOverflowPages();
         indicator.setVerticalForm(vertical);
-        indicator.setGlassBackdrop(glassBackdrop);
+        indicator.setGlassInk(glassBackdrop, glassInk);
         indicator.setAccentColor(resolvePageIndicatorAccentColor());
         int pages = azPages ? getAzVisiblePageCount()
             : (overflow ? getPinnedVisiblePageCount() : 1);
@@ -7427,19 +7427,31 @@ public final class SuggestionBarView extends GridLayout
      * ({@link PageTickStripView}) and the drawer's A&ndash;Z rope, neither of which is a band of its
      * own. One value for both, so the rope and the dock's own A&ndash;Z rail cannot disagree.</p>
      */
-    public void setGlassBackdrop(int surfaceColor) {
-        if (glassBackdrop == surfaceColor) return;
+    public void setGlassInk(int surfaceColor, int inkColor) {
+        if (glassBackdrop == surfaceColor && glassInk == inkColor) return;
         glassBackdrop = surfaceColor;
+        glassInk = inkColor;
         PageTickStripView indicator = pageIndicator;
-        if (indicator != null) indicator.setGlassBackdrop(surfaceColor);
+        if (indicator != null) indicator.setGlassInk(surfaceColor, inkColor);
     }
 
-    /** See {@link #setGlassBackdrop}. */
+    /** The opaque colour measured under this dock; see {@link #setGlassInk}. */
     public int glassBackdrop() {
         return glassBackdrop;
     }
 
+    /**
+     * The ink the chrome settled on for that surface. Carried beside it because the side it is on
+     * <em>is</em> the polarity: anything else drawn on this glass takes its own colour from its own
+     * role, and resolved on its own a near-black role colour and a pale one land on opposite sides
+     * of the same band. The rope and the ticks read the side off this.
+     */
+    public int glassInk() {
+        return glassInk;
+    }
+
     private int glassBackdrop = android.graphics.Color.TRANSPARENT;
+    private int glassInk = android.graphics.Color.TRANSPARENT;
 
     private void setRowInteractionActive(boolean active) {
         if (rowInteractionActive == active) {

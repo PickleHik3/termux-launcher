@@ -936,7 +936,10 @@ public final class AzScrubRowView extends AppCompatTextView {
     private int resolveFocusLetterColor() {
         int vivid = blendColors(boostColor(accentColor, 1.34f, 1.18f), Color.WHITE, 0.22f);
         if (Color.alpha(glassBackdrop) == 0) return vivid;
-        return GlassInk.legible(glassBackdrop, vivid, OnGlass.TARGET_LARGE_TEXT);
+        // The same side as the letters around it: a focused letter that resolved the other way
+        // would be the one glyph on the row drawn in the opposite polarity.
+        return GlassInk.legibleOn(glassBackdrop, vivid,
+            GlassInk.isPaleSide(getCurrentTextColor(), glassBackdrop), OnGlass.TARGET_LARGE_TEXT);
     }
 
 

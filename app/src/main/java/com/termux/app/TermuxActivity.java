@@ -7391,7 +7391,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzScrubRowView.setLockedInlineLetter(null);
         // The same glass reaches the page ticks and the drawer's A-Z rope through the dock, which
         // is the only thing either of them can ask.
-        mSuggestionBarView.setGlassBackdrop(glass == null ? Color.TRANSPARENT : glass.surface);
+        mSuggestionBarView.setGlassInk(glass == null ? Color.TRANSPARENT : glass.surface,
+            glass == null ? Color.TRANSPARENT : glass.ink);
         // The orb carries the letter the finger is on, so it is read as a graphic and takes the
         // large-text tier. The edge bloom carries nothing — it is a bloom off the screen's rim —
         // so it takes the decoration tier and stays the quieter of the two, which is the relation
@@ -8181,7 +8182,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * measured surface and a contrast target.</p>
      */
     private int glassInk(@NonNull OnGlass.Resolution glass, int seed, double target, int alpha) {
-        return GlassInk.legible(glass.surface, seed, target, alpha);
+        return GlassInk.legibleOn(glass.surface, seed,
+            GlassInk.isPaleSide(glass.ink, glass.surface), target, alpha);
     }
 
     private void lockScreenFromAzDoubleTap() {

@@ -43,6 +43,8 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
      * {@code SuggestionBarView}; the strip is not a band of {@code GlassBackdropCache}'s own.
      */
     private int glassBackdrop = Color.TRANSPARENT;
+    /** The ink the chrome settled on for that band; the ticks take their side from it. */
+    private int glassInkColor = Color.TRANSPARENT;
     private int activeInk;
     private int restingInk;
     private int dynamicActiveInk;
@@ -93,14 +95,15 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
      * before anything has been sampled — keeps the ticks exactly as they were drawn before this
      * round: the accent, faded by proximity.
      */
-    public void setGlassBackdrop(int surfaceColor) {
-        if (glassBackdrop == surfaceColor) return;
+    public void setGlassInk(int surfaceColor, int inkColor) {
+        if (glassBackdrop == surfaceColor && glassInkColor == inkColor) return;
         glassBackdrop = surfaceColor;
+        glassInkColor = inkColor;
         resolveInks();
         invalidate();
     }
 
-    /** See {@link #setGlassBackdrop}. */
+    /** See {@link #setGlassInk}. */
     public int glassBackdrop() {
         return glassBackdrop;
     }
@@ -118,14 +121,17 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
      */
     private void resolveInks() {
         if (Color.alpha(glassBackdrop) == 0) return;
+        boolean pale = GlassInk.isPaleSide(
+            Color.alpha(glassInkColor) == 0 ? accentColor : glassInkColor, glassBackdrop);
         int restingAlpha = Math.round(255f * PageTickStrip.INACTIVE_ALPHA);
-        activeInk = GlassInk.legible(glassBackdrop, accentColor, OnGlass.TARGET_LARGE_TEXT, 0xE8);
-        restingInk = GlassInk.legible(glassBackdrop, accentColor, OnGlass.TARGET_DECORATION,
-            restingAlpha);
-        dynamicActiveInk = GlassInk.legible(glassBackdrop, PageTickStrip.DYNAMIC_TICK_COLOR,
+        activeInk = GlassInk.legibleOn(glassBackdrop, accentColor, pale,
             OnGlass.TARGET_LARGE_TEXT, 0xE8);
-        dynamicRestingInk = GlassInk.legible(glassBackdrop, PageTickStrip.DYNAMIC_TICK_COLOR,
+        restingInk = GlassInk.legibleOn(glassBackdrop, accentColor, pale,
             OnGlass.TARGET_DECORATION, restingAlpha);
+        dynamicActiveInk = GlassInk.legibleOn(glassBackdrop, PageTickStrip.DYNAMIC_TICK_COLOR, pale,
+            OnGlass.TARGET_LARGE_TEXT, 0xE8);
+        dynamicRestingInk = GlassInk.legibleOn(glassBackdrop, PageTickStrip.DYNAMIC_TICK_COLOR,
+            pale, OnGlass.TARGET_DECORATION, restingAlpha);
     }
 
     /** The colour one tick is drawn in at this fractional page position, alpha included. */

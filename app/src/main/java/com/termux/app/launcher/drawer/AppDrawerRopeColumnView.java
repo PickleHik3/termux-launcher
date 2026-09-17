@@ -210,8 +210,15 @@ public final class AppDrawerRopeColumnView extends View {
             mFocusHalo = withAlpha(GlassInk.HALO_DARK, 215);
             return;
         }
-        mLetterInk = GlassInk.legible(backdrop, baseColor, OnGlass.TARGET_LARGE_TEXT);
-        mFocusInk = GlassInk.legible(backdrop, mFocusColor, OnGlass.TARGET_LARGE_TEXT);
+        // The dock hands over the ink the chrome settled on, not just the surface: seeded from
+        // colorOnSurface alone the rope would resolve a near-black letter on the very band the
+        // dock's own rail is drawing a pale one on, and the two rails would face opposite ways.
+        int settled = mDock != null ? mDock.glassInk() : Color.TRANSPARENT;
+        boolean pale = GlassInk.isPaleSide(
+            Color.alpha(settled) == 0 ? baseColor : settled, backdrop);
+        mLetterInk = Color.alpha(settled) != 0 ? settled
+            : GlassInk.legibleOn(backdrop, baseColor, pale, OnGlass.TARGET_LARGE_TEXT);
+        mFocusInk = GlassInk.legibleOn(backdrop, mFocusColor, pale, OnGlass.TARGET_LARGE_TEXT);
         mRestingHalo = GlassInk.halo(mLetterInk, backdrop, false);
         mFocusHalo = GlassInk.halo(mFocusInk, backdrop, true);
     }
