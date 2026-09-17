@@ -825,6 +825,118 @@ PROBE
     [ -f "$home/.config/nvim/colors/launcher-material.lua" ] || fail "undo.sh removed a hand-edited colorscheme file; it should have survived"
 }
 
+# ---- fish ----
+test_fish() {
+    local dir="$TEMPLATES_DIR/fish"
+    local rendered="$WORK/fish.rendered"
+    render_template "$dir" "launcher-material.theme" >"$rendered" 2>"$WORK/fish.err" || { fail "render error: $(cat "$WORK/fish.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    assert_dual "$rendered" "1A1B26" "E1E2E7" \
+        || { fail "rendered theme does not carry both fixture palettes (dark background 1A1B26 and light background E1E2E7)"; return; }
+
+    # The .theme format fish documents: a `# name:` line, [light]/[dark]/[unknown]
+    # sections, and `fish_(pager_)?color_*` variables whose values are bare hex
+    # (no leading #) and/or set_color switches.
+    "$PY" - "$rendered" <<'PYCHECK' 2>"$WORK/fish.formaterr" || { fail "theme file: $(cat "$WORK/fish.formaterr")"; return; }
+import re, sys
+sections, current, name = {}, None, None
+for raw in open(sys.argv[1]):
+    line = raw.strip()
+    if line.startswith("# name:"):
+        name = line.split(":", 1)[1].strip()
+        continue
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("[") and line.endswith("]"):
+        current = line[1:-1]
+        sections[current] = {}
+        continue
+    assert current is not None, f"{line!r} sits outside any section"
+    key, _, value = line.partition(" ")
+    assert re.fullmatch(r"fish_(pager_)?color_.*", key), f"{key} is not a fish_*color_* variable"
+    for word in value.split():
+        word = word.split("=", 1)[1] if word.startswith("--background=") else word
+        if word.startswith("-"):
+            continue
+        assert re.fullmatch(r"[0-9A-Fa-f]{6}", word), f"{key}: {word!r} is not a bare six-digit hex colour"
+    sections[current][key] = value
+assert name, "no `# name:` line"
+for wanted in ("light", "dark", "unknown"):
+    assert wanted in sections, f"no [{wanted}] section"
+assert set(sections["light"]) == set(sections["dark"]) == set(sections["unknown"]), \
+    "the three sections set different variables"
+differing = [k for k in sections["dark"] if sections["dark"][k] != sections["light"][k]]
+assert len(differing) >= len(sections["dark"]) - 4, \
+    f"only {len(differing)} of {len(sections['dark'])} variables differ between light and dark"
+PYCHECK
+
+    local fish_note="fish: not installed - theme-file format checked by hand"
+    if command -v fish >/dev/null 2>&1; then
+        # fish's own parser, in a throwaway HOME: it must list the theme, and
+        # resolving it for each colour theme must hand back that section's
+        # values - which is the light/dark switch itself.
+        local fhome="$WORK/fish-validate"
+        rm -rf "$fhome"; mkdir -p "$fhome/.config/fish/themes"
+        cp "$rendered" "$fhome/.config/fish/themes/launcher-material.theme"
+        local listed dark_value light_value
+        listed="$(env HOME="$fhome" XDG_CONFIG_HOME="$fhome/.config" fish -c 'fish_config theme list' 2>&1 | grep -cxF 'launcher-material')"
+        [ "$listed" = 1 ] || { fail "fish_config theme list does not offer launcher-material"; return; }
+        env HOME="$fhome" XDG_CONFIG_HOME="$fhome/.config" fish -c 'fish_config theme show launcher-material' >/dev/null 2>"$WORK/fish.showerr" \
+            || { fail "fish_config theme show rejected the rendered theme: $(cat "$WORK/fish.showerr")"; return; }
+        dark_value="$(env HOME="$fhome" XDG_CONFIG_HOME="$fhome/.config" fish -c 'fish_config theme choose launcher-material --color-theme=dark; echo $fish_color_normal' 2>&1)"
+        light_value="$(env HOME="$fhome" XDG_CONFIG_HOME="$fhome/.config" fish -c 'fish_config theme choose launcher-material --color-theme=light; echo $fish_color_normal' 2>&1)"
+        local want_dark want_light
+        want_dark="$(awk '/^\[dark\]/{s=1;next} /^\[/{s=0} s && $1=="fish_color_normal"{print $2; exit}' "$rendered")"
+        want_light="$(awk '/^\[light\]/{s=1;next} /^\[/{s=0} s && $1=="fish_color_normal"{print $2; exit}' "$rendered")"
+        [ -n "$want_dark" ] && [ -n "$want_light" ] && [ "$want_dark" != "$want_light" ] \
+            || { fail "the rendered theme has no differing fish_color_normal in [dark] and [light]"; return; }
+        grep -qiF "$want_dark" <<<"$dark_value" || fail "fish resolved the dark section to '$dark_value', wanted $want_dark"
+        grep -qiF "$want_light" <<<"$light_value" || fail "fish resolved the light section to '$light_value', wanted $want_light"
+        [ "$dark_value" != "$light_value" ] || fail "fish resolved light and dark to the same colours: '$dark_value'"
+        fish_note="fish $(fish --version | awk '{print $3}'): the real fish_config lists the theme, accepts it, and resolves --color-theme=dark/light to different colours"
+    fi
+    note "$fish_note"
+
+    local dropin_rel=".config/fish/conf.d/launcher-material-fish.fish"
+    local case
+    for case in absent pre; do
+        local home="$WORK/fish-$case/home"
+        rm -rf "$WORK/fish-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/fish-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/fish/themes/launcher-material.theme"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig_config=""
+        if [ "$case" = "pre" ]; then
+            # A fish config that already picks a theme of its own.
+            mkdir -p "$home/.config/fish/conf.d"
+            printf 'set -g fish_greeting ""\nfish_config theme choose "ayu Dark"\n' > "$home/.config/fish/config.fish"
+            orig_config="$WORK/fish-$case/orig.fish"; cp "$home/.config/fish/config.fish" "$orig_config"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        [ -f "$home/$dropin_rel" ] || { fail "apply.sh ($case) did not create the conf.d drop-in"; continue; }
+        grep -qF 'fish_config theme choose launcher-material' "$home/$dropin_rel" \
+            || fail "apply.sh ($case) drop-in does not select the theme"
+        grep -qF 'theme save' "$home/$dropin_rel" \
+            && fail "apply.sh ($case) used theme save, which freezes fish light/dark switching"
+        cp "$home/$dropin_rel" "$WORK/fish-$case/after1"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/fish-$case/after1" "$home/$dropin_rel" || fail "apply.sh ($case) not idempotent"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig_config" "$home/.config/fish/config.fish" || fail "apply.sh (pre) edited the user's config.fish"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        [ -e "$home/$dropin_rel" ] && fail "undo.sh ($case) left the conf.d drop-in behind"
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered theme behind"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig_config" "$home/.config/fish/config.fish" \
+                || fail "undo.sh (pre) did not leave the user's own theme choice exactly as it was"
+        fi
+    done
+}
+
 # ---- herdr ----
 test_herdr() {
     local dir="$TEMPLATES_DIR/herdr"
@@ -1026,11 +1138,12 @@ declare -A TEST_FN=(
     [lazygit]=test_lazygit
     [ohmyposh]=test_ohmyposh
     [nvim]=test_nvim
+    [fish]=test_fish
     [herdr]=test_herdr
     [shared-rc]=test_shared_rc
 )
 
-ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim herdr shared-rc"
+ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim fish herdr shared-rc"
 
 for id in $ORDER; do
     dir="$TEMPLATES_DIR/$id"

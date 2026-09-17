@@ -92,8 +92,8 @@ scripts — whether the palette came from the wallpaper or from a color scheme.
 Pick a tool in this list and the launcher writes its theme file whenever the palette changes, then
 wires it into that tool's own config. Turning one off puts the config back as it was. Tools that can
 reload live do; the rest pick the colors up the next time they start. Built in: Starship, Helix,
-tmux, bat, Yazi, fzf, lazygit, Oh My Posh, Neovim and herdr, a terminal workspace manager whose
-accent, panes and status line follow along.
+tmux, bat, Yazi, fzf, lazygit, Oh My Posh, Neovim, fish and herdr, a terminal workspace manager whose
+accent, panes and status line follow along. The fish entry colors the command line you type on.
 
 The palette itself keeps up on its own: it re-renders whenever your wallpaper, Material colour, or
 system dark/light mode changes, so a tool on this list never shows yesterday's contrast.
@@ -116,7 +116,8 @@ matches a shipped template replaces it. `output` understands `~`, `$VAR` and `${
 
 The input file is plain text with `{{ colors.<token>.<mode>.<format> }}` placeholders — for example
 `{{ colors.primary.dark.hex }}`. Tokens are the key names in `~/.termux/material-colors.properties`,
-mode is `default`, `dark` or `light` (all three give the active palette), and the formats are `hex`,
+mode is `default` for the palette in use, or `dark` or `light` for that palette whichever is in use —
+so one file can carry both, for a tool that switches on its own — and the formats are `hex`,
 `hex_stripped`, `rgb`, `rgba`, `red`, `green` and `blue`. `{{ mode }}` renders `dark` or `light`.
 Everything else in the file is left exactly as written, so a Go or Lua template survives intact. An
 unknown token or format skips that template and logs why; nothing is written.
