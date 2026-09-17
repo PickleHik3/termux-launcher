@@ -22,7 +22,7 @@ public class SurfaceEditorPresetPreviewTest {
         assertEquals(0, insets[0]);
         assertEquals(0, insets[2]);
         assertEquals(0, insets[3]);
-        assertEquals(0f, SurfaceEditorPresetPreview.surfaceRadiusPx(DENSITY, 24, false), 0.001f);
+        assertEquals(0f, SurfaceEditorPresetPreview.surfaceRadiusPx(W, DENSITY, 24, false), 0.001f);
     }
 
     @Test
@@ -31,7 +31,7 @@ public class SurfaceEditorPresetPreviewTest {
         assertTrue("side air must survive the scale-down", insets[0] > 0);
         assertEquals(insets[0], insets[2]);
         assertTrue("bottom air must survive the scale-down", insets[3] > 0);
-        assertTrue(SurfaceEditorPresetPreview.surfaceRadiusPx(DENSITY, 28, true) > 0f);
+        assertTrue(SurfaceEditorPresetPreview.surfaceRadiusPx(W, DENSITY, 28, true) > 0f);
     }
 
     @Test
@@ -62,7 +62,33 @@ public class SurfaceEditorPresetPreviewTest {
         int[] rounded = SurfaceEditorPresetPreview.terminalInsets(W, H, DENSITY, 12, 24);
         assertEquals(0, square[0]);
         assertTrue(rounded[0] > 0);
-        assertEquals(0f, SurfaceEditorPresetPreview.terminalRadiusPx(DENSITY, 0), 0.001f);
-        assertTrue(SurfaceEditorPresetPreview.terminalRadiusPx(DENSITY, 24) > 0f);
+        assertEquals(0f, SurfaceEditorPresetPreview.terminalRadiusPx(W, DENSITY, 0), 0.001f);
+        assertTrue(SurfaceEditorPresetPreview.terminalRadiusPx(W, DENSITY, 24) > 0f);
+    }
+
+    @Test
+    public void aShrunkCardKeepsTheMockInProportion() {
+        // The strip gives way on a short region: the card comes down to its floor and every band
+        // comes down with it, so the mock still reads as a phone rather than a squashed one.
+        int shortHeight = Math.round(SurfaceEditorPresetPreview.CARD_MIN_HEIGHT_DP * DENSITY);
+        int shortWidth = SurfaceEditorPresetPreview.widthPxForHeightPx(shortHeight);
+        assertTrue(shortWidth < W);
+        float aspect = SurfaceEditorPresetPreview.CARD_WIDTH_DP
+            / (float) SurfaceEditorPresetPreview.CARD_HEIGHT_DP;
+        assertEquals(aspect, shortWidth / (float) shortHeight, 0.03f);
+
+        int[] full = SurfaceEditorPresetPreview.bottomSlabInsets(W, H, DENSITY, 12, true);
+        int[] small = SurfaceEditorPresetPreview.bottomSlabInsets(
+            shortWidth, shortHeight, DENSITY, 12, true);
+        assertTrue("the slab is shorter", shortHeight - small[1] < H - full[1]);
+        assertTrue("and still a band rather than nothing", shortHeight - small[1] > 0);
+        // The status pill is still inside the card, above the terminal field.
+        int[] status = SurfaceEditorPresetPreview.statusInsets(
+            shortWidth, shortHeight, DENSITY, 12);
+        int[] terminal = SurfaceEditorPresetPreview.terminalInsets(
+            shortWidth, shortHeight, DENSITY, 12, 0);
+        assertTrue(status[1] > 0);
+        assertTrue(status[1] + status[3] < shortHeight);
+        assertTrue(terminal[1] > status[1]);
     }
 }

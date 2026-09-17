@@ -35,6 +35,9 @@ import org.robolectric.annotation.ConscryptMode;
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class PlaceLayoutStoreTest {
 
+    /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
+    private static final int MIGRATED = 5;
+
     private Application app;
     private SharedPreferences prefs;
     private TermuxAppSharedPreferences launcher;
@@ -243,16 +246,95 @@ public class PlaceLayoutStoreTest {
     public void eachPlaceRemembersItsOwnStatusBarAndKeyboard() {
         PlaceLayoutStore store = store();
         // Every place starts compact, the way the launcher's one status bar always has.
-        assertTrue(store.isStatusCompact(PaneWallPage.TERMINAL));
-        assertTrue(store.isStatusCompact(PaneWallPage.WIDGETS));
+        assertTrue(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        assertTrue(store.isStatusCompact(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT));
 
-        store.setStatusCompact(PaneWallPage.TERMINAL, false);
+        store.setStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, false);
         store.setKeyboardOpen(PaneWallPage.DISPLAY, true);
 
-        assertFalse(store.isStatusCompact(PaneWallPage.TERMINAL));
-        assertTrue(store.isStatusCompact(PaneWallPage.WIDGETS));
+        assertFalse(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        assertTrue(store.isStatusCompact(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT));
         assertTrue(store.wasKeyboardOpen(PaneWallPage.DISPLAY));
         assertFalse(store.wasKeyboardOpen(PaneWallPage.TERMINAL));
+    }
+
+    @Test
+    public void theBarRestsPerOrientationSoOneScreenIsNotTheOthersChoice() {
+        PlaceLayoutStore store = store();
+        store.setStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, false);
+        // Portrait opened the bar; the landscape screen it never opened it on is untouched.
+        assertFalse(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        assertTrue(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+        // And the other way about: a landscape bar left open stays open there and nowhere else.
+        store.setStatusCompact(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE, false);
+        assertFalse(store.isStatusCompact(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+        assertTrue(store.isStatusCompact(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
+        assertTrue(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+    }
+
+    @Test
+    public void anExplicitlyOpenedBarBeatsEveryDefaultAndSurvivesAReopen() {
+        PlaceLayoutStore store = store();
+        // The landscape default is compact. A user who says otherwise is not asked again — not by
+        // the default, and not by the next store built over the same preferences.
+        store.setStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, false);
+        assertFalse(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+        assertFalse(store().isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
+    }
+
+    @Test
+    public void portraitKeepsTheStateTheLaunchersOneBarAlwaysRead() {
+        // Portrait's default is the old global, unchanged: nothing about portrait moves here.
+        prefs.edit().putBoolean("top_pane_clock_collapsed", false).commit();
+        PlaceLayoutStore store = store();
+        for (PaneWallPage place : PaneWallPage.values()) {
+            assertFalse(place + " portrait",
+                store.isStatusCompact(place, PlaceOrientation.PORTRAIT));
+        }
+        // The same global with the migration already run seeds landscape too, so the expanded bar
+        // the user chose is what landscape reads as well.
+        assertFalse(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+    }
+
+    @Test
+    public void aRestingStateNobodyChoseIsNeverWrittenDown() {
+        PlaceLayoutStore store = store();
+        assertTrue(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+        assertTrue(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        // Reading a default must not pin it: the store cannot tell a pinned default from a choice
+        // afterwards, so one written here is a choice the user can never be given back.
+        assertFalse(prefs.contains("place.terminal.landscape.status_compact"));
+        assertFalse(prefs.contains("place.terminal.portrait.status_compact"));
+    }
+
+    @Test
+    public void theRestingStateIsSeededIntoBothOrientationsFromTheOneValueTheresWas() {
+        // An install that migrated before the key moved: one value per place, no orientation.
+        prefs.edit()
+            .putInt("place.migrated", 4)
+            .putBoolean("place.terminal.status_compact", false)
+            .putBoolean("place.home.status_compact", true)
+            .commit();
+
+        PlaceLayoutStore store = store();
+        // The terminal's open bar is still open — in both orientations, so the choice is kept
+        // wherever the user had it, and the landscape default does not get to overrule it.
+        assertFalse(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        assertFalse(store.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+        assertTrue(store.isStatusCompact(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT));
+        assertTrue(store.isStatusCompact(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE));
+        // The place nobody had rested the bar on is left unwritten and answers with the defaults.
+        assertFalse(prefs.contains("place.display.landscape.status_compact"));
+        assertTrue(store.isStatusCompact(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+        // The key it came from is gone, and the fold does not run again.
+        assertFalse(prefs.contains("place.terminal.status_compact"));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
+
+        store.setStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, true);
+        PlaceLayoutStore reopened = store();
+        assertTrue(reopened.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+        assertFalse(reopened.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
     }
 
     @Test
@@ -284,7 +366,10 @@ public class PlaceLayoutStoreTest {
         for (PaneWallPage place : PaneWallPage.values()) {
             assertEquals(place + " landscape apps", RowPlacement.RIGHT,
                 rowOf(store.resolve(place, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
-            assertFalse(place + " status", store.isStatusCompact(place));
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                assertFalse(place + " status " + orientation,
+                    store.isStatusCompact(place, orientation));
+            }
         }
         // The old side is folded into both orientations, and portrait stands a column now too.
         assertEquals(RowPlacement.LEFT,
@@ -295,17 +380,18 @@ public class PlaceLayoutStoreTest {
         // There is no hidden status bar any more, and the display's keyboard memory has moved.
         assertFalse(prefs.contains("x11_hide_status_bar"));
         assertFalse(prefs.contains("x11_keyboard_shown"));
-        assertEquals(4, prefs.getInt("place.migrated", 0));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
 
         // A second store over the same preferences must not fold anything again: the user's own
         // choices since the migration stand.
         store.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, RowPlacement.LEFT);
-        store.setStatusCompact(PaneWallPage.TERMINAL, true);
+        store.setStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE, true);
         PlaceLayoutStore reopened = store();
         assertEquals(RowPlacement.LEFT,
             rowOf(reopened.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
-        assertTrue(reopened.isStatusCompact(PaneWallPage.TERMINAL));
-        assertFalse(reopened.isStatusCompact(PaneWallPage.WIDGETS));
+        assertTrue(reopened.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+        assertFalse(reopened.isStatusCompact(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        assertFalse(reopened.isStatusCompact(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
@@ -325,13 +411,13 @@ public class PlaceLayoutStoreTest {
         // Version 2 still runs: the extra-keys master was off, so it folds to Hidden everywhere.
         assertEquals(RowPlacement.HIDDEN,
             rowOf(store.resolve(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.EXTRA_KEYS));
-        assertEquals(4, prefs.getInt("place.migrated", 0));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
     }
 
     @Test
     public void aFreshInstallHasNothingToFoldAndSaysSo() {
         PlaceLayoutStore store = store();
-        assertEquals(4, prefs.getInt("place.migrated", 0));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
         assertFalse(prefs.contains("place.terminal.landscape.apps_row"));
         assertEquals(RowPlacement.LEFT,
             rowOf(store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
@@ -345,8 +431,13 @@ public class PlaceLayoutStoreTest {
         assertEquals("place.display.landscape.extra_keys",
             PlaceLayoutStore.arrangementKey(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE,
                 "extra_keys"));
-        assertEquals("place.terminal.status_compact",
-            PlaceLayoutStore.memoryKey(PaneWallPage.TERMINAL, "status_compact"));
+        // The bar's resting state moved from the memory key to the per-orientation scope at
+        // migration version 5; this assertion moved with it deliberately.
+        assertEquals("place.terminal.landscape.status_compact",
+            PlaceLayoutStore.arrangementKey(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE,
+                "status_compact"));
+        assertEquals("place.display.keyboard_open",
+            PlaceLayoutStore.memoryKey(PaneWallPage.DISPLAY, "keyboard_open"));
     }
 
 
@@ -518,7 +609,7 @@ public class PlaceLayoutStoreTest {
             if ("place.migrated".equals(entry.getKey())) continue;
             assertEquals(entry.getKey(), entry.getValue(), after.get(entry.getKey()));
         }
-        assertEquals(4, prefs.getInt("place.migrated", 0));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
         for (Element element : Element.values()) {
             assertFalse(element.toString(),
                 prefs.contains("place.terminal.landscape." + element.storageKey() + "_order"));
@@ -622,7 +713,7 @@ public class PlaceLayoutStoreTest {
 
         PlaceLayoutStore store = store();
 
-        assertEquals(4, prefs.getInt("place.migrated", 0));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
         for (PaneWallPage place : PaneWallPage.values()) {
             assertEquals(place + " portrait keyboard", 1.2f,
                 store.keyboardHeightScale(place, PlaceOrientation.PORTRAIT), 0.0001f);
@@ -674,7 +765,7 @@ public class PlaceLayoutStoreTest {
 
         PlaceLayoutStore store = store();
 
-        assertEquals(4, prefs.getInt("place.migrated", 0));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
         assertEquals(1.3f,
             store.keyboardHeightScale(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE), 0.0001f);
     }

@@ -2,6 +2,8 @@ package com.termux.app.dock;
 
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.paging.PageTickStrip;
+import com.termux.app.place.PlaceLayout;
+import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -367,7 +369,11 @@ public final class DockLayoutPolicy {
         out.railIconSpacingPx = railIconSpacingPx(density);
         out.railSlotLengthPx = railSlotLengthPx(density);
 
-        out.compactStatusBarHeightPx = Math.round(density * (capsule ? 30f : 32f));
+        // The bar's own geometry owns this number in one place, for every edge and both styles;
+        // the dock only asks what a compact row costs, because the lift it gives a bottom bar is
+        // that row's height. Two copies of 30/32 drifted the moment either was tuned.
+        out.compactStatusBarHeightPx = StatusBarEdgeGeometry.thicknessPx(
+            PlaceLayout.Edge.TOP, capsule, true, density);
 
         return out.build();
     }

@@ -416,6 +416,12 @@ public final class SurfaceEditorController {
     @Nullable private ScrollView mRowsScroller;
     @Nullable private LinearLayout mRows;
     private int mRowsMaxHeightPx;
+
+    /**
+     * The height the preset cards currently stand at; 0 until the first cap, which reads as the
+     * full one. The strip is chrome that gives way before the rows do on a short region.
+     */
+    private int mPresetCardHeightPx;
     /** Restatements for the rows currently on the card, rebuilt with them. */
     @NonNull private List<Runnable> mRowSyncs = new ArrayList<>();
     /** Which set of rows the body is built for; a change in what is editable rebuilds it. */
@@ -1046,14 +1052,56 @@ public final class SurfaceEditorController {
         if (panel == null || mRowsScroller == null)
             return;
         int[] region = pillRegion();
+        int regionPx = region[1] - region[0];
         int scrollerPx = mRowsScroller.getHeight();
         int chromePx = Math.max(0, panel.root.getHeight() - scrollerPx);
-        int capped = SurfaceEditorPillMetrics.bodyCapPx(region[1] - region[0], chromePx,
+        // The preset strip gives way first, and what it hands back is room the body has instead.
+        // Counted here rather than waiting for the next layout pass to measure the shorter strip:
+        // otherwise the body spends one pass on its floor with the room already free beside it.
+        chromePx = Math.max(0, chromePx - applyPresetCardCap(panel, regionPx, chromePx));
+        int capped = SurfaceEditorPillMetrics.bodyCapPx(regionPx, chromePx,
             dp(SURFACE_EDITOR_STANDOFF_DP), dp(80), dp(360));
         if (capped == mRowsMaxHeightPx)
             return;
         mRowsMaxHeightPx = capped;
         mRowsScroller.requestLayout();
+    }
+
+    /**
+     * Shrinks the preset cards where the region cannot hold the card at full size with a usable
+     * body under it, and grows them back as the room returns.
+     *
+     * @return the height the cards handed back to the rest of the card, {@code 0} while nothing
+     *         moved or while there is nothing measured to decide from
+     */
+    private int applyPresetCardCap(@NonNull Panel panel, int regionHeightPx, int chromePx) {
+        if (mPresetItems.isEmpty() || regionHeightPx <= 0 || panel.root.getHeight() <= 0)
+            return 0;
+        int fullPx = dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP);
+        int current = presetCardHeightPx();
+        int target = SurfaceEditorPillMetrics.presetCardHeightPx(regionHeightPx,
+            Math.max(0, chromePx - current), dp(80), dp(SURFACE_EDITOR_STANDOFF_DP), fullPx,
+            dp(SurfaceEditorPresetPreview.CARD_MIN_HEIGHT_DP));
+        if (target == current)
+            return 0;
+        mPresetCardHeightPx = target;
+        int widthPx = SurfaceEditorPresetPreview.widthPxForHeightPx(target);
+        for (Pair<View, TextView> item : mPresetItems.values()) {
+            ViewGroup.LayoutParams params = item.first.getLayoutParams();
+            if (params == null)
+                continue;
+            params.width = widthPx;
+            params.height = target;
+            item.first.setLayoutParams(params);
+        }
+        refreshPresetPreviews();
+        return current - target;
+    }
+
+    /** The preset cards' current height: the full one until a short region has shrunk them. */
+    private int presetCardHeightPx() {
+        return mPresetCardHeightPx > 0
+            ? mPresetCardHeightPx : dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP);
     }
 
     /**
@@ -2687,9 +2735,9 @@ public final class SurfaceEditorController {
         item.setLayoutParams(itemParams);
 
         View preview = new View(context);
+        int cardHeightPx = presetCardHeightPx();
         preview.setLayoutParams(new LinearLayout.LayoutParams(
-            dp(SurfaceEditorPresetPreview.CARD_WIDTH_DP),
-            dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP)));
+            SurfaceEditorPresetPreview.widthPxForHeightPx(cardHeightPx), cardHeightPx));
         float cardCornerPx = dpToPx(SurfaceEditorPresetPreview.CARD_CORNER_DP);
         preview.setOutlineProvider(new android.view.ViewOutlineProvider() {
             @Override public void getOutline(View view, android.graphics.Outline outline) {
@@ -2773,8 +2821,8 @@ public final class SurfaceEditorController {
     private void refreshPresetPreviews() {
         if (mPresetItems.isEmpty())
             return;
-        int widthPx = dp(SurfaceEditorPresetPreview.CARD_WIDTH_DP);
-        int heightPx = dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP);
+        int heightPx = presetCardHeightPx();
+        int widthPx = SurfaceEditorPresetPreview.widthPxForHeightPx(heightPx);
         // One thumb shared by every card: the wallpaper is the same behind all five looks.
         Bitmap thumb = mHost.wallpaperPreviewThumb(widthPx, heightPx);
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
@@ -2838,7 +2886,7 @@ public final class SurfaceEditorController {
         GradientDrawable terminal = new GradientDrawable();
         terminal.setColor(withAlpha(Color.BLACK, 120));
         terminal.setCornerRadius(
-            SurfaceEditorPresetPreview.terminalRadiusPx(density, terminalRadiusDp));
+            SurfaceEditorPresetPreview.terminalRadiusPx(widthPx, density, terminalRadiusDp));
         if (border) {
             terminal.setStroke(Math.max(1, Math.round(density)),
                 withAlpha(mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
@@ -2846,7 +2894,7 @@ public final class SurfaceEditorController {
         }
 
         float glassRadiusPx =
-            SurfaceEditorPresetPreview.surfaceRadiusPx(density, radiusDp, floating);
+            SurfaceEditorPresetPreview.surfaceRadiusPx(widthPx, density, radiusDp, floating);
         Drawable status = mHost.presetGlassSurface(opacity / 100f, grain, glassRadiusPx, floating);
         Drawable slab = mHost.presetGlassSurface(opacity / 100f, grain, glassRadiusPx, floating);
 
