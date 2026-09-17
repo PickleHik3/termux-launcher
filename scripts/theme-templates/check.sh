@@ -545,7 +545,55 @@ test_ohmyposh() {
     input_count="$(grep -o '{{ \.' "$dir/launcher-material.omp.json" | wc -l)"
     rendered_count="$(grep -o '{{ \.' "$rendered" | wc -l)"
     [ "$input_count" = "$rendered_count" ] || { fail "Go-template {{ . count changed: input=$input_count rendered=$rendered_count"; return; }
-    note "ohmyposh: not installed - JSON parse, no {{ colors. or TERMUX_MATERIAL left, {{ . (Go template) count preserved ($input_count occurrences)"
+
+    # palettes.list.dark / .light, the constant the template renders down to,
+    # and every p: reference resolving in both (D3).
+    local rendered_light="$WORK/ohmyposh.rendered.light"
+    render_template_light "$dir" "launcher-material.omp.json" >"$rendered_light" 2>"$WORK/ohmyposh.lighterr" \
+        || { fail "render error (light mode active): $(cat "$WORK/ohmyposh.lighterr")"; return; }
+    "$PY" - "$rendered" "$rendered_light" <<'PYCHECK' 2>"$WORK/ohmyposh.dualerr" || { fail "rendered palettes: $(cat "$WORK/ohmyposh.dualerr")"; return; }
+import json, re, sys
+doc = json.load(open(sys.argv[1]))
+light_doc = json.load(open(sys.argv[2]))
+palettes = doc.get("palettes", {})
+assert palettes.get("template") == "dark", f"palettes.template rendered {palettes.get('template')!r}, wanted the constant 'dark'"
+assert light_doc.get("palettes", {}).get("template") == "light", "palettes.template did not follow the active mode"
+assert light_doc["palettes"]["list"] == palettes["list"], "the palette list is not the same in both passes"
+dark, light = palettes["list"].get("dark"), palettes["list"].get("light")
+assert isinstance(dark, dict) and dark, "no palettes.list.dark"
+assert isinstance(light, dict) and light, "no palettes.list.light"
+assert set(dark) == set(light), "the two palettes carry different keys"
+differing = [k for k in dark if dark[k] != light[k]]
+assert len(differing) >= len(dark) - 2, f"only {len(differing)} of {len(dark)} entries differ between the palettes"
+for table in (dark, light):
+    for key, value in table.items():
+        assert re.fullmatch(r"#[0-9A-Fa-f]{6}", value), f"{key} = {value!r}"
+refs = set(re.findall(r'"p:([A-Za-z0-9_]+)"', json.dumps(doc)))
+assert refs, "no segment uses a p: palette reference"
+missing = sorted(refs - set(dark))
+assert not missing, f"segments reference palette entries that do not exist: {missing}"
+# D3: accents are ANSI names, not hex, so they follow the terminal itself.
+assert not re.search(r'"#[0-9A-Fa-f]{6}"', json.dumps(doc["blocks"])), "a segment still carries a raw hex colour"
+assert not re.search(r"#[0-9A-Fa-f]{6}", json.dumps(doc.get("transient_prompt", {}))), "the transient prompt still carries a raw hex colour"
+# Every colour a segment names must be something oh-my-posh 29/30 accepts:
+# its schema's color_string pattern or a p: palette reference.
+COLOR_STRING = re.compile(
+    r"^(#([a-fA-F0-9]{6}|[a-fA-F0-9]{3})|([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])"
+    r"|black|red|green|yellow|blue|magenta|cyan|white|default|darkGray|lightRed|lightGreen"
+    r"|lightYellow|lightBlue|lightMagenta|lightCyan|lightWhite|transparent|parentBackground"
+    r"|parentForeground|background|foreground|accent)$")
+def check_color(where, value):
+    assert COLOR_STRING.match(value) or value.startswith("p:"), f"{where}: {value!r} is not a colour oh-my-posh accepts"
+for block in doc["blocks"]:
+    for segment in block.get("segments", []):
+        for key in ("foreground", "background"):
+            if key in segment:
+                check_color(f"{segment.get('type')}.{key}", segment[key])
+        for i, template in enumerate(segment.get("foreground_templates", [])):
+            if "{{" not in template:
+                check_color(f"{segment.get('type')}.foreground_templates[{i}]", template)
+PYCHECK
+    note "ohmyposh: not installed - JSON parse, no {{ colors. or TERMUX_MATERIAL left, {{ . (Go template) count preserved ($input_count occurrences), palettes.list.dark/.light checked and palettes.template renders to the active mode"
 
     local case
     for case in absent pre; do
