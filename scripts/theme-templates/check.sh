@@ -751,65 +751,118 @@ test_herdr() {
     local rendered="$WORK/herdr.rendered"
     render_template "$dir" "launcher-material.toml" >"$rendered" 2>"$WORK/herdr.err" || { fail "render error: $(cat "$WORK/herdr.err")"; return; }
     assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
-    if grep -vE '^[A-Za-z0-9_]+ = "#[0-9A-Fa-f]{6}"$' "$rendered" >"$WORK/herdr.bad" && [ -s "$WORK/herdr.bad" ]; then
-        fail "line(s) not matching herdr's key = \"#hex\" shape: $(cat "$WORK/herdr.bad")"; return
-    fi
-    note "herdr: not installed on this machine - syntax validation only (key = \"#hex\" shape)"
+    "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$rendered" 2>"$WORK/herdr.tomlerr" || { fail "invalid TOML: $(cat "$WORK/herdr.tomlerr")"; return; }
+    # Both subtables, the same key set, and genuinely different values.
+    "$PY" - "$rendered" <<'PYCHECK' 2>"$WORK/herdr.dualerr" || { fail "rendered palettes: $(cat "$WORK/herdr.dualerr")"; return; }
+import sys, tomllib
+doc = tomllib.load(open(sys.argv[1], "rb"))
+custom = doc.get("theme", {}).get("custom", {})
+dark, light = custom.get("dark"), custom.get("light")
+assert isinstance(dark, dict) and dark, "no [theme.custom.dark] table"
+assert isinstance(light, dict) and light, "no [theme.custom.light] table"
+assert set(dark) == set(light), "the two subtables carry different keys"
+assert "auto_switch" not in custom and "name" not in custom, "the rendered file must not touch [theme]"
+differing = [k for k in dark if dark[k] != light[k]]
+assert len(differing) >= len(dark) - 1, f"only {len(differing)} of {len(dark)} keys differ between the palettes"
+for table in (dark, light):
+    for key, value in table.items():
+        assert isinstance(value, str) and value.startswith("#") and len(value) == 7, f"{key} = {value!r}"
+PYCHECK
+    note "herdr: not installed on this machine - TOML parse, and both palette subtables checked for the same keys with different values"
+
+    # herdr_case <name>: runs apply/apply/undo against $home's config.toml,
+    # checking idempotency, that the result is valid TOML, and that undo
+    # restores the original bytes (or removes a file apply.sh created).
+    herdr_case() {
+        local name="$1" had_config="$2"
+        local home="$WORK/herdr-$name/home"
+        local theme_dir="$WORK/herdr-$name/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/herdr/launcher-material.toml"
+        local config="$home/.config/herdr/config.toml"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig="$WORK/herdr-$name/orig.toml"
+        [ "$had_config" = "yes" ] && cp "$config" "$orig"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($name) failed"; return 1; }
+        "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$config" 2>"$WORK/herdr-$name.tomlerr" \
+            || { fail "apply.sh ($name) produced invalid TOML: $(cat "$WORK/herdr-$name.tomlerr")"; return 1; }
+        cp "$config" "$WORK/herdr-$name/after1.toml"
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($name) failed"; return 1; }
+        cmp -s "$WORK/herdr-$name/after1.toml" "$config" || { fail "apply.sh ($name) not idempotent"; return 1; }
+
+        # What every case must end up with, whatever it started from.
+        grep -qxF 'auto_switch = true' "$config" || fail "apply.sh ($name) did not turn auto_switch on"
+        grep -qxF '[theme.custom.dark]' "$config" || fail "apply.sh ($name) has no [theme.custom.dark] table"
+        grep -qxF '[theme.custom.light]' "$config" || fail "apply.sh ($name) has no [theme.custom.light] table"
+        [ "$(grep -cxF '[theme.custom.dark]' "$config")" = 1 ] || fail "apply.sh ($name) declared [theme.custom.dark] twice"
+        [ "$(grep -cxF '[theme.custom.light]' "$config")" = 1 ] || fail "apply.sh ($name) declared [theme.custom.light] twice"
+        [ "$(grep -cxF '[theme]' "$config")" -le 1 ] || fail "apply.sh ($name) declared [theme] twice"
+        assert_dual "$config" "#B6C4FF" "#4C5D93" || fail "apply.sh ($name) did not land both palettes in config.toml"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($name) failed"; return 1; }
+        if [ "$had_config" = "yes" ]; then
+            cmp -s "$orig" "$config" || fail "undo.sh ($name) did not restore original bytes"
+        else
+            [ -e "$config" ] && fail "undo.sh ($name) left a config.toml behind (it held only our own tables)"
+        fi
+        [ -e "$output" ] && fail "undo.sh ($name) left the rendered file behind"
+        return 0
+    }
 
     # ---- absent: no config.toml at all ----
-    local home="$WORK/herdr-absent/home"
-    rm -rf "$WORK/herdr-absent"; mkdir -p "$home"
-    local theme_dir="$WORK/herdr-absent/theme_dir"; mkdir -p "$theme_dir"
-    local output="$home/.config/herdr/launcher-material.toml"
-    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (absent) failed"
-    cp "$home/.config/herdr/config.toml" "$WORK/herdr-absent/after1.toml" 2>/dev/null
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (absent) failed"
-    cmp -s "$WORK/herdr-absent/after1.toml" "$home/.config/herdr/config.toml" 2>/dev/null || fail "apply.sh (absent) not idempotent"
-    grep -qxF '[theme.custom]' "$home/.config/herdr/config.toml" || fail "apply.sh (absent) did not create a [theme.custom] table"
-    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (absent) failed"
-    [ -e "$home/.config/herdr/config.toml" ] && fail "undo.sh (absent) left a config.toml behind (it held only our own table)"
-    [ -e "$output" ] && fail "undo.sh (absent) left the rendered file behind"
+    rm -rf "$WORK/herdr-absent"; mkdir -p "$WORK/herdr-absent/home"
+    herdr_case absent no
 
-    # ---- no-table: config.toml pre-exists with no [theme.custom] table ----
-    home="$WORK/herdr-no-table/home"
-    rm -rf "$WORK/herdr-no-table"; mkdir -p "$home/.config/herdr"
-    theme_dir="$WORK/herdr-no-table/theme_dir"; mkdir -p "$theme_dir"
-    output="$home/.config/herdr/launcher-material.toml"
-    cp "$rendered" "$output"
-    printf '[general]\nworkspace_root = "~/src"\n' > "$home/.config/herdr/config.toml"
-    local orig="$WORK/herdr-no-table/orig.toml"; cp "$home/.config/herdr/config.toml" "$orig"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (no-table) failed"
-    grep -qxF '[theme.custom]' "$home/.config/herdr/config.toml" || fail "apply.sh (no-table) did not add a [theme.custom] table"
-    cp "$home/.config/herdr/config.toml" "$WORK/herdr-no-table/after1.toml"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (no-table) failed"
-    cmp -s "$WORK/herdr-no-table/after1.toml" "$home/.config/herdr/config.toml" || fail "apply.sh (no-table) not idempotent"
-    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (no-table) failed"
-    cmp -s "$orig" "$home/.config/herdr/config.toml" || fail "undo.sh (no-table) did not restore original bytes"
-    [ -e "$output" ] && fail "undo.sh (no-table) left the rendered file behind"
+    # ---- no-table: config.toml pre-exists with no theme tables at all ----
+    rm -rf "$WORK/herdr-no-table"; mkdir -p "$WORK/herdr-no-table/home/.config/herdr"
+    printf '[general]\nworkspace_root = "~/src"\n' > "$WORK/herdr-no-table/home/.config/herdr/config.toml"
+    herdr_case no-table yes
 
-    # ---- pre: [theme.custom] pre-exists with a conflicting key and unrelated content ----
-    home="$WORK/herdr-pre/home"
-    rm -rf "$WORK/herdr-pre"; mkdir -p "$home/.config/herdr"
-    theme_dir="$WORK/herdr-pre/theme_dir"; mkdir -p "$theme_dir"
-    output="$home/.config/herdr/launcher-material.toml"
-    cp "$rendered" "$output"
+    # ---- pre: [theme.custom] pre-exists with a key of ours and unrelated content ----
+    rm -rf "$WORK/herdr-pre"; mkdir -p "$WORK/herdr-pre/home/.config/herdr"
     printf '[general]\nworkspace_root = "~/src"\n\n[theme.custom]\naccent = "#123456"\nfont_size = 14\n\n[keys]\nquit = "q"\n' \
-        > "$home/.config/herdr/config.toml"
-    orig="$WORK/herdr-pre/orig.toml"; cp "$home/.config/herdr/config.toml" "$orig"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (pre) failed"
-    grep -qxF '# launcher-material: accent = "#123456"' "$home/.config/herdr/config.toml" \
-        || fail "apply.sh (pre) did not comment out the conflicting pre-existing accent key"
-    grep -qxF 'font_size = 14' "$home/.config/herdr/config.toml" \
-        || fail "apply.sh (pre) touched an unrelated key in [theme.custom]"
-    grep -qxF 'quit = "q"' "$home/.config/herdr/config.toml" \
-        || fail "apply.sh (pre) touched an unrelated table"
-    cp "$home/.config/herdr/config.toml" "$WORK/herdr-pre/after1.toml"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (pre) failed"
-    cmp -s "$WORK/herdr-pre/after1.toml" "$home/.config/herdr/config.toml" || fail "apply.sh (pre) not idempotent"
-    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (pre) failed"
-    cmp -s "$orig" "$home/.config/herdr/config.toml" || fail "undo.sh (pre) did not restore original bytes (including the uncommented accent key)"
-    [ -e "$output" ] && fail "undo.sh (pre) left the rendered file behind"
+        > "$WORK/herdr-pre/home/.config/herdr/config.toml"
+    if herdr_case pre yes; then
+        local config="$WORK/herdr-pre/home/.config/herdr/config.toml"
+        # [theme.custom] is the shared base our subtables layer over, so it is
+        # left exactly as the user wrote it - including a key we also set.
+        grep -qxF 'accent = "#123456"' "$WORK/herdr-pre/after1.toml" \
+            || fail "apply.sh (pre) touched the shared [theme.custom] table"
+        grep -qxF 'font_size = 14' "$WORK/herdr-pre/after1.toml" \
+            || fail "apply.sh (pre) touched an unrelated key in [theme.custom]"
+        grep -qxF 'quit = "q"' "$WORK/herdr-pre/after1.toml" \
+            || fail "apply.sh (pre) touched an unrelated table"
+    fi
+
+    # ---- auto-switch-off: the user pinned a theme and turned auto_switch off
+    # (this is pong's config). auto_switch is displaced, not dropped; name is
+    # left alone. ----
+    rm -rf "$WORK/herdr-autoswitch"; mkdir -p "$WORK/herdr-autoswitch/home/.config/herdr"
+    printf '[theme]\nname = "terminal"\nauto_switch = false\n\n[keys]\nquit = "q"\n' \
+        > "$WORK/herdr-autoswitch/home/.config/herdr/config.toml"
+    if herdr_case autoswitch yes; then
+        grep -qxF '# launcher-material: auto_switch = false' "$WORK/herdr-autoswitch/after1.toml" \
+            || fail "apply.sh (autoswitch) did not comment out and tag the pre-existing auto_switch = false"
+        grep -qxF 'name = "terminal"' "$WORK/herdr-autoswitch/after1.toml" \
+            || fail "apply.sh (autoswitch) touched [theme] name"
+        grep -qxF 'auto_switch = false' "$WORK/herdr-autoswitch/after1.toml" \
+            && fail "apply.sh (autoswitch) left an uncommented auto_switch = false behind"
+    fi
+
+    # ---- dark-table: [theme.custom.dark] already exists with one of our keys
+    # and one of the user's own. Ours is displaced; theirs survives; the table
+    # is never declared a second time. ----
+    rm -rf "$WORK/herdr-darktable"; mkdir -p "$WORK/herdr-darktable/home/.config/herdr"
+    printf '[theme]\nname = "catppuccin"\n\n[theme.custom.dark]\naccent = "#abcdef"\nmy_own = "#010203"\n\n[keys]\nquit = "q"\n' \
+        > "$WORK/herdr-darktable/home/.config/herdr/config.toml"
+    if herdr_case darktable yes; then
+        grep -qxF '# launcher-material: accent = "#abcdef"' "$WORK/herdr-darktable/after1.toml" \
+            || fail "apply.sh (darktable) did not comment out the conflicting accent in [theme.custom.dark]"
+        grep -qxF 'my_own = "#010203"' "$WORK/herdr-darktable/after1.toml" \
+            || fail "apply.sh (darktable) dropped an unrelated key from [theme.custom.dark]"
+        grep -qxF 'name = "catppuccin"' "$WORK/herdr-darktable/after1.toml" \
+            || fail "apply.sh (darktable) touched [theme] name"
+    fi
 }
 
 # ---- shared rc isolation (R1/R12): fzf, lazygit and ohmyposh all write into

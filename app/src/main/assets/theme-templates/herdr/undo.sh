@@ -1,9 +1,10 @@
 #!/bin/sh
-# Removes exactly the marker block apply.sh added to config.toml (which, if
-# [theme.custom] did not already exist, was the whole table) and restores
-# any pre-existing key apply.sh commented out, then removes the rendered
-# palette file and asks a running herdr server to reload. Pure POSIX
-# sh/awk, matching apply.sh.
+# Removes exactly the marker blocks apply.sh added to config.toml - the
+# `auto_switch = true` line in [theme] and the two palette subtables, each of
+# which carries its own table header when apply.sh had to create it - and
+# restores every pre-existing key apply.sh commented out, including the user's
+# own auto_switch. Then removes the rendered palette file and asks a running
+# herdr server to reload. Pure POSIX sh/awk, matching apply.sh.
 set -eu
 
 config_file="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml"
