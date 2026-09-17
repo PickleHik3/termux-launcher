@@ -37,33 +37,19 @@ import java.util.List;
  * neighbour slides the wall to its place.
  *
  * <p>The icon at home carries a soft glow of its own colour and its neighbours are drained
- * towards the surface's neutral, so the place you are on is the one that reads.
+ * towards the surface's neutral, so the place you are on is the one that reads. A neighbour is
+ * quieter, not faint: {@link StatusBarLensMetrics} holds every peeking mark to a legibility floor
+ * and grows its target to the platform's minimum.
  *
  * <p>The view lies under the bar's content but owns the neighbours' touches: nothing above it
- * claims the bar's edges, so a tap there reaches it.
+ * claims the bar's edges, so a tap there reaches it. It paints and hit-tests what the metrics say;
+ * it works out none of it.
  */
 public final class StatusBarLensView extends View {
 
     public interface Listener {
         void onPlaceIconTapped(@NonNull PaneWallPage page);
     }
-
-    /** The home icon's largest size in the expanded bar; the clock's band can ask for less. */
-    public static final float ICON_DP = 36f;
-    /** A neighbour's size as a share of the home icon's. */
-    public static final float PEEK_SHARE = 0.78f;
-    /** The gap between an icon and what comes after it. */
-    public static final float ICON_GAP_DP = 8f;
-    /** Every icon's size in the compact bar. */
-    public static final float COMPACT_ICON_DP = 20f;
-    /** The home icon's leading edge, clear of the neighbour peeking past the bar's near edge. */
-    public static final float HOME_X_DP = 20f;
-    /** The expanded bar's slot height; the home icon centres on it until the clock says where. */
-    private static final float SLOT_HEIGHT_DP = 68f;
-    /** How far the home icon's glow reaches past its edge, as a share of its size. */
-    private static final float GLOW_REACH = 0.55f;
-    /** How far the neighbours' colour is drained towards the surface's neutral. */
-    private static final float NEIGHBOUR_DRAIN = 0.55f;
 
     private final Paint mTilePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -106,7 +92,7 @@ public final class StatusBarLensView extends View {
         super(context, attrs);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         mStrokePaint.setStyle(Paint.Style.STROKE);
-        mStrokePaint.setStrokeWidth(dp(1f));
+        mStrokePaint.setStrokeWidth(context.getResources().getDisplayMetrics().density);
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
         mNeutral = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
@@ -236,8 +222,16 @@ public final class StatusBarLensView extends View {
 
     /** What the slot keeps clear at its start, from the bar's edge: the home icon and its gap. */
     public static int leadingCellWidthPx(@NonNull Context context) {
-        float density = context.getResources().getDisplayMetrics().density;
-        return Math.round((HOME_X_DP + ICON_DP + ICON_GAP_DP) * density);
+        return StatusBarLensMetrics.leadingCellWidthPx(
+            context.getResources().getDisplayMetrics().density);
+    }
+
+    /** The bar as the metrics see it: its size, how it stands, and what the clock has said. */
+    @NonNull
+    private StatusBarLensMetrics.Bar bar(int width, int height) {
+        return new StatusBarLensMetrics.Bar(width, height,
+            getResources().getDisplayMetrics().density, mVertical, mBottom, mExpansion,
+            mAlongStartPx, mAlongEndPx, mHomeCenterYPx, mHomeSizePx, mChipRadiusPx);
     }
 
     @Override
@@ -249,86 +243,57 @@ public final class StatusBarLensView extends View {
         for (RectF rect : mHitRects) rect.setEmpty();
         if (mWallWidthPx <= 0 || mPages.isEmpty()) return;
 
-        // The two axes the lens is drawn in: the places queue along the bar's length, and the
-        // line they share runs across it. On a row that is x and y; on a column it is y and x.
-        float alongStart = mVertical ? mAlongStartPx : 0f;
-        float along = (mVertical ? height : width) - alongStart - (mVertical ? mAlongEndPx : 0f);
-        float across = mVertical ? width : height;
-        if (along <= 0f) return;
-
-        // In the expanded bar the home icon takes the clock's band and its line; its neighbours
-        // share the line, smaller, half past the edges. The compact row is the place's own content
-        // and carries no home icon: there the neighbours alone peek in, and an icon fades as it
-        // arrives at home, so the row is never crowded.
-        float expandedHome = mHomeSizePx > 0f ? Math.min(dp(ICON_DP), mHomeSizePx) : dp(ICON_DP);
-        float slotMiddle = mBottom ? across - dp(SLOT_HEIGHT_DP) / 2f : dp(SLOT_HEIGHT_DP) / 2f;
-        float expandedLine = mHomeCenterYPx >= 0f && !mVertical ? mHomeCenterYPx : slotMiddle;
-        float homeSize = lerp(dp(COMPACT_ICON_DP), expandedHome, mExpansion);
-        float peekSize = lerp(dp(COMPACT_ICON_DP), expandedHome * PEEK_SHARE, mExpansion);
-        // A column's line is simply its middle: there is no clock band beside the icons there.
-        float line = mVertical ? across / 2f : lerp(across / 2f, expandedLine, mExpansion);
-        float home = dp(HOME_X_DP);
-        for (PaneWallPage page : mPages) {
-            float t = StatusBarLensPolicy.distance(mPages, mCurrent, page, mOffsetPx, mWallWidthPx);
-            float presence = StatusBarLensPolicy.presence(t);
-            // Whole at home only while the bar is expanded; in the compact row the icon at home
-            // is not there, so an arriving icon dissolves over its last stretch.
-            float alpha = StatusBarLensPolicy.alpha(t) * lerp(presence, 1f, mExpansion);
-            if (alpha <= 0.01f) continue;
-            // An icon on its way between home and a side takes the size of the end it is nearer,
-            // so the arriving one grows as it takes the home spot and the leaving one shrinks.
-            float size = lerp(homeSize, peekSize, presence) * StatusBarLensPolicy.scale(t);
-            float nearPeek = -size / 2f;
-            float farPeek = along - size / 2f;
-            float travelled = alongStart
-                + StatusBarLensPolicy.iconX(t, home, nearPeek, farPeek, size) + size / 2f;
-            float centerX = mVertical ? line : travelled;
-            float centerY = mVertical ? travelled : line;
-            mTile.set(centerX - size / 2f, centerY - size / 2f, centerX + size / 2f, centerY + size / 2f);
-            if (page != mCurrent) mHitRects[page.ordinal()].set(mTile);
-            // Weight and colour say what matters: the icon at home is the place you are on, in
-            // its own colour with a glow; the two peeking in are where you could go, drained
-            // towards the surface's neutral and quieter; a display that is not running is quieter
-            // still.
-            int accent = ColorUtils.blendARGB(accentFor(getContext(), page), mNeutral,
-                NEIGHBOUR_DRAIN * presence);
-            float ink = alpha * (1f - 0.38f * presence);
-            if (page == PaneWallPage.DISPLAY && !mDisplayRunning) ink *= 0.6f;
-            float glow = alpha * (1f - presence) * mExpansion;
-            if (glow > 0.01f) {
-                float reach = size * GLOW_REACH;
-                mGlow.set(mTile.left - reach, mTile.top - reach, mTile.right + reach, mTile.bottom + reach);
-                mGlowPaint.setShader(new android.graphics.RadialGradient(centerX, centerY,
-                    size / 2f + reach,
-                    new int[] {ColorUtils.setAlphaComponent(accent, Math.round(64 * glow)),
-                        ColorUtils.setAlphaComponent(accent, Math.round(22 * glow)), Color.TRANSPARENT},
+        List<StatusBarLensMetrics.Mark> marks = StatusBarLensMetrics.marks(bar(width, height),
+            mPages, mCurrent, mOffsetPx, mWallWidthPx, mDisplayRunning);
+        for (StatusBarLensMetrics.Mark mark : marks) {
+            mTile.set(mark.tile.left, mark.tile.top, mark.tile.right, mark.tile.bottom);
+            if (!mark.home) {
+                mHitRects[mark.page.ordinal()].set(mark.target.left, mark.target.top,
+                    mark.target.right, mark.target.bottom);
+            }
+            // Weight and colour say what matters: the icon at home is the place you are on, in its
+            // own colour with a glow; the two peeking in are where you could go, drained towards
+            // the surface's neutral — but drained in colour, not in legibility, so the mark still
+            // reads at the bar's edge.
+            int accent = ColorUtils.blendARGB(accentFor(getContext(), mark.page), mNeutral,
+                mark.drain);
+            if (mark.glow > 0.01f) {
+                float reach = mark.sizePx * StatusBarLensMetrics.GLOW_REACH;
+                mGlow.set(mTile.left - reach, mTile.top - reach, mTile.right + reach,
+                    mTile.bottom + reach);
+                mGlowPaint.setShader(new android.graphics.RadialGradient(mark.centerX, mark.centerY,
+                    mark.sizePx / 2f + reach,
+                    new int[] {ColorUtils.setAlphaComponent(accent, Math.round(64 * mark.glow)),
+                        ColorUtils.setAlphaComponent(accent, Math.round(22 * mark.glow)),
+                        Color.TRANSPARENT},
                     new float[] {0.45f, 0.7f, 1f}, Shader.TileMode.CLAMP));
                 canvas.drawRoundRect(mGlow, mGlow.width() / 2f, mGlow.height() / 2f, mGlowPaint);
             }
-            float radius = mChipRadiusPx >= 0f
-                ? Math.min(size / 2f, mChipRadiusPx * (size / dp(COMPACT_ICON_DP)))
-                : size * 0.32f;
             // Light: a tint and a thin line, so the icon marks the place without weighing on the
             // clock beside it; the glyph carries the identity.
-            mTilePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(31 * ink)));
-            mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(84 * ink)));
-            mGlyphPaint.setColor(ColorUtils.setAlphaComponent(accent, Math.round(255 * ink)));
-            mGlyphPaint.setTextSize(size * 0.5f);
-            // A neighbour dissolves towards the edge it peeks past: its own layer, then a
-            // gradient that keeps the inner side and lets the outer side go. The fade is as
-            // strong as the icon is far from home, so an arriving icon becomes whole as it lands.
-            boolean fades = presence > 0.05f && t != 0f;
+            mTilePaint.setColor(ColorUtils.setAlphaComponent(accent,
+                Math.round(StatusBarLensMetrics.FILL_ALPHA * mark.ink)));
+            mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent,
+                Math.round(StatusBarLensMetrics.STROKE_ALPHA * mark.ink)));
+            mGlyphPaint.setColor(ColorUtils.setAlphaComponent(accent,
+                Math.round(StatusBarLensMetrics.GLYPH_ALPHA * mark.ink)));
+            mGlyphPaint.setTextSize(mark.glyphSizePx);
+            // A neighbour dissolves towards the end it peeks past: its own layer, then a gradient
+            // that keeps the inner side and lets the outer side go. The dissolve is deepest when
+            // the mark is furthest from home, and it keeps half its ink there — the outer half of
+            // a resting neighbour is past the bar anyway, so taking the rest to nothing only cost
+            // the glyph that is still on screen.
             int layer = -1;
-            if (fades) {
+            if (mark.fades) {
                 layer = canvas.saveLayer(mTile.left - 1f, mTile.top - 1f, mTile.right + 1f,
                     mTile.bottom + 1f, null);
             }
-            canvas.drawRoundRect(mTile, radius, radius, mTilePaint);
-            canvas.drawRoundRect(mTile, radius, radius, mStrokePaint);
-            float baseline = centerY - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
-            canvas.drawText(glyphFor(page), centerX, baseline, mGlyphPaint);
-            if (fades) {
-                boolean fromNear = t < 0f;
+            canvas.drawRoundRect(mTile, mark.radiusPx, mark.radiusPx, mTilePaint);
+            canvas.drawRoundRect(mTile, mark.radiusPx, mark.radiusPx, mStrokePaint);
+            float baseline = mark.centerY - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
+            canvas.drawText(glyphFor(mark.page), mark.centerX, baseline, mGlyphPaint);
+            if (mark.fades) {
+                boolean fromNear = mark.fadesFromNearEnd;
                 float outer = mVertical
                     ? (fromNear ? mTile.top : mTile.bottom)
                     : (fromNear ? mTile.left : mTile.right);
@@ -336,14 +301,14 @@ public final class StatusBarLensView extends View {
                     ? (fromNear ? mTile.bottom : mTile.top)
                     : (fromNear ? mTile.right : mTile.left);
                 int outerColor = ColorUtils.setAlphaComponent(Color.WHITE,
-                    Math.round(255 * (1f - presence)));
+                    Math.round(255 * mark.fadeOuterAlpha));
                 mFadePaint.setShader(mVertical
                     ? new LinearGradient(0f, outer, 0f, inner, outerColor, Color.WHITE,
                         Shader.TileMode.CLAMP)
                     : new LinearGradient(outer, 0f, inner, 0f, outerColor, Color.WHITE,
                         Shader.TileMode.CLAMP));
-                canvas.drawRect(mTile.left - 1f, mTile.top - 1f, mTile.right + 1f, mTile.bottom + 1f,
-                    mFadePaint);
+                canvas.drawRect(mTile.left - 1f, mTile.top - 1f, mTile.right + 1f,
+                    mTile.bottom + 1f, mFadePaint);
                 canvas.restoreToCount(layer);
             }
         }
@@ -394,20 +359,11 @@ public final class StatusBarLensView extends View {
             if (page == mCurrent) continue;
             RectF rect = mHitRects[page.ordinal()];
             if (rect.isEmpty()) continue;
-            // Half of a neighbour is past the edge; the visible half plus a little air is its
-            // target.
-            float slop = dp(8f);
-            if (x >= rect.left - slop && x <= rect.right + slop && y >= rect.top - slop
-                && y <= rect.bottom + slop) return page;
+            // The rect is the target the metrics already grew to the platform's minimum: half of a
+            // neighbour is past the bar's end and cannot be touched, so the target reaches inward
+            // instead of sitting evenly around what is drawn.
+            if (rect.contains(x, y)) return page;
         }
         return null;
-    }
-
-    private static float lerp(float from, float to, float fraction) {
-        return from + (to - from) * fraction;
-    }
-
-    private float dp(float value) {
-        return value * getResources().getDisplayMetrics().density;
     }
 }
