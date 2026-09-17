@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider;
 
 import com.google.android.material.color.utilities.Hct;
 import com.termux.app.theme.LauncherThemeTokens;
+import com.termux.app.theme.templates.PaletteSet;
 import com.termux.app.theme.SchemeColors;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.terminal.TerminalColorScheme;
@@ -28,6 +29,9 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -238,6 +242,73 @@ public class MaterialTerminalColorSchemeTest {
         assertNotNull(roles.getProperty("terminal_cursor"));
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Both palettes per pass (D1). Dynamic colours are pure resource qualifiers, so forcing the
+    // night bits on a configuration context resolves the other mode's roles with no activity in
+    // sight — which is what lets a template carry both tables.
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * The forced-mode derivation has to agree with the ordinary one for the mode the phone is
+     * actually in, or the active palette and the mode file describing it would disagree.
+     */
+    @Test
+    public void theForcedModePaletteMatchesThePlainThemedContext() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Context themed = themedContext();
+            Properties plain = MaterialTerminalColorScheme.createMaterialRoleProperties(themed,
+                MaterialTerminalColorScheme.create(themed, level), level);
+            PaletteSet palettes = MaterialTerminalColorScheme.createPaletteSet(themed, level);
+            assertEquals("active at " + level.value, plain, palettes.active());
+            assertTrue("dark at " + level.value, palettes.hasDark());
+            assertTrue("light at " + level.value, palettes.hasLight());
+            Properties current = "dark".equals(plain.getProperty("mode"))
+                ? palettes.dark() : palettes.light();
+            assertEquals("current mode at " + level.value, plain, current);
+        }
+    }
+
+    /** And the two halves have to be genuinely different palettes, whichever mode is on. */
+    @Test
+    public void bothHalvesAreDerivedWhicheverModeThePhoneIsIn() {
+        try {
+            for (String qualifier : new String[] {"+notnight", "+night"}) {
+                RuntimeEnvironment.setQualifiers(qualifier);
+                PaletteSet palettes = MaterialTerminalColorScheme.createPaletteSet(
+                    themedContext(), TerminalContrastLevel.DEFAULT);
+                assertEquals(qualifier + " dark palette", "dark", palettes.dark().getProperty("mode"));
+                assertEquals(qualifier + " light palette", "light", palettes.light().getProperty("mode"));
+                assertNotEquals(qualifier, palettes.dark(), palettes.light());
+                // The active palette is one of the two, not a third derivation of its own.
+                assertEquals(qualifier, "night".equals(qualifier.substring(1))
+                        ? palettes.dark() : palettes.light(), palettes.active());
+            }
+        } finally {
+            RuntimeEnvironment.setQualifiers("+notnight");
+        }
+    }
+
+    /** A set carrying only the active palette answers for all three modes with it. */
+    @Test
+    public void aSinglePaletteSetStandsInForBothModes() {
+        Properties only = MaterialTerminalColorScheme.createMaterialRoleProperties(
+            themedContext(),
+            MaterialTerminalColorScheme.create(themedContext(), TerminalContrastLevel.DEFAULT),
+            TerminalContrastLevel.DEFAULT);
+        PaletteSet palettes = PaletteSet.of(only);
+        assertFalse(palettes.hasDark());
+        assertFalse(palettes.hasLight());
+        assertSame(only, palettes.dark());
+        assertSame(only, palettes.light());
+        assertSame(only, palettes.forMode("default"));
+        assertNull(palettes.forMode("sepia"));
+    }
+
+    private static Context themedContext() {
+        return new ContextThemeWrapper(ApplicationProvider.getApplicationContext(),
+            com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+    }
+
     /** {@code mode} has to agree with the terminal background's own HCT tone, not the theme's. */
     @Test
     public void modeAgreesWithTheTerminalBackgroundTone() {
@@ -268,6 +339,37 @@ public class MaterialTerminalColorSchemeTest {
         assertTrue(propertiesText.contains("\nmode=" + roles.getProperty("mode") + "\n"));
         assertTrue(shellText.contains("export TERMUX_MATERIAL_PRIMARY_FIXED='" + roles.getProperty("primary_fixed") + "'"));
         assertTrue(shellText.contains("export TERMUX_MATERIAL_MODE='" + roles.getProperty("mode") + "'"));
+    }
+
+    /**
+     * The mode files are the same format as the two the shells have always read — same header, same
+     * sorted keys, same {@code TERMUX_MATERIAL_*} exports — with {@code mode} stated rather than
+     * derived, and the palette they were built from left alone.
+     */
+    @Test
+    public void theModeFilesAreTheSameFormatWithTheirModeFixed() {
+        Context themed = themedContext();
+        PaletteSet palettes = MaterialTerminalColorScheme.createPaletteSet(
+            themed, TerminalContrastLevel.DEFAULT);
+        Properties light = palettes.light();
+        Properties darkFile = MaterialTerminalColorScheme.withMode(palettes.dark(), "dark");
+        Properties lightFile = MaterialTerminalColorScheme.withMode(light, "light");
+
+        assertEquals("dark", darkFile.getProperty("mode"));
+        assertEquals("light", lightFile.getProperty("mode"));
+        // Stating the mode must not edit the palette the templates are being rendered from.
+        assertNotSame(light, lightFile);
+        assertEquals(light.stringPropertyNames(), lightFile.stringPropertyNames());
+        for (String key : light.stringPropertyNames()) {
+            if ("mode".equals(key)) continue;
+            assertEquals(key, light.getProperty(key), lightFile.getProperty(key));
+        }
+
+        String text = MaterialTerminalColorScheme.toPropertiesText(darkFile);
+        assertTrue(text.startsWith("# Generated by Termux. Do not edit.\n"));
+        assertTrue(text.contains("\nmode=dark\n"));
+        assertTrue(MaterialTerminalColorScheme.toShellExports(lightFile)
+            .contains("export TERMUX_MATERIAL_MODE='light'"));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -361,12 +463,99 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
-    /** Neutrals come off the neutral palette: surface hue, and no more chroma than a neutral has. */
+    /** Neutrals come off the neutral palette: no more chroma than a neutral has, however vivid the theme. */
     @Test
     public void neutralSlotsStayNeutral() {
         Properties palette = MaterialTerminalColorScheme.ansiSlots(220d, 48d, 25d, 300d, 90d, true);
         for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
-            assertTrue(key + " chroma", Hct.fromInt(color(palette, key)).getChroma() <= 7d);
+            // The ceiling is 12 (D8 raised it from 6 with the warm nudge); a tone at the top of the
+            // ladder cannot always hold that much chroma in sRGB, so allow for the gamut mapping.
+            assertTrue(key + " chroma", Hct.fromInt(color(palette, key)).getChroma() <= 13d);
+        }
+    }
+
+    /**
+     * D8: the neutrals lean warm rather than sitting on the surface's own hue, which is what the
+     * retired {@code material-terminal-white.fish} was doing by hand on the phone. Halfway to 75°,
+     * never more than 20° of it, and never past it.
+     */
+    @Test
+    public void theNeutralHueLeansWarmWithoutPassingTheTarget() {
+        for (double surfaceHue : new double[] {0d, 40d, 110d, 210d, 260d, 300d, 359d}) {
+            double warm = MaterialTerminalColorScheme.warmNeutralHue(surfaceHue);
+            double distance = angleBetween(surfaceHue, 75d);
+            assertEquals("surface " + surfaceHue + " moved the wrong distance",
+                Math.min(distance * 0.5d, 20d), angleBetween(surfaceHue, warm), 1e-9);
+            assertTrue("surface " + surfaceHue + " landed at " + warm + ", past the target",
+                angleBetween(warm, 75d) <= distance + 1e-9);
+        }
+    }
+
+    /** A theme already at the warm hue has nowhere to go, and must not be rotated off it. */
+    @Test
+    public void aSurfaceAlreadyWarmIsNotRotated() {
+        assertEquals(75d, MaterialTerminalColorScheme.warmNeutralHue(75d), 1e-9);
+        Properties palette = MaterialTerminalColorScheme.ansiSlots(220d, 40d, 25d, 75d, 4d, true);
+        for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
+            assertEquals(key, 75d, Hct.fromInt(color(palette, key)).getHue(), 8d);
+        }
+    }
+
+    /** The nudge is a colour move, not a tone move: the ladder keeps every tone it had. */
+    @Test
+    public void theWarmNudgeLeavesTheSlotTonesWhereTheyWere() {
+        for (boolean dark : new boolean[] {true, false}) {
+            Properties palette = slots(220d, 40d, dark);
+            assertEquals(25d, tone(palette, "color0"), 1d);
+            assertEquals(dark ? 45d : 50d, tone(palette, "color8"), 1d);
+            assertEquals(dark ? 80d : 75d, tone(palette, "color7"), 1d);
+            assertEquals(dark ? 96d : 92d, tone(palette, "color15"), 1d);
+            for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
+                // Wide, deliberately: at neutral chroma the sRGB round trip moves a hue by a few
+                // degrees on its own. What is being asserted is the lean, not a number.
+                assertEquals(key + " hue", MaterialTerminalColorScheme.warmNeutralHue(220d),
+                    Hct.fromInt(color(palette, key)).getHue(), 8d);
+            }
+        }
+    }
+
+    /** A near-grey theme has to be lifted to the floor, a vivid one held at the ceiling. */
+    @Test
+    public void theNeutralChromaStaysInsideItsBand() {
+        assertEquals(8d, MaterialTerminalColorScheme.warmNeutralChroma(0d), 1e-9);
+        assertEquals(8d, MaterialTerminalColorScheme.warmNeutralChroma(7.9d), 1e-9);
+        assertEquals(10d, MaterialTerminalColorScheme.warmNeutralChroma(10d), 1e-9);
+        assertEquals(12d, MaterialTerminalColorScheme.warmNeutralChroma(90d), 1e-9);
+        Properties grey = MaterialTerminalColorScheme.ansiSlots(220d, 40d, 25d, 220d, 0d, true);
+        for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
+            assertTrue(key + " must not be a pure grey",
+                Hct.fromInt(color(grey, key)).getChroma() >= 5d);
+        }
+    }
+
+    /**
+     * The foreground is a neutral as much as slots 0/7/8/15 are, and gets the same nudge — with the
+     * legibility floor still met afterwards, since the search moves tone only.
+     */
+    @Test
+    public void theForegroundIsWarmedToo() {
+        Context themed = new ContextThemeWrapper(ApplicationProvider.getApplicationContext(),
+            com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties palette = MaterialTerminalColorScheme.create(themed, level);
+            Hct foreground = Hct.fromInt(color(palette, "foreground"));
+            // The theme's own surface, which is what the derivation takes the neutral hue from —
+            // not the generated background, whose tone move can leave it too grey to have a hue.
+            Hct surface = Hct.fromInt(com.google.android.material.color.MaterialColors.getColor(
+                themed, com.google.android.material.R.attr.colorSurface, 0) | 0xFF000000);
+            assertEquals("foreground hue at " + level.value,
+                MaterialTerminalColorScheme.warmNeutralHue(surface.getHue()),
+                foreground.getHue(), 5d);
+            assertTrue("foreground chroma at " + level.value, foreground.getChroma() <= 13d);
+            assertTrue("foreground ratio at " + level.value,
+                MaterialTerminalColorScheme.contrastRatio(
+                    color(palette, "foreground"), color(palette, "background"))
+                    + .01 >= level.foregroundRatio);
         }
     }
 

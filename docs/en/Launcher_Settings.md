@@ -87,6 +87,11 @@ The launcher exports its resolved roles to `~/.termux/material-colors.sh` and `.
 including container/on-container pairs, tertiary, error-container, and outline roles for prompts and
 scripts — whether the palette came from the wallpaper or from a color scheme.
 
+Beside them, a wallpaper palette also writes `material-colors-dark.sh` / `.properties` and
+`material-colors-light.sh` / `.properties`: the same keys for each mode, so a script can dress
+itself for the mode the phone is not in yet. The two files without a mode in the name stay the
+palette in use right now.
+
 ### Tools that follow the terminal colours
 
 Pick a tool in this list and the launcher writes its theme file whenever the palette changes, then
@@ -117,7 +122,8 @@ matches a shipped template replaces it. `output` understands `~`, `$VAR` and `${
 
 The input file is plain text with `{{ colors.<token>.<mode>.<format> }}` placeholders — for example
 `{{ colors.primary.dark.hex }}`. Tokens are the key names in `~/.termux/material-colors.properties`,
-mode is `default`, `dark` or `light` (all three give the active palette), and the formats are `hex`,
+mode is `default` for the palette in use and `dark` or `light` for those modes' own colors (a
+palette with only one mode gives it for all three), and the formats are `hex`,
 `hex_stripped`, `rgb`, `rgba`, `red`, `green` and `blue`. `{{ mode }}` renders `dark` or `light`.
 Everything else in the file is left exactly as written, so a Go or Lua template survives intact. An
 unknown token or format skips that template and logs why; nothing is written.

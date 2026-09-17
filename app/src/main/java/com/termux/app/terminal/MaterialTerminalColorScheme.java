@@ -1,16 +1,20 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Color;
+import android.view.ContextThemeWrapper;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.color.utilities.Hct;
 import com.termux.R;
+import com.termux.app.theme.templates.PaletteSet;
 import com.termux.shared.errors.Error;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
@@ -31,6 +35,17 @@ public final class MaterialTerminalColorScheme {
     private static final String MATERIAL_COLORS_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors.sh";
 
     /**
+     * The two mode files beside them. Same format, same keys, same writers — only {@code mode} is
+     * fixed rather than derived, so a tool can source one of these to dress itself for the mode it
+     * is about to be in. The two files above stay exactly what they were: the active palette, which
+     * is what {@code config.fish} and every older consumer reads.
+     */
+    private static final String MATERIAL_COLORS_DARK_PROPERTIES_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-dark.properties";
+    private static final String MATERIAL_COLORS_DARK_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-dark.sh";
+    private static final String MATERIAL_COLORS_LIGHT_PROPERTIES_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-light.properties";
+    private static final String MATERIAL_COLORS_LIGHT_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-light.sh";
+
+    /**
      * Canonical ANSI hues for slots 1–6 — red, green, yellow, blue, magenta, cyan — before
      * harmonization. These are what makes a green read as green; the theme supplies everything else.
      */
@@ -44,8 +59,26 @@ public final class MaterialTerminalColorScheme {
     private static final double ANSI_CHROMA_MIN = 28d;
     private static final double ANSI_CHROMA_MAX = 52d;
 
-    /** Neutral slots come off the neutral palette, so they carry the surface hue and almost no chroma. */
-    private static final double NEUTRAL_CHROMA_MAX = 6d;
+    /**
+     * How much chroma the neutral slots and the foreground carry.
+     *
+     * <p>They come off the neutral palette, so left alone they are the surface hue at almost no
+     * chroma — a grey ladder on a grey background, which is what the retired
+     * {@code material-terminal-white.fish} was painting over on the phone. The floor is the warm
+     * nudge itself: a neutral with no chroma cannot lean anywhere. The ceiling keeps it a neutral —
+     * above it the ladder starts reading as a seventh accent.
+     */
+    private static final double NEUTRAL_CHROMA_MIN = 8d;
+    private static final double NEUTRAL_CHROMA_MAX = 12d;
+
+    /**
+     * Where the neutrals lean: the warm side of the wheel, around parchment. The surface hue is
+     * pulled halfway toward it and never further than {@link #NEUTRAL_MAX_ROTATION}, so a theme
+     * already warm barely moves and a cold blue one warms without turning yellow. The background is
+     * not nudged — it is the chrome's own surface, and the terminal has to sit on it.
+     */
+    private static final double NEUTRAL_WARM_HUE = 75d;
+    private static final double NEUTRAL_MAX_ROTATION = 20d;
 
     /** Material's {@code Blend.harmonize} ceiling: never rotate a hue more than this far. */
     private static final double HARMONIZE_MAX_ROTATION = 15d;
@@ -85,6 +118,10 @@ public final class MaterialTerminalColorScheme {
 
         int background = surfaceTone(surface, level);
 
+        // The foreground is a neutral too — the same nudge as slots 0/7/8/15, before the legibility
+        // search, which keeps hue and chroma and only moves tone. The cursor is an accent and is
+        // left alone.
+        foreground = warmNeutral(foreground, surfaceHct.getHue());
         foreground = contrastTone(foreground, background, level.foregroundRatio);
         primary = contrastTone(primary, background, level.cursorRatio);
 
@@ -162,12 +199,39 @@ public final class MaterialTerminalColorScheme {
         // way round the background is. The light column used to end at tone 10, which made bright
         // white the darkest neutral of the four and collapsed "black on bright white" into one
         // colour; the accent bands above still flip with the background, the neutrals do not.
-        double neutral = Math.min(neutralChroma, NEUTRAL_CHROMA_MAX);
-        slots.setProperty("color0", hex(Hct.from(neutralHue, neutral, 25d).toInt()));
-        slots.setProperty("color8", hex(Hct.from(neutralHue, neutral, dark ? 45d : 50d).toInt()));
-        slots.setProperty("color7", hex(Hct.from(neutralHue, neutral, dark ? 80d : 75d).toInt()));
-        slots.setProperty("color15", hex(Hct.from(neutralHue, neutral, dark ? 96d : 92d).toInt()));
+        //
+        // The hue is the surface's, warmed; the chroma is held inside the neutral band. Tones are
+        // untouched by either — the ladder is the ladder whatever colour it is made of.
+        double warm = warmNeutralHue(neutralHue);
+        double neutral = warmNeutralChroma(neutralChroma);
+        slots.setProperty("color0", hex(Hct.from(warm, neutral, 25d).toInt()));
+        slots.setProperty("color8", hex(Hct.from(warm, neutral, dark ? 45d : 50d).toInt()));
+        slots.setProperty("color7", hex(Hct.from(warm, neutral, dark ? 80d : 75d).toInt()));
+        slots.setProperty("color15", hex(Hct.from(warm, neutral, dark ? 96d : 92d).toInt()));
         return slots;
+    }
+
+    /**
+     * {@code surfaceHue} leaning toward {@link #NEUTRAL_WARM_HUE}: halfway there, at most
+     * {@link #NEUTRAL_MAX_ROTATION}. A surface already at the warm hue does not move at all.
+     */
+    @VisibleForTesting
+    static double warmNeutralHue(double surfaceHue) {
+        return blendHue(surfaceHue, NEUTRAL_WARM_HUE, NEUTRAL_MAX_ROTATION);
+    }
+
+    /** {@code chroma} inside the neutral band — raised to the floor, held under the ceiling. */
+    @VisibleForTesting
+    static double warmNeutralChroma(double chroma) {
+        return Math.max(NEUTRAL_CHROMA_MIN, Math.min(NEUTRAL_CHROMA_MAX, chroma));
+    }
+
+    /** {@code color} rebuilt as a warm neutral: the nudged hue and band chroma at its own tone. */
+    @ColorInt
+    private static int warmNeutral(@ColorInt int color, double surfaceHue) {
+        Hct source = Hct.fromInt(color);
+        return Hct.from(warmNeutralHue(surfaceHue), warmNeutralChroma(source.getChroma()),
+            source.getTone()).toInt();
     }
 
     /**
@@ -181,7 +245,12 @@ public final class MaterialTerminalColorScheme {
      */
     @VisibleForTesting
     static double harmonizeHue(double anchor, double source) {
-        double rotation = Math.min(differenceDegrees(anchor, source) * 0.5d, HARMONIZE_MAX_ROTATION);
+        return blendHue(anchor, source, HARMONIZE_MAX_ROTATION);
+    }
+
+    /** {@code anchor} rotated halfway toward {@code source}, capped at {@code maxRotation}. */
+    private static double blendHue(double anchor, double source, double maxRotation) {
+        double rotation = Math.min(differenceDegrees(anchor, source) * 0.5d, maxRotation);
         return sanitizeDegrees(anchor + rotation * rotationDirection(anchor, source));
     }
 
@@ -198,6 +267,61 @@ public final class MaterialTerminalColorScheme {
     private static double sanitizeDegrees(double degrees) {
         double wrapped = degrees % 360d;
         return wrapped < 0d ? wrapped + 360d : wrapped;
+    }
+
+    /**
+     * The whole export: the active palette plus a dark and a light one.
+     *
+     * <p>Both halves are the same derivation as the active one, run against a configuration context
+     * with the {@code UI_MODE_NIGHT_*} bits forced and re-themed with the activity's own DayNight
+     * theme — the trick {@code TermuxApplication}'s background refresh already uses. Dynamic colours
+     * are pure resource qualifiers ({@code values-v31} / {@code values-night-v31}), so a forced
+     * configuration resolves the other mode's roles exactly as the activity would in it; no activity
+     * and no recreation is involved.
+     *
+     * <p>Must run on a thread that may resolve theme attributes and resources — in practice the main
+     * thread, like every other {@link #create} call.
+     */
+    @NonNull
+    public static PaletteSet createPaletteSet(@NonNull Context context,
+                                              @NonNull TerminalContrastLevel level) {
+        return createPaletteSet(context, level, create(context, level));
+    }
+
+    /**
+     * As {@link #createPaletteSet(Context, TerminalContrastLevel)}, for a caller that has already
+     * built the active terminal palette and handed it to the terminal — the exported files then
+     * describe exactly the colours the sessions took, rather than a second derivation of them.
+     */
+    @NonNull
+    public static PaletteSet createPaletteSet(@NonNull Context context,
+                                              @NonNull TerminalContrastLevel level,
+                                              @NonNull Properties activeTerminalProps) {
+        Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
+        return PaletteSet.of(active,
+            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_YES),
+            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_NO));
+    }
+
+    /** The export as it would be with {@code nightMode} forced, or {@code null} if that failed. */
+    @Nullable
+    private static Properties paletteForNightMode(@NonNull Context context,
+                                                  @NonNull TerminalContrastLevel level,
+                                                  int nightMode) {
+        try {
+            Configuration configuration = new Configuration(context.getResources().getConfiguration());
+            configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
+            Context themed = new ContextThemeWrapper(
+                context.createConfigurationContext(configuration),
+                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            return createMaterialRoleProperties(themed, create(themed, level), level);
+        } catch (RuntimeException e) {
+            // A palette for the mode the user is not in is worth having, never worth failing the
+            // refresh for: the active one is what the terminal is about to wear.
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Cannot derive the palette for uiMode night " + nightMode, e);
+            return null;
+        }
     }
 
     /**
@@ -357,6 +481,49 @@ public final class MaterialTerminalColorScheme {
     public static void writeMaterialColorFiles(@NonNull Properties props) {
         writeFile(MATERIAL_COLORS_PROPERTIES_PATH, toPropertiesText(props));
         writeFile(MATERIAL_COLORS_SHELL_PATH, toShellExports(props));
+    }
+
+    /**
+     * The active palette's two files, plus one pair per mode the set actually carries.
+     *
+     * <p>A set with only an active palette — the from-scheme path, which has one palette by
+     * definition — writes only the two active files and leaves any mode files a previous dynamic
+     * pass left behind alone: they are stale either way, and deleting a file a user's config may be
+     * sourcing is the worse of the two.
+     */
+    public static void writeMaterialColorFiles(@NonNull PaletteSet palettes) {
+        writeMaterialColorFiles(palettes.active());
+        if (palettes.hasDark())
+            writeModeFiles(MATERIAL_COLORS_DARK_PROPERTIES_PATH, MATERIAL_COLORS_DARK_SHELL_PATH,
+                palettes.dark(), PaletteSet.MODE_DARK);
+        if (palettes.hasLight())
+            writeModeFiles(MATERIAL_COLORS_LIGHT_PROPERTIES_PATH, MATERIAL_COLORS_LIGHT_SHELL_PATH,
+                palettes.light(), PaletteSet.MODE_LIGHT);
+    }
+
+    private static void writeModeFiles(@NonNull String propertiesPath, @NonNull String shellPath,
+                                       @NonNull Properties palette, @NonNull String mode) {
+        Properties fixed = withMode(palette, mode);
+        writeFile(propertiesPath, toPropertiesText(fixed));
+        writeFile(shellPath, toShellExports(fixed));
+    }
+
+    /**
+     * {@code palette} with {@code mode} stated rather than derived.
+     *
+     * <p>The mode file says what it is for. The derived value is the same in every ordinary case —
+     * the dark palette's background really is dark — but a theme can hand back a light surface under
+     * {@code values-night}, and a file named {@code -dark} that says {@code mode=light} is a trap for
+     * the config reading it. The palette handed in is not modified: it is the one the caller may
+     * still be rendering templates from.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Properties withMode(@NonNull Properties palette, @NonNull String mode) {
+        Properties copy = new Properties();
+        copy.putAll(palette);
+        copy.setProperty("mode", mode);
+        return copy;
     }
 
     /**

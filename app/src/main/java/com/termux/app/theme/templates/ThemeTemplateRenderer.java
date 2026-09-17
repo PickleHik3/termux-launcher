@@ -9,9 +9,14 @@ import java.util.regex.Pattern;
  *
  * <p>The syntax is the subset of noctalia's template language the launcher ports:
  * {@code {{ colors.<token>.<mode>.<format> }}} and {@code {{ mode }}}, spaces inside the braces
- * optional. All three modes ({@code default}, {@code dark}, {@code light}) read the one palette the
- * launcher has — only the active contrast level is ever rendered — so they are accepted and
- * resolved identically rather than silently dropped from ported templates.
+ * optional. {@code dark} and {@code light} resolve against the palettes of those modes, and
+ * {@code default} against the active one — so one rendered file can carry both tables and the tool
+ * reading it can switch between them on a day/night flip without the launcher exporting again.
+ * {@code {{ mode }}} is always the active mode: it is what the file says the phone is wearing now.
+ *
+ * <p>A {@link PaletteSet} that carries only the active palette — the from-scheme path, or a palette
+ * read back off a phone whose export predates the mode files — resolves all three modes to it. A
+ * template written for both modes then renders the same colours twice rather than failing.
  *
  * <p>Those two are the only placeholders. Every other {@code {{ … }}} is left exactly as written,
  * because the files being rendered are other people's formats — an oh-my-posh theme is a Go template
@@ -68,9 +73,18 @@ public final class ThemeTemplateRenderer {
      * @return a {@link Result} whose {@link Result#failure} is set when nothing should be written.
      */
     public static Result render(String template, Properties palette) {
+        return render(template, PaletteSet.of(palette));
+    }
+
+    /**
+     * Render {@code template} against a whole palette set.
+     *
+     * @return a {@link Result} whose {@link Result#failure} is set when nothing should be written.
+     */
+    public static Result render(String template, PaletteSet palettes) {
         if (template == null) return failed("the template file is missing");
         if (template.contains("<*")) return failed("block syntax (<* … *>) is not supported");
-        String mode = modeOf(palette);
+        String mode = modeOf(palettes == null ? null : palettes.active());
         Matcher matcher = PLACEHOLDER.matcher(template);
         StringBuffer out = new StringBuffer(template.length());
         while (matcher.find()) {
@@ -79,7 +93,7 @@ public final class ThemeTemplateRenderer {
             if (KEY_MODE.equals(expression)) {
                 value = mode;
             } else if (expression.startsWith(COLORS_PREFIX)) {
-                value = resolve(expression, palette);
+                value = resolve(expression, palettes);
                 if (value == null) return failed("cannot resolve {{ " + expression + " }}");
             } else {
                 // Not ours. Two of the shipped templates are Go templates — {{ .Path }},
@@ -94,14 +108,21 @@ public final class ThemeTemplateRenderer {
     }
 
     /** The value for {@code colors.<token>.<mode>.<format>}, or {@code null} if it means nothing. */
-    private static String resolve(String expression, Properties palette) {
+    private static String resolve(String expression, PaletteSet palettes) {
         String[] parts = expression.split("\\.");
         if (parts.length != 4 || !"colors".equals(parts[0])) return null;
         String token = parts[1];
         String mode = parts[2];
         String format = parts[3];
-        if (!"default".equals(mode) && !"dark".equals(mode) && !"light".equals(mode)) return null;
-        String raw = palette == null ? null : palette.getProperty(token);
+        if (palettes == null) return null;
+        // An unknown mode word is the template's mistake and fails it; the three it may name each
+        // have a palette, which is the active one when this set does not carry a separate mode.
+        Properties palette = palettes.forMode(mode);
+        if (palette == null) return null;
+        String raw = palette.getProperty(token);
+        // A mode palette read off an older export can be missing a key the active one has. The
+        // active palette is a truer answer than refusing to write the file at all.
+        if (raw == null && palettes.active() != null) raw = palettes.active().getProperty(token);
         if (raw == null) return null;
         int color = parseColor(raw);
         if (color < 0) return null;
