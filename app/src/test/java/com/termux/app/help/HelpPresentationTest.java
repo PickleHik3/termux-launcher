@@ -91,6 +91,28 @@ public class HelpPresentationTest {
         }
         return null;
     }
+    /**
+     * The centre of a button in the overlay's own coordinates. The two floating buttons live
+     * inside a shared capsule now, so their getLeft()/getTop() are measured from that capsule
+     * while {@link #tap} dispatches at the overlay; the offsets have to be walked up to agree.
+     */
+    private float[] centreInOverlay(View view) {
+        float x = view.getWidth() / 2f;
+        float y = view.getHeight() / 2f;
+        for (View cur = view; cur != null && cur != overlay; ) {
+            x += cur.getLeft();
+            y += cur.getTop();
+            android.view.ViewParent parent = cur.getParent();
+            cur = parent instanceof View ? (View) parent : null;
+        }
+        return new float[] {x, y};
+    }
+
+    private void tap(View view) {
+        float[] centre = centreInOverlay(view);
+        tap(centre[0], centre[1]);
+    }
+
     private void tap(float x,float y) {
         MotionEvent down = MotionEvent.obtain(0,0,MotionEvent.ACTION_DOWN,x,y,0);
         MotionEvent up = MotionEvent.obtain(0,1,MotionEvent.ACTION_UP,x,y,0);
@@ -210,8 +232,7 @@ public class HelpPresentationTest {
         open(PaneWallPage.TERMINAL);
         View catalogue = described("Help topics");
         assertNotNull(catalogue);
-        tap(catalogue.getLeft() + catalogue.getWidth() / 2f,
-            catalogue.getTop() + catalogue.getHeight() / 2f);
+        tap(catalogue);
         assertTrue(overlay.isShowing());
         assertEquals(0, dismissed);
     }
