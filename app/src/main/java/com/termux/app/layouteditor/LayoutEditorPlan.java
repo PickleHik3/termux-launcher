@@ -248,6 +248,16 @@ public final class LayoutEditorPlan {
         return shownLayout().slot(com.termux.app.place.Element.STATUS).edge.isOnSide();
     }
 
+    /**
+     * Whether the toggle is showing the orientation the phone is not in, where the place behind
+     * the card cannot follow what is being edited until the phone is turned. The editor shows a
+     * line about it and nothing else — the other orientation is what the toggle is for, it is only
+     * worth knowing which one the edits are landing on.
+     */
+    public boolean warnsOtherOrientation() {
+        return !liveFollows();
+    }
+
     /** Whether anything has moved since the editor opened — the unsaved-changes question. */
     public boolean isDirty() {
         return !mEntrySignature.equals(PlaceArrangeSnapshot.capture(mPlaces).signature());
@@ -264,15 +274,24 @@ public final class LayoutEditorPlan {
      * and the full width of the screen in landscape, where a frame sized from the height would be
      * a sliver.
      *
+     * <p>The landscape frame is then bounded by what the screen has left. A landscape phone is
+     * about as wide as the screen is tall, so a frame sized from the width alone asks for the
+     * whole screen and pushes everything under the canvas off the bottom of the card. The portrait
+     * frame is a fraction of the height and never reaches that, so it is left alone.
+     *
      * @param frameAspect the frame's width over its height, for the orientation asked about
      * @param reservedPx  the room the miniature keeps under the frame for the hide tray
+     * @param roomBelowPx the room that has to stay for what stands around the canvas — the card's
+     *     own chrome plus the floor {@link #rowsHeightCapPx} never takes the rows below
      */
     public static int miniatureHeightPx(@NonNull PlaceOrientation orientation, int screenWidthPx,
-                                        int screenHeightPx, float frameAspect, int reservedPx) {
-        float frameHeight = orientation == PlaceOrientation.LANDSCAPE
-            ? screenWidthPx / Math.max(frameAspect, 0.01f)
-            : PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx;
-        return Math.round(frameHeight) + reservedPx;
+                                        int screenHeightPx, float frameAspect, int reservedPx,
+                                        int roomBelowPx) {
+        if (orientation != PlaceOrientation.LANDSCAPE)
+            return Math.round(PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx) + reservedPx;
+        float frameHeight = screenWidthPx / Math.max(frameAspect, 0.01f);
+        int roomForFrame = Math.max(0, screenHeightPx - roomBelowPx - reservedPx);
+        return Math.round(Math.min(frameHeight, roomForFrame)) + reservedPx;
     }
 
     /**
