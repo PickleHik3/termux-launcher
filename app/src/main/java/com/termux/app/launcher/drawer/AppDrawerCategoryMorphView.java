@@ -8,6 +8,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 
 /** Allocation-free rounded-rect interpolation; deliberately owns no icon or bitmap. */
@@ -21,14 +22,22 @@ public final class AppDrawerCategoryMorphView extends View {
 
     public AppDrawerCategoryMorphView(@NonNull Context context) {
         super(context);
-        paint.setColor(0x2FFFFFFF);
+        // The morph's travelling plate stands in for the card it is becoming, so it takes the same
+        // polarity the cards do.
+        paint.setColor(ChromeShade.fill(0x2FFFFFFF));
         setClickable(false);
+    }
+
+    /** Re-states the plate for the chrome's current polarity; called as the morph is set up. */
+    private void applyShade() {
+        paint.setColor(ChromeShade.fill(0x2FFFFFFF));
     }
 
     public void setFrames(@Nullable Frame source, @Nullable Frame destination,
                           float sourceRadius, float destinationRadius) {
         this.source = source;
         this.destination = destination;
+        applyShade();
         this.sourceRadius = Math.max(0f, sourceRadius);
         this.destinationRadius = Math.max(0f, destinationRadius);
         invalidate();

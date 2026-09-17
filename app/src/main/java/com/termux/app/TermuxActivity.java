@@ -2953,10 +2953,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         specular.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         specular.setGradientCenter(0.5f, 0.5f);
         specular.setGradientRadius(dpToPx(120));
-        // White-leaning, wide and soft so it reads as caught light gliding over glass rather than a
-        // painted accent disc under the finger.
+        // Wide and soft so it reads as caught light gliding over glass rather than a painted accent
+        // disc under the finger — leaning white on the dark dock, and into shadow on the light one,
+        // where a white pool under the finger is a pool of nothing.
+        int caught = com.termux.app.chrome.ChromeShade.polarity()
+            == com.termux.app.chrome.ChromeInk.Polarity.DARK_INK ? Color.BLACK : Color.WHITE;
         specular.setColors(new int[] {
-            withAlphaComponent(Color.WHITE, 70),
+            withAlphaComponent(caught, 70),
             withAlphaComponent(accent, 22),
             withAlphaComponent(accent, 0)
         });

@@ -22,7 +22,7 @@
     <color name="termux_chip_done">#7FD69B</color>
     <color name="termux_error_container">#93000A</color>
     <color name="termux_on_error_container">#FFDAD6</color>
-    <color name="termux_scrollbar">#66FFFFFF</color>
+    <color name="termux_scrollbar">#B3808080</color>
 
     <color name="main_accent">@color/termux_on_surface</color>
     <color name="highlight_accent">@color/termux_surface_panel_highest</color>

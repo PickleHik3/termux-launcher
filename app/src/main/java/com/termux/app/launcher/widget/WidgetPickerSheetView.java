@@ -24,6 +24,8 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
 import com.termux.app.Spring;
+import com.termux.app.chrome.ChromeShade;
+import com.termux.app.chrome.OnGlass;
 
 import java.util.Collections;
 import java.util.List;
@@ -71,11 +73,11 @@ public final class WidgetPickerSheetView extends FrameLayout {
         addView(scrim, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         sheet = new LinearLayout(context); sheet.setOrientation(LinearLayout.VERTICAL);
         sheet.setFocusable(false); sheet.setClickable(true);
-        GradientDrawable background = new GradientDrawable(); background.setColor(0xee202124);
+        GradientDrawable background = new GradientDrawable(); background.setColor(sheetPlate());
         background.setCornerRadii(new float[] {24,24,24,24,0,0,0,0}); sheet.setBackground(background);
         LinearLayout header = new LinearLayout(context); header.setGravity(Gravity.CENTER_VERTICAL);
         int pad = dp(16); header.setPadding(pad, dp(8), dp(8), dp(4));
-        title = new TextView(context); title.setText("Add widget"); title.setTextColor(Color.WHITE);
+        title = new TextView(context); title.setText("Add widget"); title.setTextColor(sheetInk());
         header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
         ImageButton close = new ImageButton(context); close.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
         close.setBackgroundColor(Color.TRANSPARENT); close.setContentDescription("Close widget picker");
@@ -87,7 +89,7 @@ public final class WidgetPickerSheetView extends FrameLayout {
             LayoutParams.MATCH_PARENT, dp(44));
         searchParams.setMargins(pad, dp(4), pad, dp(4));
         sheet.addView(search, searchParams);
-        notice = new TextView(context); notice.setPadding(pad, dp(4), pad, dp(8)); notice.setTextColor(Color.WHITE);
+        notice = new TextView(context); notice.setPadding(pad, dp(4), pad, dp(8)); notice.setTextColor(sheetInk());
         notice.setVisibility(GONE); sheet.addView(notice);
         list = new RecyclerView(context); list.setLayoutManager(new LinearLayoutManager(context));
         list.setNestedScrollingEnabled(true); list.setFocusable(false);
@@ -98,6 +100,26 @@ public final class WidgetPickerSheetView extends FrameLayout {
         LayoutParams sheetParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT, Gravity.BOTTOM);
         addView(sheet, sheetParams); setVisibility(GONE);
+    }
+
+    /**
+     * The sheet itself: a panel, not a wash, so it does not veil toward anything — it belongs to a
+     * dark chrome or to a light one and flips whole. The scrim over the pane behind it stays black
+     * in both, which is what a modal scrim is.
+     */
+    private static int sheetPlate() {
+        return ChromeShade.plate(0xee202124, 0xeeF8F9FA);
+    }
+
+    /** The opaque surface the sheet presents to its own title, notice, field and hint. */
+    private static int sheetSurface() {
+        return ChromeShade.plateSurface(sheetPlate(), ChromeShade.nominalGlass());
+    }
+
+    /** What the sheet's own text is drawn in, read off the sheet rather than off the chrome. */
+    private static int sheetInk() {
+        return ChromeShade.onPlate(sheetPlate(), ChromeShade.nominalGlass(),
+            OnGlass.TARGET_BODY_TEXT);
     }
 
     /**
@@ -113,10 +135,12 @@ public final class WidgetPickerSheetView extends FrameLayout {
         field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         field.setImeOptions(EditorInfo.IME_ACTION_SEARCH | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
-        field.setTextColor(Color.WHITE); field.setHintTextColor(0x99FFFFFF);
+        int ink = sheetInk();
+        field.setTextColor(ink); field.setHintTextColor((ink & 0x00FFFFFF) | (0x99 << 24));
         field.setPadding(dp(12), 0, dp(12), 0);
         GradientDrawable background = new GradientDrawable();
-        background.setColor(0x1AFFFFFF); background.setCornerRadius(dp(12));
+        background.setColor(ChromeShade.inPlate(0x1AFFFFFF, sheetSurface(), ChromeShade.TARGET_FILL));
+        background.setCornerRadius(dp(12));
         field.setBackground(background);
         field.setFocusable(false); field.setFocusableInTouchMode(false);
         field.setOnClickListener(view -> {

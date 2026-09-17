@@ -354,7 +354,12 @@ public final class WidgetPaneView extends FrameLayout {
             float x = (getWidth() - total) / 2f + radius;
             float y = getHeight() / 2f;
             for (int page = 0; page < pageCount; page++) {
-                paint.setColor(page == currentPage ? 0xE6FFFFFF : 0x4DFFFFFF);
+                // The dots are chrome over the wall, so they follow the chrome's polarity: white
+                // light on the dark band, shadow on the light one, where white dots are no dots.
+                paint.setColor(page == currentPage
+                    ? com.termux.app.chrome.ChromeShade.structural(0xE6FFFFFF,
+                        com.termux.app.chrome.ChromeShade.TARGET_RIM)
+                    : com.termux.app.chrome.ChromeShade.fill(0x4DFFFFFF));
                 canvas.drawCircle(x, y, radius, paint);
                 x += step;
             }

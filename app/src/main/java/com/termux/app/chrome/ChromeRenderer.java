@@ -334,6 +334,7 @@ public final class ChromeRenderer {
     }
 
     private void sync(int scopes) {
+        noteChromeShade();
         if ((scopes & SCOPE_WALLPAPER_BLUR_CACHE) != 0) {
             mBlurCache.clear();
         }
@@ -372,6 +373,32 @@ public final class ChromeRenderer {
             restartBlurHeartbeat();
             scheduleBlurRecovery();
         }
+    }
+
+    /**
+     * Publishes the chrome's ink polarity and its nominal glass to {@link ChromeShade}, so the
+     * structural constants three packages away — the glass rim, the drawer's card washes, the
+     * menus' selection highlight — can follow the same answer the inks do without each of them
+     * needing a path back to this object.
+     *
+     * <p>Done on every sync rather than on a mode callback: a sync is exactly the pass a wallpaper,
+     * palette or theme change already runs through, and the work is a handful of comparisons.</p>
+     *
+     * <p>{@link ChromeInk#polarity()} is the source of truth, but it is a vote of the bands that
+     * have been measured, and before any band has asked {@link ChromeInk#onGlass} it answers with
+     * its own default rather than with a measurement. Until then the mode's own glass casts the
+     * vote, which is the same rule applied to the one colour that is known.</p>
+     */
+    private void noteChromeShade() {
+        int base = mSurfaces.glassBaseColor();
+        boolean measured = false;
+        for (GlassBackdropCache.Band band : GlassBackdropCache.Band.values()) {
+            if (mInk.backdrops().hasSample(band)) {
+                measured = true;
+                break;
+            }
+        }
+        ChromeShade.note(measured ? mInk.polarity() : ChromeShade.polarityOf(base), base);
     }
 
     /** True while a coalesced accessory render is waiting for its main-loop turn. */
