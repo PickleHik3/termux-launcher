@@ -25,7 +25,15 @@ public final class ChipWatermarkGeometry {
     public static final float TITLE_NUDGE_DP = 5f;
     /** The title's halo: a soft shadow in the chip's own fill, so the letters cut out of the glyph. */
     public static final float TITLE_HALO_DP = 1.5f;
-    /** How opaque that fill is made for the halo — a fill at alpha 16 would hide nothing. */
+    /**
+     * How opaque the colour behind the halo is made — a wash at its own alpha would hide nothing.
+     *
+     * <p>Kept short of opaque, and the label's legibility is deliberately not allowed to depend on
+     * the difference. {@link WindowChipInk#worstGround} measures a label against the chip's
+     * surface <em>with the watermark printed on it</em>, and this halo only ever pulls that ground
+     * back toward the plain surface; whatever fraction of it actually lands under a blurred
+     * shadow, the label was already promised its tier without it.</p>
+     */
     public static final int TITLE_HALO_ALPHA = 200;
     /** A corner dot — a mark, or the agent reading — across. */
     public static final float DOT_DIAMETER_DP = 5f;
@@ -41,11 +49,22 @@ public final class ChipWatermarkGeometry {
     /**
      * The watermark's strength, as alpha: 15% at rest, 26% selected. It is drawn in the place
      * accent rather than the title's colour — sharing the text's colour is exactly what buried it.
+     *
+     * <p>These two survived the light-mode round unchanged, and the reason is arithmetic rather
+     * than affection: the watermark is the one piece of a chip that is given no contrast floor of
+     * its own. A floor for it would have to be taken out of the label's, which is the tier that
+     * matters — see {@link WindowChipInk}. What changed instead is the colour they are spent on,
+     * which now stands on the chrome's own side of the band, and the fact that the label's ground
+     * is measured with the glyph already printed at these alphas.</p>
      */
     public static final int GLYPH_ALPHA = 38;
     public static final int SELECTED_GLYPH_ALPHA = 66;
 
-    /** The faint full outline a reported percentage fills over. */
+    /**
+     * The faint full outline a reported percentage fills over. A track, not a mark: it says where
+     * the arc will go, and the arc itself — drawn at full strength in the same colour, which
+     * {@link WindowChipInk} holds to {@code TARGET_LARGE_TEXT} — is what carries the fact.
+     */
     public static final int RING_TRACK_ALPHA = 56;
 
     /** How much of the outline the indeterminate arc covers: the ring's 270°, as a fraction. */
@@ -84,12 +103,18 @@ public final class ChipWatermarkGeometry {
     }
 
     /**
-     * The colour the title's halo is drawn in: the chip's own fill, raised to near-opaque. The
-     * fills are faint tints meant to be seen over the bar's ground, and a halo at alpha 16 would
-     * separate nothing; only the hue is wanted, so the alpha is ours.
+     * The colour the title's halo is drawn in: what the chip's body is, raised to near-opaque. The
+     * washes are faint tints meant to be seen over the bar's ground, and a halo at alpha 16 would
+     * separate nothing; only the colour is wanted, so the alpha is ours.
+     *
+     * <p>{@code chipColor} is the chip's <em>effective surface</em> — its wash already composited
+     * onto the measured band — wherever the chrome can measure what it is standing on. That is the
+     * colour the title was promised its contrast against, so a halo in it can only ever help. With
+     * nothing measured (a preview, a bar with no chrome attached) the caller passes the authored
+     * wash instead and this behaves exactly as it always did.</p>
      */
-    public static int haloColor(int fillColor) {
-        return (TITLE_HALO_ALPHA << 24) | (fillColor & 0x00FFFFFF);
+    public static int haloColor(int chipColor) {
+        return (TITLE_HALO_ALPHA << 24) | (chipColor & 0x00FFFFFF);
     }
 
     /**

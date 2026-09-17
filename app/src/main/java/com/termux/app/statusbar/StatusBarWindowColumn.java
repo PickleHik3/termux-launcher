@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -19,7 +20,10 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.GlassBackdropCache;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.terminal.TerminalWindowBar.WindowItem;
+import com.termux.app.terminal.WindowChipInk;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +52,16 @@ public final class StatusBarWindowColumn extends ScrollView {
     private int mAccent;
     private float mChipRadiusPx = -1f;
     @Nullable private OnWindowSelectedListener mListener;
+    /**
+     * Who says what this column is standing on, or null when nothing can measure it. Null keeps
+     * the authored alphas exactly as they were: every measured colour here is additive.
+     */
+    @Nullable private com.termux.app.chrome.ChromeInk mChromeInk;
+    /** The band as last measured, or null while nothing has been. */
+    @Nullable private WindowChipInk.Palette mGlassPalette;
+    private int mGlassGeneration = -1;
+    @NonNull private final android.graphics.Rect mGlassBandRect = new android.graphics.Rect();
+    @NonNull private final android.graphics.Rect mGlassMeasuredRect = new android.graphics.Rect();
 
     public StatusBarWindowColumn(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -75,6 +89,129 @@ public final class StatusBarWindowColumn extends ScrollView {
         rebuild();
     }
 
+    /**
+     * Who can say what this column is standing on.
+     *
+     * <p>The column's chips were dressed in five hand-picked alphas — a mark at 210, a fill at 74,
+     * strokes at 190, 170 and 70 — all of them tuned against a dark bar. Over the light-mode glass
+     * the user reported they composite to within a percent of the band. Given this, the marks and
+     * the rims are derived from the band as measured instead; given null, nothing is measured and
+     * the authored alphas stand.</p>
+     */
+    public void setChromeInk(@Nullable com.termux.app.chrome.ChromeInk ink) {
+        if (mChromeInk == ink) return;
+        mChromeInk = ink;
+        mGlassPalette = null;
+        mGlassGeneration = -1;
+        mGlassMeasuredRect.setEmpty();
+        rebuild();
+    }
+
+    /** The band as last measured; null until something could measure it. For tests. */
+    @Nullable
+    public WindowChipInk.Palette glassPalette() {
+        return mGlassPalette;
+    }
+
+    /**
+     * The band under the chips, measured once and remembered until the measurement could move.
+     *
+     * <p>The column stands on the status strip, so it resolves {@link GlassBackdropCache.Band#STATUS_BAR}
+     * at that band's strictest tier — its chips carry 11sp text, which is body text. A band has one
+     * veil, so this is the only place in this view that calls
+     * {@link com.termux.app.chrome.ChromeInk#onGlass}, and it asks at the same tier and with the
+     * same neutral pair that any other body-sized content on that strip would.</p>
+     */
+    private void measureBand() {
+        if (mChromeInk == null) {
+            mGlassPalette = null;
+            return;
+        }
+        if (!mChromeInk.bandRect(GlassBackdropCache.Band.STATUS_BAR, mGlassBandRect)) {
+            mGlassPalette = null;
+            mGlassGeneration = -1;
+            mGlassMeasuredRect.setEmpty();
+            return;
+        }
+        int onSurface = MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnSurface,
+            ContextCompat.getColor(getContext(), R.color.termux_on_surface));
+        int surfaceBase = MaterialColors.getColor(this,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(getContext(), R.color.termux_surface_base));
+        OnGlass.Resolution resolved = mChromeInk.onGlass(GlassBackdropCache.Band.STATUS_BAR,
+            mGlassBandRect,
+            WindowChipInk.neutralSeed(onSurface, surfaceBase, false),
+            WindowChipInk.neutralSeed(onSurface, surfaceBase, true),
+            OnGlass.TARGET_BODY_TEXT);
+        // After the resolve, never before: the band's vote is cast inside onGlass.
+        boolean pale =
+            mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
+        mGlassPalette = WindowChipInk.resolve(resolved.surface, pale,
+            WindowChipInk.neutralSeed(onSurface, surfaceBase, pale), mAccent);
+        mGlassGeneration = mChromeInk.backdrops().generation();
+        mGlassMeasuredRect.set(mGlassBandRect);
+    }
+
+    /** Whether the chrome is drawing in its pale ink; false whenever nothing has been measured. */
+    private boolean pale() {
+        return mChromeInk != null
+            && mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
+    }
+
+    @Override
+    protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
+        syncGlassPalette();
+        super.dispatchDraw(canvas);
+    }
+
+    /**
+     * Re-measures when the measurement could have moved — a new sample generation, or a band that
+     * moved on screen — and re-dresses the chips if it did. Two int comparisons per frame.
+     */
+    private void syncGlassPalette() {
+        if (mChromeInk == null) return;
+        if (!mChromeInk.bandRect(GlassBackdropCache.Band.STATUS_BAR, mGlassBandRect)) {
+            if (mGlassPalette != null) redress();
+            return;
+        }
+        if (mChromeInk.backdrops().generation() == mGlassGeneration
+            && mGlassMeasuredRect.equals(mGlassBandRect)) {
+            return;
+        }
+        redress();
+    }
+
+    /**
+     * The chips' colours after a re-measure, and nothing else. Never {@link #rebuild()}: this is
+     * reached from the draw pass, where adding and removing views is not allowed.
+     */
+    private void redress() {
+        measureBand();
+        for (int i = 0; i < mItems.size() && i < mStack.getChildCount(); i++) {
+            View child = mStack.getChildAt(i);
+            if (child instanceof TextView) dress((TextView) child, mItems.get(i), i == mSelected);
+        }
+    }
+
+    /** One chip's mark and rim: the two things that carry what the window is doing. */
+    private void dress(@NonNull TextView chip, @NonNull WindowItem item, boolean selected) {
+        WindowChipInk.Palette glass = mGlassPalette;
+        if (glass == null) {
+            chip.setTextColor(selected
+                ? MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnAccentContainer,
+                    ContextCompat.getColor(getContext(), R.color.termux_on_surface))
+                : ColorUtils.setAlphaComponent(markColor(item), 210));
+        } else {
+            // The chip's one glyph is 11sp text, so it is held to body text — on the surface the
+            // chip's own wash leaves, not on the bare band.
+            chip.setTextColor(selected
+                ? glass.selectedLabel
+                : WindowChipInk.towardPolarity(glass.restingSurface, markColor(item), pale(),
+                    OnGlass.TARGET_BODY_TEXT));
+        }
+        chip.setBackground(chipBackground(item, selected));
+    }
+
     /** The corner the bar's chips wear, shared with the badge and the lens icons. */
     public void setChipRadiusPx(float radiusPx) {
         if (mChipRadiusPx == radiusPx) return;
@@ -90,6 +227,7 @@ public final class StatusBarWindowColumn extends ScrollView {
     }
 
     private void rebuild() {
+        measureBand();
         mStack.removeAllViews();
         int size = Math.round(CHIP_SIZE_DP * density());
         int gap = Math.round(CHIP_GAP_DP * density());
@@ -107,11 +245,7 @@ public final class StatusBarWindowColumn extends ScrollView {
                 getContext(), item.agentState);
             chip.setContentDescription(agentWord == null ? item.spokenLabel
                 : item.spokenLabel + " · " + agentWord + ".");
-            chip.setTextColor(selected
-                ? MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnAccentContainer,
-                    ContextCompat.getColor(getContext(), R.color.termux_on_surface))
-                : ColorUtils.setAlphaComponent(markColor(item), 210));
-            chip.setBackground(chipBackground(item, selected));
+            dress(chip, item, selected);
             chip.setOnClickListener(v -> {
                 if (mListener != null) mListener.onWindowSelected(index);
             });
@@ -165,17 +299,30 @@ public final class StatusBarWindowColumn extends ScrollView {
         float radius = mChipRadiusPx >= 0f ? mChipRadiusPx : 8f * density();
         shape.setCornerRadius(Math.min(radius, CHIP_SIZE_DP * density() / 2f));
         int mark = markColor(item);
-        if (selected) {
-            shape.setColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(mAccent, 74)));
-            shape.setStroke(Math.round(density()), ColorUtils.setAlphaComponent(mAccent, 190));
-        } else {
-            shape.setColor(ColorStateList.valueOf(Color.TRANSPARENT));
-            shape.setStroke(Math.round(density()),
-                ColorUtils.setAlphaComponent(mark, item.busy || item.attention
-                    || item.agentState == com.termux.app.terminal.AgentStatus.State.BLOCKED
-                    || item.agentState == com.termux.app.terminal.AgentStatus.State.WORKING
-                    ? 170 : 70));
+        WindowChipInk.Palette glass = mGlassPalette;
+        if (glass == null) {
+            if (selected) {
+                shape.setColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(mAccent, 74)));
+                shape.setStroke(Math.round(density()), ColorUtils.setAlphaComponent(mAccent, 190));
+            } else {
+                shape.setColor(ColorStateList.valueOf(Color.TRANSPARENT));
+                shape.setStroke(Math.round(density()),
+                    ColorUtils.setAlphaComponent(mark, item.busy || item.attention
+                        || item.agentState == com.termux.app.terminal.AgentStatus.State.BLOCKED
+                        || item.agentState == com.termux.app.terminal.AgentStatus.State.WORKING
+                        ? 170 : 70));
+            }
+            return shape;
         }
+        // The rim is the whole chip here — there is no room for the row's corner dots, so working,
+        // asking and finished are the rim's colour. That makes it the only carrier of its own
+        // fact, which is the graphics floor; the two alphas that used to separate an active rim
+        // from an idle one are gone, because the mark's own hue already says which is which and
+        // neither of them may be the one that fails to read.
+        shape.setColor(ColorStateList.valueOf(selected ? glass.selectedFill : glass.restingFill));
+        shape.setStroke(Math.round(density()), selected
+            ? glass.selectedStroke
+            : WindowChipInk.towardPolarity(glass.band, mark, pale(), OnGlass.TARGET_LARGE_TEXT));
         return shape;
     }
 
