@@ -105,13 +105,15 @@ public final class MaterialTerminalColorScheme {
      *
      * <p>Not every ANSI slot is text. Black and white are what a TUI fills a panel with, and a floor
      * that treats them as glyph colours lifts both to the same mid tone as everything else — which is
-     * how ANSI black stopped being dark and started matching bright black. So slots 0 and 7 are
-     * exempt; slot 8 keeps a fixed 3.0:1 because it really is text — dim text, the one thing the
-     * level must not be allowed to brighten into ordinary text; the rest take the level's ratio.
+     * how ANSI black stopped being dark and started matching bright black. So slots 0, 7 and 15 are
+     * exempt — bright white is a fill exactly as much as white is, and holding it to a text ratio is
+     * what used to drag it down into the dark end of the neutral ladder; slot 8 keeps a fixed 3.0:1
+     * because it really is text — dim text, the one thing the level must not be allowed to brighten
+     * into ordinary text; the rest take the level's ratio.
      */
     @VisibleForTesting
     static double ansiFloor(int slot, @NonNull TerminalContrastLevel level) {
-        if (slot == 0 || slot == 7) return 0d;
+        if (slot == 0 || slot == 7 || slot == 15) return 0d;
         if (slot == 8) return 3.0d;
         return level.ansiRatio;
     }
@@ -155,11 +157,15 @@ public final class MaterialTerminalColorScheme {
             slots.setProperty("color" + slot, hex(Hct.from(hue, chroma, normalTone).toInt()));
             slots.setProperty("color" + (slot + 8), hex(Hct.from(hue, chroma, brightTone).toInt()));
         }
+        // One ladder, both modes: black, bright black, white, bright white climb in tone whichever
+        // way round the background is. The light column used to end at tone 10, which made bright
+        // white the darkest neutral of the four and collapsed "black on bright white" into one
+        // colour; the accent bands above still flip with the background, the neutrals do not.
         double neutral = Math.min(neutralChroma, NEUTRAL_CHROMA_MAX);
         slots.setProperty("color0", hex(Hct.from(neutralHue, neutral, 25d).toInt()));
         slots.setProperty("color8", hex(Hct.from(neutralHue, neutral, dark ? 45d : 50d).toInt()));
-        slots.setProperty("color7", hex(Hct.from(neutralHue, neutral, dark ? 80d : 65d).toInt()));
-        slots.setProperty("color15", hex(Hct.from(neutralHue, neutral, dark ? 96d : 10d).toInt()));
+        slots.setProperty("color7", hex(Hct.from(neutralHue, neutral, dark ? 80d : 75d).toInt()));
+        slots.setProperty("color15", hex(Hct.from(neutralHue, neutral, dark ? 96d : 92d).toInt()));
         return slots;
     }
 
