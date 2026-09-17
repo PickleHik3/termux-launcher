@@ -303,6 +303,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** Progress the current drag started from; non-zero only when catching a settling plane. */
     private float mGrabProgress;
 
+    /** True once {@link #warmUp()} has built and bound the grid; it runs at most once per process. */
+    private boolean mWarmed;
+    /** A warm-up waiting on the catalogue or on the host's geometry; one retry is in flight. */
+    private boolean mWarmDeferred;
+
     private boolean mFrameScheduled;
     private long mLastFrameTimeNanos;
 
@@ -947,6 +952,84 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The plane asks the grid before it claims anything: see AppDrawerPlaneView.CloseDragGate.
         plane.setCloseDragGate(content);
         mContent = content;
+    }
+
+    /**
+     * Builds, binds and lays the grid out ahead of the first pull, off the touch path.
+     *
+     * <p>{@link #buildContent} charged the whole content tree to the frame the first drag began on:
+     * a {@code RecyclerView}'s first layout and first bind of sixteen cells, measured at 95ms of
+     * traversal inside a 139ms frame on a 120Hz phone. Nothing about that work needs a finger on the
+     * glass, so the launcher pays it once it has been up and quiet for a moment instead — the same
+     * tree, at the same geometry, in a frame nobody is waiting on.
+     *
+     * <p>Invisible by construction: {@code app_drawer_host} stays {@code INVISIBLE} and the plane's
+     * content host stays at alpha 0, so the tree is measured and laid out (only {@code GONE} would
+     * skip that) while nothing of it is drawn, takes a touch or reaches accessibility. The glass
+     * material, the backdrop blur and the wallpaper frost are {@link #prepareOverlay}'s and are not
+     * touched here.
+     *
+     * <p>Runs at most once. A drawer that has already been pulled — the plane exists — is left
+     * alone, and so is one that is disabled, one whose host has not laid out, and one whose
+     * catalogue has not loaded: binding an empty grid would warm the wrong layout. The last two
+     * defer once and come back rather than giving up.
+     *
+     * @return true when this call built the content; false when it was refused or deferred, in
+     *     which case the first pull runs exactly as it always has.
+     */
+    public boolean warmUp() {
+        // The plane existing means a pull has already built everything this would have built.
+        if (mWarmed || mPlane != null || mContent != null || mEngaged || mOpen) return false;
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        if (preferences == null || !preferences.isAppLauncherDrawerEnabled()) return false;
+        // The grid borrows its icons, tint and launch ladder from the dock; before that exists
+        // there is nothing to warm.
+        if (mHost.suggestionBar() == null) return false;
+        View host = mHost.findView(R.id.app_drawer_host);
+        if (host == null) return false;
+        if (host.getWidth() <= 0 || host.getHeight() <= 0) return deferWarmUp(host);
+        LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(mHost.context());
+        if (!provider.hasLoadedApps()) {
+            if (mWarmDeferred) return false;
+            mWarmDeferred = true;
+            provider.warmAsync(this::retryWarmUp);
+            return false;
+        }
+        if (!bindViews()) return false;
+        AppDrawerPlaneView plane = mPlane;
+        AppDrawerContentView content = mContent;
+        if (plane == null || content == null) return false;
+        // Resolved exactly as captureGeometry resolves it, so the layout this pays for is the layout
+        // the first pull would have paid for: the column count is a function of the plane's width,
+        // and a grid warmed at the wrong width would be re-laid out on the touch frame anyway.
+        mRoundedStyle = mHost.dockLayout().capsule;
+        mOpenRadiusPx = resolveOpenRadiusPx();
+        mOpenRect = resolveOpenRect();
+        if (mOpenRect == null) return false;
+        prepareContent(plane);
+        // prepareContent ends by showing the content for an open that is not happening. Put it back
+        // to what buildContent left it at — the measure and layout happen either way, and the open
+        // path is the only thing allowed to show it.
+        content.setVisibility(View.INVISIBLE);
+        mWarmed = true;
+        return true;
+    }
+
+    /** One retry, when the host has been inflated but not yet laid out. */
+    private boolean deferWarmUp(@NonNull View host) {
+        if (mWarmDeferred) return false;
+        mWarmDeferred = true;
+        host.post(this::retryWarmUp);
+        return false;
+    }
+
+    /**
+     * The deferred attempt. Every guard is re-read: a drawer opened, disabled or torn down while
+     * the catalogue was loading refuses here exactly as it would have refused on the first call.
+     */
+    private void retryWarmUp() {
+        mWarmDeferred = false;
+        warmUp();
     }
 
     /**

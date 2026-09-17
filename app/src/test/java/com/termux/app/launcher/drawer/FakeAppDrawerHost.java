@@ -20,6 +20,11 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
 
     @NonNull private final Context context;
     @Nullable final TermuxAppSharedPreferences preferences;
+    /** The inflated tree {@link #findView} looks ids up in; null keeps the view-less host. */
+    @Nullable View viewRoot;
+    /** Handed out by {@link #dockLayout()}; null keeps the "no plane, no dock" assertion. */
+    @Nullable DockLayout dockLayout;
+    @Nullable SuggestionBarView suggestionBar;
     @Nullable Boolean interceptorActive;
     int flushes;
 
@@ -32,8 +37,9 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return context;
     }
 
+    @SuppressWarnings("unchecked")
     @Nullable @Override public <T extends View> T findView(int viewId) {
-        return null;
+        return viewRoot == null ? null : (T) viewRoot.findViewById(viewId);
     }
 
     @Nullable @Override public TermuxAppSharedPreferences preferences() {
@@ -41,11 +47,12 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
     }
 
     @NonNull @Override public DockLayout dockLayout() {
+        if (dockLayout != null) return dockLayout;
         throw new AssertionError("no plane, no dock geometry to capture");
     }
 
     @Nullable @Override public SuggestionBarView suggestionBar() {
-        return null;
+        return suggestionBar;
     }
 
     @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
