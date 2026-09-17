@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A row that is on or off rather than a number — the terminal's frame. The same three columns the
+     number rows stand in, with the switch leading in the control column rather than pushed to the
+     row's trailing edge, so it lines up with the sliders' handles at rest. The whole row is the
+     touch target. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:minHeight="48dp"
+        android:orientation="horizontal"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/editor_shell_row_label"
+            android:layout_width="96dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?attr/termuxColorOnSurface"
+            android:textSize="12.5sp"
+            app:autoSizeMaxTextSize="12.5sp"
+            app:autoSizeMinTextSize="10sp"
+            app:autoSizeStepGranularity="0.5sp"
+            app:autoSizeTextType="uniform" />
+
+        <com.termux.app.editorshell.EditorShellControlHost
+            android:id="@+id/editor_shell_row_control"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1">
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/editor_shell_row_switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </com.termux.app.editorshell.EditorShellControlHost>
+
+        <Space
+            android:id="@+id/editor_shell_row_value"
+            android:layout_width="52dp"
+            android:layout_height="1dp"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/editor_shell_row_chip"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:text="@string/termux_surface_tuning_link_detached"
+            android:textColor="?attr/termuxColorPrimary"
+            android:textSize="12sp"
+            android:visibility="invisible" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/editor_shell_row_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</LinearLayout>

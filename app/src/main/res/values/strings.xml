@@ -1247,7 +1247,7 @@
                      wears the palette glyph again for all of them; ✕ only puts the card away. -->
                 <string name="termux_surface_editor_open_look">Style all surfaces</string>
                 <string name="termux_surface_editor_all_surfaces">All surfaces</string>
-                <string name="surface_editor_global_heading">Global</string>
+                <string name="surface_editor_global_heading">All surfaces</string>
                 <string name="termux_surface_editor_hide_panel">Hide panel</string>
                 <string name="termux_surface_editor_action_chevron">›</string>
                 <string name="termux_surface_editor_select_description">Edit %1$s</string>
@@ -1256,6 +1256,13 @@
                 <string name="termux_surface_editor_background_opacity">BG opacity</string>
                 <string name="termux_surface_editor_wallpaper_dim">Wallpaper</string>
 
+                <!-- The two questions that shape everything, one per line. One plain word each:
+                     they name what the row changes, not how it is composited. -->
+                <string name="termux_surface_editor_shape">Shape</string>
+                <string name="termux_surface_editor_material">Material</string>
+                <!-- Two more section names, one word each, naming the thing being changed. -->
+                <string name="termux_surface_editor_section_keys">Keys</string>
+                <string name="termux_surface_editor_section_indicator">Indicator</string>
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>
@@ -1309,6 +1316,9 @@
 
                 <!-- The Layout editor: the miniature of one place, and the way out of it. -->
                 <string name="termux_layout_editor_title">Layout</string>
+                <!-- The chooser above the miniature. The header already names the place, so this
+                     row only has to say which of its two layouts is on the picture. -->
+                <string name="termux_layout_editor_orientation">Orientation</string>
                 <string name="termux_layout_editor_revert">Undo changes</string>
                 <string name="termux_layout_editor_unsaved_message">Discard them and put everything back where it was when you opened the editor, or save and close?</string>
                 <string name="termux_layout_editor_narrow_notice">With bars down the side there is not much room left.</string>

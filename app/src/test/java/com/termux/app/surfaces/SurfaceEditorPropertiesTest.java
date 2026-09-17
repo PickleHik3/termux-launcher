@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import com.termux.app.surfaces.SurfaceEditorProperties.Control;
 import com.termux.app.surfaces.SurfaceEditorProperties.Kind;
+import com.termux.app.surfaces.SurfaceEditorProperties.Section;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -193,5 +194,89 @@ public class SurfaceEditorPropertiesTest {
             SurfaceEditorProperties.ID_ALL_CORNERS));
         assertNull(SurfaceEditorProperties.find(SurfaceSlot.STATUS,
             SurfaceEditorProperties.ID_APPS));
+    }
+
+    // --------------------------------------------------------------------------- the sections
+
+    @Test
+    public void everySharedRowStandsUnderTheSectionItBelongsTo() {
+        assertSection(null, SurfaceEditorProperties.ID_ALL_OPACITY, Section.MATERIAL);
+        assertSection(null, SurfaceEditorProperties.ID_ALL_BLUR, Section.MATERIAL);
+        assertSection(null, SurfaceEditorProperties.ID_ALL_GRAIN, Section.MATERIAL);
+        assertSection(null, SurfaceEditorProperties.ID_ALL_CORNERS, Section.SHAPE);
+        assertSection(null, SurfaceEditorProperties.ID_ALL_MARGIN, Section.SHAPE);
+        assertSection(null, SurfaceEditorProperties.ID_WALLPAPER, Section.WALLPAPER);
+    }
+
+    @Test
+    public void eachSurfaceKeepsMaterialAndShapeAndAddsOneSectionOfItsOwn() {
+        assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE, Section.APPS),
+            sectionsOf(SurfaceEditorProperties.panel(SurfaceSlot.DOCK)));
+        assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE, Section.KEYS),
+            sectionsOf(SurfaceEditorProperties.panel(SurfaceSlot.KEYBOARD)));
+        assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE, Section.INDICATOR),
+            sectionsOf(SurfaceEditorProperties.panel(SurfaceSlot.STATUS)));
+        assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE, Section.FRAME),
+            sectionsOf(SurfaceEditorProperties.panel(SurfaceSlot.CANVAS)));
+        assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE, Section.WALLPAPER),
+            sectionsOf(SurfaceEditorProperties.global()));
+    }
+
+    @Test
+    public void everyPanelIsHandedOverAlreadyInSectionOrder() {
+        // The editor walks the list once and adds a heading each time the section changes, so a
+        // section may never come back after another one has started.
+        for (List<Control> panel : panels()) {
+            Set<Section> seen = new HashSet<>();
+            Section current = null;
+            for (Control control : panel) {
+                if (control.section == current)
+                    continue;
+                assertFalse(control.id + " reopens " + control.section,
+                    seen.contains(control.section));
+                seen.add(control.section);
+                current = control.section;
+            }
+        }
+    }
+
+    @Test
+    public void theSharedOrderStillHoldsInsideASection() {
+        // Section-major sorting must not disturb the one thing every panel agreed on: opacity,
+        // blur, grain, then corners, margin.
+        for (List<Control> panel : panels()) {
+            Section current = null;
+            int previousRank = -1;
+            for (Control control : panel) {
+                if (control.section != current) {
+                    current = control.section;
+                    previousRank = -1;
+                }
+                int rank = SurfaceEditorProperties.rankOf(control.id);
+                assertTrue(control.id + " sorts before its neighbour", rank >= previousRank);
+                previousRank = rank;
+            }
+        }
+    }
+
+    @Test
+    public void everySectionHasAName() {
+        for (Section section : Section.values())
+            assertTrue(section + " has no title", section.titleRes != 0);
+    }
+
+    private static void assertSection(SurfaceSlot slot, String id, Section expected) {
+        Control control = SurfaceEditorProperties.find(slot, id);
+        assertNotNull(id + " is not on that panel", control);
+        assertEquals(id, expected, control.section);
+    }
+
+    private static List<Section> sectionsOf(List<Control> panel) {
+        List<Section> sections = new ArrayList<>();
+        for (Control control : panel) {
+            if (sections.isEmpty() || sections.get(sections.size() - 1) != control.section)
+                sections.add(control.section);
+        }
+        return sections;
     }
 }

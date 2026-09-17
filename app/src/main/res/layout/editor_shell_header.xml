@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The editor shell's header, included by both editors' cards.
+
+     It names what is being edited and carries every way out of the card, in one order: save the
+     look, put it back, Discard, Done, close. Done is the only commit and the only filled control in
+     the whole card; close, where an editor has one, only puts the card down and asks nothing. Each
+     editor fills the slots it has and leaves the rest gone — the slot set is per editor, the sizes,
+     the order and the spacing are the shell's.
+
+     The bar stands at 56dp and comes down to 44dp where the card has little height to spend; both
+     are set in code from EditorShellMetrics, and every glyph keeps a 48dp target through a touch
+     delegate whichever it is. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/editor_shell_header"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:baselineAligned="false"
+    android:gravity="center_vertical"
+    android:minHeight="56dp"
+    android:orientation="horizontal">
+
+    <!-- The surface's glyph, or the palette on the shared layer. Gone where the title stands alone.
+         Set in code. -->
+    <ImageView
+        android:id="@+id/editor_shell_header_glyph"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="8dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/editor_shell_header_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center_vertical"
+        android:maxLines="1"
+        android:textColor="?attr/termuxColorOnSurface"
+        android:textSize="15sp" />
+
+    <!-- Keeping the look: the least-reached-for action, so it sits furthest from Done. -->
+    <ImageView
+        android:id="@+id/editor_shell_header_save"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="10dp"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+    <!-- Both of these exist only while there is something to lose, which is also how the header
+         says the edit is unsaved. -->
+    <ImageView
+        android:id="@+id/editor_shell_header_revert"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="4dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="10dp"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/editor_shell_header_discard"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_marginStart="4dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:gravity="center"
+        android:paddingHorizontal="8dp"
+        android:text="@string/termux_surface_tuning_unsaved_discard"
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/editor_shell_header_done"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/dock_tuning_done_pill"
+        android:contentDescription="@string/termux_dock_tuning_done"
+        android:padding="10dp"
+        android:scaleType="fitCenter" />
+
+    <ImageView
+        android:id="@+id/editor_shell_header_close"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="4dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/termux_surface_editor_hide_panel"
+        android:padding="11dp"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+</LinearLayout>

@@ -5,9 +5,11 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -25,6 +27,10 @@ import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.termux.R;
+import com.termux.app.editorshell.EditorShellControlHost;
+import com.termux.app.editorshell.EditorShellHeader;
+import com.termux.app.editorshell.EditorShellMetrics;
+import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.PlaceArrangeModel;
@@ -35,7 +41,9 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The Layout editor: a miniature of the place the user is looking at, parked over the live place,
@@ -104,11 +112,17 @@ public final class LayoutEditorController {
         final ViewGroup host;
         /** The card itself: a scroller, so a screen too short for the column still reaches it. */
         final ViewGroup root;
+        final View header;
+        final TextView title;
         final ImageView revert;
         final TextView discard;
         final ImageView done;
+        final ViewGroup chooserSlot;
+        final View orientationRow;
+        final EditorShellControlHost orientationHost;
         final MaterialButtonToggleGroup orientation;
         final TextView orientationNotice;
+        final LinearLayout body;
         final PlaceMiniatureView miniature;
         final TextView narrowNotice;
         final ViewGroup rowsHost;
@@ -116,20 +130,27 @@ public final class LayoutEditorController {
         Card(ViewGroup host, ViewGroup root) {
             this.host = host;
             this.root = root;
-            revert = root.findViewById(R.id.layout_editor_revert);
-            discard = root.findViewById(R.id.layout_editor_discard);
-            done = root.findViewById(R.id.layout_editor_done);
+            header = root.findViewById(R.id.editor_shell_header);
+            title = root.findViewById(R.id.editor_shell_header_title);
+            revert = root.findViewById(R.id.editor_shell_header_revert);
+            discard = root.findViewById(R.id.editor_shell_header_discard);
+            done = root.findViewById(R.id.editor_shell_header_done);
+            chooserSlot = root.findViewById(R.id.editor_shell_chooser_slot);
+            orientationRow = root.findViewById(R.id.layout_editor_orientation_row);
+            orientationHost = root.findViewById(R.id.layout_editor_orientation_host);
             orientation = root.findViewById(R.id.layout_editor_orientation);
             orientationNotice = root.findViewById(R.id.layout_editor_orientation_notice);
+            body = root.findViewById(R.id.layout_editor_body);
             miniature = root.findViewById(R.id.layout_editor_miniature);
             narrowNotice = root.findViewById(R.id.layout_editor_narrow_notice);
             rowsHost = root.findViewById(R.id.layout_editor_rows_host);
         }
 
         boolean complete() {
-            return revert != null && discard != null && done != null && orientation != null
-                && orientationNotice != null && miniature != null && narrowNotice != null
-                && rowsHost != null;
+            return header != null && title != null && revert != null && discard != null
+                && done != null && chooserSlot != null && orientationRow != null
+                && orientationHost != null && orientation != null && orientationNotice != null
+                && body != null && miniature != null && narrowNotice != null && rowsHost != null;
         }
     }
 
@@ -222,6 +243,10 @@ public final class LayoutEditorController {
         card.root.setBackground(cardBackground());
         setIcon(card.revert, R.drawable.ic_symbol_restart, false);
         setIcon(card.done, R.drawable.ic_symbol_check, true);
+        card.revert.setContentDescription(
+            mHost.context().getString(R.string.termux_layout_editor_revert));
+        // Layout has no way to save a look and no ✕: its ✓ is the only way out that keeps.
+        card.orientationHost.setSegmentCount(card.orientation.getChildCount());
 
         card.revert.setOnClickListener(view -> revertToEntryState());
         card.discard.setOnClickListener(view -> {
@@ -269,6 +294,8 @@ public final class LayoutEditorController {
         LayoutEditorPlan plan = mPlan;
         if (card == null || plan == null)
             return;
+        // The header names what is being edited, which here is the place.
+        card.title.setText(placeLabel(plan.place()));
         mRestatingToggle = true;
         card.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
@@ -314,17 +341,57 @@ public final class LayoutEditorController {
         card.discard.setVisibility(dirty);
     }
 
-    /** Sizes the canvas to the frame the shown orientation asks for. */
+    /**
+     * Sizes the canvas to the frame the shown orientation asks for, and decides whether the rows
+     * stand beside it or beneath it.
+     *
+     * <p>A portrait miniature on a landscape screen was a ~150px frame in a 1300px card with two
+     * ~550px empty gutters around it and the rows clipped off the bottom. Beside it there is room
+     * for a whole row of controls, and the frame gets the body's whole height instead of the body
+     * minus the floor the rows are owed.
+     */
     private void applyCanvasHeight(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
         DisplayMetrics metrics = mHost.context().getResources().getDisplayMetrics();
-        int chromePx = Math.round(dpToPx(CARD_CHROME_DP));
+        float density = metrics.density;
+        EditorShellHeader.apply(card.header, metrics.heightPixels);
         int floorPx = Math.round(dpToPx(ROWS_FLOOR_DP));
-        int height = LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(),
-            metrics.widthPixels, metrics.heightPixels,
-            PlaceMiniatureView.frameAspect(plan.shownOrientation()),
-            Math.round(card.miniature.reservedHeightPx()), chromePx + floorPx);
-        mRowsCapPx = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
-            chromePx, floorPx);
+        int chooserPx = Math.max(card.orientationRow.getHeight(),
+            Math.round(dpToPx(EditorShellMetrics.CHOOSER_DP)));
+        int chromePx = cardChromePx(metrics.heightPixels, chooserPx,
+            card.root.getPaddingTop() + card.root.getPaddingBottom(), density);
+        float frameAspect = PlaceMiniatureView.frameAspect(plan.shownOrientation());
+        int reservedPx = Math.round(card.miniature.reservedHeightPx());
+
+        int naturalPx = LayoutEditorPlan.miniatureNaturalWidthPx(plan.shownOrientation(),
+            metrics.widthPixels, metrics.heightPixels, frameAspect);
+        EditorShellMetrics.PaneSplit split = EditorShellMetrics.paneSplit(
+            EditorShellMetrics.contentWidthPx(metrics.widthPixels, density), naturalPx, density);
+        boolean twoPanes = rowsBesideMiniature(naturalPx, split, density);
+        applyCardWidth(card, metrics.widthPixels, split, density, twoPanes);
+
+        int bodyPx = Math.max(floorPx, metrics.heightPixels - chromePx);
+        int height = twoPanes
+            ? LayoutEditorPlan.miniatureHeightInPanePx(frameAspect, reservedPx,
+                split.leadingWidthPx, bodyPx)
+            : LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(), metrics.widthPixels,
+                metrics.heightPixels, frameAspect, reservedPx, chromePx + floorPx);
+        applyBodyPanes(card, split, twoPanes, height);
+
+        int available = twoPanes ? bodyPx
+            : LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height, chromePx, floorPx);
+        boolean pinned = EditorShellMetrics.chooserPinned(available, density);
+        EditorShellHeader.applyChooserPin(card.orientationRow, card.chooserSlot, mRows, pinned);
+        if (!pinned && !twoPanes)
+            available = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
+                chromePx - chooserPx, floorPx);
+        mRowsCapPx = available;
+        if (mRows != null && mRows.getChildCount() > 0) {
+            View first = mRows.getChildAt(0);
+            int pitch = first.getHeight() > 0 ? first.getHeight()
+                : Math.round(dpToPx(EditorShellMetrics.ROW_MIN_HEIGHT_DP));
+            mRowsCapPx = EditorShellMetrics.bodyCap(available, mRows.getHeight(), pitch,
+                Math.round(dpToPx(EditorShellMetrics.PEEK_DP))).capPx;
+        }
         if (mRowsScroller != null)
             mRowsScroller.requestLayout();
         ViewGroup.LayoutParams params = card.miniature.getLayoutParams();
@@ -334,15 +401,97 @@ public final class LayoutEditorController {
         card.miniature.setLayoutParams(params);
     }
 
+    /**
+     * Whether the rows can stand beside the miniature rather than beneath it.
+     *
+     * <p>Two things have to be true: the frame has to fit in the leading pane at the width it
+     * asked for — a frame squeezed into half the body is a frame that has been cut — and the
+     * trailing pane has to hold a whole row. A landscape frame is as wide as the screen, so it
+     * fails the first and the body falls back to one column, which is the case P1 bounds.
+     */
+    @VisibleForTesting
+    static boolean rowsBesideMiniature(int naturalWidthPx,
+                                       @NonNull EditorShellMetrics.PaneSplit split,
+                                       float density) {
+        if (split.paneCount < 2)
+            return false;
+        int asked = naturalWidthPx + EditorShellMetrics.px(
+            EditorShellMetrics.LEADING_PANE_AIR_DP, density);
+        return asked <= split.leadingWidthPx
+            && split.trailingWidthPx >= EditorShellMetrics.px(
+                EditorShellMetrics.ROW_MIN_INNER_DP, density);
+    }
+
+    /** Miniature and rows side by side, or one under the other. */
+    private void applyBodyPanes(@NonNull Card card, @NonNull EditorShellMetrics.PaneSplit split,
+                                boolean twoPanes, int miniatureHeightPx) {
+        card.body.setOrientation(twoPanes
+            ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        setPane(card.miniature, twoPanes ? split.leadingWidthPx
+            : ViewGroup.LayoutParams.MATCH_PARENT, 0, twoPanes ? miniatureHeightPx : -1);
+        setPane(card.rowsHost, twoPanes ? split.trailingWidthPx
+            : ViewGroup.LayoutParams.MATCH_PARENT, twoPanes ? split.gutterPx : 0, -1);
+    }
+
+    private static void setPane(@NonNull View view, int widthPx, int startMarginPx,
+                                int heightPx) {
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        if (!(params instanceof LinearLayout.LayoutParams))
+            return;
+        LinearLayout.LayoutParams pane = (LinearLayout.LayoutParams) params;
+        pane.width = widthPx;
+        pane.setMarginStart(startMarginPx);
+        if (heightPx >= 0)
+            pane.height = heightPx;
+        view.setLayoutParams(pane);
+    }
+
+    /**
+     * The card stops inheriting the screen's width. What is left over is symmetric air with the
+     * live place showing through it, which is the thing the editor is a picture of.
+     */
+    private void applyCardWidth(@NonNull Card card, int screenWidthPx,
+                                @NonNull EditorShellMetrics.PaneSplit split, float density,
+                                boolean twoPanes) {
+        // One column wide enough for one whole row, or two panes and the gutter between them.
+        EditorShellMetrics.PaneSplit shown = twoPanes ? split
+            : EditorShellMetrics.paneSplit(Math.min(
+                EditorShellMetrics.contentWidthPx(screenWidthPx, density),
+                EditorShellMetrics.px(EditorShellMetrics.ROW_MAX_INNER_DP, density)), 0, density);
+        int width = EditorShellMetrics.cardWidthPx(screenWidthPx, shown, density);
+        ViewGroup.LayoutParams params = card.root.getLayoutParams();
+        if (params == null || params.width == width)
+            return;
+        params.width = width;
+        if (params instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
+            frame.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        }
+        card.root.setLayoutParams(params);
+    }
+
     // --------------------------------------------------------------------------------- the rows
 
     /** The four segment slots a pill row declares; the ones a value set does not use come off. */
     private static final int[] SEGMENT_IDS = {
-        R.id.layout_editor_row_segment_0, R.id.layout_editor_row_segment_1,
-        R.id.layout_editor_row_segment_2, R.id.layout_editor_row_segment_3};
+        R.id.editor_shell_row_segment_0, R.id.editor_shell_row_segment_1,
+        R.id.editor_shell_row_segment_2, R.id.editor_shell_row_segment_3};
 
-    /** The header, the toggle and the card's own padding: everything that is not the canvas. */
-    @VisibleForTesting static final float CARD_CHROME_DP = 132f;
+    /** The two notice lines and the gaps the miniature stands between. */
+    @VisibleForTesting static final float NOTICES_AND_GAPS_DP = 56f;
+
+    /**
+     * Everything on the card that is not the canvas or the rows, at the height the card has.
+     *
+     * <p>Declared rather than derived: the rows' cap is what sets the scroller's height, so a
+     * chrome read back by subtracting the scroller from the card is a layout-pass loop that never
+     * settles once the cap is quantised to whole rows.
+     */
+    @VisibleForTesting
+    static int cardChromePx(int cardHeightPx, int chooserPx, int paddingPx, float density) {
+        return EditorShellMetrics.headerHeightPx(cardHeightPx, density) + chooserPx + paddingPx
+            + EditorShellMetrics.px(NOTICES_AND_GAPS_DP, density);
+    }
     /** The rows keep at least this much even where the canvas would have taken it all. */
     @VisibleForTesting static final float ROWS_FLOOR_DP = 96f;
 
@@ -371,7 +520,8 @@ public final class LayoutEditorController {
         Element heading = null;
         for (LayoutEditorPlan.Row row : plan.rows()) {
             if (row.element != heading) {
-                rows.addView(sectionTitle(context, row.element));
+                EditorShellRows.addSection(context, rows, headingRes(row.element),
+                    heading == null);
                 heading = row.element;
             }
             if (row.group instanceof PlaceArrangeModel.Pills)
@@ -379,7 +529,27 @@ public final class LayoutEditorController {
             else if (row.group instanceof PlaceArrangeModel.Track)
                 addTrackRow(context, rows, row, (PlaceArrangeModel.Track) row.group);
         }
-        if (mRowsScroller != null) mRowsScroller.scrollTo(0, 0);
+        restoreScroll(plan);
+    }
+
+    /**
+     * Where each place-and-orientation was scrolled to. Flipping the toggle and flipping it back
+     * comes back to where the user was, rather than to the top of a list they had scrolled past.
+     */
+    private final Map<String, Integer> mPanelScroll = new LinkedHashMap<>();
+
+    private void restoreScroll(@NonNull LayoutEditorPlan plan) {
+        NestedScrollView scroller = mRowsScroller;
+        if (scroller == null)
+            return;
+        if (mRowsKey != null)
+            mPanelScroll.put(mRowsKey, scroller.getScrollY());
+        String key = plan.place().name() + '.' + plan.shownOrientation().name();
+        Integer remembered = mPanelScroll.get(key);
+        int target = remembered == null ? 0 : remembered;
+        scroller.scrollTo(0, 0);
+        if (target > 0)
+            scroller.post(() -> scroller.scrollTo(0, target));
     }
 
     /** The column the rows stand in, inside a scroller that grows only to the room it was left. */
@@ -390,18 +560,16 @@ public final class LayoutEditorController {
         Context context = mHost.context();
         // Nested rather than a plain ScrollView: the card is a scroller too, and a list that has
         // reached its end has to hand the rest of the drag on rather than swallow it.
-        NestedScrollView scroller = new NestedScrollView(context) {
+        NestedScrollView scroller = new NestedScrollView(EditorShellRows.scrollerContext(context)) {
             @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
                     Math.max(1, mRowsCapPx), View.MeasureSpec.AT_MOST));
             }
         };
-        scroller.setVerticalScrollBarEnabled(false);
         scroller.setClipToPadding(false);
-        // A list cut short by a tall canvas has only the fade to say so; one that simply stops at
-        // the card's edge reads as the whole list.
-        scroller.setVerticalFadingEdgeEnabled(true);
-        scroller.setFadingEdgeLength(Math.round(dpToPx(18)));
+        // A list cut short by a tall canvas needs the fade and the scrollbar to say so; one that
+        // simply stops at the card's edge reads as the whole list.
+        EditorShellRows.applyBodyScroller(scroller);
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         scroller.addView(rows, new ViewGroup.LayoutParams(
@@ -413,22 +581,14 @@ public final class LayoutEditorController {
         return rows;
     }
 
-    /** What the rows under it are about: the dock, the keyboard, or Home's grid. */
-    @NonNull
-    private TextView sectionTitle(@NonNull Context context, @NonNull Element element) {
-        TextView title = new TextView(context);
-        title.setText(headingRes(element));
-        title.setTextSize(11f);
-        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
-        title.setTextColor(mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            R.color.termux_on_surface_variant));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.topMargin = Math.round(dpToPx(4));
-        params.bottomMargin = Math.round(dpToPx(2));
-        title.setLayoutParams(params);
-        return title;
+    /** The name a place is known by on the wall, which is what the header says it is editing. */
+    @StringRes
+    private static int placeLabel(@NonNull PaneWallPage place) {
+        switch (place) {
+            case WIDGETS: return R.string.termux_wall_tile_widgets;
+            case DISPLAY: return R.string.termux_wall_tile_display;
+            default: return R.string.termux_wall_tile_terminal;
+        }
     }
 
     @StringRes
@@ -452,9 +612,10 @@ public final class LayoutEditorController {
                              @NonNull LayoutEditorPlan.Row row,
                              @NonNull PlaceArrangeModel.Pills pills) {
         View view = LayoutInflater.from(context)
-            .inflate(R.layout.layout_editor_pills_row, into, false);
-        ((TextView) view.findViewById(R.id.layout_editor_row_label)).setText(pills.labelRes);
-        MaterialButtonToggleGroup group = view.findViewById(R.id.layout_editor_row_pills);
+            .inflate(R.layout.editor_shell_pills_row, into, false);
+        EditorShellRows.apply(view);
+        ((TextView) view.findViewById(R.id.editor_shell_row_label)).setText(pills.labelRes);
+        MaterialButtonToggleGroup group = view.findViewById(R.id.editor_shell_row_pills);
         if (group == null)
             return;
         final int count = Math.min(pills.values.length, SEGMENT_IDS.length);
@@ -462,6 +623,10 @@ public final class LayoutEditorController {
             View extra = view.findViewById(SEGMENT_IDS[i]);
             if (extra != null) group.removeView(extra);
         }
+        // After the unused slots come off, so the widths are for the segments actually offered.
+        EditorShellControlHost host = view.findViewById(R.id.editor_shell_row_control);
+        if (host != null)
+            host.setSegmentCount(count);
         for (int i = 0; i < count; i++) {
             Button segment = view.findViewById(SEGMENT_IDS[i]);
             if (segment != null) segment.setText(pills.labelResIds[i]);
@@ -508,10 +673,11 @@ public final class LayoutEditorController {
                              @NonNull LayoutEditorPlan.Row row,
                              @NonNull PlaceArrangeModel.Track track) {
         View view = LayoutInflater.from(context)
-            .inflate(R.layout.layout_editor_slider_row, into, false);
-        ((TextView) view.findViewById(R.id.layout_editor_row_label)).setText(track.labelRes);
-        SeekBar slider = view.findViewById(R.id.layout_editor_row_slider);
-        TextView value = view.findViewById(R.id.layout_editor_row_value);
+            .inflate(R.layout.editor_shell_row, into, false);
+        EditorShellRows.apply(view);
+        ((TextView) view.findViewById(R.id.editor_shell_row_label)).setText(track.labelRes);
+        SeekBar slider = view.findViewById(R.id.editor_shell_row_slider);
+        TextView value = view.findViewById(R.id.editor_shell_row_value);
         slider.setContentDescription(context.getString(track.labelRes));
         slider.setMax(Math.max(1, track.max - track.min));
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {

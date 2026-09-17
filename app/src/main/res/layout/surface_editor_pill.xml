@@ -24,143 +24,154 @@
     android:layout_marginEnd="10dp"
     android:elevation="6dp"
     android:orientation="vertical"
-    android:paddingStart="12dp"
-    android:paddingTop="4dp"
-    android:paddingEnd="6dp"
-    android:paddingBottom="8dp">
+    android:paddingStart="16dp"
+    android:paddingTop="0dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="10dp">
 
-    <LinearLayout
+    <include
         android:id="@+id/surface_editor_pill_header"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        layout="@layout/editor_shell_header" />
 
-        <!-- Names what the card is showing: the surface's own name once one is picked, and on the
-             shared layer the same palette glyph that opened it, with no words — the strip below
-             says what it is. Set in code. -->
-        <TextView
-            android:id="@+id/surface_editor_pill_title"
-            android:layout_width="0dp"
-            android:layout_height="32dp"
-            android:layout_weight="1"
-            android:drawablePadding="6dp"
-            android:ellipsize="end"
-            android:gravity="center_vertical"
-            android:maxLines="1"
-            android:textColor="?attr/termuxColorOnSurface"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <!-- Save and revert only exist once there is something to save or revert; the two of them
-             appearing together is also how the card says the edit is unsaved. Icons set in code. -->
-        <ImageView
-            android:id="@+id/surface_editor_pill_save"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/termux_surface_editor_save_look"
-            android:padding="6dp"
-            android:scaleType="fitCenter"
-            android:visibility="gone" />
-
-        <ImageView
-            android:id="@+id/surface_editor_pill_reset"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/termux_surface_editor_revert"
-            android:padding="6dp"
-            android:scaleType="fitCenter"
-            android:visibility="gone" />
-
-        <!-- Done is the only commit. ✕ only puts the card away, back to the outlines and the
-             floating pill; nothing is lost by it, so it asks nothing. -->
-        <ImageView
-            android:id="@+id/surface_editor_pill_done"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginStart="4dp"
-            android:background="@drawable/dock_tuning_done_pill"
-            android:contentDescription="@string/termux_dock_tuning_done"
-            android:padding="6dp"
-            android:scaleType="fitCenter" />
-
-        <ImageView
-            android:id="@+id/surface_editor_pill_close"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginStart="2dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/termux_surface_editor_hide_panel"
-            android:padding="7dp"
-            android:scaleType="fitCenter" />
-    </LinearLayout>
-
-
-    <!-- Complete looks, one tap each, filled in code. The shared layer only: a preset writes every
-         surface, which is not an answer to a question asked while editing one of them. -->
+    <!-- The shell's one chooser slot: the choice that changes what the whole card is showing.
+         Appearance fills it with the preset strip — complete looks, one tap each, on the shared
+         layer only, because a preset writes every surface and that is not an answer to a question
+         asked while editing one of them. It is pinned only while the body can afford it; below
+         that the strip becomes the body's first row and scrolls with it. -->
     <FrameLayout
-        android:id="@+id/surface_editor_pill_presets"
+        android:id="@+id/editor_shell_chooser_slot"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content">
 
-    <!-- The two decisions that shape everything: how the surfaces sit, and what they are made of.
-         Docked / Floating is the shorter of the two because it is the smaller question. -->
+        <FrameLayout
+            android:id="@+id/surface_editor_pill_presets"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="60dp" />
+    </FrameLayout>
+
+    <!-- The two decisions that shape everything: how the surfaces sit, and what they are made
+         of. One question per line: five equal segments on one line read as one five-way choice,
+         and Docked / Floating is asked far less often than Solid / Glass / Frost.
+
+         Both rows stand in the body under their own sections — Shape leads Shape, Material leads
+         Material — so this is where they wait while the card is showing a single surface, which
+         has neither. It is never drawn. -->
     <LinearLayout
         android:id="@+id/surface_editor_pill_pills"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
+        android:orientation="vertical"
+        android:visibility="gone">
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/surface_editor_pill_shape"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/surface_editor_pill_shape_row"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="5"
-            app:selectionRequired="true"
-            app:singleSelection="true">
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="horizontal"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_shape_docked"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_app_launcher_dock_style_default" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/editor_shell_row_label"
+                android:layout_width="96dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/termux_surface_editor_shape"
+                android:textColor="?attr/termuxColorOnSurface"
+                android:textSize="12.5sp"
+                app:autoSizeMaxTextSize="12.5sp"
+                app:autoSizeMinTextSize="10sp"
+                app:autoSizeStepGranularity="0.5sp"
+                app:autoSizeTextType="uniform" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_shape_floating"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_app_launcher_dock_style_rounded" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+            <com.termux.app.editorshell.EditorShellControlHost
+                android:id="@+id/surface_editor_pill_shape_host"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
 
-        <Space
-            android:layout_width="6dp"
-            android:layout_height="1dp" />
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/surface_editor_pill_shape"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/surface_editor_pill_material"
-            android:layout_width="0dp"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_shape_docked"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_app_launcher_dock_style_default" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_shape_floating"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_app_launcher_dock_style_rounded" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+            </com.termux.app.editorshell.EditorShellControlHost>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/surface_editor_pill_material_row"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="6"
-            app:selectionRequired="false"
-            app:singleSelection="true">
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="horizontal"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_material_solid"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_surface_tuning_material_solid" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/editor_shell_row_label"
+                android:layout_width="96dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/termux_surface_editor_material"
+                android:textColor="?attr/termuxColorOnSurface"
+                android:textSize="12.5sp"
+                app:autoSizeMaxTextSize="12.5sp"
+                app:autoSizeMinTextSize="10sp"
+                app:autoSizeStepGranularity="0.5sp"
+                app:autoSizeTextType="uniform" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_material_glass"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_surface_tuning_material_glass" />
+            <com.termux.app.editorshell.EditorShellControlHost
+                android:id="@+id/surface_editor_pill_material_host"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_material_frost"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_surface_tuning_material_frost" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/surface_editor_pill_material"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="false"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_material_solid"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_surface_tuning_material_solid" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_material_glass"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_surface_tuning_material_glass" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_material_frost"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_surface_tuning_material_frost" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+            </com.termux.app.editorshell.EditorShellControlHost>
+        </LinearLayout>
     </LinearLayout>
 
     <!-- The rows of whatever the card is showing. A scroller is added here in code so its height
