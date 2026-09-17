@@ -21,17 +21,18 @@ which opens a picker over every item you do not have yet.
 
 ## What's in the store
 
-Seven items, and each one brings whatever it needs along with it.
+Five items, and each one brings whatever it needs along with it.
 
 | item | what you get |
 | --- | --- |
 | `claude-code` | [Claude Code](https://claude.com/claude-code), Anthropic's coding agent for the terminal. About 200 MB. |
 | `fastfetch` | System information beside an animated logo. It brings the layout; drop any GIF of yours at `~/Pictures/gif/skel.gif` and it plays there, otherwise you get text. |
-| `fish-shell` | The fish shell with the launcher's setup: the wallpaper prompt and its theme, `eza`, `zoxide`, and the plugins below. |
+| `fish-shell` | The fish shell with the launcher's setup: the wallpaper prompt, `eza`, `zoxide`, and the plugins below. |
 | `kitten` | Kitty's companion tool, for showing images and sending files from the terminal. |
-| `nvim-theme` | A Neovim colour scheme that follows your wallpaper. |
-| `omp-theme` | The prompt theme on its own, if you already use oh-my-posh. |
 | `sigye` | A clock for the terminal. |
+
+The wallpaper-matching oh-my-posh prompt theme and the Neovim colour scheme are set up from
+Settings › Look now, not from tlstore.
 
 Ask about any one of them first with `tlstore info <name>`.
 
@@ -47,7 +48,7 @@ by name.
 | `tlstore list -i` | only what you have installed |
 | `tlstore list -a` | only what you do not have yet |
 | `tlstore search fish` | find an item by name or description |
-| `tlstore info nvim-theme` | what an item is, its version, and where it goes |
+| `tlstore info fish-shell` | what an item is, its version, and where it goes |
 | `tlstore install kitten sigye` | install one or more items by name |
 | `tlstore install` | open the picker instead of naming anything |
 | `tlstore remove kitten` | remove an item tlstore installed |
@@ -108,8 +109,8 @@ ones it added and clear what it downloaded. Say no and they simply stay.
 ## The fish setup
 
 `tlstore shell` (or `tlstore install fish-shell`) installs fish itself, the launcher's
-`config.fish`, a `conf.d/personal.fish` that is yours to edit, oh-my-posh with the wallpaper prompt
-theme, `eza`, `zoxide`, and [fisher](https://github.com/jorgebucaran/fisher) with two plugins:
+`config.fish`, a `conf.d/personal.fish` that is yours to edit, the `oh-my-posh` package, `eza`,
+`zoxide`, and [fisher](https://github.com/jorgebucaran/fisher) with two plugins:
 
 - [`puffer-fish`](https://github.com/nickeb96/puffer-fish) — type `...` and get `../..`, and other
   small text expansions.
@@ -120,34 +121,8 @@ Fisher fetches those plugins from GitHub itself, so installing them needs a netw
 Keeping them current is fisher's job rather than tlstore's — `tlstore update` leaves them alone,
 and `fisher update` in a fish shell brings them forward.
 
-## The Neovim theme
-
-`tlstore install nvim-theme` puts two files in your Neovim config — the colour scheme and the piece
-that turns your wallpaper into editor colours. It does not install Neovim. Turn it on in whichever
-way matches your setup:
-
-```vim
-:colorscheme launcher-material
-```
-
-```lua
--- a plain config, or anything built on lazy.nvim (LazyVim included)
-vim.cmd.colorscheme("launcher-material")
-```
-
-```lua
--- AstroNvim
-{ "AstroNvim/astroui", opts = { colorscheme = "launcher-material" } }
-```
-
-```lua
--- NvChad, which paints its own theme at startup, so ask for this one after it
-vim.schedule(function() vim.cmd.colorscheme("launcher-material") end)
-```
-
-The editor retints itself when you change your wallpaper. The background is glass by default, so
-the wallpaper shows through at whatever opacity your terminal is set to; `:MaterialTransparent off`
-makes it solid.
+The wallpaper-matching prompt theme itself, and a matching Neovim colour scheme, come from
+Settings › Look's "Tools that follow the terminal colours" instead of tlstore.
 
 ## Where things go
 
@@ -192,8 +167,8 @@ under [`recipes/cross`](../../recipes/cross) and [`recipes/termux`](../../recipe
 yourself to reproduce a binary and compare it against what tlstore installed.
 
 Everything else in the store is unmodified: `claude-code` comes straight from npm, and the
-packages behind `fish-shell` (`fish`, `eza`, `zoxide`, `oh-my-posh`) and `nvim-theme`'s dependencies
-come straight from Termux's own package repository.
+packages behind `fish-shell` (`fish`, `eza`, `zoxide`, `oh-my-posh`) come straight from Termux's
+own package repository.
 
 ## For maintainers
 

@@ -218,13 +218,15 @@ set -g window-status-current-style "fg=#{E:TERMUX_MATERIAL_SURFACE},bg=#{E:TERMU
 ## Optional Helper Files
 
 The files in `docs/en/examples/` are not bundled in the APK. `tlstore`'s catalog installs some of
-them (pinned to a tag in this repository); the app seeds the rest into place directly. Fish, Oh My
-Posh, zoxide, eza, the Neovim colour scheme, and the showcase binaries (sigye, fastfetch, kitten)
-all come from `tlstore install` — see `docs/en/Tlstore.md`.
+them (pinned to a tag in this repository); the app seeds the rest into place directly. Fish,
+zoxide, eza, and the showcase binaries (sigye, fastfetch, kitten) come from `tlstore install` — see
+`docs/en/Tlstore.md`. The Oh My Posh prompt theme and the Neovim colour scheme instead come from
+Settings › Look's template pack (`app/src/main/assets/theme-templates`), which renders and seeds
+them directly.
 
 Files:
 
-- `config.fish`, `conf.d-personal.fish`, and `aliens-material.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. It is the Termux-edition copy — the Nix edition ships its own, with nix-on-droid shortcuts in place of the `pkg`/`pacman` ones.
+- `config.fish` and `conf.d-personal.fish`: optional Fish defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. It is the Termux-edition copy — the Nix edition ships its own, with nix-on-droid shortcuts in place of the `pkg`/`pacman` ones.
 
 Refresh installed files after an APK or docs update with `tlstore update`.
 
