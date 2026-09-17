@@ -265,21 +265,22 @@ public class ExtraKeysViewKeyStyleTest {
         }
     }
 
+    /**
+     * The focused switch wears no resting halo: it reads by being full colour between two faded
+     * ones. The halo it used to wear was 7dp at 60% of a glyph a few pixels wide, which read as a
+     * smudge; {@link PlaceSwitchGlyph#GLOW_RADIUS_DP} is the one line that brings a softer one back.
+     */
     @Test
-    public void theFocusedGlyphGlowsInItsOwnColourAndTheOthersDoNot() {
+    public void noPlaceSwitchWearsARestingHaloAndTheFocusIsColourAlone() {
         showing("tool:wall.terminal");
 
-        MaterialButton terminal = button(3);
-        assertTrue("the place in front glows", terminal.getShadowRadius() > 0f);
-        assertEquals("a halo, not a drop shadow", 0f, terminal.getShadowDx(), 0f);
-        assertEquals(0f, terminal.getShadowDy(), 0f);
-        assertEquals("the glow is the glyph's own colour",
-            vivid(1) & 0x00FFFFFF, terminal.getShadowColor() & 0x00FFFFFF);
-        assertEquals("at 60%", PlaceSwitchGlyph.GLOW_ALPHA,
-            Color.alpha(terminal.getShadowColor()));
-
-        assertEquals("the places behind it do not glow", 0f, button(2).getShadowRadius(), 0f);
-        assertEquals(0f, button(4).getShadowRadius(), 0f);
+        assertEquals("the halo is off", 0f, PlaceSwitchGlyph.GLOW_RADIUS_DP, 0f);
+        for (int index = 0; index < 5; index++)
+            assertEquals("key " + index, 0f, button(index).getShadowRadius(), 0f);
+        // Which leaves the colour to say it, and it does: full strength against two faded ones.
+        assertEquals(vivid(1), button(3).getCurrentTextColor());
+        assertEquals(dimmed(0), button(2).getCurrentTextColor());
+        assertEquals(dimmed(2), button(4).getCurrentTextColor());
     }
 
     @Test
@@ -293,20 +294,46 @@ public class ExtraKeysViewKeyStyleTest {
         assertEquals(dimmed(0), button(2).getCurrentTextColor());
     }
 
+    /**
+     * What the bar's place marks are painted in comes from here: the same colour the key wears,
+     * against the key value that says which place it switches to. Read across the row in one pass,
+     * so a switch that was spread off another's hue reports the hue it is really drawn in.
+     */
     @Test
-    public void theGlowMovesWithTheFocusRatherThanBeingLeftBehind() {
+    public void theRowPublishesEachPlacesColourAgainstTheKeyThatSwitchesToIt() {
         showing("tool:wall.terminal");
-        assertTrue(button(3).getShadowRadius() > 0f);
+
+        java.util.Map<String, Integer> published = new java.util.LinkedHashMap<>();
+        view.setPlaceGlyphColorListener(published::putAll);
+
+        assertEquals("only the place switches", 3, published.size());
+        assertEquals(Integer.valueOf(vivid(0)), published.get("tool:wall.widgets"));
+        assertEquals(Integer.valueOf(vivid(1)), published.get("tool:wall.terminal"));
+        assertEquals(Integer.valueOf(vivid(2)), published.get("tool:wall.display"));
+        // The colour is the one the key is really painted in, focus aside: the focused key wears
+        // it at full alpha and the others the same colour faded.
+        assertEquals(published.get("tool:wall.terminal").intValue(),
+            button(3).getCurrentTextColor());
+        assertEquals(opaque(button(2).getCurrentTextColor()),
+            opaque(published.get("tool:wall.widgets")));
+    }
+
+    /** And it says so again whenever it restates the keys, which is what carries a place change. */
+    @Test
+    public void thePublishedColoursArriveAgainWhenTheRowRestatesItsKeys() {
+        showing("tool:wall.terminal");
+        final List<java.util.Map<String, Integer>> seen = new ArrayList<>();
+        view.setPlaceGlyphColorListener(seen::add);
+        assertEquals("setting the listener says what they are now", 1, seen.size());
 
         showing("tool:wall.display");
-        assertEquals("the switch that lost the place loses the halo with it",
-            0f, button(3).getShadowRadius(), 0f);
-        assertTrue(button(4).getShadowRadius() > 0f);
+        assertTrue("and the wall moving says it again", seen.size() > 1);
+        assertEquals(Integer.valueOf(vivid(2)),
+            seen.get(seen.size() - 1).get("tool:wall.display"));
 
-        // And a row told nothing about places has no halo anywhere.
+        // A row with no place switches at all publishes nothing to follow.
         view.setPlaceSwitchPolicy(null);
-        for (int index = 0; index < 5; index++)
-            assertEquals(0f, button(index).getShadowRadius(), 0f);
+        assertTrue(seen.get(seen.size() - 1).isEmpty());
     }
 
     @Test

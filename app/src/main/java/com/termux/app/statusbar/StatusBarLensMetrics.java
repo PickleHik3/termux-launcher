@@ -29,8 +29,17 @@ import java.util.List;
  * edge, and {@link #PEEK_INK_FLOOR} catches the stopped Display before it falls through — so
  * {@link Mark#effectiveInk} stands at or above {@link #EFFECTIVE_INK_FLOOR} for every peeking mark,
  * running or not. The hierarchy that says which place you are on is carried where it costs no
- * legibility: the neighbour's colour is still drained towards the surface's neutral, and only the
- * mark at home wears a glow.
+ * legibility: the neighbour keeps the place's own colour and is faded in it, and only the mark at
+ * home wears a glow.
+ *
+ * <h3>The same three colours as the row</h3>
+ *
+ * A place is the colour its switch wears in the extra-keys row — the lens is handed that colour
+ * rather than deriving one — and the row's own heuristic comes with it: the place in front is full
+ * colour and the ones behind it are the same colour at
+ * {@link com.termux.shared.termux.extrakeys.PlaceSwitchGlyph#UNFOCUSED_ALPHA}. That fade is
+ * {@link Mark#glyphInk}; it replaced draining the neighbour's colour towards a grey, which said the
+ * same thing in a colour the row never shows.
  */
 public final class StatusBarLensMetrics {
 
@@ -57,8 +66,14 @@ public final class StatusBarLensMetrics {
 
     // ---------------------------------------------------------------- ink
 
-    /** How far a neighbour's colour is drained towards the surface's neutral. */
-    public static final float NEIGHBOUR_DRAIN = 0.55f;
+    /**
+     * What a neighbour's glyph keeps of its colour's strength: the share the extra-keys row fades
+     * its own unfocused place switches by, so the mark in the bar and the key in the row are the
+     * same colour at the same strength. The floor is applied after it — a mark that cannot read at
+     * this alpha on the measured band is lifted until it can, which is the lens's own business.
+     */
+    public static final float UNFOCUSED_GLYPH_SHARE =
+        com.termux.shared.termux.extrakeys.PlaceSwitchGlyph.UNFOCUSED_ALPHA / 255f;
     /** How much ink a mark loses to being a neighbour rather than the place on screen. */
     public static final float PEEK_INK_DRAIN = 0.15f;
     /** What a Display that is not running keeps of its ink. */
@@ -178,8 +193,14 @@ public final class StatusBarLensMetrics {
         public final float sizePx;
         public final float radiusPx;
         public final float glyphSizePx;
-        /** How far the mark's colour is drained towards the surface's neutral. */
-        public final float drain;
+        /**
+         * The strength the mark's glyph carries: full at home, faded to
+         * {@link #UNFOCUSED_GLYPH_SHARE} as the mark reaches an end, the way the extra-keys row
+         * fades the place switches behind the one in front. The tile's fill and line keep
+         * {@link #ink}; the glyph is the mark's colour statement, so it is the one that follows the
+         * row.
+         */
+        public final float glyphInk;
         /** The ink the mark is painted with, before the dissolve. */
         public final float ink;
         /** The ink that reaches the glass where the glyph is drawn, dissolve included. */
@@ -196,7 +217,7 @@ public final class StatusBarLensMetrics {
         public final Box target;
 
         Mark(PaneWallPage page, float t, float presence, boolean home, float centerX, float centerY,
-             float sizePx, float radiusPx, float glyphSizePx, float drain, float ink,
+             float sizePx, float radiusPx, float glyphSizePx, float glyphInk, float ink,
              float effectiveInk, float fadeOuterAlpha, float glow, boolean fades,
              boolean fadesFromNearEnd, Box tile, Box target) {
             this.page = page;
@@ -208,7 +229,7 @@ public final class StatusBarLensMetrics {
             this.sizePx = sizePx;
             this.radiusPx = radiusPx;
             this.glyphSizePx = glyphSizePx;
-            this.drain = drain;
+            this.glyphInk = glyphInk;
             this.ink = ink;
             this.effectiveInk = effectiveInk;
             this.fadeOuterAlpha = fadeOuterAlpha;
@@ -297,8 +318,8 @@ public final class StatusBarLensMetrics {
                 : new Box(alongSpan[0], acrossSpan[0], alongSpan[1], acrossSpan[1]);
 
             marks.add(new Mark(page, t, presence, page == current, centerX, centerY, size, radius,
-                size * GLYPH_SHARE, NEIGHBOUR_DRAIN * presence, ink, effectiveInk, fadeOuter, glow,
-                fades, t < 0f, tile, target));
+                size * GLYPH_SHARE, alpha * glyphInkFor(presence, stoppedDisplay), ink,
+                effectiveInk, fadeOuter, glow, fades, t < 0f, tile, target));
         }
         return marks;
     }
@@ -314,6 +335,17 @@ public final class StatusBarLensMetrics {
         float atHome = stoppedDisplay ? STOPPED_DISPLAY_INK : 1f;
         float peeking = Math.max(PEEK_INK_FLOOR, (1f - PEEK_INK_DRAIN) * atHome);
         return lerp(atHome, peeking, Math.max(0f, Math.min(1f, presence)));
+    }
+
+    /**
+     * How bright a mark's glyph is at this distance from home, before the travel alpha: the place
+     * in front at full strength — or at {@link #STOPPED_DISPLAY_INK} when it is a Display with
+     * nothing running — fading to {@link #UNFOCUSED_GLYPH_SHARE} of that as it reaches an end.
+     * Which is the row's rule for its place switches, applied to the mark as it travels.
+     */
+    public static float glyphInkFor(float presence, boolean stoppedDisplay) {
+        float atHome = stoppedDisplay ? STOPPED_DISPLAY_INK : 1f;
+        return atHome * lerp(1f, UNFOCUSED_GLYPH_SHARE, Math.max(0f, Math.min(1f, presence)));
     }
 
     /** The smallest target the bar has room for on an axis it spans {@code extent} of. */

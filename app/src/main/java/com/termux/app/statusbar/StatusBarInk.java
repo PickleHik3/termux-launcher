@@ -151,10 +151,11 @@ public final class StatusBarInk {
      * {@code color} drained of its colour by {@code amount}, keeping its luminance: at 0 the colour
      * is untouched, at 1 it is the grey of the same lightness.
      *
-     * <p>The lens drains a neighbouring place's mark towards the surface's neutral to say it is not
-     * where you are. Towards a <em>neutral colour</em> that is also a move in lightness, and on a
-     * band the mark barely clears, that move is the difference between reading and not. Towards an
-     * equal-luminance grey it is the same statement with none of the cost. The alpha is kept.</p>
+     * <p>The lens used to drain a neighbouring place's mark towards the surface's neutral to say it
+     * is not where you are; since 2026-09-17 it fades the mark the way the extra-keys row fades an
+     * unfocused place switch (same colour, {@code PlaceSwitchGlyph.UNFOCUSED_ALPHA}) and no chrome
+     * drains any more. Kept for a caller that wants a colour statement with no lightness cost:
+     * towards an equal-luminance grey, alpha kept.</p>
      */
     @ColorInt
     public static int drain(@ColorInt int color, float amount) {
