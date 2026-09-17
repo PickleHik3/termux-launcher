@@ -59,6 +59,13 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return false;
     }
 
+    /** The last opacity the drawer asked of the under-pill strip; 1 until it asks for anything. */
+    float decorNavStripAlpha = 1f;
+
+    @Override public void setDecorNavStripAlpha(float alpha) {
+        decorNavStripAlpha = alpha;
+    }
+
     @Override public void flushPendingAccessoryGeometry() {
         flushes++;
     }

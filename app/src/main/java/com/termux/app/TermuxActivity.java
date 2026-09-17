@@ -960,6 +960,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int mAppliedWallpaperRenderZoomPercent = -1;
     @Nullable private FrameLayout mDecorNavBarSurfaceOverlay;
+    /**
+     * The app drawer's cross-fade of the under-pill strip; 1 whenever the drawer is not engaged.
+     * The strip is the topmost decor child, so the open plane cannot cover it — it fades out under
+     * the plane's arriving bottom edge instead, and is handed back at 1 when the drawer closes.
+     */
+    private float mAppDrawerNavStripAlpha = 1f;
     @Nullable private ImageView mDecorNavBarBlurBackdrop;
     @Nullable private View mDecorNavBarTintOverlay;
     @Nullable private Bitmap mInAppKeyboardBackdropBitmap;
@@ -1181,6 +1187,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
+            applyAppDrawerEdgeBleed(insetsCompat);
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
             applyDockImeOffset(0);
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
@@ -4031,6 +4038,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.ACCESSORY);
     }
 
+    /**
+     * Lets the app drawer's plane reach the physical screen edges.
+     *
+     * <p>{@code fitsSystemWindows} pads the root by the status bar at the top and the navigation
+     * bar at the bottom, so every child of it — the drawer host included — begins and ends inside
+     * them. The open drawer is a page, not a card: it gives those two paddings straight back as
+     * negative margins, which makes its glass, its backdrop blur and its wallpaper frost one sheet
+     * from the top bezel to the bottom one, instead of a band with the status-bar inset strip
+     * standing above it and the under-pill strip showing below. Nothing inside the drawer moves:
+     * the controller reads these same two margins back and lays the grid out in the safe area.
+     *
+     * <p>Written from the insets rather than from the root's measured padding, because this runs on
+     * the content view's own insets listener — one dispatch ahead of the root's — and because these
+     * are the very numbers the two strips are sized by, so the sheet meets them exactly.
+     */
+    private void applyAppDrawerEdgeBleed(@NonNull WindowInsetsCompat insetsCompat) {
+        View host = findViewById(R.id.app_drawer_host);
+        if (host == null) return;
+        ViewGroup.LayoutParams layoutParams = host.getLayoutParams();
+        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return;
+        int barTop = insetsCompat.getInsets(Type.systemBars()).top;
+        int barBottom = insetsCompat.getInsets(Type.systemBars()).bottom;
+        ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) layoutParams;
+        if (margins.topMargin == -barTop && margins.bottomMargin == -barBottom) return;
+        margins.topMargin = -barTop;
+        margins.bottomMargin = -barBottom;
+        host.setLayoutParams(margins);
+    }
+
     private boolean shouldShowDecorNavBarSurface(@NonNull ChromeSpec state) {
         // Floating capsules leave the gesture-pill inset showing wallpaper; edge-to-edge surfaces
         // (dock glass, or the embedded keyboard's own background) continue under the pill.
@@ -4170,6 +4206,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
     }
 
+    /** The drawer's cross-fade of the under-pill strip. See {@link #mAppDrawerNavStripAlpha}. */
+    private void setAppDrawerDecorNavStripAlpha(float alpha) {
+        float clamped = Math.max(0f, Math.min(1f, alpha));
+        if (mAppDrawerNavStripAlpha == clamped) return;
+        mAppDrawerNavStripAlpha = clamped;
+        if (mDecorNavBarSurfaceOverlay != null) mDecorNavBarSurfaceOverlay.setAlpha(clamped);
+    }
+
     private void removeDecorNavBarSurfaceOverlay() {
         if (mDecorNavBarSurfaceOverlay == null) {
             return;
@@ -4234,6 +4278,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         applyDecorNavBarSurfaceBounds(overlay, true);
+        // Re-applied on every chrome pass: a restyle while the drawer is open must not hand the
+        // strip back at full opacity over the plane.
+        overlay.setAlpha(mAppDrawerNavStripAlpha);
 
         if (mDecorNavBarTintOverlay != null) {
             mDecorNavBarTintOverlay.setBackground(buildDecorNavBarTint(state));
@@ -11687,6 +11734,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
             return mChrome.frost().applyAppDrawer(frost);
+        }
+
+        @Override public void setDecorNavStripAlpha(float alpha) {
+            setAppDrawerDecorNavStripAlpha(alpha);
         }
 
         @Override public void flushPendingAccessoryGeometry() {
