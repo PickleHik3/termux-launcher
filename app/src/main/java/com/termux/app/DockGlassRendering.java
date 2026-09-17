@@ -9,7 +9,10 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+
+import com.termux.app.chrome.OnGlass;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,6 +74,109 @@ public final class DockGlassRendering {
             return lerpArgb(sheenMid, clear, (pos - 0.33f) / 0.34f);
         }
         return lerpArgb(clear, foot, (pos - 0.67f) / 0.33f);
+    }
+
+    // ------------------------------------------------------------ the light mode's counterpart
+    //
+    // The model above pushes one way only: accent sheen at the top, clear middle, black foot at the
+    // bottom. That is the right shape over a dark backdrop, which is what a dark theme always has —
+    // Android dims the wallpaper for it. Nothing lightens the wallpaper for a light theme, so in
+    // light mode the same model lands on a glass that is already too dark for the mode's own ink,
+    // and the foot makes the worst row of the band darker still.
+    //
+    // The counterpart is not a second gradient and emphatically not a white wash — the note on
+    // lightModelColorAt still holds, a near-white sheen reads as frosted plastic. It is the other
+    // half of the same arithmetic: say what the model actually leaves an ink standing on, and say
+    // which row of the band is the worst one. A band measured that way can be veiled in its own
+    // base colour by exactly as much as it needs (OnGlass does that sum), and the foot is then part
+    // of what was measured instead of something that quietly undoes it. See ChromeInk, which is the
+    // only caller, and OnGlass.Resolution#veil for the per-pixel promise these keep.
+
+    /** The vertical light model's own stop positions, for a caller that has to visit every row. */
+    @NonNull
+    public static float[] lightModelStops() {
+        return LIGHT_MODEL_STOPS.clone();
+    }
+
+    /** The top sheen's alpha at {@code opacity}; the same curve {@link #createGlassSurface} draws. */
+    public static int topSheenAlpha(float opacity) {
+        return Math.round(16f * clamp01(opacity));
+    }
+
+    /** The mid sheen's alpha at {@code opacity}. */
+    public static int midSheenAlpha(float opacity) {
+        return Math.round(8f * clamp01(opacity));
+    }
+
+    /** The dark foot's alpha at {@code opacity}, or 0 when the surface drops the foot. */
+    public static int footAlpha(float opacity, boolean withFoot) {
+        return withFoot ? Math.round(20f * clamp01(opacity)) : 0;
+    }
+
+    /**
+     * The whole tint a band lays over the wallpaper at model position {@code pos}: its base layer
+     * at {@code baseAlpha} with the vertical light model over it, in the order the surface draws
+     * them. Alpha is kept, because this is a tint and not a surface — it is what a caller hands
+     * {@link OnGlass#backdrop} as {@code glassTint} so that what was measured is what is drawn.
+     */
+    @ColorInt
+    public static int glassTintAt(float pos, @ColorInt int baseColor, int baseAlpha,
+                                  @ColorInt int accent, int topSheenAlpha, int midSheenAlpha,
+                                  int bottomFootAlpha) {
+        return OnGlass.composite(
+            lightModelColorAt(pos, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha),
+            withAlpha(baseColor, Math.max(0, Math.min(255, baseAlpha))));
+    }
+
+    /**
+     * The model position, within the slice this surface actually renders, at which the glass works
+     * hardest against {@code ink} — the row a contrast promise has to be made at.
+     *
+     * <p>Measured rather than assumed. The foot is the obvious answer for a dark ink and the accent
+     * sheen for a pale one, but the accent is the wallpaper's Material-You primary and can be
+     * either, so both ends are evaluated along with the model's interior stops and the lowest ratio
+     * wins. A band that renders a slice of the model (the status bar takes {@code [0, f]} and the
+     * window bar {@code [f, 1]} of one model) only answers for its own rows.</p>
+     *
+     * @param under what the band's glass is drawn on, opaque: wallpaper under the launcher's dim
+     */
+    public static float worstLightModelStop(@ColorInt int ink, @ColorInt int under,
+                                            @ColorInt int baseColor, int baseAlpha,
+                                            @ColorInt int accent, int topSheenAlpha,
+                                            int midSheenAlpha, int bottomFootAlpha,
+                                            float sliceStart, float sliceEnd) {
+        float start = clamp01(sliceStart);
+        float end = Math.max(start, clamp01(sliceEnd));
+        float worst = start;
+        double worstRatio = Double.MAX_VALUE;
+        for (float stop : candidateStops(start, end)) {
+            int tint = glassTintAt(stop, baseColor, baseAlpha, accent, topSheenAlpha, midSheenAlpha,
+                bottomFootAlpha);
+            double ratio = OnGlass.ratio(ink, OnGlass.opaque(OnGlass.composite(tint, under)));
+            if (ratio < worstRatio) {
+                worstRatio = ratio;
+                worst = stop;
+            }
+        }
+        return worst;
+    }
+
+    /** The slice's own ends plus every model stop inside it — the rows {@link #lightModelSlice} draws. */
+    @NonNull
+    private static float[] candidateStops(float start, float end) {
+        List<Float> stops = new ArrayList<>();
+        stops.add(start);
+        for (float stop : LIGHT_MODEL_STOPS) {
+            if (stop > start && stop < end) stops.add(stop);
+        }
+        stops.add(end);
+        float[] result = new float[stops.size()];
+        for (int i = 0; i < result.length; i++) result[i] = stops.get(i);
+        return result;
+    }
+
+    private static float clamp01(float value) {
+        return value < 0f ? 0f : (value > 1f ? 1f : value);
     }
 
     /** Straight ARGB interpolation (alpha included) between two colors. */

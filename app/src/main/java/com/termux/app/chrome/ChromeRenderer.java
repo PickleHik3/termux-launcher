@@ -60,6 +60,15 @@ public final class ChromeRenderer {
 
         int outlineColor();
 
+        /**
+         * The launcher's own wallpaper dim — black at the user's slider percentage — which sits
+         * under every glass surface and is part of what the chrome's ink is really standing on.
+         * Transparent when the slider is at 0. Read, never changed: the slider is the user's.
+         */
+        default int wallpaperDimColor() {
+            return android.graphics.Color.TRANSPARENT;
+        }
+
         /** True while the dock (and the surfaces that follow it) render as floating capsules. */
         boolean roundedDockStyle();
 
@@ -157,6 +166,7 @@ public final class ChromeRenderer {
     private boolean mDestroyed;
     @NonNull private final SurfaceDirtyLedger mLedger = new SurfaceDirtyLedger();
     @NonNull private final WallpaperBlurCache mBlurCache;
+    @NonNull private final ChromeInk mInk;
     @NonNull private final GlassSurfaceFactory mGlass;
     @NonNull private final WallpaperFrostPainter mFrost;
 
@@ -241,13 +251,25 @@ public final class ChromeRenderer {
             }
             requestSync(SCOPE_BACKDROPS | SCOPE_ACCESSORY_RENDER);
         };
-        // Every frost crop was cut from a frame that a clear destroys.
-        mBlurCache = new WallpaperBlurCache(surfaces, mLedger::markFrostDirty,
+        // Every frost crop was cut from a frame that a clear destroys — and so was every wallpaper
+        // sample the chrome's ink was measured from, so the two go stale together, always.
+        mBlurCache = new WallpaperBlurCache(surfaces, this::onBlurFramesCleared,
             WallpaperBlurCache.DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES, blurWorker,
             blurWorker == null ? null : mHandler::post,
             blurWorker == null ? null : this::onBlurFrameReady);
-        mGlass = new GlassSurfaceFactory(surfaces);
+        mInk = new ChromeInk(surfaces, mBlurCache, () -> requestSync(SCOPE_ACCESSORY_RENDER));
+        mGlass = new GlassSurfaceFactory(surfaces, mInk);
         mFrost = new WallpaperFrostPainter(surfaces, mBlurCache, mLedger);
+    }
+
+    /**
+     * The shared pre-blurred frames have gone. Every crop cut from one is stale, and so is every
+     * wallpaper sample the chrome's ink was measured from — one callback for both, so no path can
+     * drop the frames and leave the ink believing in a wallpaper that is no longer there.
+     */
+    private void onBlurFramesCleared() {
+        mLedger.markFrostDirty();
+        mInk.invalidate();
     }
 
     /** One low-priority thread: decodes and blurs are sequential, and never on the main thread. */
@@ -521,6 +543,15 @@ public final class ChromeRenderer {
     @NonNull
     public WallpaperBlurCache blurCache() {
         return mBlurCache;
+    }
+
+    /**
+     * What colour a piece of chrome should be drawn in, given what it is standing on. The one
+     * accessor for legibility on glass; see {@link ChromeInk#onGlass}.
+     */
+    @NonNull
+    public ChromeInk ink() {
+        return mInk;
     }
 
     @NonNull

@@ -32,6 +32,9 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     int dockBlurRadiusDp = 12;
     int statusBlurRadiusDp = 12;
     int orientation = Configuration.ORIENTATION_PORTRAIT;
+    int glassBase = 0xFF1C1B1F;
+    int accent = 0xFF3366FF;
+    int dim = android.graphics.Color.TRANSPARENT;
     @NonNull final Rect frameRect = new Rect(0, 0, 100, 200);
     int systemWallpaperId = 3;
     boolean managedSource;
@@ -86,12 +89,17 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
 
     @Override
     public int glassBaseColor() {
-        return 0xFF1C1B1F;
+        return glassBase;
     }
 
     @Override
     public int accentColor() {
-        return 0xFF3366FF;
+        return accent;
+    }
+
+    @Override
+    public int wallpaperDimColor() {
+        return dim;
     }
 
     @Override
