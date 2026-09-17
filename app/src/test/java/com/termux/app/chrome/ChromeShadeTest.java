@@ -210,6 +210,46 @@ public class ChromeShadeTest {
         assertEquals(0xB8000000, ChromeShade.plate(0xB8000000, 0xB8FFFFFF));
     }
 
+    // ------------------------------------------------------------------ D · the dark panels
+
+    /**
+     * The widget picker's sheet and the pane menu: panels, so they flip whole and everything on
+     * them is read off the panel. A dark sheet in a light theme is legible but foreign, and its
+     * hint, field wash and rim were all tuned to it, so they move together or not at all.
+     */
+    @Test
+    public void aDarkPanelFlipsWholeAndItsContentsFollowIt() {
+        final int darkPanel = 0xEE202124;
+        final int lightPanel = 0xEEF8F9FA;
+        ChromeShade.note(ChromeInk.Polarity.DARK_INK, LIGHT_GLASS);
+        int plate = ChromeShade.plate(darkPanel, lightPanel);
+        assertEquals(lightPanel, plate);
+        int surface = ChromeShade.plateSurface(plate, LIGHT_GLASS);
+        int ink = ChromeShade.onPlate(plate, LIGHT_GLASS, OnGlass.TARGET_BODY_TEXT);
+        assertTrue("panel text reads at " + OnGlass.ratio(ink, surface),
+            OnGlass.ratio(ink, surface) >= OnGlass.TARGET_BODY_TEXT);
+        // The hint is the same ink at 60%, and still has to be readable against the panel.
+        int hint = (ink & 0x00FFFFFF) | (0x99 << 24);
+        assertTrue("panel hint separates by " + ChromeShade.separation(hint, surface),
+            ChromeShade.separation(hint, surface) >= OnGlass.TARGET_LARGE_TEXT);
+        // The search field's wash is measured against the panel it is cut into, not the chrome.
+        int wash = ChromeShade.inPlate(0x1AFFFFFF, surface, ChromeShade.TARGET_FILL);
+        assertTrue("field wash separates by " + ChromeShade.separation(wash, surface),
+            ChromeShade.separation(wash, surface) >= ChromeShade.TARGET_FILL);
+    }
+
+    /**
+     * A panel carries its own polarity: a dark sheet keeps its white washes even when the chrome
+     * around it has gone dark-inked. Nothing inside a card is decided by the band outside it.
+     */
+    @Test
+    public void aPanelsOwnWashesFollowThePanelNotTheChrome() {
+        ChromeShade.note(ChromeInk.Polarity.DARK_INK, LIGHT_GLASS);
+        int darkSurface = ChromeShade.plateSurface(0xEE202124, LIGHT_GLASS);
+        assertEquals(0x1AFFFFFF,
+            ChromeShade.inPlate(0x1AFFFFFF, darkSurface, ChromeShade.TARGET_FILL));
+    }
+
     // ------------------------------------------------------------------ F · the scrollbar
 
     /**

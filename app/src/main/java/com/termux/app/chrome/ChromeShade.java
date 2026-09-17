@@ -284,6 +284,30 @@ public final class ChromeShade {
     }
 
     /**
+     * The opaque surface a plate presents to its own content: the plate composited over whatever it
+     * is drawn on. What a panel's washes, strokes and inks are all measured against.
+     */
+    @ColorInt
+    public static int plateSurface(@ColorInt int plateColor, @ColorInt int under) {
+        return OnGlass.opaque(OnGlass.composite(plateColor, OnGlass.opaque(under)));
+    }
+
+    /**
+     * A structural wash or stroke drawn <em>inside</em> a plate — a search field's background, a
+     * panel's own rim — measured against the plate rather than against the chrome's glass.
+     *
+     * <p>A plate is its own surface, so it carries its own polarity: a dark sheet keeps its white
+     * washes even when the chrome around it has gone dark-inked, and a light sheet takes shadow
+     * ones even when the chrome around it has not. That is the same exemption {@link #onPlate}
+     * relies on and it is not the per-band flip {@link ChromeInk} forbids — nothing here decides
+     * what the chrome does, only what a card does inside itself.</p>
+     */
+    @ColorInt
+    public static int inPlate(@ColorInt int paleSeed, @ColorInt int plateSurface, double target) {
+        return structural(paleSeed, polarityOf(plateSurface), plateSurface, target);
+    }
+
+    /**
      * The ink for content standing on a plate {@link #plate} picked — read off the plate itself
      * rather than off the chrome's polarity, because a plate <em>is</em> the surface its content is
      * on. This is not the per-band flip {@link ChromeInk} forbids; it is a card being checked
