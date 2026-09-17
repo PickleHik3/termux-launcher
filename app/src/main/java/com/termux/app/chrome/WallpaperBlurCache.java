@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * The one pre-blurred wallpaper frame every accessory glass surface is cut from.
@@ -287,7 +288,7 @@ public final class WallpaperBlurCache {
             managedLastModified, managedLength);
         final int generation = mGeneration;
         final MainThread mainThread = mMainThread;
-        mWorker.execute(() -> {
+        final Runnable job = () -> {
             final Bitmap blurred = captureAndBlur(capture, blurRadiusDp);
             mainThread.post(() -> {
                 mPending.remove(blurRadiusDp);
@@ -301,7 +302,18 @@ public final class WallpaperBlurCache {
                     systemWallpaperId, managedLastModified, managedLength);
                 if (mOnFrameReady != null) mOnFrameReady.run();
             });
-        });
+        };
+        try {
+            mWorker.execute(job);
+        } catch (RejectedExecutionException rejected) {
+            // The worker was shut down under us: the renderer is being destroyed while a commit it
+            // had already booked is still landing (a night-mode flip recreates the activity, and
+            // the last commit of the old one ran after its onDestroy). There is no frame to fill
+            // and nobody left to hand it to — answer the miss with null, as for any capture that
+            // cannot happen right now, and forget the radius so a live cache never waits on it.
+            mPending.remove(blurRadiusDp);
+            return null;
+        }
         return null;
     }
 
