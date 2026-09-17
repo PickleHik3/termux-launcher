@@ -133,7 +133,8 @@ public final class HelpTargets {
             ExtraKeysView row = firstOfType(root, ExtraKeysView.class);
             add(s, "keys", rect(row), radius(row), copy(R.string.help_topic_keys_title,
                 R.string.help_topic_keys_purpose, R.string.help_topic_keys_action));
-            extraKeys(root, s);
+            // The row that was just measured, not a second walk for it: one search, one answer.
+            extraKeys(row, s);
             // Two keyboard hints: the prefix keys with the chords they start, and the space bar
             // with its swipes. Each is boxed on the keys it is about.
             Rect prefix = union(keyRect("ctrl"), keyRect("alt"));
@@ -227,15 +228,20 @@ public final class HelpTargets {
         if (rect(view) == null || view == overlay) return;
         if (view instanceof ExtraKeysView) {
             ExtraKeysView row = (ExtraKeysView) view;
+            int measured = 0, defined = 0;
             for (int i = 0; i < row.getChildCount(); i++) {
                 Rect r = rect(row.getChildAt(i));
                 ExtraKeyButton key = row.definitionForChild(i);
+                if (r != null) measured++;
+                if (key != null) defined++;
                 if (r == null || key == null) continue;
                 String secondary = key.getPopup() == null ? null
                     : context.getString(R.string.help_key_secondary,
                         HelpCopy.keyLabel(context, key.getPopup()));
                 s.keys.add(new KeyLabel(r, HelpCopy.keyLabel(context, key), secondary));
             }
+            HelpLog.d("extra keys: " + row.getChildCount() + " caps, " + measured + " measured, "
+                + defined + " defined, " + s.keys.size() + " labelled");
             return;
         }
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++)

@@ -290,6 +290,67 @@ public class HelpLeaderRouterTest {
         for (Placement p : r.placements) assertFalse("no leader for " + p.target.id, p.lines.isEmpty());
     }
 
+    /**
+     * The phone this was measured on, portrait with the keyboard up: a 1080x2412 screen whose pane
+     * wall stops at 1428 and whose dock (1428-1581), A-Z row (1581-1631), extra keys (1631-1729)
+     * and keyboard (1729-2349) fill everything under it, with the two prefix keys, the space bar
+     * and the settings cog in the keyboard's bottom row. Every one of those controls has to come
+     * away with a card of its own, above its own box, on one page, off every control and off the
+     * seven key cards the overlay has already fixed under the row of keys.
+     */
+    @Test public void everyControlUnderTheWallIsExplainedAboveItself() {
+        Box pane = B(0, 210, 1080, 1428);
+        Box dock = B(0, 1428, 1080, 1581), az = B(0, 1581, 1080, 1631);
+        Box keysRow = B(0, 1631, 1080, 1729);
+        Box prefix = B(0, 2225, 250, 2349), space = B(300, 2225, 780, 2349);
+        Box cog = B(196, 2236, 254, 2294);
+        List<Target> input = Arrays.asList(
+            new Target("windows", B(24, 134, 420, 202), Side.ABOVE, 490, 120),
+            new Target("sessions", B(430, 140, 500, 196), Side.ABOVE, 490, 120),
+            new Target("stats", B(700, 140, 960, 196), Side.ABOVE, 490, 120),
+            new Target("status", B(0, 126, 1080, 210), Side.ABOVE, 490, 120),
+            new Target("terminal", pane, Side.INSIDE, 490, 120),
+            new Target("dock", dock, Side.UNDER, 316, 130),
+            new Target("az", az, Side.UNDER, 316, 130),
+            new Target("prefix", prefix, Side.UNDER, 316, 160),
+            new Target("space", space, Side.UNDER, 316, 130),
+            new Target("settings", cog, Side.UNDER, 316, 150));
+        // The overlay lays the key cards out itself, in two rows under the keys; to the router
+        // they are simply in the way.
+        int[] centres = {77, 231, 385, 539, 693, 847, 1001};
+        List<Box> keyCards = new java.util.ArrayList<>();
+        for (int i = 0; i < centres.length; i++) {
+            float l = i == 0 ? 33 : centres[i - 1] + 27;
+            float r = i == centres.length - 1 ? 1047 : centres[i + 1] - 27;
+            float top = i % 2 == 0 ? 1767 : 1904;
+            keyCards.add(B(l, top, r, top + 110));
+        }
+        List<Box> controls = Arrays.asList(dock, az, keysRow, prefix, space, cog);
+        List<Box> hard = new java.util.ArrayList<>(keyCards);
+        hard.addAll(controls);
+        Result r = HelpLeaderRouter.arrange(B(0, 232, 1080, 1406), 33, 33, input, hard,
+            Arrays.asList(pane));
+        assertTrue("unplaced " + ids(r.unplaced), r.unplaced.isEmpty());
+        assertEquals(1, r.pages);
+        assertNoOverlap(r);
+        assertLeadersClear(r, 33);
+        for (Placement p : r.placements) {
+            if (p.target.side != Side.UNDER) continue;
+            assertTrue(p.target.id + " is not above its control", p.card.bottom <= p.target.box.top);
+            assertFalse("no leader for " + p.target.id, p.lines.isEmpty());
+            for (Box control : controls)
+                assertFalse(p.target.id + " sits on a control", p.card.overlaps(control));
+            for (Box key : keyCards)
+                assertFalse(p.target.id + " sits on a key card", p.card.overlaps(key));
+        }
+        // The dock and the A-Z row are explained from the wall's foot, not from down in the
+        // keyboard; the keyboard's own three from the shelf over its bottom row.
+        assertTrue(placement(r, "dock").card.top > 1000);
+        assertTrue(placement(r, "az").card.bottom <= dock.top);
+        for (String id : new String[] {"prefix", "space", "settings"})
+            assertTrue(id + " left the keyboard", placement(r, id).card.top > keysRow.bottom);
+    }
+
     @Test public void everyDefaultLayoutKeepsItsLeadersApart() {
         assertLeadersClear(HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 12, terminalTargets(),
             Collections.emptyList(), inside(terminalTargets())), 12);

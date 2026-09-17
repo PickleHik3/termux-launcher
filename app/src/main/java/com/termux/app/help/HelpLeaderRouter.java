@@ -7,7 +7,15 @@ import java.util.List;
 
 /** Deterministic, pixel-only layout. No Android types or retained state. */
 public final class HelpLeaderRouter {
-    public enum Side { ABOVE, BELOW, LEFT, RIGHT, INSIDE }
+    /**
+     * Where a control is, and so where its card belongs. {@code BELOW} seats the card at the foot
+     * of the band; {@code UNDER} seats it on the nearest shelf above the control itself, for the
+     * rows that live outside the band altogether — the dock, the rows above the keyboard, the keys.
+     */
+    public enum Side { ABOVE, BELOW, LEFT, RIGHT, INSIDE, UNDER }
+
+    /** How far above its own control an {@code UNDER} card may climb before it gives up. */
+    private static final int SHELVES = 4;
 
     public static final class Box {
         public final float left, top, right, bottom;
@@ -160,7 +168,12 @@ public final class HelpLeaderRouter {
         List<Target> targets = new ArrayList<>();
         for (Target t : input) if (t != null && t.box != null
                 && t.box.width() > 0 && t.box.height() > 0) targets.add(t);
-        targets.sort(Comparator.comparingDouble((Target t) -> t.box.top)
+        // The band's own controls in reading order, then the ones under it, smallest first: a
+        // control the size of a cog has one place its line can leave from, and a row the width of
+        // the screen has the whole width, so the cog picks its shelf before the row does.
+        targets.sort(Comparator.comparingInt((Target t) -> t.side == Side.UNDER ? 1 : 0)
+            .thenComparingDouble(t -> t.side == Side.UNDER
+                ? t.box.width() * (double) t.box.height() : t.box.top)
             .thenComparingDouble(t -> t.box.left).thenComparing(t -> t.id));
         List<Placement> placed = new ArrayList<>();
         List<Target> unplaced = new ArrayList<>();
@@ -200,6 +213,7 @@ public final class HelpLeaderRouter {
     private static Placement arrangeOn(Target t, int page, Box band, float gutter, float gap,
                                        List<Placement> placed, List<Box> hard, List<Box> soft,
                                        int mode) {
+        if (t.side == Side.UNDER) return under(t, page, band, gutter, gap, placed, hard, mode);
         float left = band.left + gutter, right = band.right - gutter;
         float w = t.cardWidth, h = t.cardHeight;
         if (w > right - left + 0.5f || h > band.height() + 0.5f) return null;
@@ -268,6 +282,65 @@ public final class HelpLeaderRouter {
             }
         }
         return null;
+    }
+
+    /**
+     * A control outside the band — the dock, a row above the keyboard, a key of it — takes its card
+     * on the nearest shelf above its own box, and shares that shelf sideways before it climbs to
+     * the next one: its control is a few pixels away, so a card beside another card says far more
+     * than one a whole shelf further off. It climbs {@link #SHELVES} shelves at most, because a
+     * card that has walked half the screen away from its control is no longer about it; when none
+     * of them can take it the mode after this one seats it on the nearest shelf with no line, and
+     * the colour it shares with its box is what pairs the two.
+     */
+    private static Placement under(Target t, int page, Box band, float gutter, float gap,
+                                   List<Placement> placed, List<Box> hard, int mode) {
+        float left = band.left + gutter, right = band.right - gutter;
+        float w = t.cardWidth, h = t.cardHeight;
+        if (w > right - left + 0.5f || h > band.height() + 0.5f) return null;
+        List<Box> blocked = new ArrayList<>(hard);
+        List<Box> near = new ArrayList<>();
+        for (Placement p : placed) if (p.page == page) {
+            blocked.add(p.card);
+            near.add(p.card);
+            near.add(p.target.box);
+        }
+        float ideal = clamp(t.box.cx() - w / 2, left, right - w);
+        float bottom = t.box.top - gap;
+        for (int shelf = 0; shelf < SHELVES && bottom - h >= band.top - 0.5f;
+                shelf++, bottom -= h + gap) {
+            for (float x : shelfSlots(ideal, left, right - w, w, gap)) {
+                Box card = new Box(x, bottom - h, x + w, bottom);
+                if (card.overlaps(t.box) || hits(card, blocked)) continue;
+                int column = card.cx() < band.cx() ? 0 : 1;
+                if (mode == 2) return new Placement(t, card, Collections.emptyList(), page, column, -1);
+                for (List<Segment> path : leaders(t, card, gap, near)) {
+                    if (path.isEmpty()) continue;
+                    if (clears(t, card, path, placed, page, gap, mode == 0))
+                        return new Placement(t, card, path, page, column, -1);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Where on one shelf a card may sit: the shelf is divided into card-wide places from its left
+     * edge, and the card takes the one nearest its control and then the next nearest. Places, not
+     * free centring, because two cards centred on controls a hand's breadth apart leave a sliver
+     * between them that a third card cannot use, and every card under the band is the same width.
+     */
+    private static List<Float> shelfSlots(float ideal, float lo, float hi, float w, float gap) {
+        List<Float> out = new ArrayList<>();
+        for (float x = lo; x <= hi + 0.5f; x += w + gap) addLane(out, lo, hi, x);
+        addLane(out, lo, hi, hi);
+        out.sort(Comparator.comparingDouble((Float v) -> Math.abs(v - ideal)));
+        return out;
+    }
+
+    private static boolean hits(Box card, List<Box> blocked) {
+        for (Box b : blocked) if (card.overlaps(b)) return true;
+        return false;
     }
 
     /**
