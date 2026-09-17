@@ -55,6 +55,15 @@ import java.util.Map;
  * the band where the model works hardest against the ink, and that row is what the veil search was
  * run against.</p>
  *
+ * <h3>Panes, and bands that share one</h3>
+ * <p>A band is a question; a pane is a sheet of glass. They are usually the same thing, and twice
+ * in this app they are not: the status strip's content and the window chips both stand on
+ * {@code terminal_window_bar_background}, at different targets and in different hues. One pane can
+ * only wear one veil, so the pane wears the stronger of the two demands and both bands are then
+ * toned against that — see {@link #resolveBand}. The strip of glass behind the system status bar is
+ * the other half of the same fact: it continues the pane's material but carries no content, so it
+ * is nobody's band and asks for no veil of its own.</p>
+ *
  * <p>Main thread only, like the rest of the chrome renderer.</p>
  */
 public final class ChromeInk {
@@ -185,10 +194,47 @@ public final class ChromeInk {
      * The band's whole answer, from its standing {@link Contract}. Every path — the content asking
      * for its ink, the surface builder asking what to veil with — comes through here, so the two
      * cannot disagree and neither has to run before the other.
+     *
+     * <p>This is also where the pane's one veil is settled. A pane is drawn once, so the veil it
+     * wears is one number, and two bands standing on it ask for two. The answer is the stronger
+     * demand — derived here from every co-tenant's own resolution rather than left to whichever of
+     * them resolved last — and this band is then resolved again against it, so what comes back is
+     * toned on the surface that is really under it and not on the veil it would have bought
+     * alone.</p>
      */
     @NonNull
     private OnGlass.Resolution resolveBand(@NonNull GlassBackdropCache.Band band,
                                            @NonNull Contract contract) {
+        OnGlass.Resolution own = resolveAt(band, contract, 0);
+        int floor = Color.alpha(own.veil);
+        for (GlassBackdropCache.Band other : GlassBackdropCache.Band.values()) {
+            if (other == band || paneOf(other) != paneOf(band)) continue;
+            Contract co = mContracts.get(other);
+            if (co == null || !co.seen) continue;
+            floor = Math.max(floor, Color.alpha(resolveAt(other, co, 0).veil));
+        }
+        OnGlass.Resolution resolved =
+            floor == Color.alpha(own.veil) ? own : resolveAt(band, contract, floor);
+        if (contract.veil != resolved.veil) {
+            contract.veil = resolved.veil;
+            // The band's material has to change, and the surface that draws it may already have
+            // been built this pass. Ask for an apply before this frame is drawn rather than for a
+            // plain render pass: a render pass can decline to run a successor when nothing it
+            // tracks went dirty, and a veil dirties none of it — which is how a resolved veil used
+            // to be resolved every pass and drawn in none of them.
+            if (mOnVeilChanged != null) mOnVeilChanged.run();
+        }
+        return resolved;
+    }
+
+    /**
+     * This band alone, with {@code floorAlpha} of its base colour taken as already drawn: the veil
+     * search may ask for more, never for less. A floor of 0 is the band's own unconstrained demand,
+     * which is what {@link #resolveBand} compares the co-tenants by.
+     */
+    @NonNull
+    private OnGlass.Resolution resolveAt(@NonNull GlassBackdropCache.Band band,
+                                         @NonNull Contract contract, int floorAlpha) {
         Rect screenRect = contract.rect;
         double target = contract.target;
         BandGlass glass = glassFor(band);
@@ -220,23 +266,14 @@ public final class ChromeInk {
         float worst = DockGlassRendering.worstLightModelStop(ink, under, mBaseColor, baseAlpha,
             mAccentColor, top, mid, foot, glass.sliceStart, glass.sliceEnd);
         OnGlass.Resolution resolved = resolveAtStop(band, screenRect, worst, under, mBaseColor,
-            baseAlpha, top, mid, foot, ink, target);
+            baseAlpha, top, mid, foot, ink, target, floorAlpha);
         for (int pass = 0; pass < 2; pass++) {
             float again = DockGlassRendering.worstLightModelStop(resolved.ink, under, mBaseColor,
                 baseAlpha, mAccentColor, top, mid, foot, glass.sliceStart, glass.sliceEnd);
             if (again == worst) break;
             worst = again;
             resolved = resolveAtStop(band, screenRect, worst, under, mBaseColor, baseAlpha, top,
-                mid, foot, ink, target);
-        }
-        if (contract.veil != resolved.veil) {
-            contract.veil = resolved.veil;
-            // The band's material has to change, and the surface that draws it may already have
-            // been built this pass. Ask for an apply before this frame is drawn rather than for a
-            // plain render pass: a render pass can decline to run a successor when nothing it
-            // tracks went dirty, and a veil dirties none of it — which is how a resolved veil used
-            // to be resolved every pass and drawn in none of them.
-            if (mOnVeilChanged != null) mOnVeilChanged.run();
+                mid, foot, ink, target, floorAlpha);
         }
         return resolved;
     }
@@ -244,13 +281,17 @@ public final class ChromeInk {
     /**
      * The band resolved with its glass measured at one model row: a veil of its own base colour
      * when that moves the surface toward {@code ink} at all, and a moved ink when it does not.
+     *
+     * <p>{@code floorAlpha} is what the pane is drawn with whatever this band asks — a co-tenant's
+     * stronger demand. Nothing here can spend less than that, because less than that is not what
+     * is on screen; a band whose own answer was bare is re-toned on the veiled surface instead.</p>
      */
     @NonNull
     private OnGlass.Resolution resolveAtStop(@NonNull GlassBackdropCache.Band band,
                                              @NonNull Rect screenRect, float stop,
                                              @ColorInt int under, @ColorInt int baseColor,
                                              int baseAlpha, int top, int mid, int foot,
-                                             @ColorInt int ink, double target) {
+                                             @ColorInt int ink, double target, int floorAlpha) {
         // Composed the way the LayerDrawable composes it, layer by layer, so the measurement and
         // the draw cannot round apart.
         int backdrop = DockGlassRendering.glassSurfaceAt(stop, under, baseColor, baseAlpha,
@@ -260,11 +301,19 @@ public final class ChromeInk {
         // across it would undo exactly what that decision is for.
         boolean pale = polarity() == Polarity.PALE_INK;
         if (OnGlass.ratio(ink, OnGlass.opaque(baseColor)) > OnGlass.ratio(ink, backdrop)) {
-            return mCache.resolveOn(band, screenRect, backdrop, ink, ink, baseColor, target, pale);
+            OnGlass.Resolution own =
+                mCache.resolveOn(band, screenRect, backdrop, ink, ink, baseColor, target, pale);
+            if (Color.alpha(own.veil) >= floorAlpha) return own;
+            return OnGlass.resolveUnder(backdrop, OnGlass.withAlpha(baseColor, floorAlpha), ink,
+                target, pale);
         }
         // Veiling toward this band's own base colour would move the surface the wrong way for the
-        // ink the chrome has settled on. Leave the wallpaper alone and move the ink.
-        return OnGlass.resolveBare(backdrop, ink, target, pale);
+        // ink the chrome has settled on. Leave the wallpaper alone and move the ink — unless a
+        // co-tenant of the same pane has already bought a veil, in which case the wallpaper is not
+        // there to be left alone and the ink is toned on what is.
+        if (floorAlpha <= 0) return OnGlass.resolveBare(backdrop, ink, target, pale);
+        return OnGlass.resolveUnder(backdrop, OnGlass.withAlpha(baseColor, floorAlpha), ink,
+            target, pale);
     }
 
     /**
@@ -369,8 +418,9 @@ public final class ChromeInk {
     }
 
     /**
-     * The veil {@code band} was last told it needs: its own base colour at an alpha, or
-     * {@link Color#TRANSPARENT} when the band reads bare. Drawn over the light model.
+     * The veil {@code band}'s pane is drawn with: its own base colour at an alpha, or
+     * {@link Color#TRANSPARENT} when everything standing on it reads bare. Drawn over the light
+     * model. A pane two bands share answers the same number to both of them.
      */
     @ColorInt
     int bandVeil(@NonNull GlassBackdropCache.Band band) {
@@ -393,6 +443,10 @@ public final class ChromeInk {
      * strip's — would take turns invalidating each other's sample and re-measure on every draw. The
      * content of a band asks the band where it is.</p>
      *
+     * <p>Two bands that share a pane get that pane's rect, which is the point: what they are drawn
+     * over is one wash of wallpaper, and asking about it twice from two rects would sample it
+     * twice and let the two answers drift.</p>
+     *
      * <p>False for a band whose view is not inflated or not laid out yet, and for a band the chrome
      * does not own a view for; that caller supplies its own rect and uses it consistently.</p>
      */
@@ -409,11 +463,32 @@ public final class ChromeInk {
 
     /** The view each band's glass is drawn by; 0 for a band whose owning phase holds its own. */
     private static int bandViewId(@NonNull GlassBackdropCache.Band band) {
-        switch (band) {
-            case STATUS_BAR: return R.id.terminal_status_bar_background;
+        switch (paneOf(band)) {
             case WINDOW_BAR: return R.id.terminal_window_bar_background;
             default: return 0;
         }
+    }
+
+    /**
+     * The pane a band's glass is really drawn on. Usually the band itself; where two bands stand on
+     * one sheet of glass, the one that owns it.
+     *
+     * <p>{@link GlassBackdropCache.Band#STATUS_BAR} is the launcher's own status strip — the
+     * CPU/RAM/weather widgets, the separator dots, the lens, the sessions chip — and every one of
+     * them is laid out inside {@code terminal_window_bar_host}, whose glass is
+     * {@code terminal_window_bar_background}. That is the same pane
+     * {@link GlassBackdropCache.Band#WINDOW_BAR}'s chips stand on. The band this used to point at,
+     * {@code terminal_status_bar_background}, carries no content at all: it is the continuation of
+     * that pane's glass through the system status-bar inset. Measuring the strip and veiling the
+     * strip put the whole veil where nothing stands and left the content on bare glass — a whitish
+     * wash under the system status bar in light mode, a dark one in dark mode, and widgets still
+     * under their ratio on the pane below it.</p>
+     */
+    @NonNull
+    private static GlassBackdropCache.Band paneOf(@NonNull GlassBackdropCache.Band band) {
+        return band == GlassBackdropCache.Band.STATUS_BAR
+            ? GlassBackdropCache.Band.WINDOW_BAR
+            : band;
     }
 
     // ------------------------------------------------------------------ lifecycle
@@ -490,12 +565,14 @@ public final class ChromeInk {
         return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
     }
 
+    /** Keyed by the pane, not by the band: co-tenants are drawn by one surface and share its glass. */
     @NonNull
     private BandGlass glassFor(@NonNull GlassBackdropCache.Band band) {
-        BandGlass glass = mGlass.get(band);
+        GlassBackdropCache.Band pane = paneOf(band);
+        BandGlass glass = mGlass.get(pane);
         if (glass == null) {
             glass = new BandGlass();
-            mGlass.put(band, glass);
+            mGlass.put(pane, glass);
         }
         return glass;
     }

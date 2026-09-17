@@ -116,8 +116,9 @@ public final class StatusBarWindowColumn extends ScrollView {
     /**
      * The band under the chips, measured once and remembered until the measurement could move.
      *
-     * <p>The column stands on the status strip, so it reads
-     * {@link GlassBackdropCache.Band#STATUS_BAR}'s settled answer rather than resolving it. A band
+     * <p>The column stands on the top pane, the same glass the status strip's content stands on,
+     * so it reads {@link GlassBackdropCache.Band#STATUS_BAR}'s settled answer rather than resolving
+     * it. A band
      * has one veil and therefore one question, and the strip's owner is the activity's own status
      * ink pass, which asks in the stats' hues. This used to ask as well, in the chips' neutrals, so
      * one strip of glass carried two resolutions and wore whichever of them drew last. Reading is
