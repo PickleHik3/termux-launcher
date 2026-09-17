@@ -5876,12 +5876,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Whether the strip behind the system status bar repeats the top pane's veil.
      *
-     * <p>False: the strip is bare glass even when the pane below it is veiled, so the veil stays
-     * under the content that asked for it and the strip shows the wallpaper the user chose. That
-     * leaves a step at the system bar's bottom edge, which is the trade the design took. Flipping
-     * this to true hands the strip the pane's veil for one continuous sheet.</p>
+     * <p>True (user decision 2026-09-17): the strip carries whatever veil the pane below it wears,
+     * so the docked top pane is one continuous sheet of glass from the physical top edge of the
+     * screen down. The strip is still not a band of its own — it asks no question and notes no
+     * glass; it only repeats the pane's answer. False leaves the strip bare glass: the veil stays
+     * strictly under the content that asked for it, at the price of a step at the system bar's
+     * bottom edge.</p>
      */
-    private static final boolean STATUS_INSET_STRIP_CONTINUES_PANE_VEIL = false;
+    private static final boolean STATUS_INSET_STRIP_CONTINUES_PANE_VEIL = true;
 
     /**
      * Continue the top pane's glass through the system status-bar inset. This surface is a sibling

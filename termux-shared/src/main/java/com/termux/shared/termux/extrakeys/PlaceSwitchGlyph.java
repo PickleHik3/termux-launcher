@@ -77,17 +77,16 @@ public final class PlaceSwitchGlyph {
     public static final int UNFOCUSED_ALPHA = 145;
 
     /**
-     * The radius of the focused glyph's resting halo, in dp. None: three glyphs a few pixels wide
-     * standing together already say which one is the place in front — it is the one at full colour
-     * between two faded ones — and a halo that wide around a glyph that small reads as a smudge
-     * rather than as a light.
-     *
-     * <p>A softer halo comes back from this one line: 3f here, with {@link #GLOW_ALPHA} at 60.
+     * The radius of the focused glyph's resting halo, in dp: a neon tube's spread, not a smudge.
+     * The halo used to be 7 dp at 60% of the glyph's own colour, which around a glyph a few pixels
+     * wide read as a smear; the user's word for what they wanted instead was "a neon light's
+     * spread" — soft, dim, close to the stroke (decision 2026-09-17). {@code 0f} turns it off, and
+     * the focus then reads by colour alone: full strength between two faded neighbours.
      */
-    public static final float GLOW_RADIUS_DP = 0f;
+    public static final float GLOW_RADIUS_DP = 3f;
 
-    /** How strong that halo is, when there is one: the glyph's own vivid colour at 60%. */
-    public static final int GLOW_ALPHA = 153;
+    /** How strong that halo is: the glyph's own vivid colour at about a quarter, so it glows, not blooms. */
+    public static final int GLOW_ALPHA = 60;
 
     /**
      * The vivid colour one role is drawn in, on its own hue.

@@ -266,17 +266,24 @@ public class ExtraKeysViewKeyStyleTest {
     }
 
     /**
-     * The focused switch wears no resting halo: it reads by being full colour between two faded
-     * ones. The halo it used to wear was 7dp at 60% of a glyph a few pixels wide, which read as a
-     * smudge; {@link PlaceSwitchGlyph#GLOW_RADIUS_DP} is the one line that brings a softer one back.
+     * The focused switch wears a soft, dim halo — a neon tube's spread, 3 dp at about a quarter of
+     * its own colour — and nothing else on the row glows. The 7 dp, 60% halo it used to wear read
+     * as a smudge; {@link PlaceSwitchGlyph#GLOW_RADIUS_DP} and {@link PlaceSwitchGlyph#GLOW_ALPHA}
+     * are the two lines that set it.
      */
     @Test
-    public void noPlaceSwitchWearsARestingHaloAndTheFocusIsColourAlone() {
+    public void onlyTheFocusedPlaceSwitchWearsASoftHalo() {
         showing("tool:wall.terminal");
 
-        assertEquals("the halo is off", 0f, PlaceSwitchGlyph.GLOW_RADIUS_DP, 0f);
-        for (int index = 0; index < 5; index++)
-            assertEquals("key " + index, 0f, button(index).getShadowRadius(), 0f);
+        assertEquals("the halo is soft", 3f, PlaceSwitchGlyph.GLOW_RADIUS_DP, 0f);
+        assertEquals("and dim", 60, PlaceSwitchGlyph.GLOW_ALPHA);
+        for (int index = 0; index < 5; index++) {
+            if (index == 3) continue;
+            assertEquals("key " + index + " does not glow", 0f, button(index).getShadowRadius(), 0f);
+        }
+        assertTrue("the focused switch glows", button(3).getShadowRadius() > 0f);
+        assertEquals("in its own colour", vivid(1) & 0x00FFFFFF, button(3).getShadowColor() & 0x00FFFFFF);
+        assertEquals("at a quarter", PlaceSwitchGlyph.GLOW_ALPHA, (button(3).getShadowColor() >>> 24));
         // Which leaves the colour to say it, and it does: full strength against two faded ones.
         assertEquals(vivid(1), button(3).getCurrentTextColor());
         assertEquals(dimmed(0), button(2).getCurrentTextColor());
