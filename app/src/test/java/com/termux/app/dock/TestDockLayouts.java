@@ -19,4 +19,14 @@ public final class TestDockLayouts {
         builder.configuredCornerRadiusDp = -1;
         return builder.build();
     }
+
+    /** The default (edge-to-edge) dock: the style whose drawer runs bezel to bezel. */
+    public static DockLayout defaultStyle(float density, int horizontalInsetPx) {
+        DockLayout.Builder builder = new DockLayout.Builder();
+        builder.capsule = false;
+        builder.density = density;
+        builder.horizontalInsetPx = horizontalInsetPx;
+        builder.configuredCornerRadiusDp = -1;
+        return builder.build();
+    }
 }
