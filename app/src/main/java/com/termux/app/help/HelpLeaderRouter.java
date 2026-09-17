@@ -252,9 +252,16 @@ public final class HelpLeaderRouter {
                         int column = cx + w / 2 < band.cx() ? 0 : 1;
                         if (mode == 2) return new Placement(t, card, Collections.emptyList(),
                             page, column, -1);
-                        for (List<Segment> path : leaders(t, card, gap, near))
+                        for (List<Segment> path : leaders(t, card, gap, near)) {
+                            // A control outside the band is only ever reached by a line, so an
+                            // empty leader there is a last resort and not a first answer: a card
+                            // that lands away from its box with nothing joining them reads as
+                            // belonging to nothing. Inside the band the card touches its box and
+                            // the absence of a line is the point.
+                            if (path.isEmpty() && t.side != Side.INSIDE) continue;
                             if (clears(t, card, path, placed, page, gap, mode == 0))
                                 return new Placement(t, card, path, page, column, -1);
+                        }
                         yy += d > 0 ? step : -step;
                     }
                 }

@@ -335,7 +335,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 FirstBootTour tour = firstBootTour();
                 if (tour != null) tour.startPractice(lessonId);
             });
-            content.addView(mHelpOverlay, new android.widget.FrameLayout.LayoutParams(
+            // Over the whole screen, not over the content alone: the dock, the A-Z row, the extra
+            // keys and the keyboard are all lifted above the content, and the strip under the
+            // gesture pill is not in the content at all. Everything help measures is measured
+            // against the overlay's own origin, so the wider frame moves nothing.
+            ViewGroup helpHost = content;
+            if (getWindow() != null && getWindow().getDecorView() instanceof FrameLayout)
+                helpHost = (FrameLayout) getWindow().getDecorView();
+            helpHost.addView(mHelpOverlay, new android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
         // A run that is partway through a lesson has nowhere to put a practice card, so help does

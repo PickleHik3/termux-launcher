@@ -39,10 +39,21 @@ public final class HelpTargets {
             this.id = id; this.rect = rect; this.radius = radius; this.copy = copy;
         }
     }
+    /** One extra key: the cap it sits on, what it does, and what a swipe up on it does. */
     public static final class KeyLabel {
         public final Rect rect;
+        /** What the key does. */
+        public final String primary;
+        /** What a swipe up on it does, already arrowed, or null when the key has no second one. */
+        public final String secondary;
+        /** Both lines, for the measurement signature. */
         public final String text;
-        KeyLabel(Rect rect, String text) { this.rect = rect; this.text = text; }
+        KeyLabel(Rect rect, String primary, String secondary) {
+            this.rect = rect;
+            this.primary = primary;
+            this.secondary = secondary;
+            this.text = secondary == null ? primary : primary + "\n" + secondary;
+        }
     }
     public static final class Snapshot {
         public final Rect wall;
@@ -77,9 +88,13 @@ public final class HelpTargets {
                 TerminalWindowBar windows = (TerminalWindowBar) bar;
                 // The chips and the + are one box and one hint: the + is the chip strip's own
                 // trailing button, and a quick reference reads better as one line than two.
-                Rect chips = null;
+                // The strip's own bounds are the box: it wraps its chips and its +, so a chip the
+                // measurement cannot see on its own is still inside the box drawn round the row.
                 ViewGroup strip = (ViewGroup) windows.chipStripView();
-                for (int i = 0; i < strip.getChildCount(); i++) chips = union(chips, rect(strip.getChildAt(i)));
+                Rect chips = rect(strip);
+                if (chips == null) {
+                    for (int i = 0; i < strip.getChildCount(); i++) chips = union(chips, rect(strip.getChildAt(i)));
+                }
                 add(s, "windows", chips, radius(strip), place == PaneWallPage.TERMINAL
                     ? copy(R.string.help_windows_title, R.string.help_windows_body)
                     : copy(R.string.help_display_apps_title, R.string.help_display_apps_body));
@@ -216,10 +231,10 @@ public final class HelpTargets {
                 Rect r = rect(row.getChildAt(i));
                 ExtraKeyButton key = row.definitionForChild(i);
                 if (r == null || key == null) continue;
-                String label = HelpCopy.keyLabel(context, key);
-                if (key.getPopup() != null) label += "\n" + context.getString(R.string.help_key_secondary,
-                    HelpCopy.keyLabel(context, key.getPopup()));
-                s.keys.add(new KeyLabel(r, label));
+                String secondary = key.getPopup() == null ? null
+                    : context.getString(R.string.help_key_secondary,
+                        HelpCopy.keyLabel(context, key.getPopup()));
+                s.keys.add(new KeyLabel(r, HelpCopy.keyLabel(context, key), secondary));
             }
             return;
         }

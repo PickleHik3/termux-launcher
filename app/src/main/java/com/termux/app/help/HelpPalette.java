@@ -13,7 +13,16 @@ public final class HelpPalette {
 
     /** The bright colour for the dashed box, index {@code i} of {@code count}. */
     public static int boxColor(int accent, int i, int count) {
-        return hsv(hue(accent, i, count), 0.55f, 0.97f);
+        return boxColor(accent, i, count, false);
+    }
+
+    /**
+     * The dashed box's colour for the wash help is drawn over: bright on the dark wash, and
+     * deepened on the light one, where a pale dash would disappear into the screen behind it.
+     */
+    public static int boxColor(int accent, int i, int count, boolean lightMode) {
+        float h = hue(accent, i, count);
+        return lightMode ? hsv(h, 0.85f, 0.55f) : hsv(h, 0.55f, 0.97f);
     }
 
     /** The title colour for the card, readable against a light or a dark card surface. */

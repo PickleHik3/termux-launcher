@@ -200,7 +200,13 @@ public final class HelpPresentationModel {
      * keeps its colour whatever else is on screen.
      */
     public int overviewColor(int accent, HelpTopics.Entry entry) {
-        return HelpPalette.boxColor(accent, entry.identityIndex, HelpTopics.sizeFor(entry.place));
+        return overviewColor(accent, entry, false);
+    }
+
+    /** The same colour, deepened when help is drawn over a light wash rather than a dark one. */
+    public int overviewColor(int accent, HelpTopics.Entry entry, boolean lightMode) {
+        return HelpPalette.boxColor(accent, entry.identityIndex, HelpTopics.sizeFor(entry.place),
+            lightMode);
     }
 
     /** The entries the overview boxes and cards: {@link #entries()} minus the chooser-only topics. */
