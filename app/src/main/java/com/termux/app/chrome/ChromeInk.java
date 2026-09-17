@@ -80,6 +80,21 @@ public final class ChromeInk {
      */
     public static final double POLARITY_FLIP_MARGIN = 1.15d;
 
+    /**
+     * The standing question a band's content has asked: which two inks, at which target, and where
+     * the band was when it asked. Kept so {@link #bandVeil} can answer the surface builder with the
+     * same resolution {@link #onGlass} would return, in whichever order the two are called.
+     */
+    private static final class Contract {
+        @NonNull final Rect rect = new Rect();
+        int darkInk;
+        int paleInk;
+        double target;
+        /** The veil the band last derived; only for noticing a change worth a repaint. */
+        int veil = Color.TRANSPARENT;
+        boolean seen;
+    }
+
     /** What a band's glass is, as far as measuring it goes: opacity, foot, and the slice it draws. */
     private static final class BandGlass {
         float opacity;
@@ -96,8 +111,11 @@ public final class ChromeInk {
 
     @NonNull private final Map<GlassBackdropCache.Band, BandGlass> mGlass =
         new EnumMap<>(GlassBackdropCache.Band.class);
-    /** The veil each band was last told it needs; what {@link GlassSurfaceFactory} draws. */
-    @NonNull private final Map<GlassBackdropCache.Band, Integer> mVeils =
+    /**
+     * What each band's content asked for, so the band's veil can be re-derived by whoever needs it
+     * next instead of being handed across a render pass. See {@link #bandVeil}.
+     */
+    @NonNull private final Map<GlassBackdropCache.Band, Contract> mContracts =
         new EnumMap<>(GlassBackdropCache.Band.class);
     /** Each band's flat glass, its vote in the polarity decision. Cleared by {@link #invalidate}. */
     @NonNull private final Map<GlassBackdropCache.Band, Integer> mVotes =
@@ -154,35 +172,95 @@ public final class ChromeInk {
                                       @ColorInt int darkInk, @ColorInt int paleInk,
                                       double target) {
         readMode();
+        Contract contract = contractFor(band);
+        contract.rect.set(screenRect);
+        contract.darkInk = darkInk;
+        contract.paleInk = paleInk;
+        contract.target = target;
+        contract.seen = true;
+        return resolveBand(band, contract);
+    }
+
+    /**
+     * The band's whole answer, from its standing {@link Contract}. Every path — the content asking
+     * for its ink, the surface builder asking what to veil with — comes through here, so the two
+     * cannot disagree and neither has to run before the other.
+     */
+    @NonNull
+    private OnGlass.Resolution resolveBand(@NonNull GlassBackdropCache.Band band,
+                                           @NonNull Contract contract) {
+        Rect screenRect = contract.rect;
+        double target = contract.target;
         BandGlass glass = glassFor(band);
         int baseAlpha = ChromePolicy.dockGlassBaseAlpha(glass.opacity);
         // The band's flat glass: wallpaper, the launcher's dim, the base layer. No light model, so
         // the polarity vote is the same number whichever ink is asking.
-        int flat = OnGlass.backdrop(mCache.wallpaperUnder(band, screenRect), mDimColor,
-            OnGlass.withAlpha(mBaseColor, baseAlpha));
+        int wallpaper = mCache.wallpaperUnder(band, screenRect);
+        int flat = OnGlass.backdrop(wallpaper, mDimColor, OnGlass.withAlpha(mBaseColor, baseAlpha));
         vote(band, flat);
-        int ink = polarity() == Polarity.DARK_INK ? darkInk : paleInk;
+        // What the band's own glass is laid on, and nothing of the glass itself: the base layer is
+        // part of the tint that gets composited over this, so counting it here too would apply it
+        // twice and pick the worst row off a band a shade lighter than the one being drawn.
+        int under = OnGlass.backdrop(wallpaper, mDimColor, Color.TRANSPARENT);
+        int ink = polarity() == Polarity.DARK_INK ? contract.darkInk : contract.paleInk;
 
         int top = DockGlassRendering.topSheenAlpha(glass.opacity);
         int mid = DockGlassRendering.midSheenAlpha(glass.opacity);
         int foot = DockGlassRendering.footAlpha(glass.opacity, glass.withFoot);
-        float worst = DockGlassRendering.worstLightModelStop(ink, flat, mBaseColor, baseAlpha,
-            mAccentColor, top, mid, foot, glass.sliceStart, glass.sliceEnd);
-        int tint = DockGlassRendering.glassTintAt(worst, mBaseColor, baseAlpha, mAccentColor,
-            top, mid, foot);
 
-        OnGlass.Resolution resolved;
-        if (veilWouldHelp(band, screenRect, tint, ink)) {
-            resolved = mCache.resolve(band, screenRect, mDimColor, tint, ink, ink, mBaseColor,
-                target);
-        } else {
-            // Veiling toward this band's own base colour would move the surface the wrong way for
-            // the ink the chrome has settled on. Leave the wallpaper alone and move the ink.
-            resolved = OnGlass.resolveBare(mCache.backdropUnder(band, screenRect, mDimColor, tint),
-                ink, target);
+        // The row of the band the promise has to be made at depends on the ink, and a resolve can
+        // change the ink: over a mid backdrop the seed's own polarity runs out of veil, the ink is
+        // re-toned to the other one, and the row that was worst for the seed (the accent sheen, for
+        // a pale ink) is no longer the row that is worst for what will be drawn (the black foot,
+        // for a dark one). Measured at the seed's row alone the band came out 0.03 short at the
+        // foot — a per-pixel promise broken by the one layer that was always able to break it. So
+        // the row is re-checked against the ink that came back, and a second pass settles it: that
+        // pass measures at the resolved ink's own worst row, and a dark ink's worst row is the
+        // foot, which is the extreme of the model.
+        float worst = DockGlassRendering.worstLightModelStop(ink, under, mBaseColor, baseAlpha,
+            mAccentColor, top, mid, foot, glass.sliceStart, glass.sliceEnd);
+        OnGlass.Resolution resolved = resolveAtStop(band, screenRect, worst, under, mBaseColor,
+            baseAlpha, top, mid, foot, ink, target);
+        for (int pass = 0; pass < 2; pass++) {
+            float again = DockGlassRendering.worstLightModelStop(resolved.ink, under, mBaseColor,
+                baseAlpha, mAccentColor, top, mid, foot, glass.sliceStart, glass.sliceEnd);
+            if (again == worst) break;
+            worst = again;
+            resolved = resolveAtStop(band, screenRect, worst, under, mBaseColor, baseAlpha, top,
+                mid, foot, ink, target);
         }
-        recordVeil(band, resolved.veil);
+        if (contract.veil != resolved.veil) {
+            contract.veil = resolved.veil;
+            // The band's material has to change, and the surface that draws it may already have
+            // been built this pass. Ask for an apply before this frame is drawn rather than for a
+            // plain render pass: a render pass can decline to run a successor when nothing it
+            // tracks went dirty, and a veil dirties none of it — which is how a resolved veil used
+            // to be resolved every pass and drawn in none of them.
+            if (mOnVeilChanged != null) mOnVeilChanged.run();
+        }
         return resolved;
+    }
+
+    /**
+     * The band resolved with its glass measured at one model row: a veil of its own base colour
+     * when that moves the surface toward {@code ink} at all, and a moved ink when it does not.
+     */
+    @NonNull
+    private OnGlass.Resolution resolveAtStop(@NonNull GlassBackdropCache.Band band,
+                                             @NonNull Rect screenRect, float stop,
+                                             @ColorInt int under, @ColorInt int baseColor,
+                                             int baseAlpha, int top, int mid, int foot,
+                                             @ColorInt int ink, double target) {
+        // Composed the way the LayerDrawable composes it, layer by layer, so the measurement and
+        // the draw cannot round apart.
+        int backdrop = DockGlassRendering.glassSurfaceAt(stop, under, baseColor, baseAlpha,
+            mAccentColor, top, mid, foot);
+        if (OnGlass.ratio(ink, OnGlass.opaque(baseColor)) > OnGlass.ratio(ink, backdrop)) {
+            return mCache.resolveOn(band, screenRect, backdrop, ink, ink, baseColor, target);
+        }
+        // Veiling toward this band's own base colour would move the surface the wrong way for the
+        // ink the chrome has settled on. Leave the wallpaper alone and move the ink.
+        return OnGlass.resolveBare(backdrop, ink, target);
     }
 
     /**
@@ -238,8 +316,14 @@ public final class ChromeInk {
      */
     @ColorInt
     int bandVeil(@NonNull GlassBackdropCache.Band band) {
-        Integer veil = mVeils.get(band);
-        return veil == null ? Color.TRANSPARENT : veil;
+        Contract contract = mContracts.get(band);
+        if (contract == null || !contract.seen) return Color.TRANSPARENT;
+        // Derived here and now, not read from something {@link #onGlass} left behind. The surface
+        // builder and the band's content run in an order neither of them controls, and a veil
+        // handed from one to the other across a pass is a veil that is resolved every frame and
+        // drawn in none — which is exactly what a mid-tone wallpaper produced: an ink toned for a
+        // veiled band, over a band that was never veiled, at 1.7:1.
+        return resolveBand(band, contract).veil;
     }
 
     /**
@@ -284,7 +368,7 @@ public final class ChromeInk {
     public void invalidate() {
         mCache.invalidate();
         mVotes.clear();
-        mVeils.clear();
+        for (Contract contract : mContracts.values()) contract.veil = Color.TRANSPARENT;
     }
 
     /** The backing cache, for tests and for a caller that wants the raw backdrop. */
@@ -317,22 +401,14 @@ public final class ChromeInk {
         invalidate();
     }
 
-    /**
-     * Whether veiling this band in its own base colour moves it toward the chosen ink at all. An
-     * opaque veil is the furthest the search could ever go, so if that does not beat the bare
-     * surface no alpha below it will either.
-     */
-    private boolean veilWouldHelp(@NonNull GlassBackdropCache.Band band, @NonNull Rect screenRect,
-                                  @ColorInt int tint, @ColorInt int ink) {
-        int backdrop = mCache.backdropUnder(band, screenRect, mDimColor, tint);
-        return OnGlass.ratio(ink, OnGlass.opaque(mBaseColor)) > OnGlass.ratio(ink, backdrop);
-    }
-
-    private void recordVeil(@NonNull GlassBackdropCache.Band band, @ColorInt int veil) {
-        Integer previous = mVeils.put(band, veil);
-        if (mOnVeilChanged != null && (previous == null ? veil != Color.TRANSPARENT : previous != veil)) {
-            mOnVeilChanged.run();
+    @NonNull
+    private Contract contractFor(@NonNull GlassBackdropCache.Band band) {
+        Contract contract = mContracts.get(band);
+        if (contract == null) {
+            contract = new Contract();
+            mContracts.put(band, contract);
         }
+        return contract;
     }
 
     private void vote(@NonNull GlassBackdropCache.Band band, @ColorInt int flatGlass) {

@@ -257,7 +257,13 @@ public final class ChromeRenderer {
             WallpaperBlurCache.DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES, blurWorker,
             blurWorker == null ? null : mHandler::post,
             blurWorker == null ? null : this::onBlurFrameReady);
-        mInk = new ChromeInk(surfaces, mBlurCache, () -> requestSync(SCOPE_ACCESSORY_RENDER));
+        // A veil has to be applied before the frame that resolved it is drawn. SCOPE_ACCESSORY_RENDER
+        // alone is not enough: a pass that asks for a successor only gets one when it also left
+        // something in the ledger dirty, and a veil touches nothing the ledger tracks, so the
+        // request was dropped every time and the band was never veiled. The commit is gated on the
+        // frame instead of on the ledger, so it cannot be declined.
+        mInk = new ChromeInk(surfaces, mBlurCache,
+            () -> requestSync(SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER));
         mGlass = new GlassSurfaceFactory(surfaces, mInk);
         mFrost = new WallpaperFrostPainter(surfaces, mBlurCache, mLedger);
     }

@@ -50,6 +50,24 @@ public class ChromeInkTest {
     /** Measured behind the A&ndash;Z strip in light mode: the marginal band. */
     private static final int AZ_GLASS = 0xFF657271;
 
+    /**
+     * The band on the user's current wallpaper, measured off the rendered pixels on pong: a bright
+     * warm wallpaper leaves the status band mid-tone, Y 0.29. Neither {@link #STATUS_GLASS} nor
+     * {@link #AZ_GLASS} reaches this part of the range, and it is the part where a role colour of
+     * either polarity misses 4.5:1 on its own.
+     */
+    private static final int MID_WARM_GLASS = 0xFFA8906C;
+    /** The Material dark neutral the chrome's glass base is in dark mode. */
+    private static final int NIGHT_BASE = 0xFF1C1B1F;
+    /** Material You primary for that wallpaper, night: the warm ink the bar was measured drawing. */
+    private static final int WARM_INK_NIGHT = 0xFFFCB46C;
+    /** Material You primary for it, light. */
+    private static final int WARM_INK_LIGHT = 0xFF784800;
+    /** The accent the light model's sheen is drawn in for that wallpaper. */
+    private static final int WARM_ACCENT = 0xFFFFB68F;
+    /** A status-bar opacity in the middle of the slider's range. */
+    private static final float MID_OPACITY = 0.35f;
+
     private static final Rect STATUS_RECT = new Rect(0, 0, 1080, 96);
     private static final Rect AZ_RECT = new Rect(1020, 300, 1080, 1800);
     private static final Rect WINDOW_RECT = new Rect(0, 96, 1080, 200);
@@ -273,6 +291,97 @@ public class ChromeInkTest {
             OnGlass.TARGET_BODY_TEXT);
         assertEquals("a settled band repaints without asking for another pass",
             1, veilChangeNotices);
+    }
+
+    // ------------------------------------------------------ the mid backdrop, both modes
+
+    /**
+     * The wallpaper the user actually has now: a bright warm one, whose band lands mid — Y 0.29,
+     * measured off the rendered pixels on pong as {@code #A8906C}. Neither original fixture covers
+     * it. A mid band is the hard case, because 4.5:1 there needs an ink that is either very dark or
+     * very light and the mode's own role colour is neither: dark mode measured 1.73:1 on the CPU
+     * label, 1.77 on RAM and on the weather.
+     *
+     * <p>The arithmetic was never wrong about it — it resolved a 33% veil of the band's own base
+     * colour and an ink that reads 4.5 on the result. What was wrong is that the veil was handed
+     * from the resolve to the surface builder across a render pass, and that pass declined to run:
+     * a follow-up render only happens when the apply left the dirty ledger changed, and a veil
+     * dirties nothing the ledger tracks. So the band was resolved every pass and veiled in none,
+     * and the ink was toned for a surface that did not exist. This asserts the thing that would
+     * have caught it: the ratio on the surface as <em>drawn</em>.</p>
+     */
+    @Test
+    public void aMidBandReachesItsTargetAsDrawn_inBothModes() {
+        for (boolean night : new boolean[] {true, false}) {
+            for (boolean paleSeed : new boolean[] {true, false}) {
+                setUp();
+                surfaces.glassBase = night ? NIGHT_BASE : LIGHT_BASE;
+                surfaces.accent = WARM_ACCENT;
+                wallpaper.status = MID_WARM_GLASS;
+                wallpaper.other = MID_WARM_GLASS;
+                int seed = paleSeed ? WARM_INK_NIGHT : WARM_INK_LIGHT;
+
+                GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
+                // The order the activity really uses: the surface is dressed by the apply, the
+                // bar's ink is measured after it. The veil must survive that, whichever way round.
+                glass.surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false,
+                    GlassBackdropCache.Band.STATUS_BAR);
+                OnGlass.Resolution band = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR,
+                    STATUS_RECT, seed, seed, OnGlass.TARGET_BODY_TEXT);
+                LayerDrawable drawn = (LayerDrawable) glass.surface(MID_OPACITY, 0f, 1f, true, 0,
+                    0f, false, GlassBackdropCache.Band.STATUS_BAR);
+
+                String where = (night ? "dark" : "light") + " mode, "
+                    + (paleSeed ? "pale" : "dark") + " seed";
+                int composed = composeDrawnBand(drawn, MID_WARM_GLASS, MID_OPACITY, 0f, 1f,
+                    band.ink);
+                assertTrue(where + ": the band promised " + band + " but as drawn the ink reads "
+                        + OnGlass.ratio(band.ink, composed),
+                    OnGlass.ratio(band.ink, composed) >= OnGlass.TARGET_BODY_TEXT);
+                assertTrue(where + ": the band's own claim has to hold too",
+                    band.ratio >= OnGlass.TARGET_BODY_TEXT);
+            }
+        }
+    }
+
+    /**
+     * The seam the bug lived in. The surface builder and the bar's content run in an order neither
+     * of them chooses, and the builder used to draw whatever the last resolve had left behind — so
+     * on the first pass of a mid band it drew nothing. The veil is derived on demand now, from the
+     * band's standing question, so both sides get the same answer whichever runs first.
+     */
+    @Test
+    public void theSurfaceBuilderDerivesTheVeilRatherThanInheritingIt() {
+        surfaces.glassBase = NIGHT_BASE;
+        surfaces.accent = WARM_ACCENT;
+        wallpaper.status = MID_WARM_GLASS;
+        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
+        glass.surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.STATUS_BAR);
+        OnGlass.Resolution band = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT,
+            WARM_INK_NIGHT, WARM_INK_NIGHT, OnGlass.TARGET_BODY_TEXT);
+        assertFalse("a mid band in dark mode has to buy a veil", band.isBare());
+
+        // A fresh sample of the same wallpaper — a rotation, a blur frame landing — clears what the
+        // last resolve left behind. The very next surface build must still veil, with no resolve in
+        // between: on the device, that rebuild is the only one that ever ran.
+        ink.invalidate();
+        LayerDrawable drawn = (LayerDrawable) glass.surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false,
+            GlassBackdropCache.Band.STATUS_BAR);
+
+        assertEquals("base, light model, veil", 3, drawn.getNumberOfLayers());
+        assertEquals(band.veil,
+            ((GradientDrawable) drawn.getDrawable(2)).getColor().getDefaultColor());
+    }
+
+    /** A band nobody has asked an ink for has nothing to veil for, and stays plain glass. */
+    @Test
+    public void anUnaskedBandIsNotVeiled() {
+        surfaces.glassBase = NIGHT_BASE;
+        wallpaper.other = MID_WARM_GLASS;
+        LayerDrawable drawn = (LayerDrawable) new GlassSurfaceFactory(surfaces, ink)
+            .surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.DOCK);
+
+        assertEquals("base and light model only", 2, drawn.getNumberOfLayers());
     }
 
     // ------------------------------------------------------------------ the foot

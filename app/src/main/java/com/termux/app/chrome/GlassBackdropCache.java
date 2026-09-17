@@ -231,6 +231,47 @@ public final class GlassBackdropCache {
     }
 
     /**
+     * The whole answer for {@code band} when the caller has already composed what the band stands
+     * on — the wallpaper, the dim and every layer of the band's own glass, in the order they are
+     * drawn.
+     *
+     * <p>{@link #resolve} builds the backdrop itself out of a dim and a single glass tint, which is
+     * the same arithmetic but not the same 8-bit rounding as a stack of layers composited one at a
+     * time. A caller that draws its glass as several layers composes it once, its own way, and
+     * hands the result here, so what was measured and what is drawn cannot drift apart by the unit
+     * of RGB that costs a promise. Memoised on the backdrop itself.</p>
+     *
+     * @param screenRect the band's rect on screen; a change re-samples the wallpaper
+     * @param backdrop the opaque colour the band's content stands on before any veil
+     */
+    @NonNull
+    public OnGlass.Resolution resolveOn(@NonNull Band band, @NonNull Rect screenRect,
+                                        @ColorInt int backdrop, @ColorInt int preferredInk,
+                                        @ColorInt int alternateInk, @ColorInt int veilColor,
+                                        double target) {
+        Entry entry = entryFor(band, screenRect);
+        for (int i = 0; i < entry.memos.size(); i++) {
+            Memo memo = entry.memos.get(i);
+            if (memo.matches(backdrop, BACKDROP_GIVEN, preferredInk, alternateInk, veilColor, target)) {
+                return memo.resolution;
+            }
+        }
+        OnGlass.Resolution resolution =
+            OnGlass.resolve(backdrop, preferredInk, alternateInk, veilColor, target);
+        if (entry.memos.size() >= MEMO_SLOTS) entry.memos.remove(entry.memos.size() - 1);
+        entry.memos.add(0, new Memo(resolution, backdrop, BACKDROP_GIVEN, preferredInk,
+            alternateInk, veilColor, target));
+        return resolution;
+    }
+
+    /**
+     * The tint slot's value in a {@link #resolveOn} memo. A sentinel rather than a flag: the slot
+     * holds a glass tint for {@link #resolve} and the composed backdrop for {@link #resolveOn}, and
+     * the two must never match each other by accident.
+     */
+    private static final int BACKDROP_GIVEN = 0x00BACD09;
+
+    /**
      * {@link #resolve(Band, Rect, int, int, int, int, int, double)} with no alternate ink: the band
      * keeps its mode's colour or a tone of it and never flips.
      */
