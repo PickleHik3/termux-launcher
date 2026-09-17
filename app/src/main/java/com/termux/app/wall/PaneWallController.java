@@ -143,6 +143,19 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return mWall.currentPage() == PaneWallPage.TERMINAL && !mWall.isMoving();
     }
 
+    /**
+     * Whether any part of the terminal place can be on screen: it is the page at rest, or the wall
+     * is moving and the terminal may be sliding into or out of the frame.
+     *
+     * <p>Not the negation of {@link #isTerminalShowing()}. That one asks whether the terminal is
+     * the place the user is on; this one asks whether its pixels can be seen. A drag towards the
+     * terminal shows it long before the wall commits to it, so anything that stops painting while
+     * the terminal is away has to start again the moment the wall moves at all.
+     */
+    public boolean isTerminalOnScreen() {
+        return mWall.currentPage() == PaneWallPage.TERMINAL || mWall.isMoving();
+    }
+
     /** Navigate by the {@code page=} argument of {@code wall.go}: a name, or left/right. */
     public boolean goTo(@Nullable String name) {
         PaneWallPage page = PaneWallPolicy.parsePage(mWall.pages(), mWall.currentPage(), name);

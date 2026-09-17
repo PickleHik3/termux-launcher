@@ -224,6 +224,18 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Whether the host is in the foreground, i.e. between onStart and onStop. */
     boolean isVisible();
 
+    /**
+     * Whether the terminal place's pixels can be on screen: the wall rests on the terminal, or it
+     * is moving and the terminal may be sliding into or out of the frame. False only while another
+     * place — Widgets, Display — is at rest in front of it.
+     *
+     * <p>Coarser than {@link #isVisible()}, which is the activity's own foreground state: the
+     * activity can be fully in the foreground with the terminal a whole page away.
+     */
+    default boolean isTerminalPlaceOnScreen() {
+        return true;
+    }
+
     /** Says which action just ran, once it has run. */
     void showTerminalActionHint(@NonNull String toolName);
 

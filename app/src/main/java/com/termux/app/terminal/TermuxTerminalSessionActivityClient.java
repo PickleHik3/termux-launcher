@@ -71,6 +71,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private boolean mTerminalScreenUpdatePending;
     /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
+    /**
+     * Sessions whose screen moved while the terminal place was off the wall, so no redraw was
+     * posted for them. One entry per pane; each is drawn exactly once when the terminal can be
+     * seen again, whatever the shell printed in the meantime.
+     */
+    private final java.util.Set<TerminalSession> mDeferredScreenUpdateSessions = new java.util.HashSet<>();
     private boolean mForegroundRefreshPending;
     private int mLastMaterialTerminalPaletteSignature;
     @NonNull private String mLastFontErrorSummary = "";
@@ -138,6 +144,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         releaseBellSoundPool();
         mTerminalScreenUpdatePending = false;
         mPendingScreenUpdateSessions.clear();
+        mDeferredScreenUpdateSessions.clear();
         mForegroundRefreshPending = false;
         mUiHandler.removeCallbacks(mForegroundTerminalRefreshRunnable);
     }
@@ -166,6 +173,16 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // non-active pane). Coalesce per-session so two live panes never drop each other's frames.
         if (mHost.viewForSession(changedSession) == null)
             return;
+        // A shell printing into a terminal that is a whole place away — the wall rests on Widgets
+        // or on the Display — is asking for a repaint of pixels nobody can see. Idle on the Home
+        // place that was a re-render per output burst, sixteen times a second, each one a full
+        // TerminalView.onDraw with its URL scan behind it. Remember the pane instead and draw it
+        // once when the terminal comes back; everything above this line — the activity's notion of
+        // shell activity, the emulator, the scrollback, titles and bells — is untouched.
+        if (!mHost.isTerminalPlaceOnScreen()) {
+            mDeferredScreenUpdateSessions.add(changedSession);
+            return;
+        }
         if (!mPendingScreenUpdateSessions.add(changedSession))
             return;
         mTerminalScreenUpdatePending = true;
@@ -174,9 +191,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
             if (!mHost.isVisible())
                 return;
+            // The wall left for another place between the post and this frame: hand the pane to
+            // the deferred set rather than drawing it, so the one redraw happens on return.
+            if (!mHost.isTerminalPlaceOnScreen()) {
+                mDeferredScreenUpdateSessions.add(changedSession);
+                return;
+            }
             com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
             if (view != null)
-                view.onScreenUpdated();
+                drawScreen(view);
         };
         // Under a flood of output the main thread is mostly *parsing* bytes, and where this redraw is
         // posted decides how it interleaves with that parsing. Measured over four configurations:
@@ -200,6 +223,41 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         } else {
             mUiHandler.post(redraw);
         }
+    }
+
+    /**
+     * The terminal place can be seen again — the wall moved, committed to the terminal, or came to
+     * rest on it. Every pane whose screen changed while it was away is drawn once, here and not on
+     * a post: a slide towards the terminal must not show a frame of stale text on the way in.
+     *
+     * <p>Called for any wall movement, so it has to be free when nothing was deferred, which it is:
+     * an empty set and a return.
+     */
+    public void onTerminalPlaceMayBeVisible() {
+        if (mDeferredScreenUpdateSessions.isEmpty())
+            return;
+        if (!mHost.isVisible())
+            return;
+        // Taken and emptied before a single pane is drawn, so a redraw that lands us back here —
+        // an accessibility event, a listener — finds nothing owed rather than the same list again.
+        java.util.List<TerminalSession> deferred =
+            new ArrayList<>(mDeferredScreenUpdateSessions);
+        mDeferredScreenUpdateSessions.clear();
+        for (TerminalSession session : deferred) {
+            com.termux.view.TerminalView view = mHost.viewForSession(session);
+            if (view != null)
+                drawScreen(view);
+        }
+    }
+
+    /**
+     * Paint a pane's screen. The one line of this class that actually draws, kept as its own call
+     * so a JVM test can count redraws: {@link com.termux.view.TerminalView} is final, so there is
+     * no stub of it to count them on.
+     */
+    @VisibleForTesting
+    void drawScreen(@NonNull com.termux.view.TerminalView view) {
+        view.onScreenUpdated();
     }
 
     private boolean shouldDeferForegroundScreenRefresh() {
@@ -230,6 +288,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onSessionFinished(@NonNull TerminalSession finishedSession) {
+        // Nothing to paint for a shell that has ended, and no reason to hold it here until the
+        // wall next moves.
+        mDeferredScreenUpdateSessions.remove(finishedSession);
         TermuxService service = mHost.service();
         if (service == null || service.wantsToStop()) {
             // The service wants to stop as soon as possible.

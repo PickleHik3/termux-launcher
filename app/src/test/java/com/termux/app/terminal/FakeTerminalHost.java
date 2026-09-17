@@ -69,6 +69,8 @@ class FakeTerminalHost implements TerminalHost {
     // Activity state
     boolean alive = true;
     boolean visible = true;
+    /** Whether the wall lets the terminal place be seen; false means another place is at rest. */
+    boolean terminalPlaceOnScreen = true;
     boolean splitPanesEnabled = true;
     boolean activityRecreated;
     boolean onResumeAfterOnCreate;
@@ -77,6 +79,8 @@ class FakeTerminalHost implements TerminalHost {
     @Nullable TerminalSession currentSession;
     @Nullable TerminalView focusedView;
     final List<TerminalView> paneViews = new ArrayList<>();
+    /** Split panes: the view showing each session, consulted before {@link #focusedView}. */
+    final Map<TerminalSession, TerminalView> sessionViews = new LinkedHashMap<>();
     boolean hasToolbar = true;
     boolean terminalViewSelected;
     int toolbarToggles;
@@ -492,6 +496,10 @@ class FakeTerminalHost implements TerminalHost {
         return visible;
     }
 
+    @Override public boolean isTerminalPlaceOnScreen() {
+        return terminalPlaceOnScreen;
+    }
+
     @Override public void showTerminalActionHint(@NonNull String toolName) {
         record("showTerminalActionHint");
         lastActionHint = toolName;
@@ -500,7 +508,10 @@ class FakeTerminalHost implements TerminalHost {
     // --- Panes and views ---
 
     @Override @Nullable public TerminalView viewForSession(@Nullable TerminalSession session) {
-        return session != null && session == currentSession ? focusedView : null;
+        if (session == null) return null;
+        TerminalView mapped = sessionViews.get(session);
+        if (mapped != null) return mapped;
+        return session == currentSession ? focusedView : null;
     }
 
     @Override @NonNull public List<TerminalView> paneViews() {
