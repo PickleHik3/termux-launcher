@@ -42,7 +42,7 @@ cat "$config_file" 2>/dev/null | awk -v begin="$marker_begin" -v end="$marker_en
             next
         }
         if (line ~ /^\[/) {
-            in_table = (line ~ /^\[theme\.custom\][ \t]*$/)
+            in_table = (line ~ /^\[[ \t]*theme\.custom[ \t]*\]/)
             print line
             if (in_table) {
                 table_seen = 1

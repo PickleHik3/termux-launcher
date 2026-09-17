@@ -137,6 +137,29 @@ test_starship() {
         [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
     done
 
+    # A pre-existing top-level `palette = "..."` line must be displaced, not
+    # discarded (R7): commented out with our tag on apply, surviving a second
+    # apply unchanged, then restored verbatim by undo.
+    local home="$WORK/starship-userpalette/home"
+    rm -rf "$WORK/starship-userpalette"; mkdir -p "$home/.config"
+    local theme_dir="$WORK/starship-userpalette/theme_dir"; mkdir -p "$theme_dir"
+    local output="$home/.cache/launcher-material/starship-palette.toml"
+    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+    printf 'palette = "my-nord"\n\n[character]\nsuccess_symbol = "➜"\n' > "$home/.config/starship.toml"
+    local orig="$WORK/starship-userpalette/orig.toml"
+    cp "$home/.config/starship.toml" "$orig"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (userpalette) failed"
+    grep -qxF '#palette = "my-nord" # >>> launcher-material: previous >>>' "$home/.config/starship.toml" \
+        || fail "apply.sh (userpalette) did not comment out and tag the user's own palette= line"
+    grep -qxF 'palette = "launcher-material"' "$home/.config/starship.toml" \
+        || fail "apply.sh (userpalette) did not add its own palette= line"
+    cp "$home/.config/starship.toml" "$WORK/starship-userpalette/after1.toml"
+    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (userpalette) failed"
+    cmp -s "$WORK/starship-userpalette/after1.toml" "$home/.config/starship.toml" || fail "apply.sh (userpalette) not idempotent"
+    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (userpalette) failed"
+    cmp -s "$orig" "$home/.config/starship.toml" || fail "undo.sh (userpalette) did not restore the user's original palette= line"
+    [ -e "$output" ] && fail "undo.sh (userpalette) left the rendered file behind"
+
     # setup.sh: bash, zsh, fish, each with the rc file absent and pre-existing,
     # plus idempotency and undo.
     local shell
@@ -338,6 +361,7 @@ test_yazi() {
             [ -e "$home/.config/yazi/theme.toml" ] && fail "undo.sh (absent) left a theme.toml behind"
         fi
         [ -e "$output" ] && fail "undo.sh ($case) left the rendered file behind"
+        [ -d "$(dirname "$output")" ] && fail "undo.sh ($case) left the empty launcher-material.yazi flavor directory behind"
     done
     note "yazi: known limitation - if theme.toml already has an active [flavor] table, apply.sh would append a second one (invalid TOML); check.sh's fixtures avoid that so the round-trip above still passes"
 }
@@ -717,6 +741,73 @@ test_herdr() {
     [ -e "$output" ] && fail "undo.sh (pre) left the rendered file behind"
 }
 
+# ---- shared rc isolation (R1/R12): fzf, lazygit and ohmyposh all write into
+# the same ~/.bashrc and ~/.zshrc. Enable all three in one HOME, in sequence,
+# then undo just the last one and confirm the other two survive untouched. ----
+test_shared_rc() {
+    local fzf_dir="$TEMPLATES_DIR/fzf"
+    local lazygit_dir="$TEMPLATES_DIR/lazygit"
+    local ohmyposh_dir="$TEMPLATES_DIR/ohmyposh"
+
+    rm -rf "$WORK/shared-rc"; mkdir -p "$WORK/shared-rc"
+    local fzf_rendered="$WORK/shared-rc/fzf.rendered"
+    local lazygit_rendered="$WORK/shared-rc/lazygit.rendered"
+    local ohmyposh_rendered="$WORK/shared-rc/ohmyposh.rendered"
+    render_template "$fzf_dir" "launcher-material.sh" >"$fzf_rendered" 2>"$WORK/shared-rc/fzf.err" \
+        || { fail "fzf render error: $(cat "$WORK/shared-rc/fzf.err")"; return; }
+    render_template "$lazygit_dir" "launcher-material.yml" >"$lazygit_rendered" 2>"$WORK/shared-rc/lazygit.err" \
+        || { fail "lazygit render error: $(cat "$WORK/shared-rc/lazygit.err")"; return; }
+    render_template "$ohmyposh_dir" "launcher-material.omp.json" >"$ohmyposh_rendered" 2>"$WORK/shared-rc/ohmyposh.err" \
+        || { fail "ohmyposh render error: $(cat "$WORK/shared-rc/ohmyposh.err")"; return; }
+
+    local home="$WORK/shared-rc/home"
+    mkdir -p "$home"
+    printf '# my bashrc\nexport FOO=bar\n' > "$home/.bashrc"
+    printf '# my zshrc\nexport BAZ=qux\n' > "$home/.zshrc"
+
+    local fzf_theme_dir="$WORK/shared-rc/fzf_theme_dir"; mkdir -p "$fzf_theme_dir"
+    local lazygit_theme_dir="$WORK/shared-rc/lazygit_theme_dir"; mkdir -p "$lazygit_theme_dir"
+    local ohmyposh_theme_dir="$WORK/shared-rc/ohmyposh_theme_dir"; mkdir -p "$ohmyposh_theme_dir"
+
+    local fzf_output="$home/.config/fzf/launcher-material.sh"
+    local lazygit_output="$home/.config/lazygit/launcher-material.yml"
+    local ohmyposh_output="$home/.config/ohmyposh/launcher-material.omp.json"
+    mkdir -p "$(dirname "$fzf_output")" "$(dirname "$lazygit_output")" "$(dirname "$ohmyposh_output")"
+    cp "$fzf_rendered" "$fzf_output"
+    cp "$lazygit_rendered" "$lazygit_output"
+    cp "$ohmyposh_rendered" "$ohmyposh_output"
+
+    run_hook "$home" "$fzf_theme_dir" "$fzf_output" "$fzf_dir/apply.sh" || { fail "fzf apply.sh failed"; return; }
+    run_hook "$home" "$lazygit_theme_dir" "$lazygit_output" "$lazygit_dir/apply.sh" || { fail "lazygit apply.sh failed"; return; }
+    run_hook "$home" "$ohmyposh_theme_dir" "$ohmyposh_output" "$ohmyposh_dir/apply.sh" || { fail "ohmyposh apply.sh failed"; return; }
+
+    local rc
+    for rc in "$home/.bashrc" "$home/.zshrc"; do
+        grep -qxF '# >>> launcher-material fzf >>>' "$rc" || fail "fzf marker missing from $rc after all three applied"
+        grep -qxF '# >>> launcher-material lazygit >>>' "$rc" || fail "lazygit marker missing from $rc after all three applied"
+        grep -qxF '# >>> launcher-material ohmyposh >>>' "$rc" || fail "ohmyposh marker missing from $rc after all three applied"
+        grep -qF "source $fzf_output" "$rc" || fail "fzf source line missing from $rc after all three applied"
+        grep -qF 'LG_CONFIG_FILE' "$rc" || fail "lazygit LG_CONFIG_FILE export missing from $rc after all three applied"
+        grep -qF 'POSH_THEME' "$rc" || fail "ohmyposh POSH_THEME export missing from $rc after all three applied"
+    done
+
+    run_hook "$home" "$ohmyposh_theme_dir" "$ohmyposh_output" "$ohmyposh_dir/undo.sh" || { fail "ohmyposh undo.sh failed"; return; }
+
+    for rc in "$home/.bashrc" "$home/.zshrc"; do
+        grep -qxF '# >>> launcher-material fzf >>>' "$rc" || fail "fzf marker lost from $rc after ohmyposh's undo removed it too"
+        grep -qxF '# >>> launcher-material lazygit >>>' "$rc" || fail "lazygit marker lost from $rc after ohmyposh's undo removed it too"
+        grep -qF "source $fzf_output" "$rc" || fail "fzf source line lost from $rc after ohmyposh's undo"
+        grep -qF 'LG_CONFIG_FILE' "$rc" || fail "lazygit export lost from $rc after ohmyposh's undo"
+        grep -qxF '# >>> launcher-material ohmyposh >>>' "$rc" && fail "ohmyposh marker still present in $rc after its own undo"
+        grep -qF 'POSH_THEME' "$rc" && fail "POSH_THEME export still present in $rc after ohmyposh's own undo"
+    done
+
+    run_hook "$home" "$fzf_theme_dir" "$fzf_output" "$fzf_dir/undo.sh" || fail "fzf undo.sh (cleanup) failed"
+    run_hook "$home" "$lazygit_theme_dir" "$lazygit_output" "$lazygit_dir/undo.sh" || fail "lazygit undo.sh (cleanup) failed"
+    cmp -s "$home/.bashrc" <(printf '# my bashrc\nexport FOO=bar\n') || fail ".bashrc not restored to its original content after all three were undone"
+    cmp -s "$home/.zshrc" <(printf '# my zshrc\nexport BAZ=qux\n') || fail ".zshrc not restored to its original content after all three were undone"
+}
+
 # ---------------------------------------------------------------------------
 # Run all templates
 # ---------------------------------------------------------------------------
@@ -732,13 +823,14 @@ declare -A TEST_FN=(
     [ohmyposh]=test_ohmyposh
     [nvim]=test_nvim
     [herdr]=test_herdr
+    [shared-rc]=test_shared_rc
 )
 
-ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim herdr"
+ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim herdr shared-rc"
 
 for id in $ORDER; do
     dir="$TEMPLATES_DIR/$id"
-    if [ ! -d "$dir" ]; then
+    if [ "$id" != "shared-rc" ] && [ ! -d "$dir" ]; then
         echo "FAIL $id: template directory missing"
         OVERALL=1
         continue

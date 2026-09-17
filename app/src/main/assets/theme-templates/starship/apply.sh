@@ -7,6 +7,11 @@ set -euo pipefail
 palette_file="${TERMUX_THEME_OUTPUT:?TERMUX_THEME_OUTPUT not set}"
 marker_begin="# >>> launcher-material >>>"
 marker_end="# <<< launcher-material <<<"
+# A user's own top-level `palette = "..."` line is displaced by ours, not
+# discarded: comment it out with this tag so undo.sh can restore it exactly,
+# the same trick helix/apply.sh uses for `theme = ...`.
+disable_suffix=" # >>> launcher-material: previous >>>"
+ours_line='palette = "launcher-material"'
 
 expand_tilde() {
     case "$1" in
@@ -49,15 +54,24 @@ else
     cleanup_body() { rm -f "$tmp_file" "$body_file"; }
     trap cleanup_body EXIT
 
-    # Strip a previous launcher-material block and any top-level palette= line;
-    # everything else in the user's file is left exactly as it was.
-    awk -v begin="$marker_begin" -v end="$marker_end" '
+    # Strip a previous launcher-material block and our own previously
+    # inserted `palette = "launcher-material"` line (both get regenerated
+    # fresh below); comment out - rather than discard - a user's own
+    # top-level palette= line so it survives undo. A line already tagged
+    # from an earlier apply is left exactly as it is (it starts with '#',
+    # so the palette= match below never sees it).
+    awk -v begin="$marker_begin" -v end="$marker_end" -v suffix="$disable_suffix" -v ours="$ours_line" '
         $0 == begin { in_block = 1; next }
         in_block {
             if ($0 == end) { in_block = 0 }
             next
         }
-        /^palette[[:space:]]*=/ { next }
+        $0 == ours { next }
+        !disabled && $0 ~ /^[[:space:]]*palette[[:space:]]*=/ {
+            print "#" $0 suffix
+            disabled = 1
+            next
+        }
         { print }
     ' "$config_file" >"$body_file"
 
