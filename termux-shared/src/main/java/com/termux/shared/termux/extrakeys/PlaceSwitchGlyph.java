@@ -65,10 +65,28 @@ public final class PlaceSwitchGlyph {
      */
     private static final double NEUTRAL_CHROMA = 4d;
 
-    /** The radius of the focused glyph's outer glow, in dp. */
-    public static final float GLOW_RADIUS_DP = 7f;
+    /**
+     * How bright a place switch is while its place is not the one in front: its own colour held
+     * back to 57%. Alpha rather than a dimmer tone of the role, because a role can be any of them —
+     * including the two fixed ones, which have no tonal palette to step down — and alpha is the one
+     * dimming that keeps every one of them on its own hue.
+     *
+     * <p>The status bar's lens fades its two peeking place marks by the same share, so a place is
+     * the same colour at the same strength wherever it is drawn.
+     */
+    public static final int UNFOCUSED_ALPHA = 145;
 
-    /** How strong that glow is: the glyph's own vivid colour at 60%. */
+    /**
+     * The radius of the focused glyph's resting halo, in dp. None: three glyphs a few pixels wide
+     * standing together already say which one is the place in front — it is the one at full colour
+     * between two faded ones — and a halo that wide around a glyph that small reads as a smudge
+     * rather than as a light.
+     *
+     * <p>A softer halo comes back from this one line: 3f here, with {@link #GLOW_ALPHA} at 60.
+     */
+    public static final float GLOW_RADIUS_DP = 0f;
+
+    /** How strong that halo is, when there is one: the glyph's own vivid colour at 60%. */
     public static final int GLOW_ALPHA = 153;
 
     /**

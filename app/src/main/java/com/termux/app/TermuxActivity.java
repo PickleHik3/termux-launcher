@@ -12959,6 +12959,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? ExtraKeysView.PlaceFocus.FOCUSED
                 : ExtraKeysView.PlaceFocus.UNFOCUSED;
         });
+        // And the status bar's place marks take the same three colours from the same three keys.
+        // Only the first key page speaks for them: the editor picks from it, the row and the column
+        // are both built from it, and a further page may stand no place switch at all.
+        if (extraKeysView == getExtraKeysView())
+            extraKeysView.setPlaceGlyphColorListener(this::applyPlaceAccentsToLens);
+    }
+
+    /** The colours the key row is painting its place switches in, as the lens was last told. */
+    @Nullable private java.util.Map<com.termux.app.wall.PaneWallPage, Integer> mPlaceAccents;
+
+    /**
+     * The row said what colour each place is; the lens draws its marks in those. Which key stands
+     * for which place is the same question the eligibility policy answers, asked the other way
+     * round, so a key the user recoloured moves the bar's mark with it.
+     */
+    private void applyPlaceAccentsToLens(
+            @NonNull java.util.Map<String, Integer> colorsByKeyValue) {
+        java.util.Map<com.termux.app.wall.PaneWallPage, Integer> byPlace =
+            new java.util.EnumMap<>(com.termux.app.wall.PaneWallPage.class);
+        for (java.util.Map.Entry<String, Integer> entry : colorsByKeyValue.entrySet()) {
+            com.termux.app.wall.PaneWallPage target =
+                com.termux.app.terminal.io.ExtraKeyEligibility.placeSwitchTarget(entry.getKey());
+            if (target != null && entry.getValue() != null) byPlace.put(target, entry.getValue());
+        }
+        mPlaceAccents = byPlace;
+        com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
+        if (lens != null) lens.setPlaceAccents(byPlace);
     }
 
     /**
@@ -14188,6 +14215,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (lens != null) {
             lens.setDisplayRunning(isEmbeddedDisplayRunning());
             lens.setDisplayGlyph(displayRuntimeGlyph());
+            // The row may have said what colour each place is before this view existed.
+            lens.setPlaceAccents(mPlaceAccents);
             // The icons are chips of the same kit as the badge beside them: same corner.
             lens.setChipRadiusPx(resolveStatusIndicatorCornerRadiusPx(Math.round(dpToPx(20)),
                 isRoundedDockStyle()));

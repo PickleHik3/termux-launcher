@@ -38,10 +38,12 @@ import java.util.List;
  * arriving one travels to home as the one at home leaves through the far edge — and a tap on a
  * neighbour slides the wall to its place.
  *
- * <p>The icon at home carries a soft glow of its own colour and its neighbours are drained
- * towards the surface's neutral, so the place you are on is the one that reads. A neighbour is
- * quieter, not faint: {@link StatusBarLensMetrics} holds every peeking mark to a legibility floor
- * and grows its target to the platform's minimum.
+ * <p>A place is drawn in the colour its switch wears in the extra-keys row — the host hands those
+ * colours over whenever the row restates them, so a key whose role the user changed changes the
+ * mark with it — and the row's heuristic comes with the colours: the icon at home is at full
+ * strength, with a soft glow of its own, and its neighbours are the same colour faded. A neighbour
+ * is quieter, not faint: {@link StatusBarLensMetrics} holds every peeking mark to a legibility
+ * floor and grows its target to the platform's minimum, and the floor wins over the fade.
  *
  * <p>The view lies under the bar's content but owns the neighbours' touches: nothing above it
  * claims the bar's edges, so a tap there reaches it. It paints and hit-tests what the metrics say;
@@ -61,7 +63,6 @@ public final class StatusBarLensView extends View {
     private final Paint mFadePaint = new Paint();
     private final RectF mTile = new RectF();
     private final RectF mGlow = new RectF();
-    private final int mNeutral;
     private final RectF[] mHitRects = new RectF[PaneWallPage.values().length];
     private final int mTouchSlop;
 
@@ -73,6 +74,10 @@ public final class StatusBarLensView extends View {
      * of a wall drag.
      */
     private static final double TONE_TARGET = OnGlass.TARGET_LARGE_TEXT * 1.04d;
+
+    /** The colour each place's switch key wears in the extra-keys row; absent until the row says. */
+    private final int[] mRowAccents = new int[PaneWallPage.values().length];
+    private final boolean[] mHasRowAccent = new boolean[PaneWallPage.values().length];
 
     /** The opaque colour the bar is standing on, as the chrome measured it; null until it has. */
     @Nullable private Integer mBandSurface;
@@ -112,8 +117,6 @@ public final class StatusBarLensView extends View {
         mStrokePaint.setStrokeWidth(context.getResources().getDisplayMetrics().density);
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
-        mNeutral = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            ContextCompat.getColor(context, R.color.termux_on_surface_variant));
         mFadePaint.setXfermode(new android.graphics.PorterDuffXfermode(
             android.graphics.PorterDuff.Mode.DST_IN));
         for (int i = 0; i < mHitRects.length; i++) mHitRects[i] = new RectF();
@@ -219,6 +222,39 @@ public final class StatusBarLensView extends View {
     }
 
     /**
+     * The colours the extra-keys row is painting its place switches in, so the bar shows a place in
+     * the colour its key shows it in. A place the row has no switch for keeps {@link #accentFor}.
+     *
+     * <p>The row is the authority because the colours are the user's: a switch takes its role's
+     * colour, and a role can be changed in the extra-keys editor. So this arrives again every time
+     * the row restates its keys rather than being read once from the theme.
+     */
+    public void setPlaceAccents(@Nullable java.util.Map<PaneWallPage, Integer> accents) {
+        boolean changed = false;
+        for (PaneWallPage page : PaneWallPage.values()) {
+            Integer given = accents == null ? null : accents.get(page);
+            boolean has = given != null;
+            int color = has ? given : 0;
+            if (mHasRowAccent[page.ordinal()] == has && mRowAccents[page.ordinal()] == color)
+                continue;
+            mHasRowAccent[page.ordinal()] = has;
+            mRowAccents[page.ordinal()] = color;
+            changed = true;
+        }
+        if (!changed) return;
+        mTonedAccentsValid = false;
+        invalidate();
+    }
+
+    /** The place's colour: the row's, when the row stands a switch for it. */
+    @ColorInt
+    @androidx.annotation.VisibleForTesting
+    int accent(@NonNull PaneWallPage page) {
+        return mHasRowAccent[page.ordinal()]
+            ? mRowAccents[page.ordinal()] : accentFor(getContext(), page);
+    }
+
+    /**
      * The place's colour moved along its own tone axis until it reads on the band — once per band,
      * not once per mark per frame: the search behind it walks a hundred HCT tones and the lens
      * redraws continuously while the wall is dragged.
@@ -226,11 +262,11 @@ public final class StatusBarLensView extends View {
     @ColorInt
     private int tonedAccent(@NonNull PaneWallPage page) {
         Integer surface = mBandSurface;
-        if (surface == null) return accentFor(getContext(), page);
+        if (surface == null) return accent(page);
         if (!mTonedAccentsValid) {
             for (PaneWallPage candidate : PaneWallPage.values()) {
                 mTonedAccents[candidate.ordinal()] = OnGlass.resolveBare(surface,
-                    accentFor(getContext(), candidate), TONE_TARGET).ink;
+                    accent(candidate), TONE_TARGET).ink;
             }
             mTonedAccentsValid = true;
         }
@@ -300,19 +336,12 @@ public final class StatusBarLensView extends View {
                 mHitRects[mark.page.ordinal()].set(mark.target.left, mark.target.top,
                     mark.target.right, mark.target.bottom);
             }
-            // Weight and colour say what matters: the icon at home is the place you are on, in its
-            // own colour with a glow; the two peeking in are where you could go, drained towards
-            // the surface's neutral — but drained in colour, not in legibility, so the mark still
-            // reads at the bar's edge.
-            //
-            // Which is what the drain finally does, now that the band under it has been measured:
-            // towards a grey of the mark's own luminance rather than towards a neutral colour that
-            // has a luminance of its own to drag it to. The statement is the same and it costs no
-            // contrast. Before the band is known there is nothing to tone against and the old
-            // blend stands.
-            int accent = mBandSurface == null
-                ? ColorUtils.blendARGB(accentFor(getContext(), mark.page), mNeutral, mark.drain)
-                : StatusBarInk.drain(tonedAccent(mark.page), mark.drain);
+            // Weight and colour say what matters, and the row already says it: the place in front
+            // is its own colour at full strength, the ones behind it are that same colour faded.
+            // So all three marks are painted in the place's colour and only the glyph's strength
+            // separates them — where a neighbour used to be drained towards a grey, which said the
+            // same thing in a colour the key beside it never shows.
+            int accent = tonedAccent(mark.page);
             if (mark.glow > 0.01f) {
                 float reach = mark.sizePx * StatusBarLensMetrics.GLOW_REACH;
                 mGlow.set(mTile.left - reach, mTile.top - reach, mTile.right + reach,
@@ -332,9 +361,11 @@ public final class StatusBarLensView extends View {
             mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent,
                 Math.round(StatusBarLensMetrics.STROKE_ALPHA * mark.ink)));
             // The tint and the line are the mark's weight; the glyph is the mark. So the glyph is
-            // the one held to a floor, and held to it at the alpha it is really drawn with — a
-            // peeking mark keeps 70% of its ink, and 70% of a ratio is not that ratio.
-            int glyphAlpha = Math.round(StatusBarLensMetrics.GLYPH_ALPHA * mark.ink);
+            // the one that carries the row's fade, and the one held to a floor — held to it at the
+            // alpha it is really drawn with, because a fraction of a ratio is not that ratio. When
+            // the two disagree the floor wins: the fade keeps its alpha and the colour is walked
+            // up the tone axis until what lands on the band reads.
+            int glyphAlpha = Math.round(StatusBarLensMetrics.GLYPH_ALPHA * mark.glyphInk);
             mGlyphPaint.setColor(mBandSurface == null
                 ? ColorUtils.setAlphaComponent(accent, glyphAlpha)
                 : StatusBarInk.inkAtAlpha(mBandSurface, accent, glyphAlpha,

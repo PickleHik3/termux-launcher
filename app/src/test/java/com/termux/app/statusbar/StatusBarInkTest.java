@@ -216,26 +216,28 @@ public class StatusBarInkTest {
     // ------------------------------------------------------------------ the place lens
 
     /**
-     * The lens glyph at every drain the wall can be dragged through, and at the alpha a peeking
+     * The lens glyph at every fade the wall can be dragged through, and at the alpha a peeking
      * mark is really drawn with. It measured 1.11 on the Home place's band.
+     *
+     * <p>The fade is the extra-keys row's own — a neighbour is the place's colour held back to
+     * {@link StatusBarLensMetrics#UNFOCUSED_GLYPH_SHARE}, not drained towards a grey — so the floor
+     * now has a deeper alpha to carry, and carries it by walking the tone rather than the fade.
      */
     @Test
-    public void theLensGlyphReadsAtEveryDrainAndEveryPeek() {
+    public void theLensGlyphReadsAtEveryFadeAndEveryPeek() {
         for (int glass : new int[] {STATUS_GLASS, AZ_GLASS, LIGHT_GLASS}) {
             int surface = OnGlass.opaque(glass);
             int toned = OnGlass.resolveBare(surface, LIGHT_PRIMARY,
                 OnGlass.TARGET_LARGE_TEXT * 1.04d).ink;
-            for (float drain = 0f; drain <= StatusBarLensMetrics.NEIGHBOUR_DRAIN + .001f;
-                 drain += .05f) {
-                int drained = StatusBarInk.drain(toned, drain);
-                for (float ink : new float[] {1f, StatusBarLensMetrics.PEEK_INK_FLOOR,
-                    StatusBarLensMetrics.STOPPED_DISPLAY_INK}) {
+            for (float presence = 0f; presence <= 1.001f; presence += .05f) {
+                for (boolean stopped : new boolean[] {false, true}) {
+                    float ink = StatusBarLensMetrics.glyphInkFor(presence, stopped);
                     int alpha = Math.round(StatusBarLensMetrics.GLYPH_ALPHA * ink);
-                    int glyph = StatusBarInk.inkAtAlpha(surface, drained, alpha,
+                    int glyph = StatusBarInk.inkAtAlpha(surface, toned, alpha,
                         OnGlass.TARGET_LARGE_TEXT);
                     double ratio = StatusBarInk.shownRatio(glyph, surface);
-                    assertTrue("the place mark at " + hex(glass) + ", drain " + drain + ", ink "
-                            + ink + " (was 1.11): " + ratio,
+                    assertTrue("the place mark at " + hex(glass) + ", presence " + presence
+                            + ", ink " + ink + " (was 1.11): " + ratio,
                         ratio >= OnGlass.TARGET_LARGE_TEXT);
                 }
             }

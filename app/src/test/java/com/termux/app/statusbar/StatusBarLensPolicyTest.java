@@ -257,14 +257,33 @@ public class StatusBarLensPolicyTest {
         assertEquals(0.85f, peek.ink, 0.001f);
         assertEquals(0.5f, peek.fadeOuterAlpha, 0.001f);
         assertEquals(0.6375f, peek.effectiveInk, 0.001f);
-        // Quieter in colour, not in ink: the neighbour is still drained towards the neutral, and
+        // Quieter in strength, not in colour: the neighbour keeps the place's own colour and is
+        // faded in it by exactly the share the extra-keys row fades its unfocused switches by, and
         // only the mark at home wears a glow.
-        assertEquals(StatusBarLensMetrics.NEIGHBOUR_DRAIN, peek.drain, 0.001f);
+        assertEquals(StatusBarLensMetrics.UNFOCUSED_GLYPH_SHARE, peek.glyphInk, 0.001f);
         assertEquals(0f, peek.glow, 0.001f);
         Mark home = markFor(landscapeMarks(TopStatusBarState.EXPANDED, true), PaneWallPage.TERMINAL);
         assertEquals(1f, home.ink, 0.001f);
-        assertEquals(0f, home.drain, 0.001f);
+        assertEquals(1f, home.glyphInk, 0.001f);
         assertTrue(home.glow > 0f);
+    }
+
+    /**
+     * The fade is the row's: the place in front at full colour, the ones behind it at the alpha
+     * the row holds its own unfocused switches to. A mark in between is somewhere in between.
+     */
+    @Test public void aNeighboursGlyphIsFadedByTheSameShareTheKeyRowFadesItsSwitchesBy() {
+        assertEquals(145 / 255f, StatusBarLensMetrics.UNFOCUSED_GLYPH_SHARE, 0.0001f);
+        assertEquals(1f, StatusBarLensMetrics.glyphInkFor(0f, false), 0.001f);
+        assertEquals(StatusBarLensMetrics.UNFOCUSED_GLYPH_SHARE,
+            StatusBarLensMetrics.glyphInkFor(1f, false), 0.001f);
+        assertTrue(StatusBarLensMetrics.glyphInkFor(0.5f, false)
+            > StatusBarLensMetrics.glyphInkFor(1f, false));
+        // A Display with nothing running is quieter again, at home and peeking alike.
+        assertEquals(StatusBarLensMetrics.STOPPED_DISPLAY_INK,
+            StatusBarLensMetrics.glyphInkFor(0f, true), 0.001f);
+        assertTrue(StatusBarLensMetrics.glyphInkFor(1f, true)
+            < StatusBarLensMetrics.glyphInkFor(1f, false));
     }
 
     @Test public void aDisplayThatIsNotRunningIsQuieterButNeverFallsThroughTheFloor() {
