@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -20,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
+import androidx.core.widget.NestedScrollView;
 
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -49,7 +49,9 @@ import java.util.List;
  *
  * <p>Beneath the picture stand the rows for what no bar can be dragged into — the dock's and the
  * keyboard's height, the keyboard's own choices and its chin, and Home's grid. They write through
- * the same way a drop does, and scroll inside whatever room the canvas above them has left.
+ * the same way a drop does, and scroll inside whatever room the canvas above them has left. The
+ * card is a scroller of its own around all of it, for the short screen at the large font scale
+ * where even the bounded canvas and the rows' floor do not both fit.
  *
  * <p>✓ keeps the edits, Discard and the revert glyph put every bar back where the editor found it,
  * and Back with something moved asks rather than choosing for the user — the live write-through
@@ -100,22 +102,25 @@ public final class LayoutEditorController {
     /** The editor's fixed views, inflated once per process. */
     private static final class Card {
         final ViewGroup host;
-        final LinearLayout root;
+        /** The card itself: a scroller, so a screen too short for the column still reaches it. */
+        final ViewGroup root;
         final ImageView revert;
         final TextView discard;
         final ImageView done;
         final MaterialButtonToggleGroup orientation;
+        final TextView orientationNotice;
         final PlaceMiniatureView miniature;
         final TextView narrowNotice;
         final ViewGroup rowsHost;
 
-        Card(ViewGroup host, LinearLayout root) {
+        Card(ViewGroup host, ViewGroup root) {
             this.host = host;
             this.root = root;
             revert = root.findViewById(R.id.layout_editor_revert);
             discard = root.findViewById(R.id.layout_editor_discard);
             done = root.findViewById(R.id.layout_editor_done);
             orientation = root.findViewById(R.id.layout_editor_orientation);
+            orientationNotice = root.findViewById(R.id.layout_editor_orientation_notice);
             miniature = root.findViewById(R.id.layout_editor_miniature);
             narrowNotice = root.findViewById(R.id.layout_editor_narrow_notice);
             rowsHost = root.findViewById(R.id.layout_editor_rows_host);
@@ -123,7 +128,8 @@ public final class LayoutEditorController {
 
         boolean complete() {
             return revert != null && discard != null && done != null && orientation != null
-                && miniature != null && narrowNotice != null && rowsHost != null;
+                && orientationNotice != null && miniature != null && narrowNotice != null
+                && rowsHost != null;
         }
     }
 
@@ -134,7 +140,7 @@ public final class LayoutEditorController {
     /** The track a finger is on, which no restatement may move under it. */
     @Nullable private SeekBar mDraggedSlider;
     /** The rows' own scroller and column, built on first use and refilled per place. */
-    @Nullable private ScrollView mRowsScroller;
+    @Nullable private NestedScrollView mRowsScroller;
     @Nullable private LinearLayout mRows;
     /** Restates every row from the store; run after anything that can move what one says. */
     @NonNull private final List<Runnable> mRowSyncs = new ArrayList<>(5);
@@ -197,7 +203,7 @@ public final class LayoutEditorController {
         ViewGroup host = mHost.findView(R.id.layout_editor_host);
         if (host == null)
             return null;
-        LinearLayout root = host.findViewById(R.id.layout_editor_card);
+        ViewGroup root = host.findViewById(R.id.layout_editor_card);
         if (root == null) {
             LayoutInflater.from(mHost.context()).inflate(R.layout.layout_editor, host, true);
             root = host.findViewById(R.id.layout_editor_card);
@@ -224,6 +230,7 @@ public final class LayoutEditorController {
         });
         card.done.setOnClickListener(view -> exit());
 
+        card.orientationNotice.setText(R.string.termux_layout_editor_other_orientation_notice);
         card.miniature.setLegendVisible(false);
         card.miniature.setOnBarDroppedListener(this::onBarDropped);
         card.orientation.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
@@ -266,6 +273,8 @@ public final class LayoutEditorController {
         card.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
         mRestatingToggle = false;
+        card.orientationNotice.setVisibility(
+            plan.warnsOtherOrientation() ? View.VISIBLE : View.GONE);
         applyCanvasHeight(card, plan);
         card.miniature.setLayout(plan.shownLayout(), plan.shownOrientation(), plan.place());
         syncNotice(card, plan);
@@ -308,12 +317,14 @@ public final class LayoutEditorController {
     /** Sizes the canvas to the frame the shown orientation asks for. */
     private void applyCanvasHeight(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
         DisplayMetrics metrics = mHost.context().getResources().getDisplayMetrics();
+        int chromePx = Math.round(dpToPx(CARD_CHROME_DP));
+        int floorPx = Math.round(dpToPx(ROWS_FLOOR_DP));
         int height = LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(),
             metrics.widthPixels, metrics.heightPixels,
             PlaceMiniatureView.frameAspect(plan.shownOrientation()),
-            Math.round(card.miniature.reservedHeightPx()));
+            Math.round(card.miniature.reservedHeightPx()), chromePx + floorPx);
         mRowsCapPx = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
-            Math.round(dpToPx(CARD_CHROME_DP)), Math.round(dpToPx(ROWS_FLOOR_DP)));
+            chromePx, floorPx);
         if (mRowsScroller != null)
             mRowsScroller.requestLayout();
         ViewGroup.LayoutParams params = card.miniature.getLayoutParams();
@@ -331,9 +342,9 @@ public final class LayoutEditorController {
         R.id.layout_editor_row_segment_2, R.id.layout_editor_row_segment_3};
 
     /** The header, the toggle and the card's own padding: everything that is not the canvas. */
-    private static final float CARD_CHROME_DP = 132f;
+    @VisibleForTesting static final float CARD_CHROME_DP = 132f;
     /** The rows keep at least this much even where the canvas would have taken it all. */
-    private static final float ROWS_FLOOR_DP = 96f;
+    @VisibleForTesting static final float ROWS_FLOOR_DP = 96f;
 
     /**
      * The rows for the place and orientation on show. They are rebuilt only when one of those two
@@ -377,7 +388,9 @@ public final class LayoutEditorController {
         if (mRows != null)
             return mRows;
         Context context = mHost.context();
-        ScrollView scroller = new ScrollView(context) {
+        // Nested rather than a plain ScrollView: the card is a scroller too, and a list that has
+        // reached its end has to hand the rest of the drag on rather than swallow it.
+        NestedScrollView scroller = new NestedScrollView(context) {
             @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
                     Math.max(1, mRowsCapPx), View.MeasureSpec.AT_MOST));

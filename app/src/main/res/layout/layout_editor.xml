@@ -8,8 +8,12 @@
      out that keeps it.
 
      The fill is opaque for the same reason the surface editor's is: the card sits over the chrome
-     it is moving, and a translucent one left neither edge reading as belonging to anything. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     it is moving, and a translucent one left neither edge reading as belonging to anything.
+
+     The card is a scroller: it stands as tall as its column wants and no taller than the screen
+     leaves it, so a short screen at a large font scale still reaches the rows and the way out. The
+     rows keep a scroller of their own inside it, capped to the room the canvas leaves. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/layout_editor_card"
     android:layout_width="match_parent"
@@ -19,119 +23,143 @@
     android:layout_marginEnd="10dp"
     android:layout_marginBottom="12dp"
     android:elevation="6dp"
-    android:orientation="vertical"
-    android:paddingStart="12dp"
-    android:paddingTop="4dp"
-    android:paddingEnd="6dp"
-    android:paddingBottom="8dp">
+    android:scrollbars="none">
 
     <LinearLayout
+        android:id="@+id/layout_editor_card_column"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="vertical"
+        android:paddingStart="12dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="8dp">
 
-        <TextView
-            android:id="@+id/layout_editor_title"
-            android:layout_width="0dp"
-            android:layout_height="32dp"
-            android:layout_weight="1"
-            android:ellipsize="end"
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="center_vertical"
-            android:maxLines="1"
-            android:text="@string/termux_layout_editor_title"
-            android:textColor="?attr/termuxColorOnSurface"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:orientation="horizontal">
 
-        <!-- Both only exist once a bar has moved, which is also how the header says the edit is
-             unsaved. Glyph set in code. -->
-        <ImageView
-            android:id="@+id/layout_editor_revert"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/termux_layout_editor_revert"
-            android:padding="6dp"
-            android:scaleType="fitCenter"
-            android:visibility="gone" />
+            <TextView
+                android:id="@+id/layout_editor_title"
+                android:layout_width="0dp"
+                android:layout_height="32dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:gravity="center_vertical"
+                android:maxLines="1"
+                android:text="@string/termux_layout_editor_title"
+                android:textColor="?attr/termuxColorOnSurface"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
+            <!-- Both only exist once a bar has moved, which is also how the header says the edit is
+                 unsaved. Glyph set in code. -->
+            <ImageView
+                android:id="@+id/layout_editor_revert"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/termux_layout_editor_revert"
+                android:padding="6dp"
+                android:scaleType="fitCenter"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/layout_editor_discard"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:gravity="center"
+                android:paddingHorizontal="8dp"
+                android:text="@string/termux_surface_tuning_unsaved_discard"
+                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/layout_editor_done"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/dock_tuning_done_pill"
+                android:contentDescription="@string/termux_dock_tuning_done"
+                android:padding="6dp"
+                android:scaleType="fitCenter" />
+        </LinearLayout>
+
+        <!-- The orientation on the miniature. It moves the picture and the target of the next drag,
+             and never the place behind the card: an orientation the phone is not in shows up there
+             only once the phone is turned. -->
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/layout_editor_orientation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginEnd="6dp"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/layout_editor_orientation_portrait"
+                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                android:text="@string/settings_layout_orientation_portrait" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/layout_editor_orientation_landscape"
+                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                android:text="@string/settings_layout_orientation_landscape" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <!-- The toggle can be left on the orientation the phone is not in, where the place
+             behind the card cannot follow the edit. LayoutEditorController shows this line
+             while that is so; its text never changes. -->
         <TextView
-            android:id="@+id/layout_editor_discard"
-            android:layout_width="wrap_content"
-            android:layout_height="30dp"
-            android:layout_marginStart="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:gravity="center"
-            android:paddingHorizontal="8dp"
-            android:text="@string/termux_surface_tuning_unsaved_discard"
+            android:id="@+id/layout_editor_orientation_notice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="6dp"
+            android:text="@string/termux_layout_editor_other_orientation_notice"
             android:textColor="?attr/termuxColorOnSurfaceVariant"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:visibility="gone" />
 
-        <ImageView
-            android:id="@+id/layout_editor_done"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginStart="4dp"
-            android:background="@drawable/dock_tuning_done_pill"
-            android:contentDescription="@string/termux_dock_tuning_done"
-            android:padding="6dp"
-            android:scaleType="fitCenter" />
+        <!-- The canvas. Its height is set in code from the orientation it is showing: the
+             portrait frame stands at about half the screen, the landscape one as wide as the
+             screen — or, where that would take the whole card, at the room it has left. -->
+        <com.termux.app.fragments.settings.PlaceMiniatureView
+            android:id="@+id/layout_editor_miniature"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="6dp" />
+
+        <!-- The one slot for what the current arrangement costs: a narrow canvas from bars on the
+             side, a status bar itself parked on a side. Neither blocks anything, both can apply at
+             once, and LayoutEditorController.syncNotice fills the text and visibility from the
+             plan. -->
+        <TextView
+            android:id="@+id/layout_editor_narrow_notice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="6dp"
+            android:textColor="?attr/termuxColorOnSurfaceVariant"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Everything about the place that no bar can be dragged into: how its keyboard
+             stands, and on Home how many cells its grid has. Filled in code from
+             LayoutEditorPlan, into a scroller that grows to whatever the canvas above has left
+             and scrolls inside it after that. -->
+        <FrameLayout
+            android:id="@+id/layout_editor_rows_host"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="6dp" />
     </LinearLayout>
-
-    <!-- The orientation on the miniature. It moves the picture and the target of the next drag,
-         and never the place behind the card: an orientation the phone is not in shows up there
-         only once the phone is turned. -->
-    <com.google.android.material.button.MaterialButtonToggleGroup
-        android:id="@+id/layout_editor_orientation"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:layout_marginEnd="6dp"
-        app:selectionRequired="true"
-        app:singleSelection="true">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/layout_editor_orientation_portrait"
-            style="@style/Widget.Termux.SurfaceEditor.Segment"
-            android:text="@string/settings_layout_orientation_portrait" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/layout_editor_orientation_landscape"
-            style="@style/Widget.Termux.SurfaceEditor.Segment"
-            android:text="@string/settings_layout_orientation_landscape" />
-    </com.google.android.material.button.MaterialButtonToggleGroup>
-
-    <!-- The canvas. Its height is set in code from the orientation it is showing: the portrait
-         frame stands at about half the screen, the landscape one fills the width. -->
-    <com.termux.app.fragments.settings.PlaceMiniatureView
-        android:id="@+id/layout_editor_miniature"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:layout_marginEnd="6dp" />
-
-    <!-- The one slot for what the current arrangement costs: a narrow canvas from bars on the
-         side, a status bar itself parked on a side. Neither blocks anything, both can apply at
-         once, and LayoutEditorController.syncNotice fills the text and visibility from the plan. -->
-    <TextView
-        android:id="@+id/layout_editor_narrow_notice"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:layout_marginEnd="6dp"
-        android:textColor="?attr/termuxColorOnSurfaceVariant"
-        android:textSize="12sp"
-        android:visibility="gone" />
-
-    <!-- Everything about the place that no bar can be dragged into: how its keyboard stands, and
-         on Home how many cells its grid has. Filled in code from LayoutEditorPlan, into a scroller
-         that grows to whatever the canvas above has left and scrolls inside it after that. -->
-    <FrameLayout
-        android:id="@+id/layout_editor_rows_host"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:layout_marginEnd="6dp" />
-</LinearLayout>
+</androidx.core.widget.NestedScrollView>

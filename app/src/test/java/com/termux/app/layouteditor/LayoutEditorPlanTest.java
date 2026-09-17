@@ -12,6 +12,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
+import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.KeyboardOnEnter;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.PlaceArrangeModel;
@@ -50,6 +51,11 @@ public class LayoutEditorPlanTest {
 
     private static final PlaceOrientation PORTRAIT = PlaceOrientation.PORTRAIT;
     private static final PlaceOrientation LANDSCAPE = PlaceOrientation.LANDSCAPE;
+
+    /** Landscape viewports in pixels, the shapes a phone and a window of one actually take. */
+    private static final int[][] LANDSCAPE_VIEWPORTS = {
+        {960, 540}, {1024, 600}, {1300, 600}, {1280, 720}, {1600, 720}, {1920, 1080},
+        {2340, 1080}, {2400, 1080}};
 
     private SharedPreferences prefs;
     private PlaceLayoutStore places;
@@ -520,22 +526,71 @@ public class LayoutEditorPlanTest {
     }
 
     @Test
-    public void thePortraitCanvasIsAboutHalfTheScreenAndTheLandscapeOneFillsTheWidth() {
-        int screenWidth = 1080;
-        int screenHeight = 2400;
+    public void thePortraitCanvasIsAboutHalfTheScreenAndTheLandscapeOneStopsAtTheRoomLeft() {
         int reserved = 60;
         float portraitAspect = 9f / 19.5f;
         float landscapeAspect = 19.5f / 9f;
 
-        int portrait = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, screenWidth, screenHeight,
-            portraitAspect, reserved);
+        int portrait = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, 1080, 2400,
+            portraitAspect, reserved, 400);
         assertEquals("about 55% of the screen, plus the room the tray keeps",
-            Math.round(0.55f * screenHeight) + reserved, portrait);
+            Math.round(0.55f * 2400) + reserved, portrait);
+        assertEquals("and the portrait frame is the screen's business, not the card's",
+            portrait, LayoutEditorPlan.miniatureHeightPx(PORTRAIT, 1080, 2400,
+                portraitAspect, reserved, 1600));
 
-        int landscape = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, screenWidth, screenHeight,
-            landscapeAspect, reserved);
-        assertEquals("as tall as a full-width landscape phone is",
-            Math.round(screenWidth / landscapeAspect) + reserved, landscape);
-        assertTrue("and never taller than the portrait canvas", landscape < portrait);
+        // The landscape viewport is that phone turned: 2400 wide, 1080 tall. A frame as wide as
+        // the screen is then taller than the screen, which is the whole defect: owe the canvas
+        // nothing and it takes everything, rows and all.
+        assertTrue("a full-width landscape frame does not fit the screen it came from",
+            Math.round(2400 / landscapeAspect) + reserved > 1080);
+        int wideOpen = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, 2400, 1080,
+            landscapeAspect, reserved, 0);
+        assertEquals("with nothing owed room below it the canvas claims the whole screen",
+            1080, wideOpen);
+
+        int onACard = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, 2400, 1080,
+            landscapeAspect, reserved, 400);
+        assertEquals("and only what is left once the chrome and the rows have theirs",
+            1080 - 400, onACard);
+        assertTrue("which is less than the frame asked for", onACard < wideOpen);
+    }
+
+    @Test
+    public void everyLandscapeViewportLeavesTheRowsTheirFloor() {
+        // The two the landscape review reproduced on. The card's chrome and the rows' floor are
+        // dp, so only the density moves them; the font scale moves what stands inside the rows,
+        // which is the scroller's business and not this sum's.
+        for (float density : new float[]{180f / 160f, 260f / 160f}) {
+            int chrome = Math.round(density * LayoutEditorController.CARD_CHROME_DP);
+            int floor = Math.round(density * LayoutEditorController.ROWS_FLOOR_DP);
+            int reserved = Math.round(density * 48f);
+            for (int[] viewport : LANDSCAPE_VIEWPORTS) {
+                int height = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, viewport[0],
+                    viewport[1], PlaceMiniatureView.frameAspect(LANDSCAPE), reserved,
+                    chrome + floor);
+                String where = viewport[0] + "x" + viewport[1] + " at " + density + "x";
+                int left = viewport[1] - height - chrome;
+                assertTrue("the rows keep their floor at " + where, left >= floor);
+                assertEquals("and the cap hands them room that is really there at " + where,
+                    left, LayoutEditorPlan.rowsHeightCapPx(viewport[1], height, chrome, floor));
+            }
+        }
+    }
+
+    @Test
+    public void theOtherOrientationIsSaidOnlyWhileTheToggleHasLeftTheOneThePhoneIsIn() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        assertFalse("the editor opens on what the phone is in", plan.warnsOtherOrientation());
+
+        plan.showOrientation(LANDSCAPE);
+        assertFalse(plan.liveFollows());
+        assertTrue("the toggle has left the phone's own orientation",
+            plan.warnsOtherOrientation());
+
+        plan.onDeviceOrientationChanged(LANDSCAPE);
+        assertTrue(plan.liveFollows());
+        assertFalse("the phone turned to the orientation on the toggle",
+            plan.warnsOtherOrientation());
     }
 }

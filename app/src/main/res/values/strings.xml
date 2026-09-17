@@ -1312,6 +1312,7 @@
                 <string name="termux_layout_editor_unsaved_message">Discard them and put everything back where it was when you opened the editor, or save and close?</string>
                 <string name="termux_layout_editor_narrow_notice">With bars down the side there is not much room left.</string>
                 <string name="termux_layout_editor_side_status_notice">A status bar on the side stays compact.</string>
+                <string name="termux_layout_editor_other_orientation_notice">This is the layout for the other orientation; it appears when you turn the phone.</string>
                 <!-- The dock's and the keyboard's height rows. The heading above each one says
                      which is which, so the label column only has to say what it sets. -->
                 <string name="termux_layout_editor_height">Height</string>
