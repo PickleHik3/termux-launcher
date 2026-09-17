@@ -172,12 +172,6 @@ public final class SurfaceEditorController {
          */
         float keyboardSurfaceCornerRadiusPx();
         /**
-         * A small center-cropped copy of the blurred wallpaper for the preset mocks, or null when
-         * no frame is available (fallback: a neutral gradient). A copy, so the blur cache recycling
-         * a frame never pulls the bitmap out from under a card.
-         */
-        @Nullable Bitmap wallpaperPreviewThumb(int widthPx, int heightPx);
-        /**
          * The live glass recipe at caller-supplied opacity/grain — what makes a preset card show
          * the material the preset would actually render, not a sketch of it.
          */
@@ -2799,17 +2793,20 @@ public final class SurfaceEditorController {
         item.setGravity(Gravity.CENTER_HORIZONTAL);
         LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        itemParams.rightMargin = dp(8);
+        itemParams.rightMargin = dp(EditorShellMetrics.PRESET_TILE_GAP_DP);
         item.setLayoutParams(itemParams);
 
         View preview = new View(context);
         preview.setLayoutParams(new LinearLayout.LayoutParams(
             dp(SurfaceEditorPresetPreview.CARD_WIDTH_DP),
             dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP)));
-        float cardCornerPx = dpToPx(SurfaceEditorPresetPreview.CARD_CORNER_DP);
+        // The tile is clipped at the preset's own corner, not a fixed one: a square preset gives a
+        // square tile and a 24dp one a tile a third as round as it is wide. Set per render.
         preview.setOutlineProvider(new android.view.ViewOutlineProvider() {
             @Override public void getOutline(View view, android.graphics.Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cardCornerPx);
+                Object corner = view.getTag(R.id.editor_shell_preset_corner);
+                float radius = corner instanceof Float ? (Float) corner : 0f;
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
             }
         });
         preview.setClipToOutline(true);
@@ -2818,7 +2815,8 @@ public final class SurfaceEditorController {
 
         TextView name = new TextView(context);
         name.setText(nameRes);
-        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        name.setGravity(Gravity.CENTER_HORIZONTAL);
         name.setMaxLines(1);
         name.setEllipsize(TextUtils.TruncateAt.END);
         name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -2878,7 +2876,7 @@ public final class SurfaceEditorController {
         empty.setColor(withAlpha(mHost.themeColor(
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
             R.color.termux_on_surface_variant), 20));
-        empty.setCornerRadius(dpToPx(SurfaceEditorPresetPreview.CARD_CORNER_DP));
+        empty.setCornerRadius(dpToPx(8));
         empty.setStroke(Math.max(1, dp(1)),
             withAlpha(mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
                 R.color.termux_on_surface_variant), 110), dpToPx(3), dpToPx(3));
@@ -2891,94 +2889,116 @@ public final class SurfaceEditorController {
             return;
         int heightPx = dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP);
         int widthPx = dp(SurfaceEditorPresetPreview.CARD_WIDTH_DP);
-        // One thumb shared by every card: the wallpaper is the same behind all five looks.
-        Bitmap thumb = mHost.wallpaperPreviewThumb(widthPx, heightPx);
-        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
-            Pair<View, TextView> item = mPresetItems.get(preset.id);
-            if (item != null)
-                item.first.setBackground(buildPresetPreview(preset, thumb, widthPx, heightPx));
-        }
+        for (SurfacePresets.Preset preset : SurfacePresets.presets())
+            renderPresetTile(mPresetItems.get(preset.id), preset, widthPx, heightPx);
         Pair<View, TextView> customItem = mPresetItems.get(SurfacePresets.CUSTOM_ID);
         if (customItem != null) {
             SurfacePresets.Preset custom = customPreset();
-            customItem.first.setBackground(custom == null
-                ? buildEmptyPresetCard()
-                : buildPresetPreview(custom, thumb, widthPx, heightPx));
+            if (custom == null) {
+                customItem.first.setTag(R.id.editor_shell_preset_corner, dpToPx(8));
+                customItem.first.setBackground(buildEmptyPresetCard());
+                customItem.first.invalidateOutline();
+            } else {
+                renderPresetTile(customItem, custom, widthPx, heightPx);
+            }
             customItem.first.setAlpha(custom == null ? 0.6f : 1f);
         }
     }
 
+    /** One tile: its clip at the preset's corner, its drawing from the preset's own numbers. */
+    private void renderPresetTile(@Nullable Pair<View, TextView> item,
+                                  @NonNull SurfacePresets.Preset preset, int widthPx,
+                                  int heightPx) {
+        if (item == null)
+            return;
+        int radiusDp = resolvedPresetRadiusDp(preset);
+        item.first.setTag(R.id.editor_shell_preset_corner,
+            SurfaceEditorPresetPreview.tileCornerPx(dpToPx(1), radiusDp));
+        item.first.setBackground(buildPresetPreview(preset, widthPx, heightPx));
+        item.first.invalidateOutline();
+    }
+
     /**
-     * A mini device mock wearing the preset: the blurred wallpaper behind the terminal field, the
-     * status pill and the dock/keyboard slab — the latter two rendered by the live glass recipe at
-     * the preset's own opacity and grain, placed by {@link SurfaceEditorPresetPreview}. Docked runs
-     * the slab flush to the card's edges; Floating pulls it in and rounds it, so the one decision
-     * the presets disagree on most is the one the cards show most clearly.
+     * The corner a preset really draws at. A stored {@code -1} is the "follow the style" sentinel,
+     * and the tile has to read what that resolves to rather than the raw key — the sentinel is not
+     * a radius and never draws as one.
+     */
+    private int resolvedPresetRadiusDp(@NonNull SurfacePresets.Preset preset) {
+        int stored = presetInt(preset,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS, 24);
+        if (stored >= 0)
+            return stored;
+        boolean floating = SegmentedPillPreference.VALUE_ROUNDED.equals(preset.values.get(
+            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
+        return floating ? 26 : 0;
+    }
+
+    /**
+     * The preset, drawn at true size: the shipped crop blurred by the preset's blur, the surface
+     * over it filled at the preset's opacity and grain by the live glass recipe, inset by the
+     * preset's margin and cornered at its radius.
+     *
+     * <p>Nothing here reads the live surfaces. The editor collapses the status pane on entry, so a
+     * preview that asked the running chrome what it looked like would be asking a pane that is not
+     * there.
      */
     @NonNull
-    private Drawable buildPresetPreview(@NonNull SurfacePresets.Preset preset,
-                                        @Nullable Bitmap wallpaperThumb, int widthPx,
+    private Drawable buildPresetPreview(@NonNull SurfacePresets.Preset preset, int widthPx,
                                         int heightPx) {
-        int radiusDp = presetInt(preset,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS, 24);
+        int radiusDp = resolvedPresetRadiusDp(preset);
         int opacity = presetInt(preset,
             TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 34);
         int grain = presetInt(preset,
             TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 0);
-        int sideGapDp = presetInt(preset,
+        int blurDp = presetInt(preset,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_BLUR, 0);
+        int marginDp = presetInt(preset,
             TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, 10);
-        int terminalRadiusDp = presetInt(preset,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS,
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
-        int paneGapDp = presetInt(preset,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_PANE_GAP,
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
         boolean floating = SegmentedPillPreference.VALUE_ROUNDED.equals(preset.values.get(
             TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
-        boolean border = Boolean.TRUE.equals(preset.values.get(
-            TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED));
 
         float density = dpToPx(1);
+        Drawable backdrop = buildPresetBackdrop(widthPx, heightPx, blurDp);
 
-        Drawable wallpaper;
-        if (wallpaperThumb != null && !wallpaperThumb.isRecycled()) {
-            wallpaper = new BitmapDrawable(getResources(), wallpaperThumb);
-        } else {
-            wallpaper = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] {
-                withAlpha(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                    R.color.termux_primary), 70),
-                withAlpha(mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-                    R.color.termux_on_surface_variant), 40)});
+        float[] radii = SurfaceEditorPresetPreview.surfaceCornerRadiiPx(density, radiusDp,
+            floating);
+        Drawable surface = mHost.presetGlassSurface(opacity / 100f, grain, radii[0], floating);
+        if (surface instanceof GradientDrawable) {
+            // Docked and Floating round different corners, so the fill takes all four rather than
+            // the one number presetGlassSurface was given.
+            ((GradientDrawable) surface).setCornerRadii(new float[] {
+                radii[0], radii[0], radii[1], radii[1],
+                radii[2], radii[2], radii[3], radii[3]});
         }
 
-        GradientDrawable terminal = new GradientDrawable();
-        terminal.setColor(withAlpha(Color.BLACK, 120));
-        terminal.setCornerRadius(
-            SurfaceEditorPresetPreview.terminalRadiusPx(widthPx, density, terminalRadiusDp));
-        if (border) {
-            terminal.setStroke(Math.max(1, Math.round(density)),
-                withAlpha(mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-                    R.color.termux_on_surface_variant), 90));
-        }
-
-        float glassRadiusPx =
-            SurfaceEditorPresetPreview.surfaceRadiusPx(widthPx, density, radiusDp, floating);
-        Drawable status = mHost.presetGlassSurface(opacity / 100f, grain, glassRadiusPx, floating);
-        Drawable slab = mHost.presetGlassSurface(opacity / 100f, grain, glassRadiusPx, floating);
-
-        LayerDrawable layers = new LayerDrawable(
-            new Drawable[] {wallpaper, terminal, status, slab});
-        int[] terminalInsets = SurfaceEditorPresetPreview.terminalInsets(
-            widthPx, heightPx, density, paneGapDp, terminalRadiusDp);
-        int[] statusInsets = SurfaceEditorPresetPreview.statusInsets(
-            widthPx, heightPx, density, sideGapDp);
-        int[] slabInsets = SurfaceEditorPresetPreview.bottomSlabInsets(
-            widthPx, heightPx, density, sideGapDp, floating);
-        layers.setLayerInset(1,
-            terminalInsets[0], terminalInsets[1], terminalInsets[2], terminalInsets[3]);
-        layers.setLayerInset(2, statusInsets[0], statusInsets[1], statusInsets[2], statusInsets[3]);
-        layers.setLayerInset(3, slabInsets[0], slabInsets[1], slabInsets[2], slabInsets[3]);
+        LayerDrawable layers = new LayerDrawable(new Drawable[] {backdrop, surface});
+        int[] insets = SurfaceEditorPresetPreview.surfaceInsets(widthPx, heightPx, density,
+            marginDp, floating);
+        layers.setLayerInset(1, insets[0], insets[1], insets[2], insets[3]);
         return layers;
+    }
+
+    /**
+     * The shipped crop at this preset's blur. The blur is a resample rather than a real one: at
+     * 72 x 40 dp a box blur and a resample are indistinguishable, and a resample costs one small
+     * bitmap where a real blur costs a render pass per tile.
+     */
+    @NonNull
+    private Drawable buildPresetBackdrop(int widthPx, int heightPx, int blurDp) {
+        Drawable crop = androidx.core.content.ContextCompat.getDrawable(
+            mHost.context(), R.drawable.editor_shell_preset_crop);
+        if (crop == null)
+            return new GradientDrawable();
+        int sampleWidth = SurfaceEditorPresetPreview.backdropSamplePx(widthPx, dpToPx(1), blurDp);
+        int sampleHeight = SurfaceEditorPresetPreview.backdropSamplePx(heightPx, dpToPx(1), blurDp);
+        if (sampleWidth >= widthPx && sampleHeight >= heightPx)
+            return crop;
+        Bitmap small = Bitmap.createBitmap(sampleWidth, sampleHeight, Bitmap.Config.ARGB_8888);
+        crop.setBounds(0, 0, sampleWidth, sampleHeight);
+        crop.draw(new android.graphics.Canvas(small));
+        BitmapDrawable blurred = new BitmapDrawable(getResources(), small);
+        blurred.setFilterBitmap(true);
+        return blurred;
     }
 
     private static int presetInt(@NonNull SurfacePresets.Preset preset, @NonNull String key,
@@ -3027,10 +3047,12 @@ public final class SurfaceEditorController {
     private Drawable buildPresetRing() {
         GradientDrawable ring = new GradientDrawable();
         ring.setColor(0);
-        ring.setCornerRadius(dpToPx(9));
+        ring.setCornerRadius(dpToPx(10));
         ring.setStroke(dp(2),
             mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary));
-        return ring;
+        // 2dp outside the tile, so the ring says "this one" without cropping the look it rings.
+        int out = dp(2);
+        return new android.graphics.drawable.InsetDrawable(ring, -out, -out, -out, -out);
     }
 
     private void applyPreset(@NonNull SurfacePresets.Preset preset) {

@@ -1,129 +1,100 @@
 package com.termux.app.surfaces;
 
 /**
- * Geometry for the preset strip's mini device mocks: a phone-aspect card whose layers — status
- * pill, terminal field, and the dock/keyboard slab — sit where they sit on the real screen, scaled
- * down from a reference device width. The controller renders the layers with the live glass
- * recipe at each preset's own values; this class only decides where each layer's rectangle is, so
- * the placement is pure arithmetic and testable without a view tree.
+ * Geometry for the preset tiles: a corner of a surface, drawn at true device size.
  *
- * <p>All returned insets are {left, top, right, bottom} pixel arrays for
- * {@code LayerDrawable.setLayerInset}.
+ * <p>The tiles used to be 42 x 68 dp mini phones scaled down from a 360 dp reference, which made
+ * every value a preset actually differs by worth about a ninth of itself — a 24 dp corner drew as
+ * 2.8 dp and a 4 dp margin as half a pixel. Classic, Mist, Slate and Bare came out as four
+ * near-identical dark outlines, and the cause was the scale, not the art. There is no scale here.
+ * Every number a preset carries is drawn at the dp it really is, on a 72 x 40 tile where a 24 dp
+ * corner is a third of the width and a 10 dp margin is a visible band of wallpaper.
+ *
+ * <p>What the tile shows is the leading-bottom corner of a surface over a fixed crop: the crop
+ * blurred by the preset's blur, the surface filled at the preset's opacity and grain, inset by the
+ * preset's margin, cornered at the preset's radius. It shows no bars, no status pill and no phone
+ * outline — a preset does not move any of those, and drawing an arrangement it does not change is
+ * what made four different looks look the same.
+ *
+ * <p>Docked and Floating are two formulas and stay two: Docked is flush at the edges it touches and
+ * rounds only where it does not, Floating is a card that pulls in on every edge it shows.
+ *
+ * <p>Pure arithmetic on pixels, no views.
  */
 public final class SurfaceEditorPresetPreview {
 
     private SurfaceEditorPresetPreview() {}
 
-    public static final int CARD_WIDTH_DP = 42;
-    public static final int CARD_HEIGHT_DP = 68;
+    public static final int CARD_WIDTH_DP = 72;
+    public static final int CARD_HEIGHT_DP = 40;
 
     /**
-     * The shortest a card is allowed to get where the region cannot hold the full one. Small, but
-     * still a phone with three bands in it: the strip is how a preset is told apart from the next
-     * one, and a card below this reads as a smudge rather than a look.
+     * The band of crop kept above the surface. Without it a Docked preset at full opacity fills
+     * the tile and there is nothing left for its opacity, its blur or its grain to read against.
      */
-    public static final int CARD_MIN_HEIGHT_DP = 48;
+    public static final int WALLPAPER_BAND_DP = 10;
 
-    /** The card's own clip corner. */
-    public static final float CARD_CORNER_DP = 5f;
+    /** The tile cannot be rounder than this and still be a rectangle. */
+    private static final int MAX_TILE_CORNER_DP = CARD_HEIGHT_DP / 2;
 
-    /** The device width the preset's dp values are scaled down from. */
-    private static final float REFERENCE_WIDTH_DP = 360f;
-
-    /**
-     * The card height the band constants below are drawn against. They are absolute rather than
-     * fractions because that is how the mock was laid out by eye; {@link #cardScale} is what keeps
-     * the bands in proportion when the card itself is resized, so a strip that has to shrink for a
-     * short region shrinks by one number rather than six.
-     */
-    private static final float REFERENCE_CARD_HEIGHT_DP = 120f;
-
-    private static final float STATUS_TOP_DP = 4f;
-    private static final float STATUS_HEIGHT_DP = 7f;
-    private static final float TERMINAL_TOP_DP = 15f;
-    private static final float TERMINAL_BOTTOM_GAP_DP = 2f;
-    private static final float BOTTOM_SLAB_HEIGHT_DP = 22f;
-    private static final float FLOATING_BOTTOM_AIR_DP = 3f;
-
-    /**
-     * The card's width at a given height, keeping the mock's phone aspect. A shrunk card is still a
-     * phone; a card that only lost height would be a different device.
-     */
-    public static int widthPxForHeightPx(int heightPx) {
-        float aspect = CARD_WIDTH_DP / (float) CARD_HEIGHT_DP;
-        return Math.max(1, Math.round(Math.max(0, heightPx) * aspect));
+    private static int px(float dp, float density) {
+        return Math.round(dp * Math.max(0.01f, density));
     }
 
     /**
-     * How many mock-px one real-device dp of a preset value is worth, at the card's current width.
-     * Read from the card's own pixels rather than the constant, so a strip shrunk for a short
-     * region scales its side gaps and corners with it.
+     * The tile's own corner, at the preset's radius rather than a fixed one: a square-cornered
+     * preset gives a square tile and a 24 dp one gives a tile a third as round as it is wide, which
+     * is the difference the strip exists to show. Clamped at half the tile's height, past which a
+     * rounded rectangle is a stadium and the radius stops reading as a number.
      */
-    public static float presetScale(int widthPx, float density) {
-        float scale = Math.max(0.01f, density);
-        return Math.max(0, widthPx) / (REFERENCE_WIDTH_DP * scale);
-    }
-
-    /** How much of a reference-card dp survives at the card's current height. */
-    private static float cardScale(int heightPx, float density) {
-        float scale = Math.max(0.01f, density);
-        return Math.max(0, heightPx) / (REFERENCE_CARD_HEIGHT_DP * scale);
-    }
-
-    /** One of the mock's vertical bands, in pixels at the card's current height. */
-    private static int bandPx(float referenceDp, int heightPx, float density) {
-        return Math.round(referenceDp * cardScale(heightPx, density) * density);
-    }
-
-    /** The status pill band. It floats with the side gap in both dock styles. */
-    public static int[] statusInsets(int widthPx, int heightPx, float density, int sideGapDp) {
-        int side = Math.round(Math.max(2f, sideGapDp * presetScale(widthPx, density)) * density);
-        int top = bandPx(STATUS_TOP_DP, heightPx, density);
-        int bottom = heightPx - top - bandPx(STATUS_HEIGHT_DP, heightPx, density);
-        return new int[] {side, top, side, Math.max(0, bottom)};
+    public static float tileCornerPx(float density, int radiusDp) {
+        return Math.min(Math.max(0, radiusDp), MAX_TILE_CORNER_DP) * Math.max(0.01f, density);
     }
 
     /**
-     * The terminal field. Full-bleed between status and the bottom slab unless the preset gives
-     * the terminal its own radius, which turns it into a bounded slab inset by the pane gap —
-     * exactly the rule the real render path applies.
+     * Where the surface sits on the tile, as {left, top, right, bottom} pixel insets.
+     *
+     * <p>The trailing edge is never inset: the tile is a crop, and the surface runs off the side of
+     * it. The leading and bottom edges carry the preset's margin while Floating and nothing at all
+     * while Docked, which is the rule the real render path applies — a docked surface is flush with
+     * the screen's edges by definition.
      */
-    public static int[] terminalInsets(int widthPx, int heightPx, float density,
-                                       int paneGapDp, int terminalRadiusDp) {
-        int margin = terminalRadiusDp > 0
-            ? Math.round(Math.max(1f, paneGapDp * presetScale(widthPx, density)) * density) : 0;
-        int top = bandPx(TERMINAL_TOP_DP, heightPx, density) + margin;
-        int bottomEdge = bottomSlabTopPx(heightPx, density)
-            - bandPx(TERMINAL_BOTTOM_GAP_DP, heightPx, density) - margin;
-        return new int[] {margin, top, margin, Math.max(0, heightPx - bottomEdge)};
+    public static int[] surfaceInsets(int widthPx, int heightPx, float density, int marginDp,
+                                      boolean floating) {
+        int band = Math.min(px(WALLPAPER_BAND_DP, density), Math.max(0, heightPx / 2));
+        int margin = floating ? px(Math.max(0, marginDp), density) : 0;
+        margin = Math.min(margin, Math.max(0, Math.min(widthPx / 2, (heightPx - band) / 2)));
+        return new int[] {margin, band, 0, margin};
     }
 
     /**
-     * The dock/keyboard slab — one piece, because that is the unified material. Docked runs flush
-     * to the card's bottom and sides; Floating pulls in by the side gap and leaves bottom air.
+     * The surface's four corners on the tile, as {leading-top, trailing-top, trailing-bottom,
+     * leading-bottom} pixel radii.
+     *
+     * <p>Two formulas, not one. Floating is already a card: every corner it shows is its own.
+     * Docked is square at rest and flush at the bottom, so only the edge it does not touch rounds.
+     * The trailing corners are always square because the surface runs off that side of the crop.
      */
-    public static int[] bottomSlabInsets(int widthPx, int heightPx, float density,
-                                         int sideGapDp, boolean floating) {
-        int side = floating
-            ? Math.round(Math.max(2f, sideGapDp * presetScale(widthPx, density)) * density) : 0;
-        int bottom = floating ? bandPx(FLOATING_BOTTOM_AIR_DP, heightPx, density) : 0;
-        return new int[] {side, bottomSlabTopPx(heightPx, density) - bottom, side, bottom};
+    public static float[] surfaceCornerRadiiPx(float density, int radiusDp, boolean floating) {
+        float radius = Math.max(0, radiusDp) * Math.max(0.01f, density);
+        return floating
+            ? new float[] {radius, 0f, 0f, radius}
+            : new float[] {radius, 0f, 0f, 0f};
     }
 
-    private static int bottomSlabTopPx(int heightPx, float density) {
-        return heightPx - bandPx(BOTTOM_SLAB_HEIGHT_DP + FLOATING_BOTTOM_AIR_DP, heightPx, density);
+    /**
+     * How small the crop is sampled to before being drawn back at full size, which is how the
+     * preset's blur is shown at this size. A blur of 0 samples at full size and is not blurred at
+     * all; the strongest blur either editor offers (30 dp) samples at about a seventh.
+     */
+    public static int backdropSamplePx(int sidePx, float density, int blurDp) {
+        float divisor = 1f + (Math.max(0, blurDp) / 5f);
+        return Math.max(1, Math.round(Math.max(1, sidePx) / divisor));
     }
 
-    /** A glass surface's corner on the mock: scaled in Floating, square where Docked is flush. */
-    public static float surfaceRadiusPx(int widthPx, float density, int radiusDp,
-                                        boolean floating) {
-        if (!floating)
-            return 0f;
-        return Math.max(1.5f, radiusDp * presetScale(widthPx, density)) * density;
-    }
-
-    /** The terminal slab's corner on the mock; 0 keeps the full-bleed field square. */
-    public static float terminalRadiusPx(int widthPx, float density, int terminalRadiusDp) {
-        return Math.max(0, terminalRadiusDp) * presetScale(widthPx, density) * density;
+    /** The whole strip's width: five tiles and the gaps between them. */
+    public static int stripWidthPx(int tileCount, int gapPx, float density) {
+        int tiles = Math.max(0, tileCount);
+        return (tiles * px(CARD_WIDTH_DP, density)) + (Math.max(0, tiles - 1) * gapPx);
     }
 }

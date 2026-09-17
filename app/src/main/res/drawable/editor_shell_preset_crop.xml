@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one crop every preset tile is drawn over. Fixed and shipped rather than read from the
+     user's wallpaper, so five looks differing only in opacity, blur and grain are differing against
+     the same thing — and so nothing in the card reads a bitmap while it parks.
+
+     Its colours are literals on purpose: a themed crop would move under the comparison. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="315"
+                android:centerColor="#FF3F6480"
+                android:endColor="#FF8AA79B"
+                android:startColor="#FF232C44"
+                android:type="linear" />
+        </shape>
+    </item>
+    <item android:alpha="0.4">
+        <shape android:shape="rectangle">
+            <gradient
+                android:centerX="0.78"
+                android:centerY="0.22"
+                android:endColor="#00FFE7AE"
+                android:gradientRadius="55%p"
+                android:startColor="#FFFFE7AE"
+                android:type="radial" />
+        </shape>
+    </item>
+</layer-list>

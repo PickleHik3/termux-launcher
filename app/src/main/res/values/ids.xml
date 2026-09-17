@@ -1,3 +1,7 @@
 <resources>
     <item name="help_split_divider" type="id" />
+
+    <!-- The corner the preset tile's outline is clipped at, which is the preset's own radius and
+         so changes per tile and per render. -->
+    <item name="editor_shell_preset_corner" type="id" />
 </resources>
