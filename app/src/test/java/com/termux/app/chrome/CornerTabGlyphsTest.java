@@ -28,16 +28,19 @@ public class CornerTabGlyphsTest {
         assertGlyph(CornerTabGlyphs.SETTINGS, 0xF013);
         assertGlyph(CornerTabGlyphs.EDIT, 0xF040);
         assertGlyph(CornerTabGlyphs.POWER, 0xF011);
-        assertGlyph(CornerTabGlyphs.APPEARANCE, 0xF1DE);
+        // nf-md-palette: the same mark the Appearance editor wears, so the button matches what it opens.
+        assertGlyph(CornerTabGlyphs.APPEARANCE, 0xF03D8);
         // nf-md-view_dashboard, in the plane-15 block the Material Design icons sit in.
         assertGlyph(CornerTabGlyphs.LAYOUT, 0xF056E);
     }
 
-    /** Layout is a supplementary code point, so it is two chars — and must not be cut in half. */
+    /** Layout and Appearance are supplementary code points, so two chars each — and never cut in half. */
     @Test
     public void theLayoutGlyphIsASurrogatePair() {
         assertEquals(2, CornerTabGlyphs.LAYOUT.length());
         assertEquals(1, CornerTabGlyphs.LAYOUT.codePointCount(0, CornerTabGlyphs.LAYOUT.length()));
+        assertEquals(2, CornerTabGlyphs.APPEARANCE.length());
+        assertEquals(1, CornerTabGlyphs.APPEARANCE.codePointCount(0, CornerTabGlyphs.APPEARANCE.length()));
     }
 
     @Test

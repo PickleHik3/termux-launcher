@@ -9,7 +9,7 @@ import com.termux.R;
 /**
  * What a corner tab's buttons are marked with. Every place on the wall answers a corner tap with
  * the same tab — the Widgets page, the Display page and a terminal pane — and each of them used to
- * carry its own copy of the code points, so the sliders that open the editor were spelled out in
+ * carry its own copy of the code points, so the glyph that opens the editor was spelled out in
  * three files and the terminal drew its own by hand. Adding a button is one edit here.
  *
  * <p>These are Nerd Font code points, drawn with the bundled symbols face
@@ -35,10 +35,12 @@ public final class CornerTabGlyphs {
     public static final String POWER = "";
 
     /**
-     * nf-fa-sliders: the Appearance editor — glass, opacity, blur, grain, corners, palette. Three
-     * rows with their knobs at different stops, which is the editor's own rows in miniature.
+     * nf-md-palette (U+F03D8, a surrogate pair like {@link #LAYOUT}): the Appearance editor. The
+     * same palette the editor itself wears on its floating pill and its shared-layer heading
+     * ({@code ic_symbol_palette}), so the button and the thing it opens carry one mark. It used to
+     * be nf-fa-sliders, which read as "settings" and told nobody a palette was behind it.
      */
-    public static final String APPEARANCE = "";
+    public static final String APPEARANCE = "\uDB80\uDFD8";
 
     /**
      * nf-fa-book: the whole of help, topic by topic — what the floating catalogue button beside an

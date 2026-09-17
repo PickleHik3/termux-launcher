@@ -143,7 +143,7 @@ public class TerminalPaneCornerTabTapTest {
         fixture.controls.setActions(
             PaneControlsView.Action.glyph(10, ""),
             PaneControlsView.Action.glyph(11, ""),
-            PaneControlsView.Action.glyph(12, ""),
+            PaneControlsView.Action.glyph(12, com.termux.app.chrome.CornerTabGlyphs.APPEARANCE),
             PaneControlsView.Action.glyph(13, ""),
             PaneControlsView.Action.glyph(14, "󰕮"));
 
