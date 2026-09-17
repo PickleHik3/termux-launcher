@@ -271,6 +271,14 @@ public final class HelpOverlayView extends FrameLayout {
         cardViews.clear(); cardSpecs.clear(); boxColors.clear();
         boolean light = lightMode();
         int width = Math.max(1, (snapshot.wall.width() - dp(36)) / 2);
+        // A control under the wall often shares a shelf with two others — the prefix keys, the
+        // space bar and the settings cog all sit in the keyboard's bottom row — so its card is a
+        // third of the width where a card on the wall is a half.
+        int narrow = Math.max(dp(100), (snapshot.wall.width() - dp(48)) / 3);
+        // The room the cards have is the wall; a control under it keeps its card beside itself.
+        Rect band = new Rect(snapshot.wall);
+        band.top += dp(8);
+        band.bottom = Math.max(band.top, band.bottom - dp(8));
         List<HelpLeaderRouter.Target> inputs = new ArrayList<>();
         List<HelpLeaderRouter.Box> soft = new ArrayList<>();
         int count = snapshot.targets.size();
@@ -280,36 +288,37 @@ public final class HelpOverlayView extends FrameLayout {
             int color = overviewColor(target.id, i, count, light);
             boxColors.put(target.id, color);
             int title = titleColor(target.id, i, count);
+            HelpLeaderRouter.Side side = side(target.rect);
+            int cardWidth = side == HelpLeaderRouter.Side.UNDER ? narrow : width;
             // The same words in the same colours are the same card: a stat that changed width
             // moves the cards it shares the wall with, and moving one is not rebuilding it.
             String spec = spec(target.copy.title, target.copy.body, title, color);
             TextView card = spec.equals(wasSpec.get(target.id)) ? wasView.get(target.id) : null;
             if (card == null) card = card(target.copy, title, color);
-            card.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            card.measure(MeasureSpec.makeMeasureSpec(cardWidth, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
             cardViews.put(target.id, card);
             cardSpecs.put(target.id, spec);
-            HelpLeaderRouter.Side side = side(target.rect);
             inputs.add(new HelpLeaderRouter.Target(target.id, box(target.rect), side,
-                width, card.getMeasuredHeight()));
+                cardWidth, card.getMeasuredHeight()));
             if (side == HelpLeaderRouter.Side.INSIDE) soft.add(box(target.rect));
         }
-        arrangeKeyCards(light);
-        // The whole band is the cards': the guide reserves nothing at the bottom, which is the
-        // room that used to push a hint onto a second page.
-        Rect band = new Rect(snapshot.wall);
-        band.top += dp(8);
-        band.bottom = Math.max(band.top, band.bottom - dp(8));
+        arrangeKeyCards(light, band);
+        // Nothing may sit on a control under the wall: those are a row or two tall, and a card
+        // over one hides the very thing it is about. The key cards are fixed by the time the rest
+        // is routed, so they count the same way.
         List<HelpLeaderRouter.Box> obstacles = new ArrayList<>();
+        for (HelpTargets.Target target : snapshot.targets)
+            if (target.rect.top >= snapshot.wall.bottom) obstacles.add(box(target.rect));
         if (keyCards.isEmpty()) {
             for (HelpTargets.KeyLabel key : snapshot.keys) obstacles.add(box(keyLabelBounds(key.rect)));
         } else {
             for (KeyCard key : keyCards) obstacles.add(box(key.bounds));
         }
         routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs, obstacles, soft);
-        // The key cards take the foot of the band, and one page still comes first: on a wall too
-        // short for both they give way rather than push a hint off the guide.
-        if (!keyCards.isEmpty() && !onOnePage(routed)) {
+        // One page still comes first: on a screen too tight for every card to keep clear of every
+        // control, the controls give way rather than a hint leave the guide.
+        if (!obstacles.isEmpty() && !onOnePage(routed)) {
             List<HelpLeaderRouter.Box> yielding = new ArrayList<>(soft);
             yielding.addAll(obstacles);
             routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs,
@@ -353,6 +362,14 @@ public final class HelpOverlayView extends FrameLayout {
             != Configuration.UI_MODE_NIGHT_YES;
     }
 
+    /** The gesture pill's own strip: help washes over it, and puts no card beneath it. */
+    private int bottomInset() {
+        android.view.WindowInsets insets = getRootWindowInsets();
+        if (insets == null) return 0;
+        return Math.max(0, Math.max(insets.getStableInsetBottom(),
+            insets.getSystemWindowInsetBottom()));
+    }
+
     /** What a card is made of; two cards with the same recipe are the same card. */
     private String spec(String title, String body, int titleColor, int borderColor) {
         return title + "\u0001" + body + "\u0001" + titleColor + ":" + borderColor + ":"
@@ -374,48 +391,63 @@ public final class HelpOverlayView extends FrameLayout {
 
     private HelpLeaderRouter.Side side(Rect r) {
         if (r.bottom <= snapshot.wall.top) return HelpLeaderRouter.Side.ABOVE;
-        if (r.top >= snapshot.wall.bottom) return HelpLeaderRouter.Side.BELOW;
+        // Everything under the wall — the dock, the rows above the keyboard, its own keys — is a
+        // shelf away from the cards' room, so its card goes to it rather than the other way round.
+        if (r.top >= snapshot.wall.bottom) return HelpLeaderRouter.Side.UNDER;
         if (r.right <= snapshot.wall.left) return HelpLeaderRouter.Side.LEFT;
         if (r.left >= snapshot.wall.right) return HelpLeaderRouter.Side.RIGHT;
         return HelpLeaderRouter.Side.INSIDE;
     }
 
     /**
-     * A card for every extra key, in the room above the row: what the key does, and what a swipe
-     * up on it does. Seven of them across a phone are too tight for one line, so they alternate
-     * between two rows, and each card takes the room between its neighbours' key centres — which
-     * leaves a lane over every key for the other row's leader to come down through. The rows sit
-     * clear of the dock and the A-Z row, whose own boxes have to stay readable under them.
+     * A card for every extra key: what the key does, and what a swipe up on it does. Seven of them
+     * across a phone are too tight for one line, so they alternate between two rows, and each card
+     * takes the room between its neighbours' key centres — which leaves a lane over every key for
+     * the other row's leader to come through. The pair of rows goes under the keys when the
+     * keyboard has the room, which it usually does, and over them otherwise, where it lies on the
+     * rows the wash has already covered.
      */
-    private void arrangeKeyCards(boolean light) {
+    private void arrangeKeyCards(boolean light, Rect band) {
         Map<Integer, TextView> wasView = new HashMap<>(keyCardViews);
         Map<Integer, String> wasSpec = new HashMap<>(keyCardSpecs);
         keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
         List<HelpTargets.KeyLabel> keys = snapshot.keys;
-        if (keys.isEmpty() || getWidth() <= 0) return;
+        if (keys.isEmpty() || getWidth() <= 0) {
+            HelpLog.d("key cards: none, " + keys.size() + " keys measured on a "
+                + getWidth() + "px overlay");
+            return;
+        }
         HelpTopics.Entry entry = HelpTopics.entry(place, "keys");
         keyColor = entry == null ? onTheWash(accent) : model.overviewColor(accent, entry, light);
         int titleColor = entry == null ? HelpPalette.titleColor(accent, 0, 1, dress.fillColor)
             : HelpPalette.titleColor(accent, entry.identityIndex,
                 HelpTopics.sizeFor(entry.place), dress.fillColor);
         int left = dp(12), right = getWidth() - dp(12);
-        int clearance = dp(10);
-        int limit = snapshot.wall.bottom;
-        for (HelpTargets.KeyLabel key : keys) limit = Math.min(limit, key.rect.top);
-        Rect dock = targetRect("dock");
-        if (dock != null) limit = Math.min(limit, dock.top);
-        Rect az = targetRect("az");
-        if (az != null) limit = Math.min(limit, az.top);
+        int keysTop = Integer.MAX_VALUE, keysBottom = 0;
+        for (HelpTargets.KeyLabel key : keys) {
+            keysTop = Math.min(keysTop, key.rect.top);
+            keysBottom = Math.max(keysBottom, key.rect.bottom);
+        }
+        // How far under the row the cards may reach: to the next control they must not cover, and
+        // never under the gesture pill, which help washes over but puts nothing beneath.
+        int floor = Math.max(keysBottom, getHeight() - bottomInset() - dp(8));
+        for (HelpTargets.Target target : snapshot.targets)
+            if (target.rect.top >= keysBottom) floor = Math.min(floor, target.rect.top - dp(6));
         int[] centers = new int[keys.size()];
         for (int i = 0; i < keys.size(); i++) centers[i] = keys.get(i).rect.centerX();
-        int[][] slots = keyCardSlots(centers, left, right, clearance);
+        int[][] slots = keyCardSlots(centers, left, right, dp(10));
         List<TextView> views = new ArrayList<>();
         List<String> specs = new ArrayList<>();
         int rowHeight = 0;
         for (int i = 0; i < keys.size(); i++) {
             HelpTargets.KeyLabel key = keys.get(i);
             // Too many keys for a card each; the caps keep their own small labels instead.
-            if (slots[i][1] - slots[i][0] < dp(56)) { keyCards.clear(); return; }
+            if (slots[i][1] - slots[i][0] < dp(56)) {
+                HelpLog.d("key cards: none, key " + i + " has only "
+                    + (slots[i][1] - slots[i][0]) + "px of shelf");
+                keyCards.clear();
+                return;
+            }
             String spec = spec(key.primary, key.secondary == null ? "" : key.secondary,
                 titleColor, keyColor);
             TextView card = spec.equals(wasSpec.get(i)) ? wasView.get(i) : null;
@@ -426,20 +458,41 @@ public final class HelpOverlayView extends FrameLayout {
             views.add(card);
             specs.add(spec);
         }
-        int lowerTop = limit - dp(14) - rowHeight;
-        int upperTop = lowerTop - dp(10) - rowHeight;
-        if (upperTop < dp(4)) {
-            upperTop = dp(4);
-            lowerTop = Math.max(lowerTop, upperTop + rowHeight + dp(10));
-        }
+        int[] rows = keyCardRows(keysTop, keysBottom, band.top, floor, rowHeight, dp(10), dp(14));
+        boolean under = rows[2] == 1;
         for (int i = 0; i < views.size(); i++) {
-            int top = i % 2 == 0 ? upperTop : lowerTop;
+            int top = i % 2 == 0 ? rows[0] : rows[1];
             Rect bounds = new Rect(slots[i][0], top, slots[i][1], top + rowHeight);
             Rect cap = keys.get(i).rect;
-            keyCards.add(new KeyCard(views.get(i), bounds, cap, keyLeader(bounds, cap)));
+            keyCards.add(new KeyCard(views.get(i), bounds, cap, keyLeader(bounds, cap, under)));
             keyCardViews.put(i, views.get(i));
             keyCardSpecs.put(i, specs.get(i));
         }
+        HelpLog.d("key cards: " + keyCards.size() + (under ? " under" : " over")
+            + " the row at " + keysTop + "-" + keysBottom + ", rows at " + rows[0] + " and "
+            + rows[1] + ", " + rowHeight + "px tall, floor " + floor);
+    }
+
+    /**
+     * Where the two rows of key cards go: the row against the keys first, then the one behind it,
+     * then 1 when both sit under the keys and 0 when they sit over them. Under is the first
+     * answer — the keyboard is the biggest washed space on the screen and it is right there — and
+     * over is what is left when the keyboard's own keys start too close to the row.
+     */
+    @VisibleForTesting
+    static int[] keyCardRows(int keysTop, int keysBottom, int ceiling, int floor,
+                             int rowHeight, int gap, int leader) {
+        if (floor - keysBottom >= 2 * rowHeight + gap + leader) {
+            int near = keysBottom + leader;
+            return new int[] {near, near + rowHeight + gap, 1};
+        }
+        int near = keysTop - leader - rowHeight;
+        int far = near - gap - rowHeight;
+        if (far < ceiling) {
+            far = ceiling;
+            near = Math.max(far + rowHeight + gap, near);
+        }
+        return new int[] {near, far, 0};
     }
 
     /**
@@ -458,19 +511,21 @@ public final class HelpOverlayView extends FrameLayout {
         return slots;
     }
 
-    /** Down from the card to the cap it names, straight when it can be and with one step when not. */
-    private List<float[]> keyLeader(Rect card, Rect cap) {
+    /** From the card to the cap it names, straight when it can be and with one step when not. */
+    private List<float[]> keyLeader(Rect card, Rect cap, boolean under) {
         List<float[]> lines = new ArrayList<>();
         int cx = cap.centerX();
         int lx = Math.max(card.left + dp(8), Math.min(card.right - dp(8), cx));
+        float from = under ? card.top : card.bottom;
+        float to = under ? cap.bottom : cap.top;
         if (lx == cx) {
-            lines.add(new float[] {cx, card.bottom, cx, cap.top});
+            lines.add(new float[] {cx, from, cx, to});
             return lines;
         }
-        float mid = (card.bottom + cap.top) / 2f;
-        lines.add(new float[] {lx, card.bottom, lx, mid});
+        float mid = (from + to) / 2f;
+        lines.add(new float[] {lx, from, lx, mid});
         lines.add(new float[] {lx, mid, cx, mid});
-        lines.add(new float[] {cx, mid, cx, cap.top});
+        lines.add(new float[] {cx, mid, cx, to});
         return lines;
     }
 

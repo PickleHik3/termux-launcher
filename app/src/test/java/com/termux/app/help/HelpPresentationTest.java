@@ -334,6 +334,27 @@ public class HelpPresentationTest {
     }
     private int centre(int[] slot) { return (slot[0] + slot[1]) / 2; }
 
+    /**
+     * The key cards take the keyboard when the keyboard has the room — on the phone this was
+     * measured on the extra keys run 1631 to 1729 and the keyboard's own keys start no higher
+     * than 2209 — and lie over the rows above the keys when it has not.
+     */
+    @Test public void theKeyCardsTakeTheKeyboardWhenItHasTheRoom() {
+        int[] under = HelpOverlayView.keyCardRows(1631, 1729, 232, 2209, 110, 27, 38);
+        assertEquals(1, under[2]);
+        assertEquals(1767, under[0]);
+        assertEquals(1904, under[1]);
+        assertTrue("the rows meet", under[1] >= under[0] + 110);
+        assertTrue("a row lies on the keyboard's own keys", under[1] + 110 <= 2209);
+        assertTrue("a row lies on the keys it names", under[0] >= 1729);
+        // A keyboard whose own keys start right under the row leaves the cards no room there.
+        int[] over = HelpOverlayView.keyCardRows(1631, 1729, 232, 1830, 110, 27, 38);
+        assertEquals(0, over[2]);
+        assertTrue("a row lies on the keys it names", over[0] + 110 <= 1631);
+        assertTrue("the rows meet", over[1] + 110 <= over[0]);
+        assertTrue("a row is off the top of the wash", over[1] >= 232);
+    }
+
     /** A control that only moved must not cost the guide its cards: rebuilding them is the flash. */
     @Test public void aRemeasureThatOnlyMovedAControlKeepsTheSameCards() {
         open(PaneWallPage.WIDGETS);
