@@ -217,6 +217,11 @@ public final class SuggestionBarView extends GridLayout
     private static final float PICKUP_X_AXIS_SLOP_FACTOR = 0.9f;
     private static final float PICKUP_Y_INTENT_SLOP_FACTOR = 1.8f;
     private static final float MENU_SELECTION_ARM_SLOP_FACTOR = 0.8f;
+    /**
+     * The pinned folder's shell — the disc that says these four icons are one thing. Seeds: white
+     * over dark glass, restated as shadow by {@link com.termux.app.chrome.ChromeShade} when the
+     * dock is standing on a light band, where 15% white is no disc at all.
+     */
     private static final int PINNED_FOLDER_FILL_COLOR = 0x26FFFFFF;
     private static final int PINNED_FOLDER_STROKE_COLOR = 0x33FFFFFF;
 
@@ -4183,10 +4188,15 @@ public final class SuggestionBarView extends GridLayout
         if (folder.apps.size() > 4) {
             TextView overflow = new TextView(getContext());
             overflow.setText("+" + (folder.apps.size() - 3));
-            overflow.setTextColor(Color.WHITE);
             overflow.setTextSize(8f);
             overflow.setGravity(Gravity.CENTER);
-            overflow.setBackgroundColor(0xB8000000);
+            // A plate, not a wash: a near-black disc is a hole punched through a light dock, so it
+            // flips whole and its text is read off the plate it ends up on.
+            int badgePlate = com.termux.app.chrome.ChromeShade.plate(0xB8000000, 0xB8FFFFFF);
+            overflow.setBackgroundColor(badgePlate);
+            overflow.setTextColor(com.termux.app.chrome.ChromeShade.onPlate(badgePlate,
+                com.termux.app.chrome.ChromeShade.nominalGlass(),
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT));
             FrameLayout.LayoutParams badge = new FrameLayout.LayoutParams(miniSize, miniSize,
                 Gravity.END | Gravity.BOTTOM);
             badge.setMargins(0, 0, pinnedFolderMiniIconMarginPx(), pinnedFolderMiniIconMarginPx());
@@ -4201,8 +4211,8 @@ public final class SuggestionBarView extends GridLayout
     private GradientDrawable createPinnedFolderShellBackground() {
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(PINNED_FOLDER_FILL_COLOR);
-        bg.setStroke(1, PINNED_FOLDER_STROKE_COLOR);
+        bg.setColor(com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR));
+        bg.setStroke(1, com.termux.app.chrome.ChromeShade.rim(PINNED_FOLDER_STROKE_COLOR));
         return bg;
     }
 
@@ -7055,9 +7065,11 @@ public final class SuggestionBarView extends GridLayout
         int alpha
     ) {
         float radius = iconSize * 0.5f;
-        swipePreviewFolderPaint.setColor(PINNED_FOLDER_FILL_COLOR);
+        swipePreviewFolderPaint.setColor(
+            com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR));
         swipePreviewFolderStrokePaint.setStrokeWidth(1f);
-        swipePreviewFolderStrokePaint.setColor(PINNED_FOLDER_STROKE_COLOR);
+        swipePreviewFolderStrokePaint.setColor(
+            com.termux.app.chrome.ChromeShade.rim(PINNED_FOLDER_STROKE_COLOR));
         canvas.drawCircle(cx, cy, radius, swipePreviewFolderPaint);
         canvas.drawCircle(cx, cy, radius - dp(0.5f), swipePreviewFolderStrokePaint);
 
@@ -7399,6 +7411,7 @@ public final class SuggestionBarView extends GridLayout
         boolean azPages = hasAzOverflowPages();
         boolean overflow = azPages || hasPinnedOverflowPages();
         indicator.setVerticalForm(vertical);
+        indicator.setGlassInk(glassBackdrop, glassInk);
         indicator.setAccentColor(resolvePageIndicatorAccentColor());
         int pages = azPages ? getAzVisiblePageCount()
             : (overflow ? getPinnedVisiblePageCount() : 1);
@@ -7415,6 +7428,42 @@ public final class SuggestionBarView extends GridLayout
         return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
             ContextCompat.getColor(getContext(), R.color.termux_primary));
     }
+
+    /**
+     * What the launcher's chrome measured under this dock: the opaque colour anything drawn on it
+     * is really standing on, or {@link android.graphics.Color#TRANSPARENT} before the wallpaper has
+     * been sampled.
+     *
+     * <p>Pushed in by the activity, which is the only thing that owns a measurer, and read by the
+     * two painted things the dock lends colours to rather than draws itself: the page ticks
+     * ({@link PageTickStripView}) and the drawer's A&ndash;Z rope, neither of which is a band of its
+     * own. One value for both, so the rope and the dock's own A&ndash;Z rail cannot disagree.</p>
+     */
+    public void setGlassInk(int surfaceColor, int inkColor) {
+        if (glassBackdrop == surfaceColor && glassInk == inkColor) return;
+        glassBackdrop = surfaceColor;
+        glassInk = inkColor;
+        PageTickStripView indicator = pageIndicator;
+        if (indicator != null) indicator.setGlassInk(surfaceColor, inkColor);
+    }
+
+    /** The opaque colour measured under this dock; see {@link #setGlassInk}. */
+    public int glassBackdrop() {
+        return glassBackdrop;
+    }
+
+    /**
+     * The ink the chrome settled on for that surface. Carried beside it because the side it is on
+     * <em>is</em> the polarity: anything else drawn on this glass takes its own colour from its own
+     * role, and resolved on its own a near-black role colour and a pale one land on opposite sides
+     * of the same band. The rope and the ticks read the side off this.
+     */
+    public int glassInk() {
+        return glassInk;
+    }
+
+    private int glassBackdrop = android.graphics.Color.TRANSPARENT;
+    private int glassInk = android.graphics.Color.TRANSPARENT;
 
     private void setRowInteractionActive(boolean active) {
         if (rowInteractionActive == active) {

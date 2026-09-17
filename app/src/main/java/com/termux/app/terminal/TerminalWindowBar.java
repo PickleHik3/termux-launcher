@@ -363,6 +363,18 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mAttentionColor;
     private int mDoneColor;
     @Nullable private Integer mPlaceAccent;
+    /**
+     * Who says what this bar is standing on, or null when nothing can measure it — a preview, a
+     * test, a bar the activity has not dressed yet. Null keeps the authored palette exactly as it
+     * was: every measured colour here is additive.
+     */
+    @Nullable private com.termux.app.chrome.ChromeInk mChromeInk;
+    /** The band as last measured, or null while nothing has been. */
+    @Nullable private WindowChipInk.Palette mGlassPalette;
+    /** The sample generation and the band rect {@link #mGlassPalette} was measured for. */
+    private int mGlassGeneration = -1;
+    @NonNull private final android.graphics.Rect mGlassBandRect = new android.graphics.Rect();
+    @NonNull private final android.graphics.Rect mGlassMeasuredRect = new android.graphics.Rect();
     /** Whether the strip ends with the plus that opens a new window. */
     private boolean mCreateButtonShown = true;
     @Nullable private ValueAnimator mSelectionAnimator;
@@ -1279,8 +1291,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 ContextCompat.getColor(context, R.color.termux_primary));
         AppCompatImageButton add = new AppCompatImageButton(context);
         add.setImageResource(R.drawable.ic_status_bar_add_window);
-        ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(
-            ColorUtils.setAlphaComponent(accent, 184)));
+        ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(plusTint(accent)));
         add.setScaleType(ImageView.ScaleType.CENTER);
         add.setBackground(null);
         add.setPadding(0, 0, 0, 0);
@@ -1465,11 +1476,152 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                     : MaterialColors.getColor(getContext(), com.termux.shared.R.attr.termuxColorPrimary,
                         ContextCompat.getColor(getContext(), R.color.termux_primary));
                 ImageViewCompat.setImageTintList((AppCompatImageButton) child,
-                    ColorStateList.valueOf(ColorUtils.setAlphaComponent(tint, 184)));
+                    ColorStateList.valueOf(plusTint(tint)));
             }
         }
         applyChipWatermarks();
         invalidate();
+    }
+
+    /**
+     * Who can say what this bar is standing on.
+     *
+     * <p>The chips are drawn on glass, and the role colours they were dressed in are authored
+     * against an opaque card: over the wallpaper the user reported, the label composited to 1.03:1
+     * of the band it stood on. Given this, every colour is derived from the band as measured
+     * instead — see {@link WindowChipInk}. Given null, nothing is measured and the bar keeps the
+     * authored palette exactly as it was.</p>
+     */
+    public void setChromeInk(@Nullable com.termux.app.chrome.ChromeInk ink) {
+        if (mChromeInk == ink) return;
+        mChromeInk = ink;
+        mGlassPalette = null;
+        mGlassGeneration = -1;
+        mGlassMeasuredRect.setEmpty();
+        updatePalette();
+        reapplyLabelInk();
+        invalidate();
+    }
+
+    /** The band as last measured; null until something could measure it. For tests. */
+    @Nullable
+    public WindowChipInk.Palette glassPalette() {
+        return mGlassPalette;
+    }
+
+    /**
+     * The band under the chips, measured once and remembered until the measurement could move.
+     *
+     * <p>{@link com.termux.app.chrome.ChromeInk#onGlass} is called here and nowhere else in this
+     * view: a band carries one veil, so asking twice in a frame — at two targets, or from two
+     * pieces of the same bar — would let the last caller decide it. The strictest tier the bar
+     * carries is its labels, so that is the tier the band is resolved at, and every other ink the
+     * chips need is derived from the surface it left.</p>
+     *
+     * @return null when nothing can be measured yet: no chrome attached, or a band whose view has
+     *     not been laid out. Both heal on a later frame through {@link #syncGlassPalette()}.
+     */
+    @Nullable
+    private WindowChipInk.Palette measureBand(int accent) {
+        if (mChromeInk == null) {
+            mGlassPalette = null;
+            return null;
+        }
+        if (!mChromeInk.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
+            mGlassBandRect)) {
+            mGlassPalette = null;
+            mGlassGeneration = -1;
+            mGlassMeasuredRect.setEmpty();
+            return null;
+        }
+        Context context = getContext();
+        int onSurface = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurface,
+            ContextCompat.getColor(context, R.color.termux_on_surface));
+        int surfaceBase = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(context, R.color.termux_surface_base));
+        com.termux.app.chrome.OnGlass.Resolution resolved = mChromeInk.onGlass(
+            com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR, mGlassBandRect,
+            WindowChipInk.neutralSeed(onSurface, surfaceBase, false),
+            WindowChipInk.neutralSeed(onSurface, surfaceBase, true),
+            com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        // Read after the resolve, never before: the band's own vote is cast inside onGlass, and a
+        // polarity read before it would be answering for a chrome that had not seen this band.
+        boolean pale =
+            mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
+        int neutral = WindowChipInk.neutralSeed(onSurface, surfaceBase, pale);
+        // A window-label poll re-dresses the whole bar; the tone walks behind a palette are not
+        // worth repeating for an answer that cannot have changed.
+        if (mGlassPalette == null
+            || !mGlassPalette.matches(resolved.surface, pale, neutral, accent)) {
+            mGlassPalette = WindowChipInk.resolve(resolved.surface, pale, neutral, accent);
+        }
+        mGlassGeneration = mChromeInk.backdrops().generation();
+        mGlassMeasuredRect.set(mGlassBandRect);
+        return mGlassPalette;
+    }
+
+    /**
+     * Re-measures the band when the measurement could have moved — the wallpaper, the palette or
+     * the mode changed (a new sample generation), or the band itself moved on screen.
+     *
+     * <p>Driven from the draw pass rather than from a callback because that is where a band that
+     * could not be read yet heals: {@link com.termux.app.chrome.GlassBackdropCache} answers an
+     * unreadable band from the mode's nominal glass and bumps its generation when a real sample
+     * lands, and a bar whose background view had not been laid out simply asks again. Two int
+     * comparisons and a rect comparison per frame; the measurement itself runs on a change.</p>
+     */
+    private void syncGlassPalette() {
+        if (mChromeInk == null) return;
+        if (!mChromeInk.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
+            mGlassBandRect)) {
+            // Nothing to measure against. Costs nothing to keep asking, and re-dressing the bar on
+            // every frame because a view is not laid out yet would.
+            if (mGlassPalette == null) return;
+            updatePalette();
+            reapplyLabelInk();
+            return;
+        }
+        if (mChromeInk.backdrops().generation() == mGlassGeneration
+            && mGlassMeasuredRect.equals(mGlassBandRect)) {
+            return;
+        }
+        updatePalette();
+        reapplyLabelInk();
+    }
+
+    /**
+     * The labels' colour after a re-measure, and nothing else: a selection slide owns the alpha and
+     * the travel of every chip while it runs, and this can land in the middle of one.
+     */
+    private void reapplyLabelInk() {
+        if (mSelectionAnimator != null && mSelectionAnimator.isRunning()) return;
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            View child = mTabs.getChildAt(i);
+            if (!(child instanceof TextView)) continue;
+            boolean selected = i == mSelectedIndex;
+            ((TextView) child).setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
+            applyTitleHalo((TextView) child, selected ? 1f : 0f);
+        }
+        if (mCloseButton != null) applyCloseButtonStyle(mCloseButton);
+    }
+
+    @Override
+    protected void dispatchDraw(@NonNull Canvas canvas) {
+        syncGlassPalette();
+        super.dispatchDraw(canvas);
+    }
+
+    /** The plus that opens a window: the place's accent, an icon, so the icon tier. */
+    private int plusTint(int accent) {
+        WindowChipInk.Palette glass = mGlassPalette;
+        if (glass == null || mChromeInk == null) {
+            return ColorUtils.setAlphaComponent(accent, 184);
+        }
+        return WindowChipInk.towardPolarity(glass.band, accent,
+            mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+            com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
     }
 
     private void updatePalette() {
@@ -1485,28 +1637,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int secondary = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
-        mSelectedTextColor = onSurface;
-        mUnselectedTextColor = ColorUtils.setAlphaComponent(
-            ColorUtils.blendARGB(onSurfaceVariant, secondary, .18f), 148);
-        mUnselectedFillColor = ColorUtils.setAlphaComponent(secondary, 16);
-        mUnselectedStrokeColor = ColorUtils.setAlphaComponent(secondary, 34);
-        mSelectedFillColor = ColorUtils.setAlphaComponent(primary, 58);
-        mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
-        // The watermark is the place's accent, never the label's colour: sharing the title's
-        // colour is what buried the glyph under it on the phone. Only its alpha moves with the
-        // selection — 30% at rest, 52% on the chip the user is in.
-        mGlyphColor = primary;
-        // The halo the title is drawn over, one per fill: near-opaque, so letters read against the
-        // glyph running behind them.
-        mUnselectedHaloColor = ChipWatermarkGeometry.haloColor(mUnselectedFillColor);
-        mSelectedHaloColor = ChipWatermarkGeometry.haloColor(mSelectedFillColor);
-        // The ground a corner dot is haloed against: the panel the row itself stands on, so a dot
-        // over the watermark still reads as a dot.
-        mGroundColor = ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-            ContextCompat.getColor(context, R.color.termux_surface_panel_high)), 255);
-        mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
-            mStatusBarRadiusPx, dp(1));
         // Tertiary for the ring, like the row's other "something is happening" accents. Error for
         // the bell and a failed progress report: it is the one Material role that is warm in every
         // generated palette, and a window waiting on the user has to be findable without reading
@@ -1519,6 +1649,62 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         // Material has no success role, and the busy accent cannot stand in for one: a chip that
         // has finished must not be the colour of a chip that is still going.
         mDoneColor = ContextCompat.getColor(context, R.color.termux_chip_done);
+
+        WindowChipInk.Palette glass = measureBand(primary);
+        if (glass == null) {
+            // Nothing can say what the bar stands on: the authored palette, unchanged. These are
+            // the numbers the app drew with before the light-mode round, so a preview or a test
+            // sees exactly what it always saw and no band is guessed at.
+            mSelectedTextColor = onSurface;
+            mUnselectedTextColor = ColorUtils.setAlphaComponent(
+                ColorUtils.blendARGB(onSurfaceVariant, secondary, .18f), 148);
+            mUnselectedFillColor = ColorUtils.setAlphaComponent(secondary, 16);
+            mUnselectedStrokeColor = ColorUtils.setAlphaComponent(secondary, 34);
+            mSelectedFillColor = ColorUtils.setAlphaComponent(primary, 58);
+            mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
+            // The watermark is the place's accent, never the label's colour: sharing the title's
+            // colour is what buried the glyph under it on the phone. Only its alpha moves with the
+            // selection — 30% at rest, 52% on the chip the user is in.
+            mGlyphColor = primary;
+            // The halo the title is drawn over, one per fill: near-opaque, so letters read against
+            // the glyph running behind them.
+            mUnselectedHaloColor = ChipWatermarkGeometry.haloColor(mUnselectedFillColor);
+            mSelectedHaloColor = ChipWatermarkGeometry.haloColor(mSelectedFillColor);
+            // The ground a corner dot is haloed against: the panel the row itself stands on, so a
+            // dot over the watermark still reads as a dot.
+            mGroundColor = ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
+                com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                ContextCompat.getColor(context, R.color.termux_surface_panel_high)), 255);
+        } else {
+            // The band was measured, so every colour is derived from what is really under it. The
+            // alphas that used to be authored here are gone: 16/255 of termux_secondary over the
+            // reporting device's wallpaper composited to 1.01:1 of the band, and the label at 148
+            // to 1.03:1 — which is the bug the user saw as "the chip is simply not there".
+            mSelectedTextColor = glass.selectedLabel;
+            mUnselectedTextColor = glass.restingLabel;
+            mUnselectedFillColor = glass.restingFill;
+            mUnselectedStrokeColor = glass.restingStroke;
+            mSelectedFillColor = glass.selectedFill;
+            mSelectedStrokeColor = glass.selectedStroke;
+            mGlyphColor = glass.glyph;
+            mUnselectedHaloColor = glass.restingHalo;
+            mSelectedHaloColor = glass.selectedHalo;
+            // The dot's halo is the chip it sits on, not the panel the row would stand on if it
+            // stood on a panel: over glass that panel colour is not on screen anywhere.
+            mGroundColor = glass.dotGround;
+            // The marks ride the outline and each is the only carrier of its own fact, so they
+            // take the outline's tier rather than the label's.
+            boolean pale = mChromeInk != null
+                && mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
+            mBusyColor = WindowChipInk.towardPolarity(glass.band, mBusyColor, pale,
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+            mAttentionColor = WindowChipInk.towardPolarity(glass.band, mAttentionColor, pale,
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+            mDoneColor = WindowChipInk.towardPolarity(glass.band, mDoneColor, pale,
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+        }
+        mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
+            mStatusBarRadiusPx, dp(1));
         applyChipWatermarks();
     }
 

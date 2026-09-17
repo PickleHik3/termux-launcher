@@ -17,9 +17,13 @@ import android.provider.Settings;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.ChromeShade;
+import com.termux.app.chrome.OnGlass;
 
 /**
  * Shared artwork-contour focus renderer for dock drag and terminal-search focus.
@@ -31,10 +35,52 @@ public final class FocusOutlineRenderer {
 
     private static final float STROKE_WIDTH_DP = 1.5f;
     private static final float HALO_RADIUS_DP = 6f;
+    /**
+     * The feather around the crisp ring, as authored: a quarter of the accent. That is enough over
+     * the dark glass and is the weakest thing on the screen over the light one, which matters
+     * because the focus ring is the only cue saying which icon a tap will launch. The strength
+     * actually drawn comes from {@link #haloAlpha}, which holds it to a separation rather than to
+     * a fraction.
+     */
     private static final float HALO_ALPHA = 0.25f;
     private static final Paint FALLBACK_PAINT = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static BlurMaskFilter fallbackHaloFilter;
     private static float fallbackHaloRadius = -1f;
+
+    /** {@link #haloAlpha}'s cache: the feather is re-resolved on a palette or polarity change. */
+    private static float sHaloAlpha = HALO_ALPHA;
+    @Nullable private static ChromeInk.Polarity sHaloPolarity;
+    private static int sHaloGlass;
+    private static int sHaloAccent;
+    private static boolean sHaloRead;
+
+    /**
+     * How strong the feather has to be for the ring to be found on what the chrome is standing on.
+     *
+     * <p>Unchanged over dark glass. Over the light band the same fraction of the same accent is a
+     * much fainter mark — a quarter of {@code termux_primary} over the light glass separates by
+     * 1.42 where the night accent over the night glass manages considerably more — so it is raised
+     * until the feather reaches the decoration floor on its own. The crisp stroke inside it is the
+     * opaque accent and carries the graphics tier in either mode; this is the halo that makes the
+     * ring findable without looking for it.</p>
+     */
+    @androidx.annotation.VisibleForTesting
+    static float haloAlpha(@ColorInt int accent) {
+        int opaqueAccent = OnGlass.opaque(accent);
+        ChromeInk.Polarity polarity = ChromeShade.polarity();
+        int glass = ChromeShade.nominalGlass();
+        if (sHaloRead && polarity == sHaloPolarity && glass == sHaloGlass
+            && opaqueAccent == sHaloAccent) {
+            return sHaloAlpha;
+        }
+        sHaloPolarity = polarity;
+        sHaloGlass = glass;
+        sHaloAccent = opaqueAccent;
+        sHaloRead = true;
+        int seed = OnGlass.withAlpha(opaqueAccent, Math.round(HALO_ALPHA * 255f));
+        sHaloAlpha = Color.alpha(ChromeShade.tinted(seed, ChromeShade.TARGET_RIM)) / 255f;
+        return sHaloAlpha;
+    }
 
     static final class Visual {
         @NonNull final Bitmap crispMask;
@@ -185,7 +231,7 @@ public final class FocusOutlineRenderer {
         int opaqueAccent = Color.rgb(Color.red(accent), Color.green(accent), Color.blue(accent));
         PorterDuffColorFilter tint = new PorterDuffColorFilter(opaqueAccent, PorterDuff.Mode.SRC_IN);
         paints.halo.setColorFilter(tint);
-        paints.halo.setAlpha(Math.round(accentAlpha * boundedAlpha * HALO_ALPHA));
+        paints.halo.setAlpha(Math.round(accentAlpha * boundedAlpha * haloAlpha(accent)));
         paints.crisp.setColorFilter(tint);
         paints.crisp.setAlpha(Math.round(accentAlpha * boundedAlpha));
 
@@ -223,7 +269,7 @@ public final class FocusOutlineRenderer {
         canvas.scale(scale, scale, target.centerX(), target.centerY());
         paint.setStrokeWidth(strokeWidth);
         paint.setMaskFilter(fallbackHaloFilter);
-        paint.setAlpha(Math.round(accentAlpha * boundedAlpha * HALO_ALPHA));
+        paint.setAlpha(Math.round(accentAlpha * boundedAlpha * haloAlpha(accent)));
         canvas.drawRoundRect(target, cornerRadius, cornerRadius, paint);
         paint.setMaskFilter(null);
         paint.setAlpha(Math.round(accentAlpha * boundedAlpha));

@@ -88,10 +88,14 @@ import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.notice.TerminalDress;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
+import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.ChromeSpec;
+import com.termux.app.chrome.GlassBackdropCache;
+import com.termux.app.chrome.GlassInk;
 import com.termux.app.chrome.KeyboardMaterialPolicy;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.chrome.SurfaceDirtyLedger;
 import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperBackdropView;
@@ -572,6 +576,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     SuggestionBarView mSuggestionBarView;
     private boolean mSuggestionBarExplicitSearchActive;
     AzScrubRowView mAzScrubRowView;
+    /** The one rect {@code Band.AZ_STRIP} is measured with; see {@link #azStripRect}. */
+    @NonNull private final Rect mAzGlassRect = new Rect();
+    @NonNull private final int[] mAzGlassLocation = new int[2];
     /** The edge the alphabets bar is standing on right now, as last applied from the place. */
     @NonNull private PlaceLayout.Edge mAzBarEdge = PlaceLayout.Edge.BOTTOM;
     /** The bar's own view in its host away from the dock, built the first time it is needed. */
@@ -2953,10 +2960,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         specular.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         specular.setGradientCenter(0.5f, 0.5f);
         specular.setGradientRadius(dpToPx(120));
-        // White-leaning, wide and soft so it reads as caught light gliding over glass rather than a
-        // painted accent disc under the finger.
+        // Wide and soft so it reads as caught light gliding over glass rather than a painted accent
+        // disc under the finger — leaning white on the dark dock, and into shadow on the light one,
+        // where a white pool under the finger is a pool of nothing.
+        int caught = com.termux.app.chrome.ChromeShade.polarity()
+            == com.termux.app.chrome.ChromeInk.Polarity.DARK_INK ? Color.BLACK : Color.WHITE;
         specular.setColors(new int[] {
-            withAlphaComponent(Color.WHITE, 70),
+            withAlphaComponent(caught, 70),
             withAlphaComponent(accent, 22),
             withAlphaComponent(accent, 0)
         });
@@ -2976,7 +2986,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : (DockLaunchRippleView) accessorySurface.findViewWithTag("dock_launch_ripple");
         if (ripple == null || ripple.getWidth() <= 0 || ripple.getHeight() <= 0) return;
 
-        int color = boostLaunchRippleColor(resolveLaunchIconDominantColor(packageName, icon),
+        int color = launchRippleColor(resolveLaunchIconDominantColor(packageName, icon),
             resolveDockAccentColor());
         int[] rippleLocation = new int[2];
         ripple.getLocationOnScreen(rippleLocation);
@@ -3019,16 +3029,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** Keeps an icon's hue legible after the low-alpha wave is composited through tinted glass. */
-    private static int boostLaunchRippleColor(int color, int fallbackAccent) {
+    /**
+     * Keeps an icon's hue legible after the low-alpha wave is composited through tinted glass.
+     *
+     * <p>An icon with no hue of its own still borrows the dock's accent — that part was never about
+     * brightness. What is gone is the pair of floors under it, saturation to 0.72 and value to
+     * 0.78, which made every launch wave a bright one whatever it was breaking over. The wave is
+     * decoration, so it is resolved at {@link OnGlass#TARGET_DECORATION} against the glass the dock
+     * is standing on, and on a pale band it now comes out darker rather than brighter.</p>
+     */
+    private int launchRippleColor(int color, int fallbackAccent) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
-        if (hsv[1] < 0.08f) {
-            Color.colorToHSV(fallbackAccent, hsv);
-        }
-        hsv[1] = Math.max(0.72f, hsv[1]);
-        hsv[2] = Math.max(0.78f, hsv[2]);
-        return Color.HSVToColor(hsv);
+        int seed = hsv[1] < 0.08f ? fallbackAccent : color;
+        OnGlass.Resolution glass = resolveAzGlass();
+        return glass == null ? seed
+            : glassInk(glass, seed, OnGlass.TARGET_DECORATION, 255);
     }
 
     private int resolveLaunchIconDominantColor(@NonNull String packageName,
@@ -7369,15 +7385,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Set<Character> letters = new LinkedHashSet<>(mSuggestionBarView.getAvailableAzLetters());
         mAzScrubRowView.setVisibleLetters(letters);
         int base = resolveAzGestureAccentColor();
-        int muted = mutedMaterialShade(base);
-        if (mAzScrubRowView.getCurrentTextColor() != muted) {
-            mAzScrubRowView.setTextColor(muted);
+        OnGlass.Resolution glass = resolveAzGlass();
+        // The letters are large text at minimum, so they are resolved at that tier and the rest of
+        // the row's colours are taken off the same measurement without asking for any more veil.
+        int letterInk = glass == null ? base : glass.ink;
+        if (mAzScrubRowView.getCurrentTextColor() != letterInk) {
+            mAzScrubRowView.setTextColor(letterInk);
         }
+        mAzScrubRowView.setGlassBackdrop(glass == null ? Color.TRANSPARENT : glass.surface);
         mAzScrubRowView.setInteractionAccentColor(base);
         mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
         mAzScrubRowView.setLockedInlineLetter(null);
-        int orbColor = brightMaterialShade(base);
-        int edgeColor = edgeMaterialVariant(base);
+        // The same glass reaches the page ticks and the drawer's A-Z rope through the dock, which
+        // is the only thing either of them can ask.
+        mSuggestionBarView.setGlassInk(glass == null ? Color.TRANSPARENT : glass.surface,
+            glass == null ? Color.TRANSPARENT : glass.ink);
+        // The orb carries the letter the finger is on, so it is read as a graphic and takes the
+        // large-text tier. The edge bloom carries nothing — it is a bloom off the screen's rim —
+        // so it takes the decoration tier and stays the quieter of the two, which is the relation
+        // the two had before and the one the design wants.
+        int orbColor = glass == null ? base
+            : glassInk(glass, base, OnGlass.TARGET_LARGE_TEXT, 0xF6);
+        int edgeSeed = GlassInk.hueRotated(base, 24f);
+        int edgeColor = glass == null ? edgeSeed
+            : glassInk(glass, edgeSeed, OnGlass.TARGET_DECORATION, 0xE0);
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxUnderlayView.setDarkThemeActive(isNightThemeActive());
@@ -8094,29 +8125,72 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ContextCompat.getColor(this, R.color.termux_primary));
     }
 
-    private int mutedMaterialShade(int color) {
-        float[] hsv = new float[3];
-        Color.colorToHSV(color, hsv);
-        hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 0.92f));
-        hsv[2] = Math.max(0.78f, Math.min(1f, hsv[2] * 0.86f));
-        return Color.HSVToColor(0xF4, hsv);
+    /**
+     * The two candidate inks for anything the launcher draws on its own glass: the theme's primary
+     * and its inverse, labelled by which of them is the darker.
+     *
+     * <p>Labelled off the colours rather than off {@code isNightThemeActive()} on purpose. Which
+     * ink is <em>used</em> is {@link ChromeInk#polarity()}'s to decide — the light theme over a
+     * dark wallpaper takes the pale one, which is the whole point of the round — and it needs both
+     * candidates named the same way in either mode.</p>
+     */
+    private int[] resolveAzInkCandidates() {
+        int primary = resolveAzGestureAccentColor();
+        int inverse = MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorPrimaryInverse, primary);
+        return new int[] {GlassInk.darkOf(primary, inverse), GlassInk.paleOf(primary, inverse)};
     }
 
-    private int brightMaterialShade(int color) {
-        float[] hsv = new float[3];
-        Color.colorToHSV(color, hsv);
-        hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 1.28f));
-        hsv[2] = Math.max(0f, Math.min(1f, Math.max(hsv[2], 0.90f)));
-        return Color.HSVToColor(0xF6, hsv);
+    /**
+     * The A&ndash;Z row's own rect on screen, or false when it is not laid out. The chrome samples
+     * and memoises a band per rect, so this is the one rect {@code Band.AZ_STRIP} is ever asked
+     * with; everything the launcher draws on that glass is resolved from the single
+     * {@link OnGlass.Resolution} it returns.
+     */
+    private boolean azStripRect(@NonNull Rect out) {
+        View row = mAzScrubRowView != null && mAzScrubRowView.getWidth() > 0
+            && mAzScrubRowView.getHeight() > 0 ? mAzScrubRowView : null;
+        if (row == null) row = findViewById(R.id.accessory_surface_host);
+        if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0) return false;
+        row.getLocationOnScreen(mAzGlassLocation);
+        out.set(mAzGlassLocation[0], mAzGlassLocation[1],
+            mAzGlassLocation[0] + row.getWidth(), mAzGlassLocation[1] + row.getHeight());
+        return true;
     }
 
-    private int edgeMaterialVariant(int color) {
-        float[] hsv = new float[3];
-        Color.colorToHSV(color, hsv);
-        hsv[0] = (hsv[0] + 24f) % 360f;
-        hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 1.1f));
-        hsv[2] = Math.max(0f, Math.min(1f, Math.max(hsv[2], 0.92f)));
-        return Color.HSVToColor(0xE0, hsv);
+    /**
+     * What the launcher's own painted things are standing on, measured: the A&ndash;Z letters, the
+     * gesture orb, the edge bloom, the page ticks, the drawer's A&ndash;Z rope and the app-launch
+     * ripple all sit on the same glass within a row of each other, and they are resolved from this
+     * one answer so they cannot disagree about which way the light goes.
+     *
+     * <p>Null until the row has been laid out and the wallpaper sampled; every caller keeps the
+     * colour it had, which is what the app drew before this round.</p>
+     */
+    @Nullable
+    private OnGlass.Resolution resolveAzGlass() {
+        if (!azStripRect(mAzGlassRect)) return null;
+        int[] candidates = resolveAzInkCandidates();
+        // The strip draws no glass of its own — its background is transparent, see
+        // applyAzScrubRowOverlayLayering — so a veil it asked for would be drawn by nobody.
+        return GlassInk.bareBandInk(mChrome.ink(), GlassBackdropCache.Band.AZ_STRIP, mAzGlassRect,
+            resolveWallpaperBackdropDimColor(), candidates[0], candidates[1],
+            OnGlass.TARGET_LARGE_TEXT);
+    }
+
+    /**
+     * One colour on the launcher's glass: the seed made legible on what {@link #resolveAzGlass}
+     * measured, at the tier its own content belongs to.
+     *
+     * <p>This one call replaced {@code mutedMaterialShade}, {@code brightMaterialShade},
+     * {@code edgeMaterialVariant} and the value half of {@code boostLaunchRippleColor} — four HSV
+     * floors that each clamped a colour <em>brighter</em> so it would survive a dark backdrop, and
+     * so made it vanish on a light one. There is no floor here and no mode in it: there is a
+     * measured surface and a contrast target.</p>
+     */
+    private int glassInk(@NonNull OnGlass.Resolution glass, int seed, double target, int alpha) {
+        return GlassInk.legibleOn(glass.surface, seed,
+            GlassInk.isPaleSide(glass.ink, glass.surface), target, alpha);
     }
 
     private void lockScreenFromAzDoubleTap() {
@@ -14093,6 +14167,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean windowsShown = page != com.termux.app.wall.PaneWallPage.WIDGETS;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) {
+            // The chips are drawn on glass, so they ask the chrome what they are standing on
+            // rather than trusting a role colour authored against an opaque card.
+            bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
             bar.setVisibility(windowsShown && !isStatusBarVertical() ? View.VISIBLE : View.GONE);
             // The plus opens a terminal window; the display's apps come from the drawer.
@@ -14101,6 +14178,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) {
+            windowColumn.setChromeInk(mChrome.ink());
             windowColumn.setPlaceAccent(placeAccent);
             windowColumn.setVisibility(windowsShown && isStatusBarVertical()
                 ? View.VISIBLE : View.GONE);

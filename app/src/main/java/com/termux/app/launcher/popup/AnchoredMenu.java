@@ -17,6 +17,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.github.mmin18.widget.RealtimeBlurView;
+import com.termux.app.chrome.ChromeShade;
 
 import java.util.Collections;
 import java.util.List;
@@ -36,6 +37,11 @@ public final class AnchoredMenu {
     /** Shortest a panel may be, in dp: a one-row menu still reads as a panel. */
     private static final int MIN_PANEL_HEIGHT_DP = 36;
     private static final int PANEL_CORNER_DP = 14;
+    /**
+     * The panel's containing edge, as authored. The panel's own opacity is a user preference, so
+     * the glass can be very thin; a white hairline round a thin panel over a light band is the
+     * boundary of the menu going missing, so {@link ChromeShade} restates it.
+     */
     private static final int RIM_COLOR = 0x3DFFFFFF;
     private static final float ELEVATION = 8f;
 
@@ -287,7 +293,7 @@ public final class AnchoredMenu {
         panelBg.setColor(overlayColor);
         // Glass rim: the same hairline the drawer plane and FULL pane draw, so every elevated
         // surface reads as the one material family.
-        panelBg.setStroke(Math.max(1, Math.round(density * 1.25f)), RIM_COLOR);
+        panelBg.setStroke(Math.max(1, Math.round(density * 1.25f)), ChromeShade.rim(RIM_COLOR));
         popupRoot.setBackground(panelBg);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             popupRoot.setClipToOutline(true);

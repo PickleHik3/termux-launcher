@@ -22,18 +22,35 @@
     <!-- A window chip's "finished" dot. Material has no success role, and the busy accent
          cannot be it: done and running must not be the same colour. -->
     <color name="termux_chip_done">#1B6B3A</color>
-    <!-- The Display place's accent in the status bar: warm, where the theme's roles are cool. -->
-    <color name="termux_place_display">#F0B48A</color>
+    <!--
+      The Display place's accent: warm, where the theme's roles are cool. Now authored the way
+      every other role in this file is — an on-light ink here, its on-dark twin in values-night —
+      so the place keeps one identity across the two modes instead of one colour. It used to be
+      the pale peach in both, which reads 1.46:1 on termux_surface_panel_high: invisible on the
+      light panels the display touchpad and the help overlay stand on. Same HCT hue as the night
+      peach (55°) with a little more chroma, at the tone a light scheme's accent takes, so it is
+      the same warm colour and it clears body text on those panels.
+    -->
+    <color name="termux_place_display">#8D4E19</color>
     <color name="termux_error_container">#FFDAD6</color>
     <color name="termux_on_error_container">#410002</color>
-    <color name="termux_scrollbar">#66FFFFFF</color>
+    <!--
+      A scrollbar thumb is drawn over the terminal, and the terminal's background comes from the
+      colour scheme rather than from the theme: a light scheme in dark mode is an ordinary choice.
+      So this cannot be a mode-qualified answer. 40% white was invisible on any light background
+      (1.03 against the light surface); a mid grey at 70% separates by 2.3 there and 2.9 on the
+      dark one, which is the best single answer a mode-agnostic thumb can have.
+    -->
+    <color name="termux_scrollbar">#B3808080</color>
 
     <!--
       Overridden at runtime by LauncherSchemeTheme when the chrome follows the terminal colour
       scheme. Deliberately declared in values/ only: a ResourcesLoader entry carries no config
-      qualifiers, so a values-night twin of this colour would outrank the override at night.
+      qualifiers, so a values-night twin of this colour would outrank the override at night — which
+      is also why its static fallback is the same mode-agnostic grey as termux_scrollbar rather than
+      white light for one mode and nothing for the other.
     -->
-    <color name="launcher_scheme_scrollbar">#66FFFFFF</color>
+    <color name="launcher_scheme_scrollbar">#B3808080</color>
 
     <color name="main_accent">@color/termux_on_surface</color>
     <color name="highlight_accent">@color/termux_surface_panel_highest</color>

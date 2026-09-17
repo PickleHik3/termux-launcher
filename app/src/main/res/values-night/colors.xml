@@ -20,9 +20,15 @@
     <color name="termux_on_accent_container">#D9E2FF</color>
     <color name="termux_error">#FFB4AB</color>
     <color name="termux_chip_done">#7FD69B</color>
+    <!--
+      The Display place's accent, on-dark: the peach the place has always worn, unchanged. This is
+      the mode it was authored for and where it already reads — 8.17:1 on termux_surface_panel_high
+      — so the twin in values/ is what moved, not this.
+    -->
+    <color name="termux_place_display">#F0B48A</color>
     <color name="termux_error_container">#93000A</color>
     <color name="termux_on_error_container">#FFDAD6</color>
-    <color name="termux_scrollbar">#66FFFFFF</color>
+    <color name="termux_scrollbar">#B3808080</color>
 
     <color name="main_accent">@color/termux_on_surface</color>
     <color name="highlight_accent">@color/termux_surface_panel_highest</color>

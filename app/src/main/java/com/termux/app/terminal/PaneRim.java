@@ -33,6 +33,13 @@ public final class PaneRim {
      * accent-coloured focused rim by hue as well as by weight.
      */
     private static final int GLASS_UNFOCUSED_ALPHA = 170;
+    /**
+     * The same rim on the light band. Two thirds of a hue that was authored against dark glass is
+     * the one reading that survived the light theme worst: the rim renderer can raise a tinted
+     * stroke's own alpha to keep it visible, but this multiplier is applied on top of that, so an
+     * unfocused pane still lost the third of the edge the renderer had just bought back.
+     */
+    private static final int GLASS_UNFOCUSED_ALPHA_ON_LIGHT = 214;
     private static final int STOCK_FOCUSED_ALPHA = 255;
     private static final int STOCK_UNFOCUSED_ALPHA = 128;
     /** How long the focus crossfade runs. */
@@ -46,6 +53,13 @@ public final class PaneRim {
     private int mCurrentTint;
     private float mRadiusPx;
     private ValueAnimator mAnimator;
+
+    /** How far an unfocused glass rim dims, which depends on what the pane is standing on. */
+    private static int glassUnfocusedAlpha() {
+        return com.termux.app.chrome.ChromeShade.polarity()
+            == com.termux.app.chrome.ChromeInk.Polarity.DARK_INK
+            ? GLASS_UNFOCUSED_ALPHA_ON_LIGHT : GLASS_UNFOCUSED_ALPHA;
+    }
 
     /**
      * Whether animators are honoured at all. Cached read of the same setting the system exposes;
@@ -113,7 +127,7 @@ public final class PaneRim {
             mCurrentTint = active ? focusedTint : unfocusedTint;
             mDrawable = new com.termux.app.GlassRimDrawable(
                 frame.getResources().getDisplayMetrics().density, radius, mCurrentTint);
-            mDrawable.setAlpha(active ? GLASS_FOCUSED_ALPHA : GLASS_UNFOCUSED_ALPHA);
+            mDrawable.setAlpha(active ? GLASS_FOCUSED_ALPHA : glassUnfocusedAlpha());
         } else {
             Drawable border = ContextCompat.getDrawable(frame.getContext(),
                 R.drawable.pane_active_border);
@@ -163,7 +177,7 @@ public final class PaneRim {
         final int fromTint = mCurrentTint;
         cancel();
         final int toAlpha = mGlass
-            ? (mActive ? GLASS_FOCUSED_ALPHA : GLASS_UNFOCUSED_ALPHA)
+            ? (mActive ? GLASS_FOCUSED_ALPHA : glassUnfocusedAlpha())
             : (mActive ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
         final int toTint = mActive ? mFocusedTint : mUnfocusedTint;
         final boolean tinted = mGlass && border instanceof com.termux.app.GlassRimDrawable;
