@@ -1,6 +1,8 @@
 package com.termux.app.editorshell;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.TouchDelegate;
@@ -11,6 +13,7 @@ import android.graphics.Rect;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.core.content.ContextCompat;
 
 import com.termux.R;
 
@@ -115,13 +118,30 @@ public final class EditorShellRows {
             context, R.style.ThemeOverlay_Termux_EditorShellScroller);
     }
 
-    /** Turns the fade and the persistent scrollbar on for a body scroller. */
+    /**
+     * Turns the fade and the persistent scrollbar on for a body scroller.
+     *
+     * <p>The scrollbar's drawables have to be handed over here. A view built with the one-argument
+     * constructor never reads the scrollbar attributes off its theme — only the inflating
+     * constructors do — so turning the scrollbar on without them leaves the platform with nothing
+     * to draw, and it throws the moment a body is long enough to show one. The themed context
+     * still carries the size; only the drawables need setting, and only from the release that can.
+     */
     public static void applyBodyScroller(@NonNull View scroller) {
         float density = scroller.getResources().getDisplayMetrics().density;
         scroller.setVerticalFadingEdgeEnabled(true);
         scroller.setFadingEdgeLength(EditorShellMetrics.px(EditorShellMetrics.FADE_DP, density));
-        scroller.setVerticalScrollBarEnabled(true);
-        scroller.setScrollbarFadingEnabled(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Drawable thumb = ContextCompat.getDrawable(
+                scroller.getContext(), R.drawable.editor_shell_scrollbar_thumb);
+            if (thumb != null) {
+                scroller.setVerticalScrollbarThumbDrawable(thumb);
+                scroller.setVerticalScrollbarTrackDrawable(ContextCompat.getDrawable(
+                    scroller.getContext(), R.drawable.editor_shell_scrollbar_track));
+                scroller.setVerticalScrollBarEnabled(true);
+                scroller.setScrollbarFadingEnabled(false);
+            }
+        }
         int inset = EditorShellMetrics.px(2, density);
         scroller.setPadding(scroller.getPaddingLeft(), scroller.getPaddingTop(), inset,
             scroller.getPaddingBottom());
