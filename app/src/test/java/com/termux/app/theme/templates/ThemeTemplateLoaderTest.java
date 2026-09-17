@@ -78,7 +78,9 @@ public class ThemeTemplateLoaderTest {
         assertNotNull(template);
         assertTrue(template.hasSetupHook());
         assertEquals("setup.sh", template.setupHook);
-        assertEquals("bash \"" + new File(mBuiltInRoot, "ohmyposh/setup.sh").getAbsolutePath() + "\"",
+        String setupDir = new File(mBuiltInRoot, "ohmyposh").getAbsolutePath();
+        assertEquals("env TERMUX_THEME_ID='ohmyposh' TERMUX_THEME_DIR='" + setupDir + "'"
+                + " TERMUX_THEME_OUTPUT='" + template.output + "' bash '" + setupDir + "/setup.sh'",
             template.setupCommand());
     }
 

@@ -75,8 +75,21 @@ public final class ThemeTemplate {
     }
 
     /** The command that finishes the setup, for the user to run in their own shell. */
+    /**
+     * The command the user pastes to finish setting a tool up. It runs {@code setup_hook} with the
+     * same {@code TERMUX_THEME_*} variables the apply hook gets, through {@code env} so the line
+     * works pasted into bash, zsh or fish alike (fish has no {@code VAR=value cmd} form).
+     */
     public String setupCommand() {
-        return "bash \"" + new File(plannedDirectory(), setupHook).getAbsolutePath() + "\"";
+        File directory = plannedDirectory();
+        return "env TERMUX_THEME_ID=" + shellQuote(id)
+            + " TERMUX_THEME_DIR=" + shellQuote(directory.getAbsolutePath())
+            + " TERMUX_THEME_OUTPUT=" + shellQuote(output)
+            + " bash " + shellQuote(new File(directory, setupHook).getAbsolutePath());
+    }
+
+    private static String shellQuote(String value) {
+        return "'" + value.replace("'", "'\\''") + "'";
     }
 
     public boolean hasPostHook() {

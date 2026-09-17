@@ -1,5 +1,7 @@
 # Launcher Material palettes for Starship
 # Rendered by Termux Launcher - do not edit manually
+# Active mode when this was rendered: {{ mode }}. A flip re-renders this file, which is what
+# makes apply.sh run again and move the palette line.
 #
 # Both palettes are here, every time. apply.sh points starship at the one for
 # the current mode with a single `palette = "launcher-material-<mode>"` line at
