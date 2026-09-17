@@ -14070,6 +14070,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Tell the session client the terminal place can be seen again. While another place rests in
+     * front of it the client stops repainting panes whose shells keep printing; this is the signal
+     * that draws each of them once, and it is free when nothing was held back.
+     */
+    private void noteTerminalPlaceMayBeVisible() {
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.onTerminalPlaceMayBeVisible();
+    }
+
+    /**
      * Wire the pane wall around the terminal's pane host. The terminal is its middle page and is
      * handed over untouched; the other places register themselves as the install gains them.
      */
@@ -14091,6 +14101,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isDisplayEnabled() { return com.termux.BuildConfig.X11_SERVER; }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
+                    noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(
                             page == com.termux.app.wall.PaneWallPage.WIDGETS);
@@ -14104,6 +14115,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
                     syncPlaceBarOffset(offsetPx);
+                    // The wall moved at all, so the terminal may be sliding back into the frame:
+                    // any pane whose screen changed while it was away is drawn now, before the
+                    // first frame of the slide, rather than one stale frame later.
+                    noteTerminalPlaceMayBeVisible();
                 }
                 @Override public void onWallDragInterrupted() {
                     // A tile tap, wall.go or Home moved the wall under a finger that was dragging
@@ -14119,6 +14134,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
+                    noteTerminalPlaceMayBeVisible();
                     if (mPaneWallController.displayPage() != null) {
                         mPaneWallController.displayPage().dismissControls();
                     }
@@ -17983,6 +17999,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean isVisible() {
             return TermuxActivity.this.isVisible();
+        }
+
+        @Override public boolean isTerminalPlaceOnScreen() {
+            return mPaneWallController == null || mPaneWallController.isTerminalOnScreen();
         }
 
         @Override public void showTerminalActionHint(@NonNull String toolName) {
