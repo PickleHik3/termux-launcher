@@ -263,6 +263,7 @@ public final class TerminalClockWidget extends View {
 
     @Override
     protected void onDetachedFromWindow() {
+        mHighRefresh = -1;
         stopTicker();
         removeCallbacks(mSyncTicker);
         super.onDetachedFromWindow();
@@ -582,7 +583,38 @@ public final class TerminalClockWidget extends View {
                 drawFull(canvas, now);
                 break;
         }
-        if (hasRunningAnimation(now)) postInvalidateOnAnimation();
+        if (hasRunningAnimation(now)) requestAnimationFrame();
+    }
+
+    /**
+     * Asks for the next frame of a running flip. On a display that refreshes faster than 60 Hz
+     * the next vsync is asked for on a 60 Hz cadence instead: a 340 ms card flip does not read any
+     * differently at 120 frames a second than at 60, and the seconds card flips every second of
+     * the day, so on the phone's 120 Hz panel that one animation was a third of all the frames the
+     * launcher drew while idle (measured 2026-09-17). Everything else about the flip — its timing,
+     * its curve — is a function of the clock, not of the frame count.
+     */
+    private void requestAnimationFrame() {
+        if (isHighRefreshDisplay()) {
+            postInvalidateDelayed(HIGH_REFRESH_FRAME_MS);
+        } else {
+            postInvalidateOnAnimation();
+        }
+    }
+
+    /** One 60 Hz frame, the cadence a flip is drawn at on faster panels. */
+    private static final long HIGH_REFRESH_FRAME_MS = 16L;
+    /** -1 unknown, 0 no, 1 yes; asked of the display once, it does not change while attached. */
+    private int mHighRefresh = -1;
+
+    private boolean isHighRefreshDisplay() {
+        if (mHighRefresh < 0) {
+            android.view.Display display = getDisplay();
+            float rate = display == null ? 60f : display.getRefreshRate();
+            if (display == null) return false; // not attached yet: decide next time
+            mHighRefresh = rate > 70f ? 1 : 0;
+        }
+        return mHighRefresh == 1;
     }
 
     /**
