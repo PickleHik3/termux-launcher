@@ -2,8 +2,8 @@
 
 Source review: `.lavish/landscape-review/` (7 items). Items 04 (split-pane corner tabs) and 06
 (extra-key accessibility labels) were **excluded by the user**. Item 08 (Appearance/Layout editor
-surfaces read as unfinished) was raised by the user on review, measured, and **deferred** — D6 is
-unanswered and it was not ticked. Review page: `.lavish/landscape-spec/index.html`.
+surfaces read as unfinished) was raised by the user on review, measured, and is **in the round**:
+D6 = full redesign, one shared editor shell. Review page: `.lavish/landscape-spec/index.html`.
 
 Every root cause below was read from source at `dev` @ f6ff2a97. Four were re-verified by hand:
 `miniatureHeightPx`'s landscape branch, `memoryKey` vs `arrangementKey` for `status_compact`,
@@ -18,7 +18,8 @@ Every root cause below was read from source at `dev` @ f6ff2a97. Four were re-ve
 | 03 Display setup | `X11CliInstaller.hasKeyboardData()` (:137–140) is called only from `X11PaneFrame.applyRunning()` (:611), which nothing on the resume or place-change path invokes — only a display running-state transition refreshes it. **D2: ship all three** — re-derive readiness on arrival (place-change and resume), name `xkeyboard-config` in the message, and make the guide reference tappable (precedent: `StatusWidgetPrivilegedGate.promptForShizuku:66–86`). Extract `DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData)` as a pure sibling of `DisplayBackPolicy`, returning the message resource and start-button visibility; the filesystem probe stays outside the policy. Note the shipped string already says "the Linux display guide names it" — the gap is the package name and anything tappable. No in-app package install: no such mechanism exists and inventing one is out of scope. |
 | 05 Place navigation | A fully-peeked neighbour draws at ~7.5% fill / ~20% stroke / ~62% glyph (`StatusBarLensView:295, 313–315`), ×0.6 more when Display is stopped (:296); its target is the visible half-tile plus `dp(8)` (:390–404). The sizes, ink and slop are private fields on the view (:52–66) and **`StatusBarLensView` has no test file**. **D3: brighten and enlarge the peek only** — no place label, no new switch. Lift `ICON_DP`, `PEEK_SHARE`, `COMPACT_ICON_DP`, `HOME_X_DP`, the ink multipliers and the slop into `StatusBarLensPolicy` (or a `StatusBarLensMetrics` beside it) taking bar size + compactness + axis + places + current, returning rect, ink and minimum target per place; the view only paints. Corrections to the review: weather is centred **only on Home** (`StatusStatsClusterPolicy.centeredReversed`), and no place *name* is rendered in status chrome in any state. |
 | 07 Chrome budget | No class owns the vertical budget: `EdgeStackPolicy.contentInsets` is purely additive and never receives the container height (:349–371), and the keyboard is not an element in that stack. `StatusBarEdgeGeometry.thicknessDp(edge, capsule, compact)` (:76–83) takes no height, orientation or density. **D4: scope `status_compact` per orientation with a migration** — it moves from `memoryKey` (currently `place.<x>.status_compact`, no orientation segment) into the per-place-per-orientation scope beside the three sizes ADR-0001 migrated, with a `MIGRATION_VERSION` bump. The migration **seeds both orientations from the existing single value** so no current choice is lost; a landscape default applies only where nothing was ever stored. Also: add a canvas-floor policy beside `contentInsets` taking container height, orientation, keyboard height, layout and metrics; consolidate the compact height duplicated in `DockLayoutPolicy.compute:370`; make the Appearance preset header shrink before the rows are cut (it is fixed at `CARD_HEIGHT_DP=68` while `applyRowsCap` only ever shrinks rows). |
-| Out of scope | Items 04, 06, 08. An in-app package-install flow. Redesigning the lens or wall paging. Landscape resource qualifiers. Any portrait behaviour change. Performance/motion verdicts (Waydroid cannot judge jank). Clean-install comparison except where item 02's reproduction needs it. |
+| 08 Editor shell | Measured on the review captures: slider rows sit on a **32 dp** pitch at both densities (48 dp is the platform minimum touch target); the Corners slider gives a 0–24 dp value an **~892 dp** track; Docked/Floating are 238 dp segments while Solid/Glass/Frost are 192 dp on the same line; preset thumbnails (`CARD_WIDTH_DP=42`, `CARD_HEIGHT_DP=68`) are near-identical dark outlines; content is sliced rather than scrolled; no grouping, and a ~150 px miniature sits in a 1300 px card between two ~550 px gutters. Through-line: **controls inherit the card's width instead of declaring their own.** **D6: full redesign** — one shared shell for Appearance and Layout, with a common header, section model and control kit, so a rule fixed once holds in both. Sizing rules live in the existing metrics classes (`SurfaceEditorPillMetrics`, the Layout editor's plan), not in view code, so they stay assertable. **Sacred:** the Appearance editor's commit-on-Done behaviour, the miniature's drag model and the layout store's schema — this is look and layout only, no behaviour rides along. |
+| Out of scope | Items 04 and 06. An in-app package-install flow. Redesigning the lens or wall paging. Landscape resource qualifiers. Any portrait behaviour change. Performance/motion verdicts (Waydroid cannot judge jank). Clean-install comparison except where item 02's reproduction needs it. |
 
 ## Seams
 
@@ -39,19 +40,18 @@ Every root cause below was read from source at `dev` @ f6ff2a97. Four were re-ve
 | P3 | `fix/display-setup-refresh` | Item 03: `DisplayEmptyStatePolicy` + tests, readiness re-derived on arrival, package named, tappable guide route, help target | — | `:app:testDebugUnitTest` green; install the package in Terminal, return to Display, see it ready |
 | P4 | `feat/place-nav-legible` | Item 05: lens sizes/ink/targets lifted into the pure policy with tests, peek brightened and enlarged | merge **after** P5 | `:app:testDebugUnitTest` green; marks legible at 1300×600 |
 | P5 | `feat/landscape-chrome-budget` | Item 07: per-orientation `status_compact` + migration, canvas-floor policy, consolidated compact height, two-way Appearance header cap | merge **before** P4 | `:app:testDebugUnitTest` green; an explicitly expanded landscape bar survives a restart |
+| P6a | — (docs) | Item 08 design: `project-docs/editor-shell/DESIGN.md` — the shared shell's header, section model and control kit, with every sizing rule as a number, and how both editors move onto it | — | agreed with the user on a review page before any code |
+| P6b | `feat/editor-shell` | Item 08 build: the shell's rules in the metrics classes with tests, then Appearance and Layout moved onto it | P6a agreed; P1 and P5 merged | `:app:testDebugUnitTest` green; both editors at both densities, portrait and landscape, against the review captures |
 
 P4 and P5 share no files (lens view/policy vs edge/geometry/store), so all five run in parallel;
 P5 merges first because D4 moves the key P4's compact check reads. Conflicts are resolved by the
 orchestrator, not the agents. Nothing here touches applicationId, bootstrap, manifests or signing,
 so the three editions need no per-edition decision.
 
-## Deferred
+## Notes
 
-- **Item 08 — editor surfaces.** Measured, not ticked, D6 open. Findings: slider rows sit on a
-  **32 dp** pitch at both densities (48 dp is the minimum touch target); the Corners slider gives a
-  0–24 dp value an **~892 dp** track; Docked/Floating are 238 dp segments while Solid/Glass/Frost
-  are 192 dp on the same line; preset thumbnails are near-identical dark outlines; content is
-  sliced rather than scrolled; no grouping, and a ~150 px miniature sits in a 1300 px card between
-  two ~550 px gutters. Through-line: controls inherit the card's width instead of declaring their
-  own. D6 offers a tightening pass, + real preset previews, a two-column relayout, a full shared
-  editor shell, or not now.
+- **Item 08 designs before it builds.** A redesign agreed as prose is a redesign nobody agreed to;
+  P6a produces the shell as numbers and mockups and goes in front of the user first.
+- **P6 overlaps P1 and P5** (the Layout card's scroller, the Appearance preset header). P6b builds
+  on them rather than owning them — item 01 is the high-severity blocker and does not wait behind a
+  redesign.
