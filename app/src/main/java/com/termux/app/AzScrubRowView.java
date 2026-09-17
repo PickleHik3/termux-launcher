@@ -18,6 +18,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 
+import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzLetterTrack;
 import com.termux.app.launcher.az.AzScrubGesture;
@@ -75,8 +77,9 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Nullable private ScrubCallback callback;
     private int currentSelectionIndex = 0;
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    // Crisp dark outline drawn under each (light) letter so it stays legible over both light and dark
-    // wallpaper regions — a sharp stroke, unlike the old blurry drop-shadow which read as fuzzy.
+    // The halo stroke drawn under each letter: a sharp edge on the far side of the band from the
+    // fill, so a letter keeps its shape where the wallpaper under it matches it. Which side that is
+    // and how much of it is drawn are GlassInk's answer, not a constant.
     private final Paint letterOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Rect glyphRect = new Rect();
     private final Paint.FontMetrics letterFontMetrics = new Paint.FontMetrics();
@@ -91,9 +94,19 @@ public final class AzScrubRowView extends AppCompatTextView {
     private float activeTouchAlong = -1f;
     private float waveStrength = 0f;
     private int accentColor = Color.WHITE;
-    // Softer than pure black: a desaturated near-black that keeps letters legible over any
-    // wallpaper without the harsh hard-edged look the old #000 stroke had.
-    private static final int OUTLINE_DARK = 0xFF1A1F2A;
+    /**
+     * The opaque colour the letters were measured to stand on, pushed in from what {@code ChromeInk}
+     * sampled under this row, or {@link Color#TRANSPARENT} before anything has been measured. Which
+     * side the halo goes and how much of it there is both come off this; see
+     * {@link #setGlassBackdrop}.
+     */
+    private int glassBackdrop = Color.TRANSPARENT;
+    /** The halo the current backdrop and fill colours resolve to; recomputed only when they move. */
+    private int haloRestingColor = withAlpha(GlassInk.HALO_DARK, 195);
+    private int haloFocusColor = withAlpha(GlassInk.HALO_DARK, 215);
+    private int haloCacheBackdrop = Color.WHITE;
+    private int haloCacheBase;
+    private int haloCacheFocus;
     // A slow "sword-glint" sweep position (runs off-screen to off-screen) that, while the row is
     // touched, brushes a soft material-colour shimmer across every letter's outline in turn.
     private float shimmerPhase = 0f;
@@ -342,6 +355,7 @@ public final class AzScrubRowView extends AppCompatTextView {
 
         int baseColor = getCurrentTextColor();
         int focusColor = resolveFocusLetterColor();
+        refreshHalos(baseColor, focusColor);
         letterPaint.setColor(baseColor);
         float baseTextSize = getTextSize();
         letterPaint.setTextSize(baseTextSize);
@@ -381,9 +395,9 @@ public final class AzScrubRowView extends AppCompatTextView {
                     : clamp01(envelope * waveStrength * 0.72f);
                 letterPaint.setColor(blendColors(baseColor, focusColor, colorProgress));
             }
-            // Crisp outline pass under the fill: a sharp dark stroke that keeps the light letter
-            // readable on any wallpaper, replacing the fuzzy drop-shadow. Constant width so the
-            // stroke never thickens enough to fill the letters' inner holes (no "bloat").
+            // Halo pass under the fill: a sharp stroke on the far side of the band from the letter,
+            // so the glyph has an edge wherever the wallpaper happens to match it. Constant width
+            // so the stroke never thickens enough to fill the letters' inner holes (no "bloat").
             String glyph = visibleGlyphs[i];
             float density = getResources().getDisplayMetrics().density;
             letterOutlinePaint.setTextSize(letterPaint.getTextSize());
@@ -391,16 +405,20 @@ public final class AzScrubRowView extends AppCompatTextView {
             letterOutlinePaint.setStrokeWidth(density * 1.4f);
             // Sword-glint shimmer: a soft material-accent highlight that the sweep brushes across
             // each outline in turn. Gaussian falloff around the sweep position; soothing, capped.
-            int outlineBase = OUTLINE_DARK;
+            // The blend only ever moves the halo towards a mid accent, which is towards the band it
+            // is drawn on, so a glint can lower the halo's contrast but never raise it past the
+            // glyph's — the ceiling in the resolved alpha holds through the sweep.
+            int outlineBase = activeFocus ? haloFocusColor : haloRestingColor;
             if (shimmerActive) {
                 float lx = along / trackLength;
                 float d = (lx - shimmerPhase) / 0.16f;
                 float glint = (float) Math.exp(-(d * d));
                 if (glint > 0.001f) {
-                    outlineBase = blendColors(OUTLINE_DARK, accentColor, clamp01(glint) * 0.6f);
+                    outlineBase = blendColors(outlineBase,
+                        withAlpha(accentColor, Color.alpha(outlineBase)), clamp01(glint) * 0.6f);
                 }
             }
-            letterOutlinePaint.setColor(withAlpha(outlineBase, activeFocus ? 215 : 195));
+            letterOutlinePaint.setColor(outlineBase);
             canvas.drawText(glyph, x, baseline, letterOutlinePaint);
             canvas.drawText(glyph, x, baseline, letterPaint);
         }
@@ -488,6 +506,63 @@ public final class AzScrubRowView extends AppCompatTextView {
         }
         accentColor = color;
         invalidate();
+    }
+
+    /**
+     * What the letters stand on, as the chrome measured it: the opaque colour behind this row once
+     * the wallpaper, the launcher's dim and any glass over them are composited.
+     *
+     * <p>The row itself draws no glass — its background is transparent — so this is the only way it
+     * can know whether it is standing on something light or something dark, and the halo cannot be
+     * decided without it. {@link Color#TRANSPARENT} means nothing has been measured yet, and the
+     * letters keep the dark halo they have always had until something has.</p>
+     */
+    public void setGlassBackdrop(int surfaceColor) {
+        if (glassBackdrop == surfaceColor) {
+            return;
+        }
+        glassBackdrop = surfaceColor;
+        invalidate();
+    }
+
+    /** The opaque colour the letters were last told they stand on; {@code 0} until measured. */
+    public int glassBackdrop() {
+        return glassBackdrop;
+    }
+
+    /** The halo drawn under a resting letter right now, alpha included. For tests and for measuring. */
+    public int restingHaloColor() {
+        refreshHalos(getCurrentTextColor(), resolveFocusLetterColor());
+        return haloRestingColor;
+    }
+
+    /** The halo drawn under the focused letter right now, alpha included. */
+    public int focusHaloColor() {
+        refreshHalos(getCurrentTextColor(), resolveFocusLetterColor());
+        return haloFocusColor;
+    }
+
+    /**
+     * Resolves the two halos, and only when one of the three colours they depend on has moved: the
+     * search behind {@link GlassInk#haloAlpha} walks up to 195 alpha steps and this is called from
+     * {@link #onDraw}, which runs on every frame of the scrub.
+     */
+    private void refreshHalos(int baseColor, int focusColor) {
+        if (haloCacheBackdrop == glassBackdrop && haloCacheBase == baseColor
+            && haloCacheFocus == focusColor) {
+            return;
+        }
+        haloCacheBackdrop = glassBackdrop;
+        haloCacheBase = baseColor;
+        haloCacheFocus = focusColor;
+        if (Color.alpha(glassBackdrop) == 0) {
+            // Nothing measured yet: exactly what the row drew before the backdrop was ever sampled.
+            haloRestingColor = withAlpha(GlassInk.HALO_DARK, 195);
+            haloFocusColor = withAlpha(GlassInk.HALO_DARK, 215);
+            return;
+        }
+        haloRestingColor = GlassInk.halo(baseColor, glassBackdrop, false);
+        haloFocusColor = GlassInk.halo(focusColor, glassBackdrop, true);
     }
 
     public void setInteractionMode(@NonNull InteractionMode mode) {
@@ -852,9 +927,16 @@ public final class AzScrubRowView extends AppCompatTextView {
         setTranslationY(0f);
     }
 
+    /**
+     * The letter under the finger: the accent made vivid, then made legible on what the row is
+     * actually standing on. The vivid step is the identity — a lifted, slightly bleached accent —
+     * and it stays a seed; whether that seed is bright enough to read is not its business, and on a
+     * light band the answer used to be no.
+     */
     private int resolveFocusLetterColor() {
-        int vivid = boostColor(accentColor, 1.34f, 1.18f);
-        return blendColors(vivid, Color.WHITE, 0.22f);
+        int vivid = blendColors(boostColor(accentColor, 1.34f, 1.18f), Color.WHITE, 0.22f);
+        if (Color.alpha(glassBackdrop) == 0) return vivid;
+        return GlassInk.legible(glassBackdrop, vivid, OnGlass.TARGET_LARGE_TEXT);
     }
 
 

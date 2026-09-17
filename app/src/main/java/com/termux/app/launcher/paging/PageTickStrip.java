@@ -123,6 +123,11 @@ public final class PageTickStrip {
      * The tick at rest, as a fraction of the accent's opacity, and the one under the active page at
      * full. Everything keys off proximity to the fractional position, so the morph is continuous
      * across a swipe and two adjacent ticks share it at the midpoint.
+     *
+     * <p>How muted a resting tick <em>looks</em>, not how faint it is allowed to be: once the glass
+     * under the strip has been measured this is the opacity {@code PageTickStripView} asks
+     * {@code GlassInk} for, and it is raised where 40% of a tick cannot clear the decoration floor
+     * on that band. A fade towards nothing is a fade towards the band.</p>
      */
     public static final float INACTIVE_ALPHA = 0.40f;
 
@@ -140,7 +145,8 @@ public final class PageTickStrip {
     /**
      * The warm tint the "most-used" page's tick carries: distinguishable from the accent ticks
      * beside it, harmonised rather than neon. Damped further while that page is not the active one,
-     * so a sleeping page never steals attention.
+     * so a sleeping page never steals attention. A seed, like the accent: what it becomes on the
+     * band it is drawn on is {@code GlassInk}'s answer.
      */
     public static final int DYNAMIC_TICK_COLOR = 0xFFE0A338;
 

@@ -2,6 +2,7 @@ package com.termux.app.launcher.drawer;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.os.Build;
@@ -18,6 +19,8 @@ import com.google.android.material.color.MaterialColors;
 
 import com.termux.R;
 import com.termux.app.RowHapticTickHelper;
+import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.SuggestionBarView;
 
 /**
@@ -71,10 +74,6 @@ public final class AppDrawerRopeColumnView extends View {
      * and below are pushed apart visually rather than overlapped.
      */
     public static final float FOCUS_GLYPH_SCALE = 1.45f;
-    /** Same desaturated near-black the dock's A-Z row strokes with. */
-    private static final int OUTLINE_DARK = 0xFF1A1F2A;
-    private static final int OUTLINE_ALPHA = 195;
-    private static final int OUTLINE_ALPHA_FOCUSED = 215;
     private static final float OUTLINE_STROKE_DP = 1.4f;
 
     private static final char[] NO_LETTERS = new char[0];
@@ -94,6 +93,23 @@ public final class AppDrawerRopeColumnView extends View {
     @NonNull private char[] mLetters = NO_LETTERS;
     /** One string per letter, built with the letter set: {@code drawText} takes a CharSequence. */
     @NonNull private String[] mGlyphs = NO_GLYPHS;
+
+    /**
+     * What the letters stand on, as the chrome measured it under the dock, or
+     * {@link android.graphics.Color#TRANSPARENT} before anything has been measured. The rope has no
+     * band of its own — the drawer's plane is not one of {@code GlassBackdropCache}'s — so it
+     * borrows the dock's, which is the same wallpaper wash one row away and, by construction, the
+     * same ink polarity as the dock's own A&ndash;Z rail. That the two rails agree is the point:
+     * they are the same letters over the same glass.
+     */
+    private int mGlassBackdrop = Color.TRANSPARENT;
+    /** The resolved letter, focus and halo colours; recomputed only when an input moves. */
+    private int mLetterInk;
+    private int mFocusInk;
+    private int mRestingHalo;
+    private int mFocusHalo;
+    private int mInkCacheBackdrop = ~0;
+    private int mInkCacheBase;
 
     private boolean mActive;
     private boolean mScrubbing;
@@ -133,9 +149,71 @@ public final class AppDrawerRopeColumnView extends View {
         mCallbacks = callbacks;
     }
 
-    /** The dock the base colour and the haptics preference are borrowed from. */
+    /** The dock the base colour, the measured glass and the haptics preference are borrowed from. */
     public void setDock(@Nullable SuggestionBarView dock) {
         mDock = dock;
+    }
+
+    /** The letter ink the rope is drawing in right now, for tests and for measuring. */
+    public int letterInk() {
+        resolveInks(baseInkSeed());
+        return mLetterInk;
+    }
+
+    /** The halo under a resting letter right now, alpha included. */
+    public int restingHaloColor() {
+        resolveInks(baseInkSeed());
+        return mRestingHalo;
+    }
+
+    /** The halo under the focused letter right now, alpha included. */
+    public int focusHaloColor() {
+        resolveInks(baseInkSeed());
+        return mFocusHalo;
+    }
+
+    private int baseInkSeed() {
+        return mDock != null ? mDock.getLauncherTextColor() : 0xFFFFFFFF;
+    }
+
+    /**
+     * What the letters stand on, for a host that has no dock to borrow it from. The dock is the
+     * source whenever one is attached — it is where the activity pushes the measurement — so this
+     * is the fallback and the way a test can stand the rope on a known band.
+     */
+    public void setGlassBackdrop(int surfaceColor) {
+        if (mGlassBackdrop == surfaceColor) return;
+        mGlassBackdrop = surfaceColor;
+        invalidate();
+    }
+
+    /** The opaque colour the letters were last resolved against; {@code 0} until measured. */
+    public int glassBackdrop() {
+        return mDock != null ? mDock.glassBackdrop() : mGlassBackdrop;
+    }
+
+    /**
+     * Resolves the four colours the draw uses, and only when the dock's text colour or the measured
+     * glass has moved: the searches behind {@link GlassInk} walk up to a couple of hundred steps
+     * each and {@link #onDraw} runs on every frame of the drawer's fx loop.
+     */
+    private void resolveInks(int baseColor) {
+        int backdrop = glassBackdrop();
+        if (mInkCacheBackdrop == backdrop && mInkCacheBase == baseColor) return;
+        mInkCacheBackdrop = backdrop;
+        mInkCacheBase = baseColor;
+        if (Color.alpha(backdrop) == 0) {
+            // Nothing measured yet: what the rope drew before the glass under it was ever sampled.
+            mLetterInk = baseColor;
+            mFocusInk = mFocusColor;
+            mRestingHalo = withAlpha(GlassInk.HALO_DARK, 195);
+            mFocusHalo = withAlpha(GlassInk.HALO_DARK, 215);
+            return;
+        }
+        mLetterInk = GlassInk.legible(backdrop, baseColor, OnGlass.TARGET_LARGE_TEXT);
+        mFocusInk = GlassInk.legible(backdrop, mFocusColor, OnGlass.TARGET_LARGE_TEXT);
+        mRestingHalo = GlassInk.halo(mLetterInk, backdrop, false);
+        mFocusHalo = GlassInk.halo(mFocusInk, backdrop, true);
     }
 
     /**
@@ -272,7 +350,7 @@ public final class AppDrawerRopeColumnView extends View {
         AppDrawerRopeMetrics metrics = metrics();
         if (metrics == null || !isActive() || mDrawAlpha <= 0f) return;
         float centerX = getWidth() * 0.5f;
-        int baseColor = mDock != null ? mDock.getLauncherTextColor() : 0xFFFFFFFF;
+        resolveInks(baseInkSeed());
         float baseGlyphPx = metrics.glyphTextSizePx;
         // The focused letter grows, but never past its slot: two letters that overlap read as a
         // rendering fault rather than as emphasis.
@@ -283,13 +361,13 @@ public final class AppDrawerRopeColumnView extends View {
         // this draw runs on every frame of the drawer's fx loop. Only the single focused glyph
         // (if any) reconfigures the paints, after all the resting glyphs have been drawn.
         mFillPaint.setTextSize(baseGlyphPx);
-        mFillPaint.setColor(baseColor);
+        mFillPaint.setColor(mLetterInk);
         applyLetterWeight(false);
         mFillPaint.getFontMetrics(mFontMetrics);
         float restingHalfSpan = (mFontMetrics.ascent + mFontMetrics.descent) * 0.5f;
         mOutlinePaint.setTextSize(baseGlyphPx);
         mOutlinePaint.setTypeface(mFillPaint.getTypeface());
-        mOutlinePaint.setColor(withAlpha(OUTLINE_DARK, OUTLINE_ALPHA));
+        mOutlinePaint.setColor(mRestingHalo);
         int focusedIndex = mScrubbing ? mActiveIndex : -1;
         for (int i = 0; i < count; i++) {
             if (i == focusedIndex) continue;
@@ -297,12 +375,12 @@ public final class AppDrawerRopeColumnView extends View {
         }
         if (focusedIndex >= 0 && focusedIndex < count) {
             mFillPaint.setTextSize(focusGlyphPx);
-            mFillPaint.setColor(mFocusColor);
+            mFillPaint.setColor(mFocusInk);
             applyLetterWeight(true);
             mFillPaint.getFontMetrics(mFontMetrics);
             mOutlinePaint.setTextSize(focusGlyphPx);
             mOutlinePaint.setTypeface(mFillPaint.getTypeface());
-            mOutlinePaint.setColor(withAlpha(OUTLINE_DARK, OUTLINE_ALPHA_FOCUSED));
+            mOutlinePaint.setColor(mFocusHalo);
             drawGlyph(canvas, metrics, focusedIndex, centerX,
                 (mFontMetrics.ascent + mFontMetrics.descent) * 0.5f);
         }

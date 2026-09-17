@@ -11,6 +11,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.place.EdgeStackView;
 
 /**
@@ -35,6 +37,16 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
     private int dynamicPageIndex = -1;
     private boolean verticalForm;
     private int accentColor = 0xFFFFFFFF;
+    /**
+     * What the ticks stand on, as the chrome measured it under the dock, or
+     * {@link Color#TRANSPARENT} before the wallpaper has been sampled. Pushed down from
+     * {@code SuggestionBarView}; the strip is not a band of {@code GlassBackdropCache}'s own.
+     */
+    private int glassBackdrop = Color.TRANSPARENT;
+    private int activeInk;
+    private int restingInk;
+    private int dynamicActiveInk;
+    private int dynamicRestingInk;
 
     public PageTickStripView(@NonNull Context context) {
         this(context, null);
@@ -58,13 +70,17 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
 
     /**
      * The colour the active page's tick is drawn in; the rest of them are the same colour muted.
-     * It is the launcher's gesture accent put through the two steps the dock's own ticks took to
-     * reach it, so moving the row does not change the indicator's colour.
+     *
+     * <p>It is the launcher's gesture accent, and nothing is done to it here any more. It used to
+     * be lifted first — saturation to at least 0.42, value to at least 0.78, then boosted again —
+     * so that it would survive a dark glass. On a light one that lift is what made it disappear
+     * into the band. What the accent has to become for where it is actually drawn is
+     * {@link GlassInk}'s answer now, and it needs {@link #setGlassBackdrop} to give it.</p>
      */
     public void setAccentColor(int gestureAccentColor) {
-        int resolved = accentFrom(gestureAccentColor);
-        if (accentColor == resolved) return;
-        accentColor = resolved;
+        if (accentColor == gestureAccentColor) return;
+        accentColor = gestureAccentColor;
+        resolveInks();
         invalidate();
     }
 
@@ -72,17 +88,72 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
         return accentColor;
     }
 
+    /**
+     * What the ticks stand on, as the chrome measured it. {@link Color#TRANSPARENT} — the value
+     * before anything has been sampled — keeps the ticks exactly as they were drawn before this
+     * round: the accent, faded by proximity.
+     */
+    public void setGlassBackdrop(int surfaceColor) {
+        if (glassBackdrop == surfaceColor) return;
+        glassBackdrop = surfaceColor;
+        resolveInks();
+        invalidate();
+    }
+
+    /** See {@link #setGlassBackdrop}. */
+    public int glassBackdrop() {
+        return glassBackdrop;
+    }
+
+    /**
+     * The four inks the ticks morph between: the accent and the most-used page's warm tint, each at
+     * the page being shown and at rest.
+     *
+     * <p>The active tick says which page you are on, so it is a meaningful graphic and takes
+     * {@link OnGlass#TARGET_LARGE_TEXT}. A tick at rest says only that there is another page there,
+     * so it takes {@link OnGlass#TARGET_DECORATION} — and it keeps its muted look by asking for it
+     * as an <em>alpha</em>, {@link PageTickStrip#INACTIVE_ALPHA}, which {@link GlassInk#legible}
+     * raises only if 40% of a tick cannot clear 2.0 on this band. The mute is a preference; the
+     * floor is not.</p>
+     */
+    private void resolveInks() {
+        if (Color.alpha(glassBackdrop) == 0) return;
+        int restingAlpha = Math.round(255f * PageTickStrip.INACTIVE_ALPHA);
+        activeInk = GlassInk.legible(glassBackdrop, accentColor, OnGlass.TARGET_LARGE_TEXT, 0xE8);
+        restingInk = GlassInk.legible(glassBackdrop, accentColor, OnGlass.TARGET_DECORATION,
+            restingAlpha);
+        dynamicActiveInk = GlassInk.legible(glassBackdrop, PageTickStrip.DYNAMIC_TICK_COLOR,
+            OnGlass.TARGET_LARGE_TEXT, 0xE8);
+        dynamicRestingInk = GlassInk.legible(glassBackdrop, PageTickStrip.DYNAMIC_TICK_COLOR,
+            OnGlass.TARGET_DECORATION, restingAlpha);
+    }
+
     /** The colour one tick is drawn in at this fractional page position, alpha included. */
     public int tickColorAt(int page) {
         float proximity = PageTickStrip.proximity(page, pagePosition);
-        float alpha = PageTickStrip.alphaFor(proximity);
-        int color = accentColor;
-        if (page == dynamicPageIndex) {
-            color = PageTickStrip.DYNAMIC_TICK_COLOR;
-            alpha *= PageTickStrip.dynamicDampFor(proximity);
+        boolean dynamic = page == dynamicPageIndex;
+        if (Color.alpha(glassBackdrop) == 0) {
+            // Nothing measured yet: the accent, faded by proximity, exactly as before this round.
+            float alpha = PageTickStrip.alphaFor(proximity);
+            int color = dynamic ? PageTickStrip.DYNAMIC_TICK_COLOR : accentColor;
+            if (dynamic) alpha *= PageTickStrip.dynamicDampFor(proximity);
+            int opacity = Math.max(0, Math.min(255, Math.round(255f * alpha)));
+            return (color & 0x00FFFFFF) | (opacity << 24);
         }
-        int opacity = Math.max(0, Math.min(255, Math.round(255f * alpha)));
-        return (color & 0x00FFFFFF) | (opacity << 24);
+        // The morph is between two resolved inks rather than between two alphas: a fade towards
+        // nothing is a fade towards the band, and the band is what the ticks were losing to.
+        float mix = dynamic ? proximity * PageTickStrip.dynamicDampFor(proximity) : proximity;
+        return blend(dynamic ? dynamicRestingInk : restingInk,
+            dynamic ? dynamicActiveInk : activeInk, mix);
+    }
+
+    private static int blend(int from, int to, float amount) {
+        float t = Math.max(0f, Math.min(1f, amount));
+        return Color.argb(
+            Math.round(Color.alpha(from) + (Color.alpha(to) - Color.alpha(from)) * t),
+            Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * t),
+            Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * t),
+            Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t));
     }
 
     /**
@@ -160,28 +231,4 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
         }
     }
 
-    /**
-     * The accent the ticks are drawn from: the launcher's gesture accent lifted to stay legible on
-     * glass and then warmed the way the dock's FX layer warmed it, so nothing about the colour
-     * changed when the ticks stopped being the dock's.
-     */
-    private static int accentFrom(int gestureAccentColor) {
-        return boost(glassVisible(gestureAccentColor, 0.78f), 1.0f, 1.18f);
-    }
-
-    private static int glassVisible(int color, float minValue) {
-        float[] hsv = new float[3];
-        Color.colorToHSV(color, hsv);
-        hsv[1] = Math.max(0.42f, hsv[1]);
-        hsv[2] = Math.max(minValue, hsv[2]);
-        return Color.HSVToColor((color >>> 24) == 0 ? 0xE8 : (color >>> 24), hsv);
-    }
-
-    private static int boost(int color, float satMul, float valMul) {
-        float[] hsv = new float[3];
-        Color.colorToHSV(color, hsv);
-        hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * satMul));
-        hsv[2] = Math.max(0f, Math.min(1f, hsv[2] * valMul));
-        return Color.HSVToColor((color >>> 24) == 0 ? 0xFF : (color >>> 24), hsv);
-    }
 }
