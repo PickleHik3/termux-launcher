@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Removes the rendered spec file and the init.lua marker block. Each
-# colorscheme file is removed only if it is still byte-identical to the
-# template's own copy, so a user's hand edit survives.
+# Removes the rendered palette module and the init.lua marker block. The
+# colorscheme and its plugin spec are removed only if each is still
+# byte-identical to the template's own copy, so a user's hand edit survives.
 set -euo pipefail
 
 theme_dir="${TERMUX_THEME_DIR:?TERMUX_THEME_DIR not set}"
@@ -18,7 +18,7 @@ remove_if_unedited() {
 }
 
 remove_if_unedited "$config_dir/colors/launcher-material.lua" "$theme_dir/colors/launcher-material.lua"
-remove_if_unedited "$config_dir/lua/launcher/material_palette.lua" "$theme_dir/lua/launcher/material_palette.lua"
+remove_if_unedited "$config_dir/lua/plugins/launcher-material.lua" "$theme_dir/lua/plugins/launcher-material.lua"
 
 init_file="$config_dir/init.lua"
 if [ -f "$init_file" ]; then

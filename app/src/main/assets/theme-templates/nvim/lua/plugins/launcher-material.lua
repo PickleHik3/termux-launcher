@@ -1,11 +1,12 @@
--- launcher-material plugin spec — Rendered by Termux Launcher, do not edit.
+-- launcher-material plugin spec — installed by Termux Launcher, do not edit.
 --
 -- Selects the launcher-material colorscheme (installed by this template's
 -- apply.sh into ~/.config/nvim/colors/) through whichever distro this config
 -- is, without `require`-ing any of their modules: they may not be on the
 -- runtimepath yet the first time this file loads.
-
-vim.o.background = "{{mode}}"
+--
+-- It does not touch `background`: Neovim sets that from the terminal's own
+-- light/dark report, and the colourscheme paints whichever mode it names.
 
 local function file_contains(path, needle)
   local fd = io.open(path, "r")

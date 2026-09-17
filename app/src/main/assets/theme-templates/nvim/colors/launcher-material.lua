@@ -12,12 +12,18 @@
 -- of the launcher, and the degree comes from the terminal's own opacity slider.
 -- Opt out with `vim.g.material_opaque = true` before the colourscheme loads, or
 -- `:MaterialTransparent off`.
+--
+-- Light and dark are both live: the palette module carries both palettes, this
+-- file paints the one matching `vim.o.background`, and re-paints itself when
+-- Neovim flips that option on the terminal's own light/dark report. It never
+-- sets `background` itself — that would fight whoever did report.
 
 --- The palette, or a fixed one ---------------------------------------------
 
--- Used before the launcher has ever exported wallpaper colours, and on plain
--- Termux, so the colourscheme is never broken — only static.
-local FALLBACK = {
+-- Used before the launcher has ever rendered wallpaper colours, and on plain
+-- Termux, so the colourscheme is never broken — only static. One per mode, so
+-- `:set background=light` is still readable without the launcher.
+local FALLBACK_DARK = {
   type = "dark",
   base_30 = {
     white = "#ABB2BF",
@@ -71,10 +77,69 @@ local FALLBACK = {
   },
 }
 
+local FALLBACK_LIGHT = {
+  type = "light",
+  base_30 = {
+    white = "#383A42",
+    darker_black = "#F0F0F0",
+    black = "#FAFAFA",
+    black2 = "#F2F2F2",
+    one_bg = "#EAEAEB",
+    one_bg2 = "#E0E0E1",
+    one_bg3 = "#D6D6D7",
+    grey = "#C6C6C7",
+    grey_fg = "#8A8B91",
+    grey_fg2 = "#797A80",
+    light_grey = "#6E6F75",
+    line = "#E5E5E6",
+    statusline_bg = "#F0F0F0",
+    lightbg = "#E8E8E9",
+    pmenu_bg = "#4078F2",
+    folder_bg = "#4078F2",
+    red = "#E45649",
+    green = "#50A14F",
+    vibrant_green = "#3F9E3E",
+    yellow = "#B07D00",
+    sun = "#986801",
+    blue = "#4078F2",
+    nord_blue = "#3A6FD8",
+    cyan = "#0184BC",
+    teal = "#0197A8",
+    purple = "#A626A4",
+    dark_purple = "#8E1F8C",
+    pink = "#C43D82",
+    baby_pink = "#C8517C",
+    orange = "#986801",
+  },
+  base_16 = {
+    base00 = "#FAFAFA",
+    base01 = "#EAEAEB",
+    base02 = "#E0E0E1",
+    base03 = "#8A8B91",
+    base04 = "#6E6F75",
+    base05 = "#383A42",
+    base06 = "#23252B",
+    base07 = "#D6D6D7",
+    base08 = "#E45649",
+    base09 = "#986801",
+    base0A = "#B07D00",
+    base0B = "#50A14F",
+    base0C = "#0184BC",
+    base0D = "#4078F2",
+    base0E = "#A626A4",
+    base0F = "#A33A31",
+  },
+}
+
+-- `background` is the mode, and nothing here writes it: Neovim >=0.11 sets it
+-- from the terminal's light/dark report, and the launcher's template no longer
+-- pins it either.
+local mode = vim.o.background == "light" and "light" or "dark"
+
 local palette_ok, palette = pcall(require, "launcher.material_palette")
-local built = palette_ok and palette.build() or nil
+local built = palette_ok and palette.build(mode) or nil
 if not built then
-  built = FALLBACK
+  built = mode == "light" and FALLBACK_LIGHT or FALLBACK_DARK
 end
 
 local c = built.base_16
@@ -107,7 +172,6 @@ if vim.fn.exists "syntax_on" == 1 then
   vim.cmd "syntax reset"
 end
 vim.o.termguicolors = true
-vim.o.background = built.type == "light" and "light" or "dark"
 
 local set = function(group, attrs)
   vim.api.nvim_set_hl(0, group, attrs)
@@ -344,6 +408,29 @@ end
 -- twice.
 vim.o.winblend = 0
 vim.o.pumblend = 0
+
+--- Follow the terminal's light/dark report ---------------------------------
+
+-- Neovim >=0.11 answers the terminal's mode-2031 report by flipping
+-- `background` itself. That is the whole switch: re-paint from the other
+-- palette when it happens, guarded so re-sourcing this file cannot recurse.
+-- Neovim re-sources a named colourscheme on its own when `background` changes,
+-- so on 0.12 this is the belt to that braces — and the only thing that repaints
+-- for anyone whose config sets `background` without `g:colors_name` surviving.
+local background_group = vim.api.nvim_create_augroup("LauncherMaterialBackground", { clear = true })
+vim.api.nvim_create_autocmd("OptionSet", {
+  group = background_group,
+  pattern = "background",
+  desc = "Re-apply launcher-material when the terminal reports a light/dark change",
+  callback = function()
+    if vim.g.launcher_material_reapplying or vim.g.colors_name ~= "launcher-material" then
+      return
+    end
+    vim.g.launcher_material_reapplying = true
+    pcall(vim.cmd.colorscheme, "launcher-material")
+    vim.g.launcher_material_reapplying = false
+  end,
+})
 
 --- Follow the wallpaper ----------------------------------------------------
 

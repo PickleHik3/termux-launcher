@@ -620,37 +620,88 @@ test_ohmyposh() {
 test_nvim() {
     local dir="$TEMPLATES_DIR/nvim"
     local rendered="$WORK/nvim.rendered"
-    render_template "$dir" "launcher-material.lua" >"$rendered" 2>"$WORK/nvim.err" || { fail "render error: $(cat "$WORK/nvim.err")"; return; }
+    # The rendered file is the palette module: both palettes as static tables.
+    render_template "$dir" "lua/launcher/material_palette.lua" >"$rendered" 2>"$WORK/nvim.err" || { fail "render error: $(cat "$WORK/nvim.err")"; return; }
     assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    assert_dual "$rendered" "#B6C4FF" "#4C5D93" \
+        || { fail "rendered palette module does not carry both fixture palettes (dark primary #B6C4FF and light primary #4C5D93)"; return; }
+    grep -q '\brendered_mode = "dark"' "$rendered" || { fail "{{ mode }} did not render into M.rendered_mode"; return; }
+    # The plugin spec no longer pins `background`: Neovim owns it.
+    grep -q 'vim.o.background[[:space:]]*=' "$dir/lua/plugins/launcher-material.lua" \
+        && { fail "the plugin spec still sets vim.o.background"; return; }
+    grep -q '^vim.o.background[[:space:]]*=' "$dir/colors/launcher-material.lua" \
+        && { fail "the colourscheme still sets vim.o.background"; return; }
 
     if command -v luac >/dev/null 2>&1; then
-        luac -p "$rendered" 2>"$WORK/nvim.luacerr" || { fail "luac -p rejected the rendered spec: $(cat "$WORK/nvim.luacerr")"; return; }
+        luac -p "$rendered" 2>"$WORK/nvim.luacerr" || { fail "luac -p rejected the rendered palette module: $(cat "$WORK/nvim.luacerr")"; return; }
         luac -p "$dir/colors/launcher-material.lua" 2>"$WORK/nvim.luacerr2" || { fail "luac -p rejected colors/launcher-material.lua: $(cat "$WORK/nvim.luacerr2")"; return; }
-        luac -p "$dir/lua/launcher/material_palette.lua" 2>"$WORK/nvim.luacerr3" || { fail "luac -p rejected material_palette.lua: $(cat "$WORK/nvim.luacerr3")"; return; }
+        luac -p "$dir/lua/plugins/launcher-material.lua" 2>"$WORK/nvim.luacerr3" || { fail "luac -p rejected the plugin spec: $(cat "$WORK/nvim.luacerr3")"; return; }
     fi
+    local nvim_note="nvim: not installed - luac -p only"
     if command -v nvim >/dev/null 2>&1; then
-        nvim --headless --clean -l "$rendered" >"$WORK/nvim.nvimlog" 2>&1 || { fail "nvim --headless --clean -l rejected the rendered spec: $(cat "$WORK/nvim.nvimlog")"; return; }
+        # A real headless run: install the colourscheme and the rendered palette
+        # module into a throwaway runtimepath, paint in dark, flip `background`
+        # to light (which is exactly what Neovim does on the terminal's mode-2031
+        # report) and require that Normal's guifg and guibg actually changed -
+        # and changed back.
+        local rt="$WORK/nvim-rtp"
+        rm -rf "$rt"; mkdir -p "$rt/colors" "$rt/lua/launcher"
+        cp "$dir/colors/launcher-material.lua" "$rt/colors/launcher-material.lua"
+        cp "$rendered" "$rt/lua/launcher/material_palette.lua"
+        cat >"$WORK/nvim-flip.lua" <<'PROBE'
+local dir = arg[1]
+vim.opt.runtimepath:prepend(dir)
+-- Opaque, so guibg is a real colour rather than the glass NONE.
+vim.g.material_opaque = true
+vim.o.termguicolors = true
+local function normal()
+  local hl = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+  return ("%s/%s"):format(
+    hl.fg and ("#%06X"):format(hl.fg) or "NONE",
+    hl.bg and ("#%06X"):format(hl.bg) or "NONE")
+end
+vim.o.background = "dark"
+vim.cmd.colorscheme("launcher-material")
+local first = normal()
+vim.o.background = "light"
+local light = normal()
+vim.o.background = "dark"
+local again = normal()
+local hooks = vim.api.nvim_get_autocmds({ group = "LauncherMaterialBackground", event = "OptionSet" })
+io.stdout:write(("dark=%s light=%s again=%s name=%s type=%s hooks=%d\n"):format(
+  first, light, again, tostring(vim.g.colors_name),
+  tostring((vim.g.material_theme_info or {}).type), #hooks))
+PROBE
+        nvim --headless --clean -l "$WORK/nvim-flip.lua" "$rt" >"$WORK/nvim.flip" 2>&1 \
+            || { fail "nvim --headless --clean rejected the colourscheme: $(cat "$WORK/nvim.flip")"; return; }
+        local flip; flip="$(cat "$WORK/nvim.flip")"
+        local dark_hl light_hl again_hl
+        dark_hl="$(sed -n 's/.*dark=\([^ ]*\).*/\1/p' <<<"$flip")"
+        light_hl="$(sed -n 's/.*light=\([^ ]*\).*/\1/p' <<<"$flip")"
+        again_hl="$(sed -n 's/.*again=\([^ ]*\).*/\1/p' <<<"$flip")"
+        grep -q 'name=launcher-material' <<<"$flip" || fail "colors_name was not set: $flip"
+        grep -q 'hooks=[1-9]' <<<"$flip" || fail "no OptionSet background autocmd was registered: $flip"
+        grep -q 'type=light' <<<"$flip" && fail "material_theme_info still reports the light build after flipping back to dark: $flip"
+        [ -n "$dark_hl" ] && [ "$dark_hl" != "NONE/NONE" ] || fail "Normal was not painted in dark mode: $flip"
+        [ "$dark_hl" != "$light_hl" ] || fail "background=light did not change Normal: $flip"
+        [ "$dark_hl" = "$again_hl" ] || fail "background=dark did not restore Normal: $flip"
+        nvim_note="nvim $(nvim --version | head -1 | awk '{print $2}'): luac -p on all three Lua files; headless background=light/dark flip repaints Normal $dark_hl <-> $light_hl, OptionSet background autocmd registered"
     fi
-    if ! cmp -s "$dir/colors/launcher-material.lua" "$REPO_ROOT/docs/en/examples/nvim/colors/launcher-material.lua"; then
-        fail "template's colors/launcher-material.lua has drifted from docs/en/examples"; return
-    fi
-    if ! cmp -s "$dir/lua/launcher/material_palette.lua" "$REPO_ROOT/docs/en/examples/nvim/lua/launcher/material_palette.lua"; then
-        fail "template's material_palette.lua has drifted from docs/en/examples"; return
-    fi
-    note "nvim: installed (luac -p on all three Lua files, nvim --headless --clean -l on the rendered spec); both shipped colorscheme copies verified byte-identical to docs/en/examples"
+    note "$nvim_note"
 
     run_nvim_case() {
         local name="$1"; shift
         local home="$WORK/nvim-$name/home"
         rm -rf "$WORK/nvim-$name"; mkdir -p "$home"
         local theme_dir="$dir"
-        local output="$home/.config/nvim/lua/plugins/launcher-material.lua"
+        local output="$home/.config/nvim/lua/launcher/material_palette.lua"
         mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
         "$@" "$home"
 
         run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($name) failed"; return; }
         cmp -s "$home/.config/nvim/colors/launcher-material.lua" "$dir/colors/launcher-material.lua" || fail "apply.sh ($name) did not install colors/launcher-material.lua correctly"
-        cmp -s "$home/.config/nvim/lua/launcher/material_palette.lua" "$dir/lua/launcher/material_palette.lua" || fail "apply.sh ($name) did not install material_palette.lua correctly"
+        cmp -s "$home/.config/nvim/lua/plugins/launcher-material.lua" "$dir/lua/plugins/launcher-material.lua" || fail "apply.sh ($name) did not install the plugin spec correctly"
+        cmp -s "$output" "$rendered" || fail "apply.sh ($name) overwrote the rendered palette module"
 
         local snapshot="$WORK/nvim-$name/after1"
         mkdir -p "$snapshot"; cp -r "$home/.config" "$snapshot/config" 2>/dev/null
@@ -660,8 +711,8 @@ test_nvim() {
 
         run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($name) failed"; return; }
         [ -e "$home/.config/nvim/colors/launcher-material.lua" ] && fail "undo.sh ($name) left colors/launcher-material.lua behind"
-        [ -e "$home/.config/nvim/lua/launcher/material_palette.lua" ] && fail "undo.sh ($name) left material_palette.lua behind"
-        [ -e "$output" ] && fail "undo.sh ($name) left the rendered spec behind"
+        [ -e "$home/.config/nvim/lua/plugins/launcher-material.lua" ] && fail "undo.sh ($name) left the plugin spec behind"
+        [ -e "$output" ] && fail "undo.sh ($name) left the rendered palette module behind"
     }
 
     setup_plain() { :; }
@@ -686,7 +737,7 @@ test_nvim() {
     # A hand-edited colorscheme file must survive undo.
     local home="$WORK/nvim-edited/home"
     rm -rf "$WORK/nvim-edited"; mkdir -p "$home"
-    local output="$home/.config/nvim/lua/plugins/launcher-material.lua"
+    local output="$home/.config/nvim/lua/launcher/material_palette.lua"
     mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
     run_hook "$home" "$dir" "$output" "$dir/apply.sh" >/dev/null || fail "apply.sh (edited case) failed"
     echo '-- user edit' >> "$home/.config/nvim/colors/launcher-material.lua"
