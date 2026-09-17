@@ -75,10 +75,19 @@ public class HelpPresentationTest {
     }
     /** One of the overlay's own floating buttons, by the name a reader hears. */
     private View described(String description) {
-        for (int i = 0; i < overlay.getChildCount(); i++) {
-            View view = overlay.getChildAt(i);
-            CharSequence had = view.getContentDescription();
-            if (had != null && description.contentEquals(had)) return view;
+        return described(overlay, description);
+    }
+
+    /** The two floating buttons share one capsule now, so the search walks down into groups. */
+    private View described(View view, String description) {
+        CharSequence had = view.getContentDescription();
+        if (had != null && description.contentEquals(had)) return view;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = described(group.getChildAt(i), description);
+                if (found != null) return found;
+            }
         }
         return null;
     }
@@ -138,6 +147,28 @@ public class HelpPresentationTest {
     @Test public void theGuideFitsOnOnePage() {
         open(PaneWallPage.TERMINAL);
         assertEquals(java.util.Collections.emptyList(), overlay.unplacedGuideIds());
+    }
+
+    /**
+     * The × and the catalogue are one group, and the group sits in a corner of the wall — never
+     * floating mid-guide where it reads as one more card.
+     */
+    @Test public void theTwoButtonsShareAGroupInACornerOfTheWall() {
+        open(PaneWallPage.TERMINAL);
+        View close = described("Close help");
+        View catalogue = described("Help topics");
+        assertNotNull(close); assertNotNull(catalogue);
+        assertSame("one capsule holds both", close.getParent(), catalogue.getParent());
+        View group = (View) close.getParent();
+        assertSame("the capsule is the overlay's own child", overlay, group.getParent());
+        int cx = (group.getLeft() + group.getRight()) / 2, cy = (group.getTop() + group.getBottom()) / 2;
+        // The wall in this harness is 0,60–400,560; the group's centre must be within its own
+        // width of one of the four corners.
+        int reach = group.getWidth();
+        boolean nearX = cx <= reach || cx >= 400 - reach;
+        boolean nearY = Math.abs(cy - 60) <= reach || Math.abs(cy - 560) <= reach;
+        assertTrue("group centre (" + cx + "," + cy + ") is in a corner", nearX && nearY);
+        assertEquals("the buttons are the same square", close.getWidth(), catalogue.getWidth());
     }
 
     @Test public void theCloseGlyphDismissesHelpOnce() {

@@ -209,7 +209,7 @@ public final class HelpOverlayView extends FrameLayout {
         stopGesture();
         if (getViewTreeObserver().isAlive()) getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener);
         removeAllViews();
-        cards.clear(); childBounds.clear(); cardViews.clear(); cardSpecs.clear();
+        cards.clear(); childBounds.clear(); cardViews.clear(); glyphGroup = null; cardSpecs.clear();
         rendered.clear(); keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
         snapshot = null; routed = null; signature = ""; announced = null;
         anchorOnScreen = null; unplaced.clear();
@@ -315,6 +315,9 @@ public final class HelpOverlayView extends FrameLayout {
         } else {
             for (KeyCard key : keyCards) obstacles.add(box(key.bounds));
         }
+        // The × and catalogue group has its corner before any card is placed; a hint under it
+        // would be a hint the user cannot read.
+        obstacles.add(box(glyphGroupRect()));
         routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs, obstacles, soft);
         // One page still comes first: on a screen too tight for every card to keep clear of every
         // control, the controls give way rather than a hint leave the guide.
@@ -677,28 +680,73 @@ public final class HelpOverlayView extends FrameLayout {
     // ---- the two floating buttons ---------------------------------------------------------
 
     /**
-     * The × and the catalogue, beside where the ? the user pressed was: help's own chrome, the same
-     * size and glass a corner tab's buttons wear, in every mode.
+     * The × and the catalogue: help's own chrome, one group, in the corner of the wall nearest
+     * where the ? the user pressed was — the same size and glass a corner tab's buttons wear, in
+     * every mode. A corner rather than "beside the ?", because the ? is a corner tab's button and
+     * the tab is gone by the time the guide is up: two buttons floating mid-screen read as part of
+     * the guide, in a corner they read as its frame.
      */
     private void placeGlyphs() {
         if (snapshot == null) return;
+        Rect group = glyphGroupRect();
+        if (glyphGroup == null) {
+            TextView close = glyphButton(getContext().getString(R.string.help_close_glyph), false,
+                getContext().getString(R.string.help_close_action), () -> command(model.close()));
+            TextView catalogue = glyphButton(CornerTabGlyphs.CATALOGUE, true,
+                getContext().getString(R.string.help_topics_action), this::toggleCatalogue);
+            LinearLayout row = new LinearLayout(getContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER);
+            int size = dp(GLYPH_SIZE_DP);
+            row.addView(close, new LinearLayout.LayoutParams(size, size));
+            row.addView(catalogue, new LinearLayout.LayoutParams(size, size));
+            row.setBackground(glyphGroupBackground());
+            glyphGroup = row;
+        }
+        put(glyphGroup, group);
+        cards.add(glyphGroup);
+    }
+
+    /** The square a thumb asks for, per button; the pair is two of them in one capsule. */
+    private static final int GLYPH_SIZE_DP = 48;
+    /** How far the group stays in from the wall's edges. */
+    private static final int GLYPH_MARGIN_DP = 6;
+    private LinearLayout glyphGroup;
+
+    /**
+     * Where the group goes: inside the wall's corner nearest the ? that opened help (or the corner
+     * a tab would have come out of), so it is always at an edge and never over the middle of the
+     * guide. Also an obstacle for the cards, so no hint is laid out under it.
+     */
+    private Rect glyphGroupRect() {
+        int size = dp(GLYPH_SIZE_DP);
+        int width = size * 2;
+        int margin = dp(GLYPH_MARGIN_DP);
+        Rect wall = snapshot.wall;
         Rect anchor = anchorBounds();
-        int size = dp(48);
-        int gap = dp(8);
-        int width = size * 2 + gap;
-        int left = clamp(anchor.centerX() - width / 2, dp(4), getWidth() - width - dp(4));
-        // Below the anchor when it sits in the top half of the screen, above it when below, so the
-        // pair never lands off the edge the tab came out of.
-        int top = anchor.centerY() < getHeight() / 2 ? anchor.bottom + gap : anchor.top - gap - size;
+        int ax = anchor.centerX(), ay = anchor.centerY();
+        boolean right = Math.abs(ax - wall.right) < Math.abs(ax - wall.left);
+        boolean bottom = Math.abs(ay - wall.bottom) < Math.abs(ay - wall.top);
+        int left = right ? wall.right - margin - width : wall.left + margin;
+        int top = bottom ? wall.bottom - margin - size : wall.top + margin;
+        left = clamp(left, dp(4), getWidth() - width - dp(4));
         top = clamp(top, dp(4), getHeight() - size - dp(4));
-        TextView close = glyphButton(getContext().getString(R.string.help_close_glyph), false,
-            getContext().getString(R.string.help_close_action), () -> command(model.close()));
-        TextView catalogue = glyphButton(CornerTabGlyphs.CATALOGUE, true,
-            getContext().getString(R.string.help_topics_action), this::toggleCatalogue);
-        put(close, new Rect(left, top, left + size, top + size));
-        put(catalogue, new Rect(left + size + gap, top, left + width, top + size));
-        cards.add(close);
-        cards.add(catalogue);
+        return new Rect(left, top, left + width, top + size);
+    }
+
+    /** The capsule the two buttons share: the tab's glass, so the pair reads as one piece. */
+    private GradientDrawable glyphGroupBackground() {
+        Context context = getContext();
+        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        int surface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
+            ContextCompat.getColor(context, R.color.termux_surface_panel));
+        GradientDrawable capsule = new GradientDrawable();
+        capsule.setShape(GradientDrawable.RECTANGLE);
+        capsule.setCornerRadius(dp(GLYPH_SIZE_DP) / 2f);
+        capsule.setColor(ColorUtils.setAlphaComponent(surface, 200));
+        capsule.setStroke(dp(CornerTabGeometry.TAB_OUTLINE_DP), ColorUtils.setAlphaComponent(primary, 120));
+        return capsule;
     }
 
     /** The catalogue button both ways: it opens the chooser, and it puts it away again. */
@@ -735,7 +783,23 @@ public final class HelpOverlayView extends FrameLayout {
             ContextCompat.getColor(context, R.color.termux_primary));
         int surface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
             ContextCompat.getColor(context, R.color.termux_surface_panel));
-        TextView view = new TextView(context);
+        // A TextView centres the font's line box, and neither × nor a Nerd Font glyph sits in the
+        // middle of its line box — the × rode high in its circle. So the glyph is drawn on its own
+        // ink bounds instead: measured per draw, centred on the view, background untouched.
+        TextView view = new TextView(context) {
+            private final Rect ink = new Rect();
+            @Override protected void onDraw(Canvas canvas) {
+                CharSequence text = getText();
+                if (text == null || text.length() == 0) return;
+                String s = text.toString();
+                Paint p = getPaint();
+                p.setColor(getCurrentTextColor());
+                p.getTextBounds(s, 0, s.length(), ink);
+                float x = getWidth() / 2f - ink.exactCenterX();
+                float y = getHeight() / 2f - ink.exactCenterY();
+                canvas.drawText(s, x, y, p);
+            }
+        };
         view.setText(glyph);
         view.setContentDescription(description);
         view.setGravity(Gravity.CENTER);
