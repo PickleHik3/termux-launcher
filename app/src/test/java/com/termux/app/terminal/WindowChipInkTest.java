@@ -1,6 +1,7 @@
 package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -280,6 +281,24 @@ public class WindowChipInkTest {
             WindowChipInk.neutralSeed(NIGHT_ON_SURFACE, NIGHT_SURFACE_BASE, true));
         assertEquals(NIGHT_SURFACE_BASE,
             WindowChipInk.neutralSeed(NIGHT_ON_SURFACE, NIGHT_SURFACE_BASE, false));
+    }
+
+    /**
+     * A palette says what it was resolved from, so a caller re-dressing itself for an unchanged
+     * band — which is every window-label poll — can keep the one it has.
+     */
+    @Test
+    public void aPaletteKnowsWhetherItStillAnswersTheQuestion() {
+        WindowChipInk.Palette palette = lightOnReportedGlass();
+        int neutral = WindowChipInk.neutralSeed(LIGHT_ON_SURFACE, LIGHT_SURFACE_BASE, true);
+        assertTrue(palette.matches(GLASS_LIGHT, true, neutral, LIGHT_PRIMARY));
+        assertTrue("alpha on the band is not part of the question",
+            palette.matches(0x806A5755, true, neutral, LIGHT_PRIMARY));
+        assertFalse(palette.matches(GLASS_NIGHT, true, neutral, LIGHT_PRIMARY));
+        assertFalse(palette.matches(GLASS_LIGHT, false, neutral, LIGHT_PRIMARY));
+        assertFalse(palette.matches(GLASS_LIGHT, true, LIGHT_ON_SURFACE, LIGHT_PRIMARY));
+        assertFalse("a new place is a new palette",
+            palette.matches(GLASS_LIGHT, true, neutral, 0xFF8D4E19));
     }
 
     /** A tone walk that runs out of room ends at the extreme rather than at a colour that fails. */

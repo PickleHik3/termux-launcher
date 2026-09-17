@@ -92,6 +92,12 @@ public final class WindowChipInk {
         /** The band's own effective opaque surface, as {@link OnGlass.Resolution#surface} gave it. */
         @ColorInt public final int band;
 
+        /** The chrome's polarity this was resolved in; part of {@link #matches}. */
+        public final boolean pale;
+        /** The two seeds it was resolved from; part of {@link #matches}. */
+        @ColorInt public final int neutralSeed;
+        @ColorInt public final int accentSeed;
+
         /** The resting chip's wash, alpha included; drawn by the chip's own drawable. */
         @ColorInt public final int restingFill;
         /** The resting chip's outline, opaque and at {@link OnGlass#TARGET_LARGE_TEXT}. */
@@ -133,11 +139,15 @@ public final class WindowChipInk {
         /** The ring of ground a corner dot is haloed against: the chip it sits on. */
         @ColorInt public final int dotGround;
 
-        Palette(int band, int restingFill, int restingStroke, int selectedFill, int selectedStroke,
+        Palette(int band, boolean pale, int neutralSeed, int accentSeed,
+                int restingFill, int restingStroke, int selectedFill, int selectedStroke,
                 int restingSurface, int selectedSurface, int restingGround, int selectedGround,
                 int restingLabel, int selectedLabel, int glyph, int restingHalo, int selectedHalo,
                 int dotGround) {
             this.band = band;
+            this.pale = pale;
+            this.neutralSeed = neutralSeed;
+            this.accentSeed = accentSeed;
             this.restingFill = restingFill;
             this.restingStroke = restingStroke;
             this.selectedFill = selectedFill;
@@ -152,6 +162,17 @@ public final class WindowChipInk {
             this.restingHalo = restingHalo;
             this.selectedHalo = selectedHalo;
             this.dotGround = dotGround;
+        }
+
+        /**
+         * Whether this was resolved from exactly these inputs, so a caller re-asking for the same
+         * answer can keep it. The resolve is a tone walk and a wash search — cheap per measurement
+         * and not cheap per window-label poll, which is how often a bar re-dresses itself.
+         */
+        public boolean matches(@ColorInt int band, boolean pale, @ColorInt int neutralSeed,
+                               @ColorInt int accentSeed) {
+            return this.band == OnGlass.opaque(band) && this.pale == pale
+                && this.neutralSeed == neutralSeed && this.accentSeed == accentSeed;
         }
     }
 
@@ -202,7 +223,8 @@ public final class WindowChipInk {
             SchemeTone.toneShift(neutralSeed, pale ? -RESTING_LABEL_TONE_STEP : RESTING_LABEL_TONE_STEP),
             pale, OnGlass.TARGET_BODY_TEXT);
 
-        return new Palette(opaqueBand, restingFill, restingStroke, selectedFill, selectedStroke,
+        return new Palette(opaqueBand, pale, neutralSeed, accentSeed,
+            restingFill, restingStroke, selectedFill, selectedStroke,
             restingSurface, selectedSurface, restingGround, selectedGround,
             restingLabel, selectedLabel, glyph,
             ChipWatermarkGeometry.haloColor(restingSurface),

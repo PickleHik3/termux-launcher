@@ -1550,8 +1550,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         // polarity read before it would be answering for a chrome that had not seen this band.
         boolean pale =
             mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
-        mGlassPalette = WindowChipInk.resolve(resolved.surface, pale,
-            WindowChipInk.neutralSeed(onSurface, surfaceBase, pale), accent);
+        int neutral = WindowChipInk.neutralSeed(onSurface, surfaceBase, pale);
+        // A window-label poll re-dresses the whole bar; the tone walks behind a palette are not
+        // worth repeating for an answer that cannot have changed.
+        if (mGlassPalette == null
+            || !mGlassPalette.matches(resolved.surface, pale, neutral, accent)) {
+            mGlassPalette = WindowChipInk.resolve(resolved.surface, pale, neutral, accent);
+        }
         mGlassGeneration = mChromeInk.backdrops().generation();
         mGlassMeasuredRect.set(mGlassBandRect);
         return mGlassPalette;

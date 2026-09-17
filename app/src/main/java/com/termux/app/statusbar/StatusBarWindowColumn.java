@@ -146,8 +146,12 @@ public final class StatusBarWindowColumn extends ScrollView {
         // After the resolve, never before: the band's vote is cast inside onGlass.
         boolean pale =
             mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
-        mGlassPalette = WindowChipInk.resolve(resolved.surface, pale,
-            WindowChipInk.neutralSeed(onSurface, surfaceBase, pale), mAccent);
+        int neutral = WindowChipInk.neutralSeed(onSurface, surfaceBase, pale);
+        // Every window-list change rebuilds the stack; an unchanged answer is not re-derived.
+        if (mGlassPalette == null
+            || !mGlassPalette.matches(resolved.surface, pale, neutral, mAccent)) {
+            mGlassPalette = WindowChipInk.resolve(resolved.surface, pale, neutral, mAccent);
+        }
         mGlassGeneration = mChromeInk.backdrops().generation();
         mGlassMeasuredRect.set(mGlassBandRect);
     }
