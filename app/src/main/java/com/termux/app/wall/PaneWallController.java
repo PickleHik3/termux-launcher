@@ -140,7 +140,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     public boolean isTerminalShowing() {
-        return mWall.currentPage() == PaneWallPage.TERMINAL && !mWall.isMoving();
+        return !mWall.isMoving() && terminalHasPixels();
     }
 
     /**
@@ -153,7 +153,44 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * the terminal is away has to start again the moment the wall moves at all.
      */
     public boolean isTerminalOnScreen() {
-        return mWall.currentPage() == PaneWallPage.TERMINAL || mWall.isMoving();
+        return mWall.isMoving() || terminalHasPixels();
+    }
+
+    private boolean mDisagreementLogged;
+
+    /**
+     * Whether the terminal page has pixels on screen, asked of the page view. The wall's record
+     * of its current page is what it means to show; the pixels are what it shows. They part when a
+     * slide is cut short, and that is logged once per episode so the path that cut it can be found.
+     */
+    private boolean terminalHasPixels() {
+        boolean pixels = mWall.isPageOnScreen(PaneWallPage.TERMINAL);
+        boolean record = mWall.currentPage() == PaneWallPage.TERMINAL;
+        if (mWall.isMoving() || pixels == record) {
+            mDisagreementLogged = false;
+        } else if (!mDisagreementLogged) {
+            mDisagreementLogged = true;
+            android.util.Log.w("TermuxWall", "record and pixels disagree: " + describeState());
+        }
+        return pixels;
+    }
+
+    /** The wall's state in one line, for the log. */
+    @NonNull
+    public String describeState() {
+        View terminal = mWall.pageView(PaneWallPage.TERMINAL);
+        return "page=" + mWall.currentPage() + " moving=" + mWall.isMoving()
+            + " dragging=" + mWall.isDragging() + " offset=" + mWall.offsetPx()
+            + " width=" + mWall.getWidth()
+            + " terminalX=" + (terminal == null ? "none" : String.valueOf(terminal.getTranslationX()))
+            + " terminalVisibility=" + (terminal == null ? "none" : String.valueOf(terminal.getVisibility()));
+    }
+
+    /** The terminal page slides in from {@code fromPx} beside its place; see PaneWallLayout#nudgePage. */
+    public void nudgeTerminalPage(float fromPx, long durationMs,
+                                  @Nullable android.view.animation.Interpolator interpolator,
+                                  @Nullable Runnable onEnd) {
+        mWall.nudgePage(PaneWallPage.TERMINAL, fromPx, durationMs, interpolator, onEnd);
     }
 
     /** Navigate by the {@code page=} argument of {@code wall.go}: a name, or left/right. */

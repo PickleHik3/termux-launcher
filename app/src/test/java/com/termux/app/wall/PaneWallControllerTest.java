@@ -165,4 +165,27 @@ public class PaneWallControllerTest {
 
         assertEquals(1, host.interrupted);
     }
+
+    @Test public void aTerminalLeftOnScreenByACutSlideCountsAsShowingWhateverTheRecordSays() {
+        View widgets = new FrameLayout(activity);
+        wall.addView(widgets);
+        wall.setPageView(PaneWallPage.WIDGETS, widgets);
+        wall.layout(0, 0, 1080, 1800);
+        wall.setReducedMotion(false);
+        assertTrue(controller.goTo(PaneWallPage.WIDGETS, true));
+        wall.onDetachedFromWindow();
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertFalse(wall.isMoving());
+
+        assertTrue(controller.isTerminalShowing());
+        assertTrue(controller.isTerminalOnScreen());
+        assertTrue(controller.describeState().contains("page=WIDGETS"));
+
+        wall.requestLayout();
+        wall.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(1800, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, 1080, 1800);
+        assertFalse(controller.isTerminalShowing());
+        assertFalse(controller.isTerminalOnScreen());
+    }
 }

@@ -297,4 +297,101 @@ public class PaneWallLayoutTest {
         wall.dragTo(-300f);
         assertEquals("a held wall must not move at all", 0f, terminal.getTranslationX(), EPS);
     }
+
+    // ---- A slide cut short -----------------------------------------------------------------
+
+    /** Ask for Widgets with a spring, then cut the spring before its first frame. */
+    private void cutASlideToWidgets() {
+        wall.setReducedMotion(false);
+        assertTrue(wall.goTo(PaneWallPage.WIDGETS, true));
+        assertTrue(wall.isMoving());
+        wall.onDetachedFromWindow();
+    }
+
+    @Test
+    public void aCutSlideLeavesTheRecordAheadOfThePixelsAndThePixelsAnswer() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        cutASlideToWidgets();
+        // At rest, the record names Widgets, but the terminal page never moved.
+        assertFalse(wall.isMoving());
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertTrue(wall.isRestingOffPage());
+        assertTrue(wall.isPageOnScreen(PaneWallPage.TERMINAL));
+        assertFalse(wall.isPageOnScreen(PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void theNextLayoutFinishesACutSlideAndSaysSo() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        final PaneWallPage[] settled = {null};
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onWallPageSettled(PaneWallPage page) { settled[0] = page; }
+        });
+        cutASlideToWidgets();
+        assertEquals(null, settled[0]);
+
+        // A real pass: the keyboard or a bar asked for layout, so onLayout runs again.
+        wall.requestLayout();
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+
+        assertFalse(wall.isRestingOffPage());
+        assertEquals(0f, wall.offsetPx(), EPS);
+        assertEquals(PaneWallPage.WIDGETS, settled[0]);
+        assertEquals(WIDTH, terminal.getTranslationX(), EPS);
+        assertEquals(View.INVISIBLE, terminal.getVisibility());
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+        assertTrue(wall.isPageOnScreen(PaneWallPage.WIDGETS));
+        assertFalse(wall.isPageOnScreen(PaneWallPage.TERMINAL));
+    }
+
+    @Test
+    public void comingBackToTheWindowFinishesACutSlide() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        cutASlideToWidgets();
+        wall.onAttachedToWindow();
+        assertFalse(wall.isRestingOffPage());
+        assertEquals(WIDTH, terminal.getTranslationX(), EPS);
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+    }
+
+    // ---- A page nudged in from the side ----------------------------------------------------
+
+    @Test
+    public void aNudgeMovesThePageOnTopOfTheWallsOwnPositionAndADragDropsIt() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        final int[] ended = {0};
+        wall.setReducedMotion(false);
+        wall.nudgePage(PaneWallPage.TERMINAL, 300f, 380L, null, () -> ended[0]++);
+        // The first frame has the page beside its place and the neighbours where they were.
+        assertEquals(300f, terminal.getTranslationX(), EPS);
+        assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
+        assertEquals(0, ended[0]);
+
+        wall.beginDrag();
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+    }
+
+    @Test
+    public void aNudgeOnAPageTheWallHasPutAwayLeavesItAway() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        assertTrue(wall.goTo(PaneWallPage.WIDGETS, false));
+        final int[] ended = {0};
+        wall.nudgePage(PaneWallPage.TERMINAL, -WIDTH, 380L, null, () -> ended[0]++);
+        assertEquals(1, ended[0]);
+        assertEquals(WIDTH, terminal.getTranslationX(), EPS);
+        assertEquals(View.INVISIBLE, terminal.getVisibility());
+    }
+
+    @Test
+    public void aNudgeOnAPageTheWallDoesNotHaveJustRunsItsEnding() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), false, true);
+        final int[] ended = {0};
+        wall.nudgePage(PaneWallPage.WIDGETS, 300f, 380L, null, () -> ended[0]++);
+        assertEquals(1, ended[0]);
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+    }
 }

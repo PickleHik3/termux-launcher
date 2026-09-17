@@ -77,6 +77,10 @@ public final class PaneWallLayout extends ViewGroup {
     @Nullable private ValueAnimator mSlide;
     private boolean mSliding;
     private boolean mDragging;
+    /** One page slid in from beside its place on top of wherever the wall puts it. */
+    @Nullable private PaneWallPage mNudgePage;
+    private float mNudgePx;
+    @Nullable private ValueAnimator mNudge;
     private boolean mReducedMotion;
     private boolean mGesturesEnabled = true;
 
@@ -158,6 +162,75 @@ public final class PaneWallLayout extends ViewGroup {
         return mOffsetPx;
     }
 
+    /**
+     * Whether {@code page}'s pixels are on screen, read off the page view itself rather than off
+     * the record of which page is current. The two agree whenever the wall rests where it says it
+     * does; a slide that was cut short leaves them apart, and then the pixels are the truth.
+     * Before the first layout there are no pixels to ask, so the record answers.
+     */
+    public boolean isPageOnScreen(@NonNull PaneWallPage page) {
+        View view = mPageViews.get(page);
+        if (view == null || !mPages.contains(page)) return false;
+        int width = getWidth();
+        if (width <= 0) return page == mCurrent;
+        return view.getVisibility() == VISIBLE && Math.abs(view.getTranslationX()) < width;
+    }
+
+    /** True while the wall is at rest but not where its record says: a slide was cut short. */
+    public boolean isRestingOffPage() {
+        return !isMoving() && mOffsetPx != 0f;
+    }
+
+    /**
+     * Slide {@code page} in from {@code fromPx} beside its place, on top of wherever the wall puts
+     * it. The window bar's arrival used to animate the terminal page's own translation, which the
+     * wall writes too; every movement of a page goes through the wall now so the position has one
+     * owner. Only the page the wall rests on is moved; a wall that starts moving drops the nudge;
+     * {@code onEnd} runs however it ends.
+     */
+    public void nudgePage(@NonNull PaneWallPage page, float fromPx, long durationMs,
+                          @Nullable android.view.animation.Interpolator interpolator,
+                          @Nullable Runnable onEnd) {
+        stopNudge();
+        // Only the page the wall rests on is nudged: a page the wall has put away would otherwise
+        // slide across the place the user is looking at.
+        if (mPageViews.get(page) == null || page != mCurrent || isMoving() || mOffsetPx != 0f
+                || fromPx == 0f) {
+            if (onEnd != null) onEnd.run();
+            return;
+        }
+        mNudgePage = page;
+        mNudgePx = fromPx;
+        applyPagePositions();
+        ValueAnimator nudge = ValueAnimator.ofFloat(fromPx, 0f);
+        nudge.setDuration(durationMs);
+        if (interpolator != null) nudge.setInterpolator(interpolator);
+        nudge.addUpdateListener(animation -> {
+            mNudgePx = (Float) animation.getAnimatedValue();
+            applyPagePositions();
+        });
+        nudge.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mNudge == animation) mNudge = null;
+                mNudgePage = null;
+                mNudgePx = 0f;
+                applyPagePositions();
+                if (onEnd != null) onEnd.run();
+            }
+        });
+        mNudge = nudge;
+        nudge.start();
+    }
+
+    private void stopNudge() {
+        ValueAnimator nudge = mNudge;
+        mNudge = null;
+        mNudgePage = null;
+        mNudgePx = 0f;
+        // Cancelling runs the end listener, which repositions the page and runs onEnd.
+        if (nudge != null) nudge.cancel();
+    }
+
     /** Off while another surface owns the gesture (the surface editor, for one). */
     public void setGesturesEnabled(boolean enabled) {
         mGesturesEnabled = enabled;
@@ -180,6 +253,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (!mPages.contains(page)) return false;
         interruptDrag();
         if (page == mCurrent && mOffsetPx == 0f) return true;
+        stopNudge();
         // Carry the current visual position across the page change: the new page's rest is one
         // width away per step, so the wall keeps drawing where it already was and springs from
         // there instead of jumping. On a ring the step is the shorter way round, which is also
@@ -206,6 +280,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (!mGesturesEnabled) return;
         mDragging = true;
         stopSlide();
+        stopNudge();
     }
 
     /** Move the wall for a finger that has travelled {@code dxPx} since it went down. */
@@ -317,7 +392,8 @@ public final class PaneWallLayout extends ViewGroup {
             // page past the outer edge is already waiting on the other side when a drag reaches
             // for it.
             float x = PaneWallPolicy.relativePosition(mPages, mCurrent, entry.getKey())
-                * (float) width + mOffsetPx;
+                * (float) width + mOffsetPx
+                + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
             view.setTranslationX(x);
             boolean onScreen = width <= 0 || Math.abs(x) < width;
             view.setVisibility(onScreen || moving ? VISIBLE : INVISIBLE);
@@ -368,7 +444,10 @@ public final class PaneWallLayout extends ViewGroup {
             if (child.getVisibility() == GONE) continue;
             child.layout(left, top, right, bottom);
         }
-        applyPagePositions();
+        // A slide cut short (the wall left the window mid-way) leaves the pages displaced and the
+        // record ahead of them; the next layout puts both right and says so.
+        if (isRestingOffPage()) settleImmediately();
+        else applyPagePositions();
     }
 
     // The activity sets the terminal page's frame by writing margins into its layout params and
@@ -397,9 +476,16 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (isRestingOffPage()) settleImmediately();
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         mSliding = false;
         stopSlide();
+        stopNudge();
     }
 }

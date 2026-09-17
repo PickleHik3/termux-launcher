@@ -17127,15 +17127,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         surfaceHost.setClipBounds(new android.graphics.Rect(
             0, 0, surfaceHost.getWidth(), surfaceHost.getHeight()));
         animateTerminalDeparture(surfaceHost, offset, horizontal, settle, durationMs);
+        Runnable unclip = () -> surfaceHost.setClipBounds(null);
         paneHost.animate().cancel();
-        paneHost.setTranslationX(horizontal ? offset : 0f);
-        paneHost.setTranslationY(horizontal ? 0f : offset);
+        paneHost.setTranslationY(0f);
+        if (horizontal) {
+            // The pane host is the wall's terminal page and the wall owns where its pages sit, so
+            // a sideways arrival is drawn by the wall; nothing else writes that position.
+            if (mPaneWallController != null) {
+                mPaneWallController.nudgeTerminalPage(offset, durationMs, settle, unclip);
+            } else {
+                unclip.run();
+            }
+            return;
+        }
+        paneHost.setTranslationY(offset);
         paneHost.animate()
-            .translationX(0f)
             .translationY(0f)
             .setDuration(durationMs)
             .setInterpolator(settle)
-            .withEndAction(() -> surfaceHost.setClipBounds(null))
+            .withEndAction(unclip)
             .start();
     }
 
