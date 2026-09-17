@@ -12,7 +12,6 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -64,26 +63,24 @@ public class StatusBarWidgetViewTest {
     }
 
     /**
-     * The hierarchy the user must still be able to read after the tiers stopped being dimmer than
-     * one another: the CPU figure is the heaviest and largest, the weather the lightest and
-     * smallest, and the widget applies both itself.
+     * The three stats draw at one weight and one size — the temperature's — and none of them is
+     * dimmer than another; the hierarchy is hue and order. The widget applies the shared answer
+     * itself, so every tier lands on the same face at the same size.
      */
     @Test
-    public void colorRole_carriesTheTierInWeightAndSizeRatherThanInDimming() {
+    public void colorRole_drawsEveryTierAtTheTemperaturesWeightAndSize() {
         StatusBarWidgetView cpu = widget(StatusBarWidgetView.ColorRole.PRIMARY);
         StatusBarWidgetView ram = widget(StatusBarWidgetView.ColorRole.SECONDARY);
         StatusBarWidgetView weather = widget(StatusBarWidgetView.ColorRole.TERTIARY);
 
-        assertTrue("the CPU figure is the largest",
-            value(cpu).getTextSize() > value(ram).getTextSize());
-        assertTrue("and the weather the smallest",
-            value(ram).getTextSize() > value(weather).getTextSize());
-        assertEquals("the CPU figure is the heaviest", android.graphics.Typeface.BOLD,
+        assertEquals("the CPU figure is the temperature's size",
+            value(weather).getTextSize(), value(cpu).getTextSize(), 0.01f);
+        assertEquals("and so is the RAM figure",
+            value(weather).getTextSize(), value(ram).getTextSize(), 0.01f);
+        assertEquals("nothing is bold", android.graphics.Typeface.NORMAL,
             value(cpu).getTypeface().getStyle());
-        assertEquals("and the weather is not", android.graphics.Typeface.NORMAL,
-            value(weather).getTypeface().getStyle());
-        assertNotEquals("nor is it the same face as the RAM figure",
-            value(ram).getTypeface(), value(weather).getTypeface());
+        assertEquals("the RAM figure is on the same face as the temperature",
+            value(weather).getTypeface(), value(ram).getTypeface());
         assertEquals(StatusBarWidgetView.ColorRole.TERTIARY, weather.colorRole());
     }
 
