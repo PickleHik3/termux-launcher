@@ -39,6 +39,16 @@ public final class WindowActivityRing {
     public static final int LAZY_STEPS = 8;
     public static final long LAZY_TICK_MS = SPIN_MS / LAZY_STEPS;
 
+    /**
+     * How many positions the smooth arc visits per turn, and how often it moves. The arc used to be
+     * driven one step per vsync, which on a 120 Hz panel is 154 redraws of every working pill per
+     * turn for a ring a few pixels wide; 38 stops is past the point where a thin arc reads as
+     * gliding, and lands the tick at about 30 a second. The angle itself stays a pure function of
+     * elapsed time, so a slower tick changes how many positions the arc visits, never its speed.
+     */
+    public static final int SMOOTH_STEPS = 38;
+    public static final long SMOOTH_TICK_MS = SPIN_MS / SMOOTH_STEPS;
+
     /** {@code phase} quantised to {@code steps} equal stops per turn, so the arc jumps rather than glides. */
     public static float steppedPhase(float phase, int steps) {
         int safeSteps = Math.max(1, steps);

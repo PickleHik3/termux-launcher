@@ -485,6 +485,72 @@ public class TerminalWindowBarTest {
         assertFalse(bar.isBusyAnimationRunning());
     }
 
+    /**
+     * The turning arc used to be driven by a ValueAnimator, so it redrew every working pill once
+     * per vsync — 154 times a turn on a 120 Hz panel, and a Choreographer callback every frame for
+     * as long as any shell was working. It now runs on a clock of its own at about 30 a second.
+     */
+    @Test
+    public void aTurningRingRedrawsOnItsOwnClockRatherThanEveryVsync() {
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home", true)), 0);
+        assertTrue(bar.isBusyAnimationRunning());
+        int before = bar.mRingRedraws;
+
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(com.termux.app.statusbar.WindowActivityRing.SPIN_MS,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+
+        int redraws = bar.mRingRedraws - before;
+        assertTrue("one turn cost " + redraws + " redraws", redraws >= 30 && redraws <= 45);
+
+        // And it stops with the work, rather than ticking on behind an idle row.
+        bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("home", "home")), 0);
+        assertFalse(bar.isBusyAnimationRunning());
+        int settled = bar.mRingRedraws;
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(com.termux.app.statusbar.WindowActivityRing.SPIN_MS,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals(settled, bar.mRingRedraws);
+    }
+
+    /**
+     * A burst of shell output hands the row the same windows several times a second, freshly built
+     * each time. Equal items are equal windows: nothing is re-inflated, and a change that IS
+     * visible still lands.
+     */
+    @Test
+    public void theSameWindowsAgainAreDroppedRatherThanRebuildingTheRow() {
+        assertEquals(new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("home", "home"));
+        assertEquals(new TerminalWindowBar.WindowItem("home", "home").hashCode(),
+            new TerminalWindowBar.WindowItem("home", "home").hashCode());
+        assertFalse(new TerminalWindowBar.WindowItem("home", "home")
+            .equals(new TerminalWindowBar.WindowItem("home", "home").withBusy(true)));
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("work", "work").withBusy(true)), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View first = tabs.getChildAt(0);
+        android.view.View second = tabs.getChildAt(1);
+
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("work", "work").withBusy(true)), 0);
+
+        assertSame(first, tabs.getChildAt(0));
+        assertSame(second, tabs.getChildAt(1));
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home").withAttention(true),
+            new TerminalWindowBar.WindowItem("work", "work").withBusy(true)), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
+    }
+
     @Test
     public void detachStopsTheAnimation() {
         // Otherwise a backgrounded activity keeps waking the Choreographer for an invisible sweep.

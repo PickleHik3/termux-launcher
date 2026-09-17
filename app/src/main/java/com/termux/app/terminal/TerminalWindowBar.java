@@ -268,6 +268,42 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 && progress == other.progress && progressError == other.progressError
                 && agentState == other.agentState && icon == other.icon;
         }
+
+        /**
+         * Value equality over everything a chip draws or speaks, so a list of these is a cheap
+         * content key: a view that is handed the same windows again can tell it has nothing to do
+         * without knowing what any of the fields mean. Labels plus {@link #sameActivity}, which
+         * together cover every field.
+         *
+         * <p>The icon is compared by identity, exactly as {@code sameActivity} does: the resolver
+         * hands back the same bitmap while nothing has moved, and comparing a few hundred kilobytes
+         * of pixels on a path that runs several times a second would cost more than the rebuild it
+         * is meant to save.
+         */
+        @Override
+        public boolean equals(@Nullable Object other) {
+            if (this == other) return true;
+            if (!(other instanceof WindowItem)) return false;
+            WindowItem that = (WindowItem) other;
+            return label.equals(that.label) && spokenLabel.equals(that.spokenLabel)
+                && sameActivity(that);
+        }
+
+        @Override
+        public int hashCode() {
+            // The icon is left out deliberately: equal items always hash equal, and two items that
+            // differ only by bitmap identity are rare enough not to be worth an identity hash.
+            int hash = label.hashCode();
+            hash = 31 * hash + spokenLabel.hashCode();
+            hash = 31 * hash + (busy ? 1 : 0);
+            hash = 31 * hash + (attention ? 1 : 0);
+            hash = 31 * hash + (done ? 1 : 0);
+            hash = 31 * hash + (doneFailed ? 1 : 0);
+            hash = 31 * hash + progress;
+            hash = 31 * hash + (progressError ? 1 : 0);
+            hash = 31 * hash + (agentState == null ? 0 : agentState.hashCode());
+            return hash;
+        }
     }
 
     /**
@@ -378,7 +414,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** Whether the strip ends with the plus that opens a new window. */
     private boolean mCreateButtonShown = true;
     @Nullable private ValueAnimator mSelectionAnimator;
-    @Nullable private ValueAnimator mBusyAnimator;
+    /**
+     * The clock the turning arcs redraw on. A timer rather than a {@link ValueAnimator}: an
+     * animator asks the Choreographer for a callback every vsync for as long as any shell is
+     * working, which on a 120 Hz panel kept the whole launcher drawing at 120 fps for one thin
+     * ring. The arc's angle comes from the clock either way, so the tick only decides how many
+     * positions it visits.
+     */
+    @Nullable private Runnable mSmoothTick;
     /**
      * Window visibility as last reported, rather than read from getWindowVisibility(): the framework
      * dispatches this during attach, and reading it keeps the animator honest without depending on
@@ -1119,8 +1162,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /**
      * One clock for the whole bar rather than one per pill: setWindows's removeAllViews() then has
      * nothing to clean up, and every ring turns in phase. It only invalidates the pills that carry
-     * a turning arc; a percentage ring and a bell are as static as the label. Smooth mode drives it
-     * from an animator, lazy mode from a slow tick.
+     * a turning arc; a percentage ring and a bell are as static as the label. Both modes drive it
+     * from a timer — smooth mode at about 30 a second, lazy mode at eight stops a turn.
      *
      * <p>Deliberately not folded into mSelectionAnimator. Both only invalidate, so they compose;
      * sharing one animator would stall the activity indication for the length of every window switch.
@@ -1129,21 +1172,23 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         boolean wanted = hasIndeterminateWindow() && mAttached && mWindowVisible;
         boolean smooth = wanted && !mLazyMode;
         boolean stepped = wanted && mLazyMode;
-        if (!smooth && mBusyAnimator != null) {
-            mBusyAnimator.cancel();
-            mBusyAnimator = null;
+        if (!smooth && mSmoothTick != null) {
+            removeCallbacks(mSmoothTick);
+            mSmoothTick = null;
         }
         if (!stepped && mLazyTick != null) {
             removeCallbacks(mLazyTick);
             mLazyTick = null;
         }
-        if (smooth && mBusyAnimator == null) {
-            mBusyAnimator = ValueAnimator.ofFloat(0f, 1f);
-            mBusyAnimator.setDuration(WindowActivityRing.SPIN_MS);
-            mBusyAnimator.setRepeatCount(ValueAnimator.INFINITE);
-            mBusyAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
-            mBusyAnimator.addUpdateListener(animation -> invalidateTurningRings());
-            mBusyAnimator.start();
+        if (smooth && mSmoothTick == null) {
+            mSmoothTick = new Runnable() {
+                @Override public void run() {
+                    if (mSmoothTick != this) return;
+                    invalidateTurningRings();
+                    postDelayed(this, WindowActivityRing.SMOOTH_TICK_MS);
+                }
+            };
+            postDelayed(mSmoothTick, WindowActivityRing.SMOOTH_TICK_MS);
         }
         if (stepped && mLazyTick == null) {
             mLazyTick = new Runnable() {
@@ -1157,7 +1202,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
     }
 
+    /**
+     * For tests: how many times the turning rings have been asked to redraw since the row was
+     * built. The one number that says whether the ring is on the vsync clock or on its own.
+     */
+    @androidx.annotation.VisibleForTesting int mRingRedraws;
+
     private void invalidateTurningRings() {
+        mRingRedraws++;
         for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
             if (needsClock(mItems.get(i))) mTabs.getChildAt(i).invalidate();
         }
@@ -1185,9 +1237,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     @Override
     protected void onDetachedFromWindow() {
         mAttached = false;
-        if (mBusyAnimator != null) {
-            mBusyAnimator.cancel();
-            mBusyAnimator = null;
+        if (mSmoothTick != null) {
+            removeCallbacks(mSmoothTick);
+            mSmoothTick = null;
         }
         if (mLazyTick != null) {
             removeCallbacks(mLazyTick);
@@ -1248,7 +1300,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** For tests: whether a working window's ring is turning right now, smoothly or in steps. */
     @androidx.annotation.VisibleForTesting
     public boolean isBusyAnimationRunning() {
-        return (mBusyAnimator != null && mBusyAnimator.isStarted()) || mLazyTick != null;
+        return mSmoothTick != null || mLazyTick != null;
     }
 
     private TextView createTab(@NonNull WindowItem item, boolean selected) {
