@@ -24,6 +24,7 @@ import com.termux.R;
 import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.ChromeSpec;
+import com.termux.app.chrome.GlassBackdropCache;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.chrome.WallpaperBlurCache;
 import com.termux.app.statusbar.StatusBarWindowColumn;
@@ -119,6 +120,7 @@ public class WindowChipGlassWiringTest {
 
     @Test
     public void theColumnDressesItsMarksFromTheBandItIsStandingOn() {
+        ownStatusBand();
         StatusBarWindowColumn column = new StatusBarWindowColumn(context, null);
         column.setChromeInk(chrome.ink());
         column.setWindows(Arrays.asList(new WindowItemFixture().item("herdr"),
@@ -147,7 +149,52 @@ public class WindowChipGlassWiringTest {
             (GradientDrawable) chip.getBackground()).getStrokeColor();
     }
 
+    /**
+     * A band has one veil and therefore one question. The column reads the strip's settled answer
+     * instead of asking one of its own, so the strip wears one veil whoever draws first — where
+     * before, the activity's status ink and this column each resolved it in their own hues and the
+     * bar wore whichever of them ran last.
+     */
+    @Test
+    public void theColumnReadsTheBandRatherThanResolvingASecondOne() {
+        OnGlass.Resolution owned = ownStatusBand();
+        StatusBarWindowColumn column = new StatusBarWindowColumn(context, null);
+        column.setChromeInk(chrome.ink());
+        column.setWindows(Arrays.asList(new WindowItemFixture().item("herdr")), 0);
+
+        WindowChipInk.Palette palette = column.glassPalette();
+        assertNotNull(palette);
+        assertEquals("the chips stand on the band the strip actually wears",
+            owned.surface, palette.band);
+        assertEquals("and nothing the column did changed what that is",
+            owned.veil, chrome.ink().resolution(GlassBackdropCache.Band.STATUS_BAR).veil);
+    }
+
+    /** Nothing has owned the strip yet: the column waits for the next pass rather than opening one. */
+    @Test
+    public void anUnownedBandLeavesTheColumnUndressed() {
+        StatusBarWindowColumn column = new StatusBarWindowColumn(context, null);
+        column.setChromeInk(chrome.ink());
+        column.setWindows(Arrays.asList(new WindowItemFixture().item("herdr")), 0);
+
+        assertNull("no owner, no answer to read, and no second question asked",
+            column.glassPalette());
+        assertNull(chrome.ink().resolution(GlassBackdropCache.Band.STATUS_BAR));
+    }
+
     // ------------------------------------------------------------------ fixtures
+
+    /**
+     * Stands in for the activity's own status-ink pass, which is the status strip's owner: it
+     * resolves the band once, at its strictest tier, in the stats' own hue.
+     */
+    @NonNull
+    private OnGlass.Resolution ownStatusBand() {
+        Rect rect = new Rect();
+        assertTrue(chrome.ink().bandRect(GlassBackdropCache.Band.STATUS_BAR, rect));
+        return chrome.ink().onGlass(GlassBackdropCache.Band.STATUS_BAR, rect,
+            0xFF345CA8, 0xFF345CA8, OnGlass.TARGET_BODY_TEXT);
+    }
 
     @NonNull
     private TerminalWindowBar dressedBar() {

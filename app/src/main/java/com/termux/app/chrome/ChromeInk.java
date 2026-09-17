@@ -255,12 +255,16 @@ public final class ChromeInk {
         // the draw cannot round apart.
         int backdrop = DockGlassRendering.glassSurfaceAt(stop, under, baseColor, baseAlpha,
             mAccentColor, top, mid, foot);
+        // Whichever rung the ladder ends on, a moved ink stays on the chrome's own side of the
+        // band: the polarity is one decision for the whole chrome and a single band re-toning
+        // across it would undo exactly what that decision is for.
+        boolean pale = polarity() == Polarity.PALE_INK;
         if (OnGlass.ratio(ink, OnGlass.opaque(baseColor)) > OnGlass.ratio(ink, backdrop)) {
-            return mCache.resolveOn(band, screenRect, backdrop, ink, ink, baseColor, target);
+            return mCache.resolveOn(band, screenRect, backdrop, ink, ink, baseColor, target, pale);
         }
         // Veiling toward this band's own base colour would move the surface the wrong way for the
         // ink the chrome has settled on. Leave the wallpaper alone and move the ink.
-        return OnGlass.resolveBare(backdrop, ink, target);
+        return OnGlass.resolveBare(backdrop, ink, target, pale);
     }
 
     /**
@@ -271,8 +275,62 @@ public final class ChromeInk {
     @ColorInt
     public int inkOn(@NonNull OnGlass.Resolution resolved, @ColorInt int darkInk,
                      @ColorInt int paleInk, double target) {
-        int ink = polarity() == Polarity.DARK_INK ? darkInk : paleInk;
-        return OnGlass.inkOnBand(resolved, ink, ink, target);
+        return inkOn(resolved, resolved.surface, darkInk, paleInk, target);
+    }
+
+    /**
+     * {@link #inkOn(OnGlass.Resolution, int, int, double)} on a ground of the caller's own.
+     *
+     * <p>Content that draws a wash between itself and the band — a chip, a pill, a card — stands on
+     * the wash, not on the band, and a ratio measured against {@code resolved.surface} is then a
+     * ratio nobody sees. Such a caller composes what its content really stands on and passes it as
+     * {@code ground}; the band is still what decides the polarity, which is the whole point of
+     * coming through here rather than to {@link OnGlass} directly.</p>
+     *
+     * <p>On a ground of the caller's own the chrome's polarity is a <em>preference</em>, not the
+     * mandate it is on the band. The polarity exists so that two things a few hundred pixels apart
+     * on the same glass do not read as opposites; something that draws its own container has
+     * already said it is not on that glass any more, and a container light enough to invert
+     * locally — the session chip is one — has to be allowed its dark label. So the walk runs on the
+     * chrome's side first and falls back to the legible answer when no tone on that side can clear
+     * the target at all. The contrast floor is never the thing that gives way.</p>
+     *
+     * @param ground the opaque colour the content is really drawn on, the band's own surface with
+     *     whatever the caller draws between
+     */
+    @ColorInt
+    public int inkOn(@NonNull OnGlass.Resolution resolved, @ColorInt int ground,
+                     @ColorInt int darkInk, @ColorInt int paleInk, double target) {
+        boolean pale = polarity() == Polarity.PALE_INK;
+        int ink = pale ? paleInk : darkInk;
+        int opaqueGround = OnGlass.opaque(ground);
+        int directed = OnGlass.inkOnBand(resolved, opaqueGround, ink, ink, target, pale);
+        if (OnGlass.ratio(directed, opaqueGround) >= target) return directed;
+        return OnGlass.inkOnBand(resolved, opaqueGround, darkInk, paleInk, target, null);
+    }
+
+    /**
+     * The band's settled answer, without asking a question of your own — the read every consumer
+     * that is <em>not</em> the band's owner should use.
+     *
+     * <p>A band has one veil, so it can only have one question: {@link #onGlass} records the ink
+     * pair and the target its caller asked about, and the veil follows from those. Two consumers
+     * calling {@code onGlass} on one band with different ink pairs is therefore two different
+     * veils for one strip of glass, and which one it wears comes down to which of them drew last —
+     * which is precisely what happened to the status bar, where the stats' own hues and the window
+     * chips' neutrals each resolved it. So exactly one consumer per band calls {@link #onGlass},
+     * and every other reads this and derives its own ink with
+     * {@link #inkOn(OnGlass.Resolution, int, int, int, double)}.</p>
+     *
+     * <p>Null until the band's owner has asked; a consumer that finds null waits for the next pass
+     * rather than resolving the band itself.</p>
+     */
+    @Nullable
+    public OnGlass.Resolution resolution(@NonNull GlassBackdropCache.Band band) {
+        readMode();
+        Contract contract = mContracts.get(band);
+        if (contract == null || !contract.seen) return null;
+        return resolveBand(band, contract);
     }
 
     /** The polarity the whole chrome is drawing in; for a caller that tints an icon to match. */
@@ -316,14 +374,14 @@ public final class ChromeInk {
      */
     @ColorInt
     int bandVeil(@NonNull GlassBackdropCache.Band band) {
-        Contract contract = mContracts.get(band);
-        if (contract == null || !contract.seen) return Color.TRANSPARENT;
+        OnGlass.Resolution resolved = resolution(band);
+        if (resolved == null) return Color.TRANSPARENT;
         // Derived here and now, not read from something {@link #onGlass} left behind. The surface
         // builder and the band's content run in an order neither of them controls, and a veil
         // handed from one to the other across a pass is a veil that is resolved every frame and
         // drawn in none — which is exactly what a mid-tone wallpaper produced: an ink toned for a
         // veiled band, over a band that was never veiled, at 1.7:1.
-        return resolveBand(band, contract).veil;
+        return resolved.veil;
     }
 
     /**

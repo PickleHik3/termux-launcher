@@ -248,18 +248,20 @@ public final class GlassBackdropCache {
     public OnGlass.Resolution resolveOn(@NonNull Band band, @NonNull Rect screenRect,
                                         @ColorInt int backdrop, @ColorInt int preferredInk,
                                         @ColorInt int alternateInk, @ColorInt int veilColor,
-                                        double target) {
+                                        double target, @Nullable Boolean paleSide) {
         Entry entry = entryFor(band, screenRect);
+        int sideKey = paleSide == null ? 0 : (paleSide ? 1 : -1);
         for (int i = 0; i < entry.memos.size(); i++) {
             Memo memo = entry.memos.get(i);
-            if (memo.matches(backdrop, BACKDROP_GIVEN, preferredInk, alternateInk, veilColor, target)) {
+            if (memo.matches(backdrop, BACKDROP_GIVEN + sideKey, preferredInk, alternateInk,
+                    veilColor, target)) {
                 return memo.resolution;
             }
         }
         OnGlass.Resolution resolution =
-            OnGlass.resolve(backdrop, preferredInk, alternateInk, veilColor, target);
+            OnGlass.resolve(backdrop, preferredInk, alternateInk, veilColor, target, paleSide);
         if (entry.memos.size() >= MEMO_SLOTS) entry.memos.remove(entry.memos.size() - 1);
-        entry.memos.add(0, new Memo(resolution, backdrop, BACKDROP_GIVEN, preferredInk,
+        entry.memos.add(0, new Memo(resolution, backdrop, BACKDROP_GIVEN + sideKey, preferredInk,
             alternateInk, veilColor, target));
         return resolution;
     }

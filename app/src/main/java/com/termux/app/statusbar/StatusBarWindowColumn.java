@@ -116,18 +116,24 @@ public final class StatusBarWindowColumn extends ScrollView {
     /**
      * The band under the chips, measured once and remembered until the measurement could move.
      *
-     * <p>The column stands on the status strip, so it resolves {@link GlassBackdropCache.Band#STATUS_BAR}
-     * at that band's strictest tier — its chips carry 11sp text, which is body text. A band has one
-     * veil, so this is the only place in this view that calls
-     * {@link com.termux.app.chrome.ChromeInk#onGlass}, and it asks at the same tier and with the
-     * same neutral pair that any other body-sized content on that strip would.</p>
+     * <p>The column stands on the status strip, so it reads
+     * {@link GlassBackdropCache.Band#STATUS_BAR}'s settled answer rather than resolving it. A band
+     * has one veil and therefore one question, and the strip's owner is the activity's own status
+     * ink pass, which asks in the stats' hues. This used to ask as well, in the chips' neutrals, so
+     * one strip of glass carried two resolutions and wore whichever of them drew last. Reading is
+     * the fix: the chips get the band exactly as it is drawn, and their own ink from
+     * {@link com.termux.app.chrome.ChromeInk#inkOn} in the polarity the whole chrome settled.</p>
      */
     private void measureBand() {
         if (mChromeInk == null) {
             mGlassPalette = null;
             return;
         }
-        if (!mChromeInk.bandRect(GlassBackdropCache.Band.STATUS_BAR, mGlassBandRect)) {
+        OnGlass.Resolution resolved = mChromeInk.resolution(GlassBackdropCache.Band.STATUS_BAR);
+        if (resolved == null
+            || !mChromeInk.bandRect(GlassBackdropCache.Band.STATUS_BAR, mGlassBandRect)) {
+            // Nothing has measured the strip yet. The owner's pass runs every apply, so the chips
+            // dress themselves on the next one rather than opening a second question here.
             mGlassPalette = null;
             mGlassGeneration = -1;
             mGlassMeasuredRect.setEmpty();
@@ -138,12 +144,6 @@ public final class StatusBarWindowColumn extends ScrollView {
         int surfaceBase = MaterialColors.getColor(this,
             com.termux.shared.R.attr.termuxColorSurfaceBase,
             ContextCompat.getColor(getContext(), R.color.termux_surface_base));
-        OnGlass.Resolution resolved = mChromeInk.onGlass(GlassBackdropCache.Band.STATUS_BAR,
-            mGlassBandRect,
-            WindowChipInk.neutralSeed(onSurface, surfaceBase, false),
-            WindowChipInk.neutralSeed(onSurface, surfaceBase, true),
-            OnGlass.TARGET_BODY_TEXT);
-        // After the resolve, never before: the band's vote is cast inside onGlass.
         boolean pale =
             mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
         int neutral = WindowChipInk.neutralSeed(onSurface, surfaceBase, pale);

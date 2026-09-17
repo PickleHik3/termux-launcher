@@ -384,6 +384,80 @@ public class ChromeInkTest {
         assertEquals("base and light model only", 2, drawn.getNumberOfLayers());
     }
 
+    /**
+     * The three labels the user reported, on the band they were reported on. Dark mode, the bright
+     * warm wallpaper's own status band: they measured 1.73, 1.77 and 1.77 against a 4.5 floor. The
+     * seeds here are the colours that were actually drawn, which is as close to the device's
+     * Material You roles as a fixture can get without the device.
+     */
+    @Test
+    public void theReportedStatsReachTheirFloorOnTheUsersOwnBand() {
+        surfaces.glassBase = NIGHT_BASE;
+        surfaces.accent = WARM_ACCENT;
+        wallpaper.status = MID_WARM_GLASS;
+        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
+        glass.surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.STATUS_BAR);
+
+        // The strip's owner resolves it once, in the hue of its most saturated content.
+        OnGlass.Resolution band = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT,
+            WARM_INK_NIGHT, WARM_INK_NIGHT, OnGlass.TARGET_BODY_TEXT);
+        LayerDrawable drawn = (LayerDrawable) glass.surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false,
+            GlassBackdropCache.Band.STATUS_BAR);
+
+        int[] seeds = {WARM_INK_NIGHT, 0xFFE4C084, 0xFFE4C06C};   // CPU, RAM, weather as drawn
+        String[] names = {"CPU", "RAM", "weather"};
+        for (int i = 0; i < seeds.length; i++) {
+            int label = ink.inkOn(band, seeds[i], seeds[i], OnGlass.TARGET_BODY_TEXT);
+            int composed = composeDrawnBand(drawn, MID_WARM_GLASS, MID_OPACITY, 0f, 1f, label);
+            assertTrue(names[i] + " reads " + OnGlass.ratio(label, composed) + " as drawn",
+                OnGlass.ratio(label, composed) >= OnGlass.TARGET_BODY_TEXT);
+            assertTrue(names[i] + " stays on the chrome's own side of the band",
+                isPale(label, band.surface) == (ink.polarity() == ChromeInk.Polarity.PALE_INK));
+        }
+    }
+
+    /**
+     * A mid band is where an undirected tone walk is a coin flip: the nearest qualifying tone of a
+     * pale seed is paler, of a dark seed darker, and the two land on opposite sides of one strip of
+     * glass. Three phases had each grown a directed walk of their own before the primitive existed.
+     */
+    @Test
+    public void twoSeedsOnOneMidBandLandOnTheSameSide() {
+        surfaces.glassBase = NIGHT_BASE;
+        surfaces.accent = WARM_ACCENT;
+        wallpaper.status = MID_WARM_GLASS;
+        new GlassSurfaceFactory(surfaces, ink)
+            .surface(MID_OPACITY, 0f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.STATUS_BAR);
+        OnGlass.Resolution band = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT,
+            WARM_INK_NIGHT, WARM_INK_NIGHT, OnGlass.TARGET_BODY_TEXT);
+        boolean pale = ink.polarity() == ChromeInk.Polarity.PALE_INK;
+
+        int fromPale = ink.inkOn(band, WARM_INK_NIGHT, WARM_INK_NIGHT, OnGlass.TARGET_LARGE_TEXT);
+        int fromDark = ink.inkOn(band, WARM_INK_LIGHT, WARM_INK_LIGHT, OnGlass.TARGET_LARGE_TEXT);
+
+        assertEquals("a pale seed and a dark seed on one band come out on one side",
+            isPale(fromPale, band.surface), isPale(fromDark, band.surface));
+        assertEquals("and that side is the chrome's", pale, isPale(fromPale, band.surface));
+        assertTrue(OnGlass.ratio(fromDark, band.surface) >= OnGlass.TARGET_LARGE_TEXT);
+    }
+
+    /** Content that draws its own wash stands on the wash, and says so. */
+    @Test
+    public void anInkOnAWashIsMeasuredAgainstTheWash() {
+        OnGlass.Resolution band = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT,
+            LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+        // A chip's container: the mode's panel colour at a fair alpha, over the band.
+        int ground = OnGlass.opaque(OnGlass.composite(OnGlass.withAlpha(LIGHT_BASE, 200),
+            band.surface));
+
+        int onWash = ink.inkOn(band, ground, LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+
+        assertTrue("the label clears its floor on what it actually stands on",
+            OnGlass.ratio(onWash, ground) >= OnGlass.TARGET_BODY_TEXT);
+        assertNotEquals("which is not the answer the band alone would have given",
+            onWash, ink.inkOn(band, LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT));
+    }
+
     // ------------------------------------------------------------------ the foot
 
     /**

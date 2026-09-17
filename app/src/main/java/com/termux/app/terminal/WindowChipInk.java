@@ -292,15 +292,11 @@ public final class WindowChipInk {
     @ColorInt
     public static int towardPolarity(@ColorInt int surface, @ColorInt int seed, boolean pale,
                                      double target) {
-        int base = OnGlass.opaque(surface);
-        if (onPolaritySide(base, seed, pale) && OnGlass.ratio(seed, base) >= target) return seed;
-        for (int step = 1; step <= 50; step++) {
-            int candidate = SchemeTone.toneShift(seed, pale ? 2d * step : -2d * step);
-            if (onPolaritySide(base, candidate, pale) && OnGlass.ratio(candidate, base) >= target) {
-                return candidate;
-            }
-        }
-        return pale ? Color.WHITE : Color.BLACK;
+        // The walk itself is OnGlass.tonedToward: three places had grown one of these before it
+        // existed, and a chip's differs from a rail's only in what it does when no tone works —
+        // here, the polarity's own extreme, so a chip on a band no tone of this hue can beat is
+        // still a chip on the chrome's side of it.
+        return OnGlass.inkOn(surface, seed, target, pale);
     }
 
     /** Whether {@code ink} stands on the chrome's own side of {@code surface}. */

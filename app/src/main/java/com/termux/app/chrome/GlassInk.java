@@ -112,22 +112,12 @@ public final class GlassInk {
     public static int legibleOn(@ColorInt int surface, @ColorInt int seed, boolean paleSide,
                                 double target, int alpha) {
         int base = OnGlass.opaque(surface);
-        double band = SchemeTone.tone(base);
-        double seedTone = SchemeTone.tone(seed);
-        boolean onSide = paleSide ? seedTone >= band : seedTone <= band;
-        if (onSide && OnGlass.ratio(seed, base) >= target) return legible(base, seed, target, alpha);
-        double from = paleSide ? Math.max(band, seedTone) : Math.min(band, seedTone);
-        for (double step = 0d; step <= 100d; step += 1d) {
-            double tone = paleSide ? from + step : from - step;
-            if (tone < 0d || tone > 100d) break;
-            int candidate = SchemeTone.toneShift(seed, tone - seedTone);
-            if (OnGlass.ratio(candidate, base) >= target) {
-                return legible(base, candidate, target, alpha);
-            }
-        }
-        // No tone of this hue works on that side of this band at all — a near-white band asked for
-        // a paler ink, say. The side was a preference; the contrast is not.
-        return legible(base, seed, target, alpha);
+        // The walk itself is OnGlass.tonedToward, which is where this one and the window chips'
+        // ended up after both phases wrote it independently. What stayed here is the answer to
+        // "nothing on that side works": for a rope or a tick the side was a preference and the
+        // contrast is not, so it falls back to the undirected ink rather than to an extreme.
+        int directed = OnGlass.tonedToward(base, seed, paleSide, target);
+        return legible(base, directed != OnGlass.NO_TONE ? directed : seed, target, alpha);
     }
 
     /** {@link #legibleOn} at full opacity. */

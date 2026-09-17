@@ -4,6 +4,7 @@ import android.graphics.Color;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.theme.SchemeTone;
 
@@ -247,6 +248,67 @@ public final class OnGlass {
         return SchemeTone.contrastTone(seed, surface, target);
     }
 
+    /** What {@link #tonedToward} answers when no tone of that hue works on that side of the band. */
+    public static final int NO_TONE = Color.TRANSPARENT;
+
+    /**
+     * {@code seed}'s hue and chroma at the first tone <em>on one side</em> of {@code surface} that
+     * clears {@code target} — or {@link #NO_TONE} when no tone on that side does.
+     *
+     * <p>The directed half of {@link #inkOn(int, int, double)}, and the one the launcher's chrome
+     * actually wants. {@code inkOn} keeps the <em>nearest</em> qualifying tone, which is right for
+     * one colour considered alone and wrong for a set of them: on a mid-tone band the nearest
+     * qualifying tone is a coin flip between a pale answer and a dark one, so a rail and the rope
+     * beside it, or an outline and the label inside it, can come out on opposite sides of the same
+     * surface. That is worse than either being wrong, and it is the thing
+     * {@link ChromeInk#polarity()} spends a whole decision on; nothing downstream of that decision
+     * may re-open it. Three separate places had grown their own directed walk before this one
+     * existed.</p>
+     *
+     * <p>Walks in {@link SchemeTone#toneShift} steps, which is HCT, so the hue and chroma of a
+     * branded colour survive however far the ink has to travel. The walk starts at whichever of the
+     * band and the seed is already furthest to that side, so a seed on the wrong side is not
+     * credited for tones it would pass through on the way, and it runs to the end of the tone axis.
+     * The caller supplies the answer for {@link #NO_TONE}, because the right one differs: chrome
+     * that must stay on its side ends at that side's extreme, content for which the side was only a
+     * preference falls back to the undirected answer.</p>
+     */
+    @ColorInt
+    public static int tonedToward(@ColorInt int surface, @ColorInt int seed, boolean paleSide,
+                                  double target) {
+        int base = opaque(surface);
+        double bandTone = SchemeTone.tone(base);
+        double seedTone = SchemeTone.tone(seed);
+        if (onSide(bandTone, seedTone, paleSide) && ratio(seed, base) >= target) return seed;
+        double from = paleSide ? Math.max(bandTone, seedTone) : Math.min(bandTone, seedTone);
+        for (double step = 0d; step <= 100d; step += 1d) {
+            double tone = paleSide ? from + step : from - step;
+            if (tone < 0d || tone > 100d) break;
+            int candidate = SchemeTone.toneShift(seed, tone - seedTone);
+            if (onSide(bandTone, SchemeTone.tone(candidate), paleSide)
+                && ratio(candidate, base) >= target) {
+                return candidate;
+            }
+        }
+        return NO_TONE;
+    }
+
+    /** True when an ink at {@code inkTone} is on {@code paleSide} of a band at {@code bandTone}. */
+    public static boolean onSide(double bandTone, double inkTone, boolean paleSide) {
+        return paleSide ? inkTone > bandTone : inkTone < bandTone;
+    }
+
+    /**
+     * {@link #tonedToward} with the answer chrome wants when nothing on that side works: the side's
+     * own extreme. A band no tone of this hue can beat still gets an ink on the right side of it.
+     */
+    @ColorInt
+    public static int inkOn(@ColorInt int surface, @ColorInt int seed, double target,
+                            boolean paleSide) {
+        int directed = tonedToward(surface, seed, paleSide, target);
+        return directed != NO_TONE ? directed : (paleSide ? Color.WHITE : Color.BLACK);
+    }
+
     /**
      * Whichever of two candidate inks reads better on {@code surface} — the "let the backdrop pick,
      * light or dark" entry point. Typically the mode's preferred ink versus its opposite.
@@ -270,13 +332,57 @@ public final class OnGlass {
     @ColorInt
     public static int inkOnBand(@NonNull Resolution band, @ColorInt int preferredInk,
                                 @ColorInt int alternateInk, double target) {
-        if (ratio(preferredInk, band.surface) >= target) return preferredInk;
-        if (ratio(alternateInk, band.surface) >= target) return alternateInk;
-        int toned = inkOn(band.surface, preferredInk, target);
-        if (ratio(toned, band.surface) >= target) return toned;
-        int tonedAlternate = inkOn(band.surface, alternateInk, target);
-        if (ratio(tonedAlternate, band.surface) >= target) return tonedAlternate;
-        return mostLegibleInk(band.surface, Color.WHITE, Color.BLACK);
+        return inkOnBand(band, preferredInk, alternateInk, target, null);
+    }
+
+    /**
+     * {@link #inkOnBand(Resolution, int, int, double)} on a named ground, with the side a moved ink
+     * must stay on.
+     *
+     * <p>The ground is normally {@code band.surface}, but not always: anything that draws a wash of
+     * its own — a chip, a pill, a card on the band — puts its content on the wash and not on the
+     * band, and a ratio measured against the band is then a ratio nobody sees. Such a caller
+     * composes its own ground and passes it here.</p>
+     */
+    @ColorInt
+    public static int inkOnBand(@NonNull Resolution band, @ColorInt int ground,
+                                @ColorInt int preferredInk, @ColorInt int alternateInk,
+                                double target, @Nullable Boolean paleSide) {
+        return inkOnGround(opaque(ground), preferredInk, alternateInk, target, paleSide);
+    }
+
+    /** {@link #inkOnBand(Resolution, int, int, int, double, Boolean)} on the band's own surface. */
+    @ColorInt
+    public static int inkOnBand(@NonNull Resolution band, @ColorInt int preferredInk,
+                                @ColorInt int alternateInk, double target,
+                                @Nullable Boolean paleSide) {
+        return inkOnGround(band.surface, preferredInk, alternateInk, target, paleSide);
+    }
+
+    @ColorInt
+    private static int inkOnGround(@ColorInt int ground, @ColorInt int preferredInk,
+                                   @ColorInt int alternateInk, double target,
+                                   @Nullable Boolean paleSide) {
+        boolean preferredOnSide = paleSide == null
+            || onSide(SchemeTone.tone(ground), SchemeTone.tone(preferredInk), paleSide);
+        if (preferredOnSide && ratio(preferredInk, ground) >= target) return preferredInk;
+        boolean alternateOnSide = paleSide == null
+            || onSide(SchemeTone.tone(ground), SchemeTone.tone(alternateInk), paleSide);
+        if (alternateOnSide && ratio(alternateInk, ground) >= target) return alternateInk;
+        int toned = toneOf(ground, preferredInk, target, paleSide);
+        if (ratio(toned, ground) >= target) return toned;
+        int tonedAlternate = toneOf(ground, alternateInk, target, paleSide);
+        if (ratio(tonedAlternate, ground) >= target) return tonedAlternate;
+        if (paleSide != null) return paleSide ? Color.WHITE : Color.BLACK;
+        return mostLegibleInk(ground, Color.WHITE, Color.BLACK);
+    }
+
+    /** The tone walk a ladder's "the ink has to move" rung takes: directed when the caller said so. */
+    @ColorInt
+    private static int toneOf(@ColorInt int surface, @ColorInt int seed, double target,
+                              @Nullable Boolean paleSide) {
+        return paleSide == null ? inkOn(surface, seed, target)
+            : inkOn(surface, seed, target, paleSide);
     }
 
     // ---------------------------------------------------------------- veil
@@ -353,6 +459,21 @@ public final class OnGlass {
     public static Resolution resolve(@ColorInt int backdrop, @ColorInt int preferredInk,
                                      @ColorInt int alternateInk, @ColorInt int veilColor,
                                      double target) {
+        return resolve(backdrop, preferredInk, alternateInk, veilColor, target, null);
+    }
+
+    /**
+     * {@link #resolve(int, int, int, int, double)} with the side a moved ink must stay on — the
+     * chrome's own polarity. It reaches only the last rungs of the ladder, where the veil has run
+     * out and the ink has to move: every rung above those returns a colour the caller supplied, and
+     * a supplied colour is the caller's business. Null leaves the tone walk undirected.
+     *
+     * @param paleSide true when the chrome is drawing in its pale ink, false in its dark one
+     */
+    @NonNull
+    public static Resolution resolve(@ColorInt int backdrop, @ColorInt int preferredInk,
+                                     @ColorInt int alternateInk, @ColorInt int veilColor,
+                                     double target, @Nullable Boolean paleSide) {
         int base = opaque(backdrop);
         double bare = ratio(preferredInk, base);
         if (bare >= target) {
@@ -372,12 +493,12 @@ public final class OnGlass {
             return new Resolution(veil, surface, preferredInk, achieved, target,
                 alpha >= MAX_VEIL_ALPHA_255, false, false);
         }
-        int toned = inkOn(surface, preferredInk, target);
+        int toned = toneOf(surface, preferredInk, target, paleSide);
         double tonedRatio = ratio(toned, surface);
         if (tonedRatio >= target) {
             return new Resolution(veil, surface, toned, tonedRatio, target, true, false, false);
         }
-        int tonedAlternate = inkOn(surface, alternateInk, target);
+        int tonedAlternate = toneOf(surface, alternateInk, target, paleSide);
         double tonedAlternateRatio = ratio(tonedAlternate, surface);
         if (tonedAlternateRatio >= target) {
             return new Resolution(veil, surface, tonedAlternate, tonedAlternateRatio, target,
@@ -412,12 +533,23 @@ public final class OnGlass {
      */
     @NonNull
     public static Resolution resolveBare(@ColorInt int backdrop, @ColorInt int ink, double target) {
+        return resolveBare(backdrop, ink, target, null);
+    }
+
+    /**
+     * {@link #resolveBare(int, int, double)} with the side the ink must stay on: the chrome's own
+     * polarity, so a band that has to move its ink cannot move it across the decision every other
+     * band is drawn by. Null leaves the tone walk undirected.
+     */
+    @NonNull
+    public static Resolution resolveBare(@ColorInt int backdrop, @ColorInt int ink, double target,
+                                         @Nullable Boolean paleSide) {
         int surface = opaque(backdrop);
         double bare = ratio(ink, surface);
         if (bare >= target) {
             return new Resolution(Color.TRANSPARENT, surface, ink, bare, target, false, false, false);
         }
-        int toned = inkOn(surface, ink, target);
+        int toned = toneOf(surface, ink, target, paleSide);
         double tonedRatio = ratio(toned, surface);
         if (tonedRatio >= target) {
             return new Resolution(Color.TRANSPARENT, surface, toned, tonedRatio, target,
