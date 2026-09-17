@@ -210,6 +210,30 @@ public class ChromeShadeTest {
         assertEquals(0xB8000000, ChromeShade.plate(0xB8000000, 0xB8FFFFFF));
     }
 
+    // ------------------------------------------------------------------ F · the scrollbar
+
+    /**
+     * The scrollbar thumb, which cannot have a mode-qualified answer: it is drawn over the
+     * terminal, and the terminal's background comes from the colour scheme rather than the theme,
+     * so a light background in dark mode is an ordinary choice. 40% white was invisible on any
+     * light one; the mid grey that replaced it is found on both.
+     */
+    @Test
+    public void theScrollbarThumbIsFoundOnALightAndADarkTerminal() {
+        final int asShipped = 0x66FFFFFF;
+        final int restated = 0xB3808080;          // launcher_scheme_scrollbar / termux_scrollbar
+        final int lightTerminal = 0xFFF4F6FB;     // termux_surface_base, light
+        final int darkTerminal = 0xFF0F141B;      // termux_surface_base, night
+        assertTrue("40% white on a light terminal separated by "
+                + ChromeShade.separation(asShipped, lightTerminal),
+            ChromeShade.separation(asShipped, lightTerminal) < 1.1d);
+        for (int terminal : new int[] {lightTerminal, darkTerminal}) {
+            assertTrue("the thumb on #" + Integer.toHexString(terminal) + " separates by "
+                    + ChromeShade.separation(restated, terminal),
+                ChromeShade.separation(restated, terminal) >= OnGlass.TARGET_DECORATION);
+        }
+    }
+
     // ------------------------------------------------------------------ bounds
 
     /** No structural constant is ever allowed to become a drawn slab. */

@@ -217,6 +217,11 @@ public final class SuggestionBarView extends GridLayout
     private static final float PICKUP_X_AXIS_SLOP_FACTOR = 0.9f;
     private static final float PICKUP_Y_INTENT_SLOP_FACTOR = 1.8f;
     private static final float MENU_SELECTION_ARM_SLOP_FACTOR = 0.8f;
+    /**
+     * The pinned folder's shell — the disc that says these four icons are one thing. Seeds: white
+     * over dark glass, restated as shadow by {@link com.termux.app.chrome.ChromeShade} when the
+     * dock is standing on a light band, where 15% white is no disc at all.
+     */
     private static final int PINNED_FOLDER_FILL_COLOR = 0x26FFFFFF;
     private static final int PINNED_FOLDER_STROKE_COLOR = 0x33FFFFFF;
 
@@ -4183,10 +4188,15 @@ public final class SuggestionBarView extends GridLayout
         if (folder.apps.size() > 4) {
             TextView overflow = new TextView(getContext());
             overflow.setText("+" + (folder.apps.size() - 3));
-            overflow.setTextColor(Color.WHITE);
             overflow.setTextSize(8f);
             overflow.setGravity(Gravity.CENTER);
-            overflow.setBackgroundColor(0xB8000000);
+            // A plate, not a wash: a near-black disc is a hole punched through a light dock, so it
+            // flips whole and its text is read off the plate it ends up on.
+            int badgePlate = com.termux.app.chrome.ChromeShade.plate(0xB8000000, 0xB8FFFFFF);
+            overflow.setBackgroundColor(badgePlate);
+            overflow.setTextColor(com.termux.app.chrome.ChromeShade.onPlate(badgePlate,
+                com.termux.app.chrome.ChromeShade.nominalGlass(),
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT));
             FrameLayout.LayoutParams badge = new FrameLayout.LayoutParams(miniSize, miniSize,
                 Gravity.END | Gravity.BOTTOM);
             badge.setMargins(0, 0, pinnedFolderMiniIconMarginPx(), pinnedFolderMiniIconMarginPx());
@@ -4201,8 +4211,8 @@ public final class SuggestionBarView extends GridLayout
     private GradientDrawable createPinnedFolderShellBackground() {
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(PINNED_FOLDER_FILL_COLOR);
-        bg.setStroke(1, PINNED_FOLDER_STROKE_COLOR);
+        bg.setColor(com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR));
+        bg.setStroke(1, com.termux.app.chrome.ChromeShade.rim(PINNED_FOLDER_STROKE_COLOR));
         return bg;
     }
 
@@ -7055,9 +7065,11 @@ public final class SuggestionBarView extends GridLayout
         int alpha
     ) {
         float radius = iconSize * 0.5f;
-        swipePreviewFolderPaint.setColor(PINNED_FOLDER_FILL_COLOR);
+        swipePreviewFolderPaint.setColor(
+            com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR));
         swipePreviewFolderStrokePaint.setStrokeWidth(1f);
-        swipePreviewFolderStrokePaint.setColor(PINNED_FOLDER_STROKE_COLOR);
+        swipePreviewFolderStrokePaint.setColor(
+            com.termux.app.chrome.ChromeShade.rim(PINNED_FOLDER_STROKE_COLOR));
         canvas.drawCircle(cx, cy, radius, swipePreviewFolderPaint);
         canvas.drawCircle(cx, cy, radius - dp(0.5f), swipePreviewFolderStrokePaint);
 
