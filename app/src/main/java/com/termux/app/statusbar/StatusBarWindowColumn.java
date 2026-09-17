@@ -49,6 +49,8 @@ public final class StatusBarWindowColumn extends ScrollView {
     private final LinearLayout mStack;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
     private int mSelected = -1;
+    /** Whether a list has ever been handed over, so the first one is never mistaken for a repeat. */
+    private boolean mSynced;
     private int mAccent;
     private float mChipRadiusPx = -1f;
     @Nullable private OnWindowSelectedListener mListener;
@@ -224,8 +226,20 @@ public final class StatusBarWindowColumn extends ScrollView {
         rebuild();
     }
 
-    /** The same list the row's pills are built from, and which one is on screen. */
+    /**
+     * The same list the row's pills are built from, and which one is on screen.
+     *
+     * <p>A shell producing output asks for this several times a second, and almost every one of
+     * those asks carries the windows exactly as they already are — the output moved, not the list.
+     * {@link #rebuild()} throws every chip away and inflates a new one, so an unchanged list is
+     * dropped here instead: the row's own pills have always compared before rebuilding, and this
+     * column now does the same. Anything a chip draws or speaks is part of
+     * {@link WindowItem#equals}, so a flip that IS visible — busy, asking, finished, a percentage,
+     * a window opened or closed, the selection moving — still gets its rebuild.</p>
+     */
     public void setWindows(@NonNull List<WindowItem> items, int selected) {
+        if (mSynced && selected == mSelected && mItems.equals(items)) return;
+        mSynced = true;
         mItems = new ArrayList<>(items);
         mSelected = selected;
         rebuild();

@@ -672,8 +672,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Runnable mShellActivityRefresh = this::refreshShellActivityIndication;
     private final Runnable mShellActivityDecay = this::refreshShellActivityIndication;
     private boolean mShellActivityRefreshPending;
-    /** Output arrives far faster than a status row can usefully redraw. */
-    private static final long SHELL_ACTIVITY_REFRESH_MS = 150L;
+    /**
+     * Output arrives far faster than a status row can usefully redraw. A quarter of a second is the
+     * floor: a burst of shell output used to rebuild the window row and the window column about
+     * five times a second while nothing about either of them had changed, and nothing a chip shows
+     * — working, asking, finished, a percentage, a window opened or closed — is news that cannot
+     * wait this long to be drawn.
+     */
+    private static final long SHELL_ACTIVITY_REFRESH_MS = 250L;
     /**
      * How long after something was written to a pane it stays exempt from the working indication.
      * Covers the echo of a keystroke and the render it triggers, so typing never lights the pill.
