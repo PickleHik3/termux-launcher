@@ -14,6 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEMPLATES_DIR="$REPO_ROOT/app/src/main/assets/theme-templates"
 FIXTURE="$SCRIPT_DIR/fixture-palette.properties"
+FIXTURE_LIGHT="$SCRIPT_DIR/fixture-palette-light.properties"
 RENDER="$SCRIPT_DIR/render.py"
 PY="${PYTHON:-python3}"
 
@@ -34,11 +35,30 @@ read_prop() {
     awk -F'=' -v k="$2" '$1 == k { sub(/^[^=]*=/, ""); print; exit }' "$1/template.properties"
 }
 
-# render_template <id> <input-file> -> writes rendered bytes to stdout, or
-# prints a render error to stderr and returns nonzero.
+# render_template <template-dir> <input-file> -> writes rendered bytes to
+# stdout, or prints a render error to stderr and returns nonzero. The dark
+# fixture is the active palette, so `{{ mode }}` renders `dark`; `.dark` and
+# `.light` resolve to the two real fixture palettes, as they will once phase 2
+# lands, so a template carrying both halves renders two different ones here.
 render_template() {
     local dir="$1" input="$2"
-    "$PY" "$RENDER" "$FIXTURE" "$dir/$input"
+    "$PY" "$RENDER" --dark "$FIXTURE" --light "$FIXTURE_LIGHT" "$FIXTURE" "$dir/$input"
+}
+
+# render_template_light <template-dir> <input-file>: the same, with the light
+# palette active - `{{ mode }}` renders `light`. For templates whose output
+# carries a mode selector line, so both of its values get checked.
+render_template_light() {
+    local dir="$1" input="$2"
+    "$PY" "$RENDER" --dark "$FIXTURE" --light "$FIXTURE_LIGHT" "$FIXTURE_LIGHT" "$dir/$input"
+}
+
+# assert_dual <rendered-file> <dark-hex> <light-hex>: the rendered file must
+# carry a value that only the dark fixture has and one only the light fixture
+# has, so a template that claims both palettes cannot silently render one
+# twice.
+assert_dual() {
+    grep -qiF "$2" "$1" && grep -qiF "$3" "$1"
 }
 
 # assert_no_colour_tokens <rendered-file>: fails if any `{{ colors.` survived. Weaker than
