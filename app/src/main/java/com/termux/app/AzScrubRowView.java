@@ -562,7 +562,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             return;
         }
         haloRestingColor = GlassInk.halo(baseColor, glassBackdrop, false);
-        haloFocusColor = GlassInk.halo(focusColor, glassBackdrop, true);
+        haloFocusColor = GlassInk.focusHalo(focusColor, baseColor, glassBackdrop);
     }
 
     public void setInteractionMode(@NonNull InteractionMode mode) {

@@ -220,7 +220,7 @@ public final class AppDrawerRopeColumnView extends View {
             : GlassInk.legibleOn(backdrop, baseColor, pale, OnGlass.TARGET_LARGE_TEXT);
         mFocusInk = GlassInk.legibleOn(backdrop, mFocusColor, pale, OnGlass.TARGET_LARGE_TEXT);
         mRestingHalo = GlassInk.halo(mLetterInk, backdrop, false);
-        mFocusHalo = GlassInk.halo(mFocusInk, backdrop, true);
+        mFocusHalo = GlassInk.focusHalo(mFocusInk, mLetterInk, backdrop);
     }
 
     /**

@@ -336,14 +336,30 @@ public final class GlassInk {
         if (focused) wanted = Math.round(wanted * HALO_FOCUS_GAIN);
         wanted = Math.min(wanted, HALO_ALPHA_CEILING);
 
+        // The floor outranks the ceiling: the halo is kept even where the band leaves no room for
+        // it, because dropping it was the alternative the user did not take.
+        return Math.max(HALO_ALPHA_FLOOR,
+            Math.min(wanted, Math.max(haloCeiling(glyphInk, base), HALO_ALPHA_FLOOR)));
+    }
+
+    /**
+     * The most halo a glyph can take before the ring reads better against the band than the glyph
+     * does — the anti-smear ceiling, and the one number that answers the report directly.
+     *
+     * <p>Monotone, so the walk stops at the first alpha that crosses: the halo is on the far side of
+     * the band from the glyph, so compositing more of it only ever moves the result further from
+     * the band.</p>
+     */
+    public static int haloCeiling(@ColorInt int glyphInk, @ColorInt int surface) {
+        int base = OnGlass.opaque(surface);
+        int halo = haloInk(glyphInk, base);
+        double glyphOnBand = OnGlass.ratio(glyphInk, base);
         int ceiling = 0;
         for (int alpha = 1; alpha <= HALO_ALPHA_CEILING; alpha++) {
             if (OnGlass.ratio(effective(halo, alpha, base), base) > glyphOnBand) break;
             ceiling = alpha;
         }
-        // The floor outranks the ceiling: the halo is kept even where the band leaves no room for
-        // it, because dropping it was the alternative the user did not take.
-        return Math.max(HALO_ALPHA_FLOOR, Math.min(wanted, Math.max(ceiling, HALO_ALPHA_FLOOR)));
+        return ceiling;
     }
 
     /** {@link #haloAlpha(int, int, boolean, double)} at the tier both A&ndash;Z rails belong to. */
@@ -359,5 +375,28 @@ public final class GlassInk {
     public static int halo(@ColorInt int glyphInk, @ColorInt int surface, boolean focused) {
         int base = OnGlass.opaque(surface);
         return OnGlass.withAlpha(haloInk(glyphInk, base), haloAlpha(glyphInk, base, focused));
+    }
+
+    /**
+     * The halo under the letter the finger is on, which is a different question from the halo under
+     * its neighbours.
+     *
+     * <p>The focused letter is emphasised, and part of that emphasis has always been the heavier
+     * stroke — 215 against the resting 195. Left to its own headroom it can end up with
+     * <em>less</em> halo than the letters beside it, because it is resolved from a more vivid accent
+     * and so reads better on the same band; one letter in the row with a lighter ring than its
+     * neighbours is not emphasis, it is a rendering fault. So it takes the greater of its own answer
+     * and the resting letter's raised by {@link #HALO_FOCUS_GAIN} — and then its own ceiling, which
+     * outranks both: emphasis is a preference, and not out-shouting the glyph is the whole point.</p>
+     */
+    @ColorInt
+    public static int focusHalo(@ColorInt int focusInk, @ColorInt int restingInk,
+                                @ColorInt int surface) {
+        int base = OnGlass.opaque(surface);
+        int wanted = Math.max(haloAlpha(focusInk, base, true),
+            Math.round(haloAlpha(restingInk, base, false) * HALO_FOCUS_GAIN));
+        int alpha = Math.max(HALO_ALPHA_FLOOR, Math.min(Math.min(wanted, HALO_ALPHA_CEILING),
+            Math.max(haloCeiling(focusInk, base), HALO_ALPHA_FLOOR)));
+        return OnGlass.withAlpha(haloInk(focusInk, base), alpha);
     }
 }
