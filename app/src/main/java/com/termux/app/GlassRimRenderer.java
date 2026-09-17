@@ -9,6 +9,10 @@ import android.graphics.Shader;
 import android.graphics.SweepGradient;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.ChromeShade;
 
 /**
  * Shared glass-rim border for elevated surfaces: a hairline base stroke, a top-edge light that
@@ -19,6 +23,14 @@ import androidx.annotation.NonNull;
  * so a 1:1 drag can redraw the rim on every frame.
  */
 public final class GlassRimRenderer {
+    /**
+     * The rim as it was authored: white light at three strengths, for glass standing on something
+     * dark. Seeds rather than answers — the colours actually painted come from
+     * {@link ChromeShade}, which restates them as shadow when the chrome is standing on a light
+     * band. A white hairline on the light-mode glass separates by 1.26, which is the containing
+     * edge of the drawer plane, the dock capsule, every anchored menu and every terminal pane all
+     * being invisible at once.
+     */
     private static final int BASE_COLOR = 0x3DFFFFFF;
     private static final int LIGHT_TOP_COLOR = 0x7DFFFFFF;
     private static final int SHIMMER_COLOR = 0xC8FFFFFF;
@@ -33,6 +45,14 @@ public final class GlassRimRenderer {
     private boolean shimmerShaderBuilt;
     private boolean mUniformLight;
 
+    /** The three seeds as {@link ChromeShade} last restated them, and the snapshot they came from. */
+    private int mShadeBase = BASE_COLOR;
+    private int mShadeLightTop = LIGHT_TOP_COLOR;
+    private int mShadeShimmer = SHIMMER_COLOR;
+    @Nullable private ChromeInk.Polarity mShadePolarity;
+    private int mShadeGlass;
+    private boolean mShadeRead;
+
     /**
      * How wide the rim's stroke is at this density. Painted just inside the bounds, so this is
      * also how far in from a glass surface's bounding box its visible border line sits — which is
@@ -46,7 +66,8 @@ public final class GlassRimRenderer {
         strokePx = strokePx(density);
         basePaint.setStyle(Paint.Style.STROKE);
         basePaint.setStrokeWidth(strokePx);
-        basePaint.setColor(BASE_COLOR);
+        readShade();
+        basePaint.setColor(tinted(BASE_COLOR));
         lightPaint.setStyle(Paint.Style.STROKE);
         lightPaint.setStrokeWidth(strokePx);
         shimmerPaint.setStyle(Paint.Style.STROKE);
@@ -70,6 +91,36 @@ public final class GlassRimRenderer {
     }
 
     /**
+     * Re-reads {@link ChromeShade}'s snapshot when it has moved, and says whether it had.
+     *
+     * <p>Polled on every draw rather than pushed: a rim renderer lives as long as the view that
+     * owns it, the snapshot changes on a theme, palette or wallpaper change, and a reference
+     * comparison plus an int comparison is cheaper than a listener registry. The three seeds are
+     * resolved once per change, not per frame — the search inside {@link ChromeShade} walks alpha
+     * one step at a time.</p>
+     */
+    private boolean readShade() {
+        ChromeInk.Polarity polarity = ChromeShade.polarity();
+        int glass = ChromeShade.nominalGlass();
+        if (mShadeRead && polarity == mShadePolarity && glass == mShadeGlass) return false;
+        mShadePolarity = polarity;
+        mShadeGlass = glass;
+        mShadeRead = true;
+        mShadeBase = ChromeShade.rim(BASE_COLOR);
+        mShadeLightTop = ChromeShade.rim(LIGHT_TOP_COLOR);
+        mShadeShimmer = ChromeShade.rim(SHIMMER_COLOR);
+        return true;
+    }
+
+    /** The seed as the chrome's polarity restates it; the plain white edge is only one of two. */
+    private int shaded(int seed) {
+        if (seed == BASE_COLOR) return mShadeBase;
+        if (seed == LIGHT_TOP_COLOR) return mShadeLightTop;
+        if (seed == SHIMMER_COLOR) return mShadeShimmer;
+        return seed;
+    }
+
+    /**
      * One even stroke instead of the lit top edge. A rim that doubles as a focus indicator has to
      * read the same all the way round: with the gradient, the bottom half was carried by the base
      * stroke alone and all but vanished on an unfocused pane.
@@ -88,11 +139,19 @@ public final class GlassRimRenderer {
     private static final int TINTED_LIGHT_ALPHA = 0xE6;
 
     private int tinted(int color) {
-        if (mTint == 0) return color;
+        if (mTint == 0) return shaded(color);
         int alpha = color >>> 24;
         if (color == BASE_COLOR) alpha = TINTED_BASE_ALPHA;
         else if (color == LIGHT_TOP_COLOR) alpha = TINTED_LIGHT_ALPHA;
-        return (alpha << 24) | (mTint & 0x00FFFFFF);
+        // A tinted rim keeps its hue — that hue is what it is saying — so only its alpha is
+        // allowed to climb, and only when the chrome is standing on the light band its Material
+        // role was never checked against.
+        return ChromeShade.tinted((alpha << 24) | (mTint & 0x00FFFFFF), ChromeShade.TARGET_RIM);
+    }
+
+    /** The alpha a plain (untinted) rim is drawn at, once the polarity has had its say. */
+    private int shadedAlpha(int seed) {
+        return shaded(seed) >>> 24;
     }
 
     /**
@@ -104,6 +163,13 @@ public final class GlassRimRenderer {
                      float radiusPx, float shimmerPhase, float alpha) {
         float a = Float.isFinite(alpha) ? Math.max(0f, Math.min(1f, alpha)) : 0f;
         if (right - left <= 2f || bottom - top <= 2f || a <= 0f) return;
+        if (readShade()) {
+            // The polarity moved under us: the base colour and both baked shaders are stale.
+            basePaint.setColor(tinted(BASE_COLOR));
+            lightShaderHeight = -1;
+            shimmerShaderBuilt = false;
+            shimmerPaint.setShader(null);
+        }
         float inset = strokePx / 2f;
         rect.set(left + inset, top + inset, right - inset, bottom - inset);
         float radius = Math.max(0f, radiusPx - inset);
@@ -112,8 +178,8 @@ public final class GlassRimRenderer {
         // be re-stated here — setColor(tinted(...)) alone was silently flattened back to the plain
         // white strength on every draw.
         int baseStrength = mUniformLight
-            ? (mTint != 0 ? TINTED_LIGHT_ALPHA : (LIGHT_TOP_COLOR >>> 24))
-            : (mTint != 0 ? TINTED_BASE_ALPHA : (BASE_COLOR >>> 24));
+            ? (mTint != 0 ? (tinted(LIGHT_TOP_COLOR) >>> 24) : shadedAlpha(LIGHT_TOP_COLOR))
+            : (mTint != 0 ? (tinted(BASE_COLOR) >>> 24) : shadedAlpha(BASE_COLOR));
         basePaint.setAlpha(Math.round(baseStrength * a));
         canvas.drawRoundRect(rect, radius, radius, basePaint);
 
@@ -121,8 +187,9 @@ public final class GlassRimRenderer {
             int lightHeight = Math.max(1, Math.round(rect.height() * 0.55f));
             if (lightShaderHeight != lightHeight) {
                 lightShaderHeight = lightHeight;
+                int lit = tinted(LIGHT_TOP_COLOR);
                 lightPaint.setShader(new LinearGradient(0f, 0f, 0f, lightHeight,
-                    tinted(LIGHT_TOP_COLOR), tinted(0x00FFFFFF), Shader.TileMode.CLAMP));
+                    lit, lit & 0x00FFFFFF, Shader.TileMode.CLAMP));
             }
             Shader light = lightPaint.getShader();
             if (light != null) {
@@ -136,8 +203,9 @@ public final class GlassRimRenderer {
         if (!(shimmerPhase >= 0f && shimmerPhase < 1f)) return;
         if (!shimmerShaderBuilt) {
             shimmerShaderBuilt = true;
+            int glint = shaded(SHIMMER_COLOR);
             shimmerPaint.setShader(new SweepGradient(0f, 0f,
-                new int[] {0x00FFFFFF, SHIMMER_COLOR, 0x00FFFFFF},
+                new int[] {glint & 0x00FFFFFF, glint, glint & 0x00FFFFFF},
                 new float[] {0.44f, 0.5f, 0.56f}));
         }
         Shader shimmer = shimmerPaint.getShader();
