@@ -423,7 +423,8 @@ public final class LayoutEditorController {
         Element heading = null;
         for (LayoutEditorPlan.Row row : plan.rows()) {
             if (row.element != heading) {
-                rows.addView(sectionTitle(context, row.element));
+                EditorShellRows.addSection(context, rows, headingRes(row.element),
+                    heading == null);
                 heading = row.element;
             }
             if (row.group instanceof PlaceArrangeModel.Pills)
@@ -463,24 +464,6 @@ public final class LayoutEditorController {
         mRowsScroller = scroller;
         mRows = rows;
         return rows;
-    }
-
-    /** What the rows under it are about: the dock, the keyboard, or Home's grid. */
-    @NonNull
-    private TextView sectionTitle(@NonNull Context context, @NonNull Element element) {
-        TextView title = new TextView(context);
-        title.setText(headingRes(element));
-        title.setTextSize(11f);
-        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
-        title.setTextColor(mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            R.color.termux_on_surface_variant));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.topMargin = Math.round(dpToPx(4));
-        params.bottomMargin = Math.round(dpToPx(2));
-        title.setLayoutParams(params);
-        return title;
     }
 
     /** The name a place is known by on the wall, which is what the header says it is editing. */

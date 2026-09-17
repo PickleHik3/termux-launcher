@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A section heading in either editor's body: one word naming what the rows under it change.
+
+     The grouping is carried by the 12dp of air above it and nothing else — no rule, no chip, no
+     background. Six identical rows with no structure is what read as unfinished; a rule between
+     every three would read as a table. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/editor_shell_section_title"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="12dp"
+    android:layout_marginBottom="4dp"
+    android:gravity="center_vertical"
+    android:letterSpacing="0.06"
+    android:minHeight="24dp"
+    android:textColor="?attr/termuxColorOnSurfaceVariant"
+    android:textSize="11sp"
+    android:textStyle="bold" />

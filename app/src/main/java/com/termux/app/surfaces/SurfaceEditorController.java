@@ -50,6 +50,7 @@ import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.app.surfaces.SurfaceEditorProperties.Control;
+import com.termux.app.surfaces.SurfaceEditorProperties.Section;
 import com.termux.app.surfaces.SurfaceEditorProperties.Kind;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.TerminalClockWidget;
@@ -379,7 +380,9 @@ public final class SurfaceEditorController {
         final ImageView close;
         final ViewGroup chooserSlot;
         final ViewGroup presets;
-        final View pills;
+        final ViewGroup pills;
+        final View shapeRow;
+        final View materialRow;
         final MaterialButtonToggleGroup shape;
         final MaterialButtonToggleGroup material;
         final EditorShellControlHost shapeHost;
@@ -406,6 +409,8 @@ public final class SurfaceEditorController {
             chooserSlot = root.findViewById(R.id.editor_shell_chooser_slot);
             presets = root.findViewById(R.id.surface_editor_pill_presets);
             pills = root.findViewById(R.id.surface_editor_pill_pills);
+            shapeRow = root.findViewById(R.id.surface_editor_pill_shape_row);
+            materialRow = root.findViewById(R.id.surface_editor_pill_material_row);
             shape = root.findViewById(R.id.surface_editor_pill_shape);
             material = root.findViewById(R.id.surface_editor_pill_material);
             shapeHost = root.findViewById(R.id.surface_editor_pill_shape_host);
@@ -418,7 +423,7 @@ public final class SurfaceEditorController {
         boolean complete() {
             return header != null && glyph != null && title != null && save != null
                 && reset != null && done != null && close != null && chooserSlot != null
-                && presets != null && pills != null
+                && presets != null && pills != null && shapeRow != null && materialRow != null
                 && shape != null && material != null && shapeHost != null
                 && materialHost != null && rowsHost != null
                 && floatPalette != null && floatDone != null;
@@ -1025,13 +1030,41 @@ public final class SurfaceEditorController {
         rows.removeAllViews();
         List<Runnable> syncs = new ArrayList<>();
         mRowSyncs = syncs;
+        Context context = mHost.context();
+        // The shared layer's two toggle rows lead the sections they answer for; a single surface
+        // has neither, so they go back to their park.
+        boolean shared = SurfaceEditorCardPlan.sharedStripShown(mSelectedSlot);
+        park(panel.shapeRow, panel.pills);
+        park(panel.materialRow, panel.pills);
+        Section heading = null;
         for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot)) {
-            if (isAvailable(mSelectedSlot, control))
-                addControlRow(mHost.context(), rows, control, mSelectedSlot, syncs);
+            if (!isAvailable(mSelectedSlot, control))
+                continue;
+            if (control.section != heading) {
+                EditorShellRows.addSection(context, rows, control.section.titleRes,
+                    heading == null);
+                heading = control.section;
+                if (shared && heading == Section.SHAPE)
+                    park(panel.shapeRow, rows);
+                else if (shared && heading == Section.MATERIAL)
+                    park(panel.materialRow, rows);
+            }
+            addControlRow(context, rows, control, mSelectedSlot, syncs);
         }
         if (mRowsScroller != null)
             mRowsScroller.scrollTo(0, 0);
         applyRowsCap();
+    }
+
+    /** Moves a view the card owns into whichever column is showing it now. */
+    private static void park(@NonNull View view, @NonNull ViewGroup into) {
+        ViewGroup parent = view.getParent() instanceof ViewGroup
+            ? (ViewGroup) view.getParent() : null;
+        if (parent == into)
+            return;
+        if (parent != null)
+            parent.removeView(view);
+        into.addView(view);
     }
 
     /** The body's one scroller, created on first use: wrap up to the cap, then scroll inside. */
@@ -1081,20 +1114,18 @@ public final class SurfaceEditorController {
         EditorShellHeader.apply(panel.header, cardRoomPx);
         int headerPx = EditorShellMetrics.headerHeightPx(cardRoomPx, density);
         int paddingPx = panel.root.getPaddingTop() + panel.root.getPaddingBottom();
-        int pillsPx = panel.pills.getVisibility() == View.GONE ? 0
-            : Math.max(panel.pills.getHeight(), 2 * dp(EditorShellMetrics.ROW_MIN_HEIGHT_DP));
         int chooserPx = panel.presets.getVisibility() == View.GONE ? 0
             : Math.max(panel.presets.getHeight(), dp(EditorShellMetrics.CHOOSER_DP));
 
         // Asked of the body the card would have with the chooser pinned: unpinning is what a body
         // too short to carry 60dp of chrome does, and the answer must not depend on the last one.
         int bodyWithChooserPx = SurfaceEditorPillMetrics.bodyCapPx(regionPx,
-            headerPx + paddingPx + pillsPx + chooserPx, standoffPx, dp(80), dp(360));
+            headerPx + paddingPx + chooserPx, standoffPx, dp(80), dp(360));
         boolean pinned = chooserPx == 0
             || EditorShellMetrics.chooserPinned(bodyWithChooserPx, density);
         EditorShellHeader.applyChooserPin(panel.presets, panel.chooserSlot, mRows, pinned);
 
-        int chromePx = headerPx + paddingPx + pillsPx + (pinned ? chooserPx : 0);
+        int chromePx = headerPx + paddingPx + (pinned ? chooserPx : 0);
         int available = SurfaceEditorPillMetrics.bodyCapPx(regionPx, chromePx, standoffPx,
             dp(80), dp(360));
         int capped = available;
@@ -1382,8 +1413,6 @@ public final class SurfaceEditorController {
         int sharedVisibility = shared ? View.VISIBLE : View.GONE;
         if (panel.presets.getVisibility() != sharedVisibility)
             panel.presets.setVisibility(sharedVisibility);
-        if (panel.pills.getVisibility() != sharedVisibility)
-            panel.pills.setVisibility(sharedVisibility);
         if (shared) {
             if (panel.presets.getChildCount() == 0)
                 buildPresetsStrip(mHost.context(), panel.presets);

@@ -1,5 +1,7 @@
 package com.termux.app.editorshell;
 
+import android.content.Context;
+import android.view.LayoutInflater;
 import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
@@ -7,6 +9,7 @@ import android.graphics.Rect;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import com.termux.R;
 
@@ -20,6 +23,34 @@ import com.termux.R;
 public final class EditorShellRows {
 
     private EditorShellRows() {}
+
+    /**
+     * A section heading, added to the column the rows are being built into.
+     *
+     * <p>The first heading in a pane gets no top margin: a section reads as a break because of the
+     * air above it, and air above the first row is just a gap at the top of the card.
+     */
+    @NonNull
+    public static View addSection(@NonNull Context context, @NonNull ViewGroup into,
+                                  @StringRes int titleRes, boolean first) {
+        float density = context.getResources().getDisplayMetrics().density;
+        View section = LayoutInflater.from(context)
+            .inflate(R.layout.editor_shell_section, into, false);
+        ((android.widget.TextView) section).setText(titleRes);
+        section.setMinimumHeight(EditorShellMetrics.px(
+            EditorShellMetrics.SECTION_MIN_HEIGHT_DP, density));
+        ViewGroup.LayoutParams params = section.getLayoutParams();
+        if (params instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
+            margins.topMargin = first ? 0
+                : EditorShellMetrics.px(EditorShellMetrics.SECTION_TOP_MARGIN_DP, density);
+            margins.bottomMargin = EditorShellMetrics.px(
+                EditorShellMetrics.SECTION_BOTTOM_MARGIN_DP, density);
+            section.setLayoutParams(params);
+        }
+        into.addView(section);
+        return section;
+    }
 
     /** Sizes one inflated row's columns. Every id it looks for is optional. */
     public static void apply(@NonNull View row) {

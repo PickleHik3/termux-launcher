@@ -1260,6 +1260,9 @@
                      they name what the row changes, not how it is composited. -->
                 <string name="termux_surface_editor_shape">Shape</string>
                 <string name="termux_surface_editor_material">Material</string>
+                <!-- Two more section names, one word each, naming the thing being changed. -->
+                <string name="termux_surface_editor_section_keys">Keys</string>
+                <string name="termux_surface_editor_section_indicator">Indicator</string>
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>

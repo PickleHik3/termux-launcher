@@ -52,14 +52,20 @@
 
     <!-- The two decisions that shape everything: how the surfaces sit, and what they are made
          of. One question per line: five equal segments on one line read as one five-way choice,
-         and Docked / Floating is asked far less often than Solid / Glass / Frost. -->
+         and Docked / Floating is asked far less often than Solid / Glass / Frost.
+
+         Both rows stand in the body under their own sections — Shape leads Shape, Material leads
+         Material — so this is where they wait while the card is showing a single surface, which
+         has neither. It is never drawn. -->
     <LinearLayout
         android:id="@+id/surface_editor_pill_pills"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:visibility="gone">
 
         <LinearLayout
+            android:id="@+id/surface_editor_pill_shape_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:baselineAligned="false"
@@ -111,6 +117,7 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/surface_editor_pill_material_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:baselineAligned="false"
