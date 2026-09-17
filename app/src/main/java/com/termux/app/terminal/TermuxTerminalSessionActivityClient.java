@@ -77,6 +77,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * seen again, whatever the shell printed in the meantime.
      */
     private final java.util.Set<TerminalSession> mDeferredScreenUpdateSessions = new java.util.HashSet<>();
+    /** Scratch for {@link #paneCanBeSeen}, so the on-screen test allocates nothing per burst. */
+    private final android.graphics.Rect mPaneVisibleRect = new android.graphics.Rect();
     private boolean mForegroundRefreshPending;
     private int mLastMaterialTerminalPaletteSignature;
     @NonNull private String mLastFontErrorSummary = "";
@@ -171,7 +173,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mHost.noteShellActivity(changedSession);
         // Split-pane: redraw whichever pane is showing the changed session (may be the
         // non-active pane). Coalesce per-session so two live panes never drop each other's frames.
-        if (mHost.viewForSession(changedSession) == null)
+        com.termux.view.TerminalView changedView = mHost.viewForSession(changedSession);
+        if (changedView == null)
             return;
         // A shell printing into a terminal that is a whole place away — the wall rests on Widgets
         // or on the Display — is asking for a repaint of pixels nobody can see. Idle on the Home
@@ -179,7 +182,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // TerminalView.onDraw with its URL scan behind it. Remember the pane instead and draw it
         // once when the terminal comes back; everything above this line — the activity's notion of
         // shell activity, the emulator, the scrollback, titles and bells — is untouched.
-        if (!mHost.isTerminalPlaceOnScreen()) {
+        if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(changedView)) {
             mDeferredScreenUpdateSessions.add(changedSession);
             return;
         }
@@ -193,13 +196,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 return;
             // The wall left for another place between the post and this frame: hand the pane to
             // the deferred set rather than drawing it, so the one redraw happens on return.
-            if (!mHost.isTerminalPlaceOnScreen()) {
+            com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
+            if (view == null)
+                return;
+            if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(view)) {
                 mDeferredScreenUpdateSessions.add(changedSession);
                 return;
             }
-            com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
-            if (view != null)
-                drawScreen(view);
+            drawScreen(view);
         };
         // Under a flood of output the main thread is mostly *parsing* bytes, and where this redraw is
         // posted decides how it interleaves with that parsing. Measured over four configurations:
@@ -217,9 +221,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         boolean pumpFrames = mHost.preferences() != null
             && mHost.preferences().isLazyModeEnabled();
         if (pumpFrames) {
-            com.termux.view.TerminalView pendingView =
-                mHost.viewForSession(changedSession);
-            pendingView.postOnAnimation(redraw);
+            changedView.postOnAnimation(redraw);
         } else {
             mUiHandler.post(redraw);
         }
@@ -248,6 +250,22 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (view != null)
                 drawScreen(view);
         }
+    }
+
+    /**
+     * Whether this pane really has pixels on screen, asked of the view hierarchy rather than of the
+     * wall's own record of which place it rests on.
+     *
+     * <p>The wall's page is bookkeeping and can disagree with what the user is looking at; when it
+     * does, believing it strands the terminal, because output is then filed for a redraw that only
+     * the next wall movement delivers — the screen sits frozen until something jogs it, and a
+     * keyboard opening is what people find. So the wall may only withhold a redraw for a pane the
+     * hierarchy also says is not showing. Off on another place the two agree, the pane is clipped
+     * away, and the saved repaints are saved exactly as before.
+     */
+    @VisibleForTesting
+    boolean paneCanBeSeen(@NonNull com.termux.view.TerminalView view) {
+        return view.isShown() && view.getGlobalVisibleRect(mPaneVisibleRect);
     }
 
     /**

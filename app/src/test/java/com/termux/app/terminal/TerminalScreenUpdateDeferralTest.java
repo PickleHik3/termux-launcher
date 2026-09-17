@@ -47,9 +47,17 @@ public class TerminalScreenUpdateDeferralTest {
             super(context, host);
         }
 
+        /** When set, {@link #paneCanBeSeen} answers this instead of asking the view hierarchy. */
+        Boolean paneVisibleOverride;
+
         @Override
         void drawScreen(@NonNull TerminalView view) {
             updates.merge(view, 1, Integer::sum);
+        }
+
+        @Override
+        boolean paneCanBeSeen(@NonNull TerminalView view) {
+            return paneVisibleOverride != null ? paneVisibleOverride : super.paneCanBeSeen(view);
         }
 
         int updatesFor(@NonNull TerminalView view) {
@@ -194,5 +202,42 @@ public class TerminalScreenUpdateDeferralTest {
 
         // onStart draws the focused view itself, so a held redraw would be a second one.
         assertEquals(0, client.updatesFor(view));
+    }
+
+    /**
+     * The wall's page is bookkeeping, and when it disagrees with what the user is looking at the
+     * pane must still be painted. Believing the wall alone is what strands the terminal: output is
+     * filed for a redraw only a later wall movement delivers, so the screen sits frozen until
+     * something jogs it — opening the keyboard is what people find.
+     */
+    @Test
+    public void aPaneTheHierarchySaysIsShowingIsDrawnEvenWhenTheWallDisagrees() {
+        host.terminalPlaceOnScreen = false;
+        client.paneVisibleOverride = Boolean.TRUE;
+
+        client.onTextChanged(session);
+        shadowOf(Looper.getMainLooper()).idle();
+
+        assertEquals("a visible pane is painted whatever the wall's page says",
+            1, client.updatesFor(view));
+    }
+
+    /** With both in agreement that nothing is showing, the saved repaints are still saved. */
+    @Test
+    public void aPaneNeitherTheWallNorTheHierarchyShowsIsStillDeferred() {
+        host.terminalPlaceOnScreen = false;
+        client.paneVisibleOverride = Boolean.FALSE;
+
+        client.onTextChanged(session);
+        shadowOf(Looper.getMainLooper()).idle();
+
+        assertEquals("nothing is painted for a pane nobody can see", 0, client.updatesFor(view));
+
+        client.paneVisibleOverride = Boolean.TRUE;
+        host.terminalPlaceOnScreen = true;
+        client.onTerminalPlaceMayBeVisible();
+
+        assertEquals("and the pane owed a frame gets exactly one on return",
+            1, client.updatesFor(view));
     }
 }
