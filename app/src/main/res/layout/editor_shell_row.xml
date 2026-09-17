@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The shell's number row, used by both editors: what it is called, the track, the number, and the
+     link back to Base where the row has one. Every column here is a declared width from
+     EditorShellMetrics rather than a share of whatever the card was given, which is what kept a
+     0-40 dp corner slider from getting most of a landscape screen to travel across.
+
+     The row wraps around a 48 dp minimum rather than standing at a fixed height: 48 is the platform
+     touch floor, and a fixed 48 would clip the label at a large font scale.
+
+     The note under the track is the row's second line and is normally gone: on the shared layer it
+     names the places holding a value of their own for this row. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:minHeight="48dp"
+        android:orientation="horizontal"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/editor_shell_row_label"
+            android:layout_width="96dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?attr/termuxColorOnSurface"
+            android:textSize="12.5sp"
+            app:autoSizeMaxTextSize="12.5sp"
+            app:autoSizeMinTextSize="10sp"
+            app:autoSizeStepGranularity="0.5sp"
+            app:autoSizeTextType="uniform" />
+
+        <!-- Declares the track's width from the room it is offered and never takes more: past
+             280 dp extra width buys no precision, only a longer thumb sweep. -->
+        <com.termux.app.editorshell.EditorShellControlHost
+            android:id="@+id/editor_shell_row_control"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1">
+
+            <SeekBar
+                android:id="@+id/editor_shell_row_slider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="32dp"
+                android:splitTrack="false" />
+        </com.termux.app.editorshell.EditorShellControlHost>
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/editor_shell_row_value"
+            android:layout_width="52dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:gravity="end|center_vertical"
+            android:maxLines="1"
+            android:textColor="?attr/termuxColorOnSurfaceVariant"
+            android:textSize="11.5sp"
+            app:autoSizeMaxTextSize="11.5sp"
+            app:autoSizeMinTextSize="9sp"
+            app:autoSizeStepGranularity="0.5sp"
+            app:autoSizeTextType="uniform" />
+
+        <!-- On the shared layer: only rendered once this surface has taken its own value, and
+             tapping it puts the row back on Base. Opened on a place it is the place's mark
+             instead — quiet while the row still wears the shared look, and the way back once the
+             place has its own. Drawn small so it does not shout; its touch target is grown to the
+             platform floor in code. -->
+        <TextView
+            android:id="@+id/editor_shell_row_chip"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:text="@string/termux_surface_tuning_link_detached"
+            android:textColor="?attr/termuxColorPrimary"
+            android:textSize="12sp"
+            android:visibility="invisible" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/editor_shell_row_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</LinearLayout>

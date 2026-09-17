@@ -1256,6 +1256,10 @@
                 <string name="termux_surface_editor_background_opacity">BG opacity</string>
                 <string name="termux_surface_editor_wallpaper_dim">Wallpaper</string>
 
+                <!-- The two questions that shape everything, one per line. One plain word each:
+                     they name what the row changes, not how it is composited. -->
+                <string name="termux_surface_editor_shape">Shape</string>
+                <string name="termux_surface_editor_material">Material</string>
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>

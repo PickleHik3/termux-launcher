@@ -104,12 +104,12 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/layout_editor_orientation_portrait"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                style="@style/Widget.Termux.EditorShell.Segment"
                 android:text="@string/settings_layout_orientation_portrait" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/layout_editor_orientation_landscape"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
+                style="@style/Widget.Termux.EditorShell.Segment"
                 android:text="@string/settings_layout_orientation_landscape" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 

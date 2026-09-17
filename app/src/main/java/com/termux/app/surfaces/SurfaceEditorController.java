@@ -41,6 +41,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
 import com.termux.R;
+import com.termux.app.editorshell.EditorShellControlHost;
+import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
@@ -376,6 +378,8 @@ public final class SurfaceEditorController {
         final View pills;
         final MaterialButtonToggleGroup shape;
         final MaterialButtonToggleGroup material;
+        final EditorShellControlHost shapeHost;
+        final EditorShellControlHost materialHost;
         final ViewGroup rowsHost;
         final View floatRoot;
         final ImageView floatPalette;
@@ -398,6 +402,8 @@ public final class SurfaceEditorController {
             pills = root.findViewById(R.id.surface_editor_pill_pills);
             shape = root.findViewById(R.id.surface_editor_pill_shape);
             material = root.findViewById(R.id.surface_editor_pill_material);
+            shapeHost = root.findViewById(R.id.surface_editor_pill_shape_host);
+            materialHost = root.findViewById(R.id.surface_editor_pill_material_host);
             rowsHost = root.findViewById(R.id.surface_editor_pill_rows_host);
             floatPalette = floatRoot.findViewById(R.id.surface_editor_float_palette);
             floatDone = floatRoot.findViewById(R.id.surface_editor_float_done);
@@ -406,7 +412,8 @@ public final class SurfaceEditorController {
         boolean complete() {
             return header != null && title != null && save != null && reset != null && done != null
                 && close != null && presets != null && pills != null
-                && shape != null && material != null && rowsHost != null
+                && shape != null && material != null && shapeHost != null
+                && materialHost != null && rowsHost != null
                 && floatPalette != null && floatDone != null;
         }
     }
@@ -720,6 +727,10 @@ public final class SurfaceEditorController {
         // and still on screen — so it asks nothing; the unsaved gate belongs to leaving the editor.
         panel.close.setOnClickListener(view -> hideCard(true));
         panel.floatPalette.setOnClickListener(view -> selectTarget(null, true));
+
+        // One segment width per line, and the line's own width from the room it was offered.
+        panel.shapeHost.setSegmentCount(panel.shape.getChildCount());
+        panel.materialHost.setSegmentCount(panel.material.getChildCount());
 
         panel.shape.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked || mRestatingToggles || prefs() == null)
@@ -1113,8 +1124,9 @@ public final class SurfaceEditorController {
                                @NonNull List<Runnable> syncs) {
         if (control.kind == Kind.ACTION) {
             View action = LayoutInflater.from(context)
-                .inflate(R.layout.surface_editor_action_row, into, false);
-            ((TextView) action.findViewById(R.id.surface_editor_row_label))
+                .inflate(R.layout.editor_shell_action_row, into, false);
+            EditorShellRows.apply(action);
+            ((TextView) action.findViewById(R.id.editor_shell_row_label))
                 .setText(control.labelRes);
             action.setOnClickListener(view -> openAction(control));
             into.addView(action);
@@ -1122,11 +1134,12 @@ public final class SurfaceEditorController {
         }
         if (control.kind == Kind.SWITCH) {
             View row = LayoutInflater.from(context)
-                .inflate(R.layout.surface_editor_switch_row, into, false);
-            ((TextView) row.findViewById(R.id.surface_editor_row_label)).setText(control.labelRes);
-            MaterialSwitch toggle = row.findViewById(R.id.surface_editor_row_switch);
-            TextView switchLink = row.findViewById(R.id.surface_editor_row_chip);
-            TextView switchNote = row.findViewById(R.id.surface_editor_row_note);
+                .inflate(R.layout.editor_shell_switch_row, into, false);
+            EditorShellRows.apply(row);
+            ((TextView) row.findViewById(R.id.editor_shell_row_label)).setText(control.labelRes);
+            MaterialSwitch toggle = row.findViewById(R.id.editor_shell_row_switch);
+            TextView switchLink = row.findViewById(R.id.editor_shell_row_chip);
+            TextView switchNote = row.findViewById(R.id.editor_shell_row_note);
             toggle.setOnCheckedChangeListener((button, checked) -> {
                 if (mRestatingToggles || prefs() == null)
                     return;
@@ -1166,12 +1179,13 @@ public final class SurfaceEditorController {
         }
 
         View rowView = LayoutInflater.from(context)
-            .inflate(R.layout.surface_editor_row, into, false);
-        TextView label = rowView.findViewById(R.id.surface_editor_row_label);
-        SeekBar slider = rowView.findViewById(R.id.surface_editor_row_slider);
-        TextView value = rowView.findViewById(R.id.surface_editor_row_value);
-        TextView link = rowView.findViewById(R.id.surface_editor_row_chip);
-        TextView note = rowView.findViewById(R.id.surface_editor_row_note);
+            .inflate(R.layout.editor_shell_row, into, false);
+        EditorShellRows.apply(rowView);
+        TextView label = rowView.findViewById(R.id.editor_shell_row_label);
+        SeekBar slider = rowView.findViewById(R.id.editor_shell_row_slider);
+        TextView value = rowView.findViewById(R.id.editor_shell_row_value);
+        TextView link = rowView.findViewById(R.id.editor_shell_row_chip);
+        TextView note = rowView.findViewById(R.id.editor_shell_row_note);
         label.setText(control.labelRes);
         slider.setContentDescription(getString(control.labelRes));
 

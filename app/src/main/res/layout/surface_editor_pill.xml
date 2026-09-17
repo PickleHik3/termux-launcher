@@ -105,62 +105,121 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
-    <!-- The two decisions that shape everything: how the surfaces sit, and what they are made of.
-         Docked / Floating is the shorter of the two because it is the smaller question. -->
+    <!-- The two decisions that shape everything: how the surfaces sit, and what they are made
+         of. One question per line: five equal segments on one line read as one five-way choice,
+         and Docked / Floating is asked far less often than Solid / Glass / Frost. -->
     <LinearLayout
         android:id="@+id/surface_editor_pill_pills"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
+        android:orientation="vertical">
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/surface_editor_pill_shape"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="5"
-            app:selectionRequired="true"
-            app:singleSelection="true">
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="horizontal"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_shape_docked"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_app_launcher_dock_style_default" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/editor_shell_row_label"
+                android:layout_width="96dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/termux_surface_editor_shape"
+                android:textColor="?attr/termuxColorOnSurface"
+                android:textSize="12.5sp"
+                app:autoSizeMaxTextSize="12.5sp"
+                app:autoSizeMinTextSize="10sp"
+                app:autoSizeStepGranularity="0.5sp"
+                app:autoSizeTextType="uniform" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_shape_floating"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_app_launcher_dock_style_rounded" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+            <com.termux.app.editorshell.EditorShellControlHost
+                android:id="@+id/surface_editor_pill_shape_host"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
 
-        <Space
-            android:layout_width="6dp"
-            android:layout_height="1dp" />
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/surface_editor_pill_shape"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/surface_editor_pill_material"
-            android:layout_width="0dp"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_shape_docked"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_app_launcher_dock_style_default" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_shape_floating"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_app_launcher_dock_style_rounded" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+            </com.termux.app.editorshell.EditorShellControlHost>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="6"
-            app:selectionRequired="false"
-            app:singleSelection="true">
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="horizontal"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_material_solid"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_surface_tuning_material_solid" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/editor_shell_row_label"
+                android:layout_width="96dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/termux_surface_editor_material"
+                android:textColor="?attr/termuxColorOnSurface"
+                android:textSize="12.5sp"
+                app:autoSizeMaxTextSize="12.5sp"
+                app:autoSizeMinTextSize="10sp"
+                app:autoSizeStepGranularity="0.5sp"
+                app:autoSizeTextType="uniform" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_material_glass"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_surface_tuning_material_glass" />
+            <com.termux.app.editorshell.EditorShellControlHost
+                android:id="@+id/surface_editor_pill_material_host"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/surface_editor_pill_material_frost"
-                style="@style/Widget.Termux.SurfaceEditor.Segment"
-                android:text="@string/termux_surface_tuning_material_frost" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/surface_editor_pill_material"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="false"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_material_solid"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_surface_tuning_material_solid" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_material_glass"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_surface_tuning_material_glass" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/surface_editor_pill_material_frost"
+                        style="@style/Widget.Termux.EditorShell.Segment"
+                        android:text="@string/termux_surface_tuning_material_frost" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+            </com.termux.app.editorshell.EditorShellControlHost>
+        </LinearLayout>
     </LinearLayout>
 
     <!-- The rows of whatever the card is showing. A scroller is added here in code so its height

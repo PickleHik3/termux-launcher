@@ -25,6 +25,8 @@ import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.termux.R;
+import com.termux.app.editorshell.EditorShellControlHost;
+import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.PlaceArrangeModel;
@@ -338,8 +340,8 @@ public final class LayoutEditorController {
 
     /** The four segment slots a pill row declares; the ones a value set does not use come off. */
     private static final int[] SEGMENT_IDS = {
-        R.id.layout_editor_row_segment_0, R.id.layout_editor_row_segment_1,
-        R.id.layout_editor_row_segment_2, R.id.layout_editor_row_segment_3};
+        R.id.editor_shell_row_segment_0, R.id.editor_shell_row_segment_1,
+        R.id.editor_shell_row_segment_2, R.id.editor_shell_row_segment_3};
 
     /** The header, the toggle and the card's own padding: everything that is not the canvas. */
     @VisibleForTesting static final float CARD_CHROME_DP = 132f;
@@ -452,9 +454,10 @@ public final class LayoutEditorController {
                              @NonNull LayoutEditorPlan.Row row,
                              @NonNull PlaceArrangeModel.Pills pills) {
         View view = LayoutInflater.from(context)
-            .inflate(R.layout.layout_editor_pills_row, into, false);
-        ((TextView) view.findViewById(R.id.layout_editor_row_label)).setText(pills.labelRes);
-        MaterialButtonToggleGroup group = view.findViewById(R.id.layout_editor_row_pills);
+            .inflate(R.layout.editor_shell_pills_row, into, false);
+        EditorShellRows.apply(view);
+        ((TextView) view.findViewById(R.id.editor_shell_row_label)).setText(pills.labelRes);
+        MaterialButtonToggleGroup group = view.findViewById(R.id.editor_shell_row_pills);
         if (group == null)
             return;
         final int count = Math.min(pills.values.length, SEGMENT_IDS.length);
@@ -462,6 +465,10 @@ public final class LayoutEditorController {
             View extra = view.findViewById(SEGMENT_IDS[i]);
             if (extra != null) group.removeView(extra);
         }
+        // After the unused slots come off, so the widths are for the segments actually offered.
+        EditorShellControlHost host = view.findViewById(R.id.editor_shell_row_control);
+        if (host != null)
+            host.setSegmentCount(count);
         for (int i = 0; i < count; i++) {
             Button segment = view.findViewById(SEGMENT_IDS[i]);
             if (segment != null) segment.setText(pills.labelResIds[i]);
@@ -508,10 +515,11 @@ public final class LayoutEditorController {
                              @NonNull LayoutEditorPlan.Row row,
                              @NonNull PlaceArrangeModel.Track track) {
         View view = LayoutInflater.from(context)
-            .inflate(R.layout.layout_editor_slider_row, into, false);
-        ((TextView) view.findViewById(R.id.layout_editor_row_label)).setText(track.labelRes);
-        SeekBar slider = view.findViewById(R.id.layout_editor_row_slider);
-        TextView value = view.findViewById(R.id.layout_editor_row_value);
+            .inflate(R.layout.editor_shell_row, into, false);
+        EditorShellRows.apply(view);
+        ((TextView) view.findViewById(R.id.editor_shell_row_label)).setText(track.labelRes);
+        SeekBar slider = view.findViewById(R.id.editor_shell_row_slider);
+        TextView value = view.findViewById(R.id.editor_shell_row_value);
         slider.setContentDescription(context.getString(track.labelRes));
         slider.setMax(Math.max(1, track.max - track.min));
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
