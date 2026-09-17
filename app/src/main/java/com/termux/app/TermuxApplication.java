@@ -3,6 +3,8 @@ package com.termux.app;
 import android.app.Application;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.ContextThemeWrapper;
 
 import androidx.annotation.NonNull;
@@ -12,6 +14,7 @@ import com.jakewharton.processphoenix.ProcessPhoenix;
 import com.termux.BuildConfig;
 import com.termux.R;
 import com.termux.app.terminal.MaterialTerminalColorScheme;
+import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.theme.templates.ThemeTemplates;
 import com.termux.shared.errors.Error;
 import com.termux.shared.android.ProcessUtils;
@@ -128,10 +131,12 @@ public class TermuxApplication extends Application {
      * flip until the user reopens the launcher. This re-derives the export and reruns the template
      * pass from here instead, off the UI thread, so those tools do not have to wait.
      *
-     * <p>Deliberately narrow: it does not touch a live {@code TerminalSession}'s colours, repaint a
-     * view, or rebuild the in-app keyboard — all of that needs a live activity and already happens
-     * unconditionally the moment {@code TermuxActivity.onCreate} next runs, recreated exactly because
-     * this same config bit moved.
+     * <p>It does push the new palette into the live sessions (D2) — the shells are running whether
+     * an activity is or not, and a terminal wearing the palette from before the flip is the symptom
+     * the whole path exists for. What it still leaves alone is everything that needs a live
+     * activity: repainting a view, the window background, the in-app keyboard. All of that happens
+     * unconditionally the moment {@code TermuxActivity.onCreate} next runs, recreated exactly
+     * because this same config bit moved.
      */
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -153,6 +158,11 @@ public class TermuxApplication extends Application {
      * thread the activity's own refresh uses, so whichever call lands last — this one or the
      * activity's, should the two race on resume — wins outright; the other stops between templates
      * rather than redoing finished work.
+     *
+     * <p>The sessions are told last, and from the export thread: the files the shells re-read have
+     * to be on disk before anything tells them to re-read (D2). The ping itself has to happen on the
+     * main looper — the session list is the one an activity's adapter observes — so the hand-off is
+     * a post from there.
      */
     private void refreshThemeTemplatesForNightModeFlip(@NonNull Configuration newConfig) {
         Context context = getApplicationContext();
@@ -165,7 +175,9 @@ public class TermuxApplication extends Application {
             Context themedContext = new ContextThemeWrapper(configuredContext,
                 R.style.Theme_TermuxActivity_DayNight_NoActionBar);
             return MaterialTerminalColorScheme.createPaletteSet(themedContext, level);
-        });
+        }, palettes -> new Handler(Looper.getMainLooper()).post(
+            () -> TermuxTerminalSessionActivityClient.pushExportedPaletteToLiveSessions(
+                palettes.active())));
     }
 
     /**

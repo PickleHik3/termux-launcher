@@ -17,6 +17,7 @@ import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.interact.ShareUtils;
+import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
@@ -35,6 +36,7 @@ import com.termux.terminal.TerminalSessionClient;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Properties;
 
@@ -779,6 +781,28 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
+     * The terminal palette inside an exported role file: the {@code terminal_}-prefixed keys, with
+     * the prefix taken off and everything that is not a palette key dropped.
+     *
+     * <p>The export also carries noctalia's aliases — {@code terminal_normal_black} and friends,
+     * and {@code terminal_selection_bg} — which are descriptions of the palette rather than slots in
+     * it. {@code TerminalColorScheme.updateWith()} throws on the first of those, mid-iteration, so
+     * they are dropped here rather than half applied there.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Properties terminalColorsOf(@NonNull Properties exported) {
+        Properties terminal = new Properties();
+        String prefix = "terminal_";
+        for (String key : exported.stringPropertyNames()) {
+            if (!key.startsWith(prefix)) continue;
+            String name = key.substring(prefix.length());
+            if (isTerminalColorKey(name)) terminal.setProperty(name, exported.getProperty(key));
+        }
+        return terminal;
+    }
+
+    /**
      * The colour entries of {@code props}, with everything else dropped and logged.
      *
      * <p>{@code TerminalColorScheme.updateWith()} throws on the first key it does not recognise, and it
@@ -886,20 +910,60 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         applyTerminalColors();
     }
 
+    /**
+     * Reload the palette in every live session.
+     *
+     * <p>Through {@code resetColorsToScheme} rather than {@code mColors.reset()} directly: that is
+     * the emulator's own door, and it repaints and then reports the flip to a program that asked for
+     * mode 2031 ({@code CSI ?997;1|2 n}). The report is per class change — see
+     * {@code TerminalEmulator.notifyColorPreferenceIfChanged}, which keeps {@code mLastReportedDark}
+     * and returns without writing when the new background is the same dark-or-light as the last one
+     * reported — so the activity's own recreate reaching here after the background refresh already
+     * pushed the same palette is a repaint and nothing more, not a second ping.
+     */
     private void resetAllSessionColors() {
         TermuxService service = mHost.service();
         if (service != null) {
             for (TermuxSession termuxSession : service.getTermuxSessions()) {
                 TerminalSession session = termuxSession.getTerminalSession();
                 if (session != null && session.getEmulator() != null) {
-                    session.getEmulator().mColors.reset();
+                    session.getEmulator().resetColorsToScheme();
                 }
             }
             return;
         }
         TerminalSession session = mHost.currentSession();
         if (session != null && session.getEmulator() != null) {
-            session.getEmulator().mColors.reset();
+            session.getEmulator().resetColorsToScheme();
+        }
+    }
+
+    /**
+     * Push an exported palette into every live session with no activity in sight.
+     *
+     * <p>The background day/night refresh (D2) has no session client and no service binding of its
+     * own — it is the application object reacting to a configuration change while the activity is
+     * merely stopped. The sessions are still there though, in the shell manager the service keeps
+     * them in, and a shell whose colours moved has to be told: without this the terminal kept the
+     * palette the wallpaper wore before the flip until the user reopened the launcher, however
+     * fresh the exported files beside it were.
+     *
+     * <p>Must run on the main thread: the session list is the one an activity's adapter observes.
+     */
+    public static void pushExportedPaletteToLiveSessions(@NonNull Properties exported) {
+        Properties terminal = terminalColorsOf(exported);
+        if (terminal.isEmpty()) return;
+        TerminalColors.COLOR_SCHEME.updateWith(terminal);
+        TermuxShellManager shellManager = TermuxShellManager.getShellManager();
+        if (shellManager == null) return;
+        // Copied: a session that dies while its colours are being reset must not take the loop with
+        // it, and this list is only ever mutated on this thread.
+        for (TermuxSession termuxSession : new ArrayList<>(shellManager.mTermuxSessions)) {
+            if (termuxSession == null) continue;
+            TerminalSession session = termuxSession.getTerminalSession();
+            if (session != null && session.getEmulator() != null) {
+                session.getEmulator().resetColorsToScheme();
+            }
         }
     }
 
