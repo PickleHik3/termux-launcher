@@ -95,6 +95,24 @@ See [Building terminal showcase tools](Building_Terminal_Showcase_Tools.md).
 Existing Sixel and iTerm bitmap rendering remain available alongside Kitty graphics. Applications can
 choose their preferred protocol from capability replies or explicit command-line options.
 
+## Color scheme notifications
+
+Programs can follow the terminal between dark and light instead of guessing from `$COLORFGBG`.
+
+- `CSI ? 996 n` asks for the current preference. The reply is `CSI ? 997 ; 1 n` when the default
+  background is dark and `CSI ? 997 ; 2 n` when it is light, and it is sent whether or not the
+  notification mode below is enabled.
+- `CSI ? 2031 h` turns on unsolicited notifications and `CSI ? 2031 l` turns them off. While the mode
+  is on, the same `CSI ? 997 ; Ps n` report is sent once each time the default background crosses
+  between dark and light, whether the change came from the app's color scheme, from `OSC 11`, or from
+  a reset such as `OSC 111` or `OSC 104`. A color change that stays on the same side is silent.
+  `CSI ? 2031 $ p` (DECRQM) answers with the mode's state, and a terminal reset turns it back off.
+- `OSC 4 ; <index> ; ? ST` reports an indexed color as `OSC 4 ; <index> ; rgb:RRRR/GGGG/BBBB ST`,
+  matching the existing `OSC 10`, `OSC 11` and `OSC 12` query replies.
+
+nvim 0.11, fish 4.3 and tmux 3.6 use these reports to restyle themselves when the terminal's scheme
+changes.
+
 ## Current boundaries
 
 - Shared-memory and file-based Kitty transmissions are not implemented.
