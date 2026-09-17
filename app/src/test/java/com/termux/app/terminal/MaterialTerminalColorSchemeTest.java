@@ -338,8 +338,27 @@ public class MaterialTerminalColorSchemeTest {
         assertEquals(96d, tone(dark, "color15"), 1d);
         assertEquals(25d, tone(light, "color0"), 1d);
         assertEquals(50d, tone(light, "color8"), 1d);
-        assertEquals(65d, tone(light, "color7"), 1d);
-        assertEquals(10d, tone(light, "color15"), 1d);
+        assertEquals(75d, tone(light, "color7"), 1d);
+        assertEquals(92d, tone(light, "color15"), 1d);
+    }
+
+    /**
+     * The neutrals are one ladder in both modes. Bright white used to be tone 10 on a light
+     * background — the darkest of the four — so {@code black on brightwhite}, which is how a TUI
+     * draws a selected row, put a tone 25 glyph on a tone 10 fill and the row vanished.
+     */
+    @Test
+    public void theNeutralsClimbInToneInBothModes() {
+        for (boolean dark : new boolean[] {true, false}) {
+            Properties palette = slots(220d, 40d, dark);
+            String mode = dark ? "dark" : "light";
+            assertTrue(mode + " color0 < color8",
+                tone(palette, "color0") < tone(palette, "color8"));
+            assertTrue(mode + " color8 < color7",
+                tone(palette, "color8") < tone(palette, "color7"));
+            assertTrue(mode + " color7 < color15",
+                tone(palette, "color7") < tone(palette, "color15"));
+        }
     }
 
     /** Neutrals come off the neutral palette: surface hue, and no more chroma than a neutral has. */
@@ -429,11 +448,16 @@ public class MaterialTerminalColorSchemeTest {
             assertTrue("dark color8 must stay darker than color7 at " + level.value,
                 tone(dark, "color8") < tone(dark, "color7"));
 
+            assertTrue("dark color7 must stay darker than color15 at " + level.value,
+                tone(dark, "color7") < tone(dark, "color15"));
+
             Properties light = flooredNeutrals(false, level);
             assertTrue("light color7 must stay lighter than color8 at " + level.value,
                 tone(light, "color7") > tone(light, "color8"));
             assertTrue("light color8 must stay lighter than color0 at " + level.value,
                 tone(light, "color8") > tone(light, "color0"));
+            assertTrue("light color15 must stay lighter than color7 at " + level.value,
+                tone(light, "color15") > tone(light, "color7"));
         }
     }
 
@@ -445,9 +469,12 @@ public class MaterialTerminalColorSchemeTest {
                 MaterialTerminalColorScheme.ansiFloor(0, level), 0d);
             assertEquals("color7 at " + level.value, 0d,
                 MaterialTerminalColorScheme.ansiFloor(7, level), 0d);
+            // Bright white is a fill too: a text floor on it is what made it the darkest neutral.
+            assertEquals("color15 at " + level.value, 0d,
+                MaterialTerminalColorScheme.ansiFloor(15, level), 0d);
             assertEquals("color8 at " + level.value, 3.0d,
                 MaterialTerminalColorScheme.ansiFloor(8, level), 0d);
-            for (int slot : new int[] {1, 6, 9, 15}) {
+            for (int slot : new int[] {1, 6, 9, 14}) {
                 assertEquals("color" + slot + " at " + level.value, level.ansiRatio,
                     MaterialTerminalColorScheme.ansiFloor(slot, level), 0d);
             }

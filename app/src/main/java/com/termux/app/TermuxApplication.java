@@ -6,6 +6,7 @@ import android.content.res.Configuration;
 import android.view.ContextThemeWrapper;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import com.jakewharton.processphoenix.ProcessPhoenix;
 import com.termux.BuildConfig;
@@ -25,29 +26,16 @@ import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
 import com.termux.shared.termux.shell.TermuxShellManager;
+import com.termux.shared.theme.NightMode;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.app.notice.AppNotice;
 import com.termux.launcherctl.LauncherCtlApiServer;
 
 import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class TermuxApplication extends Application {
 
     private static final String LOG_TAG = "TermuxApplication";
-
-    /**
-     * Runs the day/night re-export below; never the UI thread, and never the thread a
-     * configuration change is delivered on.
-     */
-    private static final ExecutorService NIGHT_MODE_EXPORT_EXECUTOR =
-        Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "app-night-mode-theme-export");
-            thread.setPriority(Thread.MIN_PRIORITY);
-            thread.setDaemon(true);
-            return thread;
-        });
 
     /**
      * Set once {@link #onCreate()} has done enough setup that a configuration change is worth
@@ -161,34 +149,49 @@ public class TermuxApplication extends Application {
      * this deliberately does not touch — mutually exclusive with dynamic colors, and unaffected by
      * this event.
      *
-     * <p>Passes are ordered through the same {@link ThemeTemplates} applier the activity schedules
-     * through (both resolve to one applier keyed off this application instance), so whichever call
-     * lands last — this one or the activity's own, should the two race on resume — wins outright;
-     * the other stops between templates rather than redoing finished work.
+     * <p>Passes are ordered through the same {@link ThemeTemplates} applier and the same background
+     * thread the activity's own refresh uses, so whichever call lands last — this one or the
+     * activity's, should the two race on resume — wins outright; the other stops between templates
+     * rather than redoing finished work.
      */
     private void refreshThemeTemplatesForNightModeFlip(@NonNull Configuration newConfig) {
         Context context = getApplicationContext();
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
         if (preferences == null || !preferences.isTerminalDynamicColorsEnabled()) return;
         TerminalContrastLevel level = preferences.getTerminalContrastLevel();
-        // Claimed here, synchronously, so a pass this triggers is ordered by when the flip was
-        // actually observed rather than when the executor got around to it.
-        long pass = ThemeTemplates.schedulePass(context);
-        NIGHT_MODE_EXPORT_EXECUTOR.execute(() -> {
-            try {
-                Context configuredContext = context.createConfigurationContext(newConfig);
-                Context themedContext = new ContextThemeWrapper(configuredContext,
-                    R.style.Theme_TermuxActivity_DayNight_NoActionBar);
-                Properties terminalColors = MaterialTerminalColorScheme.create(themedContext, level);
-                Properties exported = MaterialTerminalColorScheme.createMaterialRoleProperties(
-                    themedContext, terminalColors, level);
-                MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
-                ThemeTemplates.runPass(context, exported, pass);
-            } catch (Exception e) {
-                Logger.logStackTraceWithMessage(LOG_TAG,
-                    "Error refreshing theme templates for a background day/night flip", e);
-            }
+        Configuration effectiveConfig = withPinnedNightMode(newConfig);
+        ThemeTemplates.exportPaletteAndRunPassAsync(context, () -> {
+            Context configuredContext = context.createConfigurationContext(effectiveConfig);
+            Context themedContext = new ContextThemeWrapper(configuredContext,
+                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            Properties terminalColors = MaterialTerminalColorScheme.create(themedContext, level);
+            return MaterialTerminalColorScheme.createMaterialRoleProperties(
+                themedContext, terminalColors, level);
         });
+    }
+
+    /**
+     * {@code config} with the day/night bits the app is actually wearing.
+     *
+     * <p>{@code termux.properties}' {@code night-mode} can pin the app to day or night, and the
+     * activity pins it with {@code setLocalNightMode} — so a system flip moves the configuration
+     * delivered here without moving a single colour the app displays. Deriving from the raw
+     * configuration exported the opposite palette to every shell, and nothing undid it: the activity
+     * is not recreated by a flip it does not follow, and its resume check finds an unchanged
+     * signature and stops. The flip is still worth following through — the wallpaper may have
+     * changed with it — but it has to be followed in the mode the app is pinned to.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Configuration withPinnedNightMode(@NonNull Configuration config) {
+        NightMode nightMode = NightMode.getAppNightMode();
+        if (nightMode == NightMode.SYSTEM) return config;
+        Configuration pinned = new Configuration(config);
+        pinned.uiMode = (pinned.uiMode & ~Configuration.UI_MODE_NIGHT_MASK)
+            | (nightMode == NightMode.TRUE
+                ? Configuration.UI_MODE_NIGHT_YES
+                : Configuration.UI_MODE_NIGHT_NO);
+        return pinned;
     }
 
     public static void setLogConfig(Context context) {

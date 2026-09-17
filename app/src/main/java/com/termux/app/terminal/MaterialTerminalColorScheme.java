@@ -20,6 +20,7 @@ import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
@@ -105,13 +106,15 @@ public final class MaterialTerminalColorScheme {
      *
      * <p>Not every ANSI slot is text. Black and white are what a TUI fills a panel with, and a floor
      * that treats them as glyph colours lifts both to the same mid tone as everything else — which is
-     * how ANSI black stopped being dark and started matching bright black. So slots 0 and 7 are
-     * exempt; slot 8 keeps a fixed 3.0:1 because it really is text — dim text, the one thing the
-     * level must not be allowed to brighten into ordinary text; the rest take the level's ratio.
+     * how ANSI black stopped being dark and started matching bright black. So slots 0, 7 and 15 are
+     * exempt — bright white is a fill exactly as much as white is, and holding it to a text ratio is
+     * what used to drag it down into the dark end of the neutral ladder; slot 8 keeps a fixed 3.0:1
+     * because it really is text — dim text, the one thing the level must not be allowed to brighten
+     * into ordinary text; the rest take the level's ratio.
      */
     @VisibleForTesting
     static double ansiFloor(int slot, @NonNull TerminalContrastLevel level) {
-        if (slot == 0 || slot == 7) return 0d;
+        if (slot == 0 || slot == 7 || slot == 15) return 0d;
         if (slot == 8) return 3.0d;
         return level.ansiRatio;
     }
@@ -155,11 +158,15 @@ public final class MaterialTerminalColorScheme {
             slots.setProperty("color" + slot, hex(Hct.from(hue, chroma, normalTone).toInt()));
             slots.setProperty("color" + (slot + 8), hex(Hct.from(hue, chroma, brightTone).toInt()));
         }
+        // One ladder, both modes: black, bright black, white, bright white climb in tone whichever
+        // way round the background is. The light column used to end at tone 10, which made bright
+        // white the darkest neutral of the four and collapsed "black on bright white" into one
+        // colour; the accent bands above still flip with the background, the neutrals do not.
         double neutral = Math.min(neutralChroma, NEUTRAL_CHROMA_MAX);
         slots.setProperty("color0", hex(Hct.from(neutralHue, neutral, 25d).toInt()));
         slots.setProperty("color8", hex(Hct.from(neutralHue, neutral, dark ? 45d : 50d).toInt()));
-        slots.setProperty("color7", hex(Hct.from(neutralHue, neutral, dark ? 80d : 65d).toInt()));
-        slots.setProperty("color15", hex(Hct.from(neutralHue, neutral, dark ? 96d : 10d).toInt()));
+        slots.setProperty("color7", hex(Hct.from(neutralHue, neutral, dark ? 80d : 75d).toInt()));
+        slots.setProperty("color15", hex(Hct.from(neutralHue, neutral, dark ? 96d : 92d).toInt()));
         return slots;
     }
 
@@ -342,6 +349,10 @@ public final class MaterialTerminalColorScheme {
      * Write the exported palette files. Takes the finished properties rather than a {@link Context}
      * because this runs on a writer thread: resolving theme attributes and reading resources off the
      * main thread is not safe, so all of that has to have happened before the hand-off.
+     *
+     * <p>Not a public entry point for a refresh: call
+     * {@code ThemeTemplates.exportPaletteAndRunPassAsync}, which owns the one thread these writes and
+     * the template pass that follows them share.
      */
     public static void writeMaterialColorFiles(@NonNull Properties props) {
         writeFile(MATERIAL_COLORS_PROPERTIES_PATH, toPropertiesText(props));
@@ -513,11 +524,40 @@ public final class MaterialTerminalColorScheme {
         props.setProperty(key, hex(value));
     }
 
-    private static void writeFile(@NonNull String path, @NonNull String content) {
+    /**
+     * Replace the file at {@code path} in one step.
+     *
+     * <p>Written to a sibling temp file and renamed over the target, because these files are sourced
+     * rather than read: a shell that starts while a plain truncating write is half done sources a
+     * file cut off mid-line, and the prompt it builds from it is wrong until something rewrites the
+     * palette. A rename within the directory swaps the whole file or none of it, so a shell either
+     * gets the old palette or the new one.
+     */
+    @VisibleForTesting
+    static void writeFile(@NonNull String path, @NonNull String content) {
         if (alreadyOnDisk(path, content)) return;
-        Error error = FileUtils.writeTextToFile(path, path, StandardCharsets.UTF_8, content, false);
+        Error error = FileUtils.createParentDirectoryFile(LOG_TAG + " palette file parent", path);
         if (error != null) {
             Logger.logErrorExtended(LOG_TAG, error.toString());
+            return;
+        }
+        java.io.File target = new java.io.File(path);
+        java.io.File temp = new java.io.File(target.getParentFile(), target.getName() + ".new");
+        try (java.io.OutputStream out = new java.io.FileOutputStream(temp)) {
+            out.write(content.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+        } catch (java.io.IOException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Cannot write \"" + temp.getAbsolutePath() + "\"", e);
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
+            return;
+        }
+        if (!temp.renameTo(target)) {
+            Logger.logError(LOG_TAG, "Cannot move \"" + temp.getAbsolutePath() + "\" onto \""
+                + path + "\"");
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
         }
     }
 
@@ -532,6 +572,13 @@ public final class MaterialTerminalColorScheme {
         return builder.toString();
     }
 
+    /**
+     * The shell half of the export.
+     *
+     * <p>Keys are upper-cased against {@link Locale#ROOT}, never the device's. A Turkish locale maps
+     * {@code i} to a dotted capital I, so {@code primary} came out as {@code PRİMARY} — not a shell
+     * identifier at all, and the whole file stopped sourcing for that user.
+     */
     @VisibleForTesting
     static String toShellExports(@NonNull Properties props) {
         StringBuilder builder = new StringBuilder();
@@ -539,7 +586,7 @@ public final class MaterialTerminalColorScheme {
         ArrayList<String> keys = sortedKeys(props);
         for (String key : keys) {
             builder.append("export TERMUX_MATERIAL_")
-                .append(key.toUpperCase().replace('.', '_').replace('-', '_'))
+                .append(key.toUpperCase(Locale.ROOT).replace('.', '_').replace('-', '_'))
                 .append("='")
                 .append(props.getProperty(key))
                 .append("'\n");
