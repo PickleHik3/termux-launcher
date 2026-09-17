@@ -39,7 +39,8 @@ public class HelpPaletteTest {
         float[] light = new float[3], dark = new float[3];
         Color.colorToHSV(HelpPalette.boxColor(accent, 1, 4, true), light);
         Color.colorToHSV(HelpPalette.boxColor(accent, 1, 4, false), dark);
-        assertEquals(light[0], dark[0], 0.01f);
+        // A degree of slack: the two go through different 8-bit RGB values and back.
+        assertEquals(light[0], dark[0], 1f);
         assertTrue(light[2] < dark[2]);
         assertTrue(light[1] > dark[1]);
         // The dark wash is what the one-argument call has always meant.
