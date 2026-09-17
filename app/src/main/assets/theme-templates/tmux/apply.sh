@@ -22,30 +22,33 @@ mkdir -p "$(dirname "$target_conf")"
 
 include_line="source-file \"$rendered\""
 
-had_block=0
-if [ -f "$target_conf" ] && grep -qxF -- "$marker_begin" "$target_conf"; then
-    had_block=1
-fi
-
 tmp_file="$(mktemp "${target_conf}.tmp.XXXXXX")"
 trap 'rm -f "$tmp_file"' EXIT
 
+# Strip any existing marker block first, then always append a fresh one, so
+# a stale or hand-mangled line is repaired on the next apply instead of
+# being left in place. Rerunning stays idempotent: when the block already
+# matches, the stripped-then-reappended content is byte-identical to what
+# was there.
 if [ -f "$target_conf" ]; then
-    cat "$target_conf" >"$tmp_file"
+    awk -v begin="$marker_begin" -v end="$marker_end" '
+        $0 == begin { in_block = 1; next }
+        in_block && $0 == end { in_block = 0; next }
+        in_block { next }
+        { print }
+    ' "$target_conf" >"$tmp_file"
 else
     : >"$tmp_file"
 fi
 
-if [ "$had_block" -eq 0 ]; then
-    if [ -s "$tmp_file" ] && [ -n "$(tail -c1 "$tmp_file")" ]; then
-        printf '\n' >>"$tmp_file"
-    fi
-    {
-        echo "$marker_begin"
-        echo "$include_line"
-        echo "$marker_end"
-    } >>"$tmp_file"
+if [ -s "$tmp_file" ] && [ -n "$(tail -c1 "$tmp_file")" ]; then
+    printf '\n' >>"$tmp_file"
 fi
+{
+    echo "$marker_begin"
+    echo "$include_line"
+    echo "$marker_end"
+} >>"$tmp_file"
 
 if [ ! -e "$target_conf" ] && [ ! -L "$target_conf" ]; then
     mv "$tmp_file" "$target_conf"

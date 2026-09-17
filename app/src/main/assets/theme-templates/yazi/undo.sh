@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Removes exactly the marker block apply.sh added to theme.toml and the
-# rendered flavor directory's flavor.toml.
+# Removes exactly the marker block apply.sh added to theme.toml, the
+# rendered flavor directory's flavor.toml, and that flavor directory itself
+# if removing flavor.toml left it empty.
 set -euo pipefail
 
 config_file="${XDG_CONFIG_HOME:-$HOME/.config}/yazi/theme.toml"
@@ -26,3 +27,5 @@ if [ -f "$config_file" ]; then
 fi
 
 rm -f -- "$rendered"
+rendered_dir="$(dirname -- "$rendered")"
+rmdir -- "$rendered_dir" 2>/dev/null || true

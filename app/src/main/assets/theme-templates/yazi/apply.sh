@@ -12,32 +12,35 @@ marker_end="# <<< launcher-material <<<"
 
 mkdir -p "$(dirname "$config_file")"
 
-had_block=0
-if [ -f "$config_file" ] && grep -qxF -- "$marker_begin" "$config_file"; then
-    had_block=1
-fi
-
 tmp_file="$(mktemp "${config_file}.tmp.XXXXXX")"
 trap 'rm -f "$tmp_file"' EXIT
 
+# Strip any existing marker block first, then always append a fresh one, so
+# a stale or hand-mangled block is repaired on the next apply instead of
+# being left in place. Rerunning stays idempotent: when the block already
+# matches, the stripped-then-reappended content is byte-identical to what
+# was there.
 if [ -f "$config_file" ]; then
-    cat "$config_file" >"$tmp_file"
+    awk -v begin="$marker_begin" -v end="$marker_end" '
+        $0 == begin { in_block = 1; next }
+        in_block && $0 == end { in_block = 0; next }
+        in_block { next }
+        { print }
+    ' "$config_file" >"$tmp_file"
 else
     : >"$tmp_file"
 fi
 
-if [ "$had_block" -eq 0 ]; then
-    if [ -s "$tmp_file" ] && [ -n "$(tail -c1 "$tmp_file")" ]; then
-        printf '\n' >>"$tmp_file"
-    fi
-    {
-        echo "$marker_begin"
-        echo "[flavor]"
-        echo 'dark = "launcher-material"'
-        echo 'light = "launcher-material"'
-        echo "$marker_end"
-    } >>"$tmp_file"
+if [ -s "$tmp_file" ] && [ -n "$(tail -c1 "$tmp_file")" ]; then
+    printf '\n' >>"$tmp_file"
 fi
+{
+    echo "$marker_begin"
+    echo "[flavor]"
+    echo 'dark = "launcher-material"'
+    echo 'light = "launcher-material"'
+    echo "$marker_end"
+} >>"$tmp_file"
 
 if [ ! -e "$config_file" ] && [ ! -L "$config_file" ]; then
     mv "$tmp_file" "$config_file"

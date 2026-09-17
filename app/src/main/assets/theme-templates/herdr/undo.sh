@@ -2,7 +2,8 @@
 # Removes exactly the marker block apply.sh added to config.toml (which, if
 # [theme.custom] did not already exist, was the whole table) and restores
 # any pre-existing key apply.sh commented out, then removes the rendered
-# palette file. Pure POSIX sh/awk, matching apply.sh.
+# palette file and asks a running herdr server to reload. Pure POSIX
+# sh/awk, matching apply.sh.
 set -eu
 
 config_file="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml"
@@ -35,3 +36,7 @@ if [ -f "$config_file" ]; then
 fi
 
 rm -f -- "$rendered"
+
+if command -v herdr >/dev/null 2>&1; then
+    herdr server reload-config >/dev/null 2>&1 || true
+fi

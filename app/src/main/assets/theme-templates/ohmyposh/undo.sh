@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Removes everything apply.sh and setup.sh added: the fish drop-ins, the
-# generic marker block from ~/.bashrc / ~/.zshrc (apply.sh), the per-shell
-# init marker block from whichever rc file has one (setup.sh), and the
-# rendered theme.
+# Removes everything apply.sh and setup.sh added: the fish drop-ins, this
+# template's own POSH_THEME marker block from ~/.bashrc / ~/.zshrc
+# (apply.sh) plus any block still written under the marker every template
+# used to share before each got its own (upgrade path), the per-shell init
+# marker block from whichever rc file has one (setup.sh), and the rendered
+# theme.
 set -euo pipefail
 
 rendered="${TERMUX_THEME_OUTPUT:?TERMUX_THEME_OUTPUT not set}"
-generic_begin="# >>> launcher-material >>>"
-generic_end="# <<< launcher-material <<<"
+own_begin="# >>> launcher-material ohmyposh >>>"
+own_end="# <<< launcher-material ohmyposh <<<"
+old_begin="# >>> launcher-material >>>"
+old_end="# <<< launcher-material <<<"
 fish_dropin="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/launcher-material-ohmyposh.fish"
 fish_init="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/launcher-material-ohmyposh-init.fish"
 
@@ -30,8 +34,10 @@ remove_block() {
     rm -f "$tmp_file"
 }
 
-remove_block "$HOME/.bashrc" "$generic_begin" "$generic_end"
-remove_block "$HOME/.zshrc" "$generic_begin" "$generic_end"
+remove_block "$HOME/.bashrc" "$own_begin" "$own_end"
+remove_block "$HOME/.zshrc" "$own_begin" "$own_end"
+remove_block "$HOME/.bashrc" "$old_begin" "$old_end"
+remove_block "$HOME/.zshrc" "$old_begin" "$old_end"
 remove_block "$HOME/.bashrc" "# >>> launcher-material bash >>>" "# <<< launcher-material bash <<<"
 remove_block "$HOME/.zshrc" "# >>> launcher-material zsh >>>" "# <<< launcher-material zsh <<<"
 
