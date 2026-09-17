@@ -16,7 +16,9 @@ import java.nio.file.Files;
 import java.util.Locale;
 import java.util.Properties;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -82,6 +84,25 @@ public class MaterialColorExportWriteTest {
         } finally {
             Locale.setDefault(original);
         }
+    }
+
+    /**
+     * The files are sourced, not read: a truncating write leaves a window in which a starting shell
+     * sources half a palette. The rewrite goes through a sibling and a rename, and takes the sibling
+     * with it.
+     */
+    @Test
+    public void aRewriteReplacesTheFileInOneStepAndLeavesNothingBehind() throws Exception {
+        File file = folder.newFile("material-colors.sh");
+        Files.write(file.toPath(), "export A='#000000'\n".getBytes(StandardCharsets.UTF_8));
+
+        MaterialTerminalColorScheme.writeFile(file.getAbsolutePath(), "export A='#FFFFFF'\n");
+
+        assertEquals("export A='#FFFFFF'\n",
+            new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+        File[] leftovers = folder.getRoot().listFiles((dir, name) -> name.endsWith(".new"));
+        assertNotNull(leftovers);
+        assertEquals(0, leftovers.length);
     }
 
     @Test

@@ -349,6 +349,10 @@ public final class MaterialTerminalColorScheme {
      * Write the exported palette files. Takes the finished properties rather than a {@link Context}
      * because this runs on a writer thread: resolving theme attributes and reading resources off the
      * main thread is not safe, so all of that has to have happened before the hand-off.
+     *
+     * <p>Not a public entry point for a refresh: call
+     * {@code ThemeTemplates.exportPaletteAndRunPassAsync}, which owns the one thread these writes and
+     * the template pass that follows them share.
      */
     public static void writeMaterialColorFiles(@NonNull Properties props) {
         writeFile(MATERIAL_COLORS_PROPERTIES_PATH, toPropertiesText(props));
@@ -520,11 +524,40 @@ public final class MaterialTerminalColorScheme {
         props.setProperty(key, hex(value));
     }
 
-    private static void writeFile(@NonNull String path, @NonNull String content) {
+    /**
+     * Replace the file at {@code path} in one step.
+     *
+     * <p>Written to a sibling temp file and renamed over the target, because these files are sourced
+     * rather than read: a shell that starts while a plain truncating write is half done sources a
+     * file cut off mid-line, and the prompt it builds from it is wrong until something rewrites the
+     * palette. A rename within the directory swaps the whole file or none of it, so a shell either
+     * gets the old palette or the new one.
+     */
+    @VisibleForTesting
+    static void writeFile(@NonNull String path, @NonNull String content) {
         if (alreadyOnDisk(path, content)) return;
-        Error error = FileUtils.writeTextToFile(path, path, StandardCharsets.UTF_8, content, false);
+        Error error = FileUtils.createParentDirectoryFile(LOG_TAG + " palette file parent", path);
         if (error != null) {
             Logger.logErrorExtended(LOG_TAG, error.toString());
+            return;
+        }
+        java.io.File target = new java.io.File(path);
+        java.io.File temp = new java.io.File(target.getParentFile(), target.getName() + ".new");
+        try (java.io.OutputStream out = new java.io.FileOutputStream(temp)) {
+            out.write(content.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+        } catch (java.io.IOException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Cannot write \"" + temp.getAbsolutePath() + "\"", e);
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
+            return;
+        }
+        if (!temp.renameTo(target)) {
+            Logger.logError(LOG_TAG, "Cannot move \"" + temp.getAbsolutePath() + "\" onto \""
+                + path + "\"");
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
         }
     }
 

@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.MaterialTerminalColorScheme;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -17,16 +18,19 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
  * The app's one way in: templates, the applier they run through, and the palette on disk.
  *
- * <p>A colour refresh already builds the palette and hands it to a writer thread, so that path
- * claims a pass before the hand-off and runs it after the palette files are written. Settings has no
- * palette of its own — a preference screen is a long way from the terminal — so turning a template on
- * or off reads the last exported palette back off disk and applies from there.
+ * <p>A colour refresh hands its finished palette to {@link #exportPaletteAndRunPassAsync}, which
+ * claims the pass on the caller's thread and then, on the one background thread this class owns,
+ * writes the palette files and runs that pass. Settings has no palette of its own — a preference
+ * screen is a long way from the terminal — so turning a template on or off reads the last exported
+ * palette back off disk and applies from there, on that same thread, which is the only reason it can
+ * trust what it finds there.
  */
 public final class ThemeTemplates {
 
@@ -50,10 +54,19 @@ public final class ThemeTemplates {
 
     private static final ThemeTemplateLog LOG = message -> Logger.logWarn(LOG_TAG, message);
 
-    /** Settings changes get their own thread; colour refreshes stay on the palette writer's. */
-    private static final ExecutorService SETTINGS_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+    /**
+     * Every palette write and every template pass, on one thread, in the order they were scheduled.
+     *
+     * <p>They used to be split — an executor in the activity's session client, another in
+     * {@code TermuxApplication}, and a third here for settings — so two refreshes could write the
+     * same two files at once and leave the stale one on disk, and a settings toggle could read those
+     * files while they were being rewritten. The applier orders the passes themselves, but nothing
+     * ordered the writes underneath them. One thread does both.
+     */
+    private static final ExecutorService PALETTE_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "theme-templates");
         thread.setPriority(Thread.MIN_PRIORITY);
+        thread.setDaemon(true);
         return thread;
     });
 
@@ -91,6 +104,41 @@ public final class ThemeTemplates {
     }
 
     /**
+     * The one way to publish a palette: export {@code material-colors.properties} / {@code .sh} and
+     * run a template pass over the same values, off the caller's thread.
+     *
+     * <p>The pass is claimed here, synchronously, so it is ordered by when the palette was built
+     * rather than by when the background thread got to it — a burst of refreshes then leaves the
+     * newest one to finish and the rest to stop between templates.
+     */
+    public static void exportPaletteAndRunPassAsync(@NonNull Context context,
+                                                    @NonNull Properties palette) {
+        exportPaletteAndRunPassAsync(context, () -> palette);
+    }
+
+    /**
+     * As {@link #exportPaletteAndRunPassAsync(Context, Properties)}, for a caller whose palette can
+     * only be derived off the UI thread. {@code paletteSource} runs on the background thread and may
+     * return {@code null} to call the whole thing off; it must not touch theme attributes or
+     * resources, which are not safe to resolve there.
+     */
+    public static void exportPaletteAndRunPassAsync(@NonNull Context context,
+                                                    @NonNull Callable<Properties> paletteSource) {
+        Context application = context.getApplicationContext();
+        long pass = schedulePass(application);
+        PALETTE_EXECUTOR.execute(() -> {
+            try {
+                Properties palette = paletteSource.call();
+                if (palette == null) return;
+                MaterialTerminalColorScheme.writeMaterialColorFiles(palette);
+                runPass(application, palette, pass);
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Error exporting the palette", e);
+            }
+        });
+    }
+
+    /**
      * Apply from the palette already on disk, off the caller's thread.
      *
      * <p>This is what a settings toggle uses: it changes which templates should be applied, not what
@@ -101,7 +149,7 @@ public final class ThemeTemplates {
         ThemeTemplateApplier applier = applier(application);
         long pass = applier.schedule();
         Set<String> enabled = enabledIds(application);
-        SETTINGS_EXECUTOR.execute(() -> {
+        PALETTE_EXECUTOR.execute(() -> {
             try {
                 Properties palette = exportedPalette();
                 if (palette == null) {
@@ -124,7 +172,7 @@ public final class ThemeTemplates {
      * files are put in place here, on the same thread the passes use.
      */
     public static void unpackAsync(@NonNull ThemeTemplate template) {
-        SETTINGS_EXECUTOR.execute(() -> {
+        PALETTE_EXECUTOR.execute(() -> {
             try {
                 template.directory();
             } catch (IOException e) {

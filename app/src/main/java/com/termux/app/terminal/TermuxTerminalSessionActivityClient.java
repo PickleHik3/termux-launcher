@@ -36,8 +36,6 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * The {@link TerminalSessionClient} implementation that may require an {@link Activity} for its
@@ -60,12 +58,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     public static final int MAX_SESSIONS = 32;
     private static final long FOREGROUND_REFRESH_DEFER_MS = 120L;
-    private static final ExecutorService MATERIAL_COLOR_FILE_EXECUTOR =
-        Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "termux-material-color-writer");
-            thread.setDaemon(true);
-            return thread;
-        });
 
     private SoundPool mBellSoundPool;
 
@@ -737,18 +729,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // palette the terminal just took.
                 final Properties exported =
                     MaterialTerminalColorScheme.createMaterialRoleProperties(mContext, props, level);
-                // Claimed here rather than on the writer thread: a burst of refreshes queues several
-                // of these, and each one needs to know it has been overtaken before it starts.
-                final long templatePass = ThemeTemplates.schedulePass(mContext);
-                MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
-                    try {
-                        MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
-                        ThemeTemplates.runPass(mContext, exported, templatePass);
-                    } catch (Exception e) {
-                        Logger.logStackTraceWithMessage(LOG_TAG,
-                            "Error writing material color files", e);
-                    }
-                });
+                ThemeTemplates.exportPaletteAndRunPassAsync(mContext, exported);
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
@@ -782,20 +763,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // thread rather than costing the activity two stats and a palette build during onCreate.
         final Properties snapshot = new Properties();
         snapshot.putAll(terminalProps);
-        final long templatePass = ThemeTemplates.schedulePass(mContext);
-        MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
-            try {
-                LinkedHashMap<String, Integer> tokens = LauncherSchemeTheme.tokens();
-                if (tokens == null) return;
-                Properties exported = LauncherSchemeTheme.exportProperties(tokens);
-                for (String key : snapshot.stringPropertyNames()) {
-                    exported.setProperty("terminal_" + key, snapshot.getProperty(key));
-                }
-                MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
-                ThemeTemplates.runPass(mContext, exported, templatePass);
-            } catch (Exception e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Error writing scheme color files", e);
+        ThemeTemplates.exportPaletteAndRunPassAsync(mContext, () -> {
+            LinkedHashMap<String, Integer> tokens = LauncherSchemeTheme.tokens();
+            if (tokens == null) return null;
+            Properties exported = LauncherSchemeTheme.exportProperties(tokens);
+            for (String key : snapshot.stringPropertyNames()) {
+                exported.setProperty("terminal_" + key, snapshot.getProperty(key));
             }
+            return exported;
         });
     }
 
