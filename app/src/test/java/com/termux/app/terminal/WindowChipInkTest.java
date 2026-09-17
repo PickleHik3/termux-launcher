@@ -118,9 +118,14 @@ public class WindowChipInkTest {
     public void theReportedGlassGetsItsChipsBack() {
         WindowChipInk.Palette palette = lightOnReportedGlass();
         assertEquals(4.53d, OnGlass.ratio(palette.restingLabel, palette.restingGround), .05d);
-        assertEquals(4.51d, OnGlass.ratio(palette.selectedLabel, palette.selectedGround), .05d);
+        // 4.56 rather than the 4.51 this pinned before: the directed tone walk moved into
+        // OnGlass.tonedToward and steps one tone at a time from the band's own tone, where this
+        // class stepped two at a time from the seed's. Same side, same floor, one step finer.
+        assertEquals(4.56d, OnGlass.ratio(palette.selectedLabel, palette.selectedGround), .05d);
         assertEquals(6.25d, OnGlass.ratio(palette.restingStroke, palette.band), .05d);
-        assertEquals(3.12d, OnGlass.ratio(palette.selectedStroke, palette.band), .05d);
+        // 3.04 rather than 3.12, for the same reason: a one-tone walk stops at the first tone that
+        // clears the graphics floor instead of overshooting it by a step.
+        assertEquals(3.04d, OnGlass.ratio(palette.selectedStroke, palette.band), .05d);
     }
 
     /** The current chip is not merely legible, it is the brighter of the two. */

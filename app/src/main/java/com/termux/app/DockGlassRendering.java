@@ -129,6 +129,31 @@ public final class DockGlassRendering {
     }
 
     /**
+     * The opaque surface a band's glass leaves at model position {@code pos}, composed in exactly
+     * the order the band draws it: the base layer on what is under the glass, then the vertical
+     * light model on that.
+     *
+     * <p>The one definition of "the band, as drawn". It exists because there was briefly a second:
+     * {@link #glassTintAt} pre-combines the base and the model into a single tint, and compositing
+     * that over the backdrop is the same arithmetic in real numbers but not in 8-bit channels —
+     * each composite rounds, and the two chains landed a unit apart. A unit of RGB is 0.002 of a
+     * contrast ratio, which is nothing to look at and everything to a promise: the band measured
+     * 4.53 and drew 4.4978 against a floor of 4.5. So the measurement composes the stack the way
+     * the {@code LayerDrawable} does, and there is nothing left for the two to disagree about.</p>
+     *
+     * @param under what the glass is laid on, opaque: the wallpaper under the launcher's dim
+     */
+    @ColorInt
+    public static int glassSurfaceAt(float pos, @ColorInt int under, @ColorInt int baseColor,
+                                     int baseAlpha, @ColorInt int accent, int topSheenAlpha,
+                                     int midSheenAlpha, int bottomFootAlpha) {
+        int lit = OnGlass.composite(withAlpha(baseColor, Math.max(0, Math.min(255, baseAlpha))),
+            OnGlass.opaque(under));
+        return OnGlass.opaque(OnGlass.composite(
+            lightModelColorAt(pos, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha), lit));
+    }
+
+    /**
      * The model position, within the slice this surface actually renders, at which the glass works
      * hardest against {@code ink} — the row a contrast promise has to be made at.
      *
@@ -150,9 +175,8 @@ public final class DockGlassRendering {
         float worst = start;
         double worstRatio = Double.MAX_VALUE;
         for (float stop : candidateStops(start, end)) {
-            int tint = glassTintAt(stop, baseColor, baseAlpha, accent, topSheenAlpha, midSheenAlpha,
-                bottomFootAlpha);
-            double ratio = OnGlass.ratio(ink, OnGlass.opaque(OnGlass.composite(tint, under)));
+            double ratio = OnGlass.ratio(ink, glassSurfaceAt(stop, under, baseColor, baseAlpha,
+                accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
             if (ratio < worstRatio) {
                 worstRatio = ratio;
                 worst = stop;
