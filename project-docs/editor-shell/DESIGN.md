@@ -565,9 +565,10 @@ No behaviour rides along with a look change. Explicitly:
 
 ## 10. Open questions
 
-1. **"Global" → "All surfaces"** for the shared layer's header title
-   (`surface_editor_global_heading`). Recommended; it is a one-string change, and "Global" is the
-   only engineering word visible in either editor.
+1. ~~**"Global" → "All surfaces"**~~ — **DECIDED 2026-09-17: yes.** `surface_editor_global_heading`
+   becomes `All surfaces`. The user wrote "All Surfaces"; shipped as sentence case to match the
+   house convention every sibling title uses ("Status bar", "Extra keys", "New session",
+   "Terminal fonts"). Say so if title case was deliberate.
 2. **The preset tile's wallpaper crop.** Recommended: one fixed, shipped crop shared by all five
    tiles, so opacity and blur differences read against a constant. The alternative — the user's
    actual wallpaper — previews *their* result but makes the five tiles differ by whatever happens to
