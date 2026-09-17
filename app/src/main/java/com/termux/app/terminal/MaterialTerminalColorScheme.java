@@ -44,8 +44,26 @@ public final class MaterialTerminalColorScheme {
     private static final double ANSI_CHROMA_MIN = 28d;
     private static final double ANSI_CHROMA_MAX = 52d;
 
-    /** Neutral slots come off the neutral palette, so they carry the surface hue and almost no chroma. */
-    private static final double NEUTRAL_CHROMA_MAX = 6d;
+    /**
+     * How much chroma the neutral slots and the foreground carry.
+     *
+     * <p>They come off the neutral palette, so left alone they are the surface hue at almost no
+     * chroma — a grey ladder on a grey background, which is what the retired
+     * {@code material-terminal-white.fish} was painting over on the phone. The floor is the warm
+     * nudge itself: a neutral with no chroma cannot lean anywhere. The ceiling keeps it a neutral —
+     * above it the ladder starts reading as a seventh accent.
+     */
+    private static final double NEUTRAL_CHROMA_MIN = 8d;
+    private static final double NEUTRAL_CHROMA_MAX = 12d;
+
+    /**
+     * Where the neutrals lean: the warm side of the wheel, around parchment. The surface hue is
+     * pulled halfway toward it and never further than {@link #NEUTRAL_MAX_ROTATION}, so a theme
+     * already warm barely moves and a cold blue one warms without turning yellow. The background is
+     * not nudged — it is the chrome's own surface, and the terminal has to sit on it.
+     */
+    private static final double NEUTRAL_WARM_HUE = 75d;
+    private static final double NEUTRAL_MAX_ROTATION = 20d;
 
     /** Material's {@code Blend.harmonize} ceiling: never rotate a hue more than this far. */
     private static final double HARMONIZE_MAX_ROTATION = 15d;
@@ -85,6 +103,10 @@ public final class MaterialTerminalColorScheme {
 
         int background = surfaceTone(surface, level);
 
+        // The foreground is a neutral too — the same nudge as slots 0/7/8/15, before the legibility
+        // search, which keeps hue and chroma and only moves tone. The cursor is an accent and is
+        // left alone.
+        foreground = warmNeutral(foreground, surfaceHct.getHue());
         foreground = contrastTone(foreground, background, level.foregroundRatio);
         primary = contrastTone(primary, background, level.cursorRatio);
 
@@ -162,12 +184,39 @@ public final class MaterialTerminalColorScheme {
         // way round the background is. The light column used to end at tone 10, which made bright
         // white the darkest neutral of the four and collapsed "black on bright white" into one
         // colour; the accent bands above still flip with the background, the neutrals do not.
-        double neutral = Math.min(neutralChroma, NEUTRAL_CHROMA_MAX);
-        slots.setProperty("color0", hex(Hct.from(neutralHue, neutral, 25d).toInt()));
-        slots.setProperty("color8", hex(Hct.from(neutralHue, neutral, dark ? 45d : 50d).toInt()));
-        slots.setProperty("color7", hex(Hct.from(neutralHue, neutral, dark ? 80d : 75d).toInt()));
-        slots.setProperty("color15", hex(Hct.from(neutralHue, neutral, dark ? 96d : 92d).toInt()));
+        //
+        // The hue is the surface's, warmed; the chroma is held inside the neutral band. Tones are
+        // untouched by either — the ladder is the ladder whatever colour it is made of.
+        double warm = warmNeutralHue(neutralHue);
+        double neutral = warmNeutralChroma(neutralChroma);
+        slots.setProperty("color0", hex(Hct.from(warm, neutral, 25d).toInt()));
+        slots.setProperty("color8", hex(Hct.from(warm, neutral, dark ? 45d : 50d).toInt()));
+        slots.setProperty("color7", hex(Hct.from(warm, neutral, dark ? 80d : 75d).toInt()));
+        slots.setProperty("color15", hex(Hct.from(warm, neutral, dark ? 96d : 92d).toInt()));
         return slots;
+    }
+
+    /**
+     * {@code surfaceHue} leaning toward {@link #NEUTRAL_WARM_HUE}: halfway there, at most
+     * {@link #NEUTRAL_MAX_ROTATION}. A surface already at the warm hue does not move at all.
+     */
+    @VisibleForTesting
+    static double warmNeutralHue(double surfaceHue) {
+        return blendHue(surfaceHue, NEUTRAL_WARM_HUE, NEUTRAL_MAX_ROTATION);
+    }
+
+    /** {@code chroma} inside the neutral band — raised to the floor, held under the ceiling. */
+    @VisibleForTesting
+    static double warmNeutralChroma(double chroma) {
+        return Math.max(NEUTRAL_CHROMA_MIN, Math.min(NEUTRAL_CHROMA_MAX, chroma));
+    }
+
+    /** {@code color} rebuilt as a warm neutral: the nudged hue and band chroma at its own tone. */
+    @ColorInt
+    private static int warmNeutral(@ColorInt int color, double surfaceHue) {
+        Hct source = Hct.fromInt(color);
+        return Hct.from(warmNeutralHue(surfaceHue), warmNeutralChroma(source.getChroma()),
+            source.getTone()).toInt();
     }
 
     /**
@@ -181,7 +230,12 @@ public final class MaterialTerminalColorScheme {
      */
     @VisibleForTesting
     static double harmonizeHue(double anchor, double source) {
-        double rotation = Math.min(differenceDegrees(anchor, source) * 0.5d, HARMONIZE_MAX_ROTATION);
+        return blendHue(anchor, source, HARMONIZE_MAX_ROTATION);
+    }
+
+    /** {@code anchor} rotated halfway toward {@code source}, capped at {@code maxRotation}. */
+    private static double blendHue(double anchor, double source, double maxRotation) {
+        double rotation = Math.min(differenceDegrees(anchor, source) * 0.5d, maxRotation);
         return sanitizeDegrees(anchor + rotation * rotationDirection(anchor, source));
     }
 

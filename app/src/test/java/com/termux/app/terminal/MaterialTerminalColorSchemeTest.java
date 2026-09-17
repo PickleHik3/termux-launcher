@@ -361,12 +361,99 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
-    /** Neutrals come off the neutral palette: surface hue, and no more chroma than a neutral has. */
+    /** Neutrals come off the neutral palette: no more chroma than a neutral has, however vivid the theme. */
     @Test
     public void neutralSlotsStayNeutral() {
         Properties palette = MaterialTerminalColorScheme.ansiSlots(220d, 48d, 25d, 300d, 90d, true);
         for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
-            assertTrue(key + " chroma", Hct.fromInt(color(palette, key)).getChroma() <= 7d);
+            // The ceiling is 12 (D8 raised it from 6 with the warm nudge); a tone at the top of the
+            // ladder cannot always hold that much chroma in sRGB, so allow for the gamut mapping.
+            assertTrue(key + " chroma", Hct.fromInt(color(palette, key)).getChroma() <= 13d);
+        }
+    }
+
+    /**
+     * D8: the neutrals lean warm rather than sitting on the surface's own hue, which is what the
+     * retired {@code material-terminal-white.fish} was doing by hand on the phone. Halfway to 75°,
+     * never more than 20° of it, and never past it.
+     */
+    @Test
+    public void theNeutralHueLeansWarmWithoutPassingTheTarget() {
+        for (double surfaceHue : new double[] {0d, 40d, 110d, 210d, 260d, 300d, 359d}) {
+            double warm = MaterialTerminalColorScheme.warmNeutralHue(surfaceHue);
+            double distance = angleBetween(surfaceHue, 75d);
+            assertEquals("surface " + surfaceHue + " moved the wrong distance",
+                Math.min(distance * 0.5d, 20d), angleBetween(surfaceHue, warm), 1e-9);
+            assertTrue("surface " + surfaceHue + " landed at " + warm + ", past the target",
+                angleBetween(warm, 75d) <= distance + 1e-9);
+        }
+    }
+
+    /** A theme already at the warm hue has nowhere to go, and must not be rotated off it. */
+    @Test
+    public void aSurfaceAlreadyWarmIsNotRotated() {
+        assertEquals(75d, MaterialTerminalColorScheme.warmNeutralHue(75d), 1e-9);
+        Properties palette = MaterialTerminalColorScheme.ansiSlots(220d, 40d, 25d, 75d, 4d, true);
+        for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
+            assertEquals(key, 75d, Hct.fromInt(color(palette, key)).getHue(), 8d);
+        }
+    }
+
+    /** The nudge is a colour move, not a tone move: the ladder keeps every tone it had. */
+    @Test
+    public void theWarmNudgeLeavesTheSlotTonesWhereTheyWere() {
+        for (boolean dark : new boolean[] {true, false}) {
+            Properties palette = slots(220d, 40d, dark);
+            assertEquals(25d, tone(palette, "color0"), 1d);
+            assertEquals(dark ? 45d : 50d, tone(palette, "color8"), 1d);
+            assertEquals(dark ? 80d : 75d, tone(palette, "color7"), 1d);
+            assertEquals(dark ? 96d : 92d, tone(palette, "color15"), 1d);
+            for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
+                // Wide, deliberately: at neutral chroma the sRGB round trip moves a hue by a few
+                // degrees on its own. What is being asserted is the lean, not a number.
+                assertEquals(key + " hue", MaterialTerminalColorScheme.warmNeutralHue(220d),
+                    Hct.fromInt(color(palette, key)).getHue(), 8d);
+            }
+        }
+    }
+
+    /** A near-grey theme has to be lifted to the floor, a vivid one held at the ceiling. */
+    @Test
+    public void theNeutralChromaStaysInsideItsBand() {
+        assertEquals(8d, MaterialTerminalColorScheme.warmNeutralChroma(0d), 1e-9);
+        assertEquals(8d, MaterialTerminalColorScheme.warmNeutralChroma(7.9d), 1e-9);
+        assertEquals(10d, MaterialTerminalColorScheme.warmNeutralChroma(10d), 1e-9);
+        assertEquals(12d, MaterialTerminalColorScheme.warmNeutralChroma(90d), 1e-9);
+        Properties grey = MaterialTerminalColorScheme.ansiSlots(220d, 40d, 25d, 220d, 0d, true);
+        for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
+            assertTrue(key + " must not be a pure grey",
+                Hct.fromInt(color(grey, key)).getChroma() >= 5d);
+        }
+    }
+
+    /**
+     * The foreground is a neutral as much as slots 0/7/8/15 are, and gets the same nudge — with the
+     * legibility floor still met afterwards, since the search moves tone only.
+     */
+    @Test
+    public void theForegroundIsWarmedToo() {
+        Context themed = new ContextThemeWrapper(ApplicationProvider.getApplicationContext(),
+            com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties palette = MaterialTerminalColorScheme.create(themed, level);
+            Hct foreground = Hct.fromInt(color(palette, "foreground"));
+            // The theme's own surface, which is what the derivation takes the neutral hue from —
+            // not the generated background, whose tone move can leave it too grey to have a hue.
+            Hct surface = Hct.fromInt(com.google.android.material.color.MaterialColors.getColor(
+                themed, com.google.android.material.R.attr.colorSurface, 0) | 0xFF000000);
+            assertEquals("foreground hue at " + level.value,
+                MaterialTerminalColorScheme.warmNeutralHue(surface.getHue()),
+                foreground.getHue(), 5d);
+            assertTrue("foreground chroma at " + level.value, foreground.getChroma() <= 13d);
+            assertTrue("foreground ratio at " + level.value,
+                MaterialTerminalColorScheme.contrastRatio(
+                    color(palette, "foreground"), color(palette, "background"))
+                    + .01 >= level.foregroundRatio);
         }
     }
 
