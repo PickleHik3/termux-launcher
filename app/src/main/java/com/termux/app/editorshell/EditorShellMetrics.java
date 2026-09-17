@@ -286,6 +286,37 @@ public final class EditorShellMetrics {
         return bodyHeightPx >= px(CHOOSER_PIN_MIN_BODY_DP, density);
     }
 
+    /**
+     * How many of the leading sections go in the leading pane.
+     *
+     * <p>Panes are filled section-major and a section never straddles the gutter: related rows
+     * three eye movements apart is the thing two columns are supposed to fix, not cause. The
+     * boundary is wherever the two panes come out closest in height, and the trailing pane always
+     * gets at least one section — a second column with nothing in it is worse than one column.
+     *
+     * @param rowsPerSection the row count of each section, in the order they are drawn
+     */
+    public static int sectionsInLeadingPane(@NonNull int[] rowsPerSection) {
+        int sections = rowsPerSection.length;
+        if (sections <= 1)
+            return sections;
+        int total = 0;
+        for (int rows : rowsPerSection)
+            total += rows;
+        int best = 1;
+        int bestGap = Integer.MAX_VALUE;
+        int leading = 0;
+        for (int boundary = 1; boundary < sections; boundary++) {
+            leading += rowsPerSection[boundary - 1];
+            int gap = Math.abs(leading - (total - leading));
+            if (gap < bestGap) {
+                bestGap = gap;
+                best = boundary;
+            }
+        }
+        return best;
+    }
+
     /** How tall the body stands, in whole rows, and whether there is more below. */
     public static final class BodyCap {
         public final int capPx;

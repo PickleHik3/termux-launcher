@@ -597,4 +597,59 @@ public class LayoutEditorPlanTest {
         assertFalse("the phone turned to the orientation on the toggle",
             plan.warnsOtherOrientation());
     }
+
+    // ------------------------------------------------------------------------- the two-pane body
+
+    @Test
+    public void aPortraitMiniatureLeavesAPaneForTheRowsAndALandscapeOneDoesNot() {
+        // The wide review device: 1300 x 600 px at 1.125x.
+        float density = 180f / 160f;
+        int content = EditorShellMetrics.contentWidthPx(1300, density);
+
+        int portraitNatural = LayoutEditorPlan.miniatureNaturalWidthPx(PORTRAIT, 1300, 600,
+            PlaceMiniatureView.frameAspect(PORTRAIT));
+        EditorShellMetrics.PaneSplit beside = EditorShellMetrics.paneSplit(content,
+            portraitNatural, density);
+        assertEquals("a portrait frame is a sliver; the rows go beside it", 2, beside.paneCount);
+        assertTrue("and the rows' pane holds a whole row",
+            LayoutEditorController.rowsBesideMiniature(portraitNatural, beside, density));
+
+        int landscapeNatural = LayoutEditorPlan.miniatureNaturalWidthPx(LANDSCAPE, 1300, 600,
+            PlaceMiniatureView.frameAspect(LANDSCAPE));
+        assertEquals("a landscape frame is as wide as the screen", 1300, landscapeNatural);
+        EditorShellMetrics.PaneSplit beneath = EditorShellMetrics.paneSplit(content,
+            landscapeNatural, density);
+        assertFalse("a frame squeezed into half the body is a frame that has been cut",
+            LayoutEditorController.rowsBesideMiniature(landscapeNatural, beneath, density));
+    }
+
+    @Test
+    public void aMiniatureInItsOwnPaneTakesWhicheverOfTheTwoRunsOutFirst() {
+        float aspect = PlaceMiniatureView.frameAspect(PORTRAIT);
+        int reserved = 54;
+        // A tall pane: the width runs out first, so the frame is as wide as the pane.
+        int wide = LayoutEditorPlan.miniatureHeightInPanePx(aspect, reserved, 200, 4000);
+        assertEquals(Math.round(200 / aspect) + reserved, wide);
+        // A short pane: the height runs out first, and the frame never overflows it.
+        int shortPane = LayoutEditorPlan.miniatureHeightInPanePx(aspect, reserved, 200, 300);
+        assertEquals(300, shortPane);
+        assertTrue(shortPane < wide);
+    }
+
+    @Test
+    public void thePaneFrameNeverExceedsThePaneAtAnyReferenceSize() {
+        for (float density : new float[]{180f / 160f, 260f / 160f}) {
+            float aspect = PlaceMiniatureView.frameAspect(PORTRAIT);
+            int reserved = Math.round(density * 48f);
+            for (int paneWidth = 100; paneWidth <= 900; paneWidth += 13) {
+                for (int paneHeight = 120; paneHeight <= 900; paneHeight += 31) {
+                    int height = LayoutEditorPlan.miniatureHeightInPanePx(aspect, reserved,
+                        paneWidth, paneHeight);
+                    assertTrue(paneWidth + "x" + paneHeight + " overflowed its pane",
+                        height <= Math.max(paneHeight, reserved));
+                    assertTrue("and still leaves a frame", height >= reserved);
+                }
+            }
+        }
+    }
 }

@@ -295,6 +295,37 @@ public final class LayoutEditorPlan {
     }
 
     /**
+     * The width the miniature's frame asks for of its own accord, which is what decides whether
+     * the Layout editor's body can put the rows beside it rather than under it.
+     *
+     * <p>A landscape frame is as wide as the screen, so it never leaves a pane for the rows and
+     * the body falls back to one column — which is the case P1 bounds. A portrait frame is a
+     * sliver, and beside it there is room for everything.
+     */
+    public static int miniatureNaturalWidthPx(@NonNull PlaceOrientation orientation,
+                                              int screenWidthPx, int screenHeightPx,
+                                              float frameAspect) {
+        if (orientation == PlaceOrientation.LANDSCAPE)
+            return screenWidthPx;
+        return Math.round(PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx
+            * Math.max(frameAspect, 0.01f));
+    }
+
+    /**
+     * How tall the miniature stands in a pane of its own, where there are no rows beneath it to
+     * leave room for and the frame is bounded by the pane rather than by a fraction of the screen.
+     *
+     * <p>The frame takes the pane's width or the pane's height, whichever runs out first, so a
+     * miniature marooned between two empty gutters becomes a miniature that fills its column.
+     */
+    public static int miniatureHeightInPanePx(float frameAspect, int reservedPx, int paneWidthPx,
+                                              int paneHeightPx) {
+        float fromWidth = Math.max(0, paneWidthPx) / Math.max(frameAspect, 0.01f);
+        int room = Math.max(0, paneHeightPx - reservedPx);
+        return Math.round(Math.min(fromWidth, room)) + reservedPx;
+    }
+
+    /**
      * How tall the rows may grow before they scroll inside their own room: what the card has left
      * once the canvas and the chrome around it have taken theirs, and never less than
      * {@code minPx}, so a canvas that fills the screen still leaves a list rather than a sliver.

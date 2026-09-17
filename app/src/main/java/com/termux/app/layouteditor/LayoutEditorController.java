@@ -5,9 +5,11 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -120,6 +122,7 @@ public final class LayoutEditorController {
         final EditorShellControlHost orientationHost;
         final MaterialButtonToggleGroup orientation;
         final TextView orientationNotice;
+        final LinearLayout body;
         final PlaceMiniatureView miniature;
         final TextView narrowNotice;
         final ViewGroup rowsHost;
@@ -137,6 +140,7 @@ public final class LayoutEditorController {
             orientationHost = root.findViewById(R.id.layout_editor_orientation_host);
             orientation = root.findViewById(R.id.layout_editor_orientation);
             orientationNotice = root.findViewById(R.id.layout_editor_orientation_notice);
+            body = root.findViewById(R.id.layout_editor_body);
             miniature = root.findViewById(R.id.layout_editor_miniature);
             narrowNotice = root.findViewById(R.id.layout_editor_narrow_notice);
             rowsHost = root.findViewById(R.id.layout_editor_rows_host);
@@ -146,7 +150,7 @@ public final class LayoutEditorController {
             return header != null && title != null && revert != null && discard != null
                 && done != null && chooserSlot != null && orientationRow != null
                 && orientationHost != null && orientation != null && orientationNotice != null
-                && miniature != null && narrowNotice != null && rowsHost != null;
+                && body != null && miniature != null && narrowNotice != null && rowsHost != null;
         }
     }
 
@@ -337,7 +341,15 @@ public final class LayoutEditorController {
         card.discard.setVisibility(dirty);
     }
 
-    /** Sizes the canvas to the frame the shown orientation asks for. */
+    /**
+     * Sizes the canvas to the frame the shown orientation asks for, and decides whether the rows
+     * stand beside it or beneath it.
+     *
+     * <p>A portrait miniature on a landscape screen was a ~150px frame in a 1300px card with two
+     * ~550px empty gutters around it and the rows clipped off the bottom. Beside it there is room
+     * for a whole row of controls, and the frame gets the body's whole height instead of the body
+     * minus the floor the rows are owed.
+     */
     private void applyCanvasHeight(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
         DisplayMetrics metrics = mHost.context().getResources().getDisplayMetrics();
         float density = metrics.density;
@@ -347,15 +359,29 @@ public final class LayoutEditorController {
             Math.round(dpToPx(EditorShellMetrics.CHOOSER_DP)));
         int chromePx = cardChromePx(metrics.heightPixels, chooserPx,
             card.root.getPaddingTop() + card.root.getPaddingBottom(), density);
-        int height = LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(),
-            metrics.widthPixels, metrics.heightPixels,
-            PlaceMiniatureView.frameAspect(plan.shownOrientation()),
-            Math.round(card.miniature.reservedHeightPx()), chromePx + floorPx);
-        int available = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
-            chromePx, floorPx);
+        float frameAspect = PlaceMiniatureView.frameAspect(plan.shownOrientation());
+        int reservedPx = Math.round(card.miniature.reservedHeightPx());
+
+        int naturalPx = LayoutEditorPlan.miniatureNaturalWidthPx(plan.shownOrientation(),
+            metrics.widthPixels, metrics.heightPixels, frameAspect);
+        EditorShellMetrics.PaneSplit split = EditorShellMetrics.paneSplit(
+            EditorShellMetrics.contentWidthPx(metrics.widthPixels, density), naturalPx, density);
+        boolean twoPanes = rowsBesideMiniature(naturalPx, split, density);
+        applyCardWidth(card, metrics.widthPixels, split, density, twoPanes);
+
+        int bodyPx = Math.max(floorPx, metrics.heightPixels - chromePx);
+        int height = twoPanes
+            ? LayoutEditorPlan.miniatureHeightInPanePx(frameAspect, reservedPx,
+                split.leadingWidthPx, bodyPx)
+            : LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(), metrics.widthPixels,
+                metrics.heightPixels, frameAspect, reservedPx, chromePx + floorPx);
+        applyBodyPanes(card, split, twoPanes, height);
+
+        int available = twoPanes ? bodyPx
+            : LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height, chromePx, floorPx);
         boolean pinned = EditorShellMetrics.chooserPinned(available, density);
         EditorShellHeader.applyChooserPin(card.orientationRow, card.chooserSlot, mRows, pinned);
-        if (!pinned)
+        if (!pinned && !twoPanes)
             available = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
                 chromePx - chooserPx, floorPx);
         mRowsCapPx = available;
@@ -373,6 +399,75 @@ public final class LayoutEditorController {
             return;
         params.height = height;
         card.miniature.setLayoutParams(params);
+    }
+
+    /**
+     * Whether the rows can stand beside the miniature rather than beneath it.
+     *
+     * <p>Two things have to be true: the frame has to fit in the leading pane at the width it
+     * asked for — a frame squeezed into half the body is a frame that has been cut — and the
+     * trailing pane has to hold a whole row. A landscape frame is as wide as the screen, so it
+     * fails the first and the body falls back to one column, which is the case P1 bounds.
+     */
+    @VisibleForTesting
+    static boolean rowsBesideMiniature(int naturalWidthPx,
+                                       @NonNull EditorShellMetrics.PaneSplit split,
+                                       float density) {
+        if (split.paneCount < 2)
+            return false;
+        int asked = naturalWidthPx + EditorShellMetrics.px(
+            EditorShellMetrics.LEADING_PANE_AIR_DP, density);
+        return asked <= split.leadingWidthPx
+            && split.trailingWidthPx >= EditorShellMetrics.px(
+                EditorShellMetrics.ROW_MIN_INNER_DP, density);
+    }
+
+    /** Miniature and rows side by side, or one under the other. */
+    private void applyBodyPanes(@NonNull Card card, @NonNull EditorShellMetrics.PaneSplit split,
+                                boolean twoPanes, int miniatureHeightPx) {
+        card.body.setOrientation(twoPanes
+            ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        setPane(card.miniature, twoPanes ? split.leadingWidthPx
+            : ViewGroup.LayoutParams.MATCH_PARENT, 0, twoPanes ? miniatureHeightPx : -1);
+        setPane(card.rowsHost, twoPanes ? split.trailingWidthPx
+            : ViewGroup.LayoutParams.MATCH_PARENT, twoPanes ? split.gutterPx : 0, -1);
+    }
+
+    private static void setPane(@NonNull View view, int widthPx, int startMarginPx,
+                                int heightPx) {
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        if (!(params instanceof LinearLayout.LayoutParams))
+            return;
+        LinearLayout.LayoutParams pane = (LinearLayout.LayoutParams) params;
+        pane.width = widthPx;
+        pane.setMarginStart(startMarginPx);
+        if (heightPx >= 0)
+            pane.height = heightPx;
+        view.setLayoutParams(pane);
+    }
+
+    /**
+     * The card stops inheriting the screen's width. What is left over is symmetric air with the
+     * live place showing through it, which is the thing the editor is a picture of.
+     */
+    private void applyCardWidth(@NonNull Card card, int screenWidthPx,
+                                @NonNull EditorShellMetrics.PaneSplit split, float density,
+                                boolean twoPanes) {
+        // One column wide enough for one whole row, or two panes and the gutter between them.
+        EditorShellMetrics.PaneSplit shown = twoPanes ? split
+            : EditorShellMetrics.paneSplit(Math.min(
+                EditorShellMetrics.contentWidthPx(screenWidthPx, density),
+                EditorShellMetrics.px(EditorShellMetrics.ROW_MAX_INNER_DP, density)), 0, density);
+        int width = EditorShellMetrics.cardWidthPx(screenWidthPx, shown, density);
+        ViewGroup.LayoutParams params = card.root.getLayoutParams();
+        if (params == null || params.width == width)
+            return;
+        params.width = width;
+        if (params instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
+            frame.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        }
+        card.root.setLayoutParams(params);
     }
 
     // --------------------------------------------------------------------------------- the rows

@@ -324,4 +324,31 @@ public class EditorShellMetricsTest {
         assertTrue(cap.overflows);
         assertEquals(1, cap.wholeRows);
     }
+
+    // ------------------------------------------------------------------- filling the two panes
+
+    @Test
+    public void theSharedLayerPutsMaterialInOnePaneAndShapeAndWallpaperInTheOther() {
+        // Material is a heading, the Solid / Glass / Frost row and three sliders; Shape is a
+        // heading, Docked / Floating and two sliders; Wallpaper is a heading and one slider.
+        assertEquals(1, EditorShellMetrics.sectionsInLeadingPane(new int[] {5, 4, 2}));
+    }
+
+    @Test
+    public void aPanelWhoseLastSectionIsTheBigOneStillFillsBothPanes() {
+        // The keyboard: one material row, one shape row, four key rows. Material and Shape lead.
+        assertEquals(2, EditorShellMetrics.sectionsInLeadingPane(new int[] {2, 2, 5}));
+    }
+
+    @Test
+    public void theTrailingPaneIsNeverEmpty() {
+        int[][] shapes = {{1}, {1, 1}, {9, 1}, {1, 9}, {4, 3, 2}, {1, 1, 1, 1}};
+        for (int[] shape : shapes) {
+            int leading = EditorShellMetrics.sectionsInLeadingPane(shape);
+            assertTrue("a second column with nothing in it", leading >= 1);
+            assertTrue(leading <= Math.max(1, shape.length - 1));
+        }
+        assertEquals("one section cannot be split", 1,
+            EditorShellMetrics.sectionsInLeadingPane(new int[] {6}));
+    }
 }

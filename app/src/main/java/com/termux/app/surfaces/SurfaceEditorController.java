@@ -24,6 +24,7 @@ import android.view.ViewTreeObserver;
 import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -428,7 +429,14 @@ public final class SurfaceEditorController {
     /** The body's scroller, height-capped so the card never grows past the room it lives in. */
     @Nullable private ScrollView mRowsScroller;
     @Nullable private LinearLayout mRows;
+    /** The second column, on a card wide enough for two whole rows and the gutter between them. */
+    @Nullable private ScrollView mRowsScrollerTrailing;
+    @Nullable private LinearLayout mRowsTrailing;
+    /** The two columns side by side; one column when the card has room for only one. */
+    @Nullable private LinearLayout mPaneRow;
     private int mRowsMaxHeightPx;
+    /** How many ways the body is divided right now, so the rebuild knows where a section goes. */
+    private int mPaneCount = 1;
 
     /** Restatements for the rows currently on the card, rebuilt with them. */
     @NonNull private List<Runnable> mRowSyncs = new ArrayList<>();
@@ -1017,11 +1025,16 @@ public final class SurfaceEditorController {
         if (panel == null)
             return;
         ensureRowViews(panel);
-        LinearLayout rows = mRows;
-        if (rows == null)
+        // Before the sections are dealt out, not after: how many ways the body divides is what
+        // decides where each one goes.
+        applyCardWidth(panel, mHost.context().getResources().getDisplayMetrics().density);
+        LinearLayout leading = mRows;
+        LinearLayout trailing = mRowsTrailing;
+        if (leading == null || trailing == null)
             return;
         mShownRowSignature = rowSignature();
-        rows.removeAllViews();
+        leading.removeAllViews();
+        trailing.removeAllViews();
         List<Runnable> syncs = new ArrayList<>();
         mRowSyncs = syncs;
         Context context = mHost.context();
@@ -1030,23 +1043,57 @@ public final class SurfaceEditorController {
         boolean shared = SurfaceEditorCardPlan.sharedStripShown(mSelectedSlot);
         park(panel.shapeRow, panel.pills);
         park(panel.materialRow, panel.pills);
-        Section heading = null;
+
+        List<Control> controls = new ArrayList<>();
         for (Control control : SurfaceEditorProperties.rowsFor(mSelectedSlot)) {
-            if (!isAvailable(mSelectedSlot, control))
-                continue;
+            if (isAvailable(mSelectedSlot, control))
+                controls.add(control);
+        }
+        int inLeadingPane = mPaneCount < 2 ? Integer.MAX_VALUE
+            : EditorShellMetrics.sectionsInLeadingPane(sectionSizes(controls, shared));
+        mRowsScrollerTrailing.setVisibility(mPaneCount < 2 ? View.GONE : View.VISIBLE);
+
+        Section heading = null;
+        int sectionIndex = -1;
+        LinearLayout column = leading;
+        for (Control control : controls) {
             if (control.section != heading) {
-                EditorShellRows.addSection(context, rows, control.section.titleRes,
-                    heading == null);
                 heading = control.section;
+                sectionIndex++;
+                // A section is wholly in one pane or wholly in the other: rows that belong
+                // together three eye movements apart is what a second column is meant to fix.
+                column = sectionIndex < inLeadingPane ? leading : trailing;
+                EditorShellRows.addSection(context, column, heading.titleRes,
+                    column.getChildCount() == 0);
                 if (shared && heading == Section.SHAPE)
-                    park(panel.shapeRow, rows);
+                    park(panel.shapeRow, column);
                 else if (shared && heading == Section.MATERIAL)
-                    park(panel.materialRow, rows);
+                    park(panel.materialRow, column);
             }
-            addControlRow(context, rows, control, mSelectedSlot, syncs);
+            addControlRow(context, column, control, mSelectedSlot, syncs);
         }
         rememberAndRestoreScroll();
         applyRowsCap();
+    }
+
+    /** How many rows each section brings, in order, for the pane split to balance against. */
+    @NonNull
+    private static int[] sectionSizes(@NonNull List<Control> controls, boolean shared) {
+        List<Integer> sizes = new ArrayList<>();
+        Section heading = null;
+        for (Control control : controls) {
+            if (control.section != heading) {
+                heading = control.section;
+                // The heading itself, plus the toggle row that leads Shape and Material.
+                sizes.add(shared && (heading == Section.SHAPE || heading == Section.MATERIAL)
+                    ? 2 : 1);
+            }
+            sizes.set(sizes.size() - 1, sizes.get(sizes.size() - 1) + 1);
+        }
+        int[] answer = new int[sizes.size()];
+        for (int index = 0; index < answer.length; index++)
+            answer[index] = sizes.get(index);
+        return answer;
     }
 
     /**
@@ -1062,22 +1109,31 @@ public final class SurfaceEditorController {
     @Nullable private String mScrollKey;
 
     private void rememberAndRestoreScroll() {
-        ScrollView scroller = mRowsScroller;
-        if (scroller == null)
-            return;
         String key = (mSelectedSlot == null ? "all" : mSelectedSlot.name())
             + '.' + (editPlace() == null ? "shared" : editPlace().name());
-        if (key.equals(mScrollKey)) {
-            mPanelScroll.remove(key);
-            scroller.scrollTo(0, 0);
-            return;
+        boolean samePanel = key.equals(mScrollKey);
+        if (mScrollKey != null && !samePanel) {
+            mPanelScroll.put(mScrollKey + ".0", scrollYOf(mRowsScroller));
+            mPanelScroll.put(mScrollKey + ".1", scrollYOf(mRowsScrollerTrailing));
         }
-        if (mScrollKey != null)
-            mPanelScroll.put(mScrollKey, scroller.getScrollY());
+        if (samePanel) {
+            mPanelScroll.remove(key + ".0");
+            mPanelScroll.remove(key + ".1");
+        }
         mScrollKey = key;
-        Integer remembered = mPanelScroll.get(key);
-        int target = remembered == null ? 0 : remembered;
+        restoreScroll(mRowsScroller, mPanelScroll.get(key + ".0"));
+        restoreScroll(mRowsScrollerTrailing, mPanelScroll.get(key + ".1"));
+    }
+
+    private static int scrollYOf(@Nullable ScrollView scroller) {
+        return scroller == null ? 0 : scroller.getScrollY();
+    }
+
+    private static void restoreScroll(@Nullable ScrollView scroller, @Nullable Integer remembered) {
+        if (scroller == null)
+            return;
         scroller.scrollTo(0, 0);
+        int target = remembered == null ? 0 : remembered;
         if (target > 0)
             scroller.post(() -> scroller.scrollTo(0, target));
     }
@@ -1093,27 +1149,53 @@ public final class SurfaceEditorController {
         into.addView(view);
     }
 
-    /** The body's one scroller, created on first use: wrap up to the cap, then scroll inside. */
+    /**
+     * The body's columns, created on first use: wrap up to the cap, then scroll inside.
+     *
+     * <p>Two of them, side by side at equal weight, because the card's own width is declared as two
+     * panes and a gutter — so the weights come out at exactly the pane width the metrics asked
+     * for without either column being told a number. The trailing one is gone while the card has
+     * room for only one.
+     */
     private void ensureRowViews(@NonNull Panel panel) {
-        if (mRowsScroller != null)
+        if (mPaneRow != null)
             return;
         Context context = mHost.context();
-        mRowsScroller = new ScrollView(EditorShellRows.scrollerContext(context)) {
+        mPaneRow = new LinearLayout(context);
+        mPaneRow.setOrientation(LinearLayout.HORIZONTAL);
+        mPaneRow.setBaselineAligned(false);
+        mRowsScroller = buildBodyScroller(context);
+        mRows = (LinearLayout) mRowsScroller.getChildAt(0);
+        mRowsScrollerTrailing = buildBodyScroller(context);
+        mRowsTrailing = (LinearLayout) mRowsScrollerTrailing.getChildAt(0);
+        mPaneRow.addView(mRowsScroller, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams trailing = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        trailing.setMarginStart(dp(EditorShellMetrics.GUTTER_DP));
+        mPaneRow.addView(mRowsScrollerTrailing, trailing);
+        mRowsScrollerTrailing.setVisibility(View.GONE);
+        panel.rowsHost.addView(mPaneRow, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    @NonNull
+    private ScrollView buildBodyScroller(@NonNull Context context) {
+        ScrollView scroller = new ScrollView(EditorShellRows.scrollerContext(context)) {
             @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
                     Math.max(dp(80), mRowsMaxHeightPx), View.MeasureSpec.AT_MOST));
             }
         };
-        mRowsScroller.setClipToPadding(false);
+        scroller.setClipToPadding(false);
         // A cramped region caps the list short of its last row or two; the fade and the scrollbar
         // are what say so. A list that simply stops at the card's edge reads as the whole list.
-        EditorShellRows.applyBodyScroller(mRowsScroller);
-        mRows = new LinearLayout(context);
-        mRows.setOrientation(LinearLayout.VERTICAL);
-        mRowsScroller.addView(mRows, new ViewGroup.LayoutParams(
+        EditorShellRows.applyBodyScroller(scroller);
+        LinearLayout rows = new LinearLayout(context);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        scroller.addView(rows, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        panel.rowsHost.addView(mRowsScroller, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroller;
     }
 
     /**
@@ -1133,6 +1215,7 @@ public final class SurfaceEditorController {
         int regionPx = region[1] - region[0];
         int standoffPx = dp(SURFACE_EDITOR_STANDOFF_DP);
         float density = mHost.context().getResources().getDisplayMetrics().density;
+        applyCardWidth(panel, density);
 
         int cardRoomPx = Math.max(0, regionPx - (2 * standoffPx));
         EditorShellHeader.apply(panel.header, cardRoomPx);
@@ -1153,17 +1236,66 @@ public final class SurfaceEditorController {
         int available = SurfaceEditorPillMetrics.bodyCapPx(regionPx, chromePx, standoffPx,
             dp(80), dp(360));
         int capped = available;
-        if (mRows != null && mRows.getChildCount() > 0) {
-            View first = mRows.getChildAt(0);
-            int pitch = first.getHeight() > 0 ? first.getHeight()
-                : dp(EditorShellMetrics.ROW_MIN_HEIGHT_DP);
-            capped = EditorShellMetrics.bodyCap(available, mRows.getHeight(), pitch,
+        int pitch = measuredRowPitchPx();
+        if (pitch > 0) {
+            int content = Math.max(heightOf(mRows), heightOf(mRowsTrailing));
+            capped = EditorShellMetrics.bodyCap(available, content, pitch,
                 dp(EditorShellMetrics.PEEK_DP)).capPx;
         }
         if (capped == mRowsMaxHeightPx)
             return;
         mRowsMaxHeightPx = capped;
         mRowsScroller.requestLayout();
+        if (mRowsScrollerTrailing != null)
+            mRowsScrollerTrailing.requestLayout();
+    }
+
+    private static int heightOf(@Nullable View view) {
+        return view == null ? 0 : view.getHeight();
+    }
+
+    /**
+     * A row as it really measured, which is what the cut is quantised to. The nominal 48dp would
+     * desync the moment a font scale or a locale made the rows taller than the kit's floor.
+     */
+    private int measuredRowPitchPx() {
+        for (LinearLayout column : new LinearLayout[] {mRows, mRowsTrailing}) {
+            if (column == null)
+                continue;
+            for (int index = 0; index < column.getChildCount(); index++) {
+                int height = column.getChildAt(index).getHeight();
+                if (height >= dp(EditorShellMetrics.ROW_MIN_HEIGHT_DP))
+                    return height;
+            }
+        }
+        return mRows != null && mRows.getChildCount() > 0
+            ? dp(EditorShellMetrics.ROW_MIN_HEIGHT_DP) : 0;
+    }
+
+    /**
+     * The card stops inheriting the screen's width.
+     *
+     * <p>Both cards were {@code match_parent}, which is the single line where the through-line
+     * entered the tree: the card took the screen, the rows took the card, and a 41-position corner
+     * value ended up with 892dp of track. The width is declared from the control kit instead — one
+     * pane, or two where two whole rows and a gutter fit — and what is left over becomes symmetric
+     * air with the live place showing through it, which is the thing the editor is for.
+     */
+    private void applyCardWidth(@NonNull Panel panel, float density) {
+        int screenWidthPx = mHost.context().getResources().getDisplayMetrics().widthPixels;
+        EditorShellMetrics.PaneSplit split = EditorShellMetrics.paneSplit(
+            EditorShellMetrics.contentWidthPx(screenWidthPx, density), 0, density);
+        mPaneCount = split.paneCount;
+        int width = EditorShellMetrics.cardWidthPx(screenWidthPx, split, density);
+        ViewGroup.LayoutParams params = panel.root.getLayoutParams();
+        if (params == null || params.width == width)
+            return;
+        params.width = width;
+        if (params instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
+            frame.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        }
+        panel.root.setLayoutParams(params);
     }
 
     /**

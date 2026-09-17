@@ -113,19 +113,10 @@
             android:textSize="12sp"
             android:visibility="gone" />
 
-        <!-- The canvas. Its height is set in code from the orientation it is showing: the
-             portrait frame stands at about half the screen, the landscape one as wide as the
-             screen — or, where that would take the whole card, at the room it has left. -->
-        <com.termux.app.fragments.settings.PlaceMiniatureView
-            android:id="@+id/layout_editor_miniature"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
-
-        <!-- The one slot for what the current arrangement costs: a narrow canvas from bars on the
-             side, a status bar itself parked on a side. Neither blocks anything, both can apply at
-             once, and LayoutEditorController.syncNotice fills the text and visibility from the
-             plan. -->
+        <!-- The arrangement's own cost, above the picture it is about: a narrow canvas from bars
+             down the side of a portrait screen, and a status bar itself parked on a side. Neither
+             blocks anything, both can apply at once, and LayoutEditorController.syncNotice fills
+             the text and visibility from the plan. -->
         <TextView
             android:id="@+id/layout_editor_narrow_notice"
             android:layout_width="match_parent"
@@ -135,14 +126,36 @@
             android:textSize="12sp"
             android:visibility="gone" />
 
-        <!-- Everything about the place that no bar can be dragged into: how its keyboard
-             stands, and on Home how many cells its grid has. Filled in code from
-             LayoutEditorPlan, into a scroller that grows to whatever the canvas above has left
-             and scrolls inside it after that. -->
-        <FrameLayout
-            android:id="@+id/layout_editor_rows_host"
+        <!-- The body. One column on a phone, with the rows under the picture; two beside each
+             other where the card is wide enough for a whole row on each side, which is what turns
+             a 150px miniature marooned between two 550px gutters into a miniature that fills its
+             column with the rows beside it. LayoutEditorController flips the orientation. -->
+        <LinearLayout
+            android:id="@+id/layout_editor_body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp" />
+            android:baselineAligned="false"
+            android:orientation="vertical">
+
+            <!-- The canvas. Its height is set in code from the orientation it is showing: the
+                 portrait frame stands at about half the screen, the landscape one as wide as the
+                 screen — or, where that would take the whole card, at the room it has left. -->
+            <com.termux.app.fragments.settings.PlaceMiniatureView
+                android:id="@+id/layout_editor_miniature"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" />
+
+            <!-- Everything about the place that no bar can be dragged into: how its keyboard
+                 stands, and on Home how many cells its grid has. Filled in code from
+                 LayoutEditorPlan, into a scroller that grows to whatever the canvas above has left
+                 and scrolls inside it after that. -->
+            <FrameLayout
+                android:id="@+id/layout_editor_rows_host"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp" />
+        </LinearLayout>
+
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
