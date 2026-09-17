@@ -92,23 +92,25 @@ public class StatusBarInkTest {
     }
 
     /**
-     * The hierarchy the fix had to keep. It is carried by weight and size, which cost no contrast,
-     * and by hue — never again by being dimmer, which is the budget light mode does not have.
+     * The hierarchy the row keeps is hue and order only. The CPU figure was the one bold, larger
+     * figure beside two regular ones and read as the odd one out; every tier is now drawn at the
+     * temperature's weight and size, and none of them is dimmer than another.
      */
     @Test
-    public void theThreeTiersStayDistinguishableWithoutSpendingContrast() {
-        assertTrue("the CPU figure is the heaviest",
-            StatusBarInk.weightFor(StatusBarWidgetView.ColorRole.PRIMARY)
-                > StatusBarInk.weightFor(StatusBarWidgetView.ColorRole.SECONDARY));
-        assertTrue("and the weather the lightest",
-            StatusBarInk.weightFor(StatusBarWidgetView.ColorRole.SECONDARY)
-                > StatusBarInk.weightFor(StatusBarWidgetView.ColorRole.TERTIARY));
-        assertTrue("the CPU figure is the largest",
-            StatusBarInk.textSizeSpFor(StatusBarWidgetView.ColorRole.PRIMARY)
-                > StatusBarInk.textSizeSpFor(StatusBarWidgetView.ColorRole.SECONDARY));
-        assertTrue("and the weather the smallest",
-            StatusBarInk.textSizeSpFor(StatusBarWidgetView.ColorRole.SECONDARY)
-                > StatusBarInk.textSizeSpFor(StatusBarWidgetView.ColorRole.TERTIARY));
+    public void theThreeTiersShareOneWeightAndSizeAndStayDistinguishableByHue() {
+        assertEquals("the CPU figure is no heavier than the RAM figure",
+            StatusBarInk.weightFor(StatusBarWidgetView.ColorRole.SECONDARY),
+            StatusBarInk.weightFor(StatusBarWidgetView.ColorRole.PRIMARY));
+        assertEquals("and the RAM figure no heavier than the weather",
+            StatusBarInk.weightFor(StatusBarWidgetView.ColorRole.TERTIARY),
+            StatusBarInk.weightFor(StatusBarWidgetView.ColorRole.SECONDARY));
+        assertEquals("the CPU figure is the temperature's size",
+            StatusBarInk.textSizeSpFor(StatusBarWidgetView.ColorRole.TERTIARY),
+            StatusBarInk.textSizeSpFor(StatusBarWidgetView.ColorRole.PRIMARY), 0f);
+        assertEquals("and so is the RAM figure",
+            StatusBarInk.textSizeSpFor(StatusBarWidgetView.ColorRole.TERTIARY),
+            StatusBarInk.textSizeSpFor(StatusBarWidgetView.ColorRole.SECONDARY), 0f);
+        assertTrue("nothing is drawn bold", StatusBarInk.WEIGHT_PRIMARY < 700);
 
         // And the tiers are still three different colours on the band, not one ink three times:
         // the toning moves a hue along its own tone axis and never onto another hue's.
