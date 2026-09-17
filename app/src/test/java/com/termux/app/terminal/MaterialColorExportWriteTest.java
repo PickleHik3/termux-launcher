@@ -13,6 +13,8 @@ import org.robolectric.annotation.Config;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Locale;
+import java.util.Properties;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -57,6 +59,29 @@ public class MaterialColorExportWriteTest {
         assertFalse(MaterialTerminalColorScheme.alreadyOnDisk(file.getAbsolutePath(), "a=1\n"));
         assertFalse(MaterialTerminalColorScheme.alreadyOnDisk(file.getAbsolutePath(),
             "a=1\nb=2\nc=3\n"));
+    }
+
+    /**
+     * Turkish maps {@code i} to a dotted capital I, so a default-locale upper-case turned
+     * {@code primary} into {@code PRİMARY} — not a shell identifier, and the file stopped sourcing.
+     */
+    @Test
+    public void shellExportNamesDoNotFollowTheDeviceLocale() {
+        Locale original = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+            Properties props = new Properties();
+            props.setProperty("primary", "#FFB3AE");
+            props.setProperty("terminal_bright_white", "#EEEEEE");
+
+            String exports = MaterialTerminalColorScheme.toShellExports(props);
+
+            assertTrue(exports, exports.contains("export TERMUX_MATERIAL_PRIMARY="));
+            assertTrue(exports, exports.contains("export TERMUX_MATERIAL_TERMINAL_BRIGHT_WHITE="));
+            assertFalse(exports, exports.contains("PRİMARY"));
+        } finally {
+            Locale.setDefault(original);
+        }
     }
 
     @Test

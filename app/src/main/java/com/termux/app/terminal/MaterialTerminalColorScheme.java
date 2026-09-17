@@ -20,6 +20,7 @@ import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
@@ -538,6 +539,13 @@ public final class MaterialTerminalColorScheme {
         return builder.toString();
     }
 
+    /**
+     * The shell half of the export.
+     *
+     * <p>Keys are upper-cased against {@link Locale#ROOT}, never the device's. A Turkish locale maps
+     * {@code i} to a dotted capital I, so {@code primary} came out as {@code PRİMARY} — not a shell
+     * identifier at all, and the whole file stopped sourcing for that user.
+     */
     @VisibleForTesting
     static String toShellExports(@NonNull Properties props) {
         StringBuilder builder = new StringBuilder();
@@ -545,7 +553,7 @@ public final class MaterialTerminalColorScheme {
         ArrayList<String> keys = sortedKeys(props);
         for (String key : keys) {
             builder.append("export TERMUX_MATERIAL_")
-                .append(key.toUpperCase().replace('.', '_').replace('-', '_'))
+                .append(key.toUpperCase(Locale.ROOT).replace('.', '_').replace('-', '_'))
                 .append("='")
                 .append(props.getProperty(key))
                 .append("'\n");
