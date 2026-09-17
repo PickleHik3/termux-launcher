@@ -164,9 +164,7 @@ public class TermuxApplication extends Application {
             Context configuredContext = context.createConfigurationContext(effectiveConfig);
             Context themedContext = new ContextThemeWrapper(configuredContext,
                 R.style.Theme_TermuxActivity_DayNight_NoActionBar);
-            Properties terminalColors = MaterialTerminalColorScheme.create(themedContext, level);
-            return MaterialTerminalColorScheme.createMaterialRoleProperties(
-                themedContext, terminalColors, level);
+            return MaterialTerminalColorScheme.createPaletteSet(themedContext, level);
         });
     }
 

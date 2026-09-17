@@ -52,6 +52,13 @@ public final class ThemeTemplates {
     private static final String PALETTE_FILE_PATH =
         TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors.properties";
 
+    /** The two mode files beside it, written by the same export. Either may not exist yet. */
+    private static final String DARK_PALETTE_FILE_PATH =
+        TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-dark.properties";
+
+    private static final String LIGHT_PALETTE_FILE_PATH =
+        TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-light.properties";
+
     private static final ThemeTemplateLog LOG = message -> Logger.logWarn(LOG_TAG, message);
 
     /**
@@ -95,12 +102,12 @@ public final class ThemeTemplates {
     }
 
     /**
-     * Run a pass claimed by {@link #schedulePass(Context)} with the palette that was just exported.
+     * Run a pass claimed by {@link #schedulePass(Context)} with the palettes that were just exported.
      *
      * <p>Runs on the calling thread, which must not be the UI thread.
      */
-    public static void runPass(@NonNull Context context, @NonNull Properties palette, long pass) {
-        applier(context).apply(palette, enabledIds(context), pass);
+    public static void runPass(@NonNull Context context, @NonNull PaletteSet palettes, long pass) {
+        applier(context).apply(palettes, enabledIds(context), pass);
     }
 
     /**
@@ -113,29 +120,56 @@ public final class ThemeTemplates {
      */
     public static void exportPaletteAndRunPassAsync(@NonNull Context context,
                                                     @NonNull Properties palette) {
-        exportPaletteAndRunPassAsync(context, () -> palette);
+        exportPaletteAndRunPassAsync(context, PaletteSet.of(palette));
+    }
+
+    /** As {@link #exportPaletteAndRunPassAsync(Context, Properties)}, with both modes derived. */
+    public static void exportPaletteAndRunPassAsync(@NonNull Context context,
+                                                    @NonNull PaletteSet palettes) {
+        exportPaletteAndRunPassAsync(context, () -> palettes, null);
     }
 
     /**
-     * As {@link #exportPaletteAndRunPassAsync(Context, Properties)}, for a caller whose palette can
+     * As {@link #exportPaletteAndRunPassAsync(Context, PaletteSet)}, for a caller whose palettes can
      * only be derived off the UI thread. {@code paletteSource} runs on the background thread and may
      * return {@code null} to call the whole thing off; it must not touch theme attributes or
      * resources, which are not safe to resolve there.
      */
     public static void exportPaletteAndRunPassAsync(@NonNull Context context,
-                                                    @NonNull Callable<Properties> paletteSource) {
+                                                    @NonNull Callable<PaletteSet> paletteSource) {
+        exportPaletteAndRunPassAsync(context, paletteSource, null);
+    }
+
+    /**
+     * As above, with something to do once the palette files and the template pass have landed.
+     *
+     * <p>{@code afterPass} runs on this class's one background thread, after everything the pass
+     * writes is on disk — which is the order D2 asks for: a session told the colours moved must not
+     * beat the files it is going to re-read to the punch.
+     */
+    public static void exportPaletteAndRunPassAsync(@NonNull Context context,
+                                                    @NonNull Callable<PaletteSet> paletteSource,
+                                                    @Nullable AfterPass afterPass) {
         Context application = context.getApplicationContext();
         long pass = schedulePass(application);
         PALETTE_EXECUTOR.execute(() -> {
             try {
-                Properties palette = paletteSource.call();
-                if (palette == null) return;
-                MaterialTerminalColorScheme.writeMaterialColorFiles(palette);
-                runPass(application, palette, pass);
+                PaletteSet palettes = paletteSource.call();
+                if (palettes == null || palettes.active() == null) return;
+                MaterialTerminalColorScheme.writeMaterialColorFiles(palettes.active());
+                runPass(application, palettes, pass);
+                if (afterPass != null) afterPass.run(palettes);
             } catch (Exception e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Error exporting the palette", e);
             }
         });
+    }
+
+    /** What {@link #exportPaletteAndRunPassAsync(Context, Callable, AfterPass)} calls at the end. */
+    public interface AfterPass {
+
+        /** Called on the export thread, with everything the pass wrote already on disk. */
+        void run(@NonNull PaletteSet palettes);
     }
 
     /**
@@ -151,12 +185,13 @@ public final class ThemeTemplates {
         Set<String> enabled = enabledIds(application);
         PALETTE_EXECUTOR.execute(() -> {
             try {
-                Properties palette = exportedPalette();
+                Properties palette = exportedPalette(PALETTE_FILE_PATH);
                 if (palette == null) {
                     Logger.logWarn(LOG_TAG, "No exported palette to render templates from yet");
                     return;
                 }
-                applier.apply(palette, enabled, pass);
+                applier.apply(PaletteSet.of(palette, exportedPalette(DARK_PALETTE_FILE_PATH),
+                    exportedPalette(LIGHT_PALETTE_FILE_PATH)), enabled, pass);
             } catch (Exception e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Error applying theme templates", e);
             }
@@ -199,16 +234,16 @@ public final class ThemeTemplates {
         return preferences == null ? Collections.emptySet() : preferences.getThemeTemplatesEnabled();
     }
 
-    /** The palette the launcher last exported, or {@code null} if it has never written one. */
+    /** An exported palette file, or {@code null} if the launcher has never written that one. */
     @Nullable
-    private static Properties exportedPalette() {
-        File file = new File(PALETTE_FILE_PATH);
+    private static Properties exportedPalette(@NonNull String path) {
+        File file = new File(path);
         if (!file.isFile()) return null;
         Properties palette = new Properties();
         try (InputStream in = new FileInputStream(file)) {
             palette.load(in);
         } catch (IOException e) {
-            Logger.logWarn(LOG_TAG, "Cannot read " + PALETTE_FILE_PATH + ": " + e.getMessage());
+            Logger.logWarn(LOG_TAG, "Cannot read " + path + ": " + e.getMessage());
             return null;
         }
         return palette;

@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider;
 
 import com.google.android.material.color.utilities.Hct;
 import com.termux.app.theme.LauncherThemeTokens;
+import com.termux.app.theme.templates.PaletteSet;
 import com.termux.app.theme.SchemeColors;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.terminal.TerminalColorScheme;
@@ -28,6 +29,8 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -236,6 +239,73 @@ public class MaterialTerminalColorSchemeTest {
         assertNotNull(roles.getProperty("terminal_foreground"));
         assertNotNull(roles.getProperty("terminal_background"));
         assertNotNull(roles.getProperty("terminal_cursor"));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Both palettes per pass (D1). Dynamic colours are pure resource qualifiers, so forcing the
+    // night bits on a configuration context resolves the other mode's roles with no activity in
+    // sight — which is what lets a template carry both tables.
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * The forced-mode derivation has to agree with the ordinary one for the mode the phone is
+     * actually in, or the active palette and the mode file describing it would disagree.
+     */
+    @Test
+    public void theForcedModePaletteMatchesThePlainThemedContext() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Context themed = themedContext();
+            Properties plain = MaterialTerminalColorScheme.createMaterialRoleProperties(themed,
+                MaterialTerminalColorScheme.create(themed, level), level);
+            PaletteSet palettes = MaterialTerminalColorScheme.createPaletteSet(themed, level);
+            assertEquals("active at " + level.value, plain, palettes.active());
+            assertTrue("dark at " + level.value, palettes.hasDark());
+            assertTrue("light at " + level.value, palettes.hasLight());
+            Properties current = "dark".equals(plain.getProperty("mode"))
+                ? palettes.dark() : palettes.light();
+            assertEquals("current mode at " + level.value, plain, current);
+        }
+    }
+
+    /** And the two halves have to be genuinely different palettes, whichever mode is on. */
+    @Test
+    public void bothHalvesAreDerivedWhicheverModeThePhoneIsIn() {
+        try {
+            for (String qualifier : new String[] {"+notnight", "+night"}) {
+                RuntimeEnvironment.setQualifiers(qualifier);
+                PaletteSet palettes = MaterialTerminalColorScheme.createPaletteSet(
+                    themedContext(), TerminalContrastLevel.DEFAULT);
+                assertEquals(qualifier + " dark palette", "dark", palettes.dark().getProperty("mode"));
+                assertEquals(qualifier + " light palette", "light", palettes.light().getProperty("mode"));
+                assertNotEquals(qualifier, palettes.dark(), palettes.light());
+                // The active palette is one of the two, not a third derivation of its own.
+                assertEquals(qualifier, "night".equals(qualifier.substring(1))
+                        ? palettes.dark() : palettes.light(), palettes.active());
+            }
+        } finally {
+            RuntimeEnvironment.setQualifiers("+notnight");
+        }
+    }
+
+    /** A set carrying only the active palette answers for all three modes with it. */
+    @Test
+    public void aSinglePaletteSetStandsInForBothModes() {
+        Properties only = MaterialTerminalColorScheme.createMaterialRoleProperties(
+            themedContext(),
+            MaterialTerminalColorScheme.create(themedContext(), TerminalContrastLevel.DEFAULT),
+            TerminalContrastLevel.DEFAULT);
+        PaletteSet palettes = PaletteSet.of(only);
+        assertFalse(palettes.hasDark());
+        assertFalse(palettes.hasLight());
+        assertSame(only, palettes.dark());
+        assertSame(only, palettes.light());
+        assertSame(only, palettes.forMode("default"));
+        assertNull(palettes.forMode("sepia"));
+    }
+
+    private static Context themedContext() {
+        return new ContextThemeWrapper(ApplicationProvider.getApplicationContext(),
+            com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
     }
 
     /** {@code mode} has to agree with the terminal background's own HCT tone, not the theme's. */

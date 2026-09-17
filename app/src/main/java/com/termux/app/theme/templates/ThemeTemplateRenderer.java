@@ -68,6 +68,16 @@ public final class ThemeTemplateRenderer {
      * @return a {@link Result} whose {@link Result#failure} is set when nothing should be written.
      */
     public static Result render(String template, Properties palette) {
+        return render(template, PaletteSet.of(palette));
+    }
+
+    /**
+     * Render {@code template} against a whole palette set.
+     *
+     * @return a {@link Result} whose {@link Result#failure} is set when nothing should be written.
+     */
+    public static Result render(String template, PaletteSet palettes) {
+        Properties palette = palettes == null ? null : palettes.active();
         if (template == null) return failed("the template file is missing");
         if (template.contains("<*")) return failed("block syntax (<* … *>) is not supported");
         String mode = modeOf(palette);

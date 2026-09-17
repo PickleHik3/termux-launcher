@@ -1,16 +1,20 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Color;
+import android.view.ContextThemeWrapper;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.color.utilities.Hct;
 import com.termux.R;
+import com.termux.app.theme.templates.PaletteSet;
 import com.termux.shared.errors.Error;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
@@ -252,6 +256,61 @@ public final class MaterialTerminalColorScheme {
     private static double sanitizeDegrees(double degrees) {
         double wrapped = degrees % 360d;
         return wrapped < 0d ? wrapped + 360d : wrapped;
+    }
+
+    /**
+     * The whole export: the active palette plus a dark and a light one.
+     *
+     * <p>Both halves are the same derivation as the active one, run against a configuration context
+     * with the {@code UI_MODE_NIGHT_*} bits forced and re-themed with the activity's own DayNight
+     * theme — the trick {@code TermuxApplication}'s background refresh already uses. Dynamic colours
+     * are pure resource qualifiers ({@code values-v31} / {@code values-night-v31}), so a forced
+     * configuration resolves the other mode's roles exactly as the activity would in it; no activity
+     * and no recreation is involved.
+     *
+     * <p>Must run on a thread that may resolve theme attributes and resources — in practice the main
+     * thread, like every other {@link #create} call.
+     */
+    @NonNull
+    public static PaletteSet createPaletteSet(@NonNull Context context,
+                                              @NonNull TerminalContrastLevel level) {
+        return createPaletteSet(context, level, create(context, level));
+    }
+
+    /**
+     * As {@link #createPaletteSet(Context, TerminalContrastLevel)}, for a caller that has already
+     * built the active terminal palette and handed it to the terminal — the exported files then
+     * describe exactly the colours the sessions took, rather than a second derivation of them.
+     */
+    @NonNull
+    public static PaletteSet createPaletteSet(@NonNull Context context,
+                                              @NonNull TerminalContrastLevel level,
+                                              @NonNull Properties activeTerminalProps) {
+        Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
+        return PaletteSet.of(active,
+            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_YES),
+            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_NO));
+    }
+
+    /** The export as it would be with {@code nightMode} forced, or {@code null} if that failed. */
+    @Nullable
+    private static Properties paletteForNightMode(@NonNull Context context,
+                                                  @NonNull TerminalContrastLevel level,
+                                                  int nightMode) {
+        try {
+            Configuration configuration = new Configuration(context.getResources().getConfiguration());
+            configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
+            Context themed = new ContextThemeWrapper(
+                context.createConfigurationContext(configuration),
+                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            return createMaterialRoleProperties(themed, create(themed, level), level);
+        } catch (RuntimeException e) {
+            // A palette for the mode the user is not in is worth having, never worth failing the
+            // refresh for: the active one is what the terminal is about to wear.
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Cannot derive the palette for uiMode night " + nightMode, e);
+            return null;
+        }
     }
 
     /**

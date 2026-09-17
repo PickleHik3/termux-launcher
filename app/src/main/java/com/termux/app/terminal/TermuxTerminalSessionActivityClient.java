@@ -27,6 +27,7 @@ import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
 import com.termux.shared.logger.Logger;
 import com.termux.app.theme.LauncherSchemeTheme;
+import com.termux.app.theme.templates.PaletteSet;
 import com.termux.app.theme.templates.ThemeTemplates;
 import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TerminalSession;
@@ -726,10 +727,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     MaterialTerminalColorScheme.signature(mContext, level);
                 // Built here, on the main thread, and handed over as finished values: the writer thread
                 // must not touch the theme or resources, and this way the files describe the same
-                // palette the terminal just took.
-                final Properties exported =
-                    MaterialTerminalColorScheme.createMaterialRoleProperties(mContext, props, level);
-                ThemeTemplates.exportPaletteAndRunPassAsync(mContext, exported);
+                // palette the terminal just took. The dark and light halves are derived beside it,
+                // off forced-mode configuration contexts, so the templates can dress a tool for the
+                // mode the phone is not in.
+                ThemeTemplates.exportPaletteAndRunPassAsync(mContext,
+                    MaterialTerminalColorScheme.createPaletteSet(mContext, level, props));
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
@@ -770,7 +772,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             for (String key : snapshot.stringPropertyNames()) {
                 exported.setProperty("terminal_" + key, snapshot.getProperty(key));
             }
-            return exported;
+            // One palette, and honestly so: a scheme file is a scheme file whatever the phone's
+            // night setting says, so there is no second mode to derive and no mode file to write.
+            return PaletteSet.of(exported);
         });
     }
 

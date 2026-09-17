@@ -106,7 +106,12 @@ public final class ThemeTemplateApplier {
 
     /** Schedule a pass and run it here. Never on the UI thread: hooks are other people's shells. */
     public void apply(Properties palette, Collection<String> enabledIds) {
-        apply(palette, enabledIds, schedule());
+        apply(PaletteSet.of(palette), enabledIds, schedule());
+    }
+
+    /** As above, for a caller with only the active palette — every mode renders from it. */
+    public void apply(Properties palette, Collection<String> enabledIds, long pass) {
+        apply(PaletteSet.of(palette), enabledIds, pass);
     }
 
     /**
@@ -115,18 +120,19 @@ public final class ThemeTemplateApplier {
      * <p>Passes run one at a time: both callers read and rewrite the same ledger and run the same
      * hooks, and a pass that waited its turn finds out it was overtaken before it touches anything.
      */
-    public void apply(Properties palette, Collection<String> enabledIds, long pass) {
+    public void apply(PaletteSet palettes, Collection<String> enabledIds, long pass) {
         synchronized (mPassLock) {
-            applyLocked(palette, enabledIds, pass);
+            applyLocked(palettes, enabledIds, pass);
         }
     }
 
-    private void applyLocked(Properties palette, Collection<String> enabledIds, long pass) {
+    private void applyLocked(PaletteSet palettes, Collection<String> enabledIds, long pass) {
         Ledger ledger = readLedger();
         Map<String, String> applied = ledger.outputs;
         Map<String, String> next = new LinkedHashMap<>(applied);
         Set<String> pending = new LinkedHashSet<>(ledger.hookPending);
-        String mode = ThemeTemplateRenderer.modeOf(palette);
+        // The hooks are told the mode the user is actually in, not the modes the templates carry.
+        String mode = ThemeTemplateRenderer.modeOf(palettes.active());
         List<ThemeTemplate> active = mLoader.active(enabledIds);
         Set<String> activeIds = new LinkedHashSet<>();
         boolean superseded = false;
@@ -137,7 +143,7 @@ public final class ThemeTemplateApplier {
                 break;
             }
             boolean hookDue = !applied.containsKey(template.id) || pending.contains(template.id);
-            Outcome outcome = applyOne(template, palette, mode, hookDue);
+            Outcome outcome = applyOne(template, palettes, mode, hookDue);
             if (outcome == null) continue;
             next.put(template.id, outcome.output);
             if (outcome.hookPending) pending.add(template.id);
@@ -157,7 +163,7 @@ public final class ThemeTemplateApplier {
     }
 
     /** @return the path written and whether its hook is still owed, or {@code null} when skipped. */
-    private Outcome applyOne(ThemeTemplate template, Properties palette, String mode, boolean hookDue) {
+    private Outcome applyOne(ThemeTemplate template, PaletteSet palettes, String mode, boolean hookDue) {
         // Unpacked before anything else: the hooks run out of this directory, and so does the setup
         // command Settings hands the user, which must point at files that exist by the time they
         // paste it.
@@ -174,7 +180,7 @@ public final class ThemeTemplateApplier {
             mLog.warn("Theme template \"" + template.id + "\" cannot be read: " + e.getMessage());
             return null;
         }
-        ThemeTemplateRenderer.Result rendered = ThemeTemplateRenderer.render(source, palette);
+        ThemeTemplateRenderer.Result rendered = ThemeTemplateRenderer.render(source, palettes);
         if (!rendered.isSuccess()) {
             mLog.warn("Theme template \"" + template.id + "\" skipped: " + rendered.failure);
             return null;
