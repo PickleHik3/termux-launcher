@@ -65,10 +65,16 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
         return context;
     }
 
+    /**
+     * The chrome views a test wants found, by id. Empty by default: with no inflated layout every
+     * view-touching path must no-op safely, and that is what most of these tests drive.
+     */
+    @NonNull final java.util.Map<Integer, View> views = new java.util.HashMap<>();
+
     @Nullable
     @Override
     public View findChromeView(int viewId) {
-        return null;   // no inflated layout: every view-touching path must no-op safely
+        return views.get(viewId);
     }
 
     @Nullable

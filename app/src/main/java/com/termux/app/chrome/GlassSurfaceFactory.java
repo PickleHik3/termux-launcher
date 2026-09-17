@@ -157,6 +157,46 @@ public final class GlassSurfaceFactory {
     public Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
                             int grain, float cornerRadiusPx, boolean withRim,
                             @Nullable GlassBackdropCache.Band band) {
+        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, cornerRadiusPx, withRim,
+            band, band);
+    }
+
+    /**
+     * The glass a band's pane is continued by, on a strip no content stands on: the same tint, the
+     * same slice of the light model, the same frost and blur, and no question of its own.
+     *
+     * <p>The strip behind the system status bar is the case. It is not a band — nothing is drawn on
+     * it, so there is nothing to keep legible — and giving it one put the pane's whole veil on the
+     * one piece of glass that did not need it: a whitish wash under the system status bar in light
+     * mode with a hard edge where the pane began, a dark wash in dark mode, and the content below
+     * still standing on unveiled glass.</p>
+     *
+     * @param veilOf the pane whose veil this strip repeats, for a seamless sheet; null leaves it
+     *     bare glass, which is the launcher's choice — the veil belongs under the content, and the
+     *     step at the system bar's bottom edge is accepted
+     */
+    @NonNull
+    public Drawable statusBarExtensionSurface(float barAlpha, float sliceStart, float sliceEnd,
+                                              @Nullable GlassBackdropCache.Band veilOf) {
+        TermuxAppSharedPreferences preferences = mSurfaces.preferences();
+        int grain = preferences != null
+            ? preferences.getStatusBarGrain()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
+        return surface(barAlpha, sliceStart, sliceEnd, true, grain, 0f, false, null, veilOf);
+    }
+
+    /**
+     * @param glassBand the band whose glass this surface <em>is</em> — it reports its opacity, its
+     *     foot and its slice under this name, and a measurement of that band is a measurement of
+     *     this material. Null for a surface nothing is measured against.
+     * @param veilBand the band whose veil this surface draws. Normally the same one; a strip that
+     *     only continues another pane's material names that pane here and nothing above.
+     */
+    @NonNull
+    private Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
+                             int grain, float cornerRadiusPx, boolean withRim,
+                             @Nullable GlassBackdropCache.Band glassBand,
+                             @Nullable GlassBackdropCache.Band veilBand) {
         int base = mSurfaces.glassBaseColor();
         int accent = mSurfaces.accentColor();
         float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
@@ -167,8 +207,8 @@ public final class GlassSurfaceFactory {
         int topSheenAlpha = DockGlassRendering.topSheenAlpha(clamped);
         int midSheenAlpha = DockGlassRendering.midSheenAlpha(clamped);
         int bottomFootAlpha = DockGlassRendering.footAlpha(clamped, withFoot);
-        if (band != null && mInk != null) {
-            mInk.noteBandGlass(band, clamped, withFoot, sliceStart, sliceEnd);
+        if (glassBand != null && mInk != null) {
+            mInk.noteBandGlass(glassBand, clamped, withFoot, sliceStart, sliceEnd);
         }
         GradientDrawable baseLayer = new GradientDrawable();
         baseLayer.setColor(SchemeTone.withAlpha(base, baseAlpha / 255f));
@@ -189,7 +229,7 @@ public final class GlassSurfaceFactory {
         // one part of the model that can push a row under the promised ratio, and drawing the veil
         // under it would let the foot undo exactly what the veil was bought for. It also leaves the
         // base layer alone, so the user's opacity slider keeps meaning what it says.
-        int veil = band != null && mInk != null ? mInk.bandVeil(band) : Color.TRANSPARENT;
+        int veil = veilBand != null && mInk != null ? mInk.bandVeil(veilBand) : Color.TRANSPARENT;
         if (Color.alpha(veil) > 0) {
             GradientDrawable veilLayer = new GradientDrawable();
             veilLayer.setColor(veil);

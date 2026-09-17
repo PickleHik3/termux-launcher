@@ -50,11 +50,21 @@ public final class GlassBackdropCache {
     /**
      * The chrome bands that ask what they are drawn on. An enum rather than free-form keys so three
      * phases wiring different views cannot disagree about a band's name; adding one is a line here.
+     *
+     * <p>A band is a <em>question</em> about a piece of content, not a view. Two bands can stand on
+     * one pane of glass — {@link #STATUS_BAR} and {@link #WINDOW_BAR} both do — in which case they
+     * are sampled over the same rect and the pane is drawn with the stronger of their two veils;
+     * {@code ChromeInk} owns that reconciliation.</p>
      */
     public enum Band {
-        /** The status strip: clock, CPU/RAM widgets, weather, separator dots. */
+        /**
+         * The status strip's own content: CPU/RAM widgets, weather, separator dots, the lens, the
+         * sessions chip. All of it is laid out inside the top pane, so this band is measured on the
+         * same glass as {@link #WINDOW_BAR} — not on the strip that continues that glass through
+         * the system status-bar inset, which carries no content and no veil.
+         */
         STATUS_BAR,
-        /** The window bar's pane: window chips and their titles. */
+        /** The window bar's pane: window chips and their titles. The pane both top bands stand on. */
         WINDOW_BAR,
         /** The sessions indicator chip, which can sit on either bar. */
         SESSION_CHIP,

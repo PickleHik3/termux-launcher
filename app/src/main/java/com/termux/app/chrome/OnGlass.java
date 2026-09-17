@@ -514,6 +514,33 @@ public final class OnGlass {
     }
 
     /**
+     * The band resolved <em>under a veil that has already been decided</em>: the veil is composed
+     * onto the backdrop and the ink then walks {@link #resolveBare}'s ladder on what is left.
+     *
+     * <p>{@link #resolve} buys the smallest veil one question needs, which is the right answer for
+     * a pane with one question on it. A pane two bands stand on has one veil and two questions —
+     * the launcher's top pane carries the status strip's content and the window chips — so what
+     * gets drawn is the stronger of the two demands, and the other band's ink has to be toned
+     * against <em>that</em> surface rather than against the veil it would have bought alone. This
+     * is how the band whose demand lost is answered: the veil comes back in the
+     * {@link Resolution} because it is what the surface draws, and {@link Resolution#surface} is
+     * that veil over this band's own backdrop.</p>
+     *
+     * @param veil the veil the pane is drawn with, colour and alpha; transparent falls through to
+     *     {@link #resolveBare}
+     */
+    @NonNull
+    public static Resolution resolveUnder(@ColorInt int backdrop, @ColorInt int veil,
+                                          @ColorInt int ink, double target,
+                                          @Nullable Boolean paleSide) {
+        if (Color.alpha(veil) <= 0) return resolveBare(backdrop, ink, target, paleSide);
+        int surface = opaque(composite(veil, opaque(backdrop)));
+        Resolution bare = resolveBare(surface, ink, target, paleSide);
+        return new Resolution(veil, surface, bare.ink, bare.ratio, target,
+            Color.alpha(veil) >= MAX_VEIL_ALPHA_255, bare.inkFlipped, bare.shortfall);
+    }
+
+    /**
      * The band resolved with <em>no veil at all</em>: the wallpaper is left exactly as it is and
      * the ink moves to meet it.
      *

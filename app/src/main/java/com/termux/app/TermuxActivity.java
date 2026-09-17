@@ -5874,9 +5874,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Whether the strip behind the system status bar repeats the top pane's veil.
+     *
+     * <p>False: the strip is bare glass even when the pane below it is veiled, so the veil stays
+     * under the content that asked for it and the strip shows the wallpaper the user chose. That
+     * leaves a step at the system bar's bottom edge, which is the trade the design took. Flipping
+     * this to true hands the strip the pane's veil for one continuous sheet.</p>
+     */
+    private static final boolean STATUS_INSET_STRIP_CONTINUES_PANE_VEIL = false;
+
+    /**
      * Continue the top pane's glass through the system status-bar inset. This surface is a sibling
      * of the drawer, so Android cannot clip it at the drawer's top bound. The compact window row
      * remains bottom-aligned inside its 96dp pane and the terminal still starts below that pane.
+     *
+     * <p>The strip carries no content of its own — every status widget, the lens and the chips are
+     * laid out in the pane below it — so it is not a chrome band and asks for no veil. See
+     * {@link #STATUS_INSET_STRIP_CONTINUES_PANE_VEIL}.</p>
      */
     private void applyTerminalWindowBarBackdropInsets() {
         View host = findViewById(R.id.terminal_window_bar_host);
@@ -5931,9 +5945,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             restLiveBlur(statusBlur, true);
         }
         if (statusSurface != null) {
-            statusSurface.setBackground(mChrome.glass().statusBarSurface(opacity, 0f,
-                terminalWindowGlassStatusFraction(host), false,
-                com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR));
+            statusSurface.setBackground(mChrome.glass().statusBarExtensionSurface(opacity, 0f,
+                terminalWindowGlassStatusFraction(host),
+                STATUS_INSET_STRIP_CONTINUES_PANE_VEIL
+                    ? com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR
+                    : null));
             statusSurface.setVisibility(View.VISIBLE);
         }
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
@@ -16490,6 +16506,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * veil. Anything else in this activity that stands on the status bar should read the resolution
      * this method takes rather than call {@code onGlass} for the band a second time: the last
      * caller in a frame would otherwise decide the veil for all of them.</p>
+     *
+     * <p>The band is measured on the pane this content is laid out in — the top pane's glass,
+     * shared with the window chips — and not on the strip that continues that glass under the
+     * system status bar, which nothing stands on. {@code ChromeInk} owns that mapping; this method
+     * names the band and asks its question.</p>
      *
      * <p>Silently does nothing until the bar has been laid out and a wallpaper sample exists; the
      * accessory render pass runs this again, and the chrome asks for a pass of its own whenever a

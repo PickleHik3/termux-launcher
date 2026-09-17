@@ -10,9 +10,11 @@ import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
+import android.view.View;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -610,7 +612,144 @@ public class ChromeInkTest {
             renderer.ink().backdrops().hasSample(GlassBackdropCache.Band.STATUS_BAR));
     }
 
+    // --------------------------------------------- one pane, two bands, one veil
+
+    /**
+     * The regression this round is about. Every piece of the status strip's content — the CPU/RAM
+     * widgets, the weather, the dots, the lens, the sessions chip — is laid out inside the top
+     * pane, whose glass is {@code terminal_window_bar_background}. The band used to be measured on
+     * {@code terminal_status_bar_background} instead, which is the strip that continues that glass
+     * under the system status bar and holds nothing at all: the veil was derived for, and painted
+     * on, a strip nobody stands on.
+     */
+    @Test
+    public void theStatusBandIsMeasuredOnThePaneItsContentStandsOn() {
+        View strip = new View(RuntimeEnvironment.getApplication());
+        strip.layout(0, 0, 1080, 126);                 // the inset strip, on the reporting device
+        View pane = new View(RuntimeEnvironment.getApplication());
+        pane.layout(0, 0, 1080, 288);                  // the pane the widgets are laid out in
+        surfaces.views.put(com.termux.R.id.terminal_status_bar_background, strip);
+        surfaces.views.put(com.termux.R.id.terminal_window_bar_background, pane);
+
+        Rect status = new Rect();
+        Rect window = new Rect();
+        assertTrue(ink.bandRect(GlassBackdropCache.Band.STATUS_BAR, status));
+        assertTrue(ink.bandRect(GlassBackdropCache.Band.WINDOW_BAR, window));
+
+        assertEquals("the status content and the chips stand on one pane, so one rect answers both",
+            window, status);
+        assertEquals("and it is the pane's height, not the system inset's", 288, status.height());
+
+        // And the strip is not consulted at all: it can go away without moving the answer.
+        surfaces.views.remove(com.termux.R.id.terminal_status_bar_background);
+        Rect again = new Rect();
+        assertTrue(ink.bandRect(GlassBackdropCache.Band.STATUS_BAR, again));
+        assertEquals(window, again);
+    }
+
+    /**
+     * The white strip the user reported. The pane wears the veil its content bought; the strip that
+     * continues the pane's glass under the system status bar draws the same tint, frost and light
+     * model and no veil, so it stays the wallpaper the user chose instead of a whitish wash with a
+     * hard edge where the pane begins.
+     */
+    @Test
+    public void theInsetStripDrawsThePanesGlassWithNoVeilOfItsOwn() {
+        wallpaper.other = 0xFF9A9A9A;      // mid-light: the light-mode ink cannot read this bare
+        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
+        glass.surface(0.5f, 0.3f, 1f, true, 0, 0f, false, GlassBackdropCache.Band.WINDOW_BAR);
+        OnGlass.Resolution pane = ink.onGlass(GlassBackdropCache.Band.WINDOW_BAR, WINDOW_RECT,
+            LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+        assertFalse("this pane cannot read bare, so it must have bought a veil", pane.isBare());
+
+        LayerDrawable paneDrawn = (LayerDrawable) glass.surface(0.5f, 0.3f, 1f, true, 0, 0f, false,
+            GlassBackdropCache.Band.WINDOW_BAR);
+        assertTrue("the pane draws what its content asked for", hasLayer(paneDrawn, pane.veil));
+
+        LayerDrawable bare = (LayerDrawable) glass.statusBarExtensionSurface(0.5f, 0f, 0.3f, null);
+        assertFalse("the strip carries no content, so it carries no veil",
+            hasLayer(bare, pane.veil));
+        assertEquals("and it is still the same glass: tint and light model",
+            surfaces.glassBaseColor() & 0x00FFFFFF,
+            ((GradientDrawable) bare.getDrawable(0)).getColor().getDefaultColor() & 0x00FFFFFF);
+
+        // Option B is one constant away: the strip named as continuing the pane repeats its veil.
+        LayerDrawable seamless = (LayerDrawable) glass.statusBarExtensionSurface(0.5f, 0f, 0.3f,
+            GlassBackdropCache.Band.WINDOW_BAR);
+        assertTrue(hasLayer(seamless, pane.veil));
+        assertEquals("which is the bare strip plus exactly one layer",
+            bare.getNumberOfLayers() + 1, seamless.getNumberOfLayers());
+    }
+
+    /**
+     * Two bands, one sheet of glass. The strip's content asks in the stats' hues at body contrast
+     * and the window chips ask in their neutrals; the pane can only wear one veil, so it wears the
+     * stronger demand and both bands are answered on that.
+     */
+    @Test
+    public void onePaneWearsTheStrongerOfTheTwoDemands() {
+        surfaces.glassBase = NIGHT_BASE;
+        surfaces.accent = WARM_ACCENT;
+        wallpaper.other = MID_WARM_GLASS;
+        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
+        glass.surface(MID_OPACITY, 0.3f, 1f, true, 0, 0f, false,
+            GlassBackdropCache.Band.WINDOW_BAR);
+
+        int chipInk = 0xFFE6E1E5;          // the chips' pale neutral
+        OnGlass.Resolution status = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, WINDOW_RECT,
+            WARM_INK_NIGHT, WARM_INK_NIGHT, OnGlass.TARGET_BODY_TEXT);
+        OnGlass.Resolution chips = ink.onGlass(GlassBackdropCache.Band.WINDOW_BAR, WINDOW_RECT,
+            chipInk, chipInk, OnGlass.TARGET_BODY_TEXT);
+        // The strip's own question is asked again after the chips', as the render order does.
+        status = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, WINDOW_RECT, WARM_INK_NIGHT,
+            WARM_INK_NIGHT, OnGlass.TARGET_BODY_TEXT);
+
+        int soloStatus = Color.alpha(soloVeil(GlassBackdropCache.Band.STATUS_BAR, WARM_INK_NIGHT));
+        int soloChips = Color.alpha(soloVeil(GlassBackdropCache.Band.WINDOW_BAR, chipInk));
+        assertTrue("the two demands differ, or this fixture proves nothing",
+            soloStatus != soloChips);
+
+        assertEquals("one pane, one veil", status.veil, chips.veil);
+        assertEquals("and it is the stronger demand", Math.max(soloStatus, soloChips),
+            Color.alpha(status.veil));
+
+        // Both bands are toned on the veil that is drawn, not on the one they asked for alone.
+        LayerDrawable drawn = (LayerDrawable) glass.surface(MID_OPACITY, 0.3f, 1f, true, 0, 0f,
+            false, GlassBackdropCache.Band.WINDOW_BAR);
+        assertTrue("the pane draws the settled veil", hasLayer(drawn, status.veil));
+        for (OnGlass.Resolution band : new OnGlass.Resolution[] {status, chips}) {
+            int composed = composeDrawnBand(drawn, MID_WARM_GLASS, MID_OPACITY, 0.3f, 1f, band.ink);
+            assertTrue("as drawn, " + band + " reads " + OnGlass.ratio(band.ink, composed),
+                OnGlass.ratio(band.ink, composed) >= OnGlass.TARGET_BODY_TEXT);
+        }
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    /** True when any layer of {@code drawn} is a solid pane of exactly {@code color}. */
+    private static boolean hasLayer(@NonNull LayerDrawable drawn, @ColorInt int color) {
+        if (Color.alpha(color) == 0) return false;
+        for (int i = 0; i < drawn.getNumberOfLayers(); i++) {
+            Drawable layer = drawn.getDrawable(i);
+            if (!(layer instanceof GradientDrawable)) continue;
+            android.content.res.ColorStateList fill = ((GradientDrawable) layer).getColor();
+            if (fill != null && fill.getDefaultColor() == color) return true;
+        }
+        return false;
+    }
+
+    /**
+     * What one band would have asked for with nobody else on its pane: the same fixture, a fresh
+     * ink, one question. The pane's own answer is compared against this.
+     */
+    @ColorInt
+    private int soloVeil(@NonNull GlassBackdropCache.Band band, @ColorInt int seed) {
+        ChromeInk alone = new ChromeInk(surfaces, blurCache, null);
+        alone.backdrops().setSampler(wallpaper);
+        new GlassSurfaceFactory(surfaces, alone).surface(MID_OPACITY, 0.3f, 1f, true, 0, 0f, false,
+            GlassBackdropCache.Band.WINDOW_BAR);
+        return alone.onGlass(band, WINDOW_RECT, seed, seed, OnGlass.TARGET_BODY_TEXT).veil;
+    }
 
     /** True when {@code ink} is the pale one for {@code surface} — lighter than what it stands on. */
     private static boolean isPale(@ColorInt int ink, @ColorInt int surface) {
