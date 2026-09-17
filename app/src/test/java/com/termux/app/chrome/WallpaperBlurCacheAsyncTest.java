@@ -45,6 +45,25 @@ public class WallpaperBlurCacheAsyncTest {
         while (!worker.isEmpty()) worker.poll().run();
     }
 
+    /**
+     * The crash a night-mode flip produced on the phone: the renderer's onDestroy had shut the
+     * worker down, and a commit it had booked before that still landed afterwards and asked for a
+     * fresh nav-bar crop. A terminated executor rejects the job; the miss must read as a miss.
+     */
+    @Test
+    public void aMissAgainstAShutDownWorkerAnswersNullInsteadOfThrowing() {
+        cache = new WallpaperBlurCache(source, null,
+            WallpaperBlurCache.DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES,
+            job -> { throw new java.util.concurrent.RejectedExecutionException("terminated"); },
+            Runnable::run, () -> framesReady++);
+
+        assertNull(cache.obtain(12, wallpaperFrame));
+
+        assertFalse("nothing is left pending on a job that never started", cache.isPending(12));
+        assertEquals(0, cache.residentRadiiCount());
+        assertEquals(0, framesReady);
+    }
+
     @Test
     public void aMissAnswersNullAndTheFrameLandsWhenTheWorkerIsDone() {
         assertNull(cache.obtain(12, wallpaperFrame));

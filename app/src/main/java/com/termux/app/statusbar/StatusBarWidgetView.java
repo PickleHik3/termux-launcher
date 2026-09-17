@@ -313,19 +313,19 @@ public final class StatusBarWidgetView extends LinearLayout {
     }
 
     /**
-     * The tier's weight and size — the whole of the hierarchy between CPU, RAM and weather, now
-     * that none of it is carried by being dimmer than the widget before it.
+     * The tier's weight and size. Since 2026-09-17 all three tiers share the temperature's, so
+     * this is one answer applied three times; the hierarchy is hue and order.
      */
     private void applyTier() {
         mValue.setTextSize(TypedValue.COMPLEX_UNIT_SP,
             StatusBarInk.textSizeSpFor(mColorRole));
         int weight = StatusBarInk.weightFor(mColorRole);
-        // The two-argument form so the heaviest tier is bold even where the platform has no bold
-        // cut of the medium face: TextView then asks the paint for it rather than dropping it.
+        // The two-argument form so a heavy tier would be bold even where the platform has no bold
+        // cut of the medium face: TextView then asks the paint for it rather than dropping it. At
+        // today's one shared weight (400) this resolves to the plain face for every tier.
         mValue.setTypeface(
-            Typeface.create(weight >= StatusBarInk.WEIGHT_SECONDARY
-                ? "sans-serif-medium" : "sans-serif", Typeface.NORMAL),
-            weight >= StatusBarInk.WEIGHT_PRIMARY ? Typeface.BOLD : Typeface.NORMAL);
+            Typeface.create(weight >= 500 ? "sans-serif-medium" : "sans-serif", Typeface.NORMAL),
+            weight >= 700 ? Typeface.BOLD : Typeface.NORMAL);
     }
 
     private int dp(int value) {

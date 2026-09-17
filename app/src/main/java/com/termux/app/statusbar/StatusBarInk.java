@@ -21,11 +21,14 @@ import com.termux.app.chrome.OnGlass;
  * ({@code #6A5755}) the CPU label measured 1.03:1, the RAM label 1.10:1 and the weather line
  * 1.11:1 — the hierarchy was intact and nothing in it was readable.</p>
  *
- * <p>So the tiers move off luminance entirely and onto {@link #weightFor weight} and
- * {@link #textSizeSpFor size}, which cost no contrast at all: the CPU figure is the heaviest and
- * largest, the weather the lightest and smallest, and <em>every</em> tier is resolved to the same
- * {@link OnGlass#TARGET_BODY_TEXT} floor in its own hue. A tier is now quieter because it is
- * smaller and thinner, never because it is closer to the backdrop.</p>
+ * <p>So the tiers moved off luminance entirely, first onto weight and size and then — when the
+ * bold CPU figure read as the odd one out beside the RAM figure and the temperature — off those
+ * as well. Every stat is now drawn at the temperature's own weight and size ({@link #WEIGHT_TERTIARY},
+ * {@link #SIZE_TERTIARY_SP}), and <em>every</em> tier is resolved to the same
+ * {@link OnGlass#TARGET_BODY_TEXT} floor in its own hue. What tells the three apart is their hue
+ * and their order, never a weight, a size, or a distance from the backdrop. {@link #weightFor} and
+ * {@link #textSizeSpFor} remain the single place that answer is given, so a tier can be re-weighted
+ * in one line if the row ever wants a hierarchy back.</p>
  *
  * <h3>Ink that is drawn at less than full alpha</h3>
  * <p>A contrast ratio is a promise about the pixels that land, and half this bar draws its ink
@@ -46,19 +49,19 @@ public final class StatusBarInk {
 
     // ---------------------------------------------------------------- the tiers
 
-    /** The CPU figure's weight: the tier that reads first. */
-    public static final int WEIGHT_PRIMARY = 700;
-    /** The RAM figure's weight, and what every stat used to be drawn at. */
-    public static final int WEIGHT_SECONDARY = 500;
-    /** The weather's weight: the tier that reads last, and the only one below the old default. */
+    /** The weight every stat is drawn at: the temperature's, the one the user asked the rest to match. */
     public static final int WEIGHT_TERTIARY = 400;
+    /** The CPU figure's weight — the same as every other tier's; kept as a name so a call site reads. */
+    public static final int WEIGHT_PRIMARY = WEIGHT_TERTIARY;
+    /** The RAM figure's weight — the same as every other tier's. */
+    public static final int WEIGHT_SECONDARY = WEIGHT_TERTIARY;
 
-    /** The CPU figure's size, in sp. */
-    public static final float SIZE_PRIMARY_SP = 11.5f;
-    /** The RAM figure's size, in sp: the size every stat used to be drawn at. */
-    public static final float SIZE_SECONDARY_SP = 10.5f;
-    /** The weather's size, in sp. Deliberately a small step: weight carries most of the tier. */
+    /** The size every stat is drawn at, in sp: the temperature's. */
     public static final float SIZE_TERTIARY_SP = 10f;
+    /** The CPU figure's size, in sp — the same as every other tier's. */
+    public static final float SIZE_PRIMARY_SP = SIZE_TERTIARY_SP;
+    /** The RAM figure's size, in sp — the same as every other tier's. */
+    public static final float SIZE_SECONDARY_SP = SIZE_TERTIARY_SP;
 
     /**
      * The alpha a muted widget asks for — the AI glyph's few seconds of afterlife once its model
@@ -68,7 +71,7 @@ public final class StatusBarInk {
      */
     public static final int MUTED_ALPHA = 160;
 
-    /** How heavy a tier's value is drawn; strictly ordered, and no tier is dimmer than another. */
+    /** How heavy a tier's value is drawn; one answer for all three, and no tier is dimmer than another. */
     public static int weightFor(@NonNull StatusBarWidgetView.ColorRole role) {
         switch (role) {
             case PRIMARY: return WEIGHT_PRIMARY;
@@ -77,7 +80,7 @@ public final class StatusBarInk {
         }
     }
 
-    /** How large a tier's value is drawn, in sp; strictly ordered, same as {@link #weightFor}. */
+    /** How large a tier's value is drawn, in sp; one answer for all three, same as {@link #weightFor}. */
     public static float textSizeSpFor(@NonNull StatusBarWidgetView.ColorRole role) {
         switch (role) {
             case PRIMARY: return SIZE_PRIMARY_SP;

@@ -316,7 +316,9 @@ public final class ChromeRenderer {
      * ({@link #SCOPE_ACCESSORY_RENDER}), no matter how many callers ask for either.</p>
      */
     public void requestSync(int scopes) {
-        if (scopes == 0) {
+        if (scopes == 0 || mDestroyed) {
+            // After onDestroy the worker is gone and the views are going; a request that still
+            // arrives from the activity's own teardown has nothing to render into.
             return;
         }
         // The scopes ride in the section name so a trace shows which kind of request each caller
@@ -449,6 +451,11 @@ public final class ChromeRenderer {
             return;
         }
         unscheduleCommit();
+        if (mDestroyed) {
+            // Booked before onDestroy, delivered after it: applying the spec now would cut fresh
+            // backdrops from a blur cache whose worker has been shut down.
+            return;
+        }
         Trace.beginSection("Chrome.commit");
         try {
             mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
