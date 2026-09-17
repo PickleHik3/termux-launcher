@@ -44,11 +44,62 @@ public class ThemeTemplateRendererTest {
         assertEquals("#4080c0\t#4080c0", render("{{colors.primary.dark.hex}}\t{{ colors.primary.dark.hex }}"));
     }
 
+    /** With one palette in the set, all three modes are that palette — an old export, or a scheme. */
     @Test
     public void everyModeReadsTheOnePalette() {
         assertEquals("#4080c0", render("{{ colors.primary.default.hex }}"));
         assertEquals("#4080c0", render("{{ colors.primary.dark.hex }}"));
         assertEquals("#4080c0", render("{{ colors.primary.light.hex }}"));
+    }
+
+    /** The point of the set: one file, both tables, and the active one under {@code default}. */
+    @Test
+    public void eachModeRendersItsOwnPalette() {
+        ThemeTemplateRenderer.Result result = ThemeTemplateRenderer.render(
+            "default={{ colors.primary.default.hex }}\n"
+                + "dark={{ colors.primary.dark.hex }}\n"
+                + "light={{ colors.primary.light.hex }}\n"
+                + "mode={{ mode }}\n",
+            PaletteSet.of(palette(), modePalette("dark", "#101010"), modePalette("light", "#F0F0F0")));
+        assertTrue(String.valueOf(result.failure), result.isSuccess());
+        assertEquals("default=#4080c0\ndark=#101010\nlight=#f0f0f0\nmode=light\n", result.text);
+    }
+
+    /** A set missing one mode — an export written before the mode files — renders the active one. */
+    @Test
+    public void aMissingModeFallsBackToTheActivePalette() {
+        PaletteSet noLight = PaletteSet.of(palette(), modePalette("dark", "#101010"), null);
+        ThemeTemplateRenderer.Result result = ThemeTemplateRenderer.render(
+            "{{ colors.primary.light.hex }} {{ colors.primary.dark.hex }}", noLight);
+        assertTrue(String.valueOf(result.failure), result.isSuccess());
+        assertEquals("#4080c0 #101010", result.text);
+    }
+
+    /** And so does a mode palette that simply does not carry the token the template asked for. */
+    @Test
+    public void aTokenMissingFromAModePaletteFallsBackToTheActivePalette() {
+        Properties sparse = new Properties();
+        sparse.setProperty("mode", "dark");
+        ThemeTemplateRenderer.Result result = ThemeTemplateRenderer.render(
+            "{{ colors.terminal_color0.dark.hex }}", PaletteSet.of(palette(), sparse, null));
+        assertTrue(String.valueOf(result.failure), result.isSuccess());
+        assertEquals("#000000", result.text);
+    }
+
+    /** {@code {{ mode }}} is the mode the phone is in, never the mode of a palette in the set. */
+    @Test
+    public void theModeWordStaysTheActiveMode() {
+        assertEquals("light", ThemeTemplateRenderer.render("{{ mode }}",
+            PaletteSet.of(palette(), modePalette("dark", "#101010"),
+                modePalette("light", "#F0F0F0"))).text);
+        assertEquals("light", ThemeTemplateRenderer.modeOf(palette()));
+    }
+
+    private static Properties modePalette(String mode, String primary) {
+        Properties palette = new Properties();
+        palette.setProperty("primary", primary);
+        palette.setProperty("mode", mode);
+        return palette;
     }
 
     @Test
