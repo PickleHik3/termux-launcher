@@ -50,6 +50,14 @@ import com.termux.x11.LorieView;
  */
 public final class X11PaneFrame extends PaneContentFrame {
 
+    /**
+     * Where the empty state's guide button sends the user when the message names a missing
+     * package: the setup section of the Linux display guide, on GitHub rather than a wiki page,
+     * since that is where the doc actually lives.
+     */
+    private static final String KEYBOARD_DATA_GUIDE_URL =
+        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#turn-it-on";
+
     private static final int ACTION_HELP = 2;
     /** The sliders, which open Appearance; package-private so a test can find the button. */
     @androidx.annotation.VisibleForTesting static final int ACTION_EDITOR = 3;
@@ -174,6 +182,8 @@ public final class X11PaneFrame extends PaneContentFrame {
             if (mEnabled) mHost.startDisplay();
             else mHost.turnOnDisplay();
         });
+        View guide = findViewById(R.id.x11_pane_guide);
+        if (guide != null) guide.setOnClickListener(v -> openKeyboardDataGuide());
         // The controls tab sits above everything, drawn only while shown; the frame itself
         // answers the taps, so the view never stands between a finger and X.
         mControls = new PaneControlsView(getContext());
@@ -606,20 +616,54 @@ public final class X11PaneFrame extends PaneContentFrame {
         if (running) return;
         // Nothing to scale once the display is gone.
         if (mRail != null) mRail.dismiss();
-        // A server cannot start at all without the keyboard layouts, so say that here rather
-        // than letting the user find an Xorg error in their shell.
-        boolean ready = X11CliInstaller.hasKeyboardData();
+        applyEmptyState();
+    }
+
+    /**
+     * Re-read the keyboard-data probe and refresh the empty state from it, without waiting for a
+     * running-state change. Nothing on the resume or place-change path reaches
+     * {@link #applyRunning} on its own — only a display starting or stopping does — so a package
+     * installed in the shell while the user was elsewhere left the message stale until the next
+     * such transition. The host calls this instead, every time the user arrives at the place: on
+     * resume, and when the wall settles here. A no-op while a server is running, since there is
+     * no empty state to refresh.
+     */
+    public void refreshEmptyStateReadiness() {
+        if (!mRunning) applyEmptyState();
+    }
+
+    /**
+     * Apply {@link DisplayEmptyStatePolicy}'s answer to the message and the start control. The
+     * probe behind it is disk I/O, so this must only ever run off a user arrival or a
+     * running-state change — never a hot path.
+     */
+    private void applyEmptyState() {
+        DisplayEmptyStatePolicy.State state =
+            DisplayEmptyStatePolicy.decide(mEnabled, X11CliInstaller.hasKeyboardData());
         View message = findViewById(R.id.x11_pane_empty_message);
         if (message instanceof android.widget.TextView) {
-            ((android.widget.TextView) message).setText(!mEnabled ? R.string.termux_x11_display_off
-                : ready ? R.string.termux_x11_no_display : R.string.termux_x11_needs_keyboard_data);
+            ((android.widget.TextView) message).setText(state.messageRes);
         }
         View start = findViewById(R.id.x11_pane_start);
         if (start instanceof android.widget.TextView) {
             ((android.widget.TextView) start).setText(mEnabled
                 ? R.string.termux_x11_start_display : R.string.termux_x11_turn_on);
         }
-        if (start != null) start.setVisibility(mEnabled && !ready ? GONE : VISIBLE);
+        if (start != null) start.setVisibility(state.startVisible ? VISIBLE : GONE);
+        View guide = findViewById(R.id.x11_pane_guide);
+        if (guide != null) guide.setVisibility(state.guideVisible() ? VISIBLE : GONE);
+    }
+
+    /** The empty state's guide button: the setup section of the Linux display guide. */
+    private void openKeyboardDataGuide() {
+        try {
+            android.content.Intent intent = new android.content.Intent(
+                android.content.Intent.ACTION_VIEW, android.net.Uri.parse(KEYBOARD_DATA_GUIDE_URL));
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+        } catch (android.content.ActivityNotFoundException e) {
+            com.termux.app.notice.AppNotice.show(getContext(), KEYBOARD_DATA_GUIDE_URL, true);
+        }
     }
 
     /**

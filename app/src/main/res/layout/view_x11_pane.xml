@@ -69,5 +69,20 @@
             android:minHeight="36dp"
             android:textSize="12sp"
             android:text="@string/termux_x11_start_display" />
+
+        <!-- Only out while the message names a package the user still has to install; it is the
+             tappable route to the guide the message points at. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/x11_pane_guide"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
+            android:visibility="gone"
+            android:text="@string/termux_x11_read_guide" />
     </LinearLayout>
 </com.termux.app.x11.X11PaneFrame>

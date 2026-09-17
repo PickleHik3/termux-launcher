@@ -136,6 +136,9 @@ public final class HelpTargets {
             add(s, "touchpad", firstOfType(root, DisplayTouchpadView.class),
                 copy(R.string.help_pad_title, R.string.help_pad_one, R.string.help_pad_two, R.string.help_pad_three));
             add(s, "start", finder.findHelpView(R.id.x11_pane_start), copy(R.string.help_start_title, R.string.help_start_body));
+            // Only out while the empty state names a missing package; that visibility is the
+            // readiness flag already applied to the view, so nothing here re-checks the prefix.
+            add(s, "setup", finder.findHelpView(R.id.x11_pane_guide), copy(R.string.help_setup_title, R.string.help_setup_body));
         } else {
             WidgetGridView grid = firstOfType(root, WidgetGridView.class);
             if (grid != null) {
