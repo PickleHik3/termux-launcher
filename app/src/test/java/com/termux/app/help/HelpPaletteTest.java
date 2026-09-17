@@ -34,6 +34,18 @@ public class HelpPaletteTest {
         assertNotEquals(HelpPalette.boxColor(Color.GRAY, 0, 3), HelpPalette.boxColor(Color.GRAY, 1, 3));
     }
 
+    @Test public void boxesDeepenOnALightWashAndStayBrightOnADarkOne() {
+        int accent = Color.rgb(0x0b, 0x1f, 0x44);
+        float[] light = new float[3], dark = new float[3];
+        Color.colorToHSV(HelpPalette.boxColor(accent, 1, 4, true), light);
+        Color.colorToHSV(HelpPalette.boxColor(accent, 1, 4, false), dark);
+        assertEquals(light[0], dark[0], 0.01f);
+        assertTrue(light[2] < dark[2]);
+        assertTrue(light[1] > dark[1]);
+        // The dark wash is what the one-argument call has always meant.
+        assertEquals(HelpPalette.boxColor(accent, 1, 4), HelpPalette.boxColor(accent, 1, 4, false));
+    }
+
     @Test public void titlesDeepenOnALightCardAndBrightenOnADarkOne() {
         int accent = Color.rgb(0x0b, 0x1f, 0x44);
         float[] light = new float[3], dark = new float[3];

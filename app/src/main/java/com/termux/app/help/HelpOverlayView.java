@@ -2,6 +2,7 @@ package com.termux.app.help;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.DashPathEffect;
@@ -43,6 +44,7 @@ import com.termux.shared.termux.font.NerdFontSpans;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -68,6 +70,18 @@ public final class HelpOverlayView extends FrameLayout {
         void onPracticeRequested(String lessonId);
     }
 
+    /** One extra key's card: where it sits, the cap it is about, and the line between them. */
+    private static final class KeyCard {
+        final TextView view;
+        final Rect bounds;
+        final Rect cap;
+        /** Each leg as {x1, y1, x2, y2}; one when the card sits over its key, three otherwise. */
+        final List<float[]> lines;
+        KeyCard(TextView view, Rect bounds, Rect cap, List<float[]> lines) {
+            this.view = view; this.bounds = bounds; this.cap = cap; this.lines = lines;
+        }
+    }
+
     private final HelpTargets targets;
     private final HelpPresentationModel model = new HelpPresentationModel();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -83,6 +97,16 @@ public final class HelpOverlayView extends FrameLayout {
     /** Everything a tap may land on without closing help: the cards, and the panel. */
     private final List<View> cards = new ArrayList<>();
     private final Map<String, TextView> cardViews = new HashMap<>();
+    /** What each card was built from, so a re-measure that moved nothing keeps the same view. */
+    private final Map<String, String> cardSpecs = new HashMap<>();
+    /** Every view put on screen this pass; anything else is what has really gone away. */
+    private final Set<View> rendered = new HashSet<>();
+    /** One card per extra key, with the cap it names and the line that joins the two. */
+    private final List<KeyCard> keyCards = new ArrayList<>();
+    private final Map<Integer, TextView> keyCardViews = new HashMap<>();
+    private final Map<Integer, String> keyCardSpecs = new HashMap<>();
+    /** The one colour the extra keys' boxes, leaders and cards share. */
+    private int keyColor;
     /** The colour each hint's box and card share, by target id. */
     private final Map<String, Integer> boxColors = new HashMap<>();
     private final Runnable onDismiss;
@@ -119,6 +143,12 @@ public final class HelpOverlayView extends FrameLayout {
         density = getResources().getDisplayMetrics().density;
         dash = new DashPathEffect(new float[]{dp(4), dp(3)}, 0);
         targets = new HelpTargets(finder, this);
+        // Above every control it explains. The dock, the A-Z row, the extra keys and the keyboard
+        // are lifted between 6 and 40dp, and the guide has to wash over all of them; the outline
+        // is dropped so the height casts no shadow of its own.
+        setElevation(dp(56));
+        setTranslationZ(dp(56));
+        setOutlineProvider(null);
         setWillNotDraw(false);
         setClickable(true);
         setFocusable(true);
@@ -179,7 +209,8 @@ public final class HelpOverlayView extends FrameLayout {
         stopGesture();
         if (getViewTreeObserver().isAlive()) getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener);
         removeAllViews();
-        cards.clear(); childBounds.clear(); cardViews.clear();
+        cards.clear(); childBounds.clear(); cardViews.clear(); cardSpecs.clear();
+        rendered.clear(); keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
         snapshot = null; routed = null; signature = ""; announced = null;
         anchorOnScreen = null; unplaced.clear();
         setVisibility(GONE);
@@ -206,7 +237,8 @@ public final class HelpOverlayView extends FrameLayout {
         String next = getWidth() + ":" + getHeight() + ":"
             + getResources().getConfiguration().fontScale + ":" + density + ":"
             + currentDress.fillColor + ":" + currentDress.strokeColor + ":" + currentDress.textColor
-            + ":" + currentDress.terminalRadiusPx + ":" + currentAccent + ":" + measured.signature();
+            + ":" + currentDress.terminalRadiusPx + ":" + currentAccent + ":" + lightMode()
+            + ":" + measured.signature();
         boolean movedOnScreen = !signature.equals(next);
         if (!movedOnScreen && !pendingOpen) return;
         if (movedOnScreen) {
@@ -234,7 +266,10 @@ public final class HelpOverlayView extends FrameLayout {
 
     /** The existing arranged cards and leaders: measured once per layout, drawn per page. */
     private void arrangeOverview() {
-        cardViews.clear(); boxColors.clear();
+        Map<String, TextView> wasView = new HashMap<>(cardViews);
+        Map<String, String> wasSpec = new HashMap<>(cardSpecs);
+        cardViews.clear(); cardSpecs.clear(); boxColors.clear();
+        boolean light = lightMode();
         int width = Math.max(1, (snapshot.wall.width() - dp(36)) / 2);
         List<HelpLeaderRouter.Target> inputs = new ArrayList<>();
         List<HelpLeaderRouter.Box> soft = new ArrayList<>();
@@ -242,25 +277,44 @@ public final class HelpOverlayView extends FrameLayout {
         for (int i = 0; i < count; i++) {
             HelpTargets.Target target = snapshot.targets.get(i);
             if (HelpTopics.topicOnly(target.id)) continue;
-            int color = overviewColor(target.id, i, count);
+            int color = overviewColor(target.id, i, count, light);
             boxColors.put(target.id, color);
-            TextView card = card(target.copy, titleColor(target.id, i, count), color);
+            int title = titleColor(target.id, i, count);
+            // The same words in the same colours are the same card: a stat that changed width
+            // moves the cards it shares the wall with, and moving one is not rebuilding it.
+            String spec = spec(target.copy.title, target.copy.body, title, color);
+            TextView card = spec.equals(wasSpec.get(target.id)) ? wasView.get(target.id) : null;
+            if (card == null) card = card(target.copy, title, color);
             card.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
             cardViews.put(target.id, card);
+            cardSpecs.put(target.id, spec);
             HelpLeaderRouter.Side side = side(target.rect);
             inputs.add(new HelpLeaderRouter.Target(target.id, box(target.rect), side,
                 width, card.getMeasuredHeight()));
             if (side == HelpLeaderRouter.Side.INSIDE) soft.add(box(target.rect));
         }
+        arrangeKeyCards(light);
         // The whole band is the cards': the guide reserves nothing at the bottom, which is the
         // room that used to push a hint onto a second page.
         Rect band = new Rect(snapshot.wall);
         band.top += dp(8);
         band.bottom = Math.max(band.top, band.bottom - dp(8));
         List<HelpLeaderRouter.Box> obstacles = new ArrayList<>();
-        for (HelpTargets.KeyLabel key : snapshot.keys) obstacles.add(box(keyLabelBounds(key.rect)));
+        if (keyCards.isEmpty()) {
+            for (HelpTargets.KeyLabel key : snapshot.keys) obstacles.add(box(keyLabelBounds(key.rect)));
+        } else {
+            for (KeyCard key : keyCards) obstacles.add(box(key.bounds));
+        }
         routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs, obstacles, soft);
+        // The key cards take the foot of the band, and one page still comes first: on a wall too
+        // short for both they give way rather than push a hint off the guide.
+        if (!keyCards.isEmpty() && !onOnePage(routed)) {
+            List<HelpLeaderRouter.Box> yielding = new ArrayList<>(soft);
+            yielding.addAll(obstacles);
+            routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs,
+                Collections.<HelpLeaderRouter.Box>emptyList(), yielding);
+        }
         // One page, always: a hint with no room on it is left out of the guide and said so in the
         // log, and its topic is still there in the catalogue.
         unplaced.clear();
@@ -277,11 +331,38 @@ public final class HelpOverlayView extends FrameLayout {
         return Collections.unmodifiableList(new ArrayList<>(unplaced));
     }
 
+    /** The view carrying one hint's card right now, or null when the control is not on screen. */
+    @VisibleForTesting
+    TextView guideCardView(String id) {
+        return cardViews.get(id);
+    }
+
     /** A control's colour comes from its identity in the catalogue, not from what else is up. */
-    private int overviewColor(String id, int index, int count) {
+    private int overviewColor(String id, int index, int count, boolean light) {
         HelpTopics.Entry entry = HelpTopics.entry(place, id);
-        return entry == null ? HelpPalette.boxColor(accent, index, count)
-            : model.overviewColor(accent, entry);
+        return entry == null ? HelpPalette.boxColor(accent, index, count, light)
+            : model.overviewColor(accent, entry, light);
+    }
+
+    /**
+     * Which wash help is drawn over. The guide dims the screen so its boxes and cards carry the
+     * eye; on a light screen the dim is a light one, and the dashes deepen to match.
+     */
+    private boolean lightMode() {
+        return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+            != Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /** What a card is made of; two cards with the same recipe are the same card. */
+    private String spec(String title, String body, int titleColor, int borderColor) {
+        return title + "\u0001" + body + "\u0001" + titleColor + ":" + borderColor + ":"
+            + dress.fillColor + ":" + dress.strokeColor + ":" + dress.textColor;
+    }
+
+    private static boolean onOnePage(HelpLeaderRouter.Result result) {
+        if (!result.unplaced.isEmpty()) return false;
+        for (HelpLeaderRouter.Placement p : result.placements) if (p.page > 0) return false;
+        return true;
     }
 
     private int titleColor(String id, int index, int count) {
@@ -299,16 +380,145 @@ public final class HelpOverlayView extends FrameLayout {
         return HelpLeaderRouter.Side.INSIDE;
     }
 
+    /**
+     * A card for every extra key, in the room above the row: what the key does, and what a swipe
+     * up on it does. Seven of them across a phone are too tight for one line, so they alternate
+     * between two rows, and each card takes the room between its neighbours' key centres — which
+     * leaves a lane over every key for the other row's leader to come down through. The rows sit
+     * clear of the dock and the A-Z row, whose own boxes have to stay readable under them.
+     */
+    private void arrangeKeyCards(boolean light) {
+        Map<Integer, TextView> wasView = new HashMap<>(keyCardViews);
+        Map<Integer, String> wasSpec = new HashMap<>(keyCardSpecs);
+        keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
+        List<HelpTargets.KeyLabel> keys = snapshot.keys;
+        if (keys.isEmpty() || getWidth() <= 0) return;
+        HelpTopics.Entry entry = HelpTopics.entry(place, "keys");
+        keyColor = entry == null ? onTheWash(accent) : model.overviewColor(accent, entry, light);
+        int titleColor = entry == null ? HelpPalette.titleColor(accent, 0, 1, dress.fillColor)
+            : HelpPalette.titleColor(accent, entry.identityIndex,
+                HelpTopics.sizeFor(entry.place), dress.fillColor);
+        int left = dp(12), right = getWidth() - dp(12);
+        int clearance = dp(10);
+        int limit = snapshot.wall.bottom;
+        for (HelpTargets.KeyLabel key : keys) limit = Math.min(limit, key.rect.top);
+        Rect dock = targetRect("dock");
+        if (dock != null) limit = Math.min(limit, dock.top);
+        Rect az = targetRect("az");
+        if (az != null) limit = Math.min(limit, az.top);
+        int[] centers = new int[keys.size()];
+        for (int i = 0; i < keys.size(); i++) centers[i] = keys.get(i).rect.centerX();
+        int[][] slots = keyCardSlots(centers, left, right, clearance);
+        List<TextView> views = new ArrayList<>();
+        List<String> specs = new ArrayList<>();
+        int rowHeight = 0;
+        for (int i = 0; i < keys.size(); i++) {
+            HelpTargets.KeyLabel key = keys.get(i);
+            // Too many keys for a card each; the caps keep their own small labels instead.
+            if (slots[i][1] - slots[i][0] < dp(56)) { keyCards.clear(); return; }
+            String spec = spec(key.primary, key.secondary == null ? "" : key.secondary,
+                titleColor, keyColor);
+            TextView card = spec.equals(wasSpec.get(i)) ? wasView.get(i) : null;
+            if (card == null) card = keyCard(key, titleColor, keyColor);
+            card.measure(MeasureSpec.makeMeasureSpec(slots[i][1] - slots[i][0], MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+            rowHeight = Math.max(rowHeight, card.getMeasuredHeight());
+            views.add(card);
+            specs.add(spec);
+        }
+        int lowerTop = limit - dp(14) - rowHeight;
+        int upperTop = lowerTop - dp(10) - rowHeight;
+        if (upperTop < dp(4)) {
+            upperTop = dp(4);
+            lowerTop = Math.max(lowerTop, upperTop + rowHeight + dp(10));
+        }
+        for (int i = 0; i < views.size(); i++) {
+            int top = i % 2 == 0 ? upperTop : lowerTop;
+            Rect bounds = new Rect(slots[i][0], top, slots[i][1], top + rowHeight);
+            Rect cap = keys.get(i).rect;
+            keyCards.add(new KeyCard(views.get(i), bounds, cap, keyLeader(bounds, cap)));
+            keyCardViews.put(i, views.get(i));
+            keyCardSpecs.put(i, specs.get(i));
+        }
+    }
+
+    /**
+     * The room each key's card gets: from its left neighbour's key centre to its right
+     * neighbour's, less the clearance that keeps a lane open over every key. Cards of one row
+     * never meet, because between any two of them lies the key whose card is in the other row —
+     * and that key's leader comes down the lane between them.
+     */
+    @VisibleForTesting
+    static int[][] keyCardSlots(int[] centers, int left, int right, int clearance) {
+        int[][] slots = new int[centers.length][2];
+        for (int i = 0; i < centers.length; i++) {
+            slots[i][0] = Math.max(left, i == 0 ? left : centers[i - 1] + clearance);
+            slots[i][1] = Math.min(right, i == centers.length - 1 ? right : centers[i + 1] - clearance);
+        }
+        return slots;
+    }
+
+    /** Down from the card to the cap it names, straight when it can be and with one step when not. */
+    private List<float[]> keyLeader(Rect card, Rect cap) {
+        List<float[]> lines = new ArrayList<>();
+        int cx = cap.centerX();
+        int lx = Math.max(card.left + dp(8), Math.min(card.right - dp(8), cx));
+        if (lx == cx) {
+            lines.add(new float[] {cx, card.bottom, cx, cap.top});
+            return lines;
+        }
+        float mid = (card.bottom + cap.top) / 2f;
+        lines.add(new float[] {lx, card.bottom, lx, mid});
+        lines.add(new float[] {lx, mid, cx, mid});
+        lines.add(new float[] {cx, mid, cx, cap.top});
+        return lines;
+    }
+
+    /** One key's card: what it does in the row's colour, and its swipe under it. */
+    private TextView keyCard(HelpTargets.KeyLabel key, int titleColor, int borderColor) {
+        TextView text = new TextView(getContext());
+        String all = key.secondary == null ? key.primary : key.primary + "\n" + key.secondary;
+        SpannableString content = new SpannableString(all);
+        content.setSpan(new StyleSpan(Typeface.BOLD), 0, key.primary.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        content.setSpan(new ForegroundColorSpan(titleColor), 0, key.primary.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setText(content);
+        text.setTextSize(12);
+        text.setTextColor(dress.textColor);
+        text.setGravity(Gravity.CENTER_HORIZONTAL);
+        text.setPadding(dp(6), dp(5), dp(6), dp(5));
+        text.setLineSpacing(dp(1), 1);
+        text.setMaxLines(3);
+        text.setContentDescription(all.replace('\n', ' '));
+        android.graphics.drawable.Drawable background = dress.background(0);
+        if (background instanceof GradientDrawable)
+            ((GradientDrawable) background).setStroke(dp(1.5f), borderColor);
+        text.setBackground(background);
+        return text;
+    }
+
     // ---- rendering ---------------------------------------------------------------------------
 
+    /**
+     * What is on screen, brought up to date in place. Children that are still wanted keep their
+     * view — a re-measure that only moved a card must not blank the wall for a frame first — and
+     * only the ones this pass did not ask for are taken away.
+     */
     private void render() {
-        removeAllViews(); childBounds.clear(); cards.clear();
+        rendered.clear(); cards.clear();
         switch (model.mode()) {
             case TOPICS: renderTopics(); break;
             case TOPIC: renderTopic(); break;
             default: renderGuide(); break;
         }
         placeGlyphs();
+        for (int i = getChildCount() - 1; i >= 0; i--) {
+            View child = getChildAt(i);
+            if (rendered.contains(child)) continue;
+            removeViewAt(i);
+            childBounds.remove(child);
+        }
         requestLayout(); invalidate();
     }
 
@@ -394,13 +604,17 @@ public final class HelpOverlayView extends FrameLayout {
             TextView card = cardViews.get(p.target.id);
             put(card, rect(p.card)); cards.add(card);
         }
-        for (HelpTargets.KeyLabel key : snapshot.keys) {
-            TextView label = pill(key.text);
-            label.setPadding(dp(1), 0, dp(1), 0);
-            label.setMaxLines(2);
-            label.setAutoSizeTextTypeUniformWithConfiguration(6, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
-            label.setBackground(dress.background(key.rect.height()));
-            put(label, keyLabelBounds(key.rect));
+        if (keyCards.isEmpty()) {
+            for (HelpTargets.KeyLabel key : snapshot.keys) {
+                TextView label = pill(key.text);
+                label.setPadding(dp(1), 0, dp(1), 0);
+                label.setMaxLines(2);
+                label.setAutoSizeTextTypeUniformWithConfiguration(6, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+                label.setBackground(dress.background(key.rect.height()));
+                put(label, keyLabelBounds(key.rect));
+            }
+        } else {
+            for (KeyCard key : keyCards) { put(key.view, key.bounds); cards.add(key.view); }
         }
         announce(getContext().getString(R.string.help_header, placeName()), "guide");
     }
@@ -728,10 +942,25 @@ public final class HelpOverlayView extends FrameLayout {
     }
 
     private void put(View view, Rect rect) {
-        // A card can move between its normal page and a copy-only scroll page on remeasurement.
-        if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
-        addView(view, new LayoutParams(Math.max(1, rect.width()), Math.max(1, rect.height())));
+        int width = Math.max(1, rect.width()), height = Math.max(1, rect.height());
+        if (view.getParent() != this) {
+            // A card can move between its normal page and a copy-only scroll page on remeasurement.
+            if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
+            addView(view, new LayoutParams(width, height));
+        } else {
+            ViewGroup.LayoutParams params = view.getLayoutParams();
+            if (params.width != width || params.height != height) {
+                params.width = width; params.height = height;
+                view.setLayoutParams(params);
+            }
+        }
         childBounds.put(view, rect);
+        rendered.add(view);
+        // Sized and placed now rather than a frame later: a child that waits for the next layout
+        // pass is drawn once at no size, and that empty frame is the flash the guide used to give.
+        view.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+        view.layout(rect.left, rect.top, rect.left + width, rect.top + height);
     }
 
     /** A card in its hint's colour: the title and the border match the box on the control. */
@@ -770,7 +999,8 @@ public final class HelpOverlayView extends FrameLayout {
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (!showing || snapshot == null) return;
-        canvas.drawColor(Color.argb(166, 0, 0, 0));
+        // The wash the boxes are read against: dark on a dark screen, light on a light one.
+        canvas.drawColor(lightMode() ? Color.argb(172, 255, 255, 255) : Color.argb(166, 0, 0, 0));
         paint.setStrokeWidth(dp(1.5f)); paint.setStyle(Paint.Style.STROKE);
         if (model.mode() == HelpPresentationModel.Mode.OVERVIEW) drawGuide(canvas);
         else if (model.mode() == HelpPresentationModel.Mode.TOPIC) drawTopic(canvas);
@@ -782,8 +1012,16 @@ public final class HelpOverlayView extends FrameLayout {
     private void drawTopic(Canvas canvas) {
         Rect rect = targetRect(model.highlightTargetId());
         if (rect == null) return;
-        paint.setColor(model.topicHighlightColor(accent));
+        paint.setColor(onTheWash(model.topicHighlightColor(accent)));
         drawBox(canvas, rect, radiusOf(model.highlightTargetId()));
+    }
+
+    /** A colour deep enough to be a dash on the light wash; on the dark one it is left alone. */
+    private int onTheWash(int color) {
+        if (!lightMode()) return color;
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        return Color.HSVToColor(new float[] {hsv[0], Math.max(hsv[1], 0.85f), Math.min(hsv[2], 0.55f)});
     }
 
     /**
@@ -795,11 +1033,19 @@ public final class HelpOverlayView extends FrameLayout {
         for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == 0) {
             HelpTargets.Target target = target(p.target.id);
             Integer color = boxColors.get(target.id);
-            paint.setColor(color == null ? accent : color);
+            paint.setColor(color == null ? onTheWash(accent) : color);
             paint.setPathEffect(null);
             for (HelpLeaderRouter.Segment line : p.lines)
                 canvas.drawLine(line.x1, line.y1, line.x2, line.y2, paint);
             drawBox(canvas, target.rect, target.radius);
+        }
+        // The extra keys share one colour: they are one row, and seven hues along a keyboard
+        // would read as seven unrelated things rather than as the keys of one row.
+        paint.setColor(keyColor);
+        for (KeyCard key : keyCards) {
+            paint.setPathEffect(null);
+            for (float[] line : key.lines) canvas.drawLine(line[0], line[1], line[2], line[3], paint);
+            drawBox(canvas, key.cap, dp(8));
         }
     }
 

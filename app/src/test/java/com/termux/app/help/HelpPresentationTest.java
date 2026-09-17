@@ -295,8 +295,56 @@ public class HelpPresentationTest {
             if ("windows".equals(target.id)) windows = target.rect;
         }
         assertNotNull(windows);
+        // The strip's own bounds are the box, so the hint cannot shrink onto whichever children
+        // happened to measure: every chip on the row is inside it, and so is the +.
+        for (int i = 0; i < strip.getChildCount(); i++) {
+            View child = strip.getChildAt(i);
+            if (child.getWidth() <= 0 || child.getHeight() <= 0) continue;
+            assertTrue("chip " + i + " is outside the windows box", windows.contains(onOverlay(child)));
+        }
         assertTrue(windows.contains(onOverlay(strip.getChildAt(0))));
         assertTrue(windows.contains(onOverlay(plus)));
+    }
+
+    /**
+     * One card per extra key, each in the room between its neighbours' keys: cards of one row
+     * never meet, every key lies under its own card, and the lane over every key is left open for
+     * the other row's leader.
+     */
+    @Test public void everyExtraKeyGetsACardNearestItsOwnKey() {
+        int[] centres = {77, 231, 385, 539, 693, 847, 1001};
+        int[][] slots = HelpOverlayView.keyCardSlots(centres, 33, 1047, 27);
+        assertEquals(centres.length, slots.length);
+        for (int i = 0; i < centres.length; i++) {
+            assertTrue("card " + i + " has no room", slots[i][1] - slots[i][0] > 0);
+            assertTrue("key " + i + " is not under its card",
+                centres[i] > slots[i][0] && centres[i] < slots[i][1]);
+            int nearest = 0;
+            for (int j = 1; j < centres.length; j++) {
+                if (Math.abs(centre(slots[j]) - centres[i])
+                        < Math.abs(centre(slots[nearest]) - centres[i])) nearest = j;
+            }
+            assertEquals("key " + i + " is nearest another key's card", i, nearest);
+        }
+        for (int i = 0; i + 2 < centres.length; i++) {
+            assertTrue("row cards " + i + " and " + (i + 2) + " meet", slots[i][1] < slots[i + 2][0]);
+            assertTrue("no lane over key " + (i + 1),
+                slots[i][1] < centres[i + 1] && centres[i + 1] < slots[i + 2][0]);
+        }
+    }
+    private int centre(int[] slot) { return (slot[0] + slot[1]) / 2; }
+
+    /** A control that only moved must not cost the guide its cards: rebuilding them is the flash. */
+    @Test public void aRemeasureThatOnlyMovedAControlKeepsTheSameCards() {
+        open(PaneWallPage.WIDGETS);
+        TextView before = overlay.guideCardView("status");
+        assertNotNull(before);
+        int children = overlay.getChildCount();
+        status.layout(0, 6, 400, 46);
+        overlay.refresh();
+        assertSame(before, overlay.guideCardView("status"));
+        assertSame(overlay, before.getParent());
+        assertEquals(children, overlay.getChildCount());
     }
 
     @Test public void outsideTapConsumesAndDismissesOnlyOnce() {
