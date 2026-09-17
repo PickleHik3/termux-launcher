@@ -36,8 +36,7 @@
         android:paddingBottom="10dp">
 
         <include
-            android:id="@+id/layout_editor_header"
-            layout="@layout/editor_shell_header" />
+                layout="@layout/editor_shell_header" />
 
         <!-- The shell's one chooser slot: the choice that changes what the whole card is
              showing. Layout fills it with the orientation on the miniature, which moves the
