@@ -1688,6 +1688,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         // The DISPLAY opt-in can have been flipped in Settings while we were away.
         syncDisplayEnvironment();
+        // `pkg install xkeyboard-config` in a shell leaves no broadcast behind either, so the
+        // Display page's empty state re-reads the prefix itself rather than staying stuck on
+        // whatever it last said.
+        refreshDisplayEmptyStateReadiness();
         // `pkg install` leaves no broadcast behind: the drawer's Linux apps are re-read when the
         // prefix's desktop files have changed since they were last listed.
         refreshLinuxApps(false);
@@ -14513,6 +14517,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Re-read the keyboard-data probe and refresh the Display page's empty state from it. Only a
+     * running-state change reaches {@link com.termux.app.x11.X11PaneFrame#applyRunning} on its
+     * own, so a package installed in a shell while the user was elsewhere — on another place, or
+     * with the app backgrounded — left the message stale until the display was next started or
+     * stopped. Called on {@link #onResume} and whenever the wall settles on the place.
+     */
+    private void refreshDisplayEmptyStateReadiness() {
+        com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (display != null) display.refreshEmptyStateReadiness();
+    }
+
+    /**
      * The display's surface follows the page: attached while the Display page is the one at
      * rest, detached otherwise — a hidden page holds no screen-sized buffer, and the server keeps
      * its clients either way. Called when the wall settles, and when a controller is built while
@@ -14523,6 +14540,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? null : mPaneWallController.displayPage();
         if (mX11Display == null || display == null) return;
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
+            // The arrival itself: nothing about starting or stopping a display happened, but the
+            // message may be stale if a package landed in the prefix while the wall rested
+            // elsewhere.
+            refreshDisplayEmptyStateReadiness();
             mX11Display.attachView(display.display());
             display.display().requestFocus();
             // A place that asked for the keyboard as it arrived asked for it itself, so the

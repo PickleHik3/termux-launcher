@@ -260,7 +260,8 @@
     <string name="settings_widget_grid_rows_title">Grid rows</string>
     <string name="widget_picker_no_space">No room for a %1$d × %2$d widget on this %3$d × %4$d page. You can make the grid bigger in Settings.</string>
     <string name="termux_x11_no_display">No display is running.</string>
-    <string name="termux_x11_needs_keyboard_data">The display needs the keyboard layout package before it can start; the Linux display guide names it.</string>
+    <string name="termux_x11_needs_keyboard_data">The display needs the xkeyboard-config package installed before it can start.</string>
+    <string name="termux_x11_read_guide">Read the guide</string>
     <string name="termux_x11_start_display">Start display</string>
     <string name="termux_x11_display_off">The Linux display is switched off.</string>
     <string name="termux_x11_turn_on">Turn on</string>
@@ -1909,6 +1910,8 @@
     <string name="help_pad_three">Three fingers middle-click or switch windows.</string>
     <string name="help_start_title">Start display</string>
     <string name="help_start_body">Tap to start the Linux display.</string>
+    <string name="help_setup_title">Set up the display</string>
+    <string name="help_setup_body">Tap to see what needs installing first.</string>
     <string name="help_widget_title">A widget</string>
     <string name="help_widget_body">Long-press to move or resize.</string>
     <string name="help_empty_title">Empty space</string>

@@ -133,10 +133,23 @@ public final class X11CliInstaller {
     /**
      * Whether the XKB keyboard data the server needs is in the prefix. It comes from the
      * {@code xkeyboard-config} package; without it the server exits before it opens a port.
+     *
+     * <p>A filesystem probe: cheap, but never call it from a hot path — the Display page re-runs
+     * it only on arrival and on a running-state change, never on every frame.
      */
     public static boolean hasKeyboardData() {
-        return new File(PREFIX + "/share/X11/xkb").isDirectory()
-            || new File(PREFIX + "/share/xkeyboard-config-2").isDirectory();
+        return hasKeyboardData(new File(PREFIX));
+    }
+
+    /**
+     * The same check against an injected prefix root, so a test can fake "installed" or "missing"
+     * without the real prefix. {@link #hasKeyboardData()} is the only caller that reaches for the
+     * static {@link #PREFIX} directly.
+     */
+    @VisibleForTesting
+    static boolean hasKeyboardData(@NonNull File prefixDir) {
+        return new File(prefixDir, "share/X11/xkb").isDirectory()
+            || new File(prefixDir, "share/xkeyboard-config-2").isDirectory();
     }
 
     /** True once this launcher's own commands are in place. */

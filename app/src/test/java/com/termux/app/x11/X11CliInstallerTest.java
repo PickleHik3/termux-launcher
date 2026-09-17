@@ -166,4 +166,31 @@ public class X11CliInstallerTest {
         String[] names = dir.list((d, name) -> name.endsWith(".tmp"));
         return names == null ? 0 : names.length;
     }
+
+    // ---- hasKeyboardData: the probe behind item 03's stale empty-state message --------------
+
+    @Test public void noKeyboardDataInAFreshPrefix() throws IOException {
+        File prefix = temp.newFolder("fresh-prefix");
+        assertFalse(X11CliInstaller.hasKeyboardData(prefix));
+    }
+
+    @Test public void theXkbDirectoryAloneCounts() throws IOException {
+        File prefix = temp.newFolder("xkb-prefix");
+        assertTrue(new File(prefix, "share/X11/xkb").mkdirs());
+        assertTrue(X11CliInstaller.hasKeyboardData(prefix));
+    }
+
+    @Test public void theXkeyboardConfigDirectoryAloneCounts() throws IOException {
+        File prefix = temp.newFolder("xkeyboard-config-prefix");
+        assertTrue(new File(prefix, "share/xkeyboard-config-2").mkdirs());
+        assertTrue(X11CliInstaller.hasKeyboardData(prefix));
+    }
+
+    /** The flip a `pkg install xkeyboard-config` run in a shell produces, package unchanged. */
+    @Test public void installingThePackageFlipsTheAnswer() throws IOException {
+        File prefix = temp.newFolder("installed-while-showing");
+        assertFalse("not there yet", X11CliInstaller.hasKeyboardData(prefix));
+        assertTrue(new File(prefix, "share/xkeyboard-config-2").mkdirs());
+        assertTrue("the same prefix, re-read", X11CliInstaller.hasKeyboardData(prefix));
+    }
 }
