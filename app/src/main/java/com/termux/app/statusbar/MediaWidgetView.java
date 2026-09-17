@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
@@ -211,7 +210,9 @@ public final class MediaWidgetView extends View {
         if (!stroke) return;
         mFillPaint.setStyle(Paint.Style.STROKE);
         mFillPaint.setStrokeWidth(dp(1f));
-        mFillPaint.setColor(Color.argb(15, 255, 255, 255));
+        // The mode's own on-surface ink, not a frozen near-white: a white rim is invisible on
+        // light glass, and this pane stands on the same glass as the rest of the bar.
+        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 15));
         mRect.inset(dp(.5f), dp(.5f));
         canvas.drawRoundRect(mRect, radius, radius, mFillPaint);
         mFillPaint.setStyle(Paint.Style.FILL);
@@ -220,7 +221,7 @@ public final class MediaWidgetView extends View {
     private void drawProgress(Canvas canvas, float left, float top, float width, float progress) {
         mFillPaint.setShader(null);
         mRect.set(left, top, left + width, top + dp(2f));
-        mFillPaint.setColor(Color.argb(36, 230, 238, 246));
+        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 36));
         canvas.drawRoundRect(mRect, dp(1f), dp(1f), mFillPaint);
         if (progress <= 0f) return;
         mRect.set(left, top, left + width * progress, top + dp(2f));
@@ -239,7 +240,8 @@ public final class MediaWidgetView extends View {
 
         setRect(mPlayPauseRect, x, centerY, playBox);
         mFillPaint.setShader(null);
-        mFillPaint.setColor(Color.argb(mPressedTarget == TARGET_PLAY_PAUSE ? 51 : 31, 230, 238, 246));
+        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface,
+            mPressedTarget == TARGET_PLAY_PAUSE ? 51 : 31));
         canvas.drawCircle(mPlayPauseRect.centerX(), mPlayPauseRect.centerY(), playBox / 2f, mFillPaint);
         drawGlyph(canvas, playing ? R.drawable.ic_media_pause : R.drawable.ic_media_play_arrow,
             mPlayPauseRect, glyph, alpha, false);

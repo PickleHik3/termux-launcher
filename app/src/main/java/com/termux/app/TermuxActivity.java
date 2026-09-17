@@ -5474,6 +5474,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Trace.beginSection("Chrome.applyChromeSpec");
         try {
             doApplyChromeSpec(state);
+            // The bar's ink is measured from the wallpaper under it, so it is re-asked on the same
+            // pass that re-cuts the glass — a wallpaper, palette, mode or geometry change reaches
+            // both through one request.
+            syncStatusBarInk();
         } finally {
             Trace.endSection();
         }
@@ -15028,6 +15032,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         dot.setVisibility(mFrameContent.isMouseMode() && anyStatBefore
             ? View.VISIBLE : View.GONE);
         dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
+        syncStatusBarInk();
     }
 
     public boolean isMouseMode() {
@@ -16378,6 +16383,97 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }, WINDOW_LABEL_POLL_MS);
     }
 
+    // ---- What the status bar's content is drawn in, measured against what it is standing on ----
+
+    /** The bar's own rect on screen: one measurement, and every ink in the bar comes out of it. */
+    private final android.graphics.Rect mStatusInkRect = new android.graphics.Rect();
+
+    /** The status widgets and their dots, in the order the row lays them out. */
+    private static final int[] STATUS_INK_WIDGET_IDS = {
+        R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
+        R.id.terminal_status_widget_weather, R.id.terminal_status_widget_ai,
+        R.id.terminal_status_widget_mouse,
+    };
+
+    private static final int[] STATUS_INK_DOT_IDS = {
+        R.id.terminal_status_dot_cpu_ram, R.id.terminal_status_dot_ram_weather,
+        R.id.terminal_status_dot_ai, R.id.terminal_status_dot_mouse,
+    };
+
+    /**
+     * What every piece of the status bar's own content is drawn in, resolved from one measurement
+     * of what the bar is actually standing on.
+     *
+     * <p>The bar carries four contrast tiers at once — the stats' labels are body text, their icons
+     * and the place marks are graphics, the separator dots are decoration — and a band can only
+     * carry one veil. So the band is resolved <em>once</em> here, at its strictest tier and in the
+     * role colour of its most saturated content, and every other ink on it comes from
+     * {@link com.termux.app.chrome.ChromeInk#inkOn} at its own looser tier, which asks for no more
+     * veil. Anything else in this activity that stands on the status bar should read the resolution
+     * this method takes rather than call {@code onGlass} for the band a second time: the last
+     * caller in a frame would otherwise decide the veil for all of them.</p>
+     *
+     * <p>Silently does nothing until the bar has been laid out and a wallpaper sample exists; the
+     * accessory render pass runs this again, and the chrome asks for a pass of its own whenever a
+     * band's veil moves.</p>
+     */
+    private void syncStatusBarInk() {
+        com.termux.app.chrome.ChromeInk ink = mChrome.ink();
+        if (!ink.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect))
+            return;
+        int primary = statusInkSeed(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
+        com.termux.app.chrome.OnGlass.Resolution band = ink.onGlass(
+            com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect,
+            primary, primary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+
+        // A muted widget is the AI glyph's few seconds of afterlife: the state is said by the
+        // neutral role, and the fade is allowed only as far as the backdrop can carry it.
+        int muted = com.termux.app.statusbar.StatusBarInk.inkAtAlpha(band.surface,
+            MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                primary),
+            com.termux.app.statusbar.StatusBarInk.MUTED_ALPHA,
+            com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+
+        for (int widgetId : STATUS_INK_WIDGET_IDS) {
+            com.termux.app.statusbar.StatusBarWidgetView widget = findViewById(widgetId);
+            if (widget == null) continue;
+            int seed = statusInkSeed(widget.colorRole());
+            widget.setInk(
+                ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT),
+                ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT),
+                muted);
+        }
+        for (int dotId : STATUS_INK_DOT_IDS) {
+            com.termux.app.statusbar.MaterialDotSeparatorView dot = findViewById(dotId);
+            if (dot == null) continue;
+            int seed = statusInkSeed(dot.colorRole());
+            dot.setInk(ink.inkOn(band, seed, seed,
+                com.termux.app.chrome.OnGlass.TARGET_DECORATION));
+        }
+        com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
+        if (lens != null) lens.setBandSurface(band.surface);
+        com.termux.app.statusbar.SessionsIndicatorView sessions =
+            findViewById(R.id.terminal_sessions_indicator);
+        if (sessions != null) sessions.setBandSurface(band.surface);
+    }
+
+    /** The role colour a status tier is written in; its hue is the tier, and the toning keeps it. */
+    private int statusInkSeed(@NonNull com.termux.app.statusbar.StatusBarWidgetView.ColorRole role) {
+        int primary = MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorPrimary,
+            androidx.core.content.ContextCompat.getColor(this, R.color.termux_primary));
+        switch (role) {
+            case SECONDARY:
+                return MaterialColors.getColor(this,
+                    com.termux.shared.R.attr.termuxColorSecondary,
+                    androidx.core.content.ContextCompat.getColor(this, R.color.termux_secondary));
+            case TERTIARY:
+                return MaterialColors.getColor(this,
+                    com.google.android.material.R.attr.colorTertiary, primary);
+            default:
+                return primary;
+        }
+    }
+
     // ---- Trailing status widgets (CPU / RAM / weather) + their anchored detail cards ----
 
     /** Apply widget visibility from preferences, wire taps once, and drive the data controllers. */
@@ -16461,6 +16557,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         ensureAiIndicatorController();
+        // The tiers just moved, and a tier is which hue this widget's ink is toned from.
+        syncStatusBarInk();
     }
 
     /**

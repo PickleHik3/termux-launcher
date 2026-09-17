@@ -13,6 +13,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -20,6 +21,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.font.NerdFontSpans;
@@ -62,6 +64,21 @@ public final class StatusBarLensView extends View {
     private final int mNeutral;
     private final RectF[] mHitRects = new RectF[PaneWallPage.values().length];
     private final int mTouchSlop;
+
+    /**
+     * The contrast a mark's colour is toned to before anything is done to it. A shade above
+     * {@link OnGlass#TARGET_LARGE_TEXT} on purpose: the drain and the mark's own alpha both act on
+     * the toned colour afterwards, and the margin keeps the cheap path — a colour that already
+     * reads — from being re-toned, which is an HCT search, in a view that redraws with every pixel
+     * of a wall drag.
+     */
+    private static final double TONE_TARGET = OnGlass.TARGET_LARGE_TEXT * 1.04d;
+
+    /** The opaque colour the bar is standing on, as the chrome measured it; null until it has. */
+    @Nullable private Integer mBandSurface;
+    /** Each place's colour toned onto {@link #mBandSurface}; rebuilt when the band moves. */
+    private final int[] mTonedAccents = new int[PaneWallPage.values().length];
+    private boolean mTonedAccentsValid;
 
     @NonNull private List<PaneWallPage> mPages = Collections.singletonList(PaneWallPage.TERMINAL);
     @NonNull private PaneWallPage mCurrent = PaneWallPage.TERMINAL;
@@ -188,6 +205,38 @@ public final class StatusBarLensView extends View {
         invalidate();
     }
 
+    /**
+     * What the chrome measured the bar's band to be, so a place's colour can be toned onto it.
+     *
+     * <p>Until this arrives the lens paints what it always painted, which on the reporting device
+     * was a place mark at 1.11:1 — the mark's own blue on a glass of nearly the same luminance.</p>
+     */
+    public void setBandSurface(@ColorInt int bandSurface) {
+        if (mBandSurface != null && mBandSurface == bandSurface) return;
+        mBandSurface = bandSurface;
+        mTonedAccentsValid = false;
+        invalidate();
+    }
+
+    /**
+     * The place's colour moved along its own tone axis until it reads on the band — once per band,
+     * not once per mark per frame: the search behind it walks a hundred HCT tones and the lens
+     * redraws continuously while the wall is dragged.
+     */
+    @ColorInt
+    private int tonedAccent(@NonNull PaneWallPage page) {
+        Integer surface = mBandSurface;
+        if (surface == null) return accentFor(getContext(), page);
+        if (!mTonedAccentsValid) {
+            for (PaneWallPage candidate : PaneWallPage.values()) {
+                mTonedAccents[candidate.ordinal()] = OnGlass.resolveBare(surface,
+                    accentFor(getContext(), candidate), TONE_TARGET).ink;
+            }
+            mTonedAccentsValid = true;
+        }
+        return mTonedAccents[page.ordinal()];
+    }
+
     /** The Display place's mark: Termux X11's prompt, or the distribution the display serves. */
     public void setDisplayGlyph(@NonNull String glyph) {
         if (mDisplayGlyph.equals(glyph)) return;
@@ -255,8 +304,15 @@ public final class StatusBarLensView extends View {
             // own colour with a glow; the two peeking in are where you could go, drained towards
             // the surface's neutral — but drained in colour, not in legibility, so the mark still
             // reads at the bar's edge.
-            int accent = ColorUtils.blendARGB(accentFor(getContext(), mark.page), mNeutral,
-                mark.drain);
+            //
+            // Which is what the drain finally does, now that the band under it has been measured:
+            // towards a grey of the mark's own luminance rather than towards a neutral colour that
+            // has a luminance of its own to drag it to. The statement is the same and it costs no
+            // contrast. Before the band is known there is nothing to tone against and the old
+            // blend stands.
+            int accent = mBandSurface == null
+                ? ColorUtils.blendARGB(accentFor(getContext(), mark.page), mNeutral, mark.drain)
+                : StatusBarInk.drain(tonedAccent(mark.page), mark.drain);
             if (mark.glow > 0.01f) {
                 float reach = mark.sizePx * StatusBarLensMetrics.GLOW_REACH;
                 mGlow.set(mTile.left - reach, mTile.top - reach, mTile.right + reach,
@@ -275,8 +331,14 @@ public final class StatusBarLensView extends View {
                 Math.round(StatusBarLensMetrics.FILL_ALPHA * mark.ink)));
             mStrokePaint.setColor(ColorUtils.setAlphaComponent(accent,
                 Math.round(StatusBarLensMetrics.STROKE_ALPHA * mark.ink)));
-            mGlyphPaint.setColor(ColorUtils.setAlphaComponent(accent,
-                Math.round(StatusBarLensMetrics.GLYPH_ALPHA * mark.ink)));
+            // The tint and the line are the mark's weight; the glyph is the mark. So the glyph is
+            // the one held to a floor, and held to it at the alpha it is really drawn with — a
+            // peeking mark keeps 70% of its ink, and 70% of a ratio is not that ratio.
+            int glyphAlpha = Math.round(StatusBarLensMetrics.GLYPH_ALPHA * mark.ink);
+            mGlyphPaint.setColor(mBandSurface == null
+                ? ColorUtils.setAlphaComponent(accent, glyphAlpha)
+                : StatusBarInk.inkAtAlpha(mBandSurface, accent, glyphAlpha,
+                    OnGlass.TARGET_LARGE_TEXT));
             mGlyphPaint.setTextSize(mark.glyphSizePx);
             // A neighbour dissolves towards the end it peeks past: its own layer, then a gradient
             // that keeps the inner side and lets the outer side go. The dissolve is deepest when

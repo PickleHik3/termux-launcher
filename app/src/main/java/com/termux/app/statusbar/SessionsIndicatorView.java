@@ -15,11 +15,11 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -32,11 +32,25 @@ import com.termux.shared.termux.font.NerdFontSpans;
  */
 public final class SessionsIndicatorView extends LinearLayout {
 
+    /**
+     * How much of the mode's own panel colour the chip carries. Kept from the shape this chip has
+     * always had: enough of the band shows through for it to read as one of the bar's chips rather
+     * than a card laid on it, and {@link StatusBarInk#chip} measures the label against what that
+     * actually leaves rather than against the fill alone.
+     */
+    static final int CONTAINER_ALPHA = 198;
+
     private final AppCompatTextView mLabel;
     private boolean mCapsuleSurface;
     private float mStatusBarRadiusPx;
     private boolean mShowingSessionNumber = true;
     @Nullable private Integer mAccent;
+    /**
+     * The opaque colour of the band the chip is standing on, as the chrome measured it. Unset
+     * before the first measurement, and then the chip is resolved against its own fill alone —
+     * which is what it is, near enough, at this alpha over the mode's own glass.
+     */
+    @Nullable private Integer mBandSurface;
 
     public SessionsIndicatorView(Context context) {
         this(context, null);
@@ -83,6 +97,17 @@ public final class SessionsIndicatorView extends LinearLayout {
     public void setAccent(@Nullable Integer accent) {
         if (accent == null ? mAccent == null : accent.equals(mAccent)) return;
         mAccent = accent;
+        applyColors();
+    }
+
+    /**
+     * What the chrome measured the chip's band to be. The chip's fill is translucent, so the band
+     * is part of what its label is really standing on, and the label is toned against the two of
+     * them together rather than against the fill on its own.
+     */
+    public void setBandSurface(@ColorInt int bandSurface) {
+        if (mBandSurface != null && mBandSurface == bandSurface) return;
+        mBandSurface = bandSurface;
         applyColors();
     }
 
@@ -140,35 +165,39 @@ public final class SessionsIndicatorView extends LinearLayout {
         }
     }
 
+    /**
+     * The chip follows the mode, and the place it belongs to moves to its rim.
+     *
+     * <p>What this replaces blended the place's accent 55% towards black for the fill and the
+     * label 35% towards the accent — in <em>both</em> modes. In light mode that wrote a dark label
+     * on a fill that had been forced dark, which measured 1.75:1 on the reporting device; dark mode
+     * measured 3.90:1, under the floor too. So the fill is now the mode's own panel colour, which
+     * is light in light mode and dark in dark mode because the resource is, with nothing here
+     * branching on the mode to say so; the label is the mode's on-surface ink toned against what
+     * that fill really leaves; and the accent moves to the 1&nbsp;dp rim, where it still says which
+     * place this chip is without being the surface the label has to survive.</p>
+     */
     private void applyColors() {
         Context context = getContext();
         int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
-        int secondary = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSecondary,
-            ContextCompat.getColor(context, R.color.termux_secondary));
-        int tertiary = mAccent != null ? mAccent : MaterialColors.getColor(context,
+        int accent = mAccent != null ? mAccent : MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorTertiary, primary);
-        int tertiaryContainer = mAccent != null
-            ? ColorUtils.blendARGB(mAccent, Color.BLACK, .55f)
-            : MaterialColors.getColor(context,
-                com.google.android.material.R.attr.colorTertiaryContainer, secondary);
+        int panel = ContextCompat.getColor(context, R.color.termux_surface_panel_high);
         int onSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
-        int onTertiaryContainer = mAccent != null
-            ? ColorUtils.blendARGB(onSurface, mAccent, .35f)
-            : MaterialColors.getColor(context,
-                com.google.android.material.R.attr.colorOnTertiaryContainer, onSurface);
+        StatusBarInk.Chip resolved = StatusBarInk.chip(
+            mBandSurface != null ? mBandSurface : panel, panel, CONTAINER_ALPHA, onSurface, accent);
+
         GradientDrawable chip = new GradientDrawable();
         // The caller resolves the shape (the chip-radius knob, or the bar's own shape while that
         // knob is untouched), so the indicator and the window pills beside it always agree.
         chip.setCornerRadius(mStatusBarRadiusPx);
-        chip.setColor(ColorUtils.setAlphaComponent(
-            ColorUtils.blendARGB(tertiaryContainer, tertiary, .22f), 198));
-        chip.setStroke(dp(1), tertiary);
+        chip.setColor(resolved.container);
+        chip.setStroke(dp(1), resolved.stroke);
         setBackground(chip);
 
-        mLabel.setTextColor(onTertiaryContainer);
+        mLabel.setTextColor(resolved.label);
     }
 
     /** Alpha-weighted visual center of the rendered label, relative to its text origin. */

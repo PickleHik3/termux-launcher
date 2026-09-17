@@ -107,6 +107,39 @@ public class SessionsIndicatorViewTest {
         }
     }
 
+    /**
+     * The chip the user said they could not see. In light mode it measured 1.75:1 — a dark label on
+     * a fill the place accent had been blended 55% towards black — and in dark mode 3.90:1, under
+     * the floor too. Both modes are checked against the glass measured on the reporting device.
+     */
+    @Test
+    public void sessionChip_labelClearsTheBodyFloorOnItsContainerInBothModes() {
+        assertChipReads("light", 0xFF6A5755);
+
+        org.robolectric.RuntimeEnvironment.setQualifiers("+night");
+        assertChipReads("dark", 0xFF1B1A17);
+        org.robolectric.RuntimeEnvironment.setQualifiers("+notnight");
+    }
+
+    private static void assertChipReads(String mode, int bandSurface) {
+        SessionsIndicatorView view = new SessionsIndicatorView(
+            ApplicationProvider.getApplicationContext(), null);
+        view.setAccent(0xFF345CA8);
+        view.setBandSurface(bandSurface);
+        view.setSession("main", 2, 0);
+
+        GradientDrawable chip = (GradientDrawable) view.getBackground();
+        int container = chip.getColor().getDefaultColor();
+        int surface = com.termux.app.chrome.OnGlass.opaque(
+            com.termux.app.chrome.OnGlass.composite(container,
+                com.termux.app.chrome.OnGlass.opaque(bandSurface)));
+        int label = ((TextView) view.getChildAt(0)).getCurrentTextColor();
+        double ratio = com.termux.app.chrome.OnGlass.ratio(label, surface);
+
+        assertTrue("the session chip's label in " + mode + " mode: " + ratio,
+            ratio >= com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+    }
+
     @Test
     public void alphaWeightedCenter_followsTheMajorityOfVisibleInk() {
         int[] pixels = {

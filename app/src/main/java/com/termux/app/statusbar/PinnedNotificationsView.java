@@ -2,7 +2,6 @@ package com.termux.app.statusbar;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -245,7 +244,9 @@ public final class PinnedNotificationsView extends View {
         if (ruleEnd <= ruleStart) return;
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setColor(Color.argb(26, 230, 238, 246));
+        // The mode's own on-surface ink rather than a frozen near-white, which the light mode's
+        // glass swallows whole.
+        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 26));
         canvas.drawRect(ruleStart, height / 2f - dp(.5f), ruleEnd, height / 2f + dp(.5f), mFillPaint);
     }
 
@@ -318,7 +319,8 @@ public final class PinnedNotificationsView extends View {
         mDismissRects.add(box);
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setColor(Color.argb(mPressedIndex == index ? 41 : 20, 230, 238, 246));
+        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface,
+            mPressedIndex == index ? 41 : 20));
         canvas.drawCircle(box.centerX(), box.centerY(), box.width() / 2f, mFillPaint);
         Drawable cross = AppCompatResources.getDrawable(getContext(),
             R.drawable.ic_pinned_notification_dismiss);
