@@ -2,6 +2,7 @@ package com.termux.app.editorshell;
 
 import android.content.Context;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,6 +13,9 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Applies {@link EditorShellMetrics} to a row the shell has just inflated.
@@ -134,8 +138,59 @@ public final class EditorShellRows {
             int growX = Math.max(0, (minSizePx - bounds.width()) / 2);
             int growY = Math.max(0, (minSizePx - bounds.height()) / 2);
             bounds.inset(-growX, -growY);
-            parent.setTouchDelegate(new TouchDelegate(bounds, target));
+            SharedTouchDelegate shared = parent.getTouchDelegate() instanceof SharedTouchDelegate
+                ? (SharedTouchDelegate) parent.getTouchDelegate()
+                : new SharedTouchDelegate(parent);
+            shared.add(bounds, target);
+            parent.setTouchDelegate(shared);
         });
+    }
+
+    /**
+     * The header stands five actions side by side and every one of them wants a finger-sized
+     * target, but a view holds only one {@link TouchDelegate} — set them one at a time and only
+     * the last one asked ever grows. This keeps them all: whichever grown rect the finger comes
+     * down in takes the gesture and keeps it until the finger lifts.
+     */
+    private static final class SharedTouchDelegate extends TouchDelegate {
+
+        private final List<Rect> mBounds = new ArrayList<>();
+        private final List<TouchDelegate> mDelegates = new ArrayList<>();
+        @Nullable private TouchDelegate mHolding;
+
+        SharedTouchDelegate(@NonNull View parent) {
+            super(new Rect(), parent);
+        }
+
+        void add(@NonNull Rect bounds, @NonNull View target) {
+            mBounds.add(bounds);
+            mDelegates.add(new TouchDelegate(bounds, target));
+        }
+
+        @Override
+        public boolean onTouchEvent(@NonNull MotionEvent event) {
+            // The rect is asked here rather than left to each delegate's own check, so a down that
+            // lands in two overlapping rects goes to one of them and not to both.
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                mHolding = null;
+                int x = (int) event.getX();
+                int y = (int) event.getY();
+                for (int i = 0; i < mBounds.size(); i++) {
+                    if (mBounds.get(i).contains(x, y)) {
+                        mHolding = mDelegates.get(i);
+                        break;
+                    }
+                }
+            }
+            if (mHolding == null)
+                return false;
+            boolean handled = mHolding.onTouchEvent(event);
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_UP
+                || action == MotionEvent.ACTION_CANCEL)
+                mHolding = null;
+            return handled;
+        }
     }
 
     private static void setWidth(@Nullable View view, int widthPx) {
