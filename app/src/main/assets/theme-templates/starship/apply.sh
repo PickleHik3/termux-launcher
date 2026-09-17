@@ -11,7 +11,19 @@ marker_end="# <<< launcher-material <<<"
 # discarded: comment it out with this tag so undo.sh can restore it exactly,
 # the same trick helix/apply.sh uses for `theme = ...`.
 disable_suffix=" # >>> launcher-material: previous >>>"
-ours_line='palette = "launcher-material"'
+# One palette per mode is rendered; the active one is named by the single line
+# this script owns, and $TERMUX_THEME_MODE is what the launcher just rendered
+# for. Rewriting that line is the whole light/dark switch for starship, which
+# has no listener of its own and re-reads its config each prompt.
+mode="${TERMUX_THEME_MODE:-dark}"
+case "$mode" in
+    light) ;;
+    *) mode=dark ;;
+esac
+ours_line="palette = \"launcher-material-$mode\""
+# Every name this script has ever written, so a mode flip replaces the previous
+# line instead of leaving two.
+ours_pattern='^[[:space:]]*palette[[:space:]]*=[[:space:]]*"launcher-material(-dark|-light)?"[[:space:]]*$'
 
 expand_tilde() {
     case "$1" in
@@ -44,7 +56,7 @@ trap cleanup EXIT
 
 if [ ! -f "$config_file" ]; then
     {
-        echo 'palette = "launcher-material"'
+        printf '%s\n' "$ours_line"
         echo "$marker_begin"
         cat "$palette_file"
         echo "$marker_end"
@@ -60,13 +72,13 @@ else
     # top-level palette= line so it survives undo. A line already tagged
     # from an earlier apply is left exactly as it is (it starts with '#',
     # so the palette= match below never sees it).
-    awk -v begin="$marker_begin" -v end="$marker_end" -v suffix="$disable_suffix" -v ours="$ours_line" '
+    awk -v begin="$marker_begin" -v end="$marker_end" -v suffix="$disable_suffix" -v ours="$ours_pattern" '
         $0 == begin { in_block = 1; next }
         in_block {
             if ($0 == end) { in_block = 0 }
             next
         }
-        $0 == ours { next }
+        $0 ~ ours { next }
         !disabled && $0 ~ /^[[:space:]]*palette[[:space:]]*=/ {
             print "#" $0 suffix
             disabled = 1
@@ -80,11 +92,11 @@ else
 
     {
         if grep -qE '^"\$schema"' "$body_file"; then
-            awk '
+            awk -v ours="$ours_line" '
                 /^"\$schema"/ {
                     print
                     if (!inserted) {
-                        print "palette = \"launcher-material\""
+                        print ours
                         inserted = 1
                     }
                     next
@@ -92,7 +104,7 @@ else
                 { print }
             ' "$body_file"
         else
-            echo 'palette = "launcher-material"'
+            printf '%s\n' "$ours_line"
             cat "$body_file"
         fi
         echo "$marker_begin"

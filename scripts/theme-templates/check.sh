@@ -104,6 +104,15 @@ run_hook() {
         bash "$hook" >"$WORK/.last_hook_output" 2>&1
 }
 
+run_hook_mode() {
+    # run_hook_mode <home> <theme-dir> <output> <hook-script> <mode>
+    local home="$1" theme_dir="$2" output="$3" hook="$4" mode="$5"
+    env HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
+        TERMUX_THEME_ID="$(basename "$theme_dir")" TERMUX_THEME_DIR="$theme_dir" \
+        TERMUX_THEME_OUTPUT="$output" TERMUX_THEME_MODE="$mode" \
+        bash "$hook" >"$WORK/.last_hook_output" 2>&1
+}
+
 run_hook_shell() {
     # run_hook_shell <home> <theme-dir> <output> <hook-script> <shell>
     local home="$1" theme_dir="$2" output="$3" hook="$4" shell="$5"
@@ -124,7 +133,18 @@ test_starship() {
     assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
     assert_no_colour_tokens "$rendered" || { fail "unresolved {{ colors. token in rendered output"; return; }
     "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$rendered" 2>"$WORK/starship.tomlerr" || { fail "invalid TOML: $(cat "$WORK/starship.tomlerr")"; return; }
-    note "starship: not installed on this machine - syntax validation only (TOML parse)"
+    "$PY" - "$rendered" <<'PYCHECK' 2>"$WORK/starship.dualerr" || { fail "rendered palettes: $(cat "$WORK/starship.dualerr")"; return; }
+import sys, tomllib
+palettes = tomllib.load(open(sys.argv[1], "rb")).get("palettes", {})
+dark = palettes.get("launcher-material-dark")
+light = palettes.get("launcher-material-light")
+assert isinstance(dark, dict) and dark, "no [palettes.launcher-material-dark] table"
+assert isinstance(light, dict) and light, "no [palettes.launcher-material-light] table"
+assert set(dark) == set(light), "the two palettes carry different keys"
+differing = [k for k in dark if dark[k] != light[k]]
+assert len(differing) >= len(dark) - 2, f"only {len(differing)} of {len(dark)} entries differ between the palettes"
+PYCHECK
+    note "starship: not installed on this machine - TOML parse, and both mode palettes checked for the same keys with different values"
 
     local case
     for case in absent pre; do
@@ -171,11 +191,23 @@ test_starship() {
     run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (userpalette) failed"
     grep -qxF '#palette = "my-nord" # >>> launcher-material: previous >>>' "$home/.config/starship.toml" \
         || fail "apply.sh (userpalette) did not comment out and tag the user's own palette= line"
-    grep -qxF 'palette = "launcher-material"' "$home/.config/starship.toml" \
+    grep -qxF 'palette = "launcher-material-dark"' "$home/.config/starship.toml" \
         || fail "apply.sh (userpalette) did not add its own palette= line"
     cp "$home/.config/starship.toml" "$WORK/starship-userpalette/after1.toml"
     run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (userpalette) failed"
     cmp -s "$WORK/starship-userpalette/after1.toml" "$home/.config/starship.toml" || fail "apply.sh (userpalette) not idempotent"
+    # A mode flip rewrites that one line and leaves no second one behind (D3).
+    run_hook_mode "$home" "$theme_dir" "$output" "$dir/apply.sh" light || fail "apply.sh (userpalette, light) failed"
+    grep -qxF 'palette = "launcher-material-light"' "$home/.config/starship.toml" \
+        || fail "apply.sh did not flip the palette= line to the light palette"
+    [ "$(grep -cE '^palette = "launcher-material-(dark|light)"$' "$home/.config/starship.toml")" = 1 ] \
+        || fail "apply.sh left more than one launcher-material palette= line behind after the mode flip"
+    grep -qxF '#palette = "my-nord" # >>> launcher-material: previous >>>' "$home/.config/starship.toml" \
+        || fail "the mode flip lost the user's displaced palette= line"
+    run_hook_mode "$home" "$theme_dir" "$output" "$dir/apply.sh" dark || fail "apply.sh (userpalette, back to dark) failed"
+    cmp -s "$WORK/starship-userpalette/after1.toml" "$home/.config/starship.toml" \
+        || fail "flipping to light and back to dark did not restore the dark result byte for byte"
+
     run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (userpalette) failed"
     cmp -s "$orig" "$home/.config/starship.toml" || fail "undo.sh (userpalette) did not restore the user's original palette= line"
     [ -e "$output" ] && fail "undo.sh (userpalette) left the rendered file behind"
