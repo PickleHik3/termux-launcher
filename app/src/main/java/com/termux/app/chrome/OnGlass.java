@@ -391,4 +391,45 @@ public final class OnGlass {
         }
         return new Resolution(veil, surface, toned, tonedRatio, target, true, false, true);
     }
+
+    /**
+     * The band resolved with <em>no veil at all</em>: the wallpaper is left exactly as it is and
+     * the ink moves to meet it.
+     *
+     * <p>{@link #resolve} reaches for a veil first because a veil is usually the cheaper
+     * intervention, but a veil only ever moves the surface toward {@code veilColor}, and a caller
+     * can know that direction is the wrong one. A band drawn in the pale ink over a base colour
+     * <em>lighter</em> than its backdrop is the case: {@link #veilAlphaFor} would climb all the way
+     * to {@link #MAX_VEIL_ALPHA} without ever helping, and the band would end up a near-opaque
+     * light slab under a near-white ink — the worst of both answers. Such a caller checks the
+     * direction itself (does an opaque {@code veilColor} raise this ink's ratio at all?) and comes
+     * here when it does not.</p>
+     *
+     * <p>The ladder is {@link #resolve}'s without its veil rungs: the ink bare, then a tone of it,
+     * then the more legible of black and white, with {@link Resolution#shortfall} set if even that
+     * misses. {@link Resolution#veil} is always {@link Color#TRANSPARENT} and
+     * {@link Resolution#veilCapped} always false — nothing was spent on the wallpaper.</p>
+     */
+    @NonNull
+    public static Resolution resolveBare(@ColorInt int backdrop, @ColorInt int ink, double target) {
+        int surface = opaque(backdrop);
+        double bare = ratio(ink, surface);
+        if (bare >= target) {
+            return new Resolution(Color.TRANSPARENT, surface, ink, bare, target, false, false, false);
+        }
+        int toned = inkOn(surface, ink, target);
+        double tonedRatio = ratio(toned, surface);
+        if (tonedRatio >= target) {
+            return new Resolution(Color.TRANSPARENT, surface, toned, tonedRatio, target,
+                false, false, false);
+        }
+        int extreme = mostLegibleInk(surface, Color.WHITE, Color.BLACK);
+        double extremeRatio = ratio(extreme, surface);
+        if (extremeRatio >= tonedRatio) {
+            return new Resolution(Color.TRANSPARENT, surface, extreme, extremeRatio, target,
+                false, false, extremeRatio < target);
+        }
+        return new Resolution(Color.TRANSPARENT, surface, toned, tonedRatio, target,
+            false, false, true);
+    }
 }

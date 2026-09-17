@@ -986,6 +986,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return resolveAccessoryOutlineColor();
         }
 
+        @Override public int wallpaperDimColor() {
+            return resolveWallpaperBackdropDimColor();
+        }
+
         @Override public boolean roundedDockStyle() {
             return isRoundedDockStyle();
         }
@@ -5908,7 +5912,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (statusSurface != null) {
             statusSurface.setBackground(mChrome.glass().statusBarSurface(opacity, 0f,
-                terminalWindowGlassStatusFraction(host)));
+                terminalWindowGlassStatusFraction(host), false,
+                com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR));
             statusSurface.setVisibility(View.VISIBLE);
         }
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
@@ -15819,7 +15824,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ? mChrome.glass().dockSurface(opacity, 0f, 1f, false)
                     : mChrome.glass().statusBarSurface(opacity,
                         capsuleStatusBar || isStatusBarVertical()
-                            ? 0f : terminalWindowGlassStatusFraction(host), 1f, true));
+                            ? 0f : terminalWindowGlassStatusFraction(host), 1f, true,
+                        com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR));
         }
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
