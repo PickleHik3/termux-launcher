@@ -39,7 +39,9 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The Layout editor: a miniature of the place the user is looking at, parked over the live place,
@@ -432,7 +434,27 @@ public final class LayoutEditorController {
             else if (row.group instanceof PlaceArrangeModel.Track)
                 addTrackRow(context, rows, row, (PlaceArrangeModel.Track) row.group);
         }
-        if (mRowsScroller != null) mRowsScroller.scrollTo(0, 0);
+        restoreScroll(plan);
+    }
+
+    /**
+     * Where each place-and-orientation was scrolled to. Flipping the toggle and flipping it back
+     * comes back to where the user was, rather than to the top of a list they had scrolled past.
+     */
+    private final Map<String, Integer> mPanelScroll = new LinkedHashMap<>();
+
+    private void restoreScroll(@NonNull LayoutEditorPlan plan) {
+        NestedScrollView scroller = mRowsScroller;
+        if (scroller == null)
+            return;
+        if (mRowsKey != null)
+            mPanelScroll.put(mRowsKey, scroller.getScrollY());
+        String key = plan.place().name() + '.' + plan.shownOrientation().name();
+        Integer remembered = mPanelScroll.get(key);
+        int target = remembered == null ? 0 : remembered;
+        scroller.scrollTo(0, 0);
+        if (target > 0)
+            scroller.post(() -> scroller.scrollTo(0, target));
     }
 
     /** The column the rows stand in, inside a scroller that grows only to the room it was left. */
@@ -443,18 +465,16 @@ public final class LayoutEditorController {
         Context context = mHost.context();
         // Nested rather than a plain ScrollView: the card is a scroller too, and a list that has
         // reached its end has to hand the rest of the drag on rather than swallow it.
-        NestedScrollView scroller = new NestedScrollView(context) {
+        NestedScrollView scroller = new NestedScrollView(EditorShellRows.scrollerContext(context)) {
             @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
                     Math.max(1, mRowsCapPx), View.MeasureSpec.AT_MOST));
             }
         };
-        scroller.setVerticalScrollBarEnabled(false);
         scroller.setClipToPadding(false);
-        // A list cut short by a tall canvas has only the fade to say so; one that simply stops at
-        // the card's edge reads as the whole list.
-        scroller.setVerticalFadingEdgeEnabled(true);
-        scroller.setFadingEdgeLength(Math.round(dpToPx(18)));
+        // A list cut short by a tall canvas needs the fade and the scrollbar to say so; one that
+        // simply stops at the card's edge reads as the whole list.
+        EditorShellRows.applyBodyScroller(scroller);
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         scroller.addView(rows, new ViewGroup.LayoutParams(

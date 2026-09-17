@@ -95,6 +95,34 @@ public final class EditorShellRows {
         return label == null ? row : (View) label.getParent();
     }
 
+    /**
+     * The three things that make a capped body legible about what is below it.
+     *
+     * <p>Quantising the cap to whole rows (EditorShellMetrics.bodyCap) is the fix for a body cut
+     * through the middle of a row's glyphs; these are what make the cut readable as a list that
+     * continues. The fade covers the peek and the top of the row behind it, and the scrollbar is
+     * the only thing on screen that says <em>how much</em> more there is, so it never fades out.
+     *
+     * @return the context to build the scroller with, carrying the shell's scrollbar ink
+     */
+    @NonNull
+    public static Context scrollerContext(@NonNull Context context) {
+        return new android.view.ContextThemeWrapper(
+            context, R.style.ThemeOverlay_Termux_EditorShellScroller);
+    }
+
+    /** Turns the fade and the persistent scrollbar on for a body scroller. */
+    public static void applyBodyScroller(@NonNull View scroller) {
+        float density = scroller.getResources().getDisplayMetrics().density;
+        scroller.setVerticalFadingEdgeEnabled(true);
+        scroller.setFadingEdgeLength(EditorShellMetrics.px(EditorShellMetrics.FADE_DP, density));
+        scroller.setVerticalScrollBarEnabled(true);
+        scroller.setScrollbarFadingEnabled(false);
+        int inset = EditorShellMetrics.px(2, density);
+        scroller.setPadding(scroller.getPaddingLeft(), scroller.getPaddingTop(), inset,
+            scroller.getPaddingBottom());
+    }
+
     /** Grows a small view's touch target inside its parent, up to the row's own height. */
     public static void expandTouchTarget(@NonNull View target, int minSizePx) {
         View parent = (View) target.getParent();

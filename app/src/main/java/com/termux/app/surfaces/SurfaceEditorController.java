@@ -1051,9 +1051,41 @@ public final class SurfaceEditorController {
             }
             addControlRow(context, rows, control, mSelectedSlot, syncs);
         }
-        if (mRowsScroller != null)
-            mRowsScroller.scrollTo(0, 0);
+        rememberAndRestoreScroll();
         applyRowsCap();
+    }
+
+    /**
+     * Where each panel was scrolled to, so coming back to a surface comes back to where the user
+     * was rather than to the top of a list they had already scrolled past.
+     *
+     * <p>Only across panels. A genuine rebuild of the same panel — a row that has appeared or gone
+     * because the dock style changed — goes back to the top, because the list under the finger is
+     * not the list that was there.
+     */
+    private final Map<String, Integer> mPanelScroll = new LinkedHashMap<>();
+    /** Which panel the scroller is showing, so the outgoing one can be remembered. */
+    @Nullable private String mScrollKey;
+
+    private void rememberAndRestoreScroll() {
+        ScrollView scroller = mRowsScroller;
+        if (scroller == null)
+            return;
+        String key = (mSelectedSlot == null ? "all" : mSelectedSlot.name())
+            + '.' + (editPlace() == null ? "shared" : editPlace().name());
+        if (key.equals(mScrollKey)) {
+            mPanelScroll.remove(key);
+            scroller.scrollTo(0, 0);
+            return;
+        }
+        if (mScrollKey != null)
+            mPanelScroll.put(mScrollKey, scroller.getScrollY());
+        mScrollKey = key;
+        Integer remembered = mPanelScroll.get(key);
+        int target = remembered == null ? 0 : remembered;
+        scroller.scrollTo(0, 0);
+        if (target > 0)
+            scroller.post(() -> scroller.scrollTo(0, target));
     }
 
     /** Moves a view the card owns into whichever column is showing it now. */
@@ -1072,18 +1104,16 @@ public final class SurfaceEditorController {
         if (mRowsScroller != null)
             return;
         Context context = mHost.context();
-        mRowsScroller = new ScrollView(context) {
+        mRowsScroller = new ScrollView(EditorShellRows.scrollerContext(context)) {
             @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
                     Math.max(dp(80), mRowsMaxHeightPx), View.MeasureSpec.AT_MOST));
             }
         };
-        mRowsScroller.setVerticalScrollBarEnabled(false);
         mRowsScroller.setClipToPadding(false);
-        // A cramped region caps the list short of its last row or two. The fade is the only thing
-        // that says so — a list that simply stops at the card's edge reads as the whole list.
-        mRowsScroller.setVerticalFadingEdgeEnabled(true);
-        mRowsScroller.setFadingEdgeLength(dp(18));
+        // A cramped region caps the list short of its last row or two; the fade and the scrollbar
+        // are what say so. A list that simply stops at the card's edge reads as the whole list.
+        EditorShellRows.applyBodyScroller(mRowsScroller);
         mRows = new LinearLayout(context);
         mRows.setOrientation(LinearLayout.VERTICAL);
         mRowsScroller.addView(mRows, new ViewGroup.LayoutParams(

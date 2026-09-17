@@ -54,6 +54,17 @@
         <item name="iconPadding">0dp</item>
     </style>
 
+    <!-- The editor body's scroller. Applied as a theme overlay rather than a style, because the
+         Appearance editor's scroller is a ScrollView and the Layout editor's is a NestedScrollView
+         and only one of them has a constructor that takes a style. Both editors draw the scrollbar
+         always: it is what says how much more there is, and a body capped short of its last rows
+         with no scrollbar reads as the whole list. -->
+    <style name="ThemeOverlay.Termux.EditorShellScroller" parent="">
+        <item name="android:scrollbarSize">3dp</item>
+        <item name="android:scrollbarThumbVertical">@drawable/editor_shell_scrollbar_thumb</item>
+        <item name="android:scrollbarTrackVertical">@drawable/editor_shell_scrollbar_track</item>
+    </style>
+
     <style name="SettingsSegmentLabel">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">match_parent</item>
