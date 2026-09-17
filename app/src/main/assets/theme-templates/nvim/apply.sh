@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Installs the launcher-material Neovim colorscheme (write-if-changed: this
-# template owns the two files below), and wires it in for a plain config
-# with a marker block in init.lua. The rendered plugin spec
-# ($TERMUX_THEME_OUTPUT, lua/plugins/launcher-material.lua) already picks
-# LazyVim or AstroNvim on its own at nvim startup; this script only decides
-# whether the init.lua fallback is also needed.
+# Installs the launcher-material Neovim colorscheme and its plugin spec
+# (write-if-changed: this template owns the two files below), and wires the
+# colorscheme in for a plain config with a marker block in init.lua. The
+# rendered file is the palette module itself ($TERMUX_THEME_OUTPUT,
+# lua/launcher/material_palette.lua), which carries both the dark and the
+# light palette; the spec picks LazyVim or AstroNvim on its own at nvim
+# startup, so this script only decides whether the init.lua fallback is also
+# needed.
 set -euo pipefail
 
 theme_dir="${TERMUX_THEME_DIR:?TERMUX_THEME_DIR not set}"
@@ -21,7 +23,7 @@ write_if_changed() {
 }
 
 write_if_changed "$config_dir/colors/launcher-material.lua" "$theme_dir/colors/launcher-material.lua"
-write_if_changed "$config_dir/lua/launcher/material_palette.lua" "$theme_dir/lua/launcher/material_palette.lua"
+write_if_changed "$config_dir/lua/plugins/launcher-material.lua" "$theme_dir/lua/plugins/launcher-material.lua"
 
 file_contains() {
     [ -f "$1" ] && grep -q -- "$2" "$1" 2>/dev/null

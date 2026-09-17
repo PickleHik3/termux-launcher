@@ -1,71 +1,146 @@
-# Launcher Material palette for Starship
+# Launcher Material palettes for Starship
 # Rendered by Termux Launcher - do not edit manually
+#
+# Both palettes are here, every time. apply.sh points starship at the one for
+# the current mode with a single `palette = "launcher-material-<mode>"` line at
+# the top of your starship.toml, and rewrites that line when the mode changes.
+#
+# Segment fills below are Material surface hex, so a pill keeps its exact
+# wallpaper tint. Accents in a prompt are better written as ANSI names
+# (`green`, `bright-blue`, ...): starship emits those as terminal colours, so
+# they follow the terminal itself the instant it recolours, with no re-render.
 
-[palettes.launcher-material]
+[palettes.launcher-material-dark]
 # Standard colors
-blue      = "{{colors.terminal_normal_blue.default.hex}}"
-red       = "{{colors.terminal_normal_red.default.hex}}"
-green     = "{{colors.terminal_normal_green.default.hex}}"
-yellow    = "{{colors.terminal_normal_yellow.default.hex}}"
-cyan      = "{{colors.terminal_normal_cyan.default.hex}}"
-magenta   = "{{colors.terminal_normal_magenta.default.hex}}"
-white     = "{{colors.terminal_normal_white.default.hex}}"
-black     = "{{colors.terminal_normal_black.default.hex}}"
+blue      = "{{ colors.terminal_normal_blue.dark.hex }}"
+red       = "{{ colors.terminal_normal_red.dark.hex }}"
+green     = "{{ colors.terminal_normal_green.dark.hex }}"
+yellow    = "{{ colors.terminal_normal_yellow.dark.hex }}"
+cyan      = "{{ colors.terminal_normal_cyan.dark.hex }}"
+magenta   = "{{ colors.terminal_normal_magenta.dark.hex }}"
+white     = "{{ colors.terminal_normal_white.dark.hex }}"
+black     = "{{ colors.terminal_normal_black.dark.hex }}"
 
 # Extended palette (Catppuccin-compatible names some starship presets expect)
-rosewater = "{{colors.terminal_bright_yellow.default.hex}}"
-flamingo  = "{{colors.terminal_bright_red.default.hex}}"
-pink      = "{{colors.terminal_bright_magenta.default.hex}}"
-mauve     = "{{colors.terminal_normal_magenta.default.hex}}"
-maroon    = "{{colors.terminal_bright_red.default.hex}}"
-peach     = "{{colors.terminal_bright_yellow.default.hex}}"
-teal      = "{{colors.terminal_normal_cyan.default.hex}}"
-sky       = "{{colors.terminal_bright_cyan.default.hex}}"
-sapphire  = "{{colors.terminal_bright_blue.default.hex}}"
-lavender  = "{{colors.terminal_bright_magenta.default.hex}}"
+rosewater = "{{ colors.terminal_bright_yellow.dark.hex }}"
+flamingo  = "{{ colors.terminal_bright_red.dark.hex }}"
+pink      = "{{ colors.terminal_bright_magenta.dark.hex }}"
+mauve     = "{{ colors.terminal_normal_magenta.dark.hex }}"
+maroon    = "{{ colors.terminal_bright_red.dark.hex }}"
+peach     = "{{ colors.terminal_bright_yellow.dark.hex }}"
+teal      = "{{ colors.terminal_normal_cyan.dark.hex }}"
+sky       = "{{ colors.terminal_bright_cyan.dark.hex }}"
+sapphire  = "{{ colors.terminal_bright_blue.dark.hex }}"
+lavender  = "{{ colors.terminal_bright_magenta.dark.hex }}"
 
 # Text shades
-text      = "{{colors.terminal_foreground.default.hex}}"
-subtext1  = "{{colors.terminal_normal_white.default.hex}}"
-subtext0  = "{{colors.terminal_bright_black.default.hex}}"
+text      = "{{ colors.terminal_foreground.dark.hex }}"
+subtext1  = "{{ colors.terminal_normal_white.dark.hex }}"
+subtext0  = "{{ colors.terminal_bright_black.dark.hex }}"
 
 # Surface shades
-overlay2  = "{{colors.terminal_bright_black.default.hex}}"
-overlay1  = "{{colors.terminal_bright_black.default.hex}}"
-overlay0  = "{{colors.terminal_normal_black.default.hex}}"
-surface2  = "{{colors.terminal_normal_black.default.hex}}"
-surface1  = "{{colors.terminal_normal_black.default.hex}}"
-surface0  = "{{colors.terminal_background.default.hex}}"
-base      = "{{colors.terminal_background.default.hex}}"
-mantle    = "{{colors.terminal_background.default.hex}}"
-crust     = "{{colors.terminal_background.default.hex}}"
+overlay2  = "{{ colors.terminal_bright_black.dark.hex }}"
+overlay1  = "{{ colors.terminal_bright_black.dark.hex }}"
+overlay0  = "{{ colors.terminal_normal_black.dark.hex }}"
+surface2  = "{{ colors.terminal_normal_black.dark.hex }}"
+surface1  = "{{ colors.terminal_normal_black.dark.hex }}"
+surface0  = "{{ colors.terminal_background.dark.hex }}"
+base      = "{{ colors.terminal_background.dark.hex }}"
+mantle    = "{{ colors.terminal_background.dark.hex }}"
+crust     = "{{ colors.terminal_background.dark.hex }}"
 
 # Material roles, under their own names. The shades above are what existing presets
 # ask for; these are what the Material prompt below is drawn with.
-primary                   = "{{colors.primary.default.hex}}"
-on_primary                = "{{colors.on_primary.default.hex}}"
-primary_container         = "{{colors.primary_container.default.hex}}"
-on_primary_container      = "{{colors.on_primary_container.default.hex}}"
-secondary                 = "{{colors.secondary.default.hex}}"
-on_secondary              = "{{colors.on_secondary.default.hex}}"
-secondary_container       = "{{colors.secondary_container.default.hex}}"
-on_secondary_container    = "{{colors.on_secondary_container.default.hex}}"
-tertiary                  = "{{colors.tertiary.default.hex}}"
-on_tertiary               = "{{colors.on_tertiary.default.hex}}"
-tertiary_container        = "{{colors.tertiary_container.default.hex}}"
-on_tertiary_container     = "{{colors.on_tertiary_container.default.hex}}"
-error                     = "{{colors.error.default.hex}}"
-on_error                  = "{{colors.on_error.default.hex}}"
-error_container           = "{{colors.error_container.default.hex}}"
-on_error_container        = "{{colors.on_error_container.default.hex}}"
-surface                   = "{{colors.surface.default.hex}}"
-surface_container         = "{{colors.surface_container.default.hex}}"
-surface_container_high    = "{{colors.surface_container_high.default.hex}}"
-surface_container_highest = "{{colors.surface_container_highest.default.hex}}"
-on_surface                = "{{colors.on_surface.default.hex}}"
-on_surface_variant        = "{{colors.on_surface_variant.default.hex}}"
-outline                   = "{{colors.outline.default.hex}}"
-outline_variant           = "{{colors.outline_variant.default.hex}}"
+primary                   = "{{ colors.primary.dark.hex }}"
+on_primary                = "{{ colors.on_primary.dark.hex }}"
+primary_container         = "{{ colors.primary_container.dark.hex }}"
+on_primary_container      = "{{ colors.on_primary_container.dark.hex }}"
+secondary                 = "{{ colors.secondary.dark.hex }}"
+on_secondary              = "{{ colors.on_secondary.dark.hex }}"
+secondary_container       = "{{ colors.secondary_container.dark.hex }}"
+on_secondary_container    = "{{ colors.on_secondary_container.dark.hex }}"
+tertiary                  = "{{ colors.tertiary.dark.hex }}"
+on_tertiary               = "{{ colors.on_tertiary.dark.hex }}"
+tertiary_container        = "{{ colors.tertiary_container.dark.hex }}"
+on_tertiary_container     = "{{ colors.on_tertiary_container.dark.hex }}"
+error                     = "{{ colors.error.dark.hex }}"
+on_error                  = "{{ colors.on_error.dark.hex }}"
+error_container           = "{{ colors.error_container.dark.hex }}"
+on_error_container        = "{{ colors.on_error_container.dark.hex }}"
+surface                   = "{{ colors.surface.dark.hex }}"
+surface_container         = "{{ colors.surface_container.dark.hex }}"
+surface_container_high    = "{{ colors.surface_container_high.dark.hex }}"
+surface_container_highest = "{{ colors.surface_container_highest.dark.hex }}"
+on_surface                = "{{ colors.on_surface.dark.hex }}"
+on_surface_variant        = "{{ colors.on_surface_variant.dark.hex }}"
+outline                   = "{{ colors.outline.dark.hex }}"
+outline_variant           = "{{ colors.outline_variant.dark.hex }}"
+
+[palettes.launcher-material-light]
+# Standard colors
+blue      = "{{ colors.terminal_normal_blue.light.hex }}"
+red       = "{{ colors.terminal_normal_red.light.hex }}"
+green     = "{{ colors.terminal_normal_green.light.hex }}"
+yellow    = "{{ colors.terminal_normal_yellow.light.hex }}"
+cyan      = "{{ colors.terminal_normal_cyan.light.hex }}"
+magenta   = "{{ colors.terminal_normal_magenta.light.hex }}"
+white     = "{{ colors.terminal_normal_white.light.hex }}"
+black     = "{{ colors.terminal_normal_black.light.hex }}"
+
+# Extended palette (Catppuccin-compatible names some starship presets expect)
+rosewater = "{{ colors.terminal_bright_yellow.light.hex }}"
+flamingo  = "{{ colors.terminal_bright_red.light.hex }}"
+pink      = "{{ colors.terminal_bright_magenta.light.hex }}"
+mauve     = "{{ colors.terminal_normal_magenta.light.hex }}"
+maroon    = "{{ colors.terminal_bright_red.light.hex }}"
+peach     = "{{ colors.terminal_bright_yellow.light.hex }}"
+teal      = "{{ colors.terminal_normal_cyan.light.hex }}"
+sky       = "{{ colors.terminal_bright_cyan.light.hex }}"
+sapphire  = "{{ colors.terminal_bright_blue.light.hex }}"
+lavender  = "{{ colors.terminal_bright_magenta.light.hex }}"
+
+# Text shades
+text      = "{{ colors.terminal_foreground.light.hex }}"
+subtext1  = "{{ colors.terminal_normal_white.light.hex }}"
+subtext0  = "{{ colors.terminal_bright_black.light.hex }}"
+
+# Surface shades
+overlay2  = "{{ colors.terminal_bright_black.light.hex }}"
+overlay1  = "{{ colors.terminal_bright_black.light.hex }}"
+overlay0  = "{{ colors.terminal_normal_black.light.hex }}"
+surface2  = "{{ colors.terminal_normal_black.light.hex }}"
+surface1  = "{{ colors.terminal_normal_black.light.hex }}"
+surface0  = "{{ colors.terminal_background.light.hex }}"
+base      = "{{ colors.terminal_background.light.hex }}"
+mantle    = "{{ colors.terminal_background.light.hex }}"
+crust     = "{{ colors.terminal_background.light.hex }}"
+
+# Material roles, under their own names. The shades above are what existing presets
+# ask for; these are what the Material prompt below is drawn with.
+primary                   = "{{ colors.primary.light.hex }}"
+on_primary                = "{{ colors.on_primary.light.hex }}"
+primary_container         = "{{ colors.primary_container.light.hex }}"
+on_primary_container      = "{{ colors.on_primary_container.light.hex }}"
+secondary                 = "{{ colors.secondary.light.hex }}"
+on_secondary              = "{{ colors.on_secondary.light.hex }}"
+secondary_container       = "{{ colors.secondary_container.light.hex }}"
+on_secondary_container    = "{{ colors.on_secondary_container.light.hex }}"
+tertiary                  = "{{ colors.tertiary.light.hex }}"
+on_tertiary               = "{{ colors.on_tertiary.light.hex }}"
+tertiary_container        = "{{ colors.tertiary_container.light.hex }}"
+on_tertiary_container     = "{{ colors.on_tertiary_container.light.hex }}"
+error                     = "{{ colors.error.light.hex }}"
+on_error                  = "{{ colors.on_error.light.hex }}"
+error_container           = "{{ colors.error_container.light.hex }}"
+on_error_container        = "{{ colors.on_error_container.light.hex }}"
+surface                   = "{{ colors.surface.light.hex }}"
+surface_container         = "{{ colors.surface_container.light.hex }}"
+surface_container_high    = "{{ colors.surface_container_high.light.hex }}"
+surface_container_highest = "{{ colors.surface_container_highest.light.hex }}"
+on_surface                = "{{ colors.on_surface.light.hex }}"
+on_surface_variant        = "{{ colors.on_surface_variant.light.hex }}"
+outline                   = "{{ colors.outline.light.hex }}"
+outline_variant           = "{{ colors.outline_variant.light.hex }}"
 
 # >>> Material prompt >>>
 # A prompt drawn as Material pills, in the roles above. It is off by default so it
@@ -73,28 +148,31 @@ outline_variant           = "{{colors.outline_variant.default.hex}}"
 # own starship.toml above this block, drop the leading "# " from each, and open a
 # new shell.
 #
+# The pill fills are palette names (Material surface hex); the two prompt
+# characters are ANSI names, so they recolour with the terminal itself.
+#
 # format = "$directory$git_branch$git_status$cmd_duration$line_break$character"
 #
 # [directory]
-# format = "[](fg:primary_container)[$path]($style)[](fg:primary_container) "
+# format = "[](fg:primary_container)[$path]($style)[](fg:primary_container) "
 # style = "fg:on_primary_container bg:primary_container"
 # truncation_length = 3
 # truncation_symbol = "…/"
 #
 # [git_branch]
-# format = "[](fg:secondary_container)[$symbol$branch]($style)[](fg:secondary_container) "
+# format = "[](fg:secondary_container)[$symbol$branch]($style)[](fg:secondary_container) "
 # style = "fg:on_secondary_container bg:secondary_container"
 #
 # [git_status]
-# format = "[](fg:tertiary_container)[$all_status$ahead_behind]($style)[](fg:tertiary_container) "
+# format = "[](fg:tertiary_container)[$all_status$ahead_behind]($style)[](fg:tertiary_container) "
 # style = "fg:on_tertiary_container bg:tertiary_container"
 #
 # [cmd_duration]
-# format = "[](fg:surface_container_high)[ $duration]($style)[](fg:surface_container_high) "
+# format = "[](fg:surface_container_high)[ $duration]($style)[](fg:surface_container_high) "
 # min_time = 500
 # style = "fg:on_surface_variant bg:surface_container_high"
 #
 # [character]
-# success_symbol = "[❯](bold fg:primary)"
-# error_symbol = "[❯](bold fg:error)"
+# success_symbol = "[❯](bold green)"
+# error_symbol = "[❯](bold red)"
 # <<< Material prompt <<<

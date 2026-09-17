@@ -562,8 +562,13 @@ echo
 # The Neovim colour scheme nvim-theme installs
 # ---------------------------------------------------------------------------
 
+# The store's nvim-colors/nvim-palette rows still resolve against the pinned
+# commit in catalog.tsv, but the working copy of that colour scheme moved into
+# the theme-templates pack (and its palette module became a rendered template),
+# so this section only runs where the old working copy is still checked out.
+# scripts/theme-templates/check.sh covers the pack's own copy.
 NVIMDIR="$repo/docs/en/examples/nvim"
-if command -v nvim >/dev/null 2>&1; then
+if [ -d "$NVIMDIR" ] && command -v nvim >/dev/null 2>&1; then
     echo "== the Neovim colour scheme"
     SHELL_LABEL=nvim
     nvroot="$(mktemp -d)"

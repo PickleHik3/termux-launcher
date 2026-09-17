@@ -14,6 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEMPLATES_DIR="$REPO_ROOT/app/src/main/assets/theme-templates"
 FIXTURE="$SCRIPT_DIR/fixture-palette.properties"
+FIXTURE_LIGHT="$SCRIPT_DIR/fixture-palette-light.properties"
 RENDER="$SCRIPT_DIR/render.py"
 PY="${PYTHON:-python3}"
 
@@ -34,11 +35,30 @@ read_prop() {
     awk -F'=' -v k="$2" '$1 == k { sub(/^[^=]*=/, ""); print; exit }' "$1/template.properties"
 }
 
-# render_template <id> <input-file> -> writes rendered bytes to stdout, or
-# prints a render error to stderr and returns nonzero.
+# render_template <template-dir> <input-file> -> writes rendered bytes to
+# stdout, or prints a render error to stderr and returns nonzero. The dark
+# fixture is the active palette, so `{{ mode }}` renders `dark`; `.dark` and
+# `.light` resolve to the two real fixture palettes, as they will once phase 2
+# lands, so a template carrying both halves renders two different ones here.
 render_template() {
     local dir="$1" input="$2"
-    "$PY" "$RENDER" "$FIXTURE" "$dir/$input"
+    "$PY" "$RENDER" --dark "$FIXTURE" --light "$FIXTURE_LIGHT" "$FIXTURE" "$dir/$input"
+}
+
+# render_template_light <template-dir> <input-file>: the same, with the light
+# palette active - `{{ mode }}` renders `light`. For templates whose output
+# carries a mode selector line, so both of its values get checked.
+render_template_light() {
+    local dir="$1" input="$2"
+    "$PY" "$RENDER" --dark "$FIXTURE" --light "$FIXTURE_LIGHT" "$FIXTURE_LIGHT" "$dir/$input"
+}
+
+# assert_dual <rendered-file> <dark-hex> <light-hex>: the rendered file must
+# carry a value that only the dark fixture has and one only the light fixture
+# has, so a template that claims both palettes cannot silently render one
+# twice.
+assert_dual() {
+    grep -qiF "$2" "$1" && grep -qiF "$3" "$1"
 }
 
 # assert_no_colour_tokens <rendered-file>: fails if any `{{ colors.` survived. Weaker than
@@ -84,6 +104,15 @@ run_hook() {
         bash "$hook" >"$WORK/.last_hook_output" 2>&1
 }
 
+run_hook_mode() {
+    # run_hook_mode <home> <theme-dir> <output> <hook-script> <mode>
+    local home="$1" theme_dir="$2" output="$3" hook="$4" mode="$5"
+    env HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
+        TERMUX_THEME_ID="$(basename "$theme_dir")" TERMUX_THEME_DIR="$theme_dir" \
+        TERMUX_THEME_OUTPUT="$output" TERMUX_THEME_MODE="$mode" \
+        bash "$hook" >"$WORK/.last_hook_output" 2>&1
+}
+
 run_hook_shell() {
     # run_hook_shell <home> <theme-dir> <output> <hook-script> <shell>
     local home="$1" theme_dir="$2" output="$3" hook="$4" shell="$5"
@@ -104,7 +133,18 @@ test_starship() {
     assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
     assert_no_colour_tokens "$rendered" || { fail "unresolved {{ colors. token in rendered output"; return; }
     "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$rendered" 2>"$WORK/starship.tomlerr" || { fail "invalid TOML: $(cat "$WORK/starship.tomlerr")"; return; }
-    note "starship: not installed on this machine - syntax validation only (TOML parse)"
+    "$PY" - "$rendered" <<'PYCHECK' 2>"$WORK/starship.dualerr" || { fail "rendered palettes: $(cat "$WORK/starship.dualerr")"; return; }
+import sys, tomllib
+palettes = tomllib.load(open(sys.argv[1], "rb")).get("palettes", {})
+dark = palettes.get("launcher-material-dark")
+light = palettes.get("launcher-material-light")
+assert isinstance(dark, dict) and dark, "no [palettes.launcher-material-dark] table"
+assert isinstance(light, dict) and light, "no [palettes.launcher-material-light] table"
+assert set(dark) == set(light), "the two palettes carry different keys"
+differing = [k for k in dark if dark[k] != light[k]]
+assert len(differing) >= len(dark) - 2, f"only {len(differing)} of {len(dark)} entries differ between the palettes"
+PYCHECK
+    note "starship: not installed on this machine - TOML parse, and both mode palettes checked for the same keys with different values"
 
     local case
     for case in absent pre; do
@@ -151,11 +191,23 @@ test_starship() {
     run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (userpalette) failed"
     grep -qxF '#palette = "my-nord" # >>> launcher-material: previous >>>' "$home/.config/starship.toml" \
         || fail "apply.sh (userpalette) did not comment out and tag the user's own palette= line"
-    grep -qxF 'palette = "launcher-material"' "$home/.config/starship.toml" \
+    grep -qxF 'palette = "launcher-material-dark"' "$home/.config/starship.toml" \
         || fail "apply.sh (userpalette) did not add its own palette= line"
     cp "$home/.config/starship.toml" "$WORK/starship-userpalette/after1.toml"
     run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (userpalette) failed"
     cmp -s "$WORK/starship-userpalette/after1.toml" "$home/.config/starship.toml" || fail "apply.sh (userpalette) not idempotent"
+    # A mode flip rewrites that one line and leaves no second one behind (D3).
+    run_hook_mode "$home" "$theme_dir" "$output" "$dir/apply.sh" light || fail "apply.sh (userpalette, light) failed"
+    grep -qxF 'palette = "launcher-material-light"' "$home/.config/starship.toml" \
+        || fail "apply.sh did not flip the palette= line to the light palette"
+    [ "$(grep -cE '^palette = "launcher-material-(dark|light)"$' "$home/.config/starship.toml")" = 1 ] \
+        || fail "apply.sh left more than one launcher-material palette= line behind after the mode flip"
+    grep -qxF '#palette = "my-nord" # >>> launcher-material: previous >>>' "$home/.config/starship.toml" \
+        || fail "the mode flip lost the user's displaced palette= line"
+    run_hook_mode "$home" "$theme_dir" "$output" "$dir/apply.sh" dark || fail "apply.sh (userpalette, back to dark) failed"
+    cmp -s "$WORK/starship-userpalette/after1.toml" "$home/.config/starship.toml" \
+        || fail "flipping to light and back to dark did not restore the dark result byte for byte"
+
     run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (userpalette) failed"
     cmp -s "$orig" "$home/.config/starship.toml" || fail "undo.sh (userpalette) did not restore the user's original palette= line"
     [ -e "$output" ] && fail "undo.sh (userpalette) left the rendered file behind"
@@ -493,7 +545,55 @@ test_ohmyposh() {
     input_count="$(grep -o '{{ \.' "$dir/launcher-material.omp.json" | wc -l)"
     rendered_count="$(grep -o '{{ \.' "$rendered" | wc -l)"
     [ "$input_count" = "$rendered_count" ] || { fail "Go-template {{ . count changed: input=$input_count rendered=$rendered_count"; return; }
-    note "ohmyposh: not installed - JSON parse, no {{ colors. or TERMUX_MATERIAL left, {{ . (Go template) count preserved ($input_count occurrences)"
+
+    # palettes.list.dark / .light, the constant the template renders down to,
+    # and every p: reference resolving in both (D3).
+    local rendered_light="$WORK/ohmyposh.rendered.light"
+    render_template_light "$dir" "launcher-material.omp.json" >"$rendered_light" 2>"$WORK/ohmyposh.lighterr" \
+        || { fail "render error (light mode active): $(cat "$WORK/ohmyposh.lighterr")"; return; }
+    "$PY" - "$rendered" "$rendered_light" <<'PYCHECK' 2>"$WORK/ohmyposh.dualerr" || { fail "rendered palettes: $(cat "$WORK/ohmyposh.dualerr")"; return; }
+import json, re, sys
+doc = json.load(open(sys.argv[1]))
+light_doc = json.load(open(sys.argv[2]))
+palettes = doc.get("palettes", {})
+assert palettes.get("template") == "dark", f"palettes.template rendered {palettes.get('template')!r}, wanted the constant 'dark'"
+assert light_doc.get("palettes", {}).get("template") == "light", "palettes.template did not follow the active mode"
+assert light_doc["palettes"]["list"] == palettes["list"], "the palette list is not the same in both passes"
+dark, light = palettes["list"].get("dark"), palettes["list"].get("light")
+assert isinstance(dark, dict) and dark, "no palettes.list.dark"
+assert isinstance(light, dict) and light, "no palettes.list.light"
+assert set(dark) == set(light), "the two palettes carry different keys"
+differing = [k for k in dark if dark[k] != light[k]]
+assert len(differing) >= len(dark) - 2, f"only {len(differing)} of {len(dark)} entries differ between the palettes"
+for table in (dark, light):
+    for key, value in table.items():
+        assert re.fullmatch(r"#[0-9A-Fa-f]{6}", value), f"{key} = {value!r}"
+refs = set(re.findall(r'"p:([A-Za-z0-9_]+)"', json.dumps(doc)))
+assert refs, "no segment uses a p: palette reference"
+missing = sorted(refs - set(dark))
+assert not missing, f"segments reference palette entries that do not exist: {missing}"
+# D3: accents are ANSI names, not hex, so they follow the terminal itself.
+assert not re.search(r'"#[0-9A-Fa-f]{6}"', json.dumps(doc["blocks"])), "a segment still carries a raw hex colour"
+assert not re.search(r"#[0-9A-Fa-f]{6}", json.dumps(doc.get("transient_prompt", {}))), "the transient prompt still carries a raw hex colour"
+# Every colour a segment names must be something oh-my-posh 29/30 accepts:
+# its schema's color_string pattern or a p: palette reference.
+COLOR_STRING = re.compile(
+    r"^(#([a-fA-F0-9]{6}|[a-fA-F0-9]{3})|([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])"
+    r"|black|red|green|yellow|blue|magenta|cyan|white|default|darkGray|lightRed|lightGreen"
+    r"|lightYellow|lightBlue|lightMagenta|lightCyan|lightWhite|transparent|parentBackground"
+    r"|parentForeground|background|foreground|accent)$")
+def check_color(where, value):
+    assert COLOR_STRING.match(value) or value.startswith("p:"), f"{where}: {value!r} is not a colour oh-my-posh accepts"
+for block in doc["blocks"]:
+    for segment in block.get("segments", []):
+        for key in ("foreground", "background"):
+            if key in segment:
+                check_color(f"{segment.get('type')}.{key}", segment[key])
+        for i, template in enumerate(segment.get("foreground_templates", [])):
+            if "{{" not in template:
+                check_color(f"{segment.get('type')}.foreground_templates[{i}]", template)
+PYCHECK
+    note "ohmyposh: not installed - JSON parse, no {{ colors. or TERMUX_MATERIAL left, {{ . (Go template) count preserved ($input_count occurrences), palettes.list.dark/.light checked and palettes.template renders to the active mode"
 
     local case
     for case in absent pre; do
@@ -600,37 +700,88 @@ test_ohmyposh() {
 test_nvim() {
     local dir="$TEMPLATES_DIR/nvim"
     local rendered="$WORK/nvim.rendered"
-    render_template "$dir" "launcher-material.lua" >"$rendered" 2>"$WORK/nvim.err" || { fail "render error: $(cat "$WORK/nvim.err")"; return; }
+    # The rendered file is the palette module: both palettes as static tables.
+    render_template "$dir" "lua/launcher/material_palette.lua" >"$rendered" 2>"$WORK/nvim.err" || { fail "render error: $(cat "$WORK/nvim.err")"; return; }
     assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    assert_dual "$rendered" "#B6C4FF" "#4C5D93" \
+        || { fail "rendered palette module does not carry both fixture palettes (dark primary #B6C4FF and light primary #4C5D93)"; return; }
+    grep -q '\brendered_mode = "dark"' "$rendered" || { fail "{{ mode }} did not render into M.rendered_mode"; return; }
+    # The plugin spec no longer pins `background`: Neovim owns it.
+    grep -q 'vim.o.background[[:space:]]*=' "$dir/lua/plugins/launcher-material.lua" \
+        && { fail "the plugin spec still sets vim.o.background"; return; }
+    grep -q '^vim.o.background[[:space:]]*=' "$dir/colors/launcher-material.lua" \
+        && { fail "the colourscheme still sets vim.o.background"; return; }
 
     if command -v luac >/dev/null 2>&1; then
-        luac -p "$rendered" 2>"$WORK/nvim.luacerr" || { fail "luac -p rejected the rendered spec: $(cat "$WORK/nvim.luacerr")"; return; }
+        luac -p "$rendered" 2>"$WORK/nvim.luacerr" || { fail "luac -p rejected the rendered palette module: $(cat "$WORK/nvim.luacerr")"; return; }
         luac -p "$dir/colors/launcher-material.lua" 2>"$WORK/nvim.luacerr2" || { fail "luac -p rejected colors/launcher-material.lua: $(cat "$WORK/nvim.luacerr2")"; return; }
-        luac -p "$dir/lua/launcher/material_palette.lua" 2>"$WORK/nvim.luacerr3" || { fail "luac -p rejected material_palette.lua: $(cat "$WORK/nvim.luacerr3")"; return; }
+        luac -p "$dir/lua/plugins/launcher-material.lua" 2>"$WORK/nvim.luacerr3" || { fail "luac -p rejected the plugin spec: $(cat "$WORK/nvim.luacerr3")"; return; }
     fi
+    local nvim_note="nvim: not installed - luac -p only"
     if command -v nvim >/dev/null 2>&1; then
-        nvim --headless --clean -l "$rendered" >"$WORK/nvim.nvimlog" 2>&1 || { fail "nvim --headless --clean -l rejected the rendered spec: $(cat "$WORK/nvim.nvimlog")"; return; }
+        # A real headless run: install the colourscheme and the rendered palette
+        # module into a throwaway runtimepath, paint in dark, flip `background`
+        # to light (which is exactly what Neovim does on the terminal's mode-2031
+        # report) and require that Normal's guifg and guibg actually changed -
+        # and changed back.
+        local rt="$WORK/nvim-rtp"
+        rm -rf "$rt"; mkdir -p "$rt/colors" "$rt/lua/launcher"
+        cp "$dir/colors/launcher-material.lua" "$rt/colors/launcher-material.lua"
+        cp "$rendered" "$rt/lua/launcher/material_palette.lua"
+        cat >"$WORK/nvim-flip.lua" <<'PROBE'
+local dir = arg[1]
+vim.opt.runtimepath:prepend(dir)
+-- Opaque, so guibg is a real colour rather than the glass NONE.
+vim.g.material_opaque = true
+vim.o.termguicolors = true
+local function normal()
+  local hl = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+  return ("%s/%s"):format(
+    hl.fg and ("#%06X"):format(hl.fg) or "NONE",
+    hl.bg and ("#%06X"):format(hl.bg) or "NONE")
+end
+vim.o.background = "dark"
+vim.cmd.colorscheme("launcher-material")
+local first = normal()
+vim.o.background = "light"
+local light = normal()
+vim.o.background = "dark"
+local again = normal()
+local hooks = vim.api.nvim_get_autocmds({ group = "LauncherMaterialBackground", event = "OptionSet" })
+io.stdout:write(("dark=%s light=%s again=%s name=%s type=%s hooks=%d\n"):format(
+  first, light, again, tostring(vim.g.colors_name),
+  tostring((vim.g.material_theme_info or {}).type), #hooks))
+PROBE
+        nvim --headless --clean -l "$WORK/nvim-flip.lua" "$rt" >"$WORK/nvim.flip" 2>&1 \
+            || { fail "nvim --headless --clean rejected the colourscheme: $(cat "$WORK/nvim.flip")"; return; }
+        local flip; flip="$(cat "$WORK/nvim.flip")"
+        local dark_hl light_hl again_hl
+        dark_hl="$(sed -n 's/.*dark=\([^ ]*\).*/\1/p' <<<"$flip")"
+        light_hl="$(sed -n 's/.*light=\([^ ]*\).*/\1/p' <<<"$flip")"
+        again_hl="$(sed -n 's/.*again=\([^ ]*\).*/\1/p' <<<"$flip")"
+        grep -q 'name=launcher-material' <<<"$flip" || fail "colors_name was not set: $flip"
+        grep -q 'hooks=[1-9]' <<<"$flip" || fail "no OptionSet background autocmd was registered: $flip"
+        grep -q 'type=light' <<<"$flip" && fail "material_theme_info still reports the light build after flipping back to dark: $flip"
+        [ -n "$dark_hl" ] && [ "$dark_hl" != "NONE/NONE" ] || fail "Normal was not painted in dark mode: $flip"
+        [ "$dark_hl" != "$light_hl" ] || fail "background=light did not change Normal: $flip"
+        [ "$dark_hl" = "$again_hl" ] || fail "background=dark did not restore Normal: $flip"
+        nvim_note="nvim $(nvim --version | head -1 | awk '{print $2}'): luac -p on all three Lua files; headless background=light/dark flip repaints Normal $dark_hl <-> $light_hl, OptionSet background autocmd registered"
     fi
-    if ! cmp -s "$dir/colors/launcher-material.lua" "$REPO_ROOT/docs/en/examples/nvim/colors/launcher-material.lua"; then
-        fail "template's colors/launcher-material.lua has drifted from docs/en/examples"; return
-    fi
-    if ! cmp -s "$dir/lua/launcher/material_palette.lua" "$REPO_ROOT/docs/en/examples/nvim/lua/launcher/material_palette.lua"; then
-        fail "template's material_palette.lua has drifted from docs/en/examples"; return
-    fi
-    note "nvim: installed (luac -p on all three Lua files, nvim --headless --clean -l on the rendered spec); both shipped colorscheme copies verified byte-identical to docs/en/examples"
+    note "$nvim_note"
 
     run_nvim_case() {
         local name="$1"; shift
         local home="$WORK/nvim-$name/home"
         rm -rf "$WORK/nvim-$name"; mkdir -p "$home"
         local theme_dir="$dir"
-        local output="$home/.config/nvim/lua/plugins/launcher-material.lua"
+        local output="$home/.config/nvim/lua/launcher/material_palette.lua"
         mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
         "$@" "$home"
 
         run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($name) failed"; return; }
         cmp -s "$home/.config/nvim/colors/launcher-material.lua" "$dir/colors/launcher-material.lua" || fail "apply.sh ($name) did not install colors/launcher-material.lua correctly"
-        cmp -s "$home/.config/nvim/lua/launcher/material_palette.lua" "$dir/lua/launcher/material_palette.lua" || fail "apply.sh ($name) did not install material_palette.lua correctly"
+        cmp -s "$home/.config/nvim/lua/plugins/launcher-material.lua" "$dir/lua/plugins/launcher-material.lua" || fail "apply.sh ($name) did not install the plugin spec correctly"
+        cmp -s "$output" "$rendered" || fail "apply.sh ($name) overwrote the rendered palette module"
 
         local snapshot="$WORK/nvim-$name/after1"
         mkdir -p "$snapshot"; cp -r "$home/.config" "$snapshot/config" 2>/dev/null
@@ -640,8 +791,8 @@ test_nvim() {
 
         run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($name) failed"; return; }
         [ -e "$home/.config/nvim/colors/launcher-material.lua" ] && fail "undo.sh ($name) left colors/launcher-material.lua behind"
-        [ -e "$home/.config/nvim/lua/launcher/material_palette.lua" ] && fail "undo.sh ($name) left material_palette.lua behind"
-        [ -e "$output" ] && fail "undo.sh ($name) left the rendered spec behind"
+        [ -e "$home/.config/nvim/lua/plugins/launcher-material.lua" ] && fail "undo.sh ($name) left the plugin spec behind"
+        [ -e "$output" ] && fail "undo.sh ($name) left the rendered palette module behind"
     }
 
     setup_plain() { :; }
@@ -666,12 +817,124 @@ test_nvim() {
     # A hand-edited colorscheme file must survive undo.
     local home="$WORK/nvim-edited/home"
     rm -rf "$WORK/nvim-edited"; mkdir -p "$home"
-    local output="$home/.config/nvim/lua/plugins/launcher-material.lua"
+    local output="$home/.config/nvim/lua/launcher/material_palette.lua"
     mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
     run_hook "$home" "$dir" "$output" "$dir/apply.sh" >/dev/null || fail "apply.sh (edited case) failed"
     echo '-- user edit' >> "$home/.config/nvim/colors/launcher-material.lua"
     run_hook "$home" "$dir" "$output" "$dir/undo.sh" >/dev/null || fail "undo.sh (edited case) failed"
     [ -f "$home/.config/nvim/colors/launcher-material.lua" ] || fail "undo.sh removed a hand-edited colorscheme file; it should have survived"
+}
+
+# ---- fish ----
+test_fish() {
+    local dir="$TEMPLATES_DIR/fish"
+    local rendered="$WORK/fish.rendered"
+    render_template "$dir" "launcher-material.theme" >"$rendered" 2>"$WORK/fish.err" || { fail "render error: $(cat "$WORK/fish.err")"; return; }
+    assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
+    assert_dual "$rendered" "1A1B26" "E1E2E7" \
+        || { fail "rendered theme does not carry both fixture palettes (dark background 1A1B26 and light background E1E2E7)"; return; }
+
+    # The .theme format fish documents: a `# name:` line, [light]/[dark]/[unknown]
+    # sections, and `fish_(pager_)?color_*` variables whose values are bare hex
+    # (no leading #) and/or set_color switches.
+    "$PY" - "$rendered" <<'PYCHECK' 2>"$WORK/fish.formaterr" || { fail "theme file: $(cat "$WORK/fish.formaterr")"; return; }
+import re, sys
+sections, current, name = {}, None, None
+for raw in open(sys.argv[1]):
+    line = raw.strip()
+    if line.startswith("# name:"):
+        name = line.split(":", 1)[1].strip()
+        continue
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("[") and line.endswith("]"):
+        current = line[1:-1]
+        sections[current] = {}
+        continue
+    assert current is not None, f"{line!r} sits outside any section"
+    key, _, value = line.partition(" ")
+    assert re.fullmatch(r"fish_(pager_)?color_.*", key), f"{key} is not a fish_*color_* variable"
+    for word in value.split():
+        word = word.split("=", 1)[1] if word.startswith("--background=") else word
+        if word.startswith("-"):
+            continue
+        assert re.fullmatch(r"[0-9A-Fa-f]{6}", word), f"{key}: {word!r} is not a bare six-digit hex colour"
+    sections[current][key] = value
+assert name, "no `# name:` line"
+for wanted in ("light", "dark", "unknown"):
+    assert wanted in sections, f"no [{wanted}] section"
+assert set(sections["light"]) == set(sections["dark"]) == set(sections["unknown"]), \
+    "the three sections set different variables"
+differing = [k for k in sections["dark"] if sections["dark"][k] != sections["light"][k]]
+assert len(differing) >= len(sections["dark"]) - 4, \
+    f"only {len(differing)} of {len(sections['dark'])} variables differ between light and dark"
+PYCHECK
+
+    local fish_note="fish: not installed - theme-file format checked by hand"
+    if command -v fish >/dev/null 2>&1; then
+        # fish's own parser, in a throwaway HOME: it must list the theme, and
+        # resolving it for each colour theme must hand back that section's
+        # values - which is the light/dark switch itself.
+        local fhome="$WORK/fish-validate"
+        rm -rf "$fhome"; mkdir -p "$fhome/.config/fish/themes"
+        cp "$rendered" "$fhome/.config/fish/themes/launcher-material.theme"
+        local listed dark_value light_value
+        listed="$(env HOME="$fhome" XDG_CONFIG_HOME="$fhome/.config" fish -c 'fish_config theme list' 2>&1 | grep -cxF 'launcher-material')"
+        [ "$listed" = 1 ] || { fail "fish_config theme list does not offer launcher-material"; return; }
+        env HOME="$fhome" XDG_CONFIG_HOME="$fhome/.config" fish -c 'fish_config theme show launcher-material' >/dev/null 2>"$WORK/fish.showerr" \
+            || { fail "fish_config theme show rejected the rendered theme: $(cat "$WORK/fish.showerr")"; return; }
+        dark_value="$(env HOME="$fhome" XDG_CONFIG_HOME="$fhome/.config" fish -c 'fish_config theme choose launcher-material --color-theme=dark; echo $fish_color_normal' 2>&1)"
+        light_value="$(env HOME="$fhome" XDG_CONFIG_HOME="$fhome/.config" fish -c 'fish_config theme choose launcher-material --color-theme=light; echo $fish_color_normal' 2>&1)"
+        local want_dark want_light
+        want_dark="$(awk '/^\[dark\]/{s=1;next} /^\[/{s=0} s && $1=="fish_color_normal"{print $2; exit}' "$rendered")"
+        want_light="$(awk '/^\[light\]/{s=1;next} /^\[/{s=0} s && $1=="fish_color_normal"{print $2; exit}' "$rendered")"
+        [ -n "$want_dark" ] && [ -n "$want_light" ] && [ "$want_dark" != "$want_light" ] \
+            || { fail "the rendered theme has no differing fish_color_normal in [dark] and [light]"; return; }
+        grep -qiF "$want_dark" <<<"$dark_value" || fail "fish resolved the dark section to '$dark_value', wanted $want_dark"
+        grep -qiF "$want_light" <<<"$light_value" || fail "fish resolved the light section to '$light_value', wanted $want_light"
+        [ "$dark_value" != "$light_value" ] || fail "fish resolved light and dark to the same colours: '$dark_value'"
+        fish_note="fish $(fish --version | awk '{print $3}'): the real fish_config lists the theme, accepts it, and resolves --color-theme=dark/light to different colours"
+    fi
+    note "$fish_note"
+
+    local dropin_rel=".config/fish/conf.d/launcher-material-fish.fish"
+    local case
+    for case in absent pre; do
+        local home="$WORK/fish-$case/home"
+        rm -rf "$WORK/fish-$case"; mkdir -p "$home"
+        local theme_dir="$WORK/fish-$case/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/fish/themes/launcher-material.theme"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig_config=""
+        if [ "$case" = "pre" ]; then
+            # A fish config that already picks a theme of its own.
+            mkdir -p "$home/.config/fish/conf.d"
+            printf 'set -g fish_greeting ""\nfish_config theme choose "ayu Dark"\n' > "$home/.config/fish/config.fish"
+            orig_config="$WORK/fish-$case/orig.fish"; cp "$home/.config/fish/config.fish" "$orig_config"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($case) failed"; continue; }
+        [ -f "$home/$dropin_rel" ] || { fail "apply.sh ($case) did not create the conf.d drop-in"; continue; }
+        grep -qF 'fish_config theme choose launcher-material' "$home/$dropin_rel" \
+            || fail "apply.sh ($case) drop-in does not select the theme"
+        grep -qF 'theme save' "$home/$dropin_rel" \
+            && fail "apply.sh ($case) used theme save, which freezes fish light/dark switching"
+        cp "$home/$dropin_rel" "$WORK/fish-$case/after1"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($case) failed"; continue; }
+        cmp -s "$WORK/fish-$case/after1" "$home/$dropin_rel" || fail "apply.sh ($case) not idempotent"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig_config" "$home/.config/fish/config.fish" || fail "apply.sh (pre) edited the user's config.fish"
+        fi
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($case) failed"; continue; }
+        [ -e "$home/$dropin_rel" ] && fail "undo.sh ($case) left the conf.d drop-in behind"
+        [ -e "$output" ] && fail "undo.sh ($case) left the rendered theme behind"
+        if [ "$case" = "pre" ]; then
+            cmp -s "$orig_config" "$home/.config/fish/config.fish" \
+                || fail "undo.sh (pre) did not leave the user's own theme choice exactly as it was"
+        fi
+    done
 }
 
 # ---- herdr ----
@@ -680,65 +943,118 @@ test_herdr() {
     local rendered="$WORK/herdr.rendered"
     render_template "$dir" "launcher-material.toml" >"$rendered" 2>"$WORK/herdr.err" || { fail "render error: $(cat "$WORK/herdr.err")"; return; }
     assert_no_stray_braces "$rendered" || { fail "unresolved {{ in rendered output"; return; }
-    if grep -vE '^[A-Za-z0-9_]+ = "#[0-9A-Fa-f]{6}"$' "$rendered" >"$WORK/herdr.bad" && [ -s "$WORK/herdr.bad" ]; then
-        fail "line(s) not matching herdr's key = \"#hex\" shape: $(cat "$WORK/herdr.bad")"; return
-    fi
-    note "herdr: not installed on this machine - syntax validation only (key = \"#hex\" shape)"
+    "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$rendered" 2>"$WORK/herdr.tomlerr" || { fail "invalid TOML: $(cat "$WORK/herdr.tomlerr")"; return; }
+    # Both subtables, the same key set, and genuinely different values.
+    "$PY" - "$rendered" <<'PYCHECK' 2>"$WORK/herdr.dualerr" || { fail "rendered palettes: $(cat "$WORK/herdr.dualerr")"; return; }
+import sys, tomllib
+doc = tomllib.load(open(sys.argv[1], "rb"))
+custom = doc.get("theme", {}).get("custom", {})
+dark, light = custom.get("dark"), custom.get("light")
+assert isinstance(dark, dict) and dark, "no [theme.custom.dark] table"
+assert isinstance(light, dict) and light, "no [theme.custom.light] table"
+assert set(dark) == set(light), "the two subtables carry different keys"
+assert "auto_switch" not in custom and "name" not in custom, "the rendered file must not touch [theme]"
+differing = [k for k in dark if dark[k] != light[k]]
+assert len(differing) >= len(dark) - 1, f"only {len(differing)} of {len(dark)} keys differ between the palettes"
+for table in (dark, light):
+    for key, value in table.items():
+        assert isinstance(value, str) and value.startswith("#") and len(value) == 7, f"{key} = {value!r}"
+PYCHECK
+    note "herdr: not installed on this machine - TOML parse, and both palette subtables checked for the same keys with different values"
+
+    # herdr_case <name>: runs apply/apply/undo against $home's config.toml,
+    # checking idempotency, that the result is valid TOML, and that undo
+    # restores the original bytes (or removes a file apply.sh created).
+    herdr_case() {
+        local name="$1" had_config="$2"
+        local home="$WORK/herdr-$name/home"
+        local theme_dir="$WORK/herdr-$name/theme_dir"; mkdir -p "$theme_dir"
+        local output="$home/.config/herdr/launcher-material.toml"
+        local config="$home/.config/herdr/config.toml"
+        mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
+        local orig="$WORK/herdr-$name/orig.toml"
+        [ "$had_config" = "yes" ] && cp "$config" "$orig"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "apply.sh ($name) failed"; return 1; }
+        "$PY" -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$config" 2>"$WORK/herdr-$name.tomlerr" \
+            || { fail "apply.sh ($name) produced invalid TOML: $(cat "$WORK/herdr-$name.tomlerr")"; return 1; }
+        cp "$config" "$WORK/herdr-$name/after1.toml"
+        run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || { fail "second apply.sh ($name) failed"; return 1; }
+        cmp -s "$WORK/herdr-$name/after1.toml" "$config" || { fail "apply.sh ($name) not idempotent"; return 1; }
+
+        # What every case must end up with, whatever it started from.
+        grep -qxF 'auto_switch = true' "$config" || fail "apply.sh ($name) did not turn auto_switch on"
+        grep -qxF '[theme.custom.dark]' "$config" || fail "apply.sh ($name) has no [theme.custom.dark] table"
+        grep -qxF '[theme.custom.light]' "$config" || fail "apply.sh ($name) has no [theme.custom.light] table"
+        [ "$(grep -cxF '[theme.custom.dark]' "$config")" = 1 ] || fail "apply.sh ($name) declared [theme.custom.dark] twice"
+        [ "$(grep -cxF '[theme.custom.light]' "$config")" = 1 ] || fail "apply.sh ($name) declared [theme.custom.light] twice"
+        [ "$(grep -cxF '[theme]' "$config")" -le 1 ] || fail "apply.sh ($name) declared [theme] twice"
+        assert_dual "$config" "#B6C4FF" "#4C5D93" || fail "apply.sh ($name) did not land both palettes in config.toml"
+
+        run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || { fail "undo.sh ($name) failed"; return 1; }
+        if [ "$had_config" = "yes" ]; then
+            cmp -s "$orig" "$config" || fail "undo.sh ($name) did not restore original bytes"
+        else
+            [ -e "$config" ] && fail "undo.sh ($name) left a config.toml behind (it held only our own tables)"
+        fi
+        [ -e "$output" ] && fail "undo.sh ($name) left the rendered file behind"
+        return 0
+    }
 
     # ---- absent: no config.toml at all ----
-    local home="$WORK/herdr-absent/home"
-    rm -rf "$WORK/herdr-absent"; mkdir -p "$home"
-    local theme_dir="$WORK/herdr-absent/theme_dir"; mkdir -p "$theme_dir"
-    local output="$home/.config/herdr/launcher-material.toml"
-    mkdir -p "$(dirname "$output")"; cp "$rendered" "$output"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (absent) failed"
-    cp "$home/.config/herdr/config.toml" "$WORK/herdr-absent/after1.toml" 2>/dev/null
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (absent) failed"
-    cmp -s "$WORK/herdr-absent/after1.toml" "$home/.config/herdr/config.toml" 2>/dev/null || fail "apply.sh (absent) not idempotent"
-    grep -qxF '[theme.custom]' "$home/.config/herdr/config.toml" || fail "apply.sh (absent) did not create a [theme.custom] table"
-    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (absent) failed"
-    [ -e "$home/.config/herdr/config.toml" ] && fail "undo.sh (absent) left a config.toml behind (it held only our own table)"
-    [ -e "$output" ] && fail "undo.sh (absent) left the rendered file behind"
+    rm -rf "$WORK/herdr-absent"; mkdir -p "$WORK/herdr-absent/home"
+    herdr_case absent no
 
-    # ---- no-table: config.toml pre-exists with no [theme.custom] table ----
-    home="$WORK/herdr-no-table/home"
-    rm -rf "$WORK/herdr-no-table"; mkdir -p "$home/.config/herdr"
-    theme_dir="$WORK/herdr-no-table/theme_dir"; mkdir -p "$theme_dir"
-    output="$home/.config/herdr/launcher-material.toml"
-    cp "$rendered" "$output"
-    printf '[general]\nworkspace_root = "~/src"\n' > "$home/.config/herdr/config.toml"
-    local orig="$WORK/herdr-no-table/orig.toml"; cp "$home/.config/herdr/config.toml" "$orig"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (no-table) failed"
-    grep -qxF '[theme.custom]' "$home/.config/herdr/config.toml" || fail "apply.sh (no-table) did not add a [theme.custom] table"
-    cp "$home/.config/herdr/config.toml" "$WORK/herdr-no-table/after1.toml"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (no-table) failed"
-    cmp -s "$WORK/herdr-no-table/after1.toml" "$home/.config/herdr/config.toml" || fail "apply.sh (no-table) not idempotent"
-    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (no-table) failed"
-    cmp -s "$orig" "$home/.config/herdr/config.toml" || fail "undo.sh (no-table) did not restore original bytes"
-    [ -e "$output" ] && fail "undo.sh (no-table) left the rendered file behind"
+    # ---- no-table: config.toml pre-exists with no theme tables at all ----
+    rm -rf "$WORK/herdr-no-table"; mkdir -p "$WORK/herdr-no-table/home/.config/herdr"
+    printf '[general]\nworkspace_root = "~/src"\n' > "$WORK/herdr-no-table/home/.config/herdr/config.toml"
+    herdr_case no-table yes
 
-    # ---- pre: [theme.custom] pre-exists with a conflicting key and unrelated content ----
-    home="$WORK/herdr-pre/home"
-    rm -rf "$WORK/herdr-pre"; mkdir -p "$home/.config/herdr"
-    theme_dir="$WORK/herdr-pre/theme_dir"; mkdir -p "$theme_dir"
-    output="$home/.config/herdr/launcher-material.toml"
-    cp "$rendered" "$output"
+    # ---- pre: [theme.custom] pre-exists with a key of ours and unrelated content ----
+    rm -rf "$WORK/herdr-pre"; mkdir -p "$WORK/herdr-pre/home/.config/herdr"
     printf '[general]\nworkspace_root = "~/src"\n\n[theme.custom]\naccent = "#123456"\nfont_size = 14\n\n[keys]\nquit = "q"\n' \
-        > "$home/.config/herdr/config.toml"
-    orig="$WORK/herdr-pre/orig.toml"; cp "$home/.config/herdr/config.toml" "$orig"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "apply.sh (pre) failed"
-    grep -qxF '# launcher-material: accent = "#123456"' "$home/.config/herdr/config.toml" \
-        || fail "apply.sh (pre) did not comment out the conflicting pre-existing accent key"
-    grep -qxF 'font_size = 14' "$home/.config/herdr/config.toml" \
-        || fail "apply.sh (pre) touched an unrelated key in [theme.custom]"
-    grep -qxF 'quit = "q"' "$home/.config/herdr/config.toml" \
-        || fail "apply.sh (pre) touched an unrelated table"
-    cp "$home/.config/herdr/config.toml" "$WORK/herdr-pre/after1.toml"
-    run_hook "$home" "$theme_dir" "$output" "$dir/apply.sh" || fail "second apply.sh (pre) failed"
-    cmp -s "$WORK/herdr-pre/after1.toml" "$home/.config/herdr/config.toml" || fail "apply.sh (pre) not idempotent"
-    run_hook "$home" "$theme_dir" "$output" "$dir/undo.sh" || fail "undo.sh (pre) failed"
-    cmp -s "$orig" "$home/.config/herdr/config.toml" || fail "undo.sh (pre) did not restore original bytes (including the uncommented accent key)"
-    [ -e "$output" ] && fail "undo.sh (pre) left the rendered file behind"
+        > "$WORK/herdr-pre/home/.config/herdr/config.toml"
+    if herdr_case pre yes; then
+        local config="$WORK/herdr-pre/home/.config/herdr/config.toml"
+        # [theme.custom] is the shared base our subtables layer over, so it is
+        # left exactly as the user wrote it - including a key we also set.
+        grep -qxF 'accent = "#123456"' "$WORK/herdr-pre/after1.toml" \
+            || fail "apply.sh (pre) touched the shared [theme.custom] table"
+        grep -qxF 'font_size = 14' "$WORK/herdr-pre/after1.toml" \
+            || fail "apply.sh (pre) touched an unrelated key in [theme.custom]"
+        grep -qxF 'quit = "q"' "$WORK/herdr-pre/after1.toml" \
+            || fail "apply.sh (pre) touched an unrelated table"
+    fi
+
+    # ---- auto-switch-off: the user pinned a theme and turned auto_switch off
+    # (this is pong's config). auto_switch is displaced, not dropped; name is
+    # left alone. ----
+    rm -rf "$WORK/herdr-autoswitch"; mkdir -p "$WORK/herdr-autoswitch/home/.config/herdr"
+    printf '[theme]\nname = "terminal"\nauto_switch = false\n\n[keys]\nquit = "q"\n' \
+        > "$WORK/herdr-autoswitch/home/.config/herdr/config.toml"
+    if herdr_case autoswitch yes; then
+        grep -qxF '# launcher-material: auto_switch = false' "$WORK/herdr-autoswitch/after1.toml" \
+            || fail "apply.sh (autoswitch) did not comment out and tag the pre-existing auto_switch = false"
+        grep -qxF 'name = "terminal"' "$WORK/herdr-autoswitch/after1.toml" \
+            || fail "apply.sh (autoswitch) touched [theme] name"
+        grep -qxF 'auto_switch = false' "$WORK/herdr-autoswitch/after1.toml" \
+            && fail "apply.sh (autoswitch) left an uncommented auto_switch = false behind"
+    fi
+
+    # ---- dark-table: [theme.custom.dark] already exists with one of our keys
+    # and one of the user's own. Ours is displaced; theirs survives; the table
+    # is never declared a second time. ----
+    rm -rf "$WORK/herdr-darktable"; mkdir -p "$WORK/herdr-darktable/home/.config/herdr"
+    printf '[theme]\nname = "catppuccin"\n\n[theme.custom.dark]\naccent = "#abcdef"\nmy_own = "#010203"\n\n[keys]\nquit = "q"\n' \
+        > "$WORK/herdr-darktable/home/.config/herdr/config.toml"
+    if herdr_case darktable yes; then
+        grep -qxF '# launcher-material: accent = "#abcdef"' "$WORK/herdr-darktable/after1.toml" \
+            || fail "apply.sh (darktable) did not comment out the conflicting accent in [theme.custom.dark]"
+        grep -qxF 'my_own = "#010203"' "$WORK/herdr-darktable/after1.toml" \
+            || fail "apply.sh (darktable) dropped an unrelated key from [theme.custom.dark]"
+        grep -qxF 'name = "catppuccin"' "$WORK/herdr-darktable/after1.toml" \
+            || fail "apply.sh (darktable) touched [theme] name"
+    fi
 }
 
 # ---- shared rc isolation (R1/R12): fzf, lazygit and ohmyposh all write into
@@ -822,11 +1138,12 @@ declare -A TEST_FN=(
     [lazygit]=test_lazygit
     [ohmyposh]=test_ohmyposh
     [nvim]=test_nvim
+    [fish]=test_fish
     [herdr]=test_herdr
     [shared-rc]=test_shared_rc
 )
 
-ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim herdr shared-rc"
+ORDER="starship helix tmux bat yazi fzf lazygit ohmyposh nvim fish herdr shared-rc"
 
 for id in $ORDER; do
     dir="$TEMPLATES_DIR/$id"

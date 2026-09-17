@@ -1,12 +1,69 @@
 {
   "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "palettes": {
+    "template": "{{ mode }}",
+    "list": {
+      "dark": {
+        "primary": "{{ colors.primary.dark.hex }}",
+        "on_primary": "{{ colors.on_primary.dark.hex }}",
+        "primary_container": "{{ colors.primary_container.dark.hex }}",
+        "on_primary_container": "{{ colors.on_primary_container.dark.hex }}",
+        "secondary": "{{ colors.secondary.dark.hex }}",
+        "on_secondary": "{{ colors.on_secondary.dark.hex }}",
+        "secondary_container": "{{ colors.secondary_container.dark.hex }}",
+        "on_secondary_container": "{{ colors.on_secondary_container.dark.hex }}",
+        "tertiary": "{{ colors.tertiary.dark.hex }}",
+        "on_tertiary": "{{ colors.on_tertiary.dark.hex }}",
+        "tertiary_container": "{{ colors.tertiary_container.dark.hex }}",
+        "on_tertiary_container": "{{ colors.on_tertiary_container.dark.hex }}",
+        "error": "{{ colors.error.dark.hex }}",
+        "on_error": "{{ colors.on_error.dark.hex }}",
+        "error_container": "{{ colors.error_container.dark.hex }}",
+        "on_error_container": "{{ colors.on_error_container.dark.hex }}",
+        "surface": "{{ colors.surface.dark.hex }}",
+        "on_surface": "{{ colors.on_surface.dark.hex }}",
+        "on_surface_variant": "{{ colors.on_surface_variant.dark.hex }}",
+        "surface_container": "{{ colors.surface_container.dark.hex }}",
+        "surface_container_high": "{{ colors.surface_container_high.dark.hex }}",
+        "surface_container_highest": "{{ colors.surface_container_highest.dark.hex }}",
+        "outline": "{{ colors.outline.dark.hex }}",
+        "outline_variant": "{{ colors.outline_variant.dark.hex }}"
+      },
+      "light": {
+        "primary": "{{ colors.primary.light.hex }}",
+        "on_primary": "{{ colors.on_primary.light.hex }}",
+        "primary_container": "{{ colors.primary_container.light.hex }}",
+        "on_primary_container": "{{ colors.on_primary_container.light.hex }}",
+        "secondary": "{{ colors.secondary.light.hex }}",
+        "on_secondary": "{{ colors.on_secondary.light.hex }}",
+        "secondary_container": "{{ colors.secondary_container.light.hex }}",
+        "on_secondary_container": "{{ colors.on_secondary_container.light.hex }}",
+        "tertiary": "{{ colors.tertiary.light.hex }}",
+        "on_tertiary": "{{ colors.on_tertiary.light.hex }}",
+        "tertiary_container": "{{ colors.tertiary_container.light.hex }}",
+        "on_tertiary_container": "{{ colors.on_tertiary_container.light.hex }}",
+        "error": "{{ colors.error.light.hex }}",
+        "on_error": "{{ colors.on_error.light.hex }}",
+        "error_container": "{{ colors.error_container.light.hex }}",
+        "on_error_container": "{{ colors.on_error_container.light.hex }}",
+        "surface": "{{ colors.surface.light.hex }}",
+        "on_surface": "{{ colors.on_surface.light.hex }}",
+        "on_surface_variant": "{{ colors.on_surface_variant.light.hex }}",
+        "surface_container": "{{ colors.surface_container.light.hex }}",
+        "surface_container_high": "{{ colors.surface_container_high.light.hex }}",
+        "surface_container_highest": "{{ colors.surface_container_highest.light.hex }}",
+        "outline": "{{ colors.outline.light.hex }}",
+        "outline_variant": "{{ colors.outline_variant.light.hex }}"
+      }
+    }
+  },
   "blocks": [
     {
       "alignment": "left",
       "segments": [
         {
-          "background": "{{colors.surface_container_high.default.hex}}",
-          "foreground": "{{colors.on_surface_variant.default.hex}}",
+          "background": "p:surface_container_high",
+          "foreground": "p:on_surface_variant",
           "leading_diamond": "",
           "style": "diamond",
           "template": " {{ if le .PromptCount 1 }}󰚩{{ else if eq .Code 0 }}{{ if eq (mod .PromptCount 3) 0 }}󱚥{{ else if eq (mod .PromptCount 3) 1 }}󱚣{{ else }}󱜙{{ end }}{{ else if eq .Code 1 }}󱚟{{ else if eq .Code 2 }}󱚝{{ else if or (eq .Code 126) (eq .Code 127) }}󱚡{{ else if ge .Code 128 }}󱚡{{ else }}󱚝{{ end }} ",
@@ -14,8 +71,8 @@
           "type": "session"
         },
         {
-          "background": "{{colors.primary_container.default.hex}}",
-          "foreground": "{{colors.on_primary_container.default.hex}}",
+          "background": "p:primary_container",
+          "foreground": "p:on_primary_container",
           "leading_diamond": "",
           "style": "diamond",
           "template": " {{ .Path }} ",
@@ -26,8 +83,8 @@
           }
         },
         {
-          "background": "{{colors.secondary_container.default.hex}}",
-          "foreground": "{{colors.on_secondary_container.default.hex}}",
+          "background": "p:secondary_container",
+          "foreground": "p:on_secondary_container",
           "leading_diamond": "",
           "style": "diamond",
           "template": " {{ .HEAD }}{{ if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} *{{ .Working.String }}{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Staging.Changed }} +{{ .Staging.String }}{{ end }} ",
@@ -39,8 +96,8 @@
           }
         },
         {
-          "background": "{{colors.tertiary_container.default.hex}}",
-          "foreground": "{{colors.on_tertiary_container.default.hex}}",
+          "background": "p:tertiary_container",
+          "foreground": "p:on_tertiary_container",
           "leading_diamond": "",
           "style": "diamond",
           "template": " {{ if .Error }}{{ .Error }}{{ else }}{{ if .Venv }}{{ .Venv }} {{ end }}{{ .Full }}{{ end }} ",
@@ -48,8 +105,8 @@
           "type": "python"
         },
         {
-          "background": "{{colors.surface_container_high.default.hex}}",
-          "foreground": "{{colors.on_surface_variant.default.hex}}",
+          "background": "p:surface_container_high",
+          "foreground": "p:on_surface_variant",
           "leading_diamond": "",
           "style": "diamond",
           "template": " {{ .FormattedMs }} ",
@@ -61,8 +118,8 @@
           }
         },
         {
-          "background": "{{colors.error_container.default.hex}}",
-          "foreground": "{{colors.on_error_container.default.hex}}",
+          "background": "p:error_container",
+          "foreground": "p:on_error_container",
           "leading_diamond": "",
           "style": "diamond",
           "template": " {{ .Code }} ",
@@ -79,8 +136,8 @@
         {
           "background": "transparent",
           "foreground_templates": [
-            "{{colors.primary.default.hex}}",
-            "{{ if gt .Code 0 }}{{colors.error.default.hex}}{{ end }}"
+            "blue",
+            "{{ if gt .Code 0 }}red{{ end }}"
           ],
           "options": {
             "always_enabled": true
@@ -92,8 +149,8 @@
         {
           "background": "transparent",
           "foreground_templates": [
-            "{{colors.tertiary.default.hex}}",
-            "{{ if gt .Code 0 }}{{colors.error.default.hex}}{{ end }}"
+            "magenta",
+            "{{ if gt .Code 0 }}red{{ end }}"
           ],
           "options": {
             "always_enabled": true
@@ -110,7 +167,7 @@
   "final_space": true,
   "transient_prompt": {
     "background": "transparent",
-    "template": "<{{ if gt .Code 0 }}{{colors.error.default.hex}}{{ else }}{{colors.primary.default.hex}}{{ end }}>❯</><{{ if gt .Code 0 }}{{colors.error.default.hex}}{{ else }}{{colors.tertiary.default.hex}}{{ end }}>❯</> "
+    "template": "<{{ if gt .Code 0 }}red{{ else }}blue{{ end }}>❯</><{{ if gt .Code 0 }}red{{ else }}magenta{{ end }}>❯</> "
   },
   "version": 4
 }

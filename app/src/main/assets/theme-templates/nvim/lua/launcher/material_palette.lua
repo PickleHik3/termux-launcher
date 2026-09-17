@@ -1,8 +1,12 @@
 -- Builds a base46 theme from the launcher's wallpaper-derived Material palette.
 --
--- The launcher writes ~/.termux/material-colors.sh on every wallpaper/theme change.
--- It carries both Material roles (SURFACE*, PRIMARY, ERROR, OUTLINE...) and a full
--- ANSI set (TERMINAL_COLOR0..15, TERMINAL_BACKGROUND/FOREGROUND).
+-- Rendered by Termux Launcher - do not edit. The launcher rewrites this file on
+-- every wallpaper, colour or dark/light change, and it carries BOTH palettes:
+-- `M.raw.dark` and `M.raw.light`, each with the sixteen ANSI slots and every
+-- Material role the colourscheme paints from. Nothing is read off disk while
+-- Neovim runs, so a light/dark flip costs no I/O: colors/launcher-material.lua
+-- asks for the table matching `vim.o.background`, which Neovim itself flips when
+-- the terminal reports its mode.
 --
 -- Division of labour, which is the whole trick: syntax comes from the ANSI colours
 -- (already hue-diversified, so code keeps red/green/yellow/blue/magenta/cyan
@@ -13,7 +17,76 @@
 
 local M = {}
 
-local PALETTE = os.getenv("HOME") .. "/.termux/material-colors.sh"
+--- Both palettes, as the launcher rendered them ----------------------------
+
+M.raw = {
+  dark = {
+      TERMINAL_BACKGROUND = "{{ colors.terminal_background.dark.hex }}",
+      TERMINAL_FOREGROUND = "{{ colors.terminal_foreground.dark.hex }}",
+      TERMINAL_COLOR0 = "{{ colors.terminal_color0.dark.hex }}",
+      TERMINAL_COLOR1 = "{{ colors.terminal_color1.dark.hex }}",
+      TERMINAL_COLOR2 = "{{ colors.terminal_color2.dark.hex }}",
+      TERMINAL_COLOR3 = "{{ colors.terminal_color3.dark.hex }}",
+      TERMINAL_COLOR4 = "{{ colors.terminal_color4.dark.hex }}",
+      TERMINAL_COLOR5 = "{{ colors.terminal_color5.dark.hex }}",
+      TERMINAL_COLOR6 = "{{ colors.terminal_color6.dark.hex }}",
+      TERMINAL_COLOR7 = "{{ colors.terminal_color7.dark.hex }}",
+      TERMINAL_COLOR8 = "{{ colors.terminal_color8.dark.hex }}",
+      TERMINAL_COLOR9 = "{{ colors.terminal_color9.dark.hex }}",
+      TERMINAL_COLOR10 = "{{ colors.terminal_color10.dark.hex }}",
+      TERMINAL_COLOR11 = "{{ colors.terminal_color11.dark.hex }}",
+      TERMINAL_COLOR12 = "{{ colors.terminal_color12.dark.hex }}",
+      TERMINAL_COLOR13 = "{{ colors.terminal_color13.dark.hex }}",
+      TERMINAL_COLOR14 = "{{ colors.terminal_color14.dark.hex }}",
+      TERMINAL_COLOR15 = "{{ colors.terminal_color15.dark.hex }}",
+      PRIMARY = "{{ colors.primary.dark.hex }}",
+      TERTIARY = "{{ colors.tertiary.dark.hex }}",
+      ERROR = "{{ colors.error.dark.hex }}",
+      SURFACE = "{{ colors.surface.dark.hex }}",
+      ON_SURFACE = "{{ colors.on_surface.dark.hex }}",
+      ON_SURFACE_VARIANT = "{{ colors.on_surface_variant.dark.hex }}",
+      SURFACE_CONTAINER = "{{ colors.surface_container.dark.hex }}",
+      SURFACE_CONTAINER_HIGH = "{{ colors.surface_container_high.dark.hex }}",
+      SURFACE_CONTAINER_HIGHEST = "{{ colors.surface_container_highest.dark.hex }}",
+      OUTLINE = "{{ colors.outline.dark.hex }}",
+      OUTLINE_VARIANT = "{{ colors.outline_variant.dark.hex }}",
+  },
+  light = {
+      TERMINAL_BACKGROUND = "{{ colors.terminal_background.light.hex }}",
+      TERMINAL_FOREGROUND = "{{ colors.terminal_foreground.light.hex }}",
+      TERMINAL_COLOR0 = "{{ colors.terminal_color0.light.hex }}",
+      TERMINAL_COLOR1 = "{{ colors.terminal_color1.light.hex }}",
+      TERMINAL_COLOR2 = "{{ colors.terminal_color2.light.hex }}",
+      TERMINAL_COLOR3 = "{{ colors.terminal_color3.light.hex }}",
+      TERMINAL_COLOR4 = "{{ colors.terminal_color4.light.hex }}",
+      TERMINAL_COLOR5 = "{{ colors.terminal_color5.light.hex }}",
+      TERMINAL_COLOR6 = "{{ colors.terminal_color6.light.hex }}",
+      TERMINAL_COLOR7 = "{{ colors.terminal_color7.light.hex }}",
+      TERMINAL_COLOR8 = "{{ colors.terminal_color8.light.hex }}",
+      TERMINAL_COLOR9 = "{{ colors.terminal_color9.light.hex }}",
+      TERMINAL_COLOR10 = "{{ colors.terminal_color10.light.hex }}",
+      TERMINAL_COLOR11 = "{{ colors.terminal_color11.light.hex }}",
+      TERMINAL_COLOR12 = "{{ colors.terminal_color12.light.hex }}",
+      TERMINAL_COLOR13 = "{{ colors.terminal_color13.light.hex }}",
+      TERMINAL_COLOR14 = "{{ colors.terminal_color14.light.hex }}",
+      TERMINAL_COLOR15 = "{{ colors.terminal_color15.light.hex }}",
+      PRIMARY = "{{ colors.primary.light.hex }}",
+      TERTIARY = "{{ colors.tertiary.light.hex }}",
+      ERROR = "{{ colors.error.light.hex }}",
+      SURFACE = "{{ colors.surface.light.hex }}",
+      ON_SURFACE = "{{ colors.on_surface.light.hex }}",
+      ON_SURFACE_VARIANT = "{{ colors.on_surface_variant.light.hex }}",
+      SURFACE_CONTAINER = "{{ colors.surface_container.light.hex }}",
+      SURFACE_CONTAINER_HIGH = "{{ colors.surface_container_high.light.hex }}",
+      SURFACE_CONTAINER_HIGHEST = "{{ colors.surface_container_highest.light.hex }}",
+      OUTLINE = "{{ colors.outline.light.hex }}",
+      OUTLINE_VARIANT = "{{ colors.outline_variant.light.hex }}",
+  },
+}
+
+--- The mode the launcher itself was in when it wrote this file. Diagnostic only:
+--- what gets painted follows `vim.o.background`.
+M.rendered_mode = "{{ mode }}"
 
 -- Contrast targets, WCAG-style ratios against the background.
 local TEXT_CONTRAST = 4.5 -- syntax, foreground text
@@ -137,24 +210,19 @@ local function ensure_contrast(fg, bg, target)
   return out
 end
 
---- Palette file -----------------------------------------------------------
+--- Which palette ----------------------------------------------------------
 
---- Parses `export TERMUX_MATERIAL_KEY='#RRGGBB'` lines. Returns nil when the file
---- is missing, which is the plain-Termux / pre-first-wallpaper case.
-function M.read(path)
-  local fd = io.open(path or PALETTE, "r")
-  if not fd then
-    return nil
-  end
-  local out = {}
-  for line in fd:lines() do
-    local key, value = line:match("^%s*export%s+TERMUX_MATERIAL_([%w_]+)%s*=%s*'?([^']*)'?%s*$")
-    if key and value ~= "" then
-      out[key] = value
-    end
-  end
-  fd:close()
-  return next(out) and out or nil
+--- The mode to paint: Neovim's own `background`. Neovim >=0.11 flips it when the
+--- terminal reports a light/dark change, so nothing here has to listen for one.
+function M.mode()
+  return vim.o.background == "light" and "light" or "dark"
+end
+
+--- The raw token table for a mode, or nil when this file was never rendered
+--- (a hand-copied colourscheme, or a template the user turned off).
+function M.read(mode)
+  local raw = M.raw[mode or M.mode()]
+  return raw and next(raw) ~= nil and raw or nil
 end
 
 --- A fixed, known-good syntax set. Used when the wallpaper cannot supply one.
@@ -204,15 +272,17 @@ end
 
 --- Build ------------------------------------------------------------------
 
-function M.build()
-  local p = M.read()
+--- @param mode string|nil "dark" or "light"; defaults to `vim.o.background`.
+function M.build(mode)
+  mode = mode or M.mode()
+  local p = M.read(mode)
   if not p then
     return nil
   end
 
   local bg = p.TERMINAL_BACKGROUND or p.SURFACE or "#1A1111"
   local fg = p.TERMINAL_FOREGROUND or p.ON_SURFACE or "#F1DEDD"
-  local is_light = luminance(bg) > 0.18
+  local is_light = mode == "light"
 
   local syn, degraded, saturation = syntax_from(p, bg)
 
@@ -302,7 +372,7 @@ function M.build()
   vim.g.material_theme_info = {
     degraded = degraded,
     average_saturation = saturation,
-    contrast_level = p.TERMINAL_CONTRAST_LEVEL,
+    rendered_mode = M.rendered_mode,
     comment_contrast = contrast(comment, bg),
     fg_contrast = contrast(fg, bg),
     type = theme.type,
@@ -315,7 +385,14 @@ end
 
 local watcher, pending
 
---- Rebuild highlights when the launcher rewrites the palette, so changing the
+--- Where the launcher writes this very file. Watched instead of the palette
+--- export: this module is what the theme is built from now, and the launcher
+--- rewrites it - only when the bytes change - on every wallpaper or mode change.
+local function module_path()
+  return vim.fn.stdpath("config") .. "/lua/launcher/material_palette.lua"
+end
+
+--- Rebuild highlights when the launcher rewrites this file, so changing the
 --- wallpaper retints an open editor. Debounced: the file is rewritten in a few
 --- syscalls and fs_event reports each one.
 function M.watch()
@@ -326,7 +403,7 @@ function M.watch()
   if not watcher then
     return
   end
-  watcher:start(PALETTE, {}, function()
+  watcher:start(module_path(), {}, function()
     if pending then
       return
     end

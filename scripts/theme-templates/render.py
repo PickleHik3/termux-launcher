@@ -8,8 +8,12 @@ Implements exactly the placeholder grammar in project-docs/theme-templates/SPEC.
   {{ colors.<token>.<mode>.<format> }}   (spaces optional)
   {{ mode }}
 
-Modes default/dark/light all resolve to the single active palette the
-fixture provides. Formats: hex, hex_stripped, rgb, rgba, red, green, blue.
+`.default` resolves to the active palette, `.dark` and `.light` to the real
+dark and light palettes, and `{{ mode }}` to the active palette's mode - the
+contract phase 2 gives the Java renderer. Pass the two palettes with --dark
+and --light; with neither, all three modes fall back to the active palette
+(the pre-dual-palette behaviour).
+Formats: hex, hex_stripped, rgb, rgba, red, green, blue.
 Any other `{{ ... }}` (for example oh-my-posh's own Go-template syntax) is
 left completely untouched - only the two forms above are ever matched.
 
@@ -75,7 +79,7 @@ class RenderError(Exception):
     pass
 
 
-def render(text, palette):
+def render(text, palette, dark=None, light=None):
     if LT_STAR_RE.search(text):
         raise RenderError("template contains a `<*` block, which is out of scope")
 
@@ -83,13 +87,20 @@ def render(text, palette):
     if mode_value is None:
         raise RenderError("fixture palette has no 'mode' key")
 
+    by_mode = {
+        "default": palette,
+        "dark": dark if dark is not None else palette,
+        "light": light if light is not None else palette,
+    }
+
     def replace_colors(match):
-        token, _mode, fmt = match.group(1), match.group(2), match.group(3)
+        token, mode, fmt = match.group(1), match.group(2), match.group(3)
         if fmt not in VALID_FORMATS:
             raise RenderError(f"unknown format '{fmt}' for token '{token}'")
-        if token not in palette:
-            raise RenderError(f"unknown token '{token}'")
-        return format_value(palette[token], fmt)
+        source = by_mode[mode]
+        if token not in source:
+            raise RenderError(f"unknown token '{token}' in the {mode} palette")
+        return format_value(source[token], fmt)
 
     text = MODE_RE.sub(lambda _m: mode_value, text)
     text = COLORS_RE.sub(replace_colors, text)
@@ -97,18 +108,36 @@ def render(text, palette):
 
 
 def main(argv):
-    if len(argv) != 3:
-        print(f"usage: {argv[0]} <fixture.properties> <template-input-file>", file=sys.stderr)
+    args = list(argv[1:])
+    dark_path = light_path = None
+    positional = []
+    while args:
+        arg = args.pop(0)
+        if arg == "--dark" and args:
+            dark_path = args.pop(0)
+        elif arg == "--light" and args:
+            light_path = args.pop(0)
+        else:
+            positional.append(arg)
+
+    if len(positional) != 2:
+        print(
+            f"usage: {argv[0]} [--dark <dark.properties>] [--light <light.properties>]"
+            " <active.properties> <template-input-file>",
+            file=sys.stderr,
+        )
         return 2
 
-    fixture_path, template_path = argv[1], argv[2]
+    fixture_path, template_path = positional
     palette = load_properties(fixture_path)
+    dark = load_properties(dark_path) if dark_path else None
+    light = load_properties(light_path) if light_path else None
 
     with open(template_path, "r", encoding="utf-8") as fd:
         text = fd.read()
 
     try:
-        rendered = render(text, palette)
+        rendered = render(text, palette, dark, light)
     except RenderError as exc:
         print(f"render error: {exc}", file=sys.stderr)
         return 1

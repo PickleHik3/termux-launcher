@@ -97,9 +97,8 @@ palette in use right now.
 Pick a tool in this list and the launcher writes its theme file whenever the palette changes, then
 wires it into that tool's own config. Turning one off puts the config back as it was. Tools that can
 reload live do; the rest pick the colors up the next time they start. Built in: Starship, Helix,
-tmux, bat, Yazi, fzf, lazygit, Oh My Posh, Neovim and herdr, a terminal workspace manager — its
-accent, panes and status line follow along under `[theme.custom]` in
-`~/.config/herdr/config.toml`.
+tmux, bat, Yazi, fzf, lazygit, Oh My Posh, Neovim, fish and herdr, a terminal workspace manager whose
+accent, panes and status line follow along. The fish entry colors the command line you type on.
 
 The palette itself keeps up on its own: it re-renders whenever your wallpaper, Material colour, or
 system dark/light mode changes, so a tool on this list never shows yesterday's contrast.

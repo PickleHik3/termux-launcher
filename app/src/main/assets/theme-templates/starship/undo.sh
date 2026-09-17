@@ -37,7 +37,7 @@ if [ -f "$config_file" ]; then
         $0 == begin { in_block = 1; next }
         in_block && $0 == end { in_block = 0; next }
         in_block { next }
-        /^[[:space:]]*palette[[:space:]]*=[[:space:]]*"launcher-material"/ { next }
+        /^[[:space:]]*palette[[:space:]]*=[[:space:]]*"launcher-material(-dark|-light)?"[[:space:]]*$/ { next }
         {
             line = $0
             suf_len = length(suffix)
