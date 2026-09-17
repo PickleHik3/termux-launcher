@@ -156,7 +156,7 @@ public final class ThemeTemplates {
             try {
                 PaletteSet palettes = paletteSource.call();
                 if (palettes == null || palettes.active() == null) return;
-                MaterialTerminalColorScheme.writeMaterialColorFiles(palettes.active());
+                MaterialTerminalColorScheme.writeMaterialColorFiles(palettes);
                 runPass(application, palettes, pass);
                 if (afterPass != null) afterPass.run(palettes);
             } catch (Exception e) {

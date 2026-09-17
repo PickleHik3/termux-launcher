@@ -35,6 +35,17 @@ public final class MaterialTerminalColorScheme {
     private static final String MATERIAL_COLORS_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors.sh";
 
     /**
+     * The two mode files beside them. Same format, same keys, same writers — only {@code mode} is
+     * fixed rather than derived, so a tool can source one of these to dress itself for the mode it
+     * is about to be in. The two files above stay exactly what they were: the active palette, which
+     * is what {@code config.fish} and every older consumer reads.
+     */
+    private static final String MATERIAL_COLORS_DARK_PROPERTIES_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-dark.properties";
+    private static final String MATERIAL_COLORS_DARK_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-dark.sh";
+    private static final String MATERIAL_COLORS_LIGHT_PROPERTIES_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-light.properties";
+    private static final String MATERIAL_COLORS_LIGHT_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-light.sh";
+
+    /**
      * Canonical ANSI hues for slots 1–6 — red, green, yellow, blue, magenta, cyan — before
      * harmonization. These are what makes a green read as green; the theme supplies everything else.
      */
@@ -470,6 +481,49 @@ public final class MaterialTerminalColorScheme {
     public static void writeMaterialColorFiles(@NonNull Properties props) {
         writeFile(MATERIAL_COLORS_PROPERTIES_PATH, toPropertiesText(props));
         writeFile(MATERIAL_COLORS_SHELL_PATH, toShellExports(props));
+    }
+
+    /**
+     * The active palette's two files, plus one pair per mode the set actually carries.
+     *
+     * <p>A set with only an active palette — the from-scheme path, which has one palette by
+     * definition — writes only the two active files and leaves any mode files a previous dynamic
+     * pass left behind alone: they are stale either way, and deleting a file a user's config may be
+     * sourcing is the worse of the two.
+     */
+    public static void writeMaterialColorFiles(@NonNull PaletteSet palettes) {
+        writeMaterialColorFiles(palettes.active());
+        if (palettes.hasDark())
+            writeModeFiles(MATERIAL_COLORS_DARK_PROPERTIES_PATH, MATERIAL_COLORS_DARK_SHELL_PATH,
+                palettes.dark(), PaletteSet.MODE_DARK);
+        if (palettes.hasLight())
+            writeModeFiles(MATERIAL_COLORS_LIGHT_PROPERTIES_PATH, MATERIAL_COLORS_LIGHT_SHELL_PATH,
+                palettes.light(), PaletteSet.MODE_LIGHT);
+    }
+
+    private static void writeModeFiles(@NonNull String propertiesPath, @NonNull String shellPath,
+                                       @NonNull Properties palette, @NonNull String mode) {
+        Properties fixed = withMode(palette, mode);
+        writeFile(propertiesPath, toPropertiesText(fixed));
+        writeFile(shellPath, toShellExports(fixed));
+    }
+
+    /**
+     * {@code palette} with {@code mode} stated rather than derived.
+     *
+     * <p>The mode file says what it is for. The derived value is the same in every ordinary case —
+     * the dark palette's background really is dark — but a theme can hand back a light surface under
+     * {@code values-night}, and a file named {@code -dark} that says {@code mode=light} is a trap for
+     * the config reading it. The palette handed in is not modified: it is the one the caller may
+     * still be rendering templates from.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Properties withMode(@NonNull Properties palette, @NonNull String mode) {
+        Properties copy = new Properties();
+        copy.putAll(palette);
+        copy.setProperty("mode", mode);
+        return copy;
     }
 
     /**
