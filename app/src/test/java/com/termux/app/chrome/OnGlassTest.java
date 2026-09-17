@@ -257,6 +257,31 @@ public class OnGlassTest {
         assertEquals(LIGHT_INK, OnGlass.mostLegibleInk(Color.WHITE, LIGHT_INK, NIGHT_INK));
     }
 
+    @Test
+    public void oneBandHasOneVeilAndItsLooserTiersReadOnTheSameSurface() {
+        // The status strip resolves once, at its strictest tier: body text.
+        OnGlass.Resolution band = OnGlass.resolve(
+            STATUS_GLASS_LIGHT, LIGHT_INK, NIGHT_INK, LIGHT_SURFACE, OnGlass.TARGET_BODY_TEXT);
+        // Its glyphs and its separator dots then read on that same surface rather than each asking
+        // for a veil of their own — a band can only have one.
+        int glyph = OnGlass.inkOnBand(band, LIGHT_INK, NIGHT_INK, OnGlass.TARGET_LARGE_TEXT);
+        int dot = OnGlass.inkOnBand(band, LIGHT_INK, NIGHT_INK, OnGlass.TARGET_DECORATION);
+        assertTrue(SchemeTone.contrastRatio(glyph, band.surface) >= OnGlass.TARGET_LARGE_TEXT);
+        assertTrue(SchemeTone.contrastRatio(dot, band.surface) >= OnGlass.TARGET_DECORATION);
+        assertTrue("a looser tier must not out-shout the label beside it",
+            SchemeTone.contrastRatio(dot, band.surface)
+                <= SchemeTone.contrastRatio(band.ink, band.surface));
+    }
+
+    @Test
+    public void aBandWithNoVeilStillAnswersForItsLooserTiers() {
+        OnGlass.Resolution band = OnGlass.resolve(
+            GLASS_NIGHT, NIGHT_INK, LIGHT_INK, NIGHT_SURFACE, OnGlass.TARGET_BODY_TEXT);
+        assertTrue(band.isBare());
+        assertEquals(NIGHT_INK,
+            OnGlass.inkOnBand(band, NIGHT_INK, LIGHT_INK, OnGlass.TARGET_DECORATION));
+    }
+
     // ------------------------------------------------------------------ the contract itself
 
     @Test

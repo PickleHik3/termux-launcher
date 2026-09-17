@@ -91,9 +91,26 @@ public final class OnGlass {
     public static final class Resolution {
 
         /**
-         * The veil to draw over the band, under its content: the mode's surface colour at the
+         * The veil the band needs under its content: the veil colour the caller supplied, at the
          * smallest alpha that does the job, or {@link Color#TRANSPARENT} when the backdrop needed
          * no help at all.
+         *
+         * <p>Not a rectangle of its own, and not a white wash. It is a colour and an alpha, so the
+         * place to spend it is the base layer a glass surface already draws:
+         * {@code DockGlassRendering.createGlassSurface} fills the band with {@code baseColor} at
+         * {@code 255 x opacity}, and raising that to {@code max(userAlpha, Color.alpha(veil))} —
+         * with the band's own {@code baseColor} passed to {@link #resolve} as the veil colour — is
+         * this veil, drawn by the layer that is already there. In light mode that base is
+         * {@code termux_surface_panel_high} (#E1E7F2), not white, so the "a near-white sheen reads
+         * as frosted plastic" constraint in {@code DockGlassRendering.lightModelColorAt} holds.</p>
+         *
+         * <p>The tonal light model over that base — accent sheen, clear middle, black foot — keeps
+         * working, with one rule: a contrast ratio is a per-pixel promise, so wherever ink sits the
+         * band must not fall below this alpha. A gradient may shape the band above the floor, never
+         * under it. The cleanest way to keep the foot honest is to measure with it: pass
+         * {@code lightModelColorAt(pos, ...)} at the ink's own vertical position as the
+         * {@code glassTint} in {@link OnGlass#backdrop}, and the foot becomes part of what was
+         * measured instead of something that quietly undoes it.</p>
          */
         @ColorInt public final int veil;
 
@@ -237,6 +254,29 @@ public final class OnGlass {
     @ColorInt
     public static int mostLegibleInk(@ColorInt int surface, @ColorInt int first, @ColorInt int second) {
         return SchemeTone.mostLegible(surface, first, second);
+    }
+
+    /**
+     * A second ink for a band whose veil is already settled: legible on {@code band}'s surface at
+     * {@code target}, without asking for any more veil.
+     *
+     * <p>One band usually carries several tiers at once — the status strip has body labels, icons
+     * and 6&nbsp;px separator dots — and each tier resolved on its own would want a different veil,
+     * which is impossible: a band has one veil. So a caller resolves the band once at its
+     * <em>strictest</em> target (normally {@link #TARGET_BODY_TEXT}), draws that one veil, and asks
+     * this for every other ink on the same surface. The looser tiers then come out closer to the
+     * mode's own colour instead of dragging the whole band's veil up.</p>
+     */
+    @ColorInt
+    public static int inkOnBand(@NonNull Resolution band, @ColorInt int preferredInk,
+                                @ColorInt int alternateInk, double target) {
+        if (ratio(preferredInk, band.surface) >= target) return preferredInk;
+        if (ratio(alternateInk, band.surface) >= target) return alternateInk;
+        int toned = inkOn(band.surface, preferredInk, target);
+        if (ratio(toned, band.surface) >= target) return toned;
+        int tonedAlternate = inkOn(band.surface, alternateInk, target);
+        if (ratio(tonedAlternate, band.surface) >= target) return tonedAlternate;
+        return mostLegibleInk(band.surface, Color.WHITE, Color.BLACK);
     }
 
     // ---------------------------------------------------------------- veil
