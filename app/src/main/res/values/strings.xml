@@ -1247,7 +1247,7 @@
                      wears the palette glyph again for all of them; ✕ only puts the card away. -->
                 <string name="termux_surface_editor_open_look">Style all surfaces</string>
                 <string name="termux_surface_editor_all_surfaces">All surfaces</string>
-                <string name="surface_editor_global_heading">Global</string>
+                <string name="surface_editor_global_heading">All surfaces</string>
                 <string name="termux_surface_editor_hide_panel">Hide panel</string>
                 <string name="termux_surface_editor_action_chevron">›</string>
                 <string name="termux_surface_editor_select_description">Edit %1$s</string>
@@ -1313,6 +1313,9 @@
 
                 <!-- The Layout editor: the miniature of one place, and the way out of it. -->
                 <string name="termux_layout_editor_title">Layout</string>
+                <!-- The chooser above the miniature. The header already names the place, so this
+                     row only has to say which of its two layouts is on the picture. -->
+                <string name="termux_layout_editor_orientation">Orientation</string>
                 <string name="termux_layout_editor_revert">Undo changes</string>
                 <string name="termux_layout_editor_unsaved_message">Discard them and put everything back where it was when you opened the editor, or save and close?</string>
                 <string name="termux_layout_editor_narrow_notice">With bars down the side there is not much room left.</string>

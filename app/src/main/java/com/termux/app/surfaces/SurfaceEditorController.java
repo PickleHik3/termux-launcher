@@ -42,6 +42,8 @@ import com.google.android.material.materialswitch.MaterialSwitch;
 
 import com.termux.R;
 import com.termux.app.editorshell.EditorShellControlHost;
+import com.termux.app.editorshell.EditorShellHeader;
+import com.termux.app.editorshell.EditorShellMetrics;
 import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.notice.AppNotice;
@@ -369,11 +371,13 @@ public final class SurfaceEditorController {
         final View host;
         final LinearLayout root;
         final View header;
+        final ImageView glyph;
         final TextView title;
         final ImageView save;
         final ImageView reset;
         final ImageView done;
         final ImageView close;
+        final ViewGroup chooserSlot;
         final ViewGroup presets;
         final View pills;
         final MaterialButtonToggleGroup shape;
@@ -392,12 +396,14 @@ public final class SurfaceEditorController {
             this.host = host;
             this.root = root;
             this.floatRoot = floatRoot;
-            header = root.findViewById(R.id.surface_editor_pill_header);
-            title = root.findViewById(R.id.surface_editor_pill_title);
-            save = root.findViewById(R.id.surface_editor_pill_save);
-            reset = root.findViewById(R.id.surface_editor_pill_reset);
-            done = root.findViewById(R.id.surface_editor_pill_done);
-            close = root.findViewById(R.id.surface_editor_pill_close);
+            header = root.findViewById(R.id.editor_shell_header);
+            glyph = root.findViewById(R.id.editor_shell_header_glyph);
+            title = root.findViewById(R.id.editor_shell_header_title);
+            save = root.findViewById(R.id.editor_shell_header_save);
+            reset = root.findViewById(R.id.editor_shell_header_revert);
+            done = root.findViewById(R.id.editor_shell_header_done);
+            close = root.findViewById(R.id.editor_shell_header_close);
+            chooserSlot = root.findViewById(R.id.editor_shell_chooser_slot);
             presets = root.findViewById(R.id.surface_editor_pill_presets);
             pills = root.findViewById(R.id.surface_editor_pill_pills);
             shape = root.findViewById(R.id.surface_editor_pill_shape);
@@ -410,8 +416,9 @@ public final class SurfaceEditorController {
         }
 
         boolean complete() {
-            return header != null && title != null && save != null && reset != null && done != null
-                && close != null && presets != null && pills != null
+            return header != null && glyph != null && title != null && save != null
+                && reset != null && done != null && close != null && chooserSlot != null
+                && presets != null && pills != null
                 && shape != null && material != null && shapeHost != null
                 && materialHost != null && rowsHost != null
                 && floatPalette != null && floatDone != null;
@@ -424,11 +431,6 @@ public final class SurfaceEditorController {
     @Nullable private LinearLayout mRows;
     private int mRowsMaxHeightPx;
 
-    /**
-     * The height the preset cards currently stand at; 0 until the first cap, which reads as the
-     * full one. The strip is chrome that gives way before the rows do on a short region.
-     */
-    private int mPresetCardHeightPx;
     /** Restatements for the rows currently on the card, rebuilt with them. */
     @NonNull private List<Runnable> mRowSyncs = new ArrayList<>();
     /** Which set of rows the body is built for; a change in what is editable rebuilds it. */
@@ -704,6 +706,10 @@ public final class SurfaceEditorController {
         panel.floatRoot.setBackground(buildFloatBackground());
         setIcon(panel.save, R.drawable.ic_symbol_save, false);
         setIcon(panel.reset, R.drawable.ic_symbol_restart, false);
+        // Appearance uses four of the header's five slots; Close is the one Layout leaves empty.
+        panel.close.setVisibility(View.VISIBLE);
+        panel.save.setContentDescription(getString(R.string.termux_surface_editor_save_look));
+        panel.reset.setContentDescription(getString(R.string.termux_surface_editor_revert));
         setIcon(panel.done, R.drawable.ic_symbol_check, true);
         setIcon(panel.close, R.drawable.ic_symbol_close, false);
         setIcon(panel.floatPalette, R.drawable.ic_symbol_palette, false);
@@ -1054,9 +1060,13 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * How tall the body may grow: the room the region has left once the header, the presets and the
-     * pills have taken theirs. The cap is what keeps the card off the surfaces bounding it — a list
-     * too long for the room scrolls rather than pushing the card over the dock.
+     * How tall the body may grow, and whether the chooser can afford to stay pinned above it.
+     *
+     * <p>The chrome is counted from what the shell <em>declares</em> — the header at its own height,
+     * the chooser at its measured one, the card's padding — and never by subtracting the scroller
+     * from the card. Subtraction is a loop: the cap sets the scroller's height, the scroller's
+     * height sets the derived chrome, and the chrome sets the cap again, so quantising the cap to
+     * whole rows would never settle.
      */
     private void applyRowsCap() {
         Panel panel = mPanel;
@@ -1064,55 +1074,41 @@ public final class SurfaceEditorController {
             return;
         int[] region = pillRegion();
         int regionPx = region[1] - region[0];
-        int scrollerPx = mRowsScroller.getHeight();
-        int chromePx = Math.max(0, panel.root.getHeight() - scrollerPx);
-        // The preset strip gives way first, and what it hands back is room the body has instead.
-        // Counted here rather than waiting for the next layout pass to measure the shorter strip:
-        // otherwise the body spends one pass on its floor with the room already free beside it.
-        chromePx = Math.max(0, chromePx - applyPresetCardCap(panel, regionPx, chromePx));
-        int capped = SurfaceEditorPillMetrics.bodyCapPx(regionPx, chromePx,
-            dp(SURFACE_EDITOR_STANDOFF_DP), dp(80), dp(360));
+        int standoffPx = dp(SURFACE_EDITOR_STANDOFF_DP);
+        float density = mHost.context().getResources().getDisplayMetrics().density;
+
+        int cardRoomPx = Math.max(0, regionPx - (2 * standoffPx));
+        EditorShellHeader.apply(panel.header, cardRoomPx);
+        int headerPx = EditorShellMetrics.headerHeightPx(cardRoomPx, density);
+        int paddingPx = panel.root.getPaddingTop() + panel.root.getPaddingBottom();
+        int pillsPx = panel.pills.getVisibility() == View.GONE ? 0
+            : Math.max(panel.pills.getHeight(), 2 * dp(EditorShellMetrics.ROW_MIN_HEIGHT_DP));
+        int chooserPx = panel.presets.getVisibility() == View.GONE ? 0
+            : Math.max(panel.presets.getHeight(), dp(EditorShellMetrics.CHOOSER_DP));
+
+        // Asked of the body the card would have with the chooser pinned: unpinning is what a body
+        // too short to carry 60dp of chrome does, and the answer must not depend on the last one.
+        int bodyWithChooserPx = SurfaceEditorPillMetrics.bodyCapPx(regionPx,
+            headerPx + paddingPx + pillsPx + chooserPx, standoffPx, dp(80), dp(360));
+        boolean pinned = chooserPx == 0
+            || EditorShellMetrics.chooserPinned(bodyWithChooserPx, density);
+        EditorShellHeader.applyChooserPin(panel.presets, panel.chooserSlot, mRows, pinned);
+
+        int chromePx = headerPx + paddingPx + pillsPx + (pinned ? chooserPx : 0);
+        int available = SurfaceEditorPillMetrics.bodyCapPx(regionPx, chromePx, standoffPx,
+            dp(80), dp(360));
+        int capped = available;
+        if (mRows != null && mRows.getChildCount() > 0) {
+            View first = mRows.getChildAt(0);
+            int pitch = first.getHeight() > 0 ? first.getHeight()
+                : dp(EditorShellMetrics.ROW_MIN_HEIGHT_DP);
+            capped = EditorShellMetrics.bodyCap(available, mRows.getHeight(), pitch,
+                dp(EditorShellMetrics.PEEK_DP)).capPx;
+        }
         if (capped == mRowsMaxHeightPx)
             return;
         mRowsMaxHeightPx = capped;
         mRowsScroller.requestLayout();
-    }
-
-    /**
-     * Shrinks the preset cards where the region cannot hold the card at full size with a usable
-     * body under it, and grows them back as the room returns.
-     *
-     * @return the height the cards handed back to the rest of the card, {@code 0} while nothing
-     *         moved or while there is nothing measured to decide from
-     */
-    private int applyPresetCardCap(@NonNull Panel panel, int regionHeightPx, int chromePx) {
-        if (mPresetItems.isEmpty() || regionHeightPx <= 0 || panel.root.getHeight() <= 0)
-            return 0;
-        int fullPx = dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP);
-        int current = presetCardHeightPx();
-        int target = SurfaceEditorPillMetrics.presetCardHeightPx(regionHeightPx,
-            Math.max(0, chromePx - current), dp(80), dp(SURFACE_EDITOR_STANDOFF_DP), fullPx,
-            dp(SurfaceEditorPresetPreview.CARD_MIN_HEIGHT_DP));
-        if (target == current)
-            return 0;
-        mPresetCardHeightPx = target;
-        int widthPx = SurfaceEditorPresetPreview.widthPxForHeightPx(target);
-        for (Pair<View, TextView> item : mPresetItems.values()) {
-            ViewGroup.LayoutParams params = item.first.getLayoutParams();
-            if (params == null)
-                continue;
-            params.width = widthPx;
-            params.height = target;
-            item.first.setLayoutParams(params);
-        }
-        refreshPresetPreviews();
-        return current - target;
-    }
-
-    /** The preset cards' current height: the full one until a short region has shrunk them. */
-    private int presetCardHeightPx() {
-        return mPresetCardHeightPx > 0
-            ? mPresetCardHeightPx : dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP);
     }
 
     /**
@@ -1376,10 +1372,11 @@ public final class SurfaceEditorController {
         if (!title.equals(panel.shownTitle)) {
             panel.shownTitle = title;
             panel.title.setText(title);
-            panel.title.setCompoundDrawablesRelative(shared ? paletteGlyph() : null,
-                null, null, null);
-            panel.title.setContentDescription(shared
-                ? getString(R.string.termux_surface_editor_all_surfaces) : title);
+            // The title names what is being edited and the glyph stands beside it in its own slot:
+            // on the shared layer the palette that opened the card, on a panel the surface's own.
+            Drawable glyph = shared ? paletteGlyph() : null;
+            panel.glyph.setImageDrawable(glyph);
+            panel.glyph.setVisibility(glyph == null ? View.GONE : View.VISIBLE);
         }
 
         int sharedVisibility = shared ? View.VISIBLE : View.GONE;
@@ -1410,8 +1407,6 @@ public final class SurfaceEditorController {
         icon = icon.mutate();
         icon.setTint(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
             R.color.termux_primary));
-        int size = dp(20);
-        icon.setBounds(0, 0, size, size);
         return icon;
     }
 
@@ -2749,9 +2744,9 @@ public final class SurfaceEditorController {
         item.setLayoutParams(itemParams);
 
         View preview = new View(context);
-        int cardHeightPx = presetCardHeightPx();
         preview.setLayoutParams(new LinearLayout.LayoutParams(
-            SurfaceEditorPresetPreview.widthPxForHeightPx(cardHeightPx), cardHeightPx));
+            dp(SurfaceEditorPresetPreview.CARD_WIDTH_DP),
+            dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP)));
         float cardCornerPx = dpToPx(SurfaceEditorPresetPreview.CARD_CORNER_DP);
         preview.setOutlineProvider(new android.view.ViewOutlineProvider() {
             @Override public void getOutline(View view, android.graphics.Outline outline) {
@@ -2835,8 +2830,8 @@ public final class SurfaceEditorController {
     private void refreshPresetPreviews() {
         if (mPresetItems.isEmpty())
             return;
-        int heightPx = presetCardHeightPx();
-        int widthPx = SurfaceEditorPresetPreview.widthPxForHeightPx(heightPx);
+        int heightPx = dp(SurfaceEditorPresetPreview.CARD_HEIGHT_DP);
+        int widthPx = dp(SurfaceEditorPresetPreview.CARD_WIDTH_DP);
         // One thumb shared by every card: the wallpaper is the same behind all five looks.
         Bitmap thumb = mHost.wallpaperPreviewThumb(widthPx, heightPx);
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {

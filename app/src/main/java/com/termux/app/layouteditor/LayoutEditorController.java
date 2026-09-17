@@ -26,6 +26,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.termux.R;
 import com.termux.app.editorshell.EditorShellControlHost;
+import com.termux.app.editorshell.EditorShellHeader;
+import com.termux.app.editorshell.EditorShellMetrics;
 import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
@@ -106,9 +108,14 @@ public final class LayoutEditorController {
         final ViewGroup host;
         /** The card itself: a scroller, so a screen too short for the column still reaches it. */
         final ViewGroup root;
+        final View header;
+        final TextView title;
         final ImageView revert;
         final TextView discard;
         final ImageView done;
+        final ViewGroup chooserSlot;
+        final View orientationRow;
+        final EditorShellControlHost orientationHost;
         final MaterialButtonToggleGroup orientation;
         final TextView orientationNotice;
         final PlaceMiniatureView miniature;
@@ -118,9 +125,14 @@ public final class LayoutEditorController {
         Card(ViewGroup host, ViewGroup root) {
             this.host = host;
             this.root = root;
-            revert = root.findViewById(R.id.layout_editor_revert);
-            discard = root.findViewById(R.id.layout_editor_discard);
-            done = root.findViewById(R.id.layout_editor_done);
+            header = root.findViewById(R.id.editor_shell_header);
+            title = root.findViewById(R.id.editor_shell_header_title);
+            revert = root.findViewById(R.id.editor_shell_header_revert);
+            discard = root.findViewById(R.id.editor_shell_header_discard);
+            done = root.findViewById(R.id.editor_shell_header_done);
+            chooserSlot = root.findViewById(R.id.editor_shell_chooser_slot);
+            orientationRow = root.findViewById(R.id.layout_editor_orientation_row);
+            orientationHost = root.findViewById(R.id.layout_editor_orientation_host);
             orientation = root.findViewById(R.id.layout_editor_orientation);
             orientationNotice = root.findViewById(R.id.layout_editor_orientation_notice);
             miniature = root.findViewById(R.id.layout_editor_miniature);
@@ -129,9 +141,10 @@ public final class LayoutEditorController {
         }
 
         boolean complete() {
-            return revert != null && discard != null && done != null && orientation != null
-                && orientationNotice != null && miniature != null && narrowNotice != null
-                && rowsHost != null;
+            return header != null && title != null && revert != null && discard != null
+                && done != null && chooserSlot != null && orientationRow != null
+                && orientationHost != null && orientation != null && orientationNotice != null
+                && miniature != null && narrowNotice != null && rowsHost != null;
         }
     }
 
@@ -224,6 +237,10 @@ public final class LayoutEditorController {
         card.root.setBackground(cardBackground());
         setIcon(card.revert, R.drawable.ic_symbol_restart, false);
         setIcon(card.done, R.drawable.ic_symbol_check, true);
+        card.revert.setContentDescription(
+            mHost.context().getString(R.string.termux_layout_editor_revert));
+        // Layout has no way to save a look and no ✕: its ✓ is the only way out that keeps.
+        card.orientationHost.setSegmentCount(card.orientation.getChildCount());
 
         card.revert.setOnClickListener(view -> revertToEntryState());
         card.discard.setOnClickListener(view -> {
@@ -271,6 +288,8 @@ public final class LayoutEditorController {
         LayoutEditorPlan plan = mPlan;
         if (card == null || plan == null)
             return;
+        // The header names what is being edited, which here is the place.
+        card.title.setText(placeLabel(plan.place()));
         mRestatingToggle = true;
         card.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
@@ -319,14 +338,32 @@ public final class LayoutEditorController {
     /** Sizes the canvas to the frame the shown orientation asks for. */
     private void applyCanvasHeight(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
         DisplayMetrics metrics = mHost.context().getResources().getDisplayMetrics();
-        int chromePx = Math.round(dpToPx(CARD_CHROME_DP));
+        float density = metrics.density;
+        EditorShellHeader.apply(card.header, metrics.heightPixels);
         int floorPx = Math.round(dpToPx(ROWS_FLOOR_DP));
+        int chooserPx = Math.max(card.orientationRow.getHeight(),
+            Math.round(dpToPx(EditorShellMetrics.CHOOSER_DP)));
+        int chromePx = cardChromePx(metrics.heightPixels, chooserPx,
+            card.root.getPaddingTop() + card.root.getPaddingBottom(), density);
         int height = LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(),
             metrics.widthPixels, metrics.heightPixels,
             PlaceMiniatureView.frameAspect(plan.shownOrientation()),
             Math.round(card.miniature.reservedHeightPx()), chromePx + floorPx);
-        mRowsCapPx = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
+        int available = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
             chromePx, floorPx);
+        boolean pinned = EditorShellMetrics.chooserPinned(available, density);
+        EditorShellHeader.applyChooserPin(card.orientationRow, card.chooserSlot, mRows, pinned);
+        if (!pinned)
+            available = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
+                chromePx - chooserPx, floorPx);
+        mRowsCapPx = available;
+        if (mRows != null && mRows.getChildCount() > 0) {
+            View first = mRows.getChildAt(0);
+            int pitch = first.getHeight() > 0 ? first.getHeight()
+                : Math.round(dpToPx(EditorShellMetrics.ROW_MIN_HEIGHT_DP));
+            mRowsCapPx = EditorShellMetrics.bodyCap(available, mRows.getHeight(), pitch,
+                Math.round(dpToPx(EditorShellMetrics.PEEK_DP))).capPx;
+        }
         if (mRowsScroller != null)
             mRowsScroller.requestLayout();
         ViewGroup.LayoutParams params = card.miniature.getLayoutParams();
@@ -343,8 +380,21 @@ public final class LayoutEditorController {
         R.id.editor_shell_row_segment_0, R.id.editor_shell_row_segment_1,
         R.id.editor_shell_row_segment_2, R.id.editor_shell_row_segment_3};
 
-    /** The header, the toggle and the card's own padding: everything that is not the canvas. */
-    @VisibleForTesting static final float CARD_CHROME_DP = 132f;
+    /** The two notice lines and the gaps the miniature stands between. */
+    @VisibleForTesting static final float NOTICES_AND_GAPS_DP = 56f;
+
+    /**
+     * Everything on the card that is not the canvas or the rows, at the height the card has.
+     *
+     * <p>Declared rather than derived: the rows' cap is what sets the scroller's height, so a
+     * chrome read back by subtracting the scroller from the card is a layout-pass loop that never
+     * settles once the cap is quantised to whole rows.
+     */
+    @VisibleForTesting
+    static int cardChromePx(int cardHeightPx, int chooserPx, int paddingPx, float density) {
+        return EditorShellMetrics.headerHeightPx(cardHeightPx, density) + chooserPx + paddingPx
+            + EditorShellMetrics.px(NOTICES_AND_GAPS_DP, density);
+    }
     /** The rows keep at least this much even where the canvas would have taken it all. */
     @VisibleForTesting static final float ROWS_FLOOR_DP = 96f;
 
@@ -431,6 +481,16 @@ public final class LayoutEditorController {
         params.bottomMargin = Math.round(dpToPx(2));
         title.setLayoutParams(params);
         return title;
+    }
+
+    /** The name a place is known by on the wall, which is what the header says it is editing. */
+    @StringRes
+    private static int placeLabel(@NonNull PaneWallPage place) {
+        switch (place) {
+            case WIDGETS: return R.string.termux_wall_tile_widgets;
+            case DISPLAY: return R.string.termux_wall_tile_display;
+            default: return R.string.termux_wall_tile_terminal;
+        }
     }
 
     @StringRes

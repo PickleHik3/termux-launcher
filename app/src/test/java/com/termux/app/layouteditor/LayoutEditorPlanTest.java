@@ -12,6 +12,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
+import com.termux.app.editorshell.EditorShellMetrics;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.KeyboardOnEnter;
 import com.termux.app.place.EdgeStackPolicy;
@@ -562,10 +563,13 @@ public class LayoutEditorPlanTest {
         // dp, so only the density moves them; the font scale moves what stands inside the rows,
         // which is the scroller's business and not this sum's.
         for (float density : new float[]{180f / 160f, 260f / 160f}) {
-            int chrome = Math.round(density * LayoutEditorController.CARD_CHROME_DP);
+            int chooser = Math.round(density * EditorShellMetrics.CHOOSER_DP);
+            int padding = Math.round(density * 10f);
             int floor = Math.round(density * LayoutEditorController.ROWS_FLOOR_DP);
             int reserved = Math.round(density * 48f);
             for (int[] viewport : LANDSCAPE_VIEWPORTS) {
+                int chrome = LayoutEditorController.cardChromePx(viewport[1], chooser, padding,
+                    density);
                 int height = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, viewport[0],
                     viewport[1], PlaceMiniatureView.frameAspect(LANDSCAPE), reserved,
                     chrome + floor);
