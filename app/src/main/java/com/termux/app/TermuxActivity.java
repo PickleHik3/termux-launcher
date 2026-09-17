@@ -97,6 +97,7 @@ import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperBackdropView;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.place.CanvasBudgetPolicy;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.ExtraKeysColumnGeometry;
@@ -6339,6 +6340,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The arrangement is per orientation: which edge the rows stand on, and how big the widget
         // grid is, are both answers that have just changed.
         syncPlaceLayout();
+        // So is how the status bar rests. The edge has not necessarily moved, and the pass that
+        // applies an edge returns early when it has not, so the bar is re-rested here or it keeps
+        // the height the orientation being left was holding it at. Asking for the state it already
+        // resolves to writes nothing: setTopStatusBarCollapsed only stores a state it is moved to.
+        setTopStatusBarCollapsed(isStatusBarCompact(), false);
         // The render state hides the apps and A-Z rows in landscape and shows them in portrait, and
         // it is derived, not stored — so it has to be rebuilt here too. Without this the rows a
         // landscape session collapsed stayed collapsed after rotating back, with their preferences
@@ -9333,19 +9339,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Whether the status bar on screen is resting compact. It is the memory of the place it is
-     * showing for, not one state for the whole launcher.
+     * showing for and of the orientation it is showing in, not one state for the whole launcher:
+     * a bar the user opened on a tall screen is not a bar they asked for on a short one.
      */
     private boolean isStatusBarCompact() {
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
         }
         PlaceLayoutStore store = placeLayoutStore();
-        return store != null && store.isStatusCompact(mStatusBarPlace);
+        return store != null && store.isStatusCompact(mStatusBarPlace, currentPlaceOrientation());
     }
 
     private void setStatusBarCompact(boolean compact) {
         PlaceLayoutStore store = placeLayoutStore();
-        if (store != null) store.setStatusCompact(mStatusBarPlace, compact);
+        if (store != null)
+            store.setStatusCompact(mStatusBarPlace, currentPlaceOrientation(), compact);
     }
 
     @NonNull
@@ -10302,7 +10310,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? (mAzBarOnPlank ? azBarThicknessPx()
                 : AzBarHostGeometry.rowHeightPx(azBarHostMarginPx(), azBarThicknessPx()))
             : 0;
-        int minTerminalPx = Math.round(dpToPx(72));
+        // What the terminal keeps is a budget, not a constant: a flat 72dp is the whole of a
+        // portrait screen's story and a third of a landscape one's, which is how a bar, a dock, an
+        // extra-keys row and a keyboard came to share 600px with four lines of terminal.
+        int minTerminalPx = CanvasBudgetPolicy.canvasFloorPx(rootHeightPx,
+            currentPlaceOrientation(), getResources().getDisplayMetrics().density);
         return Math.max(0, rootHeightPx - windowBarPx - azBarTopPx - minTerminalPx
             - Math.max(0, accessoryBottomMarginPx));
     }
@@ -13897,12 +13909,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPlaceStatusBar(@NonNull com.termux.app.wall.PaneWallPage page) {
         if (page == mStatusBarPlace) return;
-        // While the bar stands on a side its resting state is forced, not remembered — writing
-        // that back here would clobber the place's real memory with the forced value. Skip the
-        // write while forced; the place still lands compact below, from isStatusBarCompact().
-        if (com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
-            setStatusBarCompact(isStatusBarCompact());
-        }
+        // The place being left has nothing to write: every change of state has already been stored
+        // as it happened, so writing its own answer back to it only ever pinned a default nobody
+        // chose — and the store cannot tell a pinned default from a choice afterwards.
         mStatusBarPlace = page;
         setTopStatusBarCollapsed(isStatusBarCompact(), true);
     }

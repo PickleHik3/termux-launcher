@@ -38,7 +38,7 @@ import java.util.Locale;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the scoped ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 4;
+    @VisibleForTesting static final int MIGRATION_VERSION = 5;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -70,6 +70,13 @@ public final class PlaceLayoutStore {
     private static final String KEY_KEYBOARD_CHIN = "keyboard_chin";
 
     private static final String KEY_STATUS_COMPACT = "status_compact";
+
+    /**
+     * Where the bar has never been rested in landscape, it rests compact: it is the orientation
+     * with the least height and the most of it already spoken for. A default, never a write.
+     */
+    private static final boolean LANDSCAPE_RESTS_COMPACT = true;
+
     private static final String KEY_KEYBOARD_ON_ENTER = "keyboard_on_enter";
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
     private static final String KEY_KEYBOARD_FLOAT_X = "keyboard_float_x";
@@ -492,15 +499,29 @@ public final class PlaceLayoutStore {
 
     // ---------------------------------------------------------------- memory
 
-    /** Whether the place was left with the status bar compact. */
-    public boolean isStatusCompact(@NonNull PaneWallPage place) {
-        String key = memoryKey(place, KEY_STATUS_COMPACT);
+    /**
+     * Whether the place was left with the status bar compact, in this orientation. Scoped like the
+     * sizes beside it rather than per place alone: the bar costs height off the short axis, and a
+     * screen turned on its side has a third of the height it had — expanding the bar where there is
+     * room for it is not a decision about the screen where there is not.
+     *
+     * <p>A place and orientation nobody has ever rested the bar in answers with a default, and only
+     * with a default: landscape rests compact, portrait keeps the state the launcher's one bar
+     * always read. Nothing writes either of them — the store has no way to tell a pinned default
+     * from a choice afterwards, so a default that was written is a choice the user can never be
+     * given back.
+     */
+    public boolean isStatusCompact(@NonNull PaneWallPage place,
+                                   @NonNull PlaceOrientation orientation) {
+        String key = arrangementKey(place, orientation, KEY_STATUS_COMPACT);
         if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, false);
-        return mPreferences.isTopPaneClockCollapsed();
+        return orientation == PlaceOrientation.LANDSCAPE
+            ? LANDSCAPE_RESTS_COMPACT : mPreferences.isTopPaneClockCollapsed();
     }
 
-    public void setStatusCompact(@NonNull PaneWallPage place, boolean compact) {
-        writeBoolean(memoryKey(place, KEY_STATUS_COMPACT), compact);
+    public void setStatusCompact(@NonNull PaneWallPage place,
+                                 @NonNull PlaceOrientation orientation, boolean compact) {
+        writeBoolean(arrangementKey(place, orientation, KEY_STATUS_COMPACT), compact);
     }
 
     /**
@@ -647,8 +668,15 @@ public final class PlaceLayoutStore {
 
             if (mStore.contains(TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED)) {
                 boolean compact = mStore.getBoolean(TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED, false);
+                // Straight into the per-orientation keys version 5 moved this to. An install
+                // that migrated before version 5 kept it under the place's memory key, and the
+                // step below folds that one; writing it here as well would leave the old key
+                // behind, since every removal an editor carries is applied before every put.
                 for (PaneWallPage place : PaneWallPage.values()) {
-                    editor.putBoolean(memoryKey(place, KEY_STATUS_COMPACT), compact);
+                    for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                        editor.putBoolean(arrangementKey(place, orientation, KEY_STATUS_COMPACT),
+                            compact);
+                    }
                 }
             }
         }
@@ -715,6 +743,27 @@ public final class PlaceLayoutStore {
         // the placement keys keep their values, and an absent order key already reads as the stack
         // the launcher has always drawn, so an upgraded install renders identically. Writing the
         // shipped orders out would only freeze numbers that still move with the default stack.
+
+        if (fromVersion < 5) {
+            // The status bar's resting state was remembered per place and nothing else, so the
+            // state a portrait screen was left in decided how much of a landscape screen's height
+            // the bar took. It is per place and orientation now, beside the sizes version 3 moved.
+            //
+            // BOTH orientations are seeded with the one value the place had, so nobody is asked
+            // again for a choice they have already made — a bar left expanded stays expanded
+            // everywhere it was. Only a place that never stored one is left unwritten, which is the
+            // one case the landscape default in isStatusCompact() is allowed to answer.
+            for (PaneWallPage place : PaneWallPage.values()) {
+                String legacy = memoryKey(place, KEY_STATUS_COMPACT);
+                if (!mStore.contains(legacy)) continue;
+                boolean compact = mStore.getBoolean(legacy, false);
+                for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                    editor.putBoolean(arrangementKey(place, orientation, KEY_STATUS_COMPACT),
+                        compact);
+                }
+                editor.remove(legacy);
+            }
+        }
 
         editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
         editor.apply();
