@@ -8808,6 +8808,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mChrome.glass().surface(barAlpha, 0f, 1f, true, grainPercent, cornerRadiusPx,
                 withRim);
         }
+
+        @Override @NonNull public com.termux.app.chrome.WallpaperPicture wallpaperPicture() {
+            return TermuxActivity.this.wallpaperPicture();
+        }
+
+        @Override public void openWallpaperPicker() {
+            TermuxActivity.this.openWallpaperPicker();
+        }
     }
 
     /**

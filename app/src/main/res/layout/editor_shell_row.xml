@@ -98,4 +98,22 @@
         android:textColor="?attr/termuxColorOnSurfaceVariant"
         android:textSize="11sp"
         android:visibility="gone" />
+
+    <!-- Only a Blur row ever shows this, and only while the picture the glass is blurring may not
+         match what is actually on the screen (issue #37: the slider moved and nothing changed, with
+         no clue why). Tappable as a whole; opens the in-app wallpaper picker without leaving the
+         card. Gone otherwise. -->
+    <TextView
+        android:id="@+id/editor_shell_row_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:background="?attr/selectableItemBackground"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="11sp"
+        android:visibility="gone" />
 </LinearLayout>

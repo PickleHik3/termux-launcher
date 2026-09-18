@@ -1297,6 +1297,11 @@
                 <string name="termux_surface_tuning_keyboard_key_opacity">Key opacity</string>
                 <string name="termux_surface_tuning_edges">Margin</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
+                <!-- Under a Blur row, only while the wallpaper the glass can read may not match the
+                     screen (issue #37); tapping it opens the in-app wallpaper picker. Product copy:
+                     one plain sentence, no mechanism words. -->
+                <string name="termux_surface_editor_blur_hint_best_effort">If the blur looks off, set your wallpaper from here.</string>
+                <string name="termux_surface_editor_blur_hint_no_still">Blur needs a still wallpaper. Set one from here.</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
                 <string name="termux_dock_tuning_radius">Corners</string>

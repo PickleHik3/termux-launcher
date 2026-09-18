@@ -178,6 +178,13 @@ public final class SurfaceEditorController {
          */
         @NonNull Drawable presetGlassSurface(
             float barAlpha, int grainPercent, float cornerRadiusPx, boolean withRim);
+        /**
+         * What the glass can currently read as the wallpaper, and how sure it is that matches the
+         * screen. Uncached: read it once per card build, not per tick of a slider.
+         */
+        @NonNull com.termux.app.chrome.WallpaperPicture wallpaperPicture();
+        /** Opens the in-app wallpaper picker; the way out a Blur row's hint offers. */
+        void openWallpaperPicker();
     }
 
     @NonNull
@@ -437,6 +444,8 @@ public final class SurfaceEditorController {
     private int mRowsMaxHeightPx;
     /** How many ways the body is divided right now, so the rebuild knows where a section goes. */
     private int mPaneCount = 1;
+    /** What the glass can currently read as the wallpaper, as of the last {@link #rebuildRows()}. */
+    @Nullable private com.termux.app.chrome.WallpaperPicture mCardWallpaperPicture;
 
     /** Restatements for the rows currently on the card, rebuilt with them. */
     @NonNull private List<Runnable> mRowSyncs = new ArrayList<>();
@@ -1024,6 +1033,10 @@ public final class SurfaceEditorController {
         Panel panel = mPanel;
         if (panel == null)
             return;
+        // Read once per rebuild, not per row and not per preview tick: wallpaperPicture() opens a
+        // file descriptor, and a Blur row's hint only needs to know what the glass can currently
+        // read, not chase every frame of a drag.
+        mCardWallpaperPicture = mHost.wallpaperPicture();
         ensureRowViews(panel);
         // Before the sections are dealt out, not after: how many ways the body divides is what
         // decides where each one goes.
@@ -1369,8 +1382,24 @@ public final class SurfaceEditorController {
         TextView value = rowView.findViewById(R.id.editor_shell_row_value);
         TextView link = rowView.findViewById(R.id.editor_shell_row_chip);
         TextView note = rowView.findViewById(R.id.editor_shell_row_note);
+        TextView hint = rowView.findViewById(R.id.editor_shell_row_hint);
         label.setText(control.labelRes);
         slider.setContentDescription(getString(control.labelRes));
+        // Only a Blur row ever carries this, and only while the picture the glass is blurring may
+        // not match the screen (issue #37); fixed for this rebuild, not restated per tick.
+        Integer hintTextRes = mCardWallpaperPicture == null ? null
+            : SurfaceEditorCardPlan.blurHintTextRes(control.id, mCardWallpaperPicture);
+        if (hintTextRes != null) {
+            hint.setText(hintTextRes);
+            hint.setVisibility(View.VISIBLE);
+            hint.setClickable(true);
+            hint.setFocusable(true);
+            hint.setOnClickListener(view -> mHost.openWallpaperPicker());
+        } else {
+            hint.setVisibility(View.GONE);
+            hint.setClickable(false);
+            hint.setOnClickListener(null);
+        }
 
         Runnable sync = () -> {
             if (prefs() == null)
