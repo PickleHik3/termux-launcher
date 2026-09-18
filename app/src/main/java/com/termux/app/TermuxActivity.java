@@ -284,72 +284,77 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // sessions are not listed.
     /** Recursive pane-tree engine; source of truth for panes/windows. */
     private com.termux.app.terminal.TerminalPaneController mPaneController;
-    private com.termux.app.help.HelpOverlayView mHelpOverlay;
+    private com.termux.app.help.HelpController mHelpController;
 
     /** All corner tabs enter the help for the place the wall currently rests on. */
     private void showHelpOverlay() {
         ViewGroup content = findViewById(android.R.id.content);
         if (content == null) return;
-        // Where the ? was, read while its tab is still up: help hangs its own buttons there, and a
-        // tab dismissed first would have nothing left to measure.
-        android.graphics.Rect anchor = new android.graphics.Rect();
-        boolean anchored = mPaneController != null && mPaneController.helpButtonRectOnScreen(anchor);
-        if (!anchored && mPaneWallController != null) {
-            anchored = mPaneWallController.widgetsPage() != null
-                && mPaneWallController.widgetsPage().helpButtonRectOnScreen(anchor);
-            if (!anchored) anchored = mPaneWallController.displayPage() != null
-                && mPaneWallController.displayPage().helpButtonRectOnScreen(anchor);
-        }
         if (mPaneController != null) mPaneController.dismissControlsForHelp();
         if (mPaneWallController != null) {
             if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().dismissControls();
             if (mPaneWallController.displayPage() != null) mPaneWallController.displayPage().dismissControls();
         }
-        if (mHelpOverlay == null) {
-            mHelpOverlay = new com.termux.app.help.HelpOverlayView(this,
-                new com.termux.app.help.HelpTargets.ViewFinder() {
-                    @Override public View findHelpView(int id) { return findViewById(id); }
-                    @Override public View activePane() {
-                        return mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
-                    }
-                    @Override public int paneCount() {
-                        return mPaneController == null ? 1 : mPaneController.tiledPaneCount();
-                    }
-                    @Override public boolean keyRectOnScreen(String name, android.graphics.Rect out) {
-                        return getInAppKeyboardKeyRect(name, out);
-                    }
-                    @Override public boolean keyCornerRectOnScreen(String name, android.graphics.Rect out) {
-                        return getInAppKeyboardKeyCornerRect(name, out);
-                    }
-                }, () -> {
+        ensureHelpController(content);
+        // A run that is partway through a lesson has nowhere to put a practice card, so help does
+        // not offer one.
+        mHelpController.setPracticeAvailable(mFirstBootTour == null || mFirstBootTour.canStartPractice());
+        mHelpController.show(currentWallPlace());
+    }
+
+    /** Help's one controller: the reading panel, the explorer, Back, the keyboard and practice. */
+    private void ensureHelpController(@NonNull ViewGroup content) {
+        if (mHelpController != null) return;
+        // Over the whole screen, not over the content alone: the dock, the A-Z row, the extra
+        // keys and the keyboard are all lifted above the content, and the strip under the
+        // gesture pill is not in the content at all. Everything help measures is measured
+        // against its own origin, so the wider frame moves nothing.
+        ViewGroup helpHost = content;
+        if (getWindow() != null && getWindow().getDecorView() instanceof FrameLayout)
+            helpHost = (FrameLayout) getWindow().getDecorView();
+        mHelpController = new com.termux.app.help.HelpController(this, helpHost,
+            new com.termux.app.help.HelpTargets.ViewFinder() {
+                @Override public View findHelpView(int id) { return findViewById(id); }
+                @Override public View activePane() {
+                    return mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
+                }
+                @Override public int paneCount() {
+                    return mPaneController == null ? 1 : mPaneController.tiledPaneCount();
+                }
+                @Override public boolean keyRectOnScreen(String name, android.graphics.Rect out) {
+                    return getInAppKeyboardKeyRect(name, out);
+                }
+                @Override public boolean keyCornerRectOnScreen(String name, android.graphics.Rect out) {
+                    return getInAppKeyboardKeyCornerRect(name, out);
+                }
+            },
+            new com.termux.app.help.HelpController.Host() {
+                @Override public void beginHelpTextInput(@NonNull EditText field) {
+                    // Help's search field borrows the configured keyboard the same way the
+                    // toolbar's does, so the system IME's insets are accepted.
+                    beginTerminalToolbarExternalTextInput(field);
+                }
+
+                @Override public void endHelpTextInput() {
+                    endTerminalToolbarExternalTextInput();
+                }
+
+                @Override public void onHelpVisibilityChanged(boolean showing) {
                     // The one path every dismissal takes, so the run hears about help going away
-                    // however it went: the Close button, a tap outside, Back, or onPause.
-                    if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(false);
+                    // however it went: the Close button, Back, a place change, or onPause.
+                    if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(showing);
+                    if (showing) return;
                     if (holdDisplayKeyboardFocus()) return;
                     View pane = mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
                     if (pane != null) pane.requestFocus();
-                });
-            // "Try it" closes help first and hands the lesson over: the run's own card comes up
-            // on the control the user was just reading about.
-            mHelpOverlay.setPracticeListener(lessonId -> {
-                FirstBootTour tour = firstBootTour();
-                if (tour != null) tour.startPractice(lessonId);
+                }
             });
-            // Over the whole screen, not over the content alone: the dock, the A-Z row, the extra
-            // keys and the keyboard are all lifted above the content, and the strip under the
-            // gesture pill is not in the content at all. Everything help measures is measured
-            // against the overlay's own origin, so the wider frame moves nothing.
-            ViewGroup helpHost = content;
-            if (getWindow() != null && getWindow().getDecorView() instanceof FrameLayout)
-                helpHost = (FrameLayout) getWindow().getDecorView();
-            helpHost.addView(mHelpOverlay, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        }
-        // A run that is partway through a lesson has nowhere to put a practice card, so help does
-        // not offer one.
-        mHelpOverlay.setPracticeAvailable(mFirstBootTour == null || mFirstBootTour.canStartPractice());
-        mHelpOverlay.show(currentWallPlace(), anchored ? anchor : null);
-        if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(true);
+        // "Try it" closes help first and hands the lesson over: the run's own card comes up
+        // on the control the user was just reading about.
+        mHelpController.setPracticeListener(lessonId -> {
+            FirstBootTour tour = firstBootTour();
+            if (tour != null) tour.startPractice(lessonId);
+        });
     }
 
     /** Settings, and anything else that asks for help by intent rather than by a corner tab. */
@@ -367,9 +372,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean dismissHelpOverlay() {
-        if (mHelpOverlay == null || !mHelpOverlay.isShowing()) return false;
-        mHelpOverlay.dismiss();
-        return true;
+        return mHelpController != null && mHelpController.dismiss();
+    }
+
+    /** Back inside help: a definition, then text entry, then a page, then help itself. */
+    private boolean onHelpBackPressed() {
+        return mHelpController != null && mHelpController.onBackPressed();
     }
 
     @Nullable private Bundle mPendingPaneLayoutState;
@@ -1853,7 +1861,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour.onSessionsSettled(sessionCountForTour(), currentSessionIdForTour());
             mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
             mFirstBootTour.onKeyboardShownSettled(isInAppKeyboardShown());
-            mFirstBootTour.onHelpShownSettled(mHelpOverlay != null && mHelpOverlay.isShowing());
+            mFirstBootTour.onHelpShownSettled(mHelpController != null && mHelpController.isShowing());
         }
         return mFirstBootTour;
     }
@@ -1883,7 +1891,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean isHelpUp() {
-            return mHelpOverlay != null && mHelpOverlay.isShowing();
+            return mHelpController != null && mHelpController.isShowing();
         }
 
         @Override public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
@@ -12056,7 +12064,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
-        registry.register(this::dismissHelpOverlay);
+        registry.register(this::onHelpBackPressed);
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 // Closing the chip discards the draft, unlike a tap outside.

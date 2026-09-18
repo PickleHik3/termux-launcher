@@ -1,22 +1,18 @@
-# Phase A — the help model (branch feat/help-model) — done
+# Phase B — the reading panel and the controller
 
 ## Done
-- `HelpTopics`: one global topic record (group/kind/summary/action/steps/wayBack/reveal/
-  target+places/gesture/lesson/related/terms/aliases/doc), 43 topics over the spec's seven
-  sections, plus per-place views (`forPlace`, `entry(place,id)`, `identityIndex`, `sizeFor`).
-- `HelpGlossary` (15 terms, A–Z helper), `HelpSearch` (pure ranking, GUIDE/TERM/FIX),
-  `HelpNavigation` (five screens, back stack, query/scroll/inline term, practice frame).
-- All topic and glossary copy in strings.xml; nine orphaned `help_*` strings deleted.
-- Compat edits: HelpPresentationModel (targetId-based highlight, place-based colour),
-  HelpOverlayView (summaryRes, identityIndex(place,id) — the view's place, never the model's).
+- `HelpStyle` (dress + accent + view shapes), `HelpPanelView` (home, search, glossary, topic,
+  inline terms, insets, no keys to the terminal), `HelpController` (navigation, back order, IME
+  hand-off, practice, explore seam), TermuxActivity wired to the controller, phase B strings.
+- `:app:compileDebugJavaWithJavac` green.
 
 ## In progress
-- Nothing.
+- `HelpControllerTest` (Robolectric).
 
 ## Next
-- Phase B (panel) and C (explore) build on the contract in the phase report.
+- Run `--tests 'com.termux.app.help.*'`; report.
 
 ## Gotchas
-- Topic ids are not target ids: "sessions" -> hierarchy, "windows" -> windows on Terminal and
-  display_apps on Display. `HelpTopics.entry(place, id)` accepts either.
-- The overlay must use its own `place` for colours; the model's place lags the first layout pass.
+- `HelpController.overlayExplorer` is the B–C bridge: it drives today's `HelpOverlayView`; the
+  seam version is written out in its javadoc, swap it when phase C lands.
+- D8: no end-of-practice signal exists in the tour; `onPracticeEnded()` is there, uncalled.

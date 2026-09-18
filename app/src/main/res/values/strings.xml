@@ -2248,4 +2248,39 @@
     <string name="help_term_mouse_definition">Sends your touches to the program as mouse input. On Display it opens the touchpad.</string>
     <string name="help_term_editors_title">Layout and appearance editors</string>
     <string name="help_term_editors_definition">Layout arranges the controls; Appearance changes how they look.</string>
+
+    <!-- Help centre, phase B: the reading panel's own words. -->
+    <string name="help_centre_title">Help</string>
+    <string name="help_back_glyph">‹</string>
+    <string name="help_back_action">Back</string>
+    <string name="help_search_label">Search</string>
+    <string name="help_search_field_hint">Search help</string>
+    <string name="help_home_on_this_screen">On this screen · %1$s</string>
+    <string name="help_home_explore">Explore this screen</string>
+    <string name="help_home_browse">Browse the guide</string>
+    <string name="help_home_glossary">Glossary</string>
+    <string name="help_home_practice">Practice the basics</string>
+    <string name="help_docs_link">Full documentation ↗</string>
+    <string name="help_support_link">Get support ↗</string>
+    <string name="help_search_suggested">Suggested</string>
+    <string name="help_search_kind_guide">Guide</string>
+    <string name="help_search_kind_term">Term</string>
+    <string name="help_search_kind_fix">Fix</string>
+    <string name="help_search_empty">No matching help</string>
+    <string name="help_glossary_filter_hint">Find a term</string>
+    <string name="help_topic_step">%1$d. %2$s</string>
+    <string name="help_topic_not_visible">Not visible on this screen</string>
+    <string name="help_topic_related">Related</string>
+    <string name="help_topic_words">Words used here</string>
+    <string name="help_topic_open_glossary">Open glossary</string>
+    <string name="help_show_on_screen">Show on screen</string>
+    <string name="help_practice_start">Start</string>
+    <string name="help_lesson_find_help_title">Find help</string>
+    <string name="help_lesson_find_help_summary">Open help from a pane corner.</string>
+    <string name="help_lesson_find_apps_title">Open an app</string>
+    <string name="help_lesson_find_apps_summary">Open an app from the dock and come back.</string>
+    <string name="help_lesson_keyboard_title">Show the keyboard</string>
+    <string name="help_lesson_keyboard_summary">Bring the keyboard up and put it away again.</string>
+    <string name="help_lesson_find_action_title">Find an action</string>
+    <string name="help_lesson_find_action_summary">Open the command palette and pick an action.</string>
 </resources>
