@@ -392,8 +392,8 @@ public final class HelpOverlayView extends FrameLayout {
     private int titleColor(String id, int index, int count) {
         HelpTopics.Entry entry = HelpTopics.entry(place, id);
         if (entry == null) return HelpPalette.titleColor(accent, index, count, dress.fillColor);
-        return HelpPalette.titleColor(accent, entry.identityIndex,
-            HelpTopics.sizeFor(entry.place), dress.fillColor);
+        return HelpPalette.titleColor(accent, HelpTopics.identityIndex(place, entry.id),
+            HelpTopics.sizeFor(place), dress.fillColor);
     }
 
     private HelpLeaderRouter.Side side(Rect r) {
@@ -428,8 +428,8 @@ public final class HelpOverlayView extends FrameLayout {
         HelpTopics.Entry entry = HelpTopics.entry(place, "keys");
         keyColor = entry == null ? onTheWash(accent) : model.overviewColor(accent, entry, light);
         int titleColor = entry == null ? HelpPalette.titleColor(accent, 0, 1, dress.fillColor)
-            : HelpPalette.titleColor(accent, entry.identityIndex,
-                HelpTopics.sizeFor(entry.place), dress.fillColor);
+            : HelpPalette.titleColor(accent, HelpTopics.identityIndex(place, entry.id),
+                HelpTopics.sizeFor(place), dress.fillColor);
         // The keys' axis: a row runs along x, a column down one side runs along y. Everything
         // below is measured along that axis and across it, so neither edge is assumed.
         int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
@@ -726,7 +726,7 @@ public final class HelpOverlayView extends FrameLayout {
         // The sentences scroll rather than push the buttons off the wall at a large font scale.
         LinearLayout body = new LinearLayout(getContext());
         body.setOrientation(LinearLayout.VERTICAL);
-        body.addView(line(getContext().getString(entry.purposeRes), true,
+        body.addView(line(getContext().getString(entry.summaryRes), true,
             model.topicHighlightColor(accent)), rowParams(dp(6)));
         body.addView(line(getContext().getString(entry.actionRes), false, dress.textColor),
             rowParams(dp(4)));
@@ -755,7 +755,7 @@ public final class HelpOverlayView extends FrameLayout {
             () -> command(model.tryIt())), weighted());
         panel.addView(second, rowParams(dp(6)));
         placePanel(panel, targetRect(model.highlightTargetId()));
-        announce(title + " " + getContext().getString(entry.purposeRes), entry.id);
+        announce(title + " " + getContext().getString(entry.summaryRes), entry.id);
     }
 
     /** The guide: every control of the place boxed, with its hint, on one page and nothing else. */
@@ -1057,7 +1057,7 @@ public final class HelpOverlayView extends FrameLayout {
         TextView view = new TextView(getContext());
         String title = getContext().getString(entry.titleRes);
         SpannableString content = new SpannableString(title + "\n"
-            + getContext().getString(entry.purposeRes));
+            + getContext().getString(entry.summaryRes));
         content.setSpan(new StyleSpan(Typeface.BOLD), 0, title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         content.setSpan(new ForegroundColorSpan(model.topicHighlightColor(accent)), 0,
             title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);

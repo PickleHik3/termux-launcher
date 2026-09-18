@@ -160,7 +160,7 @@ public final class HelpPresentationModel {
         if (!basicsOnly) return all;
         List<HelpTopics.Entry> everyday = new ArrayList<>();
         for (HelpTopics.Entry entry : all) {
-            if (entry.group == HelpTopics.Group.EVERYDAY) everyday.add(entry);
+            if (entry.group == HelpTopics.Group.FIND_YOUR_WAY) everyday.add(entry);
         }
         return Collections.unmodifiableList(everyday);
     }
@@ -172,13 +172,18 @@ public final class HelpPresentationModel {
     public boolean isMeasurable(String id) { return id != null && measurable.contains(id); }
 
     /** Whether the topic being read has its control on screen. */
-    public boolean selectedMeasurable() { return isMeasurable(selectedId); }
+    public boolean selectedMeasurable() {
+        HelpTopics.Entry entry = selected();
+        return entry != null && isMeasurable(entry.targetId);
+    }
 
     /**
      * The one control to point at, or null when it is not on screen. Never another control: a
      * missing topic is explained, not redirected.
      */
-    public String highlightTargetId() { return selectedMeasurable() ? selectedId : null; }
+    public String highlightTargetId() {
+        return selectedMeasurable() ? selected().targetId : null;
+    }
 
     /** The line that says how to bring the control back, or 0 when it is on screen. */
     public int revealRes() {
@@ -189,7 +194,8 @@ public final class HelpPresentationModel {
     /** A topic worth reading instead while this one's control is away, or null. */
     public String relatedTopicId() {
         HelpTopics.Entry entry = selected();
-        return entry == null || selectedMeasurable() ? null : entry.relatedId;
+        return entry == null || selectedMeasurable() ? null
+            : HelpTopics.relatedIdOn(place, entry.id);
     }
 
     /** In topic mode the one highlight wears the place accent. */
@@ -205,8 +211,8 @@ public final class HelpPresentationModel {
 
     /** The same colour, deepened when help is drawn over a light wash rather than a dark one. */
     public int overviewColor(int accent, HelpTopics.Entry entry, boolean lightMode) {
-        return HelpPalette.boxColor(accent, entry.identityIndex, HelpTopics.sizeFor(entry.place),
-            lightMode);
+        return HelpPalette.boxColor(accent, HelpTopics.identityIndex(place, entry.id),
+            HelpTopics.sizeFor(place), lightMode);
     }
 
     /** The entries the overview boxes and cards: {@link #entries()} minus the chooser-only topics. */

@@ -7,18 +7,37 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.tour.TourGesture;
 import com.termux.app.tour.TourRun;
 import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/** The one catalogue both help presentations read: complete, stable and self-consistent. */
+/** The one catalogue the whole help centre reads: complete, stable and self-consistent. */
 public class HelpTopicsTest {
+
+    /** Every target id {@code HelpTargets.measure()} can emit, per place. */
+    private static final List<String> TERMINAL_TARGETS = Arrays.asList("windows", "stats", "status",
+        "settings", "sessions", "divider", "dock", "az", "corners", "keys", "prefix", "space");
+    private static final List<String> DISPLAY_TARGETS = Arrays.asList("windows", "stats", "status",
+        "settings", "scale", "touchpad", "start", "setup");
+    private static final List<String> WIDGETS_TARGETS = Arrays.asList("status", "settings",
+        "widget", "empty");
+
+    private static List<String> targetsOf(PaneWallPage place) {
+        switch (place) {
+            case TERMINAL: return TERMINAL_TARGETS;
+            case DISPLAY: return DISPLAY_TARGETS;
+            default: return WIDGETS_TARGETS;
+        }
+    }
 
     private List<String> ids(PaneWallPage place) {
         List<String> ids = new ArrayList<>();
@@ -26,148 +45,251 @@ public class HelpTopicsTest {
         return ids;
     }
 
-    @Test public void everyEntryCarriesAPlaceAGroupAndCopy() {
+    @Test public void everyTopicCarriesAGroupAKindAndItsThreeSentences() {
         assertFalse(HelpTopics.all().isEmpty());
         for (HelpTopics.Entry entry : HelpTopics.all()) {
             assertNotNull(entry.id);
             assertFalse(entry.id.isEmpty());
-            assertNotNull(entry.place);
-            assertNotNull(entry.group);
-            assertNotEquals(0, entry.purposeRes);
-            assertNotEquals(0, entry.actionRes);
-            assertNotEquals(0, entry.revealRes);
-            assertNotEquals(0, entry.group.labelRes);
+            assertNotNull(entry.id, entry.group);
+            assertNotNull(entry.id, entry.kind);
+            assertNotEquals(entry.id, 0, entry.titleRes);
+            assertNotEquals(entry.id, 0, entry.summaryRes);
+            assertNotEquals(entry.id, 0, entry.actionRes);
+            assertNotEquals(entry.id, 0, entry.group.labelRes);
+            assertNotEquals(entry.id, 0, entry.group.sectionRes);
+            assertTrue(entry.id, entry.stepsRes.size() <= 3);
+            for (int step : entry.stepsRes) assertNotEquals(entry.id, 0, step);
         }
     }
 
-    @Test public void idsAreUniqueWithinAPlace() {
+    @Test public void idsAreUniqueAcrossTheWholeCatalogue() {
+        List<String> ids = new ArrayList<>();
+        for (HelpTopics.Entry entry : HelpTopics.all()) ids.add(entry.id);
+        assertEquals(ids.size(), new HashSet<>(ids).size());
+        for (String id : ids) assertNotNull(id, HelpTopics.entry(id));
+        assertNull(HelpTopics.entry("nothing_by_this_name"));
+        assertNull(HelpTopics.entry((String) null));
+    }
+
+    @Test public void theSevenSectionsAreAllAuthoredAndTheLastOneIsTwoShelves() {
+        for (HelpTopics.Group group : HelpTopics.Group.values()) {
+            assertFalse(group.name(), HelpTopics.inGroup(group).isEmpty());
+        }
+        // Linux display and Something missing? are one section of the guide, read as two lists.
+        assertEquals(HelpTopics.Group.DISPLAY.sectionRes, HelpTopics.Group.MISSING.sectionRes);
+        assertNotEquals(HelpTopics.Group.DISPLAY.labelRes, HelpTopics.Group.MISSING.labelRes);
+        assertEquals(8, HelpTopics.Group.values().length);
+        assertTrue("the guide is about thirty-five topics", HelpTopics.all().size() >= 35);
+    }
+
+    @Test public void theCatalogueIsListedGroupByGroup() {
+        int group = -1;
+        Set<Integer> seen = new HashSet<>();
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            if (entry.group.ordinal() == group) continue;
+            group = entry.group.ordinal();
+            assertTrue(entry.id + " reopens its group", seen.add(group));
+        }
+    }
+
+    @Test public void onlyTheSomethingMissingShelfIsFixes() {
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            assertEquals(entry.id, entry.group == HelpTopics.Group.MISSING
+                ? HelpTopics.Kind.FIX : HelpTopics.Kind.GUIDE, entry.kind);
+        }
+        assertFalse(HelpTopics.inGroup(HelpTopics.Group.MISSING).isEmpty());
+    }
+
+    @Test public void everyTargetTheLauncherMeasuresHasExactlyOneTopicOnThatPlace() {
+        for (PaneWallPage place : PaneWallPage.values()) {
+            for (String targetId : targetsOf(place)) {
+                HelpTopics.Entry entry = HelpTopics.forTarget(place, targetId);
+                assertNotNull(place + "/" + targetId, entry);
+                assertEquals(targetId, entry.targetId);
+                int bound = 0;
+                for (HelpTopics.Entry other : HelpTopics.forPlace(place)) {
+                    if (targetId.equals(other.targetId)) bound++;
+                }
+                assertEquals(place + "/" + targetId, 1, bound);
+            }
+        }
+    }
+
+    @Test public void aTopicIsBoundOnlyToPlacesThatMeasureItsTarget() {
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            if (entry.targetId == null) {
+                assertTrue(entry.id, entry.places.isEmpty());
+                continue;
+            }
+            assertFalse(entry.id, entry.places.isEmpty());
+            for (PaneWallPage place : entry.places) {
+                assertTrue(entry.id + " on " + place, targetsOf(place).contains(entry.targetId));
+            }
+        }
+    }
+
+    @Test public void theSameControlOnSeveralPlacesIsOneTopic() {
+        HelpTopics.Entry status = HelpTopics.entry("status");
+        assertEquals(3, status.places.size());
+        for (PaneWallPage place : PaneWallPage.values()) {
+            assertTrue(place.name(), status.onPlace(place));
+            assertEquals(status, HelpTopics.forTarget(place, "status"));
+            assertNotNull(place.name(), HelpTopics.forTarget(place, "settings"));
+        }
+        // The same target id means two different things on two places, so it is two topics.
+        assertEquals("windows", HelpTopics.forTarget(PaneWallPage.TERMINAL, "windows").id);
+        assertEquals("display_apps", HelpTopics.forTarget(PaneWallPage.DISPLAY, "windows").id);
+    }
+
+    @Test public void everyPlacesCatalogueIsTheTopicsWhoseControlItHas() {
+        assertEquals(12, HelpTopics.sizeFor(PaneWallPage.TERMINAL));
+        assertEquals(8, HelpTopics.sizeFor(PaneWallPage.DISPLAY));
+        assertEquals(4, HelpTopics.sizeFor(PaneWallPage.WIDGETS));
         for (PaneWallPage place : PaneWallPage.values()) {
             List<String> ids = ids(place);
             assertEquals(ids.size(), new HashSet<>(ids).size());
-        }
-    }
-
-    @Test public void identityIndicesNumberThePlacesFullCatalogue() {
-        for (PaneWallPage place : PaneWallPage.values()) {
-            List<HelpTopics.Entry> entries = HelpTopics.forPlace(place);
-            assertEquals(entries.size(), HelpTopics.sizeFor(place));
-            Set<Integer> seen = new HashSet<>();
-            for (HelpTopics.Entry entry : entries) {
-                assertEquals(place, entry.place);
-                assertTrue(entry.identityIndex >= 0 && entry.identityIndex < entries.size());
-                assertTrue(seen.add(entry.identityIndex));
-            }
-        }
-    }
-
-    @Test public void everyPracticeIdNamesARealLesson() {
-        boolean any = false;
-        for (HelpTopics.Entry entry : HelpTopics.all()) {
-            if (entry.lessonId == null) continue;
-            any = true;
-            assertTrue(entry.lessonId, HelpTopics.LESSON_IDS.contains(entry.lessonId));
-        }
-        assertTrue(any);
-        assertEquals(4, HelpTopics.LESSON_IDS.size());
-    }
-
-    @Test public void everyLessonIdNamesALessonTheRunActuallyHas() {
-        // The catalogue's ids and the run's are the same four strings, and nothing hands practice
-        // to a card the run cannot start.
-        assertEquals(TourRun.lessons().size(), HelpTopics.LESSON_IDS.size());
-        for (String lessonId : HelpTopics.LESSON_IDS) {
-            assertTrue(lessonId, TourRun.lessons().contains(lessonId));
-        }
-        for (HelpTopics.Entry entry : HelpTopics.all()) {
-            if (entry.lessonId == null) continue;
-            assertTrue(entry.id, HelpTopics.LESSON_IDS.contains(entry.lessonId));
-        }
-    }
-
-    @Test public void theFourLessonsAreReachedFromTheTopicsThatTeachThem() {
-        assertEquals(HelpTopics.LESSON_FIND_APPS, HelpTopics.entry(PaneWallPage.TERMINAL, "dock").lessonId);
-        assertEquals(HelpTopics.LESSON_FIND_ACTION, HelpTopics.entry(PaneWallPage.TERMINAL, "space").lessonId);
-        assertEquals(HelpTopics.LESSON_FIND_HELP, HelpTopics.entry(PaneWallPage.TERMINAL, "corners").lessonId);
-        assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "keys").lessonId);
-        assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "sessions").lessonId);
-        assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "divider").lessonId);
-        // The keyboard lesson shows and hides the keyboard; the prefix key and the chords are a
-        // different control, so neither hands practice to it.
-        assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "prefix").lessonId);
-        assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "shortcuts").lessonId);
-    }
-
-    @Test public void theTerminalKeepsEveryControlItMeasuresToday() {
-        List<String> ids = ids(PaneWallPage.TERMINAL);
-        for (String id : new String[] {"dock", "az", "status", "sessions", "windows", "stats",
-                                       "divider", "prefix", "space"}) {
-            assertTrue(id, ids.contains(id));
-        }
-        assertTrue(ids.contains("corners"));
-        assertTrue(ids.contains("keys"));
-        assertTrue(ids.contains("shortcuts"));
-    }
-
-    @Test public void theTerminalGroupsTheAdvancedMaterialApart() {
-        assertEquals(HelpTopics.Group.EVERYDAY, HelpTopics.entry(PaneWallPage.TERMINAL, "dock").group);
-        assertEquals(HelpTopics.Group.EVERYDAY, HelpTopics.entry(PaneWallPage.TERMINAL, "az").group);
-        assertEquals(HelpTopics.Group.EVERYDAY, HelpTopics.entry(PaneWallPage.TERMINAL, "status").group);
-        assertEquals(HelpTopics.Group.EVERYDAY, HelpTopics.entry(PaneWallPage.TERMINAL, "corners").group);
-        assertEquals(HelpTopics.Group.EVERYDAY, HelpTopics.entry(PaneWallPage.TERMINAL, "sessions").group);
-        assertEquals(HelpTopics.Group.EVERYDAY, HelpTopics.entry(PaneWallPage.TERMINAL, "windows").group);
-        assertEquals(HelpTopics.Group.KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "keys").group);
-        assertEquals(HelpTopics.Group.KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "prefix").group);
-        assertEquals(HelpTopics.Group.KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "space").group);
-        assertEquals(HelpTopics.Group.KEYBOARD, HelpTopics.entry(PaneWallPage.TERMINAL, "settings").group);
-        assertEquals(HelpTopics.Group.MULTITASKING, HelpTopics.entry(PaneWallPage.TERMINAL, "divider").group);
-        assertEquals(HelpTopics.Group.MULTITASKING, HelpTopics.entry(PaneWallPage.TERMINAL, "shortcuts").group);
-    }
-
-    @Test public void homeAndDisplayAreEverydayApartFromTheKeyboardsOwnTopic() {
-        for (PaneWallPage place : new PaneWallPage[] {PaneWallPage.WIDGETS, PaneWallPage.DISPLAY}) {
+            Set<Integer> indices = new HashSet<>();
             for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) {
-                assertEquals(entry.id, "settings".equals(entry.id)
-                    ? HelpTopics.Group.KEYBOARD : HelpTopics.Group.EVERYDAY, entry.group);
+                assertTrue(entry.id, entry.onPlace(place));
+                int index = HelpTopics.identityIndex(place, entry.id);
+                assertTrue(entry.id, index >= 0 && index < ids.size());
+                assertTrue(entry.id, indices.add(index));
+                assertEquals(entry.id, index, HelpTopics.identityIndex(place, entry.targetId));
             }
         }
-        assertTrue(ids(PaneWallPage.DISPLAY).containsAll(
-            java.util.Arrays.asList("status", "windows", "stats", "start", "scale", "touchpad")));
-        assertTrue(ids(PaneWallPage.WIDGETS).containsAll(
-            java.util.Arrays.asList("status", "widget", "empty")));
+        // The display's own Set up topic, which had no catalogue entry before.
+        assertEquals("setup", HelpTopics.forTarget(PaneWallPage.DISPLAY, "setup").id);
+        assertNull(HelpTopics.forTarget(PaneWallPage.WIDGETS, "sessions"));
+        assertNull(HelpTopics.forTarget(PaneWallPage.TERMINAL, "widget"));
     }
 
-    @Test public void everyPlaceSaysWhereTheLauncherSettingsAre() {
-        // The cog is a keyboard key, and the keyboard is up wherever the user is, so the topic is
-        // the same one on all three places.
-        for (PaneWallPage place : PaneWallPage.values()) {
-            HelpTopics.Entry entry = HelpTopics.entry(place, "settings");
-            assertNotNull(place.toString(), entry);
-            assertEquals(HelpTopics.Group.KEYBOARD, entry.group);
-            assertFalse(HelpTopics.topicOnly(entry.id));
-        }
-    }
-
-    @Test public void aRelatedTopicIsAnotherTopicOfTheSamePlace() {
-        for (HelpTopics.Entry entry : HelpTopics.all()) {
-            if (entry.relatedId == null) continue;
-            assertNotEquals(entry.id, entry.relatedId);
-            assertNotNull(entry.id, HelpTopics.entry(entry.place, entry.relatedId));
-        }
-    }
-
-    @Test public void lookupIsPerPlaceAndForgivingOfAnUnknownId() {
-        assertNotNull(HelpTopics.entry(PaneWallPage.TERMINAL, "status"));
-        assertNotNull(HelpTopics.entry(PaneWallPage.WIDGETS, "status"));
+    @Test public void aLookupTakesEitherATopicIdOrATargetId() {
+        assertEquals("display_apps", HelpTopics.entry(PaneWallPage.DISPLAY, "windows").id);
+        assertEquals("display_apps", HelpTopics.entry(PaneWallPage.DISPLAY, "display_apps").id);
+        assertEquals("hierarchy", HelpTopics.entry(PaneWallPage.TERMINAL, "sessions").id);
+        assertEquals("shortcuts", HelpTopics.entry(PaneWallPage.TERMINAL, "prefix").id);
+        // A topic with no control at all still resolves: it is read, not pointed at.
+        assertEquals("copy_paste", HelpTopics.entry(PaneWallPage.WIDGETS, "copy_paste").id);
         assertNull(HelpTopics.entry(PaneWallPage.WIDGETS, "sessions"));
         assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "nothing_by_this_name"));
     }
 
-    @Test public void aPlacesEntriesCarryDistinctCopyForDistinctControls() {
+    @Test public void onThisScreenIsThreeToFiveTopicsInCatalogueOrder() {
+        List<HelpTopics.Entry> shown = HelpTopics.onScreen(PaneWallPage.TERMINAL,
+            Arrays.asList("dock", "status", "keys", "space", "windows", "az", "stats"));
+        assertEquals(5, shown.size());
+        List<String> order = new ArrayList<>();
+        for (HelpTopics.Entry entry : shown) order.add(entry.id);
+        assertEquals(Arrays.asList("status", "stats", "dock", "az", "keys"), order);
+        // A bare screen is topped up rather than left with one line, and never pads past three.
+        assertEquals(3, HelpTopics.onScreen(PaneWallPage.WIDGETS,
+            Collections.singletonList("status")).size());
+        assertEquals(3, HelpTopics.onScreen(PaneWallPage.TERMINAL, null).size());
+        assertEquals(3, HelpTopics.onScreen(PaneWallPage.DISPLAY,
+            Collections.<String>emptyList()).size());
         for (PaneWallPage place : PaneWallPage.values()) {
-            Set<Integer> purposes = new HashSet<>();
+            List<HelpTopics.Entry> all = HelpTopics.onScreen(place, targetsOf(place));
+            assertTrue(place.name(), all.size() >= 3 && all.size() <= 5);
+            assertEquals(all.size(), new HashSet<>(all).size());
+        }
+    }
+
+    @Test public void aGestureIsOfferedOnlyWhereOneIsImplemented() {
+        // HelpOverlayView.gestureFor knows four controls; every other topic offers no Show gesture.
+        Set<String> withGesture = new HashSet<>();
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            if (entry.gesture == null) continue;
+            withGesture.add(entry.id);
+            assertNotNull(entry.id, entry.targetId);
+        }
+        assertEquals(new HashSet<>(Arrays.asList("dock", "status", "space", "az")), withGesture);
+        assertEquals(TourGesture.DRAG_DOWN, HelpTopics.entry("dock").gesture);
+        assertEquals(TourGesture.SWIPE_RIGHT, HelpTopics.entry("status").gesture);
+        assertEquals(TourGesture.SWIPE_UP, HelpTopics.entry("space").gesture);
+        assertEquals(TourGesture.SCRUB, HelpTopics.entry("az").gesture);
+    }
+
+    @Test public void everyPracticeIdNamesALessonTheRunActuallyHas() {
+        assertEquals(TourRun.lessons().size(), HelpTopics.LESSON_IDS.size());
+        for (String lessonId : HelpTopics.LESSON_IDS) {
+            assertTrue(lessonId, TourRun.lessons().contains(lessonId));
+        }
+        Set<String> used = new HashSet<>();
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            if (entry.lessonId == null) continue;
+            assertTrue(entry.id, HelpTopics.LESSON_IDS.contains(entry.lessonId));
+            used.add(entry.lessonId);
+        }
+        assertEquals("every lesson is reachable from a topic", 4, used.size());
+    }
+
+    @Test public void theFourLessonsAreReachedFromTheTopicsThatTeachThem() {
+        assertEquals(HelpTopics.LESSON_FIND_HELP, HelpTopics.entry("corners").lessonId);
+        assertEquals(HelpTopics.LESSON_FIND_APPS, HelpTopics.entry("dock").lessonId);
+        assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry("keyboard").lessonId);
+        assertEquals(HelpTopics.LESSON_FIND_ACTION, HelpTopics.entry("palette").lessonId);
+        assertNull(HelpTopics.entry("hierarchy").lessonId);
+        assertNull(HelpTopics.entry("shortcuts").lessonId);
+        assertNull(HelpTopics.entry("workspaces").lessonId);
+    }
+
+    @Test public void relatedTopicsAndGlossaryTermsAllExist() {
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            for (String relatedId : entry.relatedIds) {
+                assertNotEquals(entry.id, entry.id, relatedId);
+                assertNotNull(entry.id + " -> " + relatedId, HelpTopics.entry(relatedId));
+            }
+            for (String termId : entry.termIds) {
+                assertNotNull(entry.id + " -> " + termId, HelpGlossary.term(termId));
+            }
+            assertEquals(entry.id, new HashSet<>(entry.relatedIds).size(), entry.relatedIds.size());
+        }
+    }
+
+    @Test public void aRelatedTopicOfferedInsteadOfAMissingControlIsOnThisPlace() {
+        for (PaneWallPage place : PaneWallPage.values()) {
             for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) {
-                assertTrue(entry.id, purposes.add(entry.purposeRes));
+                String relatedId = HelpTopics.relatedIdOn(place, entry.id);
+                if (relatedId == null) continue;
+                assertNotEquals(entry.id, relatedId);
+                assertTrue(entry.id + " -> " + relatedId,
+                    HelpTopics.entry(relatedId).onPlace(place));
             }
         }
+        // The display's app chips point at Start display, which is the button that brings them back.
+        assertEquals("start", HelpTopics.relatedIdOn(PaneWallPage.DISPLAY, "windows"));
+        assertNull(HelpTopics.relatedIdOn(PaneWallPage.TERMINAL, "nothing_by_this_name"));
+    }
+
+    @Test public void aHiddenControlSaysHowToBringItBackAndTheRestDoNotPretendTo() {
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            if (entry.targetId == null) assertEquals(entry.id, 0, entry.revealRes);
+        }
+        assertNotEquals(0, HelpTopics.entry("space").revealRes);
+        assertNotEquals(0, HelpTopics.entry("dock").revealRes);
+        // An action that changes a mode or a layout says how to come back out of it.
+        assertNotEquals(0, HelpTopics.entry("mouse_mode").wayBackRes);
+        assertNotEquals(0, HelpTopics.entry("float_pane").wayBackRes);
+        assertNotEquals(0, HelpTopics.entry("layout_editor").wayBackRes);
+    }
+
+    @Test public void everyTopicIsSearchableAndTheOnesWithPagesPointAtRealFiles() {
+        int withAliases = 0;
+        for (HelpTopics.Entry entry : HelpTopics.all()) {
+            if (entry.aliasesRes != 0) withAliases++;
+            if (entry.docPath == null) continue;
+            assertTrue(entry.id + ": " + entry.docPath, entry.docPath.endsWith(".md")
+                || entry.docPath.contains(".md#"));
+            assertFalse(entry.id, entry.docPath.startsWith("/"));
+        }
+        assertEquals("every topic carries aliases", HelpTopics.all().size(), withAliases);
+    }
+
+    @Test public void theOldOverviewStillLeavesItsTwoTopicsUnboxed() {
+        assertTrue(HelpTopics.topicOnly("keys"));
+        assertTrue(HelpTopics.topicOnly("corners"));
+        assertFalse(HelpTopics.topicOnly("dock"));
+        assertFalse(HelpTopics.topicOnly(null));
+        assertTrue(ids(PaneWallPage.TERMINAL).containsAll(Arrays.asList("keys", "corners")));
     }
 }

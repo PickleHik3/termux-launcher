@@ -30,7 +30,7 @@ public class HelpPresentationModelTest {
 
     private Set<String> everything(PaneWallPage place) {
         Set<String> ids = new LinkedHashSet<>();
-        for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) ids.add(entry.id);
+        for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) ids.add(entry.targetId);
         return ids;
     }
 
@@ -72,7 +72,7 @@ public class HelpPresentationModelTest {
         assertEquals(HelpPresentationModel.Mode.TOPIC, model.mode());
         assertEquals("sessions", model.selectedId());
         assertNotNull(model.selected());
-        assertEquals("sessions", model.selected().id);
+        assertEquals("hierarchy", model.selected().id);
         assertEquals("sessions", model.highlightTargetId());
         assertTrue(model.selectedMeasurable());
         assertEquals(ACCENT, model.topicHighlightColor(ACCENT));
@@ -117,7 +117,7 @@ public class HelpPresentationModelTest {
         model.open(PaneWallPage.DISPLAY, everythingBut(PaneWallPage.DISPLAY, "windows"));
         model.selectTopic("windows");
         assertNull(model.highlightTargetId());
-        assertEquals(HelpTopics.entry(PaneWallPage.DISPLAY, "windows").relatedId, model.relatedTopicId());
+        assertEquals(HelpTopics.relatedIdOn(PaneWallPage.DISPLAY, "windows"), model.relatedTopicId());
         assertEquals("start", model.relatedTopicId());
         model.remeasure(everything(PaneWallPage.DISPLAY));
         assertTrue(model.selectedMeasurable());
@@ -134,7 +134,7 @@ public class HelpPresentationModelTest {
         assertEquals(HelpPresentationModel.Mode.TOPICS, model.mode());
         assertFalse(model.entries().isEmpty());
         for (HelpTopics.Entry entry : model.entries()) {
-            assertEquals(entry.id, HelpTopics.Group.EVERYDAY, entry.group);
+            assertEquals(entry.id, HelpTopics.Group.FIND_YOUR_WAY, entry.group);
         }
         assertTrue(model.entries().size() < HelpTopics.sizeFor(PaneWallPage.TERMINAL));
     }
@@ -143,7 +143,7 @@ public class HelpPresentationModelTest {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
         model.showAll();
         List<String> ids = new ArrayList<>();
-        for (HelpTopics.Entry entry : model.overviewEntries()) ids.add(entry.id);
+        for (HelpTopics.Entry entry : model.overviewEntries()) ids.add(entry.targetId);
         assertFalse(ids.contains("keys"));
         assertFalse(ids.contains("corners"));
         assertTrue(ids.contains("dock"));
@@ -219,7 +219,8 @@ public class HelpPresentationModelTest {
         sparse.showAll();
         HelpTopics.Entry status = HelpTopics.entry(PaneWallPage.TERMINAL, "status");
         assertEquals(full.overviewColor(ACCENT, status), sparse.overviewColor(ACCENT, status));
-        assertEquals(HelpPalette.boxColor(ACCENT, status.identityIndex,
+        assertEquals(HelpPalette.boxColor(ACCENT,
+            HelpTopics.identityIndex(PaneWallPage.TERMINAL, status.id),
             HelpTopics.sizeFor(PaneWallPage.TERMINAL)), full.overviewColor(ACCENT, status));
     }
 
