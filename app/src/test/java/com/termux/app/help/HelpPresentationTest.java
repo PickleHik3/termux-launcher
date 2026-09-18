@@ -36,8 +36,9 @@ public class HelpPresentationTest {
     private View wall;
     private View status;
     private View dock;
-    /** Built by the one test that is about the extra keys row; laid out with everything else. */
+    /** Built by the tests that are about the extra keys row; laid out with everything else. */
     private ExtraKeysView keys;
+    private Rect keysBounds = new Rect(0, 560, 400, 620);
     private HelpOverlayView overlay;
     private HelpTargets.ViewFinder finder;
 
@@ -87,9 +88,9 @@ public class HelpPresentationTest {
         status.layout(0, 0, 400, 40);
         dock.layout(0, 440, 400, 540);
         if (keys != null) {
-            keys.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(60, View.MeasureSpec.EXACTLY));
-            keys.layout(0, 560, 400, 620);
+            keys.measure(View.MeasureSpec.makeMeasureSpec(keysBounds.width(), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(keysBounds.height(), View.MeasureSpec.EXACTLY));
+            keys.layout(keysBounds.left, keysBounds.top, keysBounds.right, keysBounds.bottom);
         }
         overlay.layout(0, 0, 400, 800);
     }
@@ -391,6 +392,72 @@ public class HelpPresentationTest {
                 Rect.intersects(card, overlay.measuredRect("keys")));
         tapMarker("status");
         assertTrue("the key cards went with the row", overlay.keyCardBounds().isEmpty());
+    }
+
+    /**
+     * A row whose caps run down the middle of the screen: the lanes under it used to reach the
+     * bottom edge, where the toolbar is, because only the measured controls were obstacles and the
+     * toolbar is not one of them. It is an excluded region now, so the labels take the other side.
+     */
+    @Test public void keyCardsKeepOffTheToolbarWhenTheRowRunsDownTheMiddle() throws Exception {
+        keys = new ExtraKeysView(activity, null);
+        // A row of tall caps down the middle: its lanes used to reach the bottom edge, where the
+        // toolbar is, because only the measured controls were obstacles.
+        keysBounds = new Rect(0, 150, 200, 620);
+        root.addView(keys, new FrameLayout.LayoutParams(keysBounds.width(), keysBounds.height()));
+        keys.reload(new ExtraKeysInfo("[[{key:'ESC',popup:'TAB'},{key:'CTRL',popup:'ALT'}]]",
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), keysBounds.height());
+        dock.setVisibility(View.GONE);
+        explore(PaneWallPage.TERMINAL);
+        Rect row = overlay.measuredRect("keys");
+        assertNotNull("the row was not measured", row);
+        assertTrue("this test needs the row's centre near the middle of the screen",
+            Math.abs(row.centerY() - 400) < 100);
+        tapMarker("keys");
+        assertEquals("keys", overlay.selectedTopicId());
+        Rect toolbar = overlay.toolbarBounds();
+        assertTrue("this test needs the toolbar at the bottom edge", toolbar.top > 400);
+        assertEquals("one label per key", 2, overlay.keyCardBounds().size());
+        for (Rect card : overlay.keyCardBounds())
+            assertFalse("a key card is under the toolbar", Rect.intersects(card, toolbar));
+        assertClearOfEverything();
+    }
+
+    /**
+     * The lanes with and without the toolbar in the away limit, on the phone's own numbers: the
+     * extra keys row low on the screen with the keyboard down (1850–1948 of 2280), and a toolbar
+     * 110px tall along the bottom edge from 2162. Left out of the limit, the far lane lands under
+     * it; in the limit, both lanes take the wall's side instead.
+     */
+    @Test public void theToolbarInTheAwayLimitIsWhatKeepsTheFarLaneOffIt() {
+        int thickness = 110, gap = 27, leader = 38, toolbarTop = 2162, screen = 2280;
+        int[] untrimmed = HelpOverlayView.keyCardLanes(1850, 1948, 232, screen - 8, true,
+            thickness, gap, leader);
+        assertEquals("the lanes went away from the wall", 1, untrimmed[2]);
+        assertTrue("this is the lane the toolbar used to take",
+            untrimmed[1] + thickness > toolbarTop);
+        int[] trimmed = HelpOverlayView.keyCardLanes(1850, 1948, 232, toolbarTop - 6, true,
+            thickness, gap, leader);
+        assertEquals("the lanes take the wall's side instead", 0, trimmed[2]);
+        assertTrue("the near lane is off the keys it names", trimmed[0] + thickness <= 1850);
+        assertTrue("the far lane is on the wash", trimmed[1] >= 232);
+    }
+
+    /** The room along the keys' axis, once the toolbar has taken its end of it. */
+    @Test public void theKeyCardSpanGivesWayToTheToolbarAtEitherEnd() {
+        // A toolbar past the far end of the keys takes that end.
+        int[] far = HelpOverlayView.keyCardSpan(12, 788, 200, 600, 723, 792, 6);
+        assertEquals(12, far[0]);
+        assertEquals(717, far[1]);
+        // Past the near end, it takes that one.
+        int[] near = HelpOverlayView.keyCardSpan(12, 788, 200, 600, 8, 77, 6);
+        assertEquals(83, near[0]);
+        assertEquals(788, near[1]);
+        // Straddling the keys it changes nothing: the lanes across the axis keep clear of it, and
+        // trimming here would cost every card its slot.
+        int[] across = HelpOverlayView.keyCardSpan(12, 388, 0, 400, 20, 380, 6);
+        assertEquals(12, across[0]);
+        assertEquals(388, across[1]);
     }
 
     @Test public void noExtraKeyCardsUnlessTheExtraKeysRowIsTheSelectedControl() {

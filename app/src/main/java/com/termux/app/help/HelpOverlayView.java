@@ -442,8 +442,10 @@ public final class HelpOverlayView extends FrameLayout {
     }
 
     /**
-     * Where one marker sits: on a corner of its control's outline, at the first corner no other
-     * marker and no toolbar has taken, and always inside the screen.
+     * Where one marker sits: on its control's own outline, at the first anchor no other marker and
+     * no toolbar has taken, and always inside the screen. On a screen tight enough that every
+     * anchor is taken it goes to the least covered one rather than the first, so two dots that
+     * cannot avoid each other still overlap as little as they can.
      */
     private Rect markerBounds(Rect target, List<Rect> taken) {
         int size = dp(MARKER_DP);
@@ -459,17 +461,22 @@ public final class HelpOverlayView extends FrameLayout {
             {target.right + inset - size, target.centerY() - size / 2},
             {target.centerX() - size / 2, target.centerY() - size / 2},
         };
-        Rect fallback = null;
+        Rect best = null;
+        long least = Long.MAX_VALUE;
         for (int[] anchor : anchors) {
             int left = clamp(anchor[0], dp(2), Math.max(dp(2), getWidth() - size - dp(2)));
             int top = clamp(anchor[1], dp(2), Math.max(dp(2), getHeight() - size - dp(2)));
             Rect bounds = new Rect(left, top, left + size, top + size);
-            if (fallback == null) fallback = bounds;
-            boolean clear = true;
-            for (Rect other : taken) if (Rect.intersects(other, bounds)) { clear = false; break; }
-            if (clear) return bounds;
+            long covered = 0;
+            for (Rect other : taken) {
+                int w = Math.min(bounds.right, other.right) - Math.max(bounds.left, other.left);
+                int h = Math.min(bounds.bottom, other.bottom) - Math.max(bounds.top, other.top);
+                if (w > 0 && h > 0) covered += (long) w * h;
+            }
+            if (covered == 0) return bounds;
+            if (covered < least) { least = covered; best = bounds; }
         }
-        return fallback;
+        return best;
     }
 
     /** One marker: its number in its control's colour, with the control's name for a reader. */
@@ -657,29 +664,46 @@ public final class HelpOverlayView extends FrameLayout {
             minY = Math.min(minY, key.rect.centerY()); maxY = Math.max(maxY, key.rect.centerY());
         }
         boolean vertical = maxY - minY > maxX - minX;
-        int alongLo = dp(12);
-        int alongHi = (vertical ? getHeight() - bottomInset() : getWidth()) - dp(12);
         int keysNear = Integer.MAX_VALUE, keysFar = 0;
+        int alongKeysLo = Integer.MAX_VALUE, alongKeysHi = Integer.MIN_VALUE;
         for (HelpTargets.KeyLabel key : keys) {
             keysNear = Math.min(keysNear, vertical ? key.rect.left : key.rect.top);
             keysFar = Math.max(keysFar, vertical ? key.rect.right : key.rect.bottom);
+            alongKeysLo = Math.min(alongKeysLo, vertical ? key.rect.top : key.rect.left);
+            alongKeysHi = Math.max(alongKeysHi, vertical ? key.rect.bottom : key.rect.right);
         }
-        // The wall lies on one side of the keys; away is the other. How far the cards may reach
-        // there: to the next control they must not cover, and never under the gesture pill, which
-        // help washes over but puts nothing beneath.
+        int alongLo = dp(12);
+        int alongHi = (vertical ? getHeight() - bottomInset() : getWidth()) - dp(12);
+        // The toolbar is not a control, so it is not in the snapshot, and the cards have to be
+        // told about it the way the one card's placement is: as a region they may not land on.
+        if (toolbarBounds != null) {
+            int[] span = keyCardSpan(alongLo, alongHi, alongKeysLo, alongKeysHi,
+                vertical ? toolbarBounds.top : toolbarBounds.left,
+                vertical ? toolbarBounds.bottom : toolbarBounds.right, dp(6));
+            alongLo = span[0];
+            alongHi = span[1];
+        }
+        // What the cards may not land on: the other controls, and the toolbar, which is not a
+        // control and so is not in the snapshot.
+        List<Rect> blocked = new ArrayList<>();
+        for (HelpTargets.Target target : snapshot.targets) blocked.add(target.rect);
+        if (toolbarBounds != null) blocked.add(toolbarBounds);
+        // The wall lies on one side of the keys; away is the other, and the cards may reach that
+        // way as far as the first thing on the list, and never under the gesture pill, which help
+        // washes over but puts nothing beneath.
         int wallMid = vertical ? snapshot.wall.centerX() : snapshot.wall.centerY();
         boolean awayIsHigh = (keysNear + keysFar) / 2 >= wallMid;
         int awayLimit;
         if (awayIsHigh) {
             awayLimit = Math.max(keysFar, (vertical ? getWidth() : getHeight() - bottomInset()) - dp(8));
-            for (HelpTargets.Target target : snapshot.targets) {
-                int edge = vertical ? target.rect.left : target.rect.top;
+            for (Rect rect : blocked) {
+                int edge = vertical ? rect.left : rect.top;
                 if (edge >= keysFar) awayLimit = Math.min(awayLimit, edge - dp(6));
             }
         } else {
             awayLimit = Math.min(keysNear, dp(8));
-            for (HelpTargets.Target target : snapshot.targets) {
-                int edge = vertical ? target.rect.right : target.rect.bottom;
+            for (Rect rect : blocked) {
+                int edge = vertical ? rect.right : rect.bottom;
                 if (edge <= keysNear) awayLimit = Math.max(awayLimit, edge + dp(6));
             }
         }
@@ -688,9 +712,9 @@ public final class HelpOverlayView extends FrameLayout {
         // bar — stands between the keys and the wall; then they lean on the far side of that
         // control instead, and the leaders cross it. A card over a control hides it; a line does not.
         int wallNear = awayIsHigh ? keysNear : keysFar;
-        for (HelpTargets.Target target : snapshot.targets) {
-            int low = vertical ? target.rect.left : target.rect.top;
-            int high = vertical ? target.rect.right : target.rect.bottom;
+        for (Rect rect : blocked) {
+            int low = vertical ? rect.left : rect.top;
+            int high = vertical ? rect.right : rect.bottom;
             if (awayIsHigh && high <= keysNear && low >= wallLimit) wallNear = Math.min(wallNear, low - dp(6));
             if (!awayIsHigh && low >= keysFar && high <= wallLimit) wallNear = Math.max(wallNear, high + dp(6));
         }
@@ -751,10 +775,35 @@ public final class HelpOverlayView extends FrameLayout {
             keyCardViews.put(i, views.get(i));
             keyCardSpecs.put(i, specs.get(i));
         }
+        // Whatever the lanes worked out, the toolbar keeps its room: a label under Back to help
+        // is a label the reader cannot read, and the row's own card still says what the row does.
+        if (toolbarBounds != null) {
+            for (KeyCard key : keyCards) {
+                if (!Rect.intersects(key.bounds, toolbarBounds)) continue;
+                HelpLog.d("key cards: none, the toolbar has the room they need at "
+                    + key.bounds.toShortString());
+                keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
+                return;
+            }
+        }
         HelpLog.d("key cards: " + keyCards.size() + (vertical ? " beside the column" : " along the row")
             + " at " + keysNear + "-" + keysFar + (away ? ", away from the wall" : ", toward the wall")
             + ", lanes at " + lanes[0] + " and " + lanes[1] + ", " + thickness + "px thick, away limit "
             + awayLimit);
+    }
+
+    /**
+     * The room the cards have along the keys' axis, once a region they may not land on — the
+     * exploration toolbar — is taken out of it. A region past one end of the keys takes that end;
+     * a region straddling the keys is left to the lanes across the axis, which already keep clear
+     * of it, because trimming there would cost every card its slot.
+     */
+    @VisibleForTesting
+    static int[] keyCardSpan(int lo, int hi, int keysLo, int keysHi,
+                             int blockedLo, int blockedHi, int clearance) {
+        if (blockedHi <= keysLo) return new int[] {Math.max(lo, blockedHi + clearance), hi};
+        if (blockedLo >= keysHi) return new int[] {lo, Math.min(hi, blockedLo - clearance)};
+        return new int[] {lo, hi};
     }
 
     /**
