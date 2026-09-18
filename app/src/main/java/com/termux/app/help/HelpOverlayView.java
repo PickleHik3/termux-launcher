@@ -131,6 +131,8 @@ public final class HelpOverlayView extends FrameLayout {
     /** The markers, in catalogue order, which is the order they are numbered in. */
     private final List<Marker> markers = new ArrayList<>();
     private final Map<String, TextView> markerViews = new HashMap<>();
+    /** What each marker was built from, so a pass that only moved one keeps the same view. */
+    private final Map<String, String> markerSpecs = new HashMap<>();
     /** One card per extra key, shown only while the extra keys row is the selected control. */
     private final List<KeyCard> keyCards = new ArrayList<>();
     private final Map<Integer, TextView> keyCardViews = new HashMap<>();
@@ -265,7 +267,7 @@ public final class HelpOverlayView extends FrameLayout {
         if (getViewTreeObserver().isAlive()) getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener);
         removeAllViews();
         touchable.clear(); childBounds.clear(); rendered.clear();
-        markers.clear(); markerViews.clear();
+        markers.clear(); markerViews.clear(); markerSpecs.clear();
         card = null; cardTopicId = null; cardBounds = null; cardLeader = null;
         keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
         toolbar = null; toolbarBounds = null;
@@ -447,8 +449,10 @@ public final class HelpOverlayView extends FrameLayout {
      */
     private void arrangeMarkers() {
         Map<String, TextView> was = new HashMap<>(markerViews);
+        Map<String, String> wasSpec = new HashMap<>(markerSpecs);
         markers.clear();
         markerViews.clear();
+        markerSpecs.clear();
         boolean light = lightMode();
         List<HelpTopics.Entry> entries = model.markers();
         List<Rect> taken = new ArrayList<>();
@@ -460,8 +464,9 @@ public final class HelpOverlayView extends FrameLayout {
             int color = model.markerColor(accent, entry.id, light);
             String label = String.valueOf(i + 1);
             String name = getContext().getString(entry.titleRes);
-            TextView view = was.get(entry.targetId);
-            if (view == null || !label.contentEquals(view.getText())) view = marker(label, color);
+            String spec = label + ":" + color + ":" + light;
+            TextView view = spec.equals(wasSpec.get(entry.targetId)) ? was.get(entry.targetId) : null;
+            if (view == null) view = marker(label, color);
             view.setContentDescription(name);
             final String targetId = entry.targetId;
             view.setOnClickListener(v -> select(targetId, false));
@@ -469,6 +474,7 @@ public final class HelpOverlayView extends FrameLayout {
             taken.add(bounds);
             markers.add(new Marker(entry, target, view, bounds, color));
             markerViews.put(entry.targetId, view);
+            markerSpecs.put(entry.targetId, spec);
         }
         HelpLog.d("markers: " + markers.size() + " of " + snapshot.targets.size()
             + " measured controls on " + place);
