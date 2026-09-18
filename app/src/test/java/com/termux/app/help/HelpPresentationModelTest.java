@@ -57,6 +57,32 @@ public class HelpPresentationModelTest {
         return ids;
     }
 
+    /** Every curated id names a real control, and the overview keeps the curated order. */
+    @Test public void theCuratedOverviewResolvesToTopicsOnEveryPlace() {
+        assertFalse(HelpPresentationModel.OVERVIEW_TARGET_IDS.isEmpty());
+        for (String targetId : HelpPresentationModel.OVERVIEW_TARGET_IDS) {
+            HelpTopics.Entry entry = HelpTopics.forTarget(PaneWallPage.TERMINAL, targetId);
+            assertNotNull(targetId + " is not a control of the Terminal", entry);
+            assertNotEquals("no title for " + targetId, 0, entry.titleRes);
+            assertNotEquals("no instruction for " + targetId, 0, entry.actionRes);
+        }
+        for (PaneWallPage place : PaneWallPage.values()) {
+            List<String> curated = new ArrayList<>();
+            for (String targetId : HelpPresentationModel.OVERVIEW_TARGET_IDS)
+                if (HelpTopics.forTarget(place, targetId) != null) curated.add(targetId);
+            assertEquals(place.name(), curated, targetIds(opened(place).overview()));
+        }
+    }
+
+    /** A control this pass could not measure has no card: the overview points at what is there. */
+    @Test public void theOverviewOnlyDrawsWhatThisPassMeasured() {
+        HelpPresentationModel model = new HelpPresentationModel();
+        model.open(PaneWallPage.TERMINAL, Arrays.asList("status"));
+        assertEquals(Arrays.asList("status"), targetIds(model.overview()));
+        model.remeasure(Arrays.asList("keys"));
+        assertTrue(model.overview().isEmpty());
+    }
+
     @Test public void everyPlaceOpensWithItsControlsMarkedAndNothingSelected() {
         for (PaneWallPage place : PaneWallPage.values()) {
             HelpPresentationModel model = opened(place);

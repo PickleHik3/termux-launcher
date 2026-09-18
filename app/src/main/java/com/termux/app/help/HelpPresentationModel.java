@@ -3,6 +3,7 @@ package com.termux.app.help;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -19,6 +20,16 @@ import java.util.Set;
  * is still on screen — comes from here.
  */
 public final class HelpPresentationModel {
+
+    /**
+     * The controls the overview draws a card for, in the order it draws them. Everything else help
+     * can explain is read in the guide rather than pointed at, so that the screen the reader is
+     * looking at stays legible; add an id here to give that control a card of its own.
+     *
+     * <p>The extra keys row is not one of them: its keys carry their own labels, one per cap.
+     */
+    public static final List<String> OVERVIEW_TARGET_IDS = Collections.unmodifiableList(
+        Arrays.asList("dock", "status", "prefix", "settings"));
 
     private PaneWallPage place = PaneWallPage.TERMINAL;
     private String selectedTargetId;
@@ -55,6 +66,20 @@ public final class HelpPresentationModel {
         List<HelpTopics.Entry> out = new ArrayList<>();
         for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) {
             if (entry.targetId != null && measured.contains(entry.targetId)) out.add(entry);
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * The overview's cards: the curated controls the view could measure this pass, in the curated
+     * order. A control the place does not have, or that this pass could not measure, has no card.
+     */
+    public List<HelpTopics.Entry> overview() {
+        List<HelpTopics.Entry> out = new ArrayList<>();
+        for (String targetId : OVERVIEW_TARGET_IDS) {
+            if (!measured.contains(targetId)) continue;
+            HelpTopics.Entry entry = HelpTopics.forTarget(place, targetId);
+            if (entry != null) out.add(entry);
         }
         return Collections.unmodifiableList(out);
     }

@@ -12,6 +12,26 @@ import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
  */
 public final class HelpCopy {
     private HelpCopy() {}
+
+    /** The one key named for what it types rather than for a terminal key it sends. */
+    private static final String PASTE_KEY = "PASTE";
+    /** The keyboard key, which shows and hides the launcher's own keyboard. */
+    private static final String KEYBOARD_KEY = "KEYBOARD";
+
+    /**
+     * Whether this cap is one of the launcher's own keys — a {@code tool:} action, the keyboard
+     * key or paste — rather than a key that sends what it says it sends. Only the launcher's keys
+     * are labelled: a reader already knows what ESC, TAB and the arrows do, and a label on every
+     * cap is a row of labels nobody reads.
+     */
+    public static boolean isLauncherKey(ExtraKeyButton key) {
+        if (key == null) return false;
+        String name = key.getKey();
+        if (name == null) return false;
+        return name.startsWith(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX)
+            || KEYBOARD_KEY.equals(name) || PASTE_KEY.equals(name);
+    }
+
     public static String keyLabel(Context context, ExtraKeyButton key) {
         if (key == null) return "";
         String name = key.getKey();
@@ -38,7 +58,8 @@ public final class HelpCopy {
                 if (tool != null && tool.titleRes != 0) label = tool.titleRes;
                 else if (name.equals(key.getDisplay())) label = R.string.help_key_action;
             }
-        } else if ("KEYBOARD".equals(name)) label = R.string.help_key_keyboard;
+        } else if (KEYBOARD_KEY.equals(name)) label = R.string.help_key_keyboard;
+        else if (PASTE_KEY.equals(name)) label = R.string.help_key_paste;
         return label == 0 ? key.getDisplay() : context.getString(label);
     }
 }

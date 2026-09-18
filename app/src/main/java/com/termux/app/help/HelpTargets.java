@@ -179,9 +179,12 @@ public final class HelpTargets {
                 if (r != null) measured++;
                 if (key != null) defined++;
                 if (r == null || key == null) continue;
-                String secondary = key.getPopup() == null ? null
-                    : context.getString(R.string.help_key_secondary,
-                        HelpCopy.keyLabel(context, key.getPopup()));
+                // Only the launcher's own keys are named: ESC, TAB, the arrows and the rest send
+                // what they say they send, and a label on every cap is a row nobody reads. A swipe
+                // is named on the same terms as the cap it is on.
+                if (!HelpCopy.isLauncherKey(key)) continue;
+                String secondary = HelpCopy.isLauncherKey(key.getPopup()) ? context.getString(
+                    R.string.help_key_secondary, HelpCopy.keyLabel(context, key.getPopup())) : null;
                 s.keys.add(new KeyLabel(r, HelpCopy.keyLabel(context, key), secondary));
             }
             HelpLog.d("extra keys: " + row.getChildCount() + " caps, " + measured + " measured, "

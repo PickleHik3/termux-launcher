@@ -46,8 +46,10 @@ public final class HelpController {
      * same five calls.
      */
     public interface ExploreListener {
-        /** "Read topic" on the seated card. */
+        /** A card tapped in the overview, or "Read topic" on the seated card. */
         void onReadTopic(String topicId);
+        /** The overview's Guide button: the reading sheet, at its home page. */
+        void onOpenGuide();
         /** Back to help, from the toolbar or from Back with nothing selected. */
         void onBackToHelp();
         void onCloseHelp();
@@ -60,6 +62,8 @@ public final class HelpController {
     /** The explorer, as the reading side needs it. Phase C's {@code HelpOverlayView} answers it. */
     public interface Explorer {
         void setExploreListener(ExploreListener listener);
+        /** The curated overview help opens on: a few cards at once over the live launcher. */
+        void overview(PaneWallPage place);
         /** Enter exploring for a place; {@code selectTopicId} pre-selects, or is null. */
         void explore(PaneWallPage place, @Nullable String selectTopicId);
         /** Explore with the topic selected and its gesture playing. */
@@ -85,6 +89,8 @@ public final class HelpController {
     /** The target ids measured on the last pass; what "On this screen" and a hidden topic read. */
     private Set<String> measured = Collections.emptySet();
     private boolean watchingLayout;
+    /** Whether the overlay is up as the overview rather than as "Explore this screen". */
+    private boolean overviewShowing;
     /** A remeasurement mid-render would ask for another one; one pass at a time. */
     private boolean rendering;
 
@@ -127,15 +133,20 @@ public final class HelpController {
 
     // ---- opening and closing -----------------------------------------------------------------
 
-    /** Every entry point: the corner tab, Settings, the palette. Help opens at its home page. */
+    /**
+     * Every entry point: the corner tab, Settings, the palette. Help opens on the overview — a few
+     * cards on the reader's own screen — and the reading sheet is one button behind it.
+     */
     public void show(@Nullable PaneWallPage place) {
         ensureViews();
         closeExplorer();
         navigation.open(place == null ? PaneWallPage.TERMINAL : place);
         remeasure();
-        panel.show();
+        endTextEntry();
+        panel.hide();
         render();
-        watchLayout();
+        overviewShowing = true;
+        explorer.overview(navigation.place());
         host.onHelpVisibilityChanged(true);
     }
 
@@ -160,6 +171,7 @@ public final class HelpController {
     public boolean dismiss() {
         if (!isShowing()) return false;
         endTextEntry();
+        overviewShowing = false;
         if (explorer != null) explorer.dismiss();
         panel.hide();
         unwatchLayout();
@@ -176,7 +188,9 @@ public final class HelpController {
         if (!isShowing()) return false;
         if (explorer != null && explorer.isShowing()) {
             if (explorer.onBackPressed()) return true;
-            backToHelp();
+            // The overview is where help opens, so there is nothing behind it but the launcher.
+            if (overviewShowing) dismiss();
+            else backToHelp();
             return true;
         }
         if (navigation.frame().openTermId != null) {
@@ -303,6 +317,8 @@ public final class HelpController {
     private final ExploreListener exploreListener = new ExploreListener() {
         @Override public void onReadTopic(String topicId) { readInstead(topicId); }
 
+        @Override public void onOpenGuide() { openGuide(); }
+
         @Override public void onBackToHelp() { backToHelp(); }
 
         @Override public void onCloseHelp() { dismiss(); }
@@ -318,8 +334,16 @@ public final class HelpController {
         String id = topicId == null ? null : resolve(topicId);
         navigation.explore(id);
         panel.hide();
+        overviewShowing = false;
         if (gesture && id != null) explorer.demonstrate(navigation.place(), id);
         else explorer.explore(navigation.place(), id);
+    }
+
+    /** The Guide button on the overview: the reading sheet, at this place's home page. */
+    private void openGuide() {
+        leaveExplore();
+        navigation.open(navigation.place());
+        backToPanel();
     }
 
     /** The explorer could not seat a card, or the reader asked to read: the topic page instead. */
@@ -342,6 +366,7 @@ public final class HelpController {
     }
 
     private void leaveExplore() {
+        overviewShowing = false;
         if (explorer != null) explorer.dismiss();
         while (navigation.screen() == HelpNavigation.Screen.EXPLORE && navigation.depth() > 1)
             navigation.back();
@@ -451,11 +476,16 @@ public final class HelpController {
             @Override public void setExploreListener(ExploreListener listener) {
                 view().setExploreListener(listener == null ? null : new HelpOverlayView.ExploreListener() {
                     @Override public void onReadTopic(String topicId) { listener.onReadTopic(topicId); }
+                    @Override public void onOpenGuide() { listener.onOpenGuide(); }
                     @Override public void onBackToHelp() { listener.onBackToHelp(); }
                     @Override public void onCloseHelp() { listener.onCloseHelp(); }
                     @Override public void onTargetGone(String topicId) { listener.onTargetGone(topicId); }
                     @Override public void onCardDoesNotFit(String topicId) { listener.onCardDoesNotFit(topicId); }
                 });
+            }
+
+            @Override public void overview(PaneWallPage place) {
+                view().overview(place);
             }
 
             @Override public void explore(PaneWallPage place, @Nullable String selectTopicId) {
