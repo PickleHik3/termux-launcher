@@ -319,6 +319,16 @@ public final class HelpPanelView extends FrameLayout {
 
     // ---- search ------------------------------------------------------------------------------
 
+    /**
+     * The search page's field takes the caret and asks for the keyboard at once: the reader who
+     * tapped "Search help" has already said they want to type, and should not have to say it twice.
+     */
+    public void focusSearch() {
+        if (searchField == null || searchField.getParent() == null) return;
+        searchField.requestFocus();
+        if (listener != null) listener.onTextEntry(searchField);
+    }
+
     private void searchPage(HelpNavigation navigation) {
         if (searchField == null) {
             searchField = style.field(string(R.string.help_search_field_hint));

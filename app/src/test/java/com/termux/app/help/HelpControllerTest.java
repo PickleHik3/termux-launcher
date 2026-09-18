@@ -296,6 +296,20 @@ public class HelpControllerTest {
         assertEquals(HelpNavigation.Screen.TOPIC, controller.navigation().screen());
     }
 
+    @Test public void oneTapOnSearchHelpBringsTheKeyboardUp() {
+        showGuide(PaneWallPage.TERMINAL);
+        tap(string(R.string.help_search_field_hint));
+        EditText field = (EditText) panel().named(string(R.string.help_search_field_hint));
+        assertNotNull(field);
+        // The page opened on the field itself: focused, and the host asked for the keyboard once.
+        assertTrue(field.isFocused());
+        assertEquals("[begin]", input.toString());
+        assertTrue(controller.navigation().textEntryActive());
+        // A second touch on the field adds nothing.
+        field.requestFocus();
+        assertEquals("[begin]", input.toString());
+    }
+
     @Test public void openingAResultGivesTheKeyboardBackAndKeepsBackHonest() {
         showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_search_field_hint));

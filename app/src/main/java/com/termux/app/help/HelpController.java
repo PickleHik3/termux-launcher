@@ -255,6 +255,7 @@ public final class HelpController {
         @Override public void onSearch() {
             navigation.search();
             render();
+            panel.focusSearch();
         }
 
         @Override public void onQueryChanged(String text) {
