@@ -12,7 +12,6 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.InsetDrawable;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -24,23 +23,17 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import androidx.annotation.VisibleForTesting;
-import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
-import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.ReducedMotion;
-import com.termux.app.chrome.CornerTabGeometry;
-import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.notice.TerminalDress;
 import com.termux.app.statusbar.StatusBarLensView;
 import com.termux.app.tour.TourFingerPainter;
 import com.termux.app.tour.TourFingerTrace;
 import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
-import com.termux.shared.termux.font.NerdFontSpans;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -51,24 +44,35 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Help, drawn: the guide over every control of the place, the topic chooser, or one topic.
+ * Explore this screen: the live launcher, dimmed a little, with every control help can explain
+ * marked, and one card at a time on the control the reader tapped.
  *
- * <p>Help opens on the guide, with nothing round it but two floating buttons beside where the ?
- * was — a × that closes, and a book that opens the catalogue and closes it again. The guide is one
- * page and carries no chrome of its own, so the boxes, the cards and the leaders have the whole
- * wall between them.
+ * <p>Nothing is read here. A marker carries its number and its name, the card carries the topic's
+ * title and its one instruction, and "Read topic" hands the topic to the help panel through
+ * {@link ExploreListener}. The card is seated by {@link HelpExplorePlacement}, which never lets it
+ * cover the control it explains, the toolbar or the system bars; when no seat fits, the listener is
+ * told and the topic is read instead.
  *
- * <p>What is showing and what a button does is {@link HelpPresentationModel}'s; this measures the
- * controls, renders the answer and carries out what the model asks for. No persistence, no tour
- * state, and no continuously running animation — the one thing that moves is the single pass
- * "Show gesture" plays over the control it is explaining.
+ * <p>Which control is selected and what it is called is {@link HelpPresentationModel}'s and
+ * {@link HelpTopics}'; this measures the controls, seats what the placement answers, and plays the
+ * one gesture a topic carries.
  */
 public final class HelpOverlayView extends FrameLayout {
 
-    /** The launcher's side of "Try it": help is already down by the time this is called. */
-    public interface PracticeListener {
-        void onPracticeRequested(String lessonId);
+    /** What exploration asks the launcher for; everything else it does itself. */
+    public interface ExploreListener {
+        /** "Read topic" on the seated card. */
+        void onReadTopic(String topicId);
+        /** The toolbar's Back to help, or Back with nothing selected. */
+        void onBackToHelp();
+        /** The toolbar's Close help. */
+        void onCloseHelp();
+        /** The selected control is no longer on screen; the topic says so instead. */
+        void onTargetGone(String topicId);
+        /** No seat for the card on this screen: read the topic rather than shrink it. */
+        void onCardDoesNotFit(String topicId);
     }
+
 
     /** One extra key's card: where it sits, the cap it is about, and the line between them. */
     private static final class KeyCard {
@@ -82,7 +86,24 @@ public final class HelpOverlayView extends FrameLayout {
         }
     }
 
+    /** One control's marker: the topic it opens, the dot the finger lands on, and its colour. */
+    private static final class Marker {
+        final HelpTopics.Entry entry;
+        final Rect target;
+        final TextView view;
+        final Rect bounds;
+        final int color;
+        Marker(HelpTopics.Entry entry, Rect target, TextView view, Rect bounds, int color) {
+            this.entry = entry; this.target = target; this.view = view;
+            this.bounds = bounds; this.color = color;
+        }
+    }
+
+    /** The dot a finger has to be able to land on. */
+    private static final int MARKER_DP = 26;
+
     private final HelpTargets targets;
+    private ExploreListener listener;
     private final HelpPresentationModel model = new HelpPresentationModel();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path arrowPath = new Path();
@@ -94,40 +115,47 @@ public final class HelpOverlayView extends FrameLayout {
     private DashPathEffect dash;
     private final ViewTreeObserver.OnGlobalLayoutListener layoutListener = this::refresh;
     private final Map<View, Rect> childBounds = new HashMap<>();
-    /** Everything a tap may land on without closing help: the cards, and the panel. */
-    private final List<View> cards = new ArrayList<>();
-    private final Map<String, TextView> cardViews = new HashMap<>();
-    /** What each card was built from, so a re-measure that moved nothing keeps the same view. */
-    private final Map<String, String> cardSpecs = new HashMap<>();
+    /** Everything a tap may land on without changing the selection: markers, card, toolbar. */
+    private final List<View> touchable = new ArrayList<>();
     /** Every view put on screen this pass; anything else is what has really gone away. */
     private final Set<View> rendered = new HashSet<>();
-    /** One card per extra key, with the cap it names and the line that joins the two. */
+    /** The markers, in catalogue order, which is the order they are numbered in. */
+    private final List<Marker> markers = new ArrayList<>();
+    private final Map<String, TextView> markerViews = new HashMap<>();
+    /** What each marker was built from, so a pass that only moved one keeps the same view. */
+    private final Map<String, String> markerSpecs = new HashMap<>();
+    /** One card per extra key, shown only while the extra keys row is the selected control. */
     private final List<KeyCard> keyCards = new ArrayList<>();
     private final Map<Integer, TextView> keyCardViews = new HashMap<>();
     private final Map<Integer, String> keyCardSpecs = new HashMap<>();
     /** The one colour the extra keys' boxes, leaders and cards share. */
     private int keyColor;
-    /** The colour each hint's box and card share, by target id. */
-    private final Map<String, Integer> boxColors = new HashMap<>();
-    private final Runnable onDismiss;
-    private PracticeListener practiceListener;
-    /** Whether the launcher can take a "Try it" right now; a run already up cannot. */
-    private boolean practiceAvailable = true;
+
     private HelpTargets.Snapshot snapshot;
-    private HelpLeaderRouter.Result routed;
     private TerminalDress dress;
     private PaneWallPage place;
     private int accent;
-    /** Where the ? the user pressed was, in screen coordinates; null when nothing named it. */
-    private Rect anchorOnScreen;
-    /** Guide entries the router could not fit on the one page; kept for the log and a test. */
-    private final List<String> unplaced = new ArrayList<>();
     private String signature = "";
     private boolean showing;
-    /** Set by {@link #show}, cleared by the first measurement that can open the model. */
+    /** Set by {@link #explore}, cleared by the first measurement that can open the model. */
     private boolean pendingOpen;
-    /** What was last read out, so a layout pass does not announce it again. */
+    /** A topic to select as soon as there is a measurement to select it on. */
+    private String pendingSelect;
+    /** Whether that pre-selection should play its gesture once it is seated. */
+    private boolean pendingGesture;
+
+    /** The seated card, and the one line that joins it to the control. */
+    private LinearLayout card;
+    private String cardTopicId;
+    private Rect cardBounds;
+    private HelpLeaderRouter.Segment cardLeader;
+    /** Said once per selection, so a layout pass does not report the same shortfall twice. */
+    private boolean reportedNoSeat;
     private String announced;
+
+    private LinearLayout toolbar;
+    private Rect toolbarBounds;
+
     private float downX, downY;
     private boolean moved;
     private ValueAnimator gestureTrace;
@@ -137,58 +165,48 @@ public final class HelpOverlayView extends FrameLayout {
     /** Read once when the gesture starts: a setting is not something onDraw asks about. */
     private boolean gestureReducedMotion;
 
-    public HelpOverlayView(Context context, HelpTargets.ViewFinder finder, Runnable onDismiss) {
+    public HelpOverlayView(Context context, HelpTargets.ViewFinder finder) {
         super(context);
-        this.onDismiss = onDismiss;
         density = getResources().getDisplayMetrics().density;
         dash = new DashPathEffect(new float[]{dp(4), dp(3)}, 0);
         targets = new HelpTargets(finder, this);
-        // Above every control it explains. The dock, the A-Z row, the extra keys and the keyboard
-        // are lifted between 6 and 40dp, and the guide has to wash over all of them; the outline
-        // is dropped so the height casts no shadow of its own.
+        // Above every control it marks. The dock, the A-Z row, the extra keys and the keyboard are
+        // lifted between 6 and 40dp, and exploration has to wash over all of them; the outline is
+        // dropped so the height casts no shadow of its own.
         setElevation(dp(56));
         setTranslationZ(dp(56));
         setOutlineProvider(null);
         setWillNotDraw(false);
         setClickable(true);
         setFocusable(true);
-        setContentDescription(context.getString(R.string.help_accessibility));
+        setContentDescription(context.getString(R.string.help_explore_title));
         setVisibility(GONE);
     }
 
-    /** Where "Try it" sends the user. */
-    public void setPracticeListener(PracticeListener listener) {
-        this.practiceListener = listener;
+    public void setExploreListener(ExploreListener listener) {
+        this.listener = listener;
     }
 
-    /**
-     * Whether "Try it" is offered at all. Set before {@link #show}: a first-run tour already
-     * partway through a lesson cannot take one, and a dead button is kinder than a lost run.
-     */
-    public void setPracticeAvailable(boolean available) {
-        this.practiceAvailable = available;
+
+
+
+    /** Explore a place. {@code selectTopicId} pre-selects a control, or is null. */
+    public void explore(PaneWallPage place, String selectTopicId) {
+        start(place, selectTopicId, false);
     }
 
-    /** "Try it" needs a lesson to hand over and a launcher in a state to take it. */
-    private boolean canTryIt() {
-        return practiceAvailable && model.canTryIt();
+    /** Explore with the topic selected and its own gesture played once over its control. */
+    public void demonstrate(PaneWallPage place, String topicId) {
+        start(place, topicId, true);
     }
 
-    public void show(PaneWallPage place) {
-        show(place, null);
-    }
-
-    /**
-     * Open help for a place, told where the ? that opened it was so the floating buttons can sit
-     * beside it. A null anchor — Settings, the palette, a tab already gone — falls back to the
-     * corner the tab comes out of.
-     */
-    public void show(PaneWallPage place, Rect anchorOnScreen) {
+    private void start(PaneWallPage place, String selectTopicId, boolean withGesture) {
         this.place = place;
-        this.anchorOnScreen = anchorOnScreen == null ? null : new Rect(anchorOnScreen);
         signature = "";
         announced = null;
         pendingOpen = true;
+        pendingSelect = selectTopicId;
+        pendingGesture = withGesture;
         dress = TerminalDress.stored(getContext());
         accent = StatusBarLensView.accentFor(getContext(), place);
         if (!showing) getViewTreeObserver().addOnGlobalLayoutListener(layoutListener);
@@ -198,7 +216,8 @@ public final class HelpOverlayView extends FrameLayout {
         requestFocus();
         requestLayout();
         refresh();
-        HelpLog.d("show " + place);
+        HelpLog.d("explore " + place + (selectTopicId == null ? "" : " at " + selectTopicId)
+            + (withGesture ? " with its gesture" : ""));
     }
 
     public boolean isShowing() { return showing; }
@@ -209,13 +228,16 @@ public final class HelpOverlayView extends FrameLayout {
         stopGesture();
         if (getViewTreeObserver().isAlive()) getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener);
         removeAllViews();
-        cards.clear(); childBounds.clear(); cardViews.clear(); glyphGroup = null; cardSpecs.clear();
-        rendered.clear(); keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
-        snapshot = null; routed = null; signature = ""; announced = null;
-        anchorOnScreen = null; unplaced.clear();
+        touchable.clear(); childBounds.clear(); rendered.clear();
+        markers.clear(); markerViews.clear(); markerSpecs.clear();
+        card = null; cardTopicId = null; cardBounds = null; cardLeader = null;
+        keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
+        toolbar = null; toolbarBounds = null;
+        snapshot = null; signature = ""; announced = null;
+        pendingSelect = null; pendingGesture = false; reportedNoSeat = false;
+        model.clearSelection();
         setVisibility(GONE);
         HelpLog.d("dismiss " + place);
-        onDismiss.run();
     }
 
     @Override protected void onDetachedFromWindow() {
@@ -223,7 +245,23 @@ public final class HelpOverlayView extends FrameLayout {
         super.onDetachedFromWindow();
     }
 
-    /** Child rebuilds only follow changed measurements; their own layout pass is a no-op here. */
+    /**
+     * Back with a card up puts the card away; with nothing selected it is the launcher's to answer,
+     * which takes the reader to Help home.
+     */
+    public boolean onBackPressed() {
+        if (model.selectedTargetId() == null) return false;
+        deselect();
+        return true;
+    }
+
+    // ---- measurement ------------------------------------------------------------------------
+
+    /**
+     * Remeasure on layout changes only. A pass that moved nothing does nothing; a pass that moved
+     * something re-marks the controls and re-seats the one card, and a pass that took the selected
+     * control away stops rather than point at another one.
+     */
     public void refresh() {
         if (!showing || getWidth() <= 0 || getHeight() <= 0) return;
         float currentDensity = getResources().getDisplayMetrics().density;
@@ -241,170 +279,353 @@ public final class HelpOverlayView extends FrameLayout {
             + ":" + measured.signature();
         boolean movedOnScreen = !signature.equals(next);
         if (!movedOnScreen && !pendingOpen) return;
-        if (movedOnScreen) {
-            signature = next;
-            snapshot = measured;
-            dress = currentDress; accent = currentAccent;
-            arrangeOverview();
-        }
+        signature = next;
+        snapshot = measured;
+        dress = currentDress;
+        accent = currentAccent;
         if (pendingOpen) {
             pendingOpen = false;
-            model.open(place, measurableIds());
-        } else {
-            model.remeasure(measurableIds());
+            model.open(place, measuredIds());
+            String wanted = pendingSelect;
+            boolean withGesture = pendingGesture;
+            pendingSelect = null;
+            pendingGesture = false;
+            render();
+            if (wanted != null) select(wanted, withGesture);
+            return;
+        }
+        model.remeasure(measuredIds());
+        if (model.selectedTargetId() != null && !model.selectedMeasured()) {
+            String topicId = model.selectedTopicId();
+            HelpLog.d("the control for " + topicId + " is no longer on screen");
+            stopGesture();
+            model.clearSelection();
+            dropCard();
+            render();
+            if (listener != null) listener.onTargetGone(topicId);
+            return;
         }
         render();
     }
 
-    private Set<String> measurableIds() {
+    private Set<String> measuredIds() {
         Set<String> ids = new LinkedHashSet<>();
         for (HelpTargets.Target target : snapshot.targets) ids.add(target.id);
         return ids;
     }
 
-    // ---- the overview's arrangement ---------------------------------------------------------
+    // ---- selection --------------------------------------------------------------------------
 
-    /** The existing arranged cards and leaders: measured once per layout, drawn per page. */
-    private void arrangeOverview() {
-        Map<String, TextView> wasView = new HashMap<>(cardViews);
-        Map<String, String> wasSpec = new HashMap<>(cardSpecs);
-        cardViews.clear(); cardSpecs.clear(); boxColors.clear();
+    /**
+     * Select the control a marker or a tap on the launcher landed on, named by target id or by
+     * topic id. A control this screen has no measurement for cannot be pointed at, so its topic is
+     * handed back to be read instead.
+     */
+    @VisibleForTesting
+    void select(String idOrTargetId, boolean withGesture) {
+        HelpTopics.Entry entry = model.select(idOrTargetId);
+        if (entry == null) {
+            HelpTopics.Entry wanted = model.topicFor(idOrTargetId);
+            String topicId = wanted == null ? idOrTargetId : wanted.id;
+            HelpLog.d("nothing to point at for " + topicId + " on " + place);
+            if (listener != null) listener.onTargetGone(topicId);
+            return;
+        }
+        reportedNoSeat = false;
+        stopGesture();
+        render();
+        if (withGesture && entry.id.equals(model.selectedTopicId())) startGesture(entry);
+    }
+
+    /** Put the card away and leave the screen marked. */
+    @VisibleForTesting
+    void deselect() {
+        if (model.selectedTargetId() == null) return;
+        stopGesture();
+        model.clearSelection();
+        dropCard();
+        render();
+    }
+
+    private void dropCard() {
+        card = null;
+        cardTopicId = null;
+        cardBounds = null;
+        cardLeader = null;
+        keyCards.clear();
+        keyCardViews.clear();
+        keyCardSpecs.clear();
+    }
+
+    /** The topic the reader has open on the card, or null. */
+    @VisibleForTesting
+    String selectedTopicId() { return model.selectedTopicId(); }
+
+    // ---- what is on screen ------------------------------------------------------------------
+
+    private void render() {
+        if (snapshot == null) return;
+        rendered.clear();
+        touchable.clear();
+        HelpTopics.Entry selected = model.selected();
+        // The toolbar first: it is the one thing the markers and the card have to work round.
+        placeToolbar(selected);
+        arrangeMarkers();
+        keyCards.clear();
+        if (selected == null) {
+            dropCard();
+        } else if (!seatCard(selected)) {
+            String topicId = selected.id;
+            HelpLog.d("no seat for " + topicId + "'s card on this screen");
+            model.clearSelection();
+            dropCard();
+            boolean first = !reportedNoSeat;
+            reportedNoSeat = true;
+            if (first && listener != null) listener.onCardDoesNotFit(topicId);
+        }
+        for (Marker marker : markers) { put(marker.view, marker.bounds); touchable.add(marker.view); }
+        for (KeyCard key : keyCards) { put(key.view, key.bounds); touchable.add(key.view); }
+        if (card != null && cardBounds != null) { put(card, cardBounds); touchable.add(card); }
+        if (toolbar != null && toolbarBounds != null) { put(toolbar, toolbarBounds); touchable.add(toolbar); }
+        for (int i = getChildCount() - 1; i >= 0; i--) {
+            View child = getChildAt(i);
+            if (rendered.contains(child)) continue;
+            removeViewAt(i);
+            childBounds.remove(child);
+        }
+        HelpTopics.Entry reading = model.selected();
+        if (reading == null) announce(getContext().getString(R.string.help_explore_title), "explore");
+        else announce(getContext().getString(reading.titleRes) + ". "
+            + getContext().getString(reading.actionRes), reading.id);
+        requestLayout();
+        invalidate();
+    }
+
+    // ---- the markers ------------------------------------------------------------------------
+
+    /**
+     * A marker on every measured control that has a topic: a numbered dot on the control's own
+     * outline, in the control's colour, named for a reader. Colour is never the only cue — the dot
+     * carries a number and the name is on the marker — and two markers never sit on each other.
+     */
+    private void arrangeMarkers() {
+        Map<String, TextView> was = new HashMap<>(markerViews);
+        Map<String, String> wasSpec = new HashMap<>(markerSpecs);
+        markers.clear();
+        markerViews.clear();
+        markerSpecs.clear();
         boolean light = lightMode();
-        int width = Math.max(1, (snapshot.wall.width() - dp(36)) / 2);
-        // A control outside the wall often shares a shelf with two others — the prefix keys, the
-        // space bar and the settings cog all sit in the keyboard's bottom row — so its card is a
-        // third of the width where a card on the wall is a half.
-        int narrow = Math.max(dp(100), (snapshot.wall.width() - dp(48)) / 3);
-        // The room the cards have is the wall; a control outside it keeps its card beside itself.
-        Rect band = new Rect(snapshot.wall);
-        band.top += dp(8);
-        band.bottom = Math.max(band.top, band.bottom - dp(8));
-        List<HelpLeaderRouter.Target> inputs = new ArrayList<>();
-        List<HelpLeaderRouter.Box> soft = new ArrayList<>();
-        int count = snapshot.targets.size();
-        for (int i = 0; i < count; i++) {
-            HelpTargets.Target target = snapshot.targets.get(i);
-            if (HelpTopics.topicOnly(target.id)) continue;
-            int color = overviewColor(target.id, i, count, light);
-            boxColors.put(target.id, color);
-            int title = titleColor(target.id, i, count);
-            HelpLeaderRouter.Side side = side(target.rect);
-            int cardWidth = side == HelpLeaderRouter.Side.INSIDE ? width : narrow;
-            // The same words in the same colours are the same card: a stat that changed width
-            // moves the cards it shares the wall with, and moving one is not rebuilding it.
-            String spec = spec(target.copy.title, target.copy.body, title, color);
-            TextView card = spec.equals(wasSpec.get(target.id)) ? wasView.get(target.id) : null;
-            if (card == null) card = card(target.copy, title, color);
-            card.measure(MeasureSpec.makeMeasureSpec(cardWidth, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
-            cardViews.put(target.id, card);
-            cardSpecs.put(target.id, spec);
-            inputs.add(new HelpLeaderRouter.Target(target.id, box(target.rect), side,
-                cardWidth, card.getMeasuredHeight()));
-            if (side == HelpLeaderRouter.Side.INSIDE) soft.add(box(target.rect));
+        List<HelpTopics.Entry> entries = model.markers();
+        List<Rect> taken = new ArrayList<>();
+        if (toolbarBounds != null) taken.add(toolbarBounds);
+        for (int i = 0; i < entries.size(); i++) {
+            HelpTopics.Entry entry = entries.get(i);
+            Rect target = targetRect(entry.targetId);
+            if (target == null) continue;
+            int color = model.markerColor(accent, entry.id, light);
+            String label = String.valueOf(i + 1);
+            String name = getContext().getString(entry.titleRes);
+            String spec = label + ":" + color + ":" + light;
+            TextView view = spec.equals(wasSpec.get(entry.targetId)) ? was.get(entry.targetId) : null;
+            if (view == null) view = marker(label, color);
+            view.setContentDescription(name);
+            final String targetId = entry.targetId;
+            view.setOnClickListener(v -> select(targetId, false));
+            Rect bounds = markerBounds(target, taken);
+            taken.add(bounds);
+            markers.add(new Marker(entry, target, view, bounds, color));
+            markerViews.put(entry.targetId, view);
+            markerSpecs.put(entry.targetId, spec);
         }
-        arrangeKeyCards(light, band);
-        // Nothing may sit on a control outside the wall, whichever edge it is on: those are a row
-        // or two thick, and a card over one hides the very thing it is about. The key cards are
-        // fixed by the time the rest is routed, so they count the same way.
-        List<HelpLeaderRouter.Box> obstacles = new ArrayList<>();
-        for (HelpTargets.Target target : snapshot.targets)
-            if (side(target.rect) != HelpLeaderRouter.Side.INSIDE) obstacles.add(box(target.rect));
-        if (keyCards.isEmpty()) {
-            for (HelpTargets.KeyLabel key : snapshot.keys) obstacles.add(box(keyLabelBounds(key.rect)));
-        } else {
-            for (KeyCard key : keyCards) obstacles.add(box(key.bounds));
-        }
-        // The × and catalogue group has its corner before any card is placed; a hint under it
-        // would be a hint the user cannot read.
-        obstacles.add(box(glyphGroupRect()));
-        routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs, obstacles, soft);
-        // One page still comes first: on a screen too tight for every card to keep clear of every
-        // control, the controls give way rather than a hint leave the guide.
-        if (!obstacles.isEmpty() && !onOnePage(routed)) {
-            StringBuilder crowded = new StringBuilder("yielding: controls give way for");
-            for (HelpLeaderRouter.Placement p : routed.placements) if (p.page > 0) crowded.append(' ').append(p.target.id);
-            for (HelpLeaderRouter.Target t : routed.unplaced) crowded.append(' ').append(t.id);
-            HelpLog.d(crowded.toString());
-            List<HelpLeaderRouter.Box> yielding = new ArrayList<>(soft);
-            yielding.addAll(obstacles);
-            routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs,
-                Collections.<HelpLeaderRouter.Box>emptyList(), yielding);
-        }
-        // One page, always: a hint with no room on it is left out of the guide and said so in the
-        // log, and its topic is still there in the catalogue.
-        unplaced.clear();
-        for (HelpLeaderRouter.Target target : routed.unplaced) unplaced.add(target.id);
-        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page > 0) unplaced.add(p.target.id);
-        for (String id : unplaced) HelpLog.d("left out of the guide: " + id + ", no room on the page");
-        HelpLog.d("layout " + place + ": " + snapshot.targets.size() + " targets, "
-            + unplaced.size() + " left out");
-    }
-
-    /** What the guide could not fit; empty on every layout the launcher ships. */
-    @VisibleForTesting
-    List<String> unplacedGuideIds() {
-        return Collections.unmodifiableList(new ArrayList<>(unplaced));
-    }
-
-    /** The view carrying one hint's card right now, or null when the control is not on screen. */
-    @VisibleForTesting
-    TextView guideCardView(String id) {
-        return cardViews.get(id);
-    }
-
-    /** A control's colour comes from its identity in the catalogue, not from what else is up. */
-    private int overviewColor(String id, int index, int count, boolean light) {
-        HelpTopics.Entry entry = HelpTopics.entry(place, id);
-        return entry == null ? HelpPalette.boxColor(accent, index, count, light)
-            : HelpPalette.boxColor(accent, HelpTopics.identityIndex(place, entry.id),
-                HelpTopics.sizeFor(place), light);
+        HelpLog.d("markers: " + markers.size() + " of " + snapshot.targets.size()
+            + " measured controls on " + place);
     }
 
     /**
-     * Which wash help is drawn over. The guide dims the screen so its boxes and cards carry the
-     * eye; on a light screen the dim is a light one, and the dashes deepen to match.
+     * Where one marker sits: on a corner of its control's outline, at the first corner no other
+     * marker and no toolbar has taken, and always inside the screen.
      */
-    private boolean lightMode() {
-        return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
-            != Configuration.UI_MODE_NIGHT_YES;
+    private Rect markerBounds(Rect target, List<Rect> taken) {
+        int size = dp(MARKER_DP);
+        int inset = dp(2);
+        int[][] anchors = {
+            {target.left - inset, target.top - inset},
+            {target.right + inset - size, target.top - inset},
+            {target.left - inset, target.bottom + inset - size},
+            {target.right + inset - size, target.bottom + inset - size},
+            {target.centerX() - size / 2, target.top - inset},
+            {target.centerX() - size / 2, target.bottom + inset - size},
+            {target.left - inset, target.centerY() - size / 2},
+            {target.right + inset - size, target.centerY() - size / 2},
+            {target.centerX() - size / 2, target.centerY() - size / 2},
+        };
+        Rect fallback = null;
+        for (int[] anchor : anchors) {
+            int left = clamp(anchor[0], dp(2), Math.max(dp(2), getWidth() - size - dp(2)));
+            int top = clamp(anchor[1], dp(2), Math.max(dp(2), getHeight() - size - dp(2)));
+            Rect bounds = new Rect(left, top, left + size, top + size);
+            if (fallback == null) fallback = bounds;
+            boolean clear = true;
+            for (Rect other : taken) if (Rect.intersects(other, bounds)) { clear = false; break; }
+            if (clear) return bounds;
+        }
+        return fallback;
     }
 
-    /** The gesture pill's own strip: help washes over it, and puts no card beneath it. */
-    private int bottomInset() {
-        android.view.WindowInsets insets = getRootWindowInsets();
-        if (insets == null) return 0;
-        return Math.max(0, Math.max(insets.getStableInsetBottom(),
-            insets.getSystemWindowInsetBottom()));
+    /** One marker: its number in its control's colour, with the control's name for a reader. */
+    private TextView marker(String label, int color) {
+        TextView view = new TextView(getContext());
+        view.setText(label);
+        view.setGravity(Gravity.CENTER);
+        view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 13);
+        view.setTypeface(Typeface.DEFAULT_BOLD);
+        view.setTextColor(HelpPalette.lightSurface(color) ? Color.BLACK : Color.WHITE);
+        GradientDrawable shape = new GradientDrawable();
+        shape.setShape(GradientDrawable.OVAL);
+        shape.setColor(color);
+        shape.setStroke(dp(1.5f), ColorUtils.setAlphaComponent(
+            lightMode() ? Color.WHITE : Color.BLACK, 160));
+        view.setBackground(shape);
+        view.setClickable(true);
+        view.setFocusable(true);
+        return view;
     }
 
-    /** What a card is made of; two cards with the same recipe are the same card. */
-    private String spec(String title, String body, int titleColor, int borderColor) {
-        return title + "\u0001" + body + "\u0001" + titleColor + ":" + borderColor + ":"
-            + dress.fillColor + ":" + dress.strokeColor + ":" + dress.textColor;
+    // ---- the one card -----------------------------------------------------------------------
+
+    /**
+     * The card for the selected control: its title, its one instruction and "Read topic", seated
+     * where it covers neither the control, nor the toolbar, nor the system bars. The extra keys row
+     * brings its seven per-key cards with it, and they are seated first.
+     *
+     * @return false when this screen has no seat for it at a readable size.
+     */
+    private boolean seatCard(HelpTopics.Entry entry) {
+        Rect target = targetRect(entry.targetId);
+        if (target == null) return false;
+        if (card == null || !entry.id.equals(cardTopicId)) {
+            card = card(entry);
+            cardTopicId = entry.id;
+        }
+        if ("keys".equals(entry.targetId)) arrangeKeyCards(lightMode(), band());
+        List<HelpLeaderRouter.Box> reserved = new ArrayList<>();
+        if (toolbarBounds != null) reserved.add(box(toolbarBounds));
+        for (KeyCard key : keyCards) reserved.add(box(key.bounds));
+        List<HelpLeaderRouter.Box> others = new ArrayList<>();
+        for (HelpTargets.Target other : snapshot.targets)
+            if (!other.id.equals(entry.targetId)) others.add(box(other.rect));
+        Rect safe = safeArea();
+        // Narrower before nowhere: the same words in a narrower card are still the app's own
+        // reading size, and shrinking the text is never one of the answers.
+        for (int width : cardWidths(safe)) {
+            card.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(safe.height(), MeasureSpec.AT_MOST));
+            int height = card.getMeasuredHeight();
+            if (height > safe.height()) continue;
+            HelpExplorePlacement.Result seat = HelpExplorePlacement.place(
+                new HelpExplorePlacement.Request(box(safe), box(target), reserved, others,
+                    width, height, dp(10)));
+            if (!seat.fits()) continue;
+            cardBounds = rect(seat.card);
+            cardLeader = seat.leader;
+            HelpLog.d("card for " + entry.id + ": " + seat.seat + " at " + cardBounds.toShortString()
+                + (seat.leader == null ? ", no leader" : ", one leader"));
+            return true;
+        }
+        return false;
     }
 
-    private static boolean onOnePage(HelpLeaderRouter.Result result) {
-        if (!result.unplaced.isEmpty()) return false;
-        for (HelpLeaderRouter.Placement p : result.placements) if (p.page > 0) return false;
-        return true;
+    /** The widths a card may be asked to fit in, widest first. */
+    private List<Integer> cardWidths(Rect safe) {
+        int widest = Math.min(dp(320), safe.width() - dp(24));
+        List<Integer> widths = new ArrayList<>();
+        for (int width : new int[] {widest, widest * 3 / 4, dp(180)}) {
+            if (width >= dp(140) && width <= safe.width() - dp(16) && !widths.contains(width))
+                widths.add(width);
+        }
+        if (widths.isEmpty() && safe.width() > dp(80)) widths.add(safe.width() - dp(16));
+        return widths;
     }
 
-    private int titleColor(String id, int index, int count) {
-        HelpTopics.Entry entry = HelpTopics.entry(place, id);
-        if (entry == null) return HelpPalette.titleColor(accent, index, count, dress.fillColor);
-        return HelpPalette.titleColor(accent, HelpTopics.identityIndex(place, entry.id),
-            HelpTopics.sizeFor(place), dress.fillColor);
+    /** One control's card: what it is, the one thing to do with it, and the way into its topic. */
+    private LinearLayout card(HelpTopics.Entry entry) {
+        LinearLayout panel = new LinearLayout(getContext());
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setClickable(true);
+        panel.setFocusable(true);
+        panel.setPadding(dp(12), dp(10), dp(12), dp(10));
+        android.graphics.drawable.Drawable background = dress.background(0);
+        if (background instanceof GradientDrawable)
+            ((GradientDrawable) background).setStroke(dp(1.5f),
+                model.markerColor(accent, entry.id, lightMode()));
+        panel.setBackground(background);
+        TextView heading = new TextView(getContext());
+        heading.setText(getContext().getString(entry.titleRes));
+        heading.setTextSize(14);
+        heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        heading.setTextColor(model.titleColor(accent, entry.id, dress.fillColor));
+        panel.addView(heading, rowParams(0));
+        TextView action = new TextView(getContext());
+        action.setText(getContext().getString(entry.actionRes));
+        action.setTextSize(13);
+        action.setTextColor(dress.textColor);
+        action.setLineSpacing(dp(2), 1f);
+        panel.addView(action, rowParams(dp(4)));
+        panel.addView(button(getContext().getString(R.string.help_explore_read),
+            () -> { if (listener != null) listener.onReadTopic(entry.id); }), rowParams(dp(8)));
+        return panel;
     }
 
-    private HelpLeaderRouter.Side side(Rect r) {
-        // Which edge of the wall the control is past, if any. The router seats the card on the
-        // shelf between the two, so the answer only has to be the edge, never the element.
-        if (r.bottom <= snapshot.wall.top) return HelpLeaderRouter.Side.ABOVE;
-        if (r.top >= snapshot.wall.bottom) return HelpLeaderRouter.Side.UNDER;
-        if (r.right <= snapshot.wall.left) return HelpLeaderRouter.Side.LEFT;
-        if (r.left >= snapshot.wall.right) return HelpLeaderRouter.Side.RIGHT;
-        return HelpLeaderRouter.Side.INSIDE;
+    // ---- the toolbar ------------------------------------------------------------------------
+
+    /**
+     * Back to help and Close help, inside the system bars, at the edge farthest from the control
+     * being explained — so the card has the room beside its own control, and the toolbar is never
+     * on top of either.
+     */
+    private void placeToolbar(HelpTopics.Entry selected) {
+        if (toolbar == null) toolbar = toolbar();
+        Rect safe = safeArea();
+        int width = Math.min(safe.width() - dp(16), dp(360));
+        toolbar.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(safe.height(), MeasureSpec.AT_MOST));
+        int height = toolbar.getMeasuredHeight();
+        int left = safe.centerX() - width / 2;
+        Rect low = new Rect(left, safe.bottom - dp(8) - height, left + width, safe.bottom - dp(8));
+        Rect high = new Rect(left, safe.top + dp(8), left + width, safe.top + dp(8) + height);
+        Rect target = selected == null ? null : targetRect(selected.targetId);
+        if (target == null) { toolbarBounds = low; return; }
+        // The edge farthest from the control, and the near edge only when the far one would land
+        // on the control itself.
+        boolean farIsHigh = target.centerY() > safe.centerY();
+        Rect far = farIsHigh ? high : low, near = farIsHigh ? low : high;
+        toolbarBounds = !Rect.intersects(far, target) ? far
+            : !Rect.intersects(near, target) ? near : far;
+        if (Rect.intersects(toolbarBounds, target))
+            HelpLog.d("the toolbar has nowhere clear of " + selected.id + "'s control");
+    }
+
+    private LinearLayout toolbar() {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setClickable(true);
+        row.setPadding(dp(6), dp(6), dp(6), dp(6));
+        row.setBackground(dress.background(dp(28)));
+        row.addView(button(getContext().getString(R.string.help_explore_back),
+            () -> { if (listener != null) listener.onBackToHelp(); }), weighted());
+        row.addView(button(getContext().getString(R.string.help_close_action),
+            () -> { if (listener != null) listener.onCloseHelp(); }), weighted());
+        return row;
+    }
+
+    // ---- the extra keys ---------------------------------------------------------------------
+
+    /** The wall, with a little room kept at top and bottom for the key cards' lanes. */
+    private Rect band() {
+        Rect band = new Rect(snapshot.wall);
+        band.top += dp(8);
+        band.bottom = Math.max(band.top, band.bottom - dp(8));
+        return band;
     }
 
     /**
@@ -426,13 +647,8 @@ public final class HelpOverlayView extends FrameLayout {
                 + getWidth() + "px overlay");
             return;
         }
-        HelpTopics.Entry entry = HelpTopics.entry(place, "keys");
-        keyColor = entry == null ? onTheWash(accent)
-            : HelpPalette.boxColor(accent, HelpTopics.identityIndex(place, entry.id),
-                HelpTopics.sizeFor(place), light);
-        int titleColor = entry == null ? HelpPalette.titleColor(accent, 0, 1, dress.fillColor)
-            : HelpPalette.titleColor(accent, HelpTopics.identityIndex(place, entry.id),
-                HelpTopics.sizeFor(place), dress.fillColor);
+        keyColor = model.markerColor(accent, "keys", light);
+        int titleColor = model.titleColor(accent, "keys", dress.fillColor);
         // The keys' axis: a row runs along x, a column down one side runs along y. Everything
         // below is measured along that axis and across it, so neither edge is assumed.
         int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
@@ -492,29 +708,28 @@ public final class HelpOverlayView extends FrameLayout {
         for (int i = 0; i < keys.size(); i++) {
             HelpTargets.KeyLabel key = keys.get(i);
             int room = slots[i][1] - slots[i][0];
-            // Too many keys for a card each; the caps keep their own small labels instead.
+            // Too many keys for a card each; the row's own card says what the row is for instead.
             if (room < dp(56)) {
                 HelpLog.d("key cards: none, key " + i + " has only " + room + "px of shelf");
                 keyCards.clear();
                 return;
             }
-            String spec = spec(key.primary, key.secondary == null ? "" : key.secondary,
-                titleColor, keyColor);
-            TextView card = spec.equals(wasSpec.get(i)) ? wasView.get(i) : null;
-            if (card == null) card = keyCard(key, titleColor, keyColor);
-            measureKeyCard(card, vertical ? laneWidth : room, key.secondary == null ? 1 : 2);
+            String spec = key.text + "|" + titleColor + ":" + keyColor + ":" + dress.fillColor;
+            TextView keyCard = spec.equals(wasSpec.get(i)) ? wasView.get(i) : null;
+            if (keyCard == null) keyCard = keyCard(key, titleColor, keyColor);
+            measureKeyCard(keyCard, vertical ? laneWidth : room, key.secondary == null ? 1 : 2);
             if (vertical) {
-                if (card.getMeasuredHeight() > room) {
-                    HelpLog.d("key cards: none, key " + i + " needs " + card.getMeasuredHeight()
+                if (keyCard.getMeasuredHeight() > room) {
+                    HelpLog.d("key cards: none, key " + i + " needs " + keyCard.getMeasuredHeight()
                         + "px of a " + room + "px slot");
                     keyCards.clear();
                     return;
                 }
-                lengths.add(card.getMeasuredHeight());
+                lengths.add(keyCard.getMeasuredHeight());
             } else {
-                thickness = Math.max(thickness, card.getMeasuredHeight());
+                thickness = Math.max(thickness, keyCard.getMeasuredHeight());
             }
-            views.add(card);
+            views.add(keyCard);
             specs.add(spec);
         }
         int[] lanes = keyCardLanes(awayIsHigh ? wallNear : keysNear, awayIsHigh ? keysFar : wallNear,
@@ -624,6 +839,7 @@ public final class HelpOverlayView extends FrameLayout {
         }
         return lines;
     }
+
     /**
      * Measure a key card at {@code width}; when a word has to break to fit — the card at either end
      * of the row only has the room from the screen's edge to its neighbour — the text steps down a
@@ -662,307 +878,27 @@ public final class HelpOverlayView extends FrameLayout {
         return text;
     }
 
-    // ---- rendering ---------------------------------------------------------------------------
+    // ---- the gesture demonstration ----------------------------------------------------------
 
     /**
-     * What is on screen, brought up to date in place. Children that are still wanted keep their
-     * view — a re-measure that only moved a card must not blank the wall for a frame first — and
-     * only the ones this pass did not ask for are taken away.
+     * One finite pass of the topic's own gesture over its control; exploration stays up throughout.
+     * A topic with no gesture plays nothing and simply shows its card.
      */
-    private void render() {
-        rendered.clear(); cards.clear();
-        switch (model.mode()) {
-            case TOPICS: renderTopics(); break;
-            case TOPIC: renderTopic(); break;
-            default: renderGuide(); break;
-        }
-        placeGlyphs();
-        for (int i = getChildCount() - 1; i >= 0; i--) {
-            View child = getChildAt(i);
-            if (rendered.contains(child)) continue;
-            removeViewAt(i);
-            childBounds.remove(child);
-        }
-        requestLayout(); invalidate();
-    }
-
-    /** The chooser: what this place can explain, in a list the user picks one thing out of. */
-    private void renderTopics() {
-        LinearLayout panel = panel();
-        String title = getContext().getString(R.string.help_header, placeName());
-        panel.addView(header(title));
-        LinearLayout list = new LinearLayout(getContext());
-        list.setOrientation(LinearLayout.VERTICAL);
-        HelpTopics.Group group = null;
-        for (HelpTopics.Entry entry : model.entries()) {
-            if (entry.group != group) {
-                group = entry.group;
-                list.addView(sectionLabel(getContext().getString(group.labelRes)), rowParams(dp(8)));
-            }
-            list.addView(chip(entry), rowParams(dp(4)));
-        }
-        ScrollView scroll = new ScrollView(getContext());
-        scroll.setFillViewport(false);
-        scroll.addView(list, new ScrollView.LayoutParams(LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT));
-        // Weighted like the topic's text: a long list scrolls, the buttons under it stay whole.
-        panel.addView(scroll, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT, 1f));
-        LinearLayout row = buttonRow();
-        row.addView(button(getContext().getString(R.string.help_show_basics), !model.basicsOnly(),
-            () -> command(model.showBasics())), weighted());
-        // Show all puts the popup away and leaves the guide standing, which is where help began.
-        row.addView(button(getContext().getString(R.string.help_show_all), true,
-            () -> command(model.showAll())), weighted());
-        panel.addView(row, rowParams(dp(8)));
-        placePanel(panel, null);
-        announce(title, "topics");
-    }
-
-    /** One topic: what the control is, how to use it, and one box on the control itself. */
-    private void renderTopic() {
-        HelpTopics.Entry entry = model.selected();
-        if (entry == null) { command(model.backToTopics()); return; }
-        LinearLayout panel = panel();
-        String title = getContext().getString(entry.titleRes);
-        panel.addView(header(title));
-        // The sentences scroll rather than push the buttons off the wall at a large font scale.
-        LinearLayout body = new LinearLayout(getContext());
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.addView(line(getContext().getString(entry.summaryRes), true,
-            model.topicHighlightColor(accent)), rowParams(dp(6)));
-        body.addView(line(getContext().getString(entry.actionRes), false, dress.textColor),
-            rowParams(dp(4)));
-        int revealRes = model.revealRes();
-        if (revealRes != 0)
-            body.addView(line(getContext().getString(revealRes), false,
-                ColorUtils.setAlphaComponent(dress.textColor, 199)), rowParams(dp(6)));
-        HelpTopics.Entry related = HelpTopics.entry(place, model.relatedTopicId());
-        if (related != null) body.addView(chip(related), rowParams(dp(8)));
-        ScrollView scroll = new ScrollView(getContext());
-        scroll.setFillViewport(false);
-        scroll.addView(body, new ScrollView.LayoutParams(LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT));
-        // Weighted, so a panel taller than the wall takes the shortfall out of the text it can
-        // scroll and never out of the buttons under it.
-        panel.addView(scroll, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT, 1f));
-        LinearLayout first = buttonRow();
-        first.addView(button(getContext().getString(R.string.help_back_to_topics), true,
-            () -> command(model.backToTopics())), weighted());
-        panel.addView(first, rowParams(dp(10)));
-        LinearLayout second = buttonRow();
-        second.addView(button(getContext().getString(R.string.help_show_gesture),
-            model.canShowGesture(), () -> command(model.showGesture())), weighted());
-        second.addView(button(getContext().getString(R.string.help_try_it), canTryIt(),
-            () -> command(model.tryIt())), weighted());
-        panel.addView(second, rowParams(dp(6)));
-        placePanel(panel, targetRect(model.highlightTargetId()));
-        announce(title + " " + getContext().getString(entry.summaryRes), entry.id);
-    }
-
-    /** The guide: every control of the place boxed, with its hint, on one page and nothing else. */
-    private void renderGuide() {
-        if (routed == null) return;
-        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == 0) {
-            TextView card = cardViews.get(p.target.id);
-            put(card, rect(p.card)); cards.add(card);
-        }
-        if (keyCards.isEmpty()) {
-            for (HelpTargets.KeyLabel key : snapshot.keys) {
-                TextView label = pill(key.text);
-                label.setPadding(dp(1), 0, dp(1), 0);
-                label.setMaxLines(2);
-                label.setAutoSizeTextTypeUniformWithConfiguration(6, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
-                label.setBackground(dress.background(key.rect.height()));
-                put(label, keyLabelBounds(key.rect));
-            }
-        } else {
-            for (KeyCard key : keyCards) { put(key.view, key.bounds); cards.add(key.view); }
-        }
-        announce(getContext().getString(R.string.help_header, placeName()), "guide");
-    }
-
-    // ---- the two floating buttons ---------------------------------------------------------
-
-    /**
-     * The × and the catalogue: help's own chrome, one group, in the corner of the wall nearest
-     * where the ? the user pressed was — the same size and glass a corner tab's buttons wear, in
-     * every mode. A corner rather than "beside the ?", because the ? is a corner tab's button and
-     * the tab is gone by the time the guide is up: two buttons floating mid-screen read as part of
-     * the guide, in a corner they read as its frame.
-     */
-    private void placeGlyphs() {
-        if (snapshot == null) return;
-        Rect group = glyphGroupRect();
-        if (glyphGroup == null) {
-            TextView close = glyphButton(getContext().getString(R.string.help_close_glyph), false,
-                getContext().getString(R.string.help_close_action), () -> command(model.close()));
-            TextView catalogue = glyphButton(CornerTabGlyphs.CATALOGUE, true,
-                getContext().getString(R.string.help_topics_action), this::toggleCatalogue);
-            LinearLayout row = new LinearLayout(getContext());
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER);
-            int size = dp(GLYPH_SIZE_DP);
-            row.addView(close, new LinearLayout.LayoutParams(size, size));
-            row.addView(catalogue, new LinearLayout.LayoutParams(size, size));
-            row.setBackground(glyphGroupBackground());
-            glyphGroup = row;
-        }
-        put(glyphGroup, group);
-        cards.add(glyphGroup);
-    }
-
-    /** The square a thumb asks for, per button; the pair is two of them in one capsule. */
-    private static final int GLYPH_SIZE_DP = 48;
-    /** How far the group stays in from the wall's edges. */
-    private static final int GLYPH_MARGIN_DP = 6;
-    private LinearLayout glyphGroup;
-
-    /**
-     * Where the group goes: inside the wall's corner nearest the ? that opened help (or the corner
-     * a tab would have come out of), so it is always at an edge and never over the middle of the
-     * guide. Also an obstacle for the cards, so no hint is laid out under it.
-     */
-    private Rect glyphGroupRect() {
-        int size = dp(GLYPH_SIZE_DP);
-        int width = size * 2;
-        int margin = dp(GLYPH_MARGIN_DP);
-        Rect wall = snapshot.wall;
-        Rect anchor = anchorBounds();
-        int ax = anchor.centerX(), ay = anchor.centerY();
-        boolean right = Math.abs(ax - wall.right) < Math.abs(ax - wall.left);
-        boolean bottom = Math.abs(ay - wall.bottom) < Math.abs(ay - wall.top);
-        int left = right ? wall.right - margin - width : wall.left + margin;
-        int top = bottom ? wall.bottom - margin - size : wall.top + margin;
-        left = clamp(left, dp(4), getWidth() - width - dp(4));
-        top = clamp(top, dp(4), getHeight() - size - dp(4));
-        return new Rect(left, top, left + width, top + size);
-    }
-
-    /** The capsule the two buttons share: the tab's glass, so the pair reads as one piece. */
-    private GradientDrawable glyphGroupBackground() {
-        Context context = getContext();
-        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(context, R.color.termux_primary));
-        int surface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
-            ContextCompat.getColor(context, R.color.termux_surface_panel));
-        GradientDrawable capsule = new GradientDrawable();
-        capsule.setShape(GradientDrawable.RECTANGLE);
-        capsule.setCornerRadius(dp(GLYPH_SIZE_DP) / 2f);
-        capsule.setColor(ColorUtils.setAlphaComponent(surface, 200));
-        capsule.setStroke(dp(CornerTabGeometry.TAB_OUTLINE_DP), ColorUtils.setAlphaComponent(primary, 120));
-        return capsule;
-    }
-
-    /** The catalogue button both ways: it opens the chooser, and it puts it away again. */
-    private void toggleCatalogue() {
-        command(model.mode() == HelpPresentationModel.Mode.OVERVIEW
-            ? model.backToTopics() : model.showAll());
-    }
-
-    /**
-     * Where the buttons hang off: the ? the user pressed, or — for help opened from Settings or the
-     * palette — the corner a tab would have come out of.
-     */
-    private Rect anchorBounds() {
-        if (anchorOnScreen != null) {
-            int[] origin = new int[2];
-            getLocationOnScreen(origin);
-            Rect local = new Rect(anchorOnScreen);
-            local.offset(-origin[0], -origin[1]);
-            if (!local.isEmpty()) return local;
-        }
-        Rect corner = targetRect("corners");
-        if (corner != null) return new Rect(corner);
-        Rect wall = snapshot.wall;
-        int size = dp(32);
-        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-        int left = rtl ? wall.left : wall.right - size;
-        return new Rect(left, wall.top, left + size, wall.top + size);
-    }
-
-    /** One floating button: the corner tab's own glass and tint, round, inside a thumb's square. */
-    private TextView glyphButton(String glyph, boolean symbols, String description, Runnable onClick) {
-        Context context = getContext();
-        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(context, R.color.termux_primary));
-        int surface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
-            ContextCompat.getColor(context, R.color.termux_surface_panel));
-        // A TextView centres the font's line box, and neither × nor a Nerd Font glyph sits in the
-        // middle of its line box — the × rode high in its circle. So the glyph is drawn on its own
-        // ink bounds instead: measured per draw, centred on the view, background untouched.
-        TextView view = new TextView(context) {
-            private final Rect ink = new Rect();
-            @Override protected void onDraw(Canvas canvas) {
-                CharSequence text = getText();
-                if (text == null || text.length() == 0) return;
-                String s = text.toString();
-                Paint p = getPaint();
-                p.setColor(getCurrentTextColor());
-                p.getTextBounds(s, 0, s.length(), ink);
-                float x = getWidth() / 2f - ink.exactCenterX();
-                float y = getHeight() / 2f - ink.exactCenterY();
-                canvas.drawText(s, x, y, p);
-            }
-        };
-        view.setText(glyph);
-        view.setContentDescription(description);
-        view.setGravity(Gravity.CENTER);
-        view.setTypeface(symbols ? NerdFontSpans.typeface(context) : Typeface.DEFAULT_BOLD);
-        // In dp, not sp: these are marks on a button the size of the tab's, not text to read.
-        view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, symbols ? 14 : 18);
-        view.setTextColor(primary);
-        GradientDrawable shape = new GradientDrawable();
-        shape.setShape(GradientDrawable.OVAL);
-        shape.setColor(ColorUtils.setAlphaComponent(surface, 232));
-        shape.setStroke(dp(CornerTabGeometry.TAB_OUTLINE_DP),
-            ColorUtils.setAlphaComponent(primary, 225));
-        // The circle is a tab button's 30dp; the square around it is the 48dp a thumb asks for.
-        view.setBackground(new InsetDrawable(shape, dp(9)));
-        view.setClickable(true);
-        view.setFocusable(true);
-        view.setOnClickListener(v -> onClick.run());
-        return view;
-    }
-
-    private static int clamp(int value, int min, int max) {
-        return Math.max(min, Math.min(Math.max(min, max), value));
-    }
-
-    /** Whatever the model asked for, done. Reading help asks for nothing. */
-    private void command(HelpPresentationModel.Effect effect) {
-        switch (effect.kind) {
-            case CLOSE:
-                dismiss();
-                return;
-            case CLOSE_AND_PRACTICE:
-                String lesson = effect.lessonId;
-                dismiss();
-                if (practiceListener != null) practiceListener.onPracticeRequested(lesson);
-                return;
-            case DEMONSTRATE:
-                startGesture(effect.targetId);
-                return;
-            default:
-                stopGesture();
-                render();
-        }
-    }
-
-    // ---- the gesture demonstration -----------------------------------------------------------
-
-    /** One finite pass of the topic's gesture over its control; help stays up throughout. */
-    private void startGesture(String targetId) {
-        Rect rect = targetRect(targetId);
+    private void startGesture(HelpTopics.Entry entry) {
+        Rect rect = targetRect(entry.targetId);
         stopGesture();
         if (rect == null) return;
+        TourGesture wanted = gestureFor(entry, rect);
+        if (wanted == TourGesture.NONE) {
+            HelpLog.d("no gesture for " + entry.id);
+            return;
+        }
         gestureRect = new Rect(rect);
-        gesture = gestureFor(targetId);
+        gesture = wanted;
         gestureReducedMotion = ReducedMotion.isEnabled(getContext());
         if (gestureReducedMotion) {
             // No animation at all on this phone: the cue is drawn where the gesture starts and
-            // where it ends, and stays there while help is up.
+            // where it ends, and stays there while exploration is up.
             gestureProgress = 1f;
             invalidate();
             return;
@@ -977,6 +913,21 @@ public final class HelpOverlayView extends FrameLayout {
         gestureTrace.start();
     }
 
+    /**
+     * The movement the topic carries, turned toward the control as it is actually laid out: a dock
+     * that is a rail down one edge is swiped inward off the rail rather than pulled down.
+     */
+    @VisibleForTesting
+    TourGesture gestureFor(HelpTopics.Entry entry, Rect rect) {
+        if (entry == null || entry.gesture == null) return TourGesture.NONE;
+        if (entry.gesture == TourGesture.DRAG_DOWN && rect != null && snapshot != null) {
+            HelpLeaderRouter.Side side = side(rect);
+            if (side == HelpLeaderRouter.Side.LEFT) return TourGesture.SWIPE_RIGHT;
+            if (side == HelpLeaderRouter.Side.RIGHT) return TourGesture.SWIPE_LEFT;
+        }
+        return entry.gesture;
+    }
+
     private void stopGesture() {
         if (gestureTrace != null) { gestureTrace.cancel(); gestureTrace = null; }
         gestureRect = null;
@@ -985,106 +936,77 @@ public final class HelpOverlayView extends FrameLayout {
     }
 
     /** Whether a demonstration is on screen right now. */
+    @VisibleForTesting
     boolean isShowingGesture() {
         return gestureRect != null && gesture != TourGesture.NONE;
     }
 
-    /** The movement each control is used with; everything that is tapped is a tap. */
-    static TourGesture gestureFor(String topicId) {
-        if (topicId == null) return TourGesture.TAP;
-        switch (topicId) {
-            case "dock": return TourGesture.DRAG_DOWN;
-            case "status": return TourGesture.SWIPE_RIGHT;
-            case "space": return TourGesture.SWIPE_UP;
-            case "az": return TourGesture.SCRUB;
-            default: return TourGesture.TAP;
+    /** Which movement is being played, for a test that asks what a rail gets. */
+    @VisibleForTesting
+    TourGesture playingGesture() { return gesture; }
+
+    // ---- pieces -----------------------------------------------------------------------------
+
+    /**
+     * Which wash exploration is drawn over. The launcher is only dimmed — the reader is looking at
+     * their own screen — and the wash is light on a light screen and dark on a dark one.
+     */
+    private boolean lightMode() {
+        return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+            != Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /** The room the toolbar and the card may use: the screen, less the system bars. */
+    private Rect safeArea() {
+        Rect safe = new Rect(0, 0, getWidth(), getHeight());
+        android.view.WindowInsets insets = getRootWindowInsets();
+        if (insets != null) {
+            safe.left += Math.max(0, insets.getStableInsetLeft());
+            safe.top += Math.max(0, insets.getStableInsetTop());
+            safe.right -= Math.max(0, insets.getStableInsetRight());
+            safe.bottom -= Math.max(0, insets.getStableInsetBottom());
         }
+        if (safe.width() <= 0 || safe.height() <= 0) return new Rect(0, 0, getWidth(), getHeight());
+        return safe;
     }
 
-    // ---- pieces ------------------------------------------------------------------------------
-
-    private String placeName() {
-        int res = place == PaneWallPage.WIDGETS ? R.string.help_place_home
-            : place == PaneWallPage.DISPLAY ? R.string.help_place_display
-            : R.string.help_place_terminal;
-        return getContext().getString(res);
+    /** The gesture pill's own strip: exploration washes over it, and puts no card beneath it. */
+    private int bottomInset() {
+        android.view.WindowInsets insets = getRootWindowInsets();
+        if (insets == null) return 0;
+        return Math.max(0, Math.max(insets.getStableInsetBottom(),
+            insets.getSystemWindowInsetBottom()));
     }
 
-    private int panelWidth() {
-        Rect wall = snapshot == null ? new Rect(0, 0, getWidth(), getHeight()) : snapshot.wall;
-        return Math.max(dp(120), wall.width() - dp(32));
+    /** Which edge of the wall a control is past, if any; a dock that is a rail is one of these. */
+    private HelpLeaderRouter.Side side(Rect r) {
+        if (r.bottom <= snapshot.wall.top) return HelpLeaderRouter.Side.ABOVE;
+        if (r.top >= snapshot.wall.bottom) return HelpLeaderRouter.Side.UNDER;
+        if (r.right <= snapshot.wall.left) return HelpLeaderRouter.Side.LEFT;
+        if (r.left >= snapshot.wall.right) return HelpLeaderRouter.Side.RIGHT;
+        return HelpLeaderRouter.Side.INSIDE;
     }
 
-    private LinearLayout panel() {
-        LinearLayout panel = new LinearLayout(getContext());
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackground(dress.background(0));
-        panel.setPadding(dp(14), dp(12), dp(14), dp(10));
-        panel.setClickable(true);
-        panel.setFocusable(true);
-        return panel;
-    }
-
-    /** The panel's own row: the title alone — the × beside it is help's one way out. */
-    private View header(String title) {
-        TextView text = new TextView(getContext());
-        text.setText(title);
-        text.setTextSize(14);
-        text.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        text.setTextColor(dress.textColor);
-        return text;
-    }
-
-    private TextView sectionLabel(String text) {
-        TextView label = new TextView(getContext());
-        label.setText(text);
-        label.setTextSize(11);
-        label.setAllCaps(true);
-        label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        label.setTextColor(ColorUtils.setAlphaComponent(dress.textColor, 168));
-        return label;
-    }
-
-    private TextView line(String text, boolean bold, int color) {
+    /** A button of the card or the toolbar: never smaller than a thumb, always named for a reader. */
+    private TextView button(String label, Runnable onClick) {
         TextView view = new TextView(getContext());
-        view.setText(text);
+        view.setText(label);
+        view.setContentDescription(label);
         view.setTextSize(13);
-        view.setTextColor(color);
-        view.setLineSpacing(dp(2), 1f);
-        if (bold) view.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
-        return view;
-    }
-
-    /** One topic in the chooser: its name, and the sentence that says what it is for. */
-    private TextView chip(HelpTopics.Entry entry) {
-        TextView view = new TextView(getContext());
-        String title = getContext().getString(entry.titleRes);
-        SpannableString content = new SpannableString(title + "\n"
-            + getContext().getString(entry.summaryRes));
-        content.setSpan(new StyleSpan(Typeface.BOLD), 0, title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        content.setSpan(new ForegroundColorSpan(model.topicHighlightColor(accent)), 0,
-            title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        view.setText(content);
-        view.setTextSize(12);
-        view.setTextColor(dress.textColor);
-        view.setLineSpacing(dp(1), 1f);
+        view.setAllCaps(false);
+        view.setGravity(Gravity.CENTER);
         view.setMinHeight(dp(48));
-        view.setGravity(Gravity.CENTER_VERTICAL);
+        view.setMinWidth(dp(48));
         view.setPadding(dp(10), dp(8), dp(10), dp(8));
-        view.setContentDescription(title);
+        view.setTextColor(accent);
         GradientDrawable shape = new GradientDrawable();
-        shape.setColor(ColorUtils.setAlphaComponent(accent, 20));
+        shape.setColor(ColorUtils.setAlphaComponent(accent, 28));
         shape.setCornerRadius(dp(10));
         view.setBackground(shape);
         view.setClickable(true);
-        view.setOnClickListener(v -> command(model.selectTopic(entry.id)));
+        view.setFocusable(true);
+        view.setOnClickListener(v -> onClick.run());
         return view;
-    }
-
-    private LinearLayout buttonRow() {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        return row;
     }
 
     private LinearLayout.LayoutParams weighted() {
@@ -1102,49 +1024,7 @@ public final class HelpOverlayView extends FrameLayout {
         return params;
     }
 
-    /** A button of the panel: never smaller than a thumb, and always named for a reader. */
-    private TextView button(String label, boolean enabled, Runnable onClick) {
-        TextView view = new TextView(getContext());
-        view.setText(label);
-        view.setContentDescription(label);
-        view.setTextSize(13);
-        view.setAllCaps(false);
-        view.setGravity(Gravity.CENTER);
-        view.setMinHeight(dp(48));
-        view.setMinWidth(dp(48));
-        view.setPadding(dp(10), dp(8), dp(10), dp(8));
-        view.setTextColor(enabled ? accent : ColorUtils.setAlphaComponent(dress.textColor, 97));
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(ColorUtils.setAlphaComponent(accent, enabled ? 28 : 12));
-        shape.setCornerRadius(dp(10));
-        view.setBackground(shape);
-        view.setEnabled(enabled);
-        view.setFocusable(enabled);
-        view.setClickable(enabled);
-        if (enabled) view.setOnClickListener(v -> onClick.run());
-        return view;
-    }
-
-    /**
-     * The panel, in the half of the wall the control is not in, so the user can read the sentence
-     * and see the box it is about at the same time.
-     */
-    private void placePanel(View panel, Rect avoid) {
-        Rect wall = snapshot.wall;
-        int width = panelWidth();
-        int maxHeight = Math.max(dp(80), wall.height() - dp(24));
-        panel.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.AT_MOST));
-        int height = Math.min(panel.getMeasuredHeight(), maxHeight);
-        boolean atTheTop = avoid != null && avoid.centerY() > wall.centerY();
-        int top = atTheTop ? wall.top + dp(12) : wall.bottom - height - dp(12);
-        int left = wall.centerX() - width / 2;
-        put(panel, new Rect(left, top, left + width, top + height));
-        cards.add(panel);
-        panel.requestFocus();
-    }
-
-    /** Said once per topic: a layout pass is not a new thing to read out. */
+    /** Said once per selection: a layout pass is not a new thing to read out. */
     private void announce(String text, String key) {
         if (key == null || key.equals(announced)) return;
         announced = key;
@@ -1157,19 +1037,15 @@ public final class HelpOverlayView extends FrameLayout {
         return null;
     }
 
-    private Rect keyLabelBounds(Rect cap) {
-        Rect label = new Rect(cap);
-        label.inset(dp(2), dp(2));
-        // Text stays on its measured cap, clear of the screen's edges.
-        label.left = Math.max(label.left, dp(12));
-        label.right = Math.min(label.right, getWidth() - dp(12));
-        return label;
+    private float radiusOf(String id) {
+        if (snapshot == null) return 0;
+        for (HelpTargets.Target target : snapshot.targets) if (target.id.equals(id)) return target.radius;
+        return 0;
     }
 
     private void put(View view, Rect rect) {
         int width = Math.max(1, rect.width()), height = Math.max(1, rect.height());
         if (view.getParent() != this) {
-            // A card can move between its normal page and a copy-only scroll page on remeasurement.
             if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
             addView(view, new LayoutParams(width, height));
         } else {
@@ -1182,88 +1058,57 @@ public final class HelpOverlayView extends FrameLayout {
         childBounds.put(view, rect);
         rendered.add(view);
         // Sized and placed now rather than a frame later: a child that waits for the next layout
-        // pass is drawn once at no size, and that empty frame is the flash the guide used to give.
+        // pass is drawn once at no size, and that empty frame is the flash the overlay used to give.
         view.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
         view.layout(rect.left, rect.top, rect.left + width, rect.top + height);
-    }
-
-    /** A card in its hint's colour: the title and the border match the box on the control. */
-    private TextView card(HelpCopy copy, int titleColor, int borderColor) {
-        TextView text = new TextView(getContext());
-        SpannableString content = new SpannableString(copy.title + "\n" + copy.body);
-        content.setSpan(new StyleSpan(Typeface.BOLD), 0, copy.title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        content.setSpan(new ForegroundColorSpan(titleColor), 0, copy.title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        text.setText(content); text.setTextSize(12); text.setTextColor(dress.textColor);
-        text.setPadding(dp(8), dp(6), dp(8), dp(6));
-        text.setLineSpacing(dp(1), 1);
-        android.graphics.drawable.Drawable background = dress.background(0);
-        if (background instanceof GradientDrawable)
-            ((GradientDrawable) background).setStroke(dp(1.5f), borderColor);
-        text.setBackground(background);
-        return text;
-    }
-
-    private TextView pill(String copy) {
-        TextView text = new TextView(getContext());
-        text.setText(copy); text.setTextSize(12); text.setTextColor(dress.textColor);
-        text.setGravity(Gravity.CENTER); text.setPadding(dp(10), dp(8), dp(10), dp(8));
-        text.setBackground(dress.background(dp(40)));
-        return text;
     }
 
     @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
         for (Map.Entry<View, Rect> entry : childBounds.entrySet()) {
             View child = entry.getKey(); Rect bounds = entry.getValue();
             child.layout(bounds.left, bounds.top, bounds.right, bounds.bottom);
-            if (child.getBackground() instanceof GradientDrawable)
+            // The markers are round and the toolbar is a capsule; everything else wears the
+            // terminal's own corner.
+            if (child.getBackground() instanceof GradientDrawable && child != toolbar
+                    && !markerViews.containsValue(child))
                 ((GradientDrawable) child.getBackground()).setCornerRadius(dress.cornerRadiusPx(bounds.height()));
         }
     }
 
+    // ---- drawing ----------------------------------------------------------------------------
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (!showing || snapshot == null) return;
-        // The wash the boxes are read against: dark on a dark screen, light on a light one.
-        canvas.drawColor(lightMode() ? Color.argb(172, 255, 255, 255) : Color.argb(166, 0, 0, 0));
-        paint.setStrokeWidth(dp(1.5f)); paint.setStyle(Paint.Style.STROKE);
-        if (model.mode() == HelpPresentationModel.Mode.OVERVIEW) drawGuide(canvas);
-        else if (model.mode() == HelpPresentationModel.Mode.TOPIC) drawTopic(canvas);
+        // Dimmed, not covered: the reader is being shown their own screen.
+        canvas.drawColor(lightMode() ? Color.argb(104, 255, 255, 255) : Color.argb(102, 0, 0, 0));
+        paint.setStrokeWidth(dp(1.5f));
+        paint.setStyle(Paint.Style.STROKE);
+        String selected = model.selectedTargetId();
+        for (Marker marker : markers) {
+            if (marker.entry.targetId.equals(selected)) continue;
+            paint.setColor(ColorUtils.setAlphaComponent(onTheWash(marker.color), 150));
+            drawBox(canvas, marker.target, radiusOf(marker.entry.targetId));
+        }
+        drawSelected(canvas, selected);
         paint.setPathEffect(null);
         drawGesture(canvas);
     }
 
-    /** One box, on the one control the topic is about. */
-    private void drawTopic(Canvas canvas) {
-        Rect rect = targetRect(model.highlightTargetId());
+    /** The one highlight, its one short leader, and the extra keys' own cards when they are up. */
+    private void drawSelected(Canvas canvas, String selected) {
+        if (selected == null) return;
+        Rect rect = targetRect(selected);
         if (rect == null) return;
-        paint.setColor(onTheWash(model.topicHighlightColor(accent)));
-        drawBox(canvas, rect, radiusOf(model.highlightTargetId()));
-    }
-
-    /** A colour deep enough to be a dash on the light wash; on the dark one it is left alone. */
-    private int onTheWash(int color) {
-        if (!lightMode()) return color;
-        float[] hsv = new float[3];
-        Color.colorToHSV(color, hsv);
-        return Color.HSVToColor(new float[] {hsv[0], Math.max(hsv[1], 0.85f), Math.min(hsv[2], 0.55f)});
-    }
-
-    /**
-     * Each box, its leader and its card wear one colour, so a line that passes another card still
-     * reads as belonging to its own pair.
-     */
-    private void drawGuide(Canvas canvas) {
-        if (routed == null) return;
-        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page == 0) {
-            HelpTargets.Target target = target(p.target.id);
-            Integer color = boxColors.get(target.id);
-            paint.setColor(color == null ? onTheWash(accent) : color);
+        paint.setColor(onTheWash(model.markerColor(accent, selected, lightMode())));
+        paint.setStrokeWidth(dp(2.5f));
+        if (cardLeader != null) {
             paint.setPathEffect(null);
-            for (HelpLeaderRouter.Segment line : p.lines)
-                canvas.drawLine(line.x1, line.y1, line.x2, line.y2, paint);
-            drawBox(canvas, target.rect, target.radius);
+            canvas.drawLine(cardLeader.x1, cardLeader.y1, cardLeader.x2, cardLeader.y2, paint);
         }
+        drawBox(canvas, rect, radiusOf(selected));
+        paint.setStrokeWidth(dp(1.5f));
         // The extra keys share one colour: they are one row, and seven hues along a keyboard
         // would read as seven unrelated things rather than as the keys of one row.
         paint.setColor(keyColor);
@@ -1272,6 +1117,14 @@ public final class HelpOverlayView extends FrameLayout {
             for (float[] line : key.lines) canvas.drawLine(line[0], line[1], line[2], line[3], paint);
             drawBox(canvas, key.cap, dp(8));
         }
+    }
+
+    /** A colour deep enough to be a dash on the light wash; on the dark one it is left alone. */
+    private int onTheWash(int color) {
+        if (!lightMode()) return color;
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        return Color.HSVToColor(new float[] {hsv[0], Math.max(hsv[1], 0.85f), Math.min(hsv[2], 0.55f)});
     }
 
     private void drawBox(Canvas canvas, Rect rect, float radius) {
@@ -1296,19 +1149,10 @@ public final class HelpOverlayView extends FrameLayout {
             density, gestureProgress, accent, fingerPoint, trailPoint);
     }
 
-    private float radiusOf(String id) {
-        if (snapshot == null) return 0;
-        for (HelpTargets.Target target : snapshot.targets) if (target.id.equals(id)) return target.radius;
-        return 0;
-    }
-
-    private HelpTargets.Target target(String id) {
-        for (HelpTargets.Target t : snapshot.targets) if (t.id.equals(id)) return t;
-        throw new IllegalStateException(id);
-    }
+    // ---- touch ------------------------------------------------------------------------------
 
     @Override public boolean dispatchTouchEvent(MotionEvent event) {
-        // Children receive taps and panel scrolling; nothing can pass through this layer.
+        // Children receive taps; nothing passes through this layer to the launcher underneath.
         super.dispatchTouchEvent(event);
         return true;
     }
@@ -1322,24 +1166,86 @@ public final class HelpOverlayView extends FrameLayout {
                     > android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop()) moved = true;
                 break;
             case MotionEvent.ACTION_UP:
-                if (!moved && !insideCard(downX, downY) && !insideCard(event.getX(), event.getY())) {
-                    performClick(); command(model.close());
-                }
+                if (moved || onSomething(downX, downY) || onSomething(event.getX(), event.getY())) break;
+                performClick();
+                // The control itself is as good a marker as its dot; empty space puts the card away.
+                String id = targetAt(event.getX(), event.getY());
+                if (id != null) select(id, false);
+                else deselect();
                 break;
         }
         return true;
     }
 
-    private boolean insideCard(float x, float y) {
-        for (View card : cards) { Rect r = childBounds.get(card); if (r != null && r.contains((int) x, (int) y)) return true; }
+    private boolean onSomething(float x, float y) {
+        for (View view : touchable) {
+            Rect r = childBounds.get(view);
+            if (r != null && r.contains((int) x, (int) y)) return true;
+        }
         return false;
+    }
+
+    /** The smallest marked control under the finger, so a badge inside a bar wins over the bar. */
+    private String targetAt(float x, float y) {
+        String best = null;
+        long area = Long.MAX_VALUE;
+        for (Marker marker : markers) {
+            Rect r = marker.target;
+            if (!r.contains((int) x, (int) y)) continue;
+            long size = (long) r.width() * r.height();
+            if (size < area) { area = size; best = marker.entry.targetId; }
+        }
+        return best;
     }
 
     @Override public boolean performClick() { super.performClick(); return true; }
 
     private int dp(float value) { return Math.round(value * density); }
 
-    private static HelpLeaderRouter.Box box(Rect r) { return new HelpLeaderRouter.Box(r.left, r.top, r.right, r.bottom); }
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(Math.max(min, max), value));
+    }
 
-    private static Rect rect(HelpLeaderRouter.Box b) { return new Rect(Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)); }
+    private static HelpLeaderRouter.Box box(Rect r) {
+        return new HelpLeaderRouter.Box(r.left, r.top, r.right, r.bottom);
+    }
+
+    private static Rect rect(HelpLeaderRouter.Box b) {
+        return new Rect(Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom));
+    }
+
+    /** The marked controls on screen right now, in the order they are numbered. */
+    @VisibleForTesting
+    List<String> markerTargetIds() {
+        List<String> ids = new ArrayList<>();
+        for (Marker marker : markers) ids.add(marker.entry.targetId);
+        return Collections.unmodifiableList(ids);
+    }
+
+    /** Where the seated card is, or null when nothing is selected. */
+    @VisibleForTesting
+    Rect cardBounds() { return cardBounds == null ? null : new Rect(cardBounds); }
+
+    /** Where the toolbar is. */
+    @VisibleForTesting
+    Rect toolbarBounds() { return toolbarBounds == null ? null : new Rect(toolbarBounds); }
+
+    /** The extra keys' own cards, empty unless the extra keys row is the selected control. */
+    @VisibleForTesting
+    List<Rect> keyCardBounds() {
+        List<Rect> out = new ArrayList<>();
+        for (KeyCard key : keyCards) out.add(new Rect(key.bounds));
+        return out;
+    }
+
+    /** The marker dot for one control, or null when that control is not marked. */
+    @VisibleForTesting
+    View markerView(String targetId) { return markerViews.get(targetId); }
+
+    /** Where one control was measured this pass, for a test that checks nothing covers it. */
+    @VisibleForTesting
+    Rect measuredRect(String targetId) {
+        Rect rect = targetRect(targetId);
+        return rect == null ? null : new Rect(rect);
+    }
 }

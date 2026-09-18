@@ -10,8 +10,6 @@ import com.termux.app.AzScrubRowView;
 import com.termux.app.launcher.widget.WidgetCellRect;
 import com.termux.app.launcher.widget.WidgetGridMetrics;
 import com.termux.app.launcher.widget.WidgetGridView;
-import com.termux.app.terminal.TerminalActionDispatcher;
-import com.termux.app.terminal.TerminalKeyBindingResolver;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.x11.DisplayScaleRailView;
@@ -34,9 +32,8 @@ public final class HelpTargets {
         public final String id;
         public final Rect rect;
         public final float radius;
-        public final HelpCopy copy;
-        Target(String id, Rect rect, float radius, HelpCopy copy) {
-            this.id = id; this.rect = rect; this.radius = radius; this.copy = copy;
+        Target(String id, Rect rect, float radius) {
+            this.id = id; this.rect = rect; this.radius = radius;
         }
     }
     /** One extra key: the cap it sits on, what it does, and what a swipe up on it does. */
@@ -62,8 +59,7 @@ public final class HelpTargets {
         Snapshot(Rect wall) { this.wall = wall; }
         public String signature() {
             StringBuilder s = new StringBuilder(wall.toShortString());
-            for (Target t : targets) s.append(t.id).append(t.rect.toShortString())
-                .append(t.radius).append(t.copy.title).append(t.copy.body);
+            for (Target t : targets) s.append(t.id).append(t.rect.toShortString()).append(t.radius);
             for (KeyLabel k : keys) s.append(k.rect.toShortString()).append(k.text);
             return s.toString();
         }
@@ -95,74 +91,57 @@ public final class HelpTargets {
                 if (chips == null) {
                     for (int i = 0; i < strip.getChildCount(); i++) chips = union(chips, rect(strip.getChildAt(i)));
                 }
-                add(s, "windows", chips, radius(strip), place == PaneWallPage.TERMINAL
-                    ? copy(R.string.help_windows_title, R.string.help_windows_body)
-                    : copy(R.string.help_display_apps_title, R.string.help_display_apps_body));
+                add(s, "windows", chips, radius(strip));
             }
             stats(s);
         }
-        // The whole bar, not the peeking place icon at its end: the gestures the hint names are
+        // The whole bar, not the peeking place icon at its end: the gestures the topic names are
         // made anywhere along it, and a box on one small icon read as being about that icon.
         View host = finder.findHelpView(R.id.terminal_window_bar_host);
-        add(s, "status", rect(host), radius(host), copy(R.string.help_status_title, R.string.help_status_body));
+        add(s, "status", rect(host), radius(host));
         // Launcher settings live on a keyboard corner rather than in the chrome, so every place
         // points at the cog itself: the box is the glyph, which is the thing the user swipes off.
-        add(s, "settings", keyCornerRect(SETTINGS_KEY), 0,
-            copy(R.string.help_launcher_settings_title, R.string.help_launcher_settings_body));
+        add(s, "settings", keyCornerRect(SETTINGS_KEY), 0);
         if (place == PaneWallPage.TERMINAL) {
-            add(s, "sessions", finder.findHelpView(R.id.terminal_sessions_indicator),
-                copy(R.string.help_sessions_title, R.string.help_sessions_body));
+            add(s, "sessions", finder.findHelpView(R.id.terminal_sessions_indicator));
             if (finder.paneCount() > 1) {
                 View divider = tagged(root);
-                add(s, "divider", divider, copy(R.string.help_divider_title, R.string.help_divider_body));
+                add(s, "divider", divider);
             }
-            View dock = firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host);
-            // The rail's copy is about a column of icons down one side; a row moved to the top
-            // edge is still a row and keeps the dock's.
-            boolean rail = dock != null && dock.getId() == R.id.place_apps_bar_host
-                && dock.getHeight() > dock.getWidth();
-            add(s, "dock", dock, copy(R.string.help_dock_title,
-                rail ? R.string.help_rail_body : R.string.help_dock_body));
-            add(s, "az", firstOfType(root, AzScrubRowView.class), copy(R.string.help_az_title, R.string.help_az_body));
+            // A dock that is a rail down one side reads off its own measured rect: whoever draws
+            // help asks which edge of the wall it is past, so nothing here has to say.
+            add(s, "dock", firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host));
+            add(s, "az", firstOfType(root, AzScrubRowView.class));
             paneCorner(s);
-            // The row as one box, for the topic that is about the row. Each key keeps its own
-            // label drawn on its own cap: the box says which row, the labels say which key.
+            // The row as one box, for the topic that is about the row; every cap is measured
+            // separately below, for the labels shown while the row is the selected control.
             ExtraKeysView row = firstOfType(root, ExtraKeysView.class);
-            add(s, "keys", rect(row), radius(row), copy(R.string.help_topic_keys_title,
-                R.string.help_topic_keys_purpose, R.string.help_topic_keys_action));
+            add(s, "keys", rect(row), radius(row));
             // The row that was just measured, not a second walk for it: one search, one answer.
             extraKeys(row, s);
-            // Two keyboard hints: the prefix keys with the chords they start, and the space bar
-            // with its swipes. Each is boxed on the keys it is about.
-            Rect prefix = union(keyRect("ctrl"), keyRect("alt"));
-            if (prefix != null) {
-                String chords = chords();
-                String hold = context.getString(R.string.help_prefix_body);
-                add(s, "prefix", prefix, 0, new HelpCopy(context.getString(R.string.help_prefix_title),
-                    chords.isEmpty() ? hold : hold + "\n" + chords));
-            }
-            add(s, "space", keyRect("space"), 0, copy(R.string.help_space_title, R.string.help_space_body));
+            // Two keyboard controls of their own: the prefix keys that start the chords, and the
+            // space bar with its swipes. Each is measured on the keys it is about.
+            add(s, "prefix", union(keyRect("ctrl"), keyRect("alt")), 0);
+            add(s, "space", keyRect("space"), 0);
         } else if (place == PaneWallPage.DISPLAY) {
             DisplayScaleRailView rail = firstOfType(root, DisplayScaleRailView.class);
             if (rail != null && rail.isRailShown()) add(s, "scale", localRect(rail, rail.helpBounds()),
-                radius(rail), copy(R.string.help_scale_title, R.string.help_scale_body));
-            add(s, "touchpad", firstOfType(root, DisplayTouchpadView.class),
-                copy(R.string.help_pad_title, R.string.help_pad_one, R.string.help_pad_two, R.string.help_pad_three));
-            add(s, "start", finder.findHelpView(R.id.x11_pane_start), copy(R.string.help_start_title, R.string.help_start_body));
+                radius(rail));
+            add(s, "touchpad", firstOfType(root, DisplayTouchpadView.class));
+            add(s, "start", finder.findHelpView(R.id.x11_pane_start));
             // Only out while the empty state names a missing package; that visibility is the
             // readiness flag already applied to the view, so nothing here re-checks the prefix.
-            add(s, "setup", finder.findHelpView(R.id.x11_pane_guide), copy(R.string.help_setup_title, R.string.help_setup_body));
+            add(s, "setup", finder.findHelpView(R.id.x11_pane_guide));
         } else {
             WidgetGridView grid = firstOfType(root, WidgetGridView.class);
             if (grid != null) {
                 for (int i = 0; i < grid.getChildCount(); i++) {
                     View child = grid.getChildAt(i);
                     if (rect(child) == null) continue;
-                    add(s, "widget", child, copy(R.string.help_widget_title, R.string.help_widget_body));
+                    add(s, "widget", child);
                     break;
                 }
-                add(s, "empty", localRect(grid, largestEmptyRegion(grid)), radius(grid),
-                    copy(R.string.help_empty_title, R.string.help_empty_body));
+                add(s, "empty", localRect(grid, largestEmptyRegion(grid)), radius(grid));
             }
         }
         return s;
@@ -179,47 +158,15 @@ public final class HelpTargets {
         int size = Math.round(com.termux.app.chrome.CornerZones.clampSize(
             com.termux.app.chrome.CornerZones.paneSizePx(density), pane.width(), pane.height()));
         if (size <= 0) return;
-        add(s, "corners", new Rect(pane.left, pane.top, pane.left + size, pane.top + size), 0,
-            copy(R.string.help_topic_corners_title, R.string.help_topic_corners_purpose,
-                R.string.help_topic_corners_action));
+        add(s, "corners", new Rect(pane.left, pane.top, pane.left + size, pane.top + size), 0);
     }
 
-    private String chords() {
-        String[] tools = {"pane.split", "window.new", "session.new"};
-        int[] sentences = {R.string.help_split_chord, R.string.help_window_chord, R.string.help_session_chord};
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < tools.length; i++) {
-            List<String> strokes = TerminalKeyBindingResolver.getInstance().getStrokesForTool(tools[i],
-                TerminalActionDispatcher.getInstance().actionContext());
-            if (strokes.isEmpty()) continue;
-            String stroke = strokes.get(0);
-            if (result.length() > 0) result.append('\n');
-            result.append(context.getString(sentences[i], displayChord(stroke)));
-        }
-        return result.toString();
-    }
-    static String displayChord(String stroke) {
-        StringBuilder out = new StringBuilder();
-        for (String key : stroke.split("\\+")) {
-            if (out.length() > 0) out.append(", ");
-            if (!key.isEmpty()) out.append(Character.toUpperCase(key.charAt(0))).append(key.substring(1));
-        }
-        return out.toString();
-    }
+    /** The widgets that are out, as one box: the topic is about the cluster, not about CPU. */
     private void stats(Snapshot s) {
         int[] ids = {R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram, R.id.terminal_status_widget_weather};
-        int[] labels = {R.string.help_stat_cpu, R.string.help_stat_ram, R.string.help_stat_weather};
         Rect bounds = null;
-        StringBuilder title = new StringBuilder();
-        for (int i = 0; i < ids.length; i++) {
-            Rect r = rect(finder.findHelpView(ids[i]));
-            if (r == null) continue;
-            bounds = union(bounds, r);
-            if (title.length() > 0) title.append(context.getString(R.string.help_stat_separator));
-            title.append(context.getString(labels[i]));
-        }
-        add(s, "stats", bounds, radius(finder.findHelpView(R.id.terminal_status_stats_cluster)),
-            new HelpCopy(title.toString(), context.getString(R.string.help_stats_body)));
+        for (int id : ids) bounds = union(bounds, rect(finder.findHelpView(id)));
+        add(s, "stats", bounds, radius(finder.findHelpView(R.id.terminal_status_stats_cluster)));
     }
     private void extraKeys(View view, Snapshot s) {
         if (rect(view) == null || view == overlay) return;
@@ -289,11 +236,10 @@ public final class HelpTargets {
             }
         return best;
     }
-    private HelpCopy copy(int title, int... lines) { return HelpCopy.of(context, title, lines); }
-    private void add(Snapshot s, String id, View view, HelpCopy copy) { add(s,id,rect(view),radius(view),copy); }
-    private void add(Snapshot s, String id, Rect rect, float radius, HelpCopy copy) {
+    private void add(Snapshot s, String id, View view) { add(s, id, rect(view), radius(view)); }
+    private void add(Snapshot s, String id, Rect rect, float radius) {
         if (rect == null || rect.isEmpty()) { HelpLog.d("omit " + id + ": not visible"); return; }
-        s.targets.add(new Target(id, rect, radius, copy));
+        s.targets.add(new Target(id, rect, radius));
     }
     private View firstShown(int... ids) {
         for (int id : ids) { View view = finder.findHelpView(id); if (rect(view) != null) return view; }

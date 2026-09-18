@@ -1878,53 +1878,22 @@
 
     <!-- On-demand help. -->
     <string name="help_button">?</string>
-    <string name="help_close_glyph">×</string>
     <string name="help_accessibility">Help</string>
+    <string name="help_close_glyph">×</string>
     <string name="help_close_action">Close help</string>
-    <string name="help_topics_action">Help topics</string>
-    <string name="help_sessions_title">Sessions</string>
-    <string name="help_sessions_body">Tap to switch.</string>
-    <string name="help_windows_title">Windows</string>
-    <string name="help_windows_body">Tap to pick one, tap again for its × button, and tap + for a new one.</string>
-    <string name="help_stats_body">Tap one for details.</string>
-    <string name="help_stat_cpu">CPU</string>
-    <string name="help_stat_ram">RAM</string>
-    <string name="help_stat_weather">Weather</string>
-    <string name="help_stat_separator">" · "</string>
     <string name="help_status_title">Status bar</string>
-    <string name="help_status_body">Swipe to change place, drag down for the clock.</string>
-    <string name="help_divider_title">Divider</string>
-    <string name="help_divider_body">Drag to resize.</string>
     <string name="help_dock_title">Dock</string>
-    <string name="help_dock_body">Pull down for the app drawer.</string>
-    <string name="help_rail_body">Swipe off the rail for the app drawer.</string>
     <string name="help_az_title">A–Z row</string>
-    <string name="help_az_body">Slide to filter, drag up to an app to launch it.</string>
-    <string name="help_prefix_title">Prefix keys</string>
-    <string name="help_prefix_body">Hold Ctrl and Alt to see what every key does.</string>
-    <string name="help_split_chord">%1$s splits the pane.</string>
-    <string name="help_window_chord">%1$s opens a window.</string>
-    <string name="help_session_chord">%1$s opens a session.</string>
     <string name="help_space_title">Space bar</string>
-    <string name="help_space_body">Swipe up for the command palette, toward a corner for windows and sessions.</string>
     <string name="help_launcher_settings_title">Termux Launcher settings</string>
-    <string name="help_launcher_settings_body">Swipe the key toward the cog.</string>
     <string name="help_display_apps_title">Display apps</string>
-    <string name="help_display_apps_body">Tap once to show its × button.</string>
     <string name="help_scale_title">Scale</string>
-    <string name="help_scale_body">Drag to resize the display.</string>
     <string name="help_pad_title">Touchpad</string>
     <string name="help_pad_one">One finger moves and taps.</string>
     <string name="help_pad_two">Two fingers scroll, pinch or right-click.</string>
     <string name="help_pad_three">Three fingers middle-click or switch windows.</string>
     <string name="help_start_title">Start display</string>
-    <string name="help_start_body">Tap to start the Linux display.</string>
     <string name="help_setup_title">Set up the display</string>
-    <string name="help_setup_body">Tap to see what needs installing first.</string>
-    <string name="help_widget_title">A widget</string>
-    <string name="help_widget_body">Long-press to move or resize.</string>
-    <string name="help_empty_title">Empty space</string>
-    <string name="help_empty_body">Long-press to add a widget or another page.</string>
     <string name="help_key_action">Action</string>
     <string name="help_key_form">form</string>
     <string name="help_key_mouse">Mouse</string>
@@ -1992,9 +1961,6 @@
     <string name="help_place_home">Home</string>
     <string name="help_place_terminal">Terminal</string>
     <string name="help_place_display">Display</string>
-    <string name="help_show_basics">Show basics</string>
-    <string name="help_show_all">Show all</string>
-    <string name="help_back_to_topics">Back to topics</string>
     <string name="help_show_gesture">Show gesture</string>
     <string name="help_try_it">Try it</string>
     <string name="help_settings_title">Help</string>
@@ -2286,4 +2252,8 @@
     <string name="help_lesson_keyboard_summary">Bring the keyboard up and put it away again.</string>
     <string name="help_lesson_find_action_title">Find an action</string>
     <string name="help_lesson_find_action_summary">Open the command palette and pick an action.</string>
+    <!-- Explore this screen (phase C). -->
+    <string name="help_explore_title">Explore this screen</string>
+    <string name="help_explore_back">Back to help</string>
+    <string name="help_explore_read">Read topic</string>
 </resources>

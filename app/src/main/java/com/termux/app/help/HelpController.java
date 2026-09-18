@@ -432,59 +432,38 @@ public final class HelpController {
         return panel;
     }
 
-    // ---- the B–C bridge ----------------------------------------------------------------------
+    // ---- the explorer -----------------------------------------------------------------------
 
-    /**
-     * The explore overlay as it exists on this branch. Phase C rewrites {@code HelpOverlayView}
-     * to the {@link Explorer} seam; until that branch lands this drives the overlay it can see,
-     * and the swap is this whole method:
-     *
-     * <pre>
-     * HelpOverlayView view = new HelpOverlayView(context, finder);
-     * host.addView(view, new FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
-     * return new Explorer() {
-     *     public void setExploreListener(ExploreListener l) {
-     *         view.setExploreListener(new HelpOverlayView.ExploreListener() { ...delegate... });
-     *     }
-     *     public void explore(PaneWallPage p, String id) { view.explore(p, id); }
-     *     public void demonstrate(PaneWallPage p, String id) { view.demonstrate(p, id); }
-     *     public boolean isShowing() { return view.isShowing(); }
-     *     public void dismiss() { view.dismiss(); }
-     *     public boolean onBackPressed() { return view.onBackPressed(); }
-     * };
-     * </pre>
-     */
+    /** The explore overlay, created on first use and added over the same host as the panel. */
     private static Explorer overlayExplorer(Context context, ViewGroup host,
                                             HelpTargets.ViewFinder finder) {
         return new Explorer() {
             private HelpOverlayView view;
-            private ExploreListener listener;
-            /** Whether this bridge asked for the dismissal, or the overlay closed itself. */
-            private boolean closing;
 
             private HelpOverlayView view() {
                 if (view != null) return view;
-                view = new HelpOverlayView(context, finder, () -> {
-                    if (closing || listener == null) return;
-                    listener.onBackToHelp();
-                });
-                // Practice belongs to the reading side now; the old overlay offers none.
-                view.setPracticeAvailable(false);
+                view = new HelpOverlayView(context, finder);
                 host.addView(view, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 return view;
             }
 
             @Override public void setExploreListener(ExploreListener listener) {
-                this.listener = listener;
+                view().setExploreListener(listener == null ? null : new HelpOverlayView.ExploreListener() {
+                    @Override public void onReadTopic(String topicId) { listener.onReadTopic(topicId); }
+                    @Override public void onBackToHelp() { listener.onBackToHelp(); }
+                    @Override public void onCloseHelp() { listener.onCloseHelp(); }
+                    @Override public void onTargetGone(String topicId) { listener.onTargetGone(topicId); }
+                    @Override public void onCardDoesNotFit(String topicId) { listener.onCardDoesNotFit(topicId); }
+                });
             }
 
             @Override public void explore(PaneWallPage place, @Nullable String selectTopicId) {
-                view().show(place);
+                view().explore(place, selectTopicId);
             }
 
             @Override public void demonstrate(PaneWallPage place, String topicId) {
-                view().show(place);
+                view().demonstrate(place, topicId);
             }
 
             @Override public boolean isShowing() {
@@ -492,17 +471,11 @@ public final class HelpController {
             }
 
             @Override public void dismiss() {
-                if (view == null || !view.isShowing()) return;
-                closing = true;
-                try {
-                    view.dismiss();
-                } finally {
-                    closing = false;
-                }
+                if (view != null) view.dismiss();
             }
 
             @Override public boolean onBackPressed() {
-                return false;
+                return view != null && view.onBackPressed();
             }
         };
     }

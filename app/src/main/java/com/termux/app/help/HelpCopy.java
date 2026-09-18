@@ -5,18 +5,13 @@ import com.termux.R;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
 
-/** Product copy for measured controls; tool identifiers never become labels. */
+/**
+ * What one of the reader's own extra keys is called. Everything else a control is called comes from
+ * {@link HelpTopics}; only the keys are named by the reader's own key assignments, and a tool
+ * identifier never becomes a label.
+ */
 public final class HelpCopy {
-    public final String title, body;
-    public HelpCopy(String title, String body) { this.title = title; this.body = body; }
-    public static HelpCopy of(Context context, int title, int... lines) {
-        StringBuilder body = new StringBuilder();
-        for (int line : lines) {
-            if (body.length() > 0) body.append('\n');
-            body.append(context.getString(line));
-        }
-        return new HelpCopy(context.getString(title), body.toString());
-    }
+    private HelpCopy() {}
     public static String keyLabel(Context context, ExtraKeyButton key) {
         if (key == null) return "";
         String name = key.getKey();
