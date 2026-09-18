@@ -12,27 +12,31 @@ public class WallpaperBackdropPolicyTest {
     @Test
     public void aStillWallpaperWeCanReadIsDrawnByTheLauncher() {
         assertEquals(WallpaperBackdropPolicy.Mode.SELF_DRAWN,
-            WallpaperBackdropPolicy.mode(true, false, true));
+            WallpaperBackdropPolicy.mode(true, WallpaperPicture.MATCHES_SCREEN, true));
     }
 
     @Test
-    public void aLiveWallpaperStaysWithTheSystem() {
+    public void aPictureWeAreOnlyGuessingAtStaysWithTheSystem() {
+        // Best-effort still blurs on every glass, but painting it behind everything would put a
+        // picture on screen that the user is not looking at.
         assertEquals(WallpaperBackdropPolicy.Mode.PASSTHROUGH,
-            WallpaperBackdropPolicy.mode(true, true, true));
+            WallpaperBackdropPolicy.mode(true, WallpaperPicture.BEST_EFFORT, true));
+        assertEquals(WallpaperBackdropPolicy.Mode.PASSTHROUGH,
+            WallpaperBackdropPolicy.mode(true, WallpaperPicture.NO_STILL, true));
     }
 
     @Test
     public void aWallpaperWeCannotReadStaysWithTheSystem() {
         assertEquals(WallpaperBackdropPolicy.Mode.PASSTHROUGH,
-            WallpaperBackdropPolicy.mode(true, false, false));
+            WallpaperBackdropPolicy.mode(true, WallpaperPicture.MATCHES_SCREEN, false));
     }
 
     @Test
     public void theFeatureBeingOffLeavesEverythingAsItWas() {
         assertEquals(WallpaperBackdropPolicy.Mode.PASSTHROUGH,
-            WallpaperBackdropPolicy.mode(false, false, true));
+            WallpaperBackdropPolicy.mode(false, WallpaperPicture.MATCHES_SCREEN, true));
         assertEquals(WallpaperBackdropPolicy.Mode.PASSTHROUGH,
-            WallpaperBackdropPolicy.mode(false, true, false));
+            WallpaperBackdropPolicy.mode(false, WallpaperPicture.BEST_EFFORT, false));
     }
 
     @Test
