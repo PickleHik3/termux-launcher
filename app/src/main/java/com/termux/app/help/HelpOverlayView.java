@@ -24,6 +24,12 @@ import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.termux.shared.termux.font.NerdFontSpans;
+import com.termux.app.chrome.CornerTabGlyphs;
+import com.termux.app.chrome.CornerTabGeometry;
+import com.google.android.material.color.MaterialColors;
+import androidx.core.content.ContextCompat;
+import android.graphics.drawable.InsetDrawable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.graphics.ColorUtils;
 import com.termux.R;
@@ -611,14 +617,24 @@ public final class HelpOverlayView extends FrameLayout {
      * controls, the foot of the screen first. A corner rather than mid-screen, where two buttons
      * read as one more card; and placed before any card, so nothing is laid out under them.
      */
+    /** The square a thumb asks for, per button; the pair is two of them in one capsule. */
+    private static final int GLYPH_SIZE_DP = 48;
+    /** How far the capsule stays in from the wall's edges. */
+    private static final int GLYPH_MARGIN_DP = 6;
+
+    /**
+     * The × and the guide button: help's own chrome, one capsule in a corner of the wall — the
+     * same size and glass a corner tab's buttons wear — in whichever corner covers the fewest
+     * controls, the foot of the wall first.
+     */
     private void placeButtons() {
         if (buttons == null) buttons = buttons();
         Rect safe = safeArea();
-        int width = Math.min(safe.width() - dp(16), dp(220));
+        int height = dp(GLYPH_SIZE_DP);
+        int width = height * 2;
         buttons.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(safe.height(), MeasureSpec.AT_MOST));
-        int height = buttons.getMeasuredHeight();
-        int margin = dp(8);
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+        int margin = dp(GLYPH_MARGIN_DP);
         Rect wall = snapshot.wall;
         int left = clamp(wall.left + margin, safe.left, safe.right - width);
         int right = clamp(wall.right - margin - width, safe.left, safe.right - width);
@@ -634,19 +650,79 @@ public final class HelpOverlayView extends FrameLayout {
         }
     }
 
+    /** The capsule: the × and the guide glyph, two round tab-style buttons sharing one pill. */
     private LinearLayout buttons() {
-        LinearLayout row = new LinearLayout(getContext());
+        Context context = getContext();
+        TextView close = glyphButton(context.getString(R.string.help_close_glyph), false,
+            context.getString(R.string.help_close_action),
+            () -> { if (listener != null) listener.onCloseHelp(); });
+        TextView guide = glyphButton(CornerTabGlyphs.CATALOGUE, true,
+            context.getString(R.string.help_overview_guide_action),
+            () -> { if (listener != null) listener.onOpenGuide(); });
+        LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
         row.setClickable(true);
-        row.setPadding(dp(6), dp(6), dp(6), dp(6));
-        row.setBackground(dress.background(dp(28)));
-        row.addView(button(getContext().getString(R.string.help_close_glyph),
-            getContext().getString(R.string.help_close_action),
-            () -> { if (listener != null) listener.onCloseHelp(); }), weighted());
-        row.addView(button(getContext().getString(R.string.help_overview_guide),
-            getContext().getString(R.string.help_overview_guide_action),
-            () -> { if (listener != null) listener.onOpenGuide(); }), weighted());
+        int size = dp(GLYPH_SIZE_DP);
+        row.addView(close, new LinearLayout.LayoutParams(size, size));
+        row.addView(guide, new LinearLayout.LayoutParams(size, size));
+        row.setBackground(glyphGroupBackground());
         return row;
+    }
+
+    /** The pill the two buttons share: the tab's glass, so the pair reads as one piece. */
+    private GradientDrawable glyphGroupBackground() {
+        Context context = getContext();
+        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        int surface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
+            ContextCompat.getColor(context, R.color.termux_surface_panel));
+        GradientDrawable capsule = new GradientDrawable();
+        capsule.setShape(GradientDrawable.RECTANGLE);
+        capsule.setCornerRadius(dp(GLYPH_SIZE_DP) / 2f);
+        capsule.setColor(ColorUtils.setAlphaComponent(surface, 200));
+        capsule.setStroke(dp(CornerTabGeometry.TAB_OUTLINE_DP), ColorUtils.setAlphaComponent(primary, 120));
+        return capsule;
+    }
+
+    /** One round button: the corner tab's own glass and tint, inside a thumb's square. */
+    private TextView glyphButton(String glyph, boolean symbols, String description, Runnable onClick) {
+        Context context = getContext();
+        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        int surface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
+            ContextCompat.getColor(context, R.color.termux_surface_panel));
+        // Neither × nor a Nerd Font glyph sits in the middle of its line box, so the glyph is
+        // drawn on its own ink bounds, centred on the view.
+        TextView view = new TextView(context) {
+            private final Rect ink = new Rect();
+            @Override protected void onDraw(Canvas canvas) {
+                CharSequence text = getText();
+                if (text == null || text.length() == 0) return;
+                String s = text.toString();
+                Paint p = getPaint();
+                p.setColor(getCurrentTextColor());
+                p.getTextBounds(s, 0, s.length(), ink);
+                canvas.drawText(s, getWidth() / 2f - ink.exactCenterX(),
+                    getHeight() / 2f - ink.exactCenterY(), p);
+            }
+        };
+        view.setText(glyph);
+        view.setContentDescription(description);
+        view.setGravity(Gravity.CENTER);
+        view.setTypeface(symbols ? NerdFontSpans.typeface(context) : Typeface.DEFAULT_BOLD);
+        view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, symbols ? 14 : 18);
+        view.setTextColor(primary);
+        GradientDrawable shape = new GradientDrawable();
+        shape.setShape(GradientDrawable.OVAL);
+        shape.setColor(ColorUtils.setAlphaComponent(surface, 232));
+        shape.setStroke(dp(CornerTabGeometry.TAB_OUTLINE_DP), ColorUtils.setAlphaComponent(primary, 225));
+        // The circle is a tab button's 30dp; the square around it is the 48dp a thumb asks for.
+        view.setBackground(new InsetDrawable(shape, dp(9)));
+        view.setClickable(true);
+        view.setFocusable(true);
+        view.setOnClickListener(v -> onClick.run());
+        return view;
     }
 
     // ---- the markers ------------------------------------------------------------------------
@@ -1016,6 +1092,7 @@ public final class HelpOverlayView extends FrameLayout {
                 }
                 lengths.add(keyCard.getMeasuredHeight());
             } else {
+                lengths.add(keyCard.getMeasuredHeight());
                 thickness = Math.max(thickness, keyCard.getMeasuredHeight());
             }
             views.add(keyCard);
@@ -1033,7 +1110,11 @@ public final class HelpOverlayView extends FrameLayout {
                 int along = Math.max(slots[i][0], Math.min(slots[i][1] - length, centers[i] - length / 2));
                 bounds = new Rect(start, along, start + thickness, along + length);
             } else {
-                bounds = new Rect(slots[i][0], start, slots[i][1], start + thickness);
+                // A card is only as tall as its own text: a key with no swipe-up action has one
+                // line, and it hugs the lane's edge nearest the keys so its leader stays short.
+                int height = lengths.get(i);
+                int top = cardsHigh ? start + thickness - height : start;
+                bounds = new Rect(slots[i][0], top, slots[i][1], top + height);
             }
             Rect cap = keys.get(i).rect;
             keyCards.add(new KeyCard(views.get(i), bounds, cap, keyLeader(bounds, cap, vertical, cardsHigh)));
