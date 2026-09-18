@@ -157,7 +157,8 @@ public class HelpLeaderRouterTest {
         assertNoOverlap(r);
         for (Placement p : r.placements) {
             assertFalse("no leader for " + p.target.id, p.lines.isEmpty());
-            assertTrue(p.card.top >= 60 && p.card.bottom <= 700.5f);
+            // Every card leans on its own control, so none climbs above the topmost one.
+            assertTrue(p.target.id + " at " + p.card.top, p.card.top >= 52);
             assertFalse("card over the footer", p.card.overlaps(B(12, 660, 468, 700)));
         }
     }
@@ -169,14 +170,14 @@ public class HelpLeaderRouterTest {
                 t("c", 40, 800, 140, 840, Side.BELOW), t("d", 238, 200, 242, 500, Side.INSIDE)),
             Collections.emptyList(), Collections.emptyList());
         Placement a = placement(r, "a"), b = placement(r, "b"), c = placement(r, "c"), d = placement(r, "d");
-        // Under its control, at the top of the band; the next one along cascades a little lower.
-        assertEquals(60f, a.card.top, 0.01f);
+        // On the shelf leaning on its control, across from it; the next one along shares the shelf.
+        assertEquals(52f, a.card.top, 0.01f);
         assertEquals(12f, a.card.left, 0.01f);
-        assertTrue(b.card.top > a.card.top && b.card.top < a.card.bottom);
-        assertEquals(350f, b.card.cx(), 0.01f);
-        // Over its control, at the bottom of the band.
-        assertEquals(700f, c.card.bottom, 0.01f);
-        assertEquals(90f, c.card.cx(), 0.01f);
+        assertEquals(a.card.top, b.card.top, 0.01f);
+        assertTrue(b.card.left <= 350 && b.card.right >= 350);
+        // Over its control, leaning on it, in the slot nearest it.
+        assertEquals(788f, c.card.bottom, 0.01f);
+        assertEquals(12f, c.card.left, 0.01f);
         // Beside the divider, level with its middle.
         assertEquals(254f, d.card.left, 0.01f);
         assertEquals(350f, d.card.cy(), 0.01f);
@@ -188,9 +189,10 @@ public class HelpLeaderRouterTest {
             Arrays.asList(t("a", 0, 0, 100, 40, Side.ABOVE), t("b", 100, 0, 200, 40, Side.ABOVE)),
             Collections.emptyList(), Collections.emptyList());
         Placement a = placement(r, "a"), b = placement(r, "b");
-        assertEquals(a.card.bottom + 12, b.card.top, 0.01f);
-        assertEquals(75f, b.card.left, 0.01f);
-        // The lower card's leader takes a lane of its own rather than a line through the upper card.
+        // The second card shares the shelf, in the next slot along, rather than stepping in.
+        assertEquals(a.card.top, b.card.top, 0.01f);
+        assertEquals(a.card.right + 12, b.card.left, 0.01f);
+        // Its leader takes a lane of its own rather than a line through the first card.
         for (Segment line : b.lines) assertFalse(enters(line, a.card));
         assertLeadersClear(r, 12);
     }
@@ -233,9 +235,10 @@ public class HelpLeaderRouterTest {
     }
 
     @Test public void arrangeYieldsToInsideBoxesUnlessNothingFitsOtherwise() {
-        Box widget = B(0, 60, 480, 400);
+        // A widget row one shelf tall under the status bar: the status card steps one shelf in.
+        Box widget = B(0, 60, 480, 120);
         Result r = HelpLeaderRouter.arrange(B(0, 60, 480, 700), 12, 8,
-            Arrays.asList(t("widget", 0, 60, 480, 400, Side.INSIDE), t("status", 0, 0, 480, 48, Side.ABOVE)),
+            Arrays.asList(t("widget", 0, 60, 480, 120, Side.INSIDE), t("status", 0, 0, 480, 48, Side.ABOVE)),
             Collections.emptyList(), Collections.singletonList(widget));
         assertEquals(1, r.pages);
         for (Placement p : r.placements) assertFalse(p.target.id, p.card.overlaps(widget));
@@ -254,10 +257,11 @@ public class HelpLeaderRouterTest {
         assertTrue(r.pages >= 2);
         assertTrue(r.unplaced.isEmpty());
         assertNoOverlap(r);
-        // Six cards of 100 fit each side of a 640-tall band: page one holds twelve.
+        // Two cards of 200 share each shelf of a 480-wide band and a card walks four shelves at
+        // most: page one holds eight.
         int onFirst = 0;
         for (Placement p : r.placements) if (p.page == 0) onFirst++;
-        assertEquals(12, onFirst);
+        assertEquals(8, onFirst);
     }
 
     // ---- No two leaders may overlap or touch; parallel runs keep the gap. ----
@@ -419,5 +423,45 @@ public class HelpLeaderRouterTest {
     private static void assertNoOverlap(Result r) {
         for (Placement a : r.placements) for (Placement b : r.placements)
             if (a != b && a.page == b.page) assertFalse(a.target.id + " over " + b.target.id, a.card.overlaps(b.card));
+    }
+
+    // ---- One rule for every edge. ----
+    /** The same rule seats a control on any edge: its card leans on it from the band's side. */
+    @Test public void aControlOnAnyEdgeGetsItsCardOnTheShelfFacingIt() {
+        Box band = B(100, 100, 900, 900);
+        Result r = HelpLeaderRouter.arrange(band, 12, 12, Arrays.asList(
+            t("top", 400, 20, 600, 80, Side.ABOVE), t("bottom", 400, 920, 600, 980, Side.UNDER),
+            t("left", 20, 400, 80, 600, Side.LEFT), t("right", 920, 400, 980, 600, Side.RIGHT)),
+            Collections.emptyList(), Collections.emptyList());
+        assertTrue("unplaced " + ids(r.unplaced), r.unplaced.isEmpty());
+        Placement top = placement(r, "top"), bottom = placement(r, "bottom");
+        Placement left = placement(r, "left"), right = placement(r, "right");
+        assertEquals(92f, top.card.top, 0.01f);
+        assertEquals(908f, bottom.card.bottom, 0.01f);
+        assertEquals(92f, left.card.left, 0.01f);
+        assertEquals(908f, right.card.right, 0.01f);
+        // Across from its control: the card spans the control's centre line.
+        assertTrue(top.card.left <= 500 && top.card.right >= 500);
+        assertTrue(bottom.card.left <= 500 && bottom.card.right >= 500);
+        assertTrue(left.card.top <= 500 && left.card.bottom >= 500);
+        assertTrue(right.card.top <= 500 && right.card.bottom >= 500);
+        for (Placement p : r.placements) assertFalse("no leader for " + p.target.id, p.lines.isEmpty());
+        assertNoOverlap(r);
+        assertLeadersClear(r, 12);
+    }
+    /** A rail of controls down one side shares one column of cards, as a row shares a shelf. */
+    @Test public void controlsDownOneSideShareAColumnOfCards() {
+        Result r = HelpLeaderRouter.arrange(B(100, 0, 900, 1000), 12, 12, Arrays.asList(
+            t("a", 20, 100, 80, 160, Side.LEFT), t("b", 20, 180, 80, 240, Side.LEFT),
+            t("c", 20, 260, 80, 320, Side.LEFT)),
+            Collections.emptyList(), Collections.emptyList());
+        assertTrue("unplaced " + ids(r.unplaced), r.unplaced.isEmpty());
+        Placement a = placement(r, "a"), b = placement(r, "b"), c = placement(r, "c");
+        assertEquals(92f, a.card.left, 0.01f);
+        assertEquals(a.card.left, b.card.left, 0.01f);
+        assertEquals(a.card.left, c.card.left, 0.01f);
+        assertTrue(a.card.bottom <= b.card.top && b.card.bottom <= c.card.top);
+        assertNoOverlap(r);
+        assertLeadersClear(r, 12);
     }
 }

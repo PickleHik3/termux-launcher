@@ -407,6 +407,26 @@ public class HelpPresentationTest {
         assertTrue("a row is off the top of the wash", over[1] >= 232);
     }
 
+    /**
+     * Keys whose wall lies below them — a row along the top — ask the same question in a mirror:
+     * the lanes go above the keys when there is room for two, and under them, toward the wall,
+     * when there is not.
+     */
+    @Test public void theKeyCardLanesTurnWithTheKeys() {
+        int[] toward = HelpOverlayView.keyCardLanes(100, 198, 600, 8, false, 110, 27, 38);
+        assertEquals(0, toward[2]);
+        assertEquals(198 + 38, toward[0]);
+        assertEquals(198 + 38 + 110 + 27, toward[1]);
+        int[] away = HelpOverlayView.keyCardLanes(600, 698, 900, 8, false, 110, 27, 38);
+        assertEquals(1, away[2]);
+        assertEquals(600 - 38 - 110, away[0]);
+        assertEquals(600 - 38 - 110 - 27 - 110, away[1]);
+        // The unmirrored case is the row above the keyboard, unchanged.
+        int[] under = HelpOverlayView.keyCardLanes(1631, 1729, 232, 2209, true, 110, 27, 38);
+        assertEquals(1767, under[0]);
+        assertEquals(1904, under[1]);
+    }
+
     /** A control that only moved must not cost the guide its cards: rebuilding them is the flash. */
     @Test public void aRemeasureThatOnlyMovedAControlKeepsTheSameCards() {
         open(PaneWallPage.WIDGETS);
