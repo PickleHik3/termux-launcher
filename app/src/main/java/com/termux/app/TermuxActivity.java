@@ -4011,6 +4011,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Which picture the glass can blur, and how sure we are it is the one on screen — see
+     * {@link com.termux.app.chrome.WallpaperPicture}. Three facts feed it: whether a wallpaper
+     * service is running, whether the system wallpaper id is the one the in-app picker stored when
+     * it set the picture, and whether Android still holds a still file at all (a live wallpaper
+     * clears it, after which {@code getDrawable()} hands back the built-in default).
+     *
+     * <p>Uncached: it opens a file descriptor. Callers on a render path hold the value across the
+     * pass and refresh it when the wallpaper changes, not per surface.
+     */
+    @NonNull
+    com.termux.app.chrome.WallpaperPicture wallpaperPicture() {
+        boolean serviceRunning = isLiveWallpaperActive();
+        boolean launcherSet = false;
+        if (serviceRunning && mPreferences != null) {
+            int storedWallpaperId = mPreferences.getManagedWallpaperSystemId();
+            launcherSet = storedWallpaperId > 0 && storedWallpaperId == getCurrentSystemWallpaperId();
+        }
+        boolean stillFileExists = serviceRunning && !launcherSet && systemWallpaperStillExists();
+        return com.termux.app.chrome.WallpaperPicturePolicy.resolve(serviceRunning, launcherSet, stillFileExists);
+    }
+
+    /**
+     * Whether Android holds a still image for the system wallpaper. False under a freshly set live
+     * wallpaper, and false when the read is refused — in which case no blur could be drawn anyway.
+     */
+    private boolean systemWallpaperStillExists() {
+        try (android.os.ParcelFileDescriptor fd = WallpaperManager.getInstance(this)
+                .getWallpaperFile(WallpaperManager.FLAG_SYSTEM)) {
+            return fd != null;
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Cannot tell whether a system wallpaper still exists", e);
+            return false;
+        }
+    }
+
+    /**
      * The dock's rectangle on screen, for a surface that wants to sit exactly where the dock is.
      *
      * @return false when there is no dock laid out — a terminal-only install, or before first layout.
