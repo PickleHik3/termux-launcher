@@ -1,22 +1,21 @@
-# Phase A — the help model (branch feat/help-model) — done
+# Phase B — the reading panel and the controller
 
 ## Done
-- `HelpTopics`: one global topic record (group/kind/summary/action/steps/wayBack/reveal/
-  target+places/gesture/lesson/related/terms/aliases/doc), 43 topics over the spec's seven
-  sections, plus per-place views (`forPlace`, `entry(place,id)`, `identityIndex`, `sizeFor`).
-- `HelpGlossary` (15 terms, A–Z helper), `HelpSearch` (pure ranking, GUIDE/TERM/FIX),
-  `HelpNavigation` (five screens, back stack, query/scroll/inline term, practice frame).
-- All topic and glossary copy in strings.xml; nine orphaned `help_*` strings deleted.
-- Compat edits: HelpPresentationModel (targetId-based highlight, place-based colour),
-  HelpOverlayView (summaryRes, identityIndex(place,id) — the view's place, never the model's).
+- `HelpStyle`, `HelpPanelView` (home, search, glossary, topic, inline terms, insets, no keys to
+  the terminal), `HelpController` (pages, back order, IME hand-off, practice, explore seam),
+  `TermuxActivity` on the controller, phase B strings, `HelpControllerTest` (21 cases).
+- Review round: text entry ends before Home/topic/glossary navigation, a fresh invocation puts
+  the explorer away, a linked topic's header leads to Help home, neutral missing-topic line.
+- `--tests 'com.termux.app.help.*'`: BUILD SUCCESSFUL, 141 tests, 0 failures.
 
 ## In progress
 - Nothing.
 
 ## Next
-- Phase B (panel) and C (explore) build on the contract in the phase report.
+- Phase D: swap `HelpController.overlayExplorer` for phase C's seam (its javadoc has the code),
+  and call `HelpController.onPracticeEnded()` once the tour signals the end of a practice run.
 
 ## Gotchas
-- Topic ids are not target ids: "sessions" -> hierarchy, "windows" -> windows on Terminal and
-  display_apps on Display. `HelpTopics.entry(place, id)` accepts either.
-- The overlay must use its own `place` for colours; the model's place lags the first layout pass.
+- D8 deviation: the tour has no end-of-practice signal reachable from the activity, so help
+  stays closed after practice; the frame is kept and `onPracticeEnded()` restores it.
+- `HelpOverlayView` untouched: phase C owns it. Explore is interim until that branch lands.
