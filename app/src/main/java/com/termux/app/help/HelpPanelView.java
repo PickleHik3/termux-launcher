@@ -213,7 +213,16 @@ public final class HelpPanelView extends FrameLayout {
     }
 
     private void buildHeader(HelpNavigation.Frame frame) {
-        if (frame.screen != HelpNavigation.Screen.HOME) {
+        boolean linkedTopic = frame.screen == HelpNavigation.Screen.TOPIC
+            && navigation != null && navigation.depth() == 1;
+        if (linkedTopic) {
+            // A topic opened by a Learn more link has nothing under it: Back and Close both
+            // return the reader to what they were doing, so the header's own control is the one
+            // that leads further into help.
+            header.addView(add(string(R.string.help_home_action), style.headerButton(
+                string(R.string.help_home_label), string(R.string.help_home_action),
+                () -> { if (listener != null) listener.onHome(); })));
+        } else if (frame.screen != HelpNavigation.Screen.HOME) {
             header.addView(add(string(R.string.help_back_action), style.headerButton(
                 string(R.string.help_back_glyph), string(R.string.help_back_action),
                 () -> { if (listener != null) listener.onBack(); })));
@@ -407,7 +416,7 @@ public final class HelpPanelView extends FrameLayout {
     private void topicPage(HelpNavigation.Frame frame) {
         HelpTopics.Entry entry = HelpTopics.entry(place, frame.id);
         if (entry == null) {
-            body.addView(style.body(string(R.string.help_search_empty)));
+            body.addView(style.body(string(R.string.help_topic_unavailable)));
             return;
         }
         body.addView(style.body(text.get(entry.summaryRes)));

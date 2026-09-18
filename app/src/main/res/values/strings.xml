@@ -2260,6 +2260,9 @@
     <string name="help_home_browse">Browse the guide</string>
     <string name="help_home_glossary">Glossary</string>
     <string name="help_home_practice">Practice the basics</string>
+    <string name="help_home_label">Home</string>
+    <string name="help_home_action">Help home</string>
+    <string name="help_topic_unavailable">This topic is not part of this screen.</string>
     <string name="help_docs_link">Full documentation ↗</string>
     <string name="help_support_link">Get support ↗</string>
     <string name="help_search_suggested">Suggested</string>

@@ -3,8 +3,10 @@
 ## Done
 - `HelpStyle`, `HelpPanelView` (home, search, glossary, topic, inline terms, insets, no keys to
   the terminal), `HelpController` (pages, back order, IME hand-off, practice, explore seam),
-  `TermuxActivity` on the controller, phase B strings, `HelpControllerTest` (16 cases).
-- `--tests 'com.termux.app.help.*'`: BUILD SUCCESSFUL, 136 tests, 0 failures.
+  `TermuxActivity` on the controller, phase B strings, `HelpControllerTest` (21 cases).
+- Review round: text entry ends before Home/topic/glossary navigation, a fresh invocation puts
+  the explorer away, a linked topic's header leads to Help home, neutral missing-topic line.
+- `--tests 'com.termux.app.help.*'`: BUILD SUCCESSFUL, 141 tests, 0 failures.
 
 ## In progress
 - Nothing.

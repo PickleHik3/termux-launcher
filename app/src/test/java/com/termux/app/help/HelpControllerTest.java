@@ -244,6 +244,71 @@ public class HelpControllerTest {
         assertEquals(HelpNavigation.Screen.TOPIC, controller.navigation().screen());
     }
 
+    @Test public void openingAResultGivesTheKeyboardBackAndKeepsBackHonest() {
+        controller.show(PaneWallPage.TERMINAL);
+        tap(string(R.string.help_search_field_hint));
+        EditText field = (EditText) panel().named(string(R.string.help_search_field_hint));
+        assertNotNull(field);
+        field.requestFocus();
+        field.setText("dock");
+        assertEquals("[begin]", input.toString());
+        List<HelpSearch.Result> found = HelpSearch.search("dock", PaneWallPage.TERMINAL,
+            HelpSearch.text(activity));
+        assertFalse(found.isEmpty());
+        tap(found.get(0).title);
+
+        // The field is gone, so the keyboard went back with it, exactly once.
+        assertEquals("[begin, end]", input.toString());
+        assertFalse(controller.navigation().textEntryActive());
+        // One press, one step: back to the search it came from, not a redrawn topic.
+        assertTrue(controller.onBackPressed());
+        assertEquals(HelpNavigation.Screen.SEARCH, controller.navigation().screen());
+        assertEquals("[begin, end]", input.toString());
+    }
+
+    @Test public void browsingAwayFromTheSearchPageEndsTextEntryToo() {
+        controller.show(PaneWallPage.TERMINAL);
+        tap(string(R.string.help_search_field_hint));
+        EditText field = (EditText) panel().named(string(R.string.help_search_field_hint));
+        field.requestFocus();
+        field.setText("zzzzqqq");
+        assertEquals("[begin]", input.toString());
+
+        // "Browse the guide" out of a search with nothing in it.
+        tap(string(R.string.help_home_browse));
+        assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
+        assertEquals("[begin, end]", input.toString());
+        assertFalse(controller.navigation().textEntryActive());
+        // Nothing left for Back to swallow: one press closes help from home.
+        assertTrue(controller.onBackPressed());
+        assertFalse(controller.isShowing());
+    }
+
+    // ---- a topic opened by a link ------------------------------------------------------------
+
+    @Test public void aLinkedTopicOffersTheWayIntoHelpHome() {
+        HelpTopics.Entry entry = firstTerminalTopic();
+        controller.showTopic(PaneWallPage.TERMINAL, entry.id);
+        assertNotNull("a linked topic has no way into help", panel().named(string(R.string.help_home_action)));
+        assertNull("Back is the same as Close here", panel().named(string(R.string.help_back_action)));
+        tap(string(R.string.help_home_action));
+        assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
+        assertTrue(controller.isShowing());
+        // Close still leaves help from the linked topic.
+        controller.showTopic(PaneWallPage.TERMINAL, entry.id);
+        tap(string(R.string.help_close_action));
+        assertFalse(controller.isShowing());
+    }
+
+    @Test public void aTopicReachedFromHomeKeepsItsBackControl() {
+        controller.show(PaneWallPage.TERMINAL);
+        HelpTopics.Entry entry = HelpTopics.onScreen(PaneWallPage.TERMINAL,
+            controller.measuredTargetIds()).get(0);
+        tap(string(entry.titleRes));
+        assertNotNull(panel().named(string(R.string.help_back_action)));
+        assertNull(panel().named(string(R.string.help_home_action)));
+    }
+
     // ---- the explorer ------------------------------------------------------------------------
 
     @Test public void exploreHandsOverAndComesBackThroughItsListener() {
@@ -289,6 +354,26 @@ public class HelpControllerTest {
         tap(string(R.string.help_home_explore));
         explorer.listener.onTargetGone(entry.id);
         assertEquals(entry.id, controller.navigation().id());
+    }
+
+    @Test public void openingHelpAgainWhileExploringPutsTheExplorerAway() {
+        controller.show(PaneWallPage.TERMINAL);
+        tap(string(R.string.help_home_explore));
+        assertTrue(explorer.isShowing());
+        assertFalse(panel().isShowing());
+
+        // Settings, the palette or a corner tab while the explorer is up: one overlay at a time.
+        controller.show(PaneWallPage.TERMINAL);
+        assertFalse(explorer.isShowing());
+        assertTrue(panel().isShowing());
+        assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
+
+        tap(string(R.string.help_home_explore));
+        assertTrue(explorer.isShowing());
+        controller.showTopic(PaneWallPage.TERMINAL, firstTerminalTopic().id);
+        assertFalse(explorer.isShowing());
+        assertTrue(panel().isShowing());
+        assertEquals(HelpNavigation.Screen.TOPIC, controller.navigation().screen());
     }
 
     @Test public void backWhileExploringGoesToTheExplorerFirst() {

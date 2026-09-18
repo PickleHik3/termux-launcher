@@ -130,6 +130,7 @@ public final class HelpController {
     /** Every entry point: the corner tab, Settings, the palette. Help opens at its home page. */
     public void show(@Nullable PaneWallPage place) {
         ensureViews();
+        closeExplorer();
         navigation.open(place == null ? PaneWallPage.TERMINAL : place);
         remeasure();
         panel.show();
@@ -141,6 +142,7 @@ public final class HelpController {
     /** A Learn-more link: the topic itself, and Back leaves help rather than stacking a home page. */
     public void showTopic(@Nullable PaneWallPage place, String topicId) {
         ensureViews();
+        closeExplorer();
         navigation.openTopic(place == null ? PaneWallPage.TERMINAL : place, topicId);
         remeasure();
         panel.show();
@@ -229,6 +231,9 @@ public final class HelpController {
         @Override public void onClose() { dismiss(); }
 
         @Override public void onHome() {
+            // Leaving the page the field was on: the keyboard goes back the way help found it,
+            // or the flag outlives the field and swallows the next Back.
+            endTextEntry();
             navigation.home();
             render();
         }
@@ -251,11 +256,13 @@ public final class HelpController {
         }
 
         @Override public void onTopic(String topicId) {
+            endTextEntry();
             navigation.topic(resolve(topicId));
             render();
         }
 
         @Override public void onGlossary() {
+            endTextEntry();
             navigation.glossary();
             render();
         }
@@ -327,6 +334,11 @@ public final class HelpController {
         leaveExplore();
         navigation.home();
         backToPanel();
+    }
+
+    /** A fresh invocation over an explorer that is still up: one overlay at a time. */
+    private void closeExplorer() {
+        if (explorer != null && explorer.isShowing()) explorer.dismiss();
     }
 
     private void leaveExplore() {
