@@ -14,8 +14,8 @@ import androidx.annotation.NonNull;
  * <p>The way out is to stop guessing: when the wallpaper is a still image we can read, the launcher
  * draws it itself, from the very frame the crops come from. Backdrop and glass are then the same
  * pixels at the same offset, so alignment holds by construction on every ROM and the slider has
- * nothing left to correct — which is why {@link #renderZoomPercent} pins it to 100 there. A live
- * wallpaper (a moving picture no capture can match) or a wallpaper we are not allowed to read
+ * nothing left to correct — which is why {@link #renderZoomPercent} pins it to 100 there. A picture
+ * we cannot be sure of (see {@link WallpaperPicture}) or a wallpaper we are not allowed to read
  * leaves the system drawing it, and the slider is the only tool that mode has.</p>
  */
 public final class WallpaperBackdropPolicy {
@@ -33,13 +33,16 @@ public final class WallpaperBackdropPolicy {
 
     /**
      * @param wallpaperFeatureEnabled the {@code use_system_wallpaper} preference
-     * @param liveWallpaperActive     a wallpaper service is running, so there is no frame to match
+     * @param picture                 which picture the glass can read, and how sure we are it is the
+     *                                one on screen. Only {@link WallpaperPicture#MATCHES_SCREEN} may
+     *                                be painted by us: anything else would put a picture behind
+     *                                everything that the user is not actually looking at.
      * @param wallpaperReadable       the wallpaper can still be captured (no read was refused)
      */
     @NonNull
-    public static Mode mode(boolean wallpaperFeatureEnabled, boolean liveWallpaperActive,
+    public static Mode mode(boolean wallpaperFeatureEnabled, @NonNull WallpaperPicture picture,
                             boolean wallpaperReadable) {
-        return wallpaperFeatureEnabled && !liveWallpaperActive && wallpaperReadable
+        return wallpaperFeatureEnabled && picture.allowsSelfDrawnBackdrop() && wallpaperReadable
             ? Mode.SELF_DRAWN : Mode.PASSTHROUGH;
     }
 

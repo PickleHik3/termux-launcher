@@ -27,6 +27,7 @@ import androidx.preference.SwitchPreferenceCompat;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.WallpaperBackdropPolicy;
+import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.launcherctl.LauncherCtlNotificationStore;
@@ -154,8 +155,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
      * Wallpaper alignment only has something to correct while the system is the one drawing the
      * wallpaper. With a still wallpaper the launcher draws it itself from the frame its own
      * surfaces are cut from, so the row is put away rather than left as a knob that does nothing;
-     * a live wallpaper (or the switch being off) brings it back. The switch above it is on the
-     * same page, so it re-checks on the spot as well as on every resume.
+     * a picture the launcher cannot be sure of (or the switch being off) brings it back. The switch
+     * above it is on the same page, so it re-checks on the spot as well as on every resume.
      */
     private void configureWallpaperAlignment(@NonNull Context context) {
         updateWallpaperAlignmentVisibility(context);
@@ -166,7 +167,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             if (alignment != null) {
                 alignment.setVisible(WallpaperBackdropPolicy.alignmentSliderApplies(
                     WallpaperBackdropPolicy.mode(Boolean.TRUE.equals(newValue),
-                        isLiveWallpaperActive(context), true)));
+                        WallpaperPictureReader.read(context,
+                            TermuxAppSharedPreferences.build(context, true)), true)));
             }
             return true;
         });
@@ -178,15 +180,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
         alignment.setVisible(WallpaperBackdropPolicy.alignmentSliderApplies(
-            WallpaperBackdropPolicy.mode(wallpaperMode, isLiveWallpaperActive(context), true)));
-    }
-
-    private static boolean isLiveWallpaperActive(@NonNull Context context) {
-        try {
-            return android.app.WallpaperManager.getInstance(context).getWallpaperInfo() != null;
-        } catch (Exception e) {
-            return false;
-        }
+            WallpaperBackdropPolicy.mode(wallpaperMode,
+                WallpaperPictureReader.read(context, preferences), true)));
     }
 
     private void refreshThemeEntries() {

@@ -2,7 +2,6 @@ package com.termux.app;
 
 import android.annotation.SuppressLint;
 import android.app.WallpaperColors;
-import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -100,6 +99,8 @@ import com.termux.app.chrome.OnGlass;
 import com.termux.app.chrome.SurfaceDirtyLedger;
 import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperBackdropView;
+import com.termux.app.chrome.WallpaperPicture;
+import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.place.CanvasBudgetPolicy;
@@ -970,6 +971,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mWallpaperReadPermissionDenied;
     private boolean mWallpaperReadPermissionPromptShowing;
     /**
+     * Which picture every glass in the app is cut from, cached because resolving it opens a file
+     * descriptor and each render pass asks once per surface. See {@link #refreshWallpaperPicture()}.
+     */
+    @NonNull private WallpaperPicture mWallpaperPicture = WallpaperPicture.MATCHES_SCREEN;
+    /**
      * Wallpaper alignment the resident blur frames were captured at (percent), or -1 before the
      * first read. See {@link #applyWallpaperRenderZoomIfChanged()}.
      */
@@ -1530,6 +1536,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     
         if (mIsInvalidState) return;
 
+        // The wallpaper can have been swapped while we were stopped.
+        refreshWallpaperPictureOnArrival();
+
         if (mWidgetHostController != null) mWidgetHostController.onStart();
         if (mWidgetPaneController != null) mWidgetPaneController.onStart();
 
@@ -1734,6 +1743,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onResume");
         if (mIsInvalidState)
             return;
+        // Also here, not only in onStart: a wallpaper picker shown over this activity never stops
+        // it, so the arrival back from one is an onResume on its own.
+        refreshWallpaperPictureOnArrival();
         // The DISPLAY opt-in can have been flipped in Settings while we were away.
         syncDisplayEnvironment();
         // `pkg install xkeyboard-config` in a shell leaves no broadcast behind either, so the
@@ -2439,12 +2451,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The shared pre-blurred wallpaper frame the panes draw, remembered so the blur cache never
      * recycles a bitmap a pane is still painting from (the panes hold it in a custom view rather
      * than an ImageView, so the frost-in-use scan cannot find it by drawable).
+     *
+     * <p>Null while the readable picture is one nobody chose ({@link WallpaperPicture#NO_STILL}):
+     * the pane then wears its tint and grain alone, which {@code PaneGlassBackdropView} draws for a
+     * null frame, and keeps the rim and insets a glass pane has. Same gate as the bands', so the
+     * whole app either blurs a picture or none of it does.
      */
     @Nullable
     private Bitmap obtainTerminalPaneGlassFrame() {
         int radiusDp = mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (radiusDp <= 0 || wallpaperFrame == null || !isTerminalPaneGlassActive()) {
+        if (radiusDp <= 0 || wallpaperFrame == null || !isTerminalPaneGlassActive()
+                || !wallpaperPicture().blurs()) {
             mPaneGlassFrame = null;
             return null;
         }
@@ -2483,7 +2501,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private WallpaperBackdropPolicy.Mode wallpaperBackdropMode() {
         return WallpaperBackdropPolicy.mode(shouldUseWallpaperPassthroughMode(),
-            isLiveWallpaperActive(), !mWallpaperReadPermissionDenied);
+            wallpaperPicture(), !mWallpaperReadPermissionDenied);
     }
 
     /**
@@ -2649,6 +2667,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
                 mChrome.blurCache().clear();
+                // How a wallpaper set outside the launcher reaches us: the picture can have gone
+                // from a still to a live wallpaper, or back, and every glass turns on that.
+                refreshWallpaperPicture();
                 if (!mIsVisible) {
                     return;
                 }
@@ -3980,15 +4001,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The dock's and keyboard's blur radius as the glass draws it. This used to drop to 0 whenever
-     * {@link #isLiveWallpaperActive()} — but some ROMs (One UI, issue #37) serve a plain static
-     * picture through a wallpaper service, so the bands lost their blur on a still image while the
-     * terminal pane, which never had the gate, blurred the very same frame. The bands now follow the
-     * pane: the preference is the radius. Under a real live wallpaper every glass blurs the stored
-     * still, as the pane always has.
+     * The dock's and keyboard's blur radius as the glass draws it.
+     *
+     * <p>This used to drop to 0 whenever a wallpaper <em>service</em> was running — but some ROMs
+     * (One UI, issue #37) serve a plain static picture through one, so the bands lost their blur on
+     * a still image while the terminal pane, which never had the gate, blurred the very same frame.
+     * The gate is now the same for every glass in the app: the readable picture is blurred wherever
+     * there is one, and only the ROM default nobody chose ({@link WallpaperPicture#NO_STILL}) sends
+     * every band to its plain tint. Downstream, a radius of 0 already means "no blur".
      */
     private int getEffectiveExtraKeysBlurRadius() {
-        if (mPreferences == null) {
+        if (mPreferences == null || !wallpaperPicture().blurs()) {
             return 0;
         }
         return Math.max(0, mPreferences.getExtraKeysBlurRadius());
@@ -3996,54 +4019,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** @see #getEffectiveExtraKeysBlurRadius() */
     private int getEffectiveStatusBarBlurRadius() {
-        if (mPreferences == null) return 0;
+        if (mPreferences == null || !wallpaperPicture().blurs()) return 0;
         return Math.max(0, mPreferences.getStatusBarBlurRadius());
-    }
-
-    private boolean isLiveWallpaperActive() {
-        try {
-            WallpaperInfo wallpaperInfo = WallpaperManager.getInstance(this).getWallpaperInfo();
-            return wallpaperInfo != null;
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to detect live wallpaper state", e);
-            return false;
-        }
     }
 
     /**
      * Which picture the glass can blur, and how sure we are it is the one on screen — see
-     * {@link com.termux.app.chrome.WallpaperPicture}. Three facts feed it: whether a wallpaper
-     * service is running, whether the system wallpaper id is the one the in-app picker stored when
-     * it set the picture, and whether Android still holds a still file at all (a live wallpaper
-     * clears it, after which {@code getDrawable()} hands back the built-in default).
-     *
-     * <p>Uncached: it opens a file descriptor. Callers on a render path hold the value across the
-     * pass and refresh it when the wallpaper changes, not per surface.
+     * {@link WallpaperPicture}. Read from the cached value, because resolving it opens a file
+     * descriptor and every surface in a render pass asks: {@link #refreshWallpaperPicture()} is
+     * what actually goes to Android, on arrival and whenever the wallpaper changes.
      */
     @NonNull
-    com.termux.app.chrome.WallpaperPicture wallpaperPicture() {
-        boolean serviceRunning = isLiveWallpaperActive();
-        boolean launcherSet = false;
-        if (serviceRunning && mPreferences != null) {
-            int storedWallpaperId = mPreferences.getManagedWallpaperSystemId();
-            launcherSet = storedWallpaperId > 0 && storedWallpaperId == getCurrentSystemWallpaperId();
-        }
-        boolean stillFileExists = serviceRunning && !launcherSet && systemWallpaperStillExists();
-        return com.termux.app.chrome.WallpaperPicturePolicy.resolve(serviceRunning, launcherSet, stillFileExists);
+    WallpaperPicture wallpaperPicture() {
+        return mWallpaperPicture;
     }
 
     /**
-     * Whether Android holds a still image for the system wallpaper. False under a freshly set live
-     * wallpaper, and false when the read is refused — in which case no blur could be drawn anyway.
+     * Ask Android which picture is on screen now, and re-dress everything if the answer moved.
+     *
+     * <p>The three facts behind it are only readable from the system, so this runs where a change
+     * can have happened: on arrival, after the in-app picker sets a wallpaper, when the wallpaper
+     * colors listener fires (which is how a wallpaper swap made outside the app reaches us), and
+     * after the wallpaper-read permission is granted.
+     *
+     * @return true when the picture changed, so the caller can skip a redraw nothing needs
      */
-    private boolean systemWallpaperStillExists() {
-        try (android.os.ParcelFileDescriptor fd = WallpaperManager.getInstance(this)
-                .getWallpaperFile(WallpaperManager.FLAG_SYSTEM)) {
-            return fd != null;
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Cannot tell whether a system wallpaper still exists", e);
-            return false;
-        }
+    private boolean refreshWallpaperPicture() {
+        WallpaperPicture picture = WallpaperPictureReader.read(this, mPreferences);
+        if (picture == mWallpaperPicture) return false;
+        mWallpaperPicture = picture;
+        return true;
+    }
+
+    /** {@link #refreshWallpaperPicture()} on an arrival, re-dressing the glass only if it moved. */
+    private void refreshWallpaperPictureOnArrival() {
+        if (refreshWallpaperPicture()) mChrome.onWallpaperChanged();
     }
 
     /**
@@ -11199,6 +11209,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPreferences != null) {
                     mPreferences.setManagedWallpaperSystemId(wallpaperId);
                 }
+                // The picture is ours again the moment that id is stored, so the glass must be
+                // told before the sync below re-dresses it.
+                refreshWallpaperPicture();
             }
             return true;
         } catch (Exception e) {
@@ -12937,6 +12950,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 mWallpaperReadPermissionDenied = false;
+                refreshWallpaperPicture();
                 mChrome.onWallpaperChanged();
             }
             // Granted or denied, the first-run chain moves on: the two permissions are unrelated.

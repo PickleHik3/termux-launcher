@@ -9,7 +9,8 @@ public final class WallpaperPicturePolicy {
     }
 
     /**
-     * @param serviceRunning            {@code WallpaperManager.getWallpaperInfo() != null}
+     * @param serviceRunning            a wallpaper service is running, as read by
+     *                                  {@link WallpaperPictureReader}
      * @param launcherSetCurrentWallpaper the system wallpaper id equals the id the in-app picker
      *                                  stored when it set the picture; Android issues a new id
      *                                  whenever the picture or the service changes
