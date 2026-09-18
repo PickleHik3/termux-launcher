@@ -178,6 +178,7 @@ public final class HelpOverlayView extends FrameLayout {
         setOutlineProvider(null);
         setWillNotDraw(false);
         setClickable(true);
+        setFocusableInTouchMode(true);
         setFocusable(true);
         setContentDescription(context.getString(R.string.help_explore_title));
         setVisibility(GONE);
@@ -601,7 +602,11 @@ public final class HelpOverlayView extends FrameLayout {
         Rect low = new Rect(left, safe.bottom - dp(8) - height, left + width, safe.bottom - dp(8));
         Rect high = new Rect(left, safe.top + dp(8), left + width, safe.top + dp(8) + height);
         Rect target = selected == null ? null : targetRect(selected.targetId);
-        if (target == null) { toolbarBounds = low; return; }
+        if (target == null) {
+            // Nothing selected yet: the edge that covers fewer controls, the foot on a tie.
+            toolbarBounds = covered(high) < covered(low) ? high : low;
+            return;
+        }
         // The edge farthest from the control, and the near edge only when the far one would land
         // on the control itself.
         boolean farIsHigh = target.centerY() > safe.centerY();
@@ -610,6 +615,13 @@ public final class HelpOverlayView extends FrameLayout {
             : !Rect.intersects(near, target) ? near : far;
         if (Rect.intersects(toolbarBounds, target))
             HelpLog.d("the toolbar has nowhere clear of " + selected.id + "'s control");
+    }
+
+    /** How many measured controls a toolbar seat would lie over. */
+    private int covered(Rect seat) {
+        int n = 0;
+        if (snapshot != null) for (HelpTargets.Target t : snapshot.targets) if (Rect.intersects(seat, t.rect)) n++;
+        return n;
     }
 
     private LinearLayout toolbar() {

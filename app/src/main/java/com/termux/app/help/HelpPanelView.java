@@ -105,6 +105,9 @@ public final class HelpPanelView extends FrameLayout {
         setBackgroundColor(style.scrimColor());
         setClickable(true);
         setFocusable(true);
+        // In touch mode a plain focusable is refused focus, and the strokes of a hardware keyboard
+        // would go on reaching the terminal underneath while help is up.
+        setFocusableInTouchMode(true);
         setContentDescription(context.getString(R.string.help_accessibility));
         // Above every control it covers, like the guide it replaces: the dock, the keys row and
         // the keyboard are all lifted, and a document has to wash over all of them.
