@@ -102,7 +102,6 @@ public class SurfaceEditorPropertiesTest {
         // table deletes it from the product, so the list is spelled out rather than derived.
         List<String> mustExist = Arrays.asList(
             SurfaceEditorProperties.ID_APPS,
-            SurfaceEditorProperties.ID_BORDER,
             SurfaceEditorProperties.ID_KEYBOARD_SPACING,
             SurfaceEditorProperties.ID_KEYBOARD_KEY_RADIUS,
             SurfaceEditorProperties.ID_KEYBOARD_KEY_OPACITY,
@@ -120,21 +119,17 @@ public class SurfaceEditorPropertiesTest {
     }
 
     @Test
-    public void theTerminalOwnsItsFrameItsRadiusAndItsMarginOutsideTheCascade() {
+    public void theTerminalOwnsItsRadiusAndItsMarginOutsideTheCascade() {
         Control corners = SurfaceEditorProperties.find(SurfaceSlot.CANVAS,
             SurfaceEditorProperties.ID_CORNERS);
         Control margin = SurfaceEditorProperties.find(SurfaceSlot.CANVAS,
             SurfaceEditorProperties.ID_MARGIN);
-        Control frame = SurfaceEditorProperties.find(SurfaceSlot.CANVAS,
-            SurfaceEditorProperties.ID_BORDER);
         assertNotNull(corners);
         assertNotNull(margin);
-        assertNotNull(frame);
         // Not cascade cells: the canvas is the room the other surfaces are inset from, so it has no
         // Base radius or gap to follow, and its two numbers are its own.
         assertNull(corners.cell);
         assertNull(margin.cell);
-        assertEquals(Kind.SWITCH, frame.kind);
         assertEquals(SurfaceEditorProperties.MAX_TERMINAL_MARGIN_DP, margin.max);
     }
 
@@ -216,7 +211,8 @@ public class SurfaceEditorPropertiesTest {
             sectionsOf(SurfaceEditorProperties.panel(SurfaceSlot.KEYBOARD)));
         assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE, Section.INDICATOR),
             sectionsOf(SurfaceEditorProperties.panel(SurfaceSlot.STATUS)));
-        assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE, Section.FRAME),
+        // The terminal's frame is always on now, so the canvas has no section of its own.
+        assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE),
             sectionsOf(SurfaceEditorProperties.panel(SurfaceSlot.CANVAS)));
         assertEquals(Arrays.asList(Section.MATERIAL, Section.SHAPE, Section.WALLPAPER),
             sectionsOf(SurfaceEditorProperties.global()));

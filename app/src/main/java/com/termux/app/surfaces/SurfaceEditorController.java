@@ -1838,9 +1838,6 @@ public final class SurfaceEditorController {
                 if (slot == SurfaceSlot.CANVAS)
                     mHost.refreshPaneLayout();
                 break;
-            case SurfaceEditorProperties.ID_BORDER:
-                applySurfaceEditorStructuralPreview();
-                break;
             default:
                 break;
         }

@@ -81,8 +81,7 @@ public final class SurfaceEditorProperties {
         WALLPAPER(R.string.termux_surface_editor_wallpaper_dim),
         APPS(R.string.termux_dock_tuning_icons),
         KEYS(R.string.termux_surface_editor_section_keys),
-        INDICATOR(R.string.termux_surface_editor_section_indicator),
-        FRAME(R.string.termux_dock_tuning_terminal_border);
+        INDICATOR(R.string.termux_surface_editor_section_indicator);
 
         @StringRes public final int titleRes;
 
@@ -184,7 +183,6 @@ public final class SurfaceEditorProperties {
     public static final String ID_KEYBOARD_SPACING = "keyboard_spacing";
     public static final String ID_KEYBOARD_COLORS = "keyboard_colors";
     public static final String ID_CHIP_RADIUS = "chip_radius";
-    public static final String ID_BORDER = "border";
     public static final String ID_WALLPAPER = "wallpaper";
 
     /**
@@ -410,15 +408,7 @@ public final class SurfaceEditorProperties {
                 Kind.SLIDER, Unit.DP, MAX_TERMINAL_MARGIN_DP,
                 TermuxAppSharedPreferences::getTerminalPaneGap,
                 TermuxAppSharedPreferences::setTerminalPaneGap,
-                PREVIEW_SURFACES, TERMUX_APP.KEY_TERMINAL_PANE_GAP),
-            // Last, and a switch rather than a number: it is the frame the glass above it lives
-            // inside, so the rows it enables read down into it rather than out of it.
-            own(ID_BORDER, R.string.termux_dock_tuning_terminal_border, Section.FRAME,
-                Kind.SWITCH, Unit.NONE, 1,
-                prefs -> prefs.isTerminalBorderEnabled() ? 1 : 0,
-                (prefs, value) -> prefs.setTerminalBorderEnabled(value != 0),
-                PREVIEW_ALL | PREVIEW_GEOMETRY_COMMIT,
-                TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED)));
+                PREVIEW_SURFACES, TERMUX_APP.KEY_TERMINAL_PANE_GAP)));
     }
 
     /**

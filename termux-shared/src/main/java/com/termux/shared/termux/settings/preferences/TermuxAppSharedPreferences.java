@@ -2498,9 +2498,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_FLUSH_DOCK, value, false);
     }
 
+    /**
+     * Always on. The frame is what the glass rim, the pane inset and the help guide's boxes are
+     * drawn against, so it is no longer a choice; the stored value is kept for old looks that
+     * still carry the key, and ignored.
+     */
     public boolean isTerminalBorderEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED,
-            TERMUX_APP.DEFAULT_VALUE_TERMINAL_BORDER_ENABLED);
+        return true;
     }
 
     public void setTerminalBorderEnabled(boolean value) {

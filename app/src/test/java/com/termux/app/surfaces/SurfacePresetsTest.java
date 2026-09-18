@@ -119,7 +119,6 @@ public class SurfacePresetsTest {
             SurfacePresets.deserialize(preferences.getSurfaceCustomPreset());
         assertNotNull(look);
         assertTrue(look.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY) instanceof Integer);
-        assertTrue(look.get(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED) instanceof Boolean);
         assertTrue(look.get(TERMUX_APP.KEY_SURFACE_MATERIAL) instanceof String);
     }
 
@@ -137,8 +136,6 @@ public class SurfacePresetsTest {
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
             for (String key : rendered)
                 assertTrue(preset.id + " misses " + key, preset.values.containsKey(key));
-            assertTrue(preset.id + " misses the border switch",
-                preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED));
         }
     }
 }
