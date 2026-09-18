@@ -323,15 +323,19 @@ public final class TerminalSession extends TerminalOutput {
         notifyScreenUpdate();
     }
 
+    private static final ShellTerminator.ProcessTable PROCESS_TABLE = new ProcSessionTable();
+
     /**
-     * Finish this terminal session by hanging up the shell's whole process group, then killing it if
-     * it is still there.
+     * Finish this terminal session by hanging up every process group in the shell's session, then
+     * killing whatever the session still holds.
      *
-     * <p>Signalling the group rather than the single pid is what stops a pane's background jobs
-     * outliving it: the native child setsid()s before opening the slave pty, so its pid is its own
-     * group leader and every descendant inherits the group. All six kill sites funnel through here
-     * and every one of them wants group semantics — including TermuxSession.killIfExecuting, whose
-     * background RunCommand shells are setsid'd the same way — so no call site changes.
+     * <p>The session, not the shell's process group, is what covers a pane's jobs: an interactive
+     * shell with job control gives every foreground and background job a group of its own, so a
+     * group signal reached none of them. The native child setsid()s before opening the slave pty,
+     * so the session id is the shell's pid and every descendant keeps it. All six kill sites funnel
+     * through here and every one of them wants these semantics — including
+     * TermuxSession.killIfExecuting, whose background RunCommand shells are setsid'd the same way —
+     * so no call site changes.
      *
      * <p>Safe from MSG_PROCESS_EXITED, the UI and TermuxService alike: the escalation is posted to
      * the main looper, and mShellPid is set to -1 by cleanupResources on that same thread.
@@ -339,7 +343,7 @@ public final class TerminalSession extends TerminalOutput {
     public void finishIfRunning() {
         if (!isRunning()) return;
         ShellTerminator.terminate(mShellPid, OsConstants.SIGHUP, OsConstants.SIGKILL,
-            this::sendSignal, mMainThreadHandler::postDelayed, () -> mShellPid);
+            this::sendSignal, mMainThreadHandler::postDelayed, PROCESS_TABLE, () -> mShellPid);
     }
 
     private boolean sendSignal(int pid, int signal) {

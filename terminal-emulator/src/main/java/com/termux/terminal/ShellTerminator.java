@@ -1,17 +1,26 @@
 package com.termux.terminal;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 /**
  * Tears down a shell and everything it started.
  *
- * <p>The old teardown sent one SIGKILL to the shell's own pid, which is why {@code sleep 300 &}
- * outlived the pane that spawned it: the shell died, its children were reparented to init, and the
- * pane's work kept running with nothing on screen to stop it.
+ * <p>Two earlier teardowns each left work behind. Stock termux-app sent one SIGKILL to the shell's
+ * own pid, so {@code sleep 300 &} was reparented to init and kept running. The next version hung up
+ * and then killed the shell's process group, {@code kill(-shellPid)} — but an interactive shell with
+ * job control (fish, bash) puts every job, foreground or background, into a process group of its
+ * own, precisely so it can stop and interrupt them one at a time. The group signal therefore never
+ * reached a single job, and curses programs that swallow the write error on a dead pty (tty-clock,
+ * cbonsai, lazygit, sigye) lived on until the phone rebooted.
  *
- * <p>The native child calls {@code setsid()} before opening the slave pty, so its pid is its own
- * process group leader and every descendant inherits that group. Signalling the group therefore
- * reaches the whole job — which is also strictly more than the kernel's pty hangup would.
+ * <p>What does identify the whole tree is the session. The native child calls {@code setsid()}
+ * before opening the slave pty, so its session id is its own pid and every descendant inherits it
+ * unless it starts a session of its own — a real daemon, which is then deliberately left alone. The
+ * teardown hangs up every process group the session holds, waits, and kills whatever groups the
+ * session still holds, whether or not the shell itself survived the hangup.
  *
- * <p>No Android imports, so the escalation logic runs under the module's plain-JUnit suite.
+ * <p>No Android imports, so the logic runs under the module's plain-JUnit suite.
  */
 public final class ShellTerminator {
 
@@ -33,30 +42,54 @@ public final class ShellTerminator {
         int get();
     }
 
+    /** Answers which process groups a session currently holds. */
+    public interface ProcessTable {
+        /**
+         * The distinct process-group ids of every live process whose session id is {@code sid},
+         * or null when the table cannot be read at all. An empty array means the session is gone.
+         */
+        int[] processGroupsInSession(int sid);
+    }
+
     private ShellTerminator() {}
 
     /**
-     * Hangs up {@code shellPid}'s process group, then kills it if the shell is still alive after
-     * {@link #ESCALATION_DELAY_MS}.
+     * Hangs up every process group in {@code shellPid}'s session, then after
+     * {@link #ESCALATION_DELAY_MS} kills every group the session still holds.
      *
-     * <p>The escalation is guarded on the leader still being alive, which is what makes it
-     * pid-reuse-safe: while the leader lives, the process group {@code shellPid} is unambiguously
-     * this job's, so a negative-pid SIGKILL cannot land on a stranger. It also implements the chosen
-     * contract — a shell that exited on the hangup is simply left alone.
+     * <p>The second pass matches on the session id rather than on the shell being alive, because
+     * the common case is the opposite: the shell exits on the hangup and a job that ignores it
+     * stays. A brand-new pane whose shell was handed this exact pid within the grace period would
+     * be caught too; pids are handed out in sequence and wrap only after tens of thousands of
+     * processes, so that is theoretical.
      *
-     * <p>If the group form of the signal is rejected, the single pid is signalled instead and the
-     * escalation is skipped, since a group kill would be no more valid than the group hangup was.
+     * <p>When the table is unreadable the leader's own group is signalled alone, guarded on the
+     * leader still being alive, which is the previous behaviour. If even the group form of the
+     * hangup is rejected, the single pid is signalled and the escalation is skipped, since a group
+     * kill would be no more valid than the group hangup was.
      */
-    public static void terminate(int shellPid, int sighup, int sigkill,
-                                 SignalSender sender, Scheduler scheduler, LivePid livePid) {
+    public static void terminate(int shellPid, int sighup, int sigkill, SignalSender sender,
+                                 Scheduler scheduler, ProcessTable table, LivePid livePid) {
         if (shellPid <= 0) return;
-        if (!sender.send(-shellPid, sighup)) {
+        int[] found = table.processGroupsInSession(shellPid);
+        Set<Integer> groups = new LinkedHashSet<>();
+        groups.add(shellPid);   // the leader's own group, even when the table has nothing to say
+        if (found != null) for (int g : found) groups.add(g);
+
+        boolean anyAccepted = false;
+        for (int g : groups) anyAccepted |= sender.send(-g, sighup);
+        if (!anyAccepted) {
             sender.send(shellPid, sighup);
             return;
         }
+
         scheduler.postDelayed(() -> {
-            if (livePid.get() != shellPid) return;   // already exited on the hangup
-            sender.send(-shellPid, sigkill);
+            int[] left = table.processGroupsInSession(shellPid);
+            if (left == null) {
+                if (livePid.get() == shellPid) sender.send(-shellPid, sigkill);
+                return;
+            }
+            for (int g : left) sender.send(-g, sigkill);
         }, ESCALATION_DELAY_MS);
     }
 }
