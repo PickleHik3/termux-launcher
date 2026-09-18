@@ -124,9 +124,6 @@ public final class HelpTargets {
             add(s, "dock", dock, copy(R.string.help_dock_title,
                 rail ? R.string.help_rail_body : R.string.help_dock_body));
             add(s, "az", firstOfType(root, AzScrubRowView.class), copy(R.string.help_az_title, R.string.help_az_body));
-            // The pane itself is the control the touch grammar is about, so it is its own box.
-            add(s, "terminal", finder.activePane(), copy(R.string.help_topic_terminal_title,
-                R.string.help_topic_terminal_purpose, R.string.help_topic_terminal_action));
             paneCorner(s);
             // The row as one box, for the topic that is about the row. Each key keeps its own
             // label drawn on its own cap: the box says which row, the labels say which key.

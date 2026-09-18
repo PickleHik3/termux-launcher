@@ -1302,7 +1302,6 @@
                 <string name="termux_dock_tuning_radius">Corners</string>
                 <string name="termux_dock_tuning_icons">Apps</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
-                <string name="termux_dock_tuning_terminal_border">Frame</string>
                 <string name="termux_dock_tuning_done">Done</string>
                 <string name="termux_surface_tuning_peek_readout">%1$s · %2$s</string>
                 <!-- The peek echo names the control in full; the card's own label column is too
@@ -1956,9 +1955,6 @@
     <string name="help_topic_corners_purpose">Every pane corner holds the controls for that pane, including this help.</string>
     <string name="help_topic_corners_action">Hold a corner, then tap the ? button.</string>
     <string name="help_topic_corners_reveal">Hold any corner of a pane to see its controls.</string>
-    <string name="help_topic_terminal_purpose">The terminal is where your shell runs.</string>
-    <string name="help_topic_terminal_action">Hold for a moment to use the mouse: lift to click, drag to drag. Keep holding to select text.</string>
-    <string name="help_topic_terminal_reveal">Open a window to see a terminal.</string>
     <string name="help_topic_sessions_purpose">Sessions group your windows.</string>
     <string name="help_topic_sessions_action">Tap the badge to switch.</string>
     <string name="help_topic_sessions_reveal">Show the status bar in the Layout editor to see the badge.</string>
@@ -2016,5 +2012,4 @@
     <string name="help_topic_corners_title">Pane corners</string>
     <string name="help_topic_keys_title">Extra keys</string>
     <string name="help_topic_shortcuts_title">Key chords</string>
-    <string name="help_topic_terminal_title">Terminal</string>
 </resources>

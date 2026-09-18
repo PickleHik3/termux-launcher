@@ -126,8 +126,6 @@ public final class HelpTopics {
             R.string.help_topic_status_action, R.string.help_topic_status_reveal, null, null);
         terminal.add("stats", Group.EVERYDAY, R.string.help_topic_stats_title, R.string.help_topic_stats_purpose,
             R.string.help_topic_stats_action, R.string.help_topic_stats_reveal, null, null);
-        terminal.add("terminal", Group.EVERYDAY, R.string.help_topic_terminal_title, R.string.help_topic_terminal_purpose,
-            R.string.help_topic_terminal_action, R.string.help_topic_terminal_reveal, null, "windows");
         terminal.add("corners", Group.EVERYDAY, R.string.help_topic_corners_title, R.string.help_topic_corners_purpose,
             R.string.help_topic_corners_action, R.string.help_topic_corners_reveal, LESSON_FIND_HELP, null);
         terminal.add("sessions", Group.EVERYDAY, R.string.help_sessions_title, R.string.help_topic_sessions_purpose,
