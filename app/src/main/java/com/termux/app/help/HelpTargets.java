@@ -95,7 +95,7 @@ public final class HelpTargets {
             }
             stats(s);
         }
-        // The whole bar, not the peeking place icon at its end: the gestures the hint names are
+        // The whole bar, not the peeking place icon at its end: the gestures the topic names are
         // made anywhere along it, and a box on one small icon read as being about that icon.
         View host = finder.findHelpView(R.id.terminal_window_bar_host);
         add(s, "status", rect(host), radius(host));
@@ -113,8 +113,8 @@ public final class HelpTargets {
             add(s, "dock", firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host));
             add(s, "az", firstOfType(root, AzScrubRowView.class));
             paneCorner(s);
-            // The row as one box, for the topic that is about the row. Each key keeps its own
-            // label drawn on its own cap: the box says which row, the labels say which key.
+            // The row as one box, for the topic that is about the row; every cap is measured
+            // separately below, for the labels shown while the row is the selected control.
             ExtraKeysView row = firstOfType(root, ExtraKeysView.class);
             add(s, "keys", rect(row), radius(row));
             // The row that was just measured, not a second walk for it: one search, one answer.

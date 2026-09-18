@@ -14,6 +14,7 @@ import com.termux.app.wall.PaneWallPage;
 import com.termux.app.launcher.widget.WidgetGridView;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
+import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import org.junit.Before;
 import org.junit.Test;
@@ -28,13 +29,15 @@ import static org.junit.Assert.*;
  * of the card's way, and an explicit answer when a control goes away or a card will not fit.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28, application = Application.class)
+@Config(sdk = 28, application = Application.class, qualifiers = "w400dp-h800dp")
 public class HelpPresentationTest {
     private Activity activity;
     private FrameLayout root;
     private View wall;
     private View status;
     private View dock;
+    /** Built by the one test that is about the extra keys row; laid out with everything else. */
+    private ExtraKeysView keys;
     private HelpOverlayView overlay;
     private HelpTargets.ViewFinder finder;
 
@@ -82,7 +85,12 @@ public class HelpPresentationTest {
         root.layout(0, 0, 400, 800);
         wall.layout(0, 60, 400, 560);
         status.layout(0, 0, 400, 40);
-        dock.layout(0, 600, 400, 700);
+        dock.layout(0, 440, 400, 540);
+        if (keys != null) {
+            keys.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(60, View.MeasureSpec.EXACTLY));
+            keys.layout(0, 560, 400, 620);
+        }
         overlay.layout(0, 0, 400, 800);
     }
 
@@ -336,12 +344,18 @@ public class HelpPresentationTest {
         HelpTopics.Entry dockTopic = HelpTopics.entry("dock");
         assertEquals(TourGesture.DRAG_DOWN, dockTopic.gesture);
         explore(PaneWallPage.TERMINAL);
-        // The wall moved off the left edge and the dock became a column beside it: the same topic,
-        // a different movement.
-        assertEquals(TourGesture.SWIPE_RIGHT, overlay.gestureFor(dockTopic, new Rect(0, 100, 60, 500)));
-        assertEquals(TourGesture.SWIPE_LEFT, overlay.gestureFor(dockTopic, new Rect(380, 100, 400, 500)));
         assertEquals("a row along the bottom is still pulled down",
             TourGesture.DRAG_DOWN, overlay.gestureFor(dockTopic, new Rect(0, 600, 400, 700)));
+        // The wall off the left edge, and the dock a column beside it: the same topic, and the
+        // movement the copy names -- inward off the rail.
+        wall.layout(80, 60, 400, 560);
+        overlay.refresh();
+        assertEquals(TourGesture.SWIPE_RIGHT,
+            overlay.gestureFor(dockTopic, new Rect(0, 100, 60, 500)));
+        wall.layout(0, 60, 320, 560);
+        overlay.refresh();
+        assertEquals(TourGesture.SWIPE_LEFT,
+            overlay.gestureFor(dockTopic, new Rect(330, 100, 400, 500)));
     }
 
     @Test public void aTopicWithNoGesturePlaysNothingAndStillShowsItsCard() {
@@ -354,6 +368,29 @@ public class HelpPresentationTest {
         assertEquals("corners", overlay.selectedTopicId());
         assertFalse(overlay.isShowingGesture());
         assertNotNull(overlay.cardBounds());
+    }
+
+    /**
+     * The extra keys row is the one control that brings more than a card: one label per key, for
+     * the reader's own key assignments, and only while the row itself is selected.
+     */
+    @Test public void theExtraKeysRowBringsALabelForEveryKey() throws Exception {
+        keys = new ExtraKeysView(activity, null);
+        root.addView(keys, new FrameLayout.LayoutParams(400, 60));
+        keys.reload(new ExtraKeysInfo("[['ESC','TAB','CTRL','ALT','-','/','|']]", "default",
+            ExtraKeysConstants.CONTROL_CHARS_ALIASES), 60);
+        explore(PaneWallPage.TERMINAL);
+        assertTrue("the row was not measured", overlay.markerTargetIds().contains("keys"));
+        assertTrue("no key cards until the row is selected", overlay.keyCardBounds().isEmpty());
+        tapMarker("keys");
+        assertEquals("keys", overlay.selectedTopicId());
+        assertEquals("one label per key", 7, overlay.keyCardBounds().size());
+        assertClearOfEverything();
+        for (Rect card : overlay.keyCardBounds())
+            assertFalse("a key card is on the row it labels",
+                Rect.intersects(card, overlay.measuredRect("keys")));
+        tapMarker("status");
+        assertTrue("the key cards went with the row", overlay.keyCardBounds().isEmpty());
     }
 
     @Test public void noExtraKeyCardsUnlessTheExtraKeysRowIsTheSelectedControl() {

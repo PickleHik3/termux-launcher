@@ -169,10 +169,11 @@ public class HelpExplorePlacementTest {
 
     /** Another control is only covered when there is nowhere clear left to sit. */
     @Test public void aClearSeatBeatsOneOverAnotherControl() {
-        Box target = new Box(0, 60, 1080, 150);
-        Box below = new Box(0, 180, 1080, 560);
+        Box target = new Box(0, 1000, 1080, 1120);
+        Box below = new Box(0, 1150, 1080, 1500);
         Request r = request(target, BOTTOM_TOOLBAR, Collections.singletonList(below), 600, 320);
         Result seat = HelpExplorePlacement.place(r);
+        assertEquals("under is taken, so over it is", Seat.ABOVE, seat.seat);
         assertLegal(r, seat);
         assertFalse("a clear seat was available", overlaps(seat.card, below));
     }

@@ -2,17 +2,21 @@
 
 ## Done
 - `HelpExplorePlacement` (pure, new) + test: one card's seat, hard rules, explicit NONE.
-- `HelpOverlayView` rewritten to exploration only: markers, one card, toolbar, per-topic gesture.
-- `HelpPresentationModel` slimmed to place/measured/selection/colour; tests rewritten.
-- `HelpLeaderRouter` pruned to Box/Segment/Side (the overview's router went with the overview).
-- `HelpTargets.Target.copy` retired; 35 dead help strings removed, 3 explore strings added.
+- `HelpOverlayView` is exploration only: numbered named markers, one card, toolbar at the far edge,
+  per-topic gesture (a rail swipes inward), remeasure keeps or reports the selection.
+- `HelpPresentationModel` slimmed to place/measured/selection/colour; its test rewritten.
+- `HelpLeaderRouter` pruned to Box/Segment/Side; `HelpTargets.Target.copy` retired; `HelpCopy`
+  is now just the extra-key label. 35 dead strings out, 3 explore strings in.
+- Acceptance test green: 103 help tests, 0 failures.
 
 ## In progress
-- Running `:app:testDebugUnitTest --tests 'com.termux.app.help.*'` and fixing what it says.
+- Nothing.
 
 ## Next
-- Report: judgement calls (deprecated shims for TermuxActivity, router pruning, no marker grouping).
+- Phase B rewires TermuxActivity to the seam; then the deprecated shims below can go.
 
 ## Gotchas
-- TermuxActivity still calls the old 3-arg constructor/show(); deprecated shims keep dev compiling
-  until phase B rewires it. Do not delete them on this branch.
+- TermuxActivity on dev still calls the old 3-arg constructor / show() / setPractice*; deprecated
+  shims keep it compiling. Do not delete them on this branch.
+- The Robolectric harness needs `qualifiers = "w400dp-h800dp"`: without it the window clips
+  anything below ~470px and controls simply do not measure.

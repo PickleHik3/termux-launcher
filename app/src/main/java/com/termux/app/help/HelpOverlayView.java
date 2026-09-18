@@ -623,11 +623,19 @@ public final class HelpOverlayView extends FrameLayout {
         toolbar.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(safe.height(), MeasureSpec.AT_MOST));
         int height = toolbar.getMeasuredHeight();
-        Rect target = selected == null ? null : targetRect(selected.targetId);
-        boolean atTheTop = target != null && target.centerY() > safe.centerY();
         int left = safe.centerX() - width / 2;
-        int top = atTheTop ? safe.top + dp(8) : safe.bottom - dp(8) - height;
-        toolbarBounds = new Rect(left, top, left + width, top + height);
+        Rect low = new Rect(left, safe.bottom - dp(8) - height, left + width, safe.bottom - dp(8));
+        Rect high = new Rect(left, safe.top + dp(8), left + width, safe.top + dp(8) + height);
+        Rect target = selected == null ? null : targetRect(selected.targetId);
+        if (target == null) { toolbarBounds = low; return; }
+        // The edge farthest from the control, and the near edge only when the far one would land
+        // on the control itself.
+        boolean farIsHigh = target.centerY() > safe.centerY();
+        Rect far = farIsHigh ? high : low, near = farIsHigh ? low : high;
+        toolbarBounds = !Rect.intersects(far, target) ? far
+            : !Rect.intersects(near, target) ? near : far;
+        if (Rect.intersects(toolbarBounds, target))
+            HelpLog.d("the toolbar has nowhere clear of " + selected.id + "'s control");
     }
 
     private LinearLayout toolbar() {
