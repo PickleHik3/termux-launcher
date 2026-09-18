@@ -357,7 +357,8 @@ public final class HelpOverlayView extends FrameLayout {
     private int overviewColor(String id, int index, int count, boolean light) {
         HelpTopics.Entry entry = HelpTopics.entry(place, id);
         return entry == null ? HelpPalette.boxColor(accent, index, count, light)
-            : model.overviewColor(accent, entry, light);
+            : HelpPalette.boxColor(accent, HelpTopics.identityIndex(place, entry.id),
+                HelpTopics.sizeFor(place), light);
     }
 
     /**
@@ -426,7 +427,9 @@ public final class HelpOverlayView extends FrameLayout {
             return;
         }
         HelpTopics.Entry entry = HelpTopics.entry(place, "keys");
-        keyColor = entry == null ? onTheWash(accent) : model.overviewColor(accent, entry, light);
+        keyColor = entry == null ? onTheWash(accent)
+            : HelpPalette.boxColor(accent, HelpTopics.identityIndex(place, entry.id),
+                HelpTopics.sizeFor(place), light);
         int titleColor = entry == null ? HelpPalette.titleColor(accent, 0, 1, dress.fillColor)
             : HelpPalette.titleColor(accent, HelpTopics.identityIndex(place, entry.id),
                 HelpTopics.sizeFor(place), dress.fillColor);

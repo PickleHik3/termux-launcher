@@ -1,19 +1,22 @@
-# Phase A — the help model (branch feat/help-model)
+# Phase A — the help model (branch feat/help-model) — done
 
 ## Done
-- `HelpTopics` rewritten: global topic record (group/kind/summary/action/steps/wayBack/reveal/
-  target+places/gesture/lesson/related/terms/aliases/doc), 43 topics, per-place compat views.
-- `HelpGlossary` (15 terms), `HelpSearch` (pure ranking), `HelpNavigation` (screens + back stack).
-- All topic/glossary copy in strings.xml; nine orphaned help_* strings deleted.
-- Compat edits in HelpPresentationModel and HelpOverlayView (summaryRes, identityIndex(place,id)).
+- `HelpTopics`: one global topic record (group/kind/summary/action/steps/wayBack/reveal/
+  target+places/gesture/lesson/related/terms/aliases/doc), 43 topics over the spec's seven
+  sections, plus per-place views (`forPlace`, `entry(place,id)`, `identityIndex`, `sizeFor`).
+- `HelpGlossary` (15 terms, A–Z helper), `HelpSearch` (pure ranking, GUIDE/TERM/FIX),
+  `HelpNavigation` (five screens, back stack, query/scroll/inline term, practice frame).
+- All topic and glossary copy in strings.xml; nine orphaned `help_*` strings deleted.
+- Compat edits: HelpPresentationModel (targetId-based highlight, place-based colour),
+  HelpOverlayView (summaryRes, identityIndex(place,id) — the view's place, never the model's).
 
 ## In progress
-- First compile/test run of `:app:testDebugUnitTest --tests 'com.termux.app.help.*'`.
+- Nothing.
 
 ## Next
-- Fix whatever the run reports, commit, write the contract for phases B and C.
+- Phase B (panel) and C (explore) build on the contract in the phase report.
 
 ## Gotchas
-- Topic ids are not target ids: target "sessions" -> topic "hierarchy", "windows" -> "windows" on
-  Terminal but "display_apps" on Display. `HelpTopics.entry(place, id)` takes either.
-- `HelpTestText` reads the real strings.xml off disk, so tests rank the actual copy.
+- Topic ids are not target ids: "sessions" -> hierarchy, "windows" -> windows on Terminal and
+  display_apps on Display. `HelpTopics.entry(place, id)` accepts either.
+- The overlay must use its own `place` for colours; the model's place lags the first layout pass.

@@ -121,13 +121,16 @@ public final class HelpSearch {
 
     private static int aliases(int aliasesRes, String needle, HelpTopics.Text text) {
         if (aliasesRes == 0) return 0;
+        // The best alias wins, not the first one listed: "tabs" is an exact alias of Windows even
+        // though "tab" is listed before it.
+        int best = 0;
         for (String alias : text.get(aliasesRes).split(",")) {
             String one = alias.trim().toLowerCase(Locale.ROOT);
             if (one.isEmpty()) continue;
             if (one.equals(needle)) return ALIAS_EXACT;
-            if (one.contains(needle) || needle.contains(one)) return ALIAS_CONTAINS;
+            if (one.contains(needle) || needle.contains(one)) best = ALIAS_CONTAINS;
         }
-        return 0;
+        return best;
     }
 
     private static int body(HelpTopics.Entry entry, String needle, HelpTopics.Text text) {
