@@ -5,9 +5,11 @@ import android.app.Application;
 import android.graphics.Rect;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import com.termux.R;
+import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.launcher.widget.WidgetGridView;
 import com.termux.app.terminal.TerminalWindowBar;
@@ -21,6 +23,10 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 
+/**
+ * Explore this screen, drawn: a marker on every measured control, one card at a time, a toolbar out
+ * of the card's way, and an explicit answer when a control goes away or a card will not fit.
+ */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28, application = Application.class)
 public class HelpPresentationTest {
@@ -28,10 +34,15 @@ public class HelpPresentationTest {
     private FrameLayout root;
     private View wall;
     private View status;
+    private View dock;
     private HelpOverlayView overlay;
     private HelpTargets.ViewFinder finder;
-    private int dismissed;
-    private String practised;
+
+    private String read;
+    private String gone;
+    private String noSeat;
+    private int backToHelp;
+    private int closed;
 
     @Before public void setUp() {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -39,89 +50,66 @@ public class HelpPresentationTest {
         root = new FrameLayout(activity);
         activity.setContentView(root);
         wall = new View(activity); wall.setId(R.id.terminal_pane_wall);
-        root.addView(wall, new FrameLayout.LayoutParams(400,500));
+        root.addView(wall, new FrameLayout.LayoutParams(400, 500));
         status = new View(activity); status.setId(R.id.terminal_window_bar_host);
-        root.addView(status, new FrameLayout.LayoutParams(400,40));
+        root.addView(status, new FrameLayout.LayoutParams(400, 40));
+        dock = new View(activity); dock.setId(R.id.apps_bar_viewpager);
+        root.addView(dock, new FrameLayout.LayoutParams(400, 100));
         finder = new HelpTargets.ViewFinder() {
             @Override public View findHelpView(int id) {
                 return id == android.R.id.content ? root : root.findViewById(id);
             }
             @Override public View activePane() { return wall; }
             @Override public int paneCount() { return 1; }
-            @Override public boolean keyRectOnScreen(String name,Rect out) { return false; }
-            @Override public boolean keyCornerRectOnScreen(String name,Rect out) { return false; }
+            @Override public boolean keyRectOnScreen(String name, Rect out) { return false; }
+            @Override public boolean keyCornerRectOnScreen(String name, Rect out) { return false; }
         };
-        overlay = new HelpOverlayView(activity, finder, () -> dismissed++);
-        overlay.setPracticeListener(lessonId -> practised = lessonId);
-        root.addView(overlay,new FrameLayout.LayoutParams(400,800));
+        overlay = new HelpOverlayView(activity, finder);
+        overlay.setExploreListener(new HelpOverlayView.ExploreListener() {
+            @Override public void onReadTopic(String topicId) { read = topicId; }
+            @Override public void onBackToHelp() { backToHelp++; }
+            @Override public void onCloseHelp() { closed++; }
+            @Override public void onTargetGone(String topicId) { gone = topicId; }
+            @Override public void onCardDoesNotFit(String topicId) { noSeat = topicId; }
+        });
+        root.addView(overlay, new FrameLayout.LayoutParams(400, 800));
         layout();
     }
+
     private void layout() {
-        root.measure(View.MeasureSpec.makeMeasureSpec(400,View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(800,View.MeasureSpec.EXACTLY));
-        root.layout(0,0,400,800);
-        wall.layout(0,60,400,560);
-        status.layout(0,0,400,40);
-        overlay.layout(0,0,400,800);
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 800);
+        wall.layout(0, 60, 400, 560);
+        status.layout(0, 0, 400, 40);
+        dock.layout(0, 600, 400, 700);
+        overlay.layout(0, 0, 400, 800);
     }
-    private void open(PaneWallPage place) {
-        overlay.show(place); layout(); overlay.refresh(); layout();
-    }
-    /** The guide, then the catalogue button: where the topic chooser now lives. */
-    private void openTopics(PaneWallPage place) {
-        open(place);
-        described("Help topics").performClick();
+
+    private void explore(PaneWallPage place) {
+        overlay.explore(place, null);
+        layout();
+        overlay.refresh();
         layout();
     }
-    /** One of the overlay's own floating buttons, by the name a reader hears. */
-    private View described(String description) {
-        return described(overlay, description);
+
+    /** The marker dot for one control, tapped the way a finger or TalkBack taps it. */
+    private void tapMarker(String targetId) {
+        View marker = overlay.markerView(targetId);
+        assertNotNull("no marker for " + targetId, marker);
+        marker.performClick();
+        layout();
     }
 
-    /** The two floating buttons share one capsule now, so the search walks down into groups. */
-    private View described(View view, String description) {
-        CharSequence had = view.getContentDescription();
-        if (had != null && description.contentEquals(had)) return view;
-        if (view instanceof android.view.ViewGroup) {
-            android.view.ViewGroup group = (android.view.ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                View found = described(group.getChildAt(i), description);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-    /**
-     * The centre of a button in the overlay's own coordinates. The two floating buttons live
-     * inside a shared capsule now, so their getLeft()/getTop() are measured from that capsule
-     * while {@link #tap} dispatches at the overlay; the offsets have to be walked up to agree.
-     */
-    private float[] centreInOverlay(View view) {
-        float x = view.getWidth() / 2f;
-        float y = view.getHeight() / 2f;
-        for (View cur = view; cur != null && cur != overlay; ) {
-            x += cur.getLeft();
-            y += cur.getTop();
-            android.view.ViewParent parent = cur.getParent();
-            cur = parent instanceof View ? (View) parent : null;
-        }
-        return new float[] {x, y};
-    }
-
-    private void tap(View view) {
-        float[] centre = centreInOverlay(view);
-        tap(centre[0], centre[1]);
-    }
-
-    private void tap(float x,float y) {
-        MotionEvent down = MotionEvent.obtain(0,0,MotionEvent.ACTION_DOWN,x,y,0);
-        MotionEvent up = MotionEvent.obtain(0,1,MotionEvent.ACTION_UP,x,y,0);
+    private void tap(float x, float y) {
+        MotionEvent down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, x, y, 0);
+        MotionEvent up = MotionEvent.obtain(0, 1, MotionEvent.ACTION_UP, x, y, 0);
         assertTrue(overlay.dispatchTouchEvent(down));
         assertTrue(overlay.dispatchTouchEvent(up));
         down.recycle(); up.recycle();
+        layout();
     }
 
-    /** Every text view under the overlay, in the order they were added. */
     private java.util.List<TextView> texts() {
         java.util.List<TextView> found = new java.util.ArrayList<>();
         collect(overlay, found);
@@ -129,8 +117,8 @@ public class HelpPresentationTest {
     }
     private void collect(View view, java.util.List<TextView> out) {
         if (view instanceof TextView) out.add((TextView) view);
-        if (view instanceof android.view.ViewGroup) {
-            android.view.ViewGroup group = (android.view.ViewGroup) view;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) collect(group.getChildAt(i), out);
         }
     }
@@ -138,193 +126,270 @@ public class HelpPresentationTest {
         for (TextView view : texts()) if (text.contentEquals(view.getText())) return view;
         return null;
     }
-    private TextView startingWith(String prefix) {
-        for (TextView view : texts()) if (view.getText().toString().startsWith(prefix)) return view;
+    private int countExactly(String text) {
+        int count = 0;
+        for (TextView view : texts()) if (text.contentEquals(view.getText())) count++;
+        return count;
+    }
+    private View described(String description) {
+        for (TextView view : texts()) {
+            CharSequence had = view.getContentDescription();
+            if (had != null && description.contentEquals(had)) return view;
+        }
         return null;
     }
-    private Rect onOverlay(View view) {
-        int[] source = new int[2], origin = new int[2];
-        view.getLocationOnScreen(source);
-        overlay.getLocationOnScreen(origin);
-        int left = source[0] - origin[0], top = source[1] - origin[1];
-        return new Rect(left, top, left + view.getWidth(), top + view.getHeight());
+    private String string(int res) { return activity.getString(res); }
+
+    private void assertClearOfEverything() {
+        Rect card = overlay.cardBounds();
+        assertNotNull("nothing is seated", card);
+        Rect toolbar = overlay.toolbarBounds();
+        assertNotNull(toolbar);
+        assertFalse("the card is on the toolbar", Rect.intersects(card, toolbar));
+        String topicId = overlay.selectedTopicId();
+        HelpTopics.Entry entry = HelpTopics.entry(topicId);
+        Rect target = overlay.measuredRect(entry.targetId);
+        assertNotNull(target);
+        assertFalse("the card covers the control it explains", Rect.intersects(card, target));
+        assertFalse("the toolbar covers the control", Rect.intersects(toolbar, target));
+        assertTrue("the card left the screen", card.left >= 0 && card.top >= 0
+            && card.right <= 400 && card.bottom <= 800);
+        for (Rect key : overlay.keyCardBounds())
+            assertFalse("the card is on a key card", Rect.intersects(card, key));
     }
 
-    @Test public void everyPlaceOpensOnTheGuideWithTwoGlyphsAndNoPanel() {
+    @Test public void everyPlaceMarksItsControlsAndSeatsNoCard() {
         for (PaneWallPage place : PaneWallPage.values()) {
-            open(place);
-            assertNotNull(place.name(), startingWith("Status bar\n"));
-            assertNotNull(place.name(), described("Close help"));
-            assertNotNull(place.name(), described("Help topics"));
-            assertNull(place.name(), exactly("Show all"));
-            assertNull(place.name(), exactly("Show basics"));
-            assertNull(place.name(), exactly("Back to topics"));
-            assertNull(place.name(), exactly("Previous"));
-            assertNull(place.name(), exactly("Next"));
-            assertNull(place.name(), exactly("Show topics"));
+            explore(place);
+            assertTrue(place.name(), overlay.isShowing());
+            assertFalse(place.name() + " marked nothing", overlay.markerTargetIds().isEmpty());
+            assertNull(place.name() + " opened with a card up", overlay.cardBounds());
+            assertNull(place.name(), overlay.selectedTopicId());
+            assertNotNull(place.name(), overlay.toolbarBounds());
+            assertNotNull(place.name(), described(string(R.string.help_explore_back)));
+            assertNotNull(place.name(), described(string(R.string.help_close_action)));
+            assertNull(place.name() + " read something", exactly(string(R.string.help_explore_read)));
             overlay.dismiss();
         }
     }
 
-    @Test public void theGuideFitsOnOnePage() {
-        open(PaneWallPage.TERMINAL);
-        assertEquals(java.util.Collections.emptyList(), overlay.unplacedGuideIds());
+    /** A marker carries its number and its control's name, and no two sit on each other. */
+    @Test public void everyMarkerIsNumberedNamedAndClearOfTheOthers() {
+        explore(PaneWallPage.TERMINAL);
+        java.util.List<String> ids = overlay.markerTargetIds();
+        assertTrue("the terminal marks more than one control", ids.size() > 1);
+        java.util.List<Rect> seen = new java.util.ArrayList<>();
+        for (int i = 0; i < ids.size(); i++) {
+            View marker = overlay.markerView(ids.get(i));
+            assertNotNull(marker);
+            assertEquals("marker " + i + " is not numbered", String.valueOf(i + 1),
+                ((TextView) marker).getText().toString());
+            HelpTopics.Entry entry = HelpTopics.forTarget(PaneWallPage.TERMINAL, ids.get(i));
+            assertEquals("marker " + i + " is not named", string(entry.titleRes),
+                marker.getContentDescription().toString());
+            assertTrue("marker " + i + " is too small for a finger", marker.getWidth() >= 24);
+            Rect bounds = new Rect(marker.getLeft(), marker.getTop(), marker.getRight(), marker.getBottom());
+            for (Rect other : seen) assertFalse("two markers sit on each other",
+                Rect.intersects(other, bounds));
+            seen.add(bounds);
+        }
+    }
+
+    @Test public void aMarkerTapSeatsOneCardClearOfEverything() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("status");
+        assertEquals("status", overlay.selectedTopicId());
+        assertClearOfEverything();
+        HelpTopics.Entry entry = HelpTopics.entry("status");
+        assertNotNull(exactly(string(entry.titleRes)));
+        assertNotNull(exactly(string(entry.actionRes)));
+        assertEquals("one card at a time", 1, countExactly(string(R.string.help_explore_read)));
+    }
+
+    @Test public void tappingTheControlItselfAlsoSeatsItsCard() {
+        explore(PaneWallPage.TERMINAL);
+        tap(300, 20);
+        assertEquals("status", overlay.selectedTopicId());
+        assertClearOfEverything();
+    }
+
+    @Test public void tappingAnotherControlSwitchesTheOneCard() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("status");
+        assertEquals("status", overlay.selectedTopicId());
+        tapMarker("dock");
+        assertEquals("dock", overlay.selectedTopicId());
+        assertEquals("one card at a time", 1, countExactly(string(R.string.help_explore_read)));
+        assertClearOfEverything();
+    }
+
+    @Test public void tappingEmptySpaceLeavesTheScreenMarkedWithNoCard() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("status");
+        assertNotNull(overlay.cardBounds());
+        tap(200, 400);
+        assertNull(overlay.cardBounds());
+        assertNull(overlay.selectedTopicId());
+        assertTrue("an outside tap is not a way out of help", overlay.isShowing());
+        assertEquals(0, closed);
+        assertFalse(overlay.markerTargetIds().isEmpty());
+    }
+
+    @Test public void backPutsTheCardAwayFirstAndThenHandsBackToHelp() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("status");
+        assertTrue("back with a card up is consumed", overlay.onBackPressed());
+        assertNull(overlay.cardBounds());
+        assertTrue(overlay.isShowing());
+        assertFalse("back with nothing selected is the launcher's", overlay.onBackPressed());
+        assertEquals(0, backToHelp);
+    }
+
+    @Test public void readTopicHandsTheTopicOver() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("status");
+        TextView readTopic = exactly(string(R.string.help_explore_read));
+        assertNotNull(readTopic);
+        assertTrue(readTopic.getHeight() >= 48);
+        readTopic.performClick();
+        assertEquals("status", read);
+    }
+
+    @Test public void theToolbarLeadsBackAndOut() {
+        explore(PaneWallPage.WIDGETS);
+        described(string(R.string.help_explore_back)).performClick();
+        assertEquals(1, backToHelp);
+        described(string(R.string.help_close_action)).performClick();
+        assertEquals(1, closed);
+    }
+
+    /** The toolbar goes to the edge farthest from the control, so the card keeps the near one. */
+    @Test public void theToolbarSitsAtTheEdgeFarthestFromTheControl() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("status");
+        Rect high = overlay.toolbarBounds();
+        assertTrue("a control at the top leaves the toolbar at the bottom", high.top > 400);
+        tapMarker("dock");
+        Rect low = overlay.toolbarBounds();
+        assertTrue("a control at the bottom lifts the toolbar to the top", low.bottom < 400);
+        assertClearOfEverything();
     }
 
     /**
-     * The × and the catalogue are one group, and the group sits in a corner of the wall — never
-     * floating mid-guide where it reads as one more card.
+     * A control that goes away stops the demonstration and names its topic; the highlight is never
+     * moved to some other control.
      */
-    @Test public void theTwoButtonsShareAGroupInACornerOfTheWall() {
-        open(PaneWallPage.TERMINAL);
-        View close = described("Close help");
-        View catalogue = described("Help topics");
-        assertNotNull(close); assertNotNull(catalogue);
-        assertSame("one capsule holds both", close.getParent(), catalogue.getParent());
-        View group = (View) close.getParent();
-        assertSame("the capsule is the overlay's own child", overlay, group.getParent());
-        int cx = (group.getLeft() + group.getRight()) / 2, cy = (group.getTop() + group.getBottom()) / 2;
-        // The wall in this harness is 0,60–400,560; the group's centre must be within its own
-        // width of one of the four corners.
-        int reach = group.getWidth();
-        boolean nearX = cx <= reach || cx >= 400 - reach;
-        boolean nearY = Math.abs(cy - 60) <= reach || Math.abs(cy - 560) <= reach;
-        assertTrue("group centre (" + cx + "," + cy + ") is in a corner", nearX && nearY);
-        assertEquals("the buttons are the same square", close.getWidth(), catalogue.getWidth());
-    }
-
-    @Test public void theCloseGlyphDismissesHelpOnce() {
-        open(PaneWallPage.WIDGETS);
-        View close = described("Close help");
-        assertNotNull(close);
-        close.performClick();
-        assertFalse(overlay.isShowing());
-        assertEquals(1, dismissed);
-    }
-
-    @Test public void theCatalogueGlyphOpensTheChooserAndPutsItAwayAgain() {
-        open(PaneWallPage.TERMINAL);
-        described("Help topics").performClick();
+    @Test public void aVanishedControlIsSaidRatherThanRedirected() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("dock");
+        assertEquals("dock", overlay.selectedTopicId());
+        dock.setVisibility(View.GONE);
+        overlay.refresh();
         layout();
+        assertEquals("dock", gone);
+        assertNull(overlay.selectedTopicId());
+        assertNull(overlay.cardBounds());
+        assertFalse(overlay.markerTargetIds().contains("dock"));
         assertTrue(overlay.isShowing());
-        assertNotNull(exactly("Show all"));
-        assertNotNull(startingWith("Pane corners\n"));
-        described("Help topics").performClick();
+    }
+
+    /** Asking for a control this screen does not have is answered, not silently dropped. */
+    @Test public void showOnScreenForAControlThatIsNotThereIsSaid() {
+        dock.setVisibility(View.GONE);
+        overlay.explore(PaneWallPage.TERMINAL, "dock");
         layout();
-        assertNull(exactly("Show all"));
-        assertNotNull(startingWith("Status bar\n"));
-        assertEquals(0, dismissed);
-    }
-
-    @Test public void showAllFromTheChooserReturnsToTheGuide() {
-        openTopics(PaneWallPage.TERMINAL);
-        exactly("Show all").performClick();
+        overlay.refresh();
         layout();
-        assertTrue(overlay.isShowing());
-        assertNull(exactly("Show all"));
-        assertNull(exactly("Show basics"));
-        assertNotNull(startingWith("Status bar\n"));
-        assertNotNull(described("Close help"));
-        assertEquals(0, dismissed);
+        assertEquals("dock", gone);
+        assertNull(overlay.cardBounds());
     }
 
-    @Test public void aGlyphTapIsConsumedAndReachesNoLauncherControl() {
-        open(PaneWallPage.TERMINAL);
-        View catalogue = described("Help topics");
-        assertNotNull(catalogue);
-        tap(catalogue);
-        assertTrue(overlay.isShowing());
-        assertEquals(0, dismissed);
+    /** Too little room is an answer, not an excuse to shrink the text. */
+    @Test public void aScreenWithNoSeatForTheCardSaysSo() {
+        root.measure(View.MeasureSpec.makeMeasureSpec(200, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(200, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 200, 200);
+        wall.layout(0, 40, 200, 200);
+        status.layout(0, 0, 200, 30);
+        dock.setVisibility(View.GONE);
+        overlay.layout(0, 0, 200, 200);
+        overlay.explore(PaneWallPage.TERMINAL, null);
+        overlay.refresh();
+        tapMarker("status");
+        assertEquals("status", noSeat);
+        assertNull(overlay.cardBounds());
+        assertNull(overlay.selectedTopicId());
     }
 
-    @Test public void anOutsideTapDismissesTheChooserToo() {
-        openTopics(PaneWallPage.TERMINAL);
-        assertNotNull(exactly("Show all"));
-        tap(200, 770);
-        assertFalse(overlay.isShowing());
-        assertEquals(1, dismissed);
-    }
-
-    @Test public void aTopicChipChangesWhatIsReadAndLeavesHelpOpen() {
-        openTopics(PaneWallPage.TERMINAL);
-        TextView chip = startingWith("Pane corners\n");
-        assertNotNull(chip);
-        chip.performClick();
+    /** The demonstration is the topic's own movement, and a rail is swiped inward off itself. */
+    @Test public void aDemonstrationPlaysTheGestureTheTopicCarries() {
+        overlay.demonstrate(PaneWallPage.TERMINAL, "dock");
         layout();
-        assertTrue(overlay.isShowing());
-        assertNotNull(exactly("Back to topics"));
-        assertNotNull(startingWith("Every pane corner holds"));
-        assertNull(exactly("Show all"));
-        assertEquals(0, dismissed);
-    }
-
-    @Test public void showGestureDemonstratesAndLeavesHelpOpen() {
-        openTopics(PaneWallPage.TERMINAL);
-        startingWith("Pane corners\n").performClick();
+        overlay.refresh();
         layout();
-        TextView gesture = exactly("Show gesture");
-        assertNotNull(gesture);
-        assertTrue(gesture.isEnabled());
-        gesture.performClick();
-        assertTrue(overlay.isShowing());
+        assertEquals("dock", overlay.selectedTopicId());
         assertTrue(overlay.isShowingGesture());
-        assertEquals(0, dismissed);
+        assertEquals(TourGesture.DRAG_DOWN, overlay.playingGesture());
     }
 
-    @Test public void tryItClosesHelpAndNamesTheLesson() {
-        openTopics(PaneWallPage.TERMINAL);
-        startingWith("Pane corners\n").performClick();
+    @Test public void aDockThatIsARailIsSwipedInwardInstead() {
+        HelpTopics.Entry dockTopic = HelpTopics.entry("dock");
+        assertEquals(TourGesture.DRAG_DOWN, dockTopic.gesture);
+        explore(PaneWallPage.TERMINAL);
+        // The wall moved off the left edge and the dock became a column beside it: the same topic,
+        // a different movement.
+        assertEquals(TourGesture.SWIPE_RIGHT, overlay.gestureFor(dockTopic, new Rect(0, 100, 60, 500)));
+        assertEquals(TourGesture.SWIPE_LEFT, overlay.gestureFor(dockTopic, new Rect(380, 100, 400, 500)));
+        assertEquals("a row along the bottom is still pulled down",
+            TourGesture.DRAG_DOWN, overlay.gestureFor(dockTopic, new Rect(0, 600, 400, 700)));
+    }
+
+    @Test public void aTopicWithNoGesturePlaysNothingAndStillShowsItsCard() {
+        HelpTopics.Entry corners = HelpTopics.entry("corners");
+        assertNull("this test is about a topic with no gesture", corners.gesture);
+        overlay.demonstrate(PaneWallPage.TERMINAL, "corners");
         layout();
-        TextView tryIt = exactly("Try it");
-        assertNotNull(tryIt);
-        assertTrue(tryIt.isEnabled());
-        tryIt.performClick();
+        overlay.refresh();
+        layout();
+        assertEquals("corners", overlay.selectedTopicId());
+        assertFalse(overlay.isShowingGesture());
+        assertNotNull(overlay.cardBounds());
+    }
+
+    @Test public void noExtraKeyCardsUnlessTheExtraKeysRowIsTheSelectedControl() {
+        explore(PaneWallPage.TERMINAL);
+        assertTrue(overlay.keyCardBounds().isEmpty());
+        tapMarker("status");
+        assertTrue("the status bar has no key cards", overlay.keyCardBounds().isEmpty());
+    }
+
+    /** A control that only moved must not cost the screen its markers: rebuilding them is the flash. */
+    @Test public void aRemeasureThatOnlyMovedAControlKeepsTheSameMarkers() {
+        explore(PaneWallPage.WIDGETS);
+        View before = overlay.markerView("status");
+        assertNotNull(before);
+        int children = overlay.getChildCount();
+        status.layout(0, 6, 400, 46);
+        overlay.refresh();
+        assertSame(before, overlay.markerView("status"));
+        assertSame(overlay, before.getParent());
+        assertEquals(children, overlay.getChildCount());
+    }
+
+    @Test public void dismissTakesEverythingWithIt() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("status");
+        overlay.dismiss();
         assertFalse(overlay.isShowing());
-        assertEquals(1, dismissed);
-        assertEquals("find_help", practised);
+        assertEquals(0, overlay.getChildCount());
+        assertNull(overlay.cardBounds());
+        assertTrue(overlay.markerTargetIds().isEmpty());
     }
 
-    @Test public void aTopicsSentencesScrollAndItsButtonsDoNot() {
-        openTopics(PaneWallPage.TERMINAL);
-        startingWith("Pane corners\n").performClick();
-        layout();
-        assertTrue(inScrollView(startingWith("Every pane corner holds")));
-        assertFalse(inScrollView(exactly("Back to topics")));
-        assertFalse(inScrollView(exactly("Show gesture")));
-    }
-
-    private boolean inScrollView(View view) {
-        assertNotNull(view);
-        android.view.ViewParent parent = view.getParent();
-        while (parent != null) {
-            if (parent instanceof android.widget.ScrollView) return true;
-            parent = parent.getParent();
-        }
-        return false;
-    }
-
-    @Test public void thePopupCarriesNoCloseOfItsOwn() {
-        openTopics(PaneWallPage.TERMINAL);
-        assertNull(exactly("Close"));
-        startingWith("Pane corners\n").performClick();
-        layout();
-        assertNull(exactly("Close"));
-        assertNotNull(described("Close help"));
-    }
-
-    @Test public void tryItIsNotOfferedWhileTheLauncherCannotTakeOne() {
-        overlay.setPracticeAvailable(false);
-        openTopics(PaneWallPage.TERMINAL);
-        startingWith("Pane corners\n").performClick();
-        layout();
-        TextView tryIt = exactly("Try it");
-        assertNotNull(tryIt);
-        assertFalse(tryIt.isEnabled());
-        tryIt.performClick();
-        assertTrue(overlay.isShowing());
-        assertNull(practised);
-    }
-
+    /**
+     * One box for the window strip: the chips and the + are one control, and a chip the
+     * measurement cannot see on its own is still inside the box drawn round the row.
+     */
     @Test public void theWindowsBoxCoversTheChipsAndThePlus() {
         TerminalWindowBar bar = new TerminalWindowBar(activity, null);
         bar.setId(R.id.terminal_window_bar);
@@ -333,12 +398,10 @@ public class HelpPresentationTest {
             new TerminalWindowBar.WindowItem("home", "home"),
             new TerminalWindowBar.WindowItem("zbook", "zbook")), 0);
         layout();
-        // Well inside the test window: a rect past its frame is clipped away and measures as
-        // "not on screen", which is not what this test is about.
         bar.measure(View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(40, View.MeasureSpec.EXACTLY));
         bar.layout(0, 100, 300, 140);
-        android.view.ViewGroup strip = (android.view.ViewGroup) bar.chipStripView();
+        ViewGroup strip = (ViewGroup) bar.chipStripView();
         View plus = bar.createWindowButtonView();
         assertNotNull(plus);
         Rect windows = null;
@@ -347,8 +410,6 @@ public class HelpPresentationTest {
             if ("windows".equals(target.id)) windows = target.rect;
         }
         assertNotNull(windows);
-        // The strip's own bounds are the box, so the hint cannot shrink onto whichever children
-        // happened to measure: every chip on the row is inside it, and so is the +.
         for (int i = 0; i < strip.getChildCount(); i++) {
             View child = strip.getChildAt(i);
             if (child.getWidth() <= 0 || child.getHeight() <= 0) continue;
@@ -356,6 +417,14 @@ public class HelpPresentationTest {
         }
         assertTrue(windows.contains(onOverlay(strip.getChildAt(0))));
         assertTrue(windows.contains(onOverlay(plus)));
+    }
+
+    private Rect onOverlay(View view) {
+        int[] source = new int[2], origin = new int[2];
+        view.getLocationOnScreen(source);
+        overlay.getLocationOnScreen(origin);
+        int left = source[0] - origin[0], top = source[1] - origin[1];
+        return new Rect(left, top, left + view.getWidth(), top + view.getHeight());
     }
 
     /**
@@ -399,7 +468,6 @@ public class HelpPresentationTest {
         assertTrue("the rows meet", under[1] >= under[0] + 110);
         assertTrue("a row lies on the keyboard's own keys", under[1] + 110 <= 2209);
         assertTrue("a row lies on the keys it names", under[0] >= 1729);
-        // A keyboard whose own keys start right under the row leaves the cards no room there.
         int[] over = HelpOverlayView.keyCardRows(1631, 1729, 232, 1830, 110, 27, 38);
         assertEquals(0, over[2]);
         assertTrue("a row lies on the keys it names", over[0] + 110 <= 1631);
@@ -421,70 +489,27 @@ public class HelpPresentationTest {
         assertEquals(1, away[2]);
         assertEquals(600 - 38 - 110, away[0]);
         assertEquals(600 - 38 - 110 - 27 - 110, away[1]);
-        // The unmirrored case is the row above the keyboard, unchanged.
         int[] under = HelpOverlayView.keyCardLanes(1631, 1729, 232, 2209, true, 110, 27, 38);
         assertEquals(1767, under[0]);
         assertEquals(1904, under[1]);
     }
 
-    /** A control that only moved must not cost the guide its cards: rebuilding them is the flash. */
-    @Test public void aRemeasureThatOnlyMovedAControlKeepsTheSameCards() {
-        open(PaneWallPage.WIDGETS);
-        TextView before = overlay.guideCardView("status");
-        assertNotNull(before);
-        int children = overlay.getChildCount();
-        status.layout(0, 6, 400, 46);
-        overlay.refresh();
-        assertSame(before, overlay.guideCardView("status"));
-        assertSame(overlay, before.getParent());
-        assertEquals(children, overlay.getChildCount());
-    }
-
-    @Test public void outsideTapConsumesAndDismissesOnlyOnce() {
-        open(PaneWallPage.WIDGETS);
-        assertTrue(overlay.isShowing());
-        tap(200,770);
-        assertFalse(overlay.isShowing());
-        overlay.dismiss();
-        assertEquals(1,dismissed);
-        assertEquals(0,overlay.getChildCount());
-    }
-    @Test public void cardTapStaysOpenAndRemeasureDropsHiddenTarget() {
-        open(PaneWallPage.WIDGETS);
-        TextView card = null;
-        for (int i=0; i<overlay.getChildCount(); i++) {
-            View v = overlay.getChildAt(i);
-            if (v instanceof TextView && ((TextView)v).getText().toString().startsWith("Status bar\n"))
-                card = (TextView)v;
-        }
-        assertNotNull(card);
-        tap(card.getLeft()+4,card.getTop()+4);
-        assertTrue(overlay.isShowing());
-        status.setVisibility(View.GONE);
-        overlay.refresh(); layout();
-        for (int i=0; i<overlay.getChildCount(); i++) {
-            View v=overlay.getChildAt(i);
-            if (v instanceof TextView) assertFalse(((TextView)v).getText().toString().startsWith("Status bar\n"));
-        }
-        overlay.dismiss();
-        open(PaneWallPage.DISPLAY);
-        assertTrue(overlay.isShowing());
-    }
     @Test public void configuredExtraKeyLabelsIncludeSecondaryAndPlainGlyph() throws Exception {
         ExtraKeysInfo keys = new ExtraKeysInfo("[[{key:'tool:pane.split',popup:'tool:window.new'},'LEFT']]",
             "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
-        assertEquals("Split",HelpCopy.keyLabel(activity,keys.getMatrix()[0][0]));
-        assertEquals("window",HelpCopy.keyLabel(activity,keys.getMatrix()[0][0].getPopup()));
-        assertEquals(keys.getMatrix()[0][1].getDisplay(),HelpCopy.keyLabel(activity,keys.getMatrix()[0][1]));
-        assertEquals("Ctrl, Alt, Shift, C",HelpTargets.displayChord("ctrl+alt+shift+c"));
+        assertEquals("Split", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0]));
+        assertEquals("window", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0].getPopup()));
+        assertEquals(keys.getMatrix()[0][1].getDisplay(),
+            HelpCopy.keyLabel(activity, keys.getMatrix()[0][1]));
     }
+
     @Test public void emptyWidgetRegionUsesGridMetrics() {
         WidgetGridView grid = new WidgetGridView(activity);
-        grid.layout(0,0,400,500);
-        assertEquals(grid.metrics().contentBounds(),HelpTargets.largestEmptyRegion(grid));
+        grid.layout(0, 0, 400, 500);
+        assertEquals(grid.metrics().contentBounds(), HelpTargets.largestEmptyRegion(grid));
         View occupied = new View(activity);
         grid.addView(occupied);
-        occupied.layout(0,0,400,500);
+        occupied.layout(0, 0, 400, 500);
         assertNull(HelpTargets.largestEmptyRegion(grid));
     }
 }

@@ -12,25 +12,30 @@ import android.graphics.Color;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/** Commands in, rendered state and requested effects out; the model never draws or measures. */
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+
+/**
+ * What exploration is showing: the controls it measured, the one that is selected, and the topic and
+ * colour each of them wears. The model never draws and never measures.
+ */
 @RunWith(RobolectricTestRunner.class)
 public class HelpPresentationModelTest {
 
     private static final int ACCENT = Color.rgb(0xf0, 0xb4, 0x8a);
 
+    /** Every control this place has a topic for, as if all of them had measured. */
     private Set<String> everything(PaneWallPage place) {
         Set<String> ids = new LinkedHashSet<>();
-        for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) ids.add(entry.targetId);
+        for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) {
+            if (entry.targetId != null) ids.add(entry.targetId);
+        }
         return ids;
     }
 
@@ -46,198 +51,120 @@ public class HelpPresentationModelTest {
         return model;
     }
 
-    @Test public void everyPlaceOpensOnTheGuide() {
-        for (PaneWallPage place : PaneWallPage.values()) {
-            assertEquals(place.name(), HelpPresentationModel.Mode.OVERVIEW, opened(place).mode());
-        }
-        assertTrue(opened(PaneWallPage.TERMINAL).isOpen());
-    }
-
-    @Test public void openingSelectsNothingAndFiltersNothing() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.showBasics();
-        model.selectTopic("dock");
-        assertEquals(HelpPresentationModel.Effect.NONE,
-            model.open(PaneWallPage.TERMINAL, everything(PaneWallPage.TERMINAL)));
-        assertEquals(HelpPresentationModel.Mode.OVERVIEW, model.mode());
-        assertNull(model.selectedId());
-        assertNull(model.selected());
-        assertFalse(model.basicsOnly());
-        assertEquals(PaneWallPage.TERMINAL, model.place());
-    }
-
-    @Test public void selectingATopicShowsOneTargetInThePlaceAccentAndAsksForNothing() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        assertEquals(HelpPresentationModel.Effect.NONE, model.selectTopic("sessions"));
-        assertEquals(HelpPresentationModel.Mode.TOPIC, model.mode());
-        assertEquals("sessions", model.selectedId());
-        assertNotNull(model.selected());
-        assertEquals("hierarchy", model.selected().id);
-        assertEquals("sessions", model.highlightTargetId());
-        assertTrue(model.selectedMeasurable());
-        assertEquals(ACCENT, model.topicHighlightColor(ACCENT));
-        assertEquals(0, model.revealRes());
-        assertNull(model.relatedTopicId());
-    }
-
-    @Test public void anUnknownTopicChangesNothing() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.selectTopic("sessions");
-        assertEquals(HelpPresentationModel.Effect.NONE, model.selectTopic("no_such_topic"));
-        assertEquals("sessions", model.selectedId());
-        assertEquals(HelpPresentationModel.Effect.NONE, model.selectTopic("widget"));
-        assertEquals("sessions", model.selectedId());
-    }
-
-    @Test public void backToTopicsDropsTheSelection() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.selectTopic("sessions");
-        assertEquals(HelpPresentationModel.Effect.NONE, model.backToTopics());
-        assertEquals(HelpPresentationModel.Mode.TOPICS, model.mode());
-        assertNull(model.selectedId());
-    }
-
-    @Test public void aTopicWhoseControlIsGoneExplainsItselfAndPointsAtNoOtherControl() {
-        HelpPresentationModel model = new HelpPresentationModel();
-        model.open(PaneWallPage.TERMINAL, everythingBut(PaneWallPage.TERMINAL, "space", "prefix", "keys"));
-        model.selectTopic("space");
-        assertEquals("space", model.selectedId());
-        assertFalse(model.selectedMeasurable());
-        assertNull(model.highlightTargetId());
-        assertEquals(HelpTopics.entry(PaneWallPage.TERMINAL, "space").revealRes, model.revealRes());
-        assertNotEquals(0, model.revealRes());
-        assertFalse(model.canShowGesture());
-        assertFalse(model.canTryIt());
-        assertEquals(HelpPresentationModel.Effect.NONE, model.showGesture());
-        assertEquals(HelpPresentationModel.Effect.NONE, model.tryIt());
-    }
-
-    @Test public void aMissingTopicMayOfferARelatedTopicButNeverAnotherTarget() {
-        HelpPresentationModel model = new HelpPresentationModel();
-        model.open(PaneWallPage.DISPLAY, everythingBut(PaneWallPage.DISPLAY, "windows"));
-        model.selectTopic("windows");
-        assertNull(model.highlightTargetId());
-        assertEquals(HelpTopics.relatedIdOn(PaneWallPage.DISPLAY, "windows"), model.relatedTopicId());
-        assertEquals("start", model.relatedTopicId());
-        model.remeasure(everything(PaneWallPage.DISPLAY));
-        assertTrue(model.selectedMeasurable());
-        assertEquals("windows", model.highlightTargetId());
-        assertNull(model.relatedTopicId());
-        assertEquals(0, model.revealRes());
-    }
-
-    @Test public void showBasicsListsOnlyTheEverydayTopics() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.backToTopics();
-        assertEquals(HelpPresentationModel.Effect.NONE, model.showBasics());
-        assertTrue(model.basicsOnly());
-        assertEquals(HelpPresentationModel.Mode.TOPICS, model.mode());
-        assertFalse(model.entries().isEmpty());
-        for (HelpTopics.Entry entry : model.entries()) {
-            assertEquals(entry.id, HelpTopics.Group.FIND_YOUR_WAY, entry.group);
-        }
-        assertTrue(model.entries().size() < HelpTopics.sizeFor(PaneWallPage.TERMINAL));
-    }
-
-    @Test public void theOverviewLeavesTheChooserOnlyTopicsToTheChooser() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.showAll();
+    private List<String> targetIds(List<HelpTopics.Entry> entries) {
         List<String> ids = new ArrayList<>();
-        for (HelpTopics.Entry entry : model.overviewEntries()) ids.add(entry.targetId);
-        assertFalse(ids.contains("keys"));
-        assertFalse(ids.contains("corners"));
-        assertTrue(ids.contains("dock"));
-        assertEquals(HelpTopics.sizeFor(PaneWallPage.TERMINAL) - 2, ids.size());
+        for (HelpTopics.Entry entry : entries) ids.add(entry.targetId);
+        return ids;
     }
 
-    @Test public void showAllLeavesTheChooserForTheWholeGuide() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.showBasics();
-        assertEquals(HelpPresentationModel.Effect.NONE, model.showAll());
-        assertEquals(HelpPresentationModel.Mode.OVERVIEW, model.mode());
-        assertFalse(model.basicsOnly());
-        assertEquals(HelpTopics.forPlace(PaneWallPage.TERMINAL), model.entries());
+    @Test public void everyPlaceOpensWithItsControlsMarkedAndNothingSelected() {
+        for (PaneWallPage place : PaneWallPage.values()) {
+            HelpPresentationModel model = opened(place);
+            assertEquals(place.name(), place, model.place());
+            assertNull(place.name(), model.selectedTargetId());
+            assertNull(place.name(), model.selectedTopicId());
+            assertFalse(place.name(), model.markers().isEmpty());
+        }
     }
 
-    @Test public void theListNeverHidesATopicWhoseControlIsMissing() {
+    /** The markers are the measured controls, in catalogue order — which is their numbering. */
+    @Test public void markersAreTheMeasuredControlsInCatalogueOrder() {
         HelpPresentationModel model = new HelpPresentationModel();
-        model.open(PaneWallPage.TERMINAL, everythingBut(PaneWallPage.TERMINAL, "space", "prefix", "keys"));
-        model.showAll();
-        assertEquals(HelpTopics.forPlace(PaneWallPage.TERMINAL), model.entries());
-        assertFalse(model.isMeasurable("space"));
-        assertTrue(model.isMeasurable("dock"));
+        model.open(PaneWallPage.TERMINAL, Arrays.asList("dock", "status", "keys"));
+        List<String> ids = targetIds(model.markers());
+        assertEquals(Arrays.asList("status", "dock", "keys"), ids);
+        for (HelpTopics.Entry entry : model.markers())
+            assertTrue(entry.id, model.isMeasured(entry.targetId));
     }
 
-    @Test public void showGestureAsksForADemonstrationAndLeavesHelpOpen() {
+    /** A topic with nothing to point at is read, never marked. */
+    @Test public void aTopicWithNoControlIsNeverAMarker() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.selectTopic("dock");
-        assertTrue(model.canShowGesture());
-        assertEquals(HelpPresentationModel.Effect.demonstrate("dock"), model.showGesture());
-        assertTrue(model.isOpen());
-        assertEquals(HelpPresentationModel.Mode.TOPIC, model.mode());
-        assertEquals("dock", model.selectedId());
+        for (HelpTopics.Entry entry : model.markers()) assertNotNull(entry.id, entry.targetId);
+        assertNull(model.select("copy_paste"));
+        assertNull(model.selectedTargetId());
     }
 
-    @Test public void tryItClosesHelpAndStartsTheTopicsLesson() {
+    @Test public void aControlIsSelectedByEitherOfItsNames() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.selectTopic("dock");
-        assertTrue(model.canTryIt());
-        assertEquals(HelpPresentationModel.Effect.practice(HelpTopics.LESSON_FIND_APPS), model.tryIt());
-        assertFalse(model.isOpen());
+        HelpTopics.Entry byTarget = model.select("sessions");
+        assertNotNull(byTarget);
+        assertEquals("hierarchy", byTarget.id);
+        assertEquals("sessions", model.selectedTargetId());
+        assertEquals("hierarchy", model.selectedTopicId());
+        model.clearSelection();
+        HelpTopics.Entry byTopic = model.select("hierarchy");
+        assertNotNull(byTopic);
+        assertEquals("sessions", model.selectedTargetId());
     }
 
-    @Test public void aTopicWithNoLessonOffersNoPractice() {
+    /** The explorer names controls; the lists name topics. One lookup answers both. */
+    @Test public void everyTargetIdResolvesToItsOwnTopic() {
+        HelpPresentationModel terminal = opened(PaneWallPage.TERMINAL);
+        assertEquals("hierarchy", terminal.topicFor("sessions").id);
+        assertEquals("panes", terminal.topicFor("divider").id);
+        assertEquals("shortcuts", terminal.topicFor("prefix").id);
+        assertEquals("windows", terminal.topicFor("windows").id);
+        HelpPresentationModel widgets = opened(PaneWallPage.WIDGETS);
+        assertEquals("pages", widgets.topicFor("empty").id);
+        HelpPresentationModel display = opened(PaneWallPage.DISPLAY);
+        assertEquals("display_apps", display.topicFor("windows").id);
+    }
+
+    @Test public void aControlThatDidNotMeasureCannotBeSelected() {
+        HelpPresentationModel model = new HelpPresentationModel();
+        model.open(PaneWallPage.TERMINAL, everythingBut(PaneWallPage.TERMINAL, "dock"));
+        assertNotNull(model.select("status"));
+        assertNull("a control that is away cannot be pointed at", model.select("dock"));
+        assertEquals("the selection is left alone", "status", model.selectedTargetId());
+        assertNull(model.select("no_such_thing"));
+        assertEquals("status", model.selectedTargetId());
+    }
+
+    /**
+     * A control that goes away keeps its topic's name, so the view can say which topic to read
+     * instead of quietly pointing at another control.
+     */
+    @Test public void aVanishedControlStopsBeingMeasuredAndKeepsItsTopic() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.selectTopic("sessions");
-        assertTrue(model.canShowGesture());
-        assertFalse(model.canTryIt());
-        assertEquals(HelpPresentationModel.Effect.NONE, model.tryIt());
-        assertTrue(model.isOpen());
+        model.select("dock");
+        assertTrue(model.selectedMeasured());
+        model.remeasure(everythingBut(PaneWallPage.TERMINAL, "dock"));
+        assertFalse(model.selectedMeasured());
+        assertEquals("dock", model.selectedTopicId());
+        assertFalse(targetIds(model.markers()).contains("dock"));
     }
 
-    @Test public void gesturesAndPracticeBelongToTheTopicViewOnly() {
+    @Test public void openingAgainClearsTheSelection() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        assertFalse(model.canShowGesture());
-        assertFalse(model.canTryIt());
-        assertEquals(HelpPresentationModel.Effect.NONE, model.showGesture());
-        model.showAll();
-        assertFalse(model.canShowGesture());
-        assertEquals(HelpPresentationModel.Effect.NONE, model.showGesture());
+        model.select("status");
+        model.open(PaneWallPage.DISPLAY, everything(PaneWallPage.DISPLAY));
+        assertNull(model.selectedTargetId());
+        assertEquals(PaneWallPage.DISPLAY, model.place());
     }
 
-    @Test public void closeAsksForDismissal() {
+    /** A control's colour is its own identity, not its position in what happens to be on screen. */
+    @Test public void colourFollowsTheControlRatherThanWhatElseIsUp() {
         HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        assertEquals(HelpPresentationModel.Effect.CLOSE, model.close());
-        assertFalse(model.isOpen());
+        int dock = model.markerColor(ACCENT, "dock", false);
+        int status = model.markerColor(ACCENT, "status", false);
+        assertNotEquals(dock, status);
+        model.remeasure(everythingBut(PaneWallPage.TERMINAL, "status", "keys"));
+        assertEquals(dock, model.markerColor(ACCENT, "dock", false));
+        assertNotEquals("a light wash needs a deeper colour",
+            dock, model.markerColor(ACCENT, "dock", true));
+        assertNotEquals(0, model.titleColor(ACCENT, "dock", Color.BLACK));
     }
 
-    @Test public void anOverviewColourIsTheEntrysOwnWhateverElseIsOnScreen() {
-        HelpPresentationModel full = opened(PaneWallPage.TERMINAL);
-        HelpPresentationModel sparse = new HelpPresentationModel();
-        sparse.open(PaneWallPage.TERMINAL, new HashSet<>(Arrays.asList("dock", "status")));
-        full.showAll();
-        sparse.showAll();
-        HelpTopics.Entry status = HelpTopics.entry(PaneWallPage.TERMINAL, "status");
-        assertEquals(full.overviewColor(ACCENT, status), sparse.overviewColor(ACCENT, status));
-        assertEquals(HelpPalette.boxColor(ACCENT,
-            HelpTopics.identityIndex(PaneWallPage.TERMINAL, status.id),
-            HelpTopics.sizeFor(PaneWallPage.TERMINAL)), full.overviewColor(ACCENT, status));
-    }
-
-    @Test public void everyEntryOfAPlaceGetsItsOwnOverviewColour() {
-        HelpPresentationModel model = opened(PaneWallPage.DISPLAY);
-        Set<Integer> colours = new HashSet<>();
-        List<HelpTopics.Entry> entries = HelpTopics.forPlace(PaneWallPage.DISPLAY);
-        for (HelpTopics.Entry entry : entries) colours.add(model.overviewColor(ACCENT, entry));
-        assertEquals(entries.size(), colours.size());
-    }
-
-    @Test public void reopeningOnAnotherPlaceForgetsTheLastPlacesTopic() {
-        HelpPresentationModel model = opened(PaneWallPage.TERMINAL);
-        model.selectTopic("sessions");
-        model.open(PaneWallPage.WIDGETS, everything(PaneWallPage.WIDGETS));
-        assertEquals(PaneWallPage.WIDGETS, model.place());
-        assertNull(model.selectedId());
-        assertEquals(HelpTopics.forPlace(PaneWallPage.WIDGETS), model.entries());
+    @Test public void nothingIsSelectedUntilSomethingIs() {
+        HelpPresentationModel model = new HelpPresentationModel();
+        assertEquals(PaneWallPage.TERMINAL, model.place());
+        assertNull(model.selected());
+        assertNull(model.selectedTopicId());
+        assertFalse(model.selectedMeasured());
+        assertTrue(model.markers().isEmpty());
+        assertFalse(model.isMeasured(null));
+        model.clearSelection();
+        assertNull(model.selectedTargetId());
     }
 }
