@@ -2256,4 +2256,9 @@
     <string name="help_explore_title">Explore this screen</string>
     <string name="help_explore_back">Back to help</string>
     <string name="help_explore_read">Read topic</string>
+    <!-- The curated overview help opens on. -->
+    <string name="help_dock_rail_action">Swipe it inward for the app drawer.</string>
+    <string name="help_overview_guide">Guide</string>
+    <string name="help_overview_guide_action">Open the guide</string>
+    <string name="help_key_paste">Paste</string>
 </resources>

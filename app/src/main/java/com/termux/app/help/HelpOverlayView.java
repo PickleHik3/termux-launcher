@@ -44,34 +44,44 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Explore this screen: the live launcher, dimmed a little, with every control help can explain
- * marked, and one card at a time on the control the reader tapped.
+ * The live launcher, dimmed a little, with help drawn over it two ways.
  *
- * <p>Nothing is read here. A marker carries its number and its name, the card carries the topic's
- * title and its one instruction, and "Read topic" hands the topic to the help panel through
- * {@link ExploreListener}. The card is seated by {@link HelpExplorePlacement}, which never lets it
- * cover the control it explains, the toolbar or the system bars; when no seat fits, the listener is
- * told and the topic is read instead.
+ * <p>The <b>overview</b> is what help opens on: a card on each of the few controls
+ * {@link HelpPresentationModel#OVERVIEW_TARGET_IDS} names, drawn all at once and joined to their
+ * controls by {@link HelpLeaderRouter}, the extra keys carrying a label each, and two buttons —
+ * close, and the way into the guide. Nothing else on the screen is marked, so the screen the
+ * reader is looking at stays legible.
  *
- * <p>Which control is selected and what it is called is {@link HelpPresentationModel}'s and
- * {@link HelpTopics}'; this measures the controls, seats what the placement answers, and plays the
- * one gesture a topic carries.
+ * <p><b>Explore this screen</b> is the other way: every control help can explain is marked, and one
+ * card at a time sits on the control the reader tapped. That card is seated by
+ * {@link HelpExplorePlacement}, which never lets it cover the control it explains, the toolbar or
+ * the system bars; when no seat fits, the listener is told and the topic is read instead.
+ *
+ * <p>Nothing is read here. A card carries the topic's title and its one instruction, and hands the
+ * topic to the help panel through {@link ExploreListener}. Which control is where and what it is
+ * called is {@link HelpPresentationModel}'s and {@link HelpTopics}'; this measures the controls,
+ * seats what the layout answers, and plays the one gesture a topic carries.
  */
 public final class HelpOverlayView extends FrameLayout {
 
-    /** What exploration asks the launcher for; everything else it does itself. */
+    /** What help's overlay asks the launcher for; everything else it does itself. */
     public interface ExploreListener {
-        /** "Read topic" on the seated card. */
+        /** A card tapped in the overview, or "Read topic" on the seated card. */
         void onReadTopic(String topicId);
+        /** The overview's Guide button: the reading sheet, at its home page. */
+        void onOpenGuide();
         /** The toolbar's Back to help, or Back with nothing selected. */
         void onBackToHelp();
-        /** The toolbar's Close help. */
+        /** The toolbar's Close help, and the overview's ×. */
         void onCloseHelp();
         /** The selected control is no longer on screen; the topic says so instead. */
         void onTargetGone(String topicId);
         /** No seat for the card on this screen: read the topic rather than shrink it. */
         void onCardDoesNotFit(String topicId);
     }
+
+    /** Which of the two the overlay is drawing. */
+    private enum Mode { OVERVIEW, EXPLORE }
 
 
     /** One extra key's card: where it sits, the cap it is about, and the line between them. */
@@ -124,7 +134,16 @@ public final class HelpOverlayView extends FrameLayout {
     private final Map<String, TextView> markerViews = new HashMap<>();
     /** What each marker was built from, so a pass that only moved one keeps the same view. */
     private final Map<String, String> markerSpecs = new HashMap<>();
-    /** One card per extra key, shown only while the extra keys row is the selected control. */
+    /** The overview's cards, by target id, and what each was built from, so a moved one is kept. */
+    private final Map<String, TextView> cardViews = new HashMap<>();
+    private final Map<String, String> cardSpecs = new HashMap<>();
+    /** The colour each boxed control shares with its own leader and card. */
+    private final Map<String, Integer> boxColors = new HashMap<>();
+    /** Where the overview seated its cards this pass, or null. */
+    private HelpLeaderRouter.Result routed;
+    /** The curated cards this screen had no room for; empty on every layout the launcher ships. */
+    private final List<String> unplaced = new ArrayList<>();
+    /** One card per extra key, shown in the overview and while the row is the selected control. */
     private final List<KeyCard> keyCards = new ArrayList<>();
     private final Map<Integer, TextView> keyCardViews = new HashMap<>();
     private final Map<Integer, String> keyCardSpecs = new HashMap<>();
@@ -155,6 +174,11 @@ public final class HelpOverlayView extends FrameLayout {
 
     private LinearLayout toolbar;
     private Rect toolbarBounds;
+
+    /** The overview's own two buttons — × and Guide — and their corner. */
+    private LinearLayout buttons;
+    private Rect buttonsBounds;
+    private Mode mode = Mode.EXPLORE;
 
     private float downX, downY;
     private boolean moved;
@@ -191,17 +215,25 @@ public final class HelpOverlayView extends FrameLayout {
 
 
 
+    /** The curated overview: a few cards at once, the key labels, and the way into the guide. */
+    public void overview(PaneWallPage place) {
+        start(place, null, false, Mode.OVERVIEW);
+    }
+
     /** Explore a place. {@code selectTopicId} pre-selects a control, or is null. */
     public void explore(PaneWallPage place, String selectTopicId) {
-        start(place, selectTopicId, false);
+        start(place, selectTopicId, false, Mode.EXPLORE);
     }
 
     /** Explore with the topic selected and its own gesture played once over its control. */
     public void demonstrate(PaneWallPage place, String topicId) {
-        start(place, topicId, true);
+        start(place, topicId, true, Mode.EXPLORE);
     }
 
-    private void start(PaneWallPage place, String selectTopicId, boolean withGesture) {
+    private void start(PaneWallPage place, String selectTopicId, boolean withGesture, Mode mode) {
+        this.mode = mode;
+        setContentDescription(getContext().getString(mode == Mode.OVERVIEW
+            ? R.string.help_centre_title : R.string.help_explore_title));
         this.place = place;
         signature = "";
         announced = null;
@@ -217,7 +249,8 @@ public final class HelpOverlayView extends FrameLayout {
         requestFocus();
         requestLayout();
         refresh();
-        HelpLog.d("explore " + place + (selectTopicId == null ? "" : " at " + selectTopicId)
+        HelpLog.d((mode == Mode.OVERVIEW ? "overview " : "explore ") + place
+            + (selectTopicId == null ? "" : " at " + selectTopicId)
             + (withGesture ? " with its gesture" : ""));
     }
 
@@ -233,7 +266,10 @@ public final class HelpOverlayView extends FrameLayout {
         markers.clear(); markerViews.clear(); markerSpecs.clear();
         card = null; cardTopicId = null; cardBounds = null; cardLeader = null;
         keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
+        cardViews.clear(); cardSpecs.clear(); boxColors.clear(); unplaced.clear();
+        routed = null;
         toolbar = null; toolbarBounds = null;
+        buttons = null; buttonsBounds = null;
         snapshot = null; signature = ""; announced = null;
         pendingSelect = null; pendingGesture = false; reportedNoSeat = false;
         model.clearSelection();
@@ -248,9 +284,11 @@ public final class HelpOverlayView extends FrameLayout {
 
     /**
      * Back with a card up puts the card away; with nothing selected it is the launcher's to answer,
-     * which takes the reader to Help home.
+     * which takes the reader to Help home. In the overview it is the launcher's either way, and
+     * help closes: the overview is where help opens, so there is nothing behind it.
      */
     public boolean onBackPressed() {
+        if (mode == Mode.OVERVIEW) return false;
         if (model.selectedTargetId() == null) return false;
         deselect();
         return true;
@@ -368,6 +406,59 @@ public final class HelpOverlayView extends FrameLayout {
         if (snapshot == null) return;
         rendered.clear();
         touchable.clear();
+        if (mode == Mode.OVERVIEW) renderOverview(); else renderExplore();
+        for (int i = getChildCount() - 1; i >= 0; i--) {
+            View child = getChildAt(i);
+            if (rendered.contains(child)) continue;
+            removeViewAt(i);
+            childBounds.remove(child);
+        }
+        if (mode == Mode.OVERVIEW) {
+            announce(getContext().getString(R.string.help_centre_title), "overview");
+        } else {
+            HelpTopics.Entry reading = model.selected();
+            if (reading == null) announce(getContext().getString(R.string.help_explore_title), "explore");
+            else announce(getContext().getString(reading.titleRes) + ". "
+                + getContext().getString(reading.actionRes), reading.id);
+        }
+        requestLayout();
+        invalidate();
+    }
+
+    /**
+     * The overview: the two buttons in their corner, a label on every launcher key, and the curated
+     * cards seated round them. Nothing else on the screen is marked at all.
+     */
+    private void renderOverview() {
+        markers.clear();
+        markerViews.clear();
+        markerSpecs.clear();
+        card = null; cardTopicId = null; cardBounds = null; cardLeader = null;
+        keyCards.clear();
+        toolbar = null; toolbarBounds = null;
+        placeButtons();
+        arrangeOverview();
+        if (routed != null) for (HelpLeaderRouter.Placement p : routed.placements) {
+            if (p.page != 0) continue;
+            TextView view = cardViews.get(p.target.id);
+            if (view == null) continue;
+            put(view, rect(p.card));
+            touchable.add(view);
+        }
+        for (KeyCard key : keyCards) { put(key.view, key.bounds); touchable.add(key.view); }
+        if (buttons != null && buttonsBounds != null) {
+            put(buttons, buttonsBounds);
+            touchable.add(buttons);
+        }
+    }
+
+    private void renderExplore() {
+        routed = null;
+        unplaced.clear();
+        cardViews.clear();
+        cardSpecs.clear();
+        buttons = null;
+        buttonsBounds = null;
         HelpTopics.Entry selected = model.selected();
         // The toolbar first: it is the one thing the markers and the card have to work round.
         placeToolbar(selected);
@@ -388,18 +479,174 @@ public final class HelpOverlayView extends FrameLayout {
         for (KeyCard key : keyCards) { put(key.view, key.bounds); touchable.add(key.view); }
         if (card != null && cardBounds != null) { put(card, cardBounds); touchable.add(card); }
         if (toolbar != null && toolbarBounds != null) { put(toolbar, toolbarBounds); touchable.add(toolbar); }
-        for (int i = getChildCount() - 1; i >= 0; i--) {
-            View child = getChildAt(i);
-            if (rendered.contains(child)) continue;
-            removeViewAt(i);
-            childBounds.remove(child);
+    }
+
+    // ---- the overview -----------------------------------------------------------------------
+
+    /**
+     * The curated cards, seated all at once. Each card takes the shelf between its own control and
+     * the wall, in the control's own colour, with one line joining the two; the router keeps them
+     * off each other, off the controls they explain, off the key labels and off the two buttons.
+     *
+     * <p>Run on a layout change, never per frame: the cards are measured once and then only moved.
+     */
+    private void arrangeOverview() {
+        Map<String, TextView> wasView = new HashMap<>(cardViews);
+        Map<String, String> wasSpec = new HashMap<>(cardSpecs);
+        cardViews.clear(); cardSpecs.clear(); boxColors.clear(); unplaced.clear();
+        routed = null;
+        boolean light = lightMode();
+        Rect band = band();
+        int wide = Math.max(1, (snapshot.wall.width() - dp(36)) / 2);
+        // A control outside the wall often shares a shelf with another — the prefix keys and the
+        // settings cog both sit in the keyboard's bottom row — so its card is a third of the wall's
+        // width where a card inside the wall is a half.
+        int narrow = Math.max(dp(100), (snapshot.wall.width() - dp(48)) / 3);
+        List<HelpLeaderRouter.Target> inputs = new ArrayList<>();
+        List<HelpLeaderRouter.Box> boxed = new ArrayList<>();
+        List<HelpLeaderRouter.Box> soft = new ArrayList<>();
+        Set<String> carded = new HashSet<>();
+        for (HelpTopics.Entry entry : model.overview()) {
+            Rect target = targetRect(entry.targetId);
+            if (target == null) continue;
+            carded.add(entry.targetId);
+            int color = model.markerColor(accent, entry.id, light);
+            boxColors.put(entry.targetId, color);
+            int titleColor = model.titleColor(accent, entry.id, dress.fillColor);
+            HelpLeaderRouter.Side side = side(target);
+            int width = side == HelpLeaderRouter.Side.INSIDE ? wide : narrow;
+            String title = getContext().getString(entry.titleRes);
+            String body = getContext().getString(overviewAction(entry, side));
+            // The same words in the same colours are the same card: a control that moved moves its
+            // card, and moving one is not rebuilding it.
+            String spec = spec(title, body, titleColor, color);
+            TextView view = spec.equals(wasSpec.get(entry.targetId)) ? wasView.get(entry.targetId) : null;
+            if (view == null) view = overviewCard(entry, title, body, titleColor, color);
+            view.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+            cardViews.put(entry.targetId, view);
+            cardSpecs.put(entry.targetId, spec);
+            inputs.add(new HelpLeaderRouter.Target(entry.targetId, box(target), side,
+                width, view.getMeasuredHeight()));
+            (side == HelpLeaderRouter.Side.INSIDE ? soft : boxed).add(box(target));
         }
-        HelpTopics.Entry reading = model.selected();
-        if (reading == null) announce(getContext().getString(R.string.help_explore_title), "explore");
-        else announce(getContext().getString(reading.titleRes) + ". "
-            + getContext().getString(reading.actionRes), reading.id);
-        requestLayout();
-        invalidate();
+        arrangeKeyCards(light, band);
+        if (inputs.isEmpty()) return;
+        // The key labels and the two buttons are seated by now, and no card may land on either: a
+        // label under a card is a label nobody can read, and a button under one cannot be pressed.
+        List<HelpLeaderRouter.Box> fixed = new ArrayList<>();
+        for (KeyCard key : keyCards) fixed.add(box(key.bounds));
+        if (buttonsBounds != null) fixed.add(box(buttonsBounds));
+        // A control with a card of its own is never covered — a card over it hides the very thing
+        // it is about. One without a card may be, but only when nothing else fits.
+        for (HelpTargets.Target target : snapshot.targets)
+            if (!carded.contains(target.id)) soft.add(box(target.rect));
+        List<HelpLeaderRouter.Box> hard = new ArrayList<>(fixed);
+        hard.addAll(boxed);
+        routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs, hard, soft);
+        // One page, always: on a screen too tight for every card to keep clear of every control,
+        // the controls give way rather than a card leave the overview.
+        if (!boxed.isEmpty() && !onOnePage(routed)) {
+            List<HelpLeaderRouter.Box> yielding = new ArrayList<>(soft);
+            yielding.addAll(boxed);
+            routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs, fixed, yielding);
+        }
+        for (HelpLeaderRouter.Target target : routed.unplaced) unplaced.add(target.id);
+        for (HelpLeaderRouter.Placement p : routed.placements) if (p.page > 0) unplaced.add(p.target.id);
+        for (String id : unplaced) HelpLog.d("left out of the overview: " + id + ", no room on the page");
+        HelpLog.d("overview " + place + ": " + inputs.size() + " cards, " + keyCards.size()
+            + " key labels, " + unplaced.size() + " left out");
+    }
+
+    /**
+     * The one sentence on a control's card: the topic's own instruction, except for a dock that is
+     * a rail down one edge of the wall, which is swiped inward off the rail rather than pulled down.
+     */
+    private int overviewAction(HelpTopics.Entry entry, HelpLeaderRouter.Side side) {
+        if ("dock".equals(entry.targetId) && (side == HelpLeaderRouter.Side.LEFT
+                || side == HelpLeaderRouter.Side.RIGHT)) return R.string.help_dock_rail_action;
+        return entry.actionRes;
+    }
+
+    /** What a card is made of; two cards with the same recipe are the same card. */
+    private String spec(String title, String body, int titleColor, int borderColor) {
+        return title + "" + body + "" + titleColor + ":" + borderColor + ":"
+            + dress.fillColor + ":" + dress.strokeColor + ":" + dress.textColor;
+    }
+
+    private static boolean onOnePage(HelpLeaderRouter.Result result) {
+        if (!result.unplaced.isEmpty()) return false;
+        for (HelpLeaderRouter.Placement p : result.placements) if (p.page > 0) return false;
+        return true;
+    }
+
+    /** One control's card, in its own colour, and a tap on it opens that control's topic. */
+    private TextView overviewCard(HelpTopics.Entry entry, String title, String body,
+                                  int titleColor, int borderColor) {
+        TextView text = new TextView(getContext());
+        SpannableString content = new SpannableString(title + "\n" + body);
+        content.setSpan(new StyleSpan(Typeface.BOLD), 0, title.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        content.setSpan(new ForegroundColorSpan(titleColor), 0, title.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setText(content);
+        text.setTextSize(12);
+        text.setTextColor(dress.textColor);
+        text.setPadding(dp(8), dp(6), dp(8), dp(6));
+        text.setLineSpacing(dp(1), 1);
+        text.setContentDescription(title + ". " + body);
+        android.graphics.drawable.Drawable background = dress.background(0);
+        if (background instanceof GradientDrawable)
+            ((GradientDrawable) background).setStroke(dp(1.5f), borderColor);
+        text.setBackground(background);
+        text.setClickable(true);
+        text.setFocusable(true);
+        final String topicId = entry.id;
+        text.setOnClickListener(v -> { if (listener != null) listener.onReadTopic(topicId); });
+        return text;
+    }
+
+    /**
+     * The overview's own chrome: × and Guide, in the corner of the wall that covers the fewest
+     * controls, the foot of the screen first. A corner rather than mid-screen, where two buttons
+     * read as one more card; and placed before any card, so nothing is laid out under them.
+     */
+    private void placeButtons() {
+        if (buttons == null) buttons = buttons();
+        Rect safe = safeArea();
+        int width = Math.min(safe.width() - dp(16), dp(220));
+        buttons.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(safe.height(), MeasureSpec.AT_MOST));
+        int height = buttons.getMeasuredHeight();
+        int margin = dp(8);
+        Rect wall = snapshot.wall;
+        int left = clamp(wall.left + margin, safe.left, safe.right - width);
+        int right = clamp(wall.right - margin - width, safe.left, safe.right - width);
+        int top = clamp(wall.top + margin, safe.top, safe.bottom - height);
+        int bottom = clamp(wall.bottom - margin - height, safe.top, safe.bottom - height);
+        int[][] corners = {{right, bottom}, {left, bottom}, {right, top}, {left, top}};
+        int least = Integer.MAX_VALUE;
+        for (int[] corner : corners) {
+            Rect seat = new Rect(corner[0], corner[1], corner[0] + width, corner[1] + height);
+            int covered = covered(seat);
+            if (covered < least) { least = covered; buttonsBounds = seat; }
+            if (least == 0) break;
+        }
+    }
+
+    private LinearLayout buttons() {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setClickable(true);
+        row.setPadding(dp(6), dp(6), dp(6), dp(6));
+        row.setBackground(dress.background(dp(28)));
+        row.addView(button(getContext().getString(R.string.help_close_glyph),
+            getContext().getString(R.string.help_close_action),
+            () -> { if (listener != null) listener.onCloseHelp(); }), weighted());
+        row.addView(button(getContext().getString(R.string.help_overview_guide),
+            getContext().getString(R.string.help_overview_guide_action),
+            () -> { if (listener != null) listener.onOpenGuide(); }), weighted());
+        return row;
     }
 
     // ---- the markers ------------------------------------------------------------------------
@@ -639,6 +886,11 @@ public final class HelpOverlayView extends FrameLayout {
 
     // ---- the extra keys ---------------------------------------------------------------------
 
+    /** Help's own chrome this pass: the exploration toolbar, or the overview's two buttons. */
+    private Rect chrome() {
+        return mode == Mode.OVERVIEW ? buttonsBounds : toolbarBounds;
+    }
+
     /** The wall, with a little room kept at top and bottom for the key cards' lanes. */
     private Rect band() {
         Rect band = new Rect(snapshot.wall);
@@ -686,20 +938,21 @@ public final class HelpOverlayView extends FrameLayout {
         }
         int alongLo = dp(12);
         int alongHi = (vertical ? getHeight() - bottomInset() : getWidth()) - dp(12);
-        // The toolbar is not a control, so it is not in the snapshot, and the cards have to be
-        // told about it the way the one card's placement is: as a region they may not land on.
-        if (toolbarBounds != null) {
+        // Help's own chrome is not a control, so it is not in the snapshot, and the cards have to
+        // be told about it the way the one card's placement is: a region they may not land on.
+        Rect chrome = chrome();
+        if (chrome != null) {
             int[] span = keyCardSpan(alongLo, alongHi, alongKeysLo, alongKeysHi,
-                vertical ? toolbarBounds.top : toolbarBounds.left,
-                vertical ? toolbarBounds.bottom : toolbarBounds.right, dp(6));
+                vertical ? chrome.top : chrome.left,
+                vertical ? chrome.bottom : chrome.right, dp(6));
             alongLo = span[0];
             alongHi = span[1];
         }
-        // What the cards may not land on: the other controls, and the toolbar, which is not a
-        // control and so is not in the snapshot.
+        // What the cards may not land on: the other controls, and help's own chrome, which is not
+        // a control and so is not in the snapshot.
         List<Rect> blocked = new ArrayList<>();
         for (HelpTargets.Target target : snapshot.targets) blocked.add(target.rect);
-        if (toolbarBounds != null) blocked.add(toolbarBounds);
+        if (chrome != null) blocked.add(chrome);
         // The wall lies on one side of the keys; away is the other, and the cards may reach that
         // way as far as the first thing on the list, and never under the gesture pill, which help
         // washes over but puts nothing beneath.
@@ -787,12 +1040,12 @@ public final class HelpOverlayView extends FrameLayout {
             keyCardViews.put(i, views.get(i));
             keyCardSpecs.put(i, specs.get(i));
         }
-        // Whatever the lanes worked out, the toolbar keeps its room: a label under Back to help
+        // Whatever the lanes worked out, help's own chrome keeps its room: a label under a button
         // is a label the reader cannot read, and the row's own card still says what the row does.
-        if (toolbarBounds != null) {
+        if (chrome != null) {
             for (KeyCard key : keyCards) {
-                if (!Rect.intersects(key.bounds, toolbarBounds)) continue;
-                HelpLog.d("key cards: none, the toolbar has the room they need at "
+                if (!Rect.intersects(key.bounds, chrome)) continue;
+                HelpLog.d("key cards: none, help's own buttons have the room they need at "
                     + key.bounds.toShortString());
                 keyCards.clear(); keyCardViews.clear(); keyCardSpecs.clear();
                 return;
@@ -1050,9 +1303,14 @@ public final class HelpOverlayView extends FrameLayout {
 
     /** A button of the card or the toolbar: never smaller than a thumb, always named for a reader. */
     private TextView button(String label, Runnable onClick) {
+        return button(label, label, onClick);
+    }
+
+    /** The same button, for one whose mark is not what a reader should hear — the × is "Close help". */
+    private TextView button(String label, String description, Runnable onClick) {
         TextView view = new TextView(getContext());
         view.setText(label);
-        view.setContentDescription(label);
+        view.setContentDescription(description);
         view.setTextSize(13);
         view.setAllCaps(false);
         view.setGravity(Gravity.CENTER);
@@ -1129,10 +1387,10 @@ public final class HelpOverlayView extends FrameLayout {
         for (Map.Entry<View, Rect> entry : childBounds.entrySet()) {
             View child = entry.getKey(); Rect bounds = entry.getValue();
             child.layout(bounds.left, bounds.top, bounds.right, bounds.bottom);
-            // The markers are round and the toolbar is a capsule; everything else wears the
-            // terminal's own corner.
+            // The markers are round and help's own button rows are capsules; everything else wears
+            // the terminal's own corner.
             if (child.getBackground() instanceof GradientDrawable && child != toolbar
-                    && !markerViews.containsValue(child))
+                    && child != buttons && !markerViews.containsValue(child))
                 ((GradientDrawable) child.getBackground()).setCornerRadius(dress.cornerRadiusPx(bounds.height()));
         }
     }
@@ -1146,15 +1404,45 @@ public final class HelpOverlayView extends FrameLayout {
         canvas.drawColor(lightMode() ? Color.argb(104, 255, 255, 255) : Color.argb(102, 0, 0, 0));
         paint.setStrokeWidth(dp(1.5f));
         paint.setStyle(Paint.Style.STROKE);
-        String selected = model.selectedTargetId();
-        for (Marker marker : markers) {
-            if (marker.entry.targetId.equals(selected)) continue;
-            paint.setColor(ColorUtils.setAlphaComponent(onTheWash(marker.color), 150));
-            drawBox(canvas, marker.target, radiusOf(marker.entry.targetId));
+        if (mode == Mode.OVERVIEW) {
+            drawOverview(canvas);
+        } else {
+            String selected = model.selectedTargetId();
+            for (Marker marker : markers) {
+                if (marker.entry.targetId.equals(selected)) continue;
+                paint.setColor(ColorUtils.setAlphaComponent(onTheWash(marker.color), 150));
+                drawBox(canvas, marker.target, radiusOf(marker.entry.targetId));
+            }
+            drawSelected(canvas, selected);
         }
-        drawSelected(canvas, selected);
         paint.setPathEffect(null);
         drawGesture(canvas);
+    }
+
+    /**
+     * Each box, its leader and its card wear one colour, so a line that passes another card still
+     * reads as belonging to its own pair. A control with no card is not marked at all.
+     */
+    private void drawOverview(Canvas canvas) {
+        if (routed != null) for (HelpLeaderRouter.Placement p : routed.placements) {
+            if (p.page != 0) continue;
+            Rect target = targetRect(p.target.id);
+            if (target == null) continue;
+            Integer color = boxColors.get(p.target.id);
+            paint.setColor(onTheWash(color == null ? accent : color));
+            paint.setPathEffect(null);
+            for (HelpLeaderRouter.Segment line : p.lines)
+                canvas.drawLine(line.x1, line.y1, line.x2, line.y2, paint);
+            drawBox(canvas, target, radiusOf(p.target.id));
+        }
+        // The extra keys share one colour: they are one row, and seven hues along a keyboard
+        // would read as seven unrelated things rather than as the keys of one row.
+        paint.setColor(keyColor);
+        for (KeyCard key : keyCards) {
+            paint.setPathEffect(null);
+            for (float[] line : key.lines) canvas.drawLine(line[0], line[1], line[2], line[3], paint);
+            drawBox(canvas, key.cap, dp(8));
+        }
     }
 
     /** The one highlight, its one short leader, and the extra keys' own cards when they are up. */
@@ -1229,6 +1517,9 @@ public final class HelpOverlayView extends FrameLayout {
             case MotionEvent.ACTION_UP:
                 if (moved || onSomething(downX, downY) || onSomething(event.getX(), event.getY())) break;
                 performClick();
+                // The overview has nothing to put away: it is all one page, and a stray tap on the
+                // launcher underneath must not read as a way out of help.
+                if (mode == Mode.OVERVIEW) break;
                 // The control itself is as good a marker as its dot; empty space puts the card away.
                 String id = targetAt(event.getX(), event.getY());
                 if (id != null) select(id, false);
@@ -1290,6 +1581,38 @@ public final class HelpOverlayView extends FrameLayout {
     /** Where the toolbar is. */
     @VisibleForTesting
     Rect toolbarBounds() { return toolbarBounds == null ? null : new Rect(toolbarBounds); }
+
+    /** Where the overview's own two buttons are. */
+    @VisibleForTesting
+    Rect buttonsBounds() { return buttonsBounds == null ? null : new Rect(buttonsBounds); }
+
+    /** The controls the overview drew a card for, in the order it seated them. */
+    @VisibleForTesting
+    List<String> overviewCardIds() {
+        List<String> ids = new ArrayList<>();
+        if (routed != null) for (HelpLeaderRouter.Placement p : routed.placements)
+            if (p.page == 0) ids.add(p.target.id);
+        return Collections.unmodifiableList(ids);
+    }
+
+    /** Where one overview card sits, or null when that control has none. */
+    @VisibleForTesting
+    Rect overviewCardBounds(String targetId) {
+        if (routed == null) return null;
+        for (HelpLeaderRouter.Placement p : routed.placements)
+            if (p.page == 0 && p.target.id.equals(targetId)) return rect(p.card);
+        return null;
+    }
+
+    /** The view carrying one overview card, or null when that control has none. */
+    @VisibleForTesting
+    TextView overviewCardView(String targetId) { return cardViews.get(targetId); }
+
+    /** What the overview could not fit; empty on every layout the launcher ships. */
+    @VisibleForTesting
+    List<String> unplacedOverviewIds() {
+        return Collections.unmodifiableList(new ArrayList<>(unplaced));
+    }
 
     /** The extra keys' own cards, empty unless the extra keys row is the selected control. */
     @VisibleForTesting

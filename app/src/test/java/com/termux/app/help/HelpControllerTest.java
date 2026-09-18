@@ -36,6 +36,7 @@ public class HelpControllerTest {
         PaneWallPage place;
         String selected;
         boolean demonstrating;
+        boolean overviewing;
         boolean showing;
         boolean consumeBack;
 
@@ -43,13 +44,21 @@ public class HelpControllerTest {
             this.listener = listener;
         }
 
+        @Override public void overview(PaneWallPage place) {
+            this.place = place; this.selected = null; this.demonstrating = false;
+            overviewing = true;
+            showing = true;
+        }
+
         @Override public void explore(PaneWallPage place, String selectTopicId) {
             this.place = place; this.selected = selectTopicId; this.demonstrating = false;
+            overviewing = false;
             showing = true;
         }
 
         @Override public void demonstrate(PaneWallPage place, String topicId) {
             this.place = place; this.selected = topicId; this.demonstrating = true;
+            overviewing = false;
             showing = true;
         }
 
@@ -123,6 +132,12 @@ public class HelpControllerTest {
         return activity.getString(res);
     }
 
+    /** Help opens on the overview; the reading sheet is one button behind it. */
+    private void showGuide(PaneWallPage place) {
+        controller.show(place);
+        explorer.listener.onOpenGuide();
+    }
+
     /** Whether the Terminal place can show this topic at all; a page has to resolve its entry. */
     private static boolean onTerminal(HelpTopics.Entry entry) {
         return entry.targetId == null || entry.places.contains(PaneWallPage.TERMINAL);
@@ -157,8 +172,45 @@ public class HelpControllerTest {
 
     // ---- opening -----------------------------------------------------------------------------
 
-    @Test public void openingLandsOnHelpHomeWithThisScreensTopics() {
+    /** Every entry point lands on the overview now; the reading sheet waits behind its button. */
+    @Test public void openingLandsOnTheOverviewOverTheLiveLauncher() {
         controller.show(PaneWallPage.TERMINAL);
+        assertTrue(controller.isShowing());
+        assertTrue("help did not open on the overview", explorer.overviewing);
+        assertTrue(explorer.isShowing());
+        assertEquals(PaneWallPage.TERMINAL, explorer.place);
+        assertNull("the overview selects nothing", explorer.selected);
+        assertFalse("the sheet is behind a button", panel().isShowing());
+        assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
+        assertEquals("[true]", visibility.toString());
+    }
+
+    /** Back on the overview leaves help: it is where help opens, so nothing is behind it. */
+    @Test public void backFromTheOverviewClosesHelp() {
+        controller.show(PaneWallPage.TERMINAL);
+        explorer.consumeBack = false;
+        assertTrue(controller.onBackPressed());
+        assertFalse(controller.isShowing());
+        assertFalse(explorer.isShowing());
+        assertEquals("[true, false]", visibility.toString());
+    }
+
+    /** A card on the overview opens that control's topic in the sheet. */
+    @Test public void aCardOnTheOverviewOpensItsTopic() {
+        controller.show(PaneWallPage.TERMINAL);
+        HelpTopics.Entry entry = HelpTopics.forTarget(PaneWallPage.TERMINAL, "dock");
+        assertNotNull(entry);
+        explorer.listener.onReadTopic(entry.id);
+        assertFalse(explorer.isShowing());
+        assertTrue(panel().isShowing());
+        assertEquals(HelpNavigation.Screen.TOPIC, controller.navigation().screen());
+        assertEquals(entry.id, controller.navigation().id());
+    }
+
+    @Test public void theGuideButtonOpensHelpHomeWithThisScreensTopics() {
+        showGuide(PaneWallPage.TERMINAL);
+        assertFalse("the overview went away with it", explorer.isShowing());
+        assertTrue(panel().isShowing());
         assertTrue(controller.isShowing());
         assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
         assertEquals(PaneWallPage.TERMINAL, controller.navigation().place());
@@ -175,14 +227,14 @@ public class HelpControllerTest {
     }
 
     @Test public void everyEntryPointOpensHomeAndCloseEndsIt() {
-        controller.show(PaneWallPage.DISPLAY);
+        showGuide(PaneWallPage.DISPLAY);
         assertEquals(PaneWallPage.DISPLAY, controller.navigation().place());
         tap(string(R.string.help_close_action));
         assertFalse(controller.isShowing());
         assertEquals("[true, false]", visibility.toString());
         // A second invocation starts at home again, with no search carried over.
         controller.navigation().setQuery("dock");
-        controller.show(PaneWallPage.WIDGETS);
+        showGuide(PaneWallPage.WIDGETS);
         assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
         assertEquals("", controller.navigation().query());
     }
@@ -198,7 +250,7 @@ public class HelpControllerTest {
     }
 
     @Test public void aTopicRowOpensThatTopic() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         HelpTopics.Entry entry = HelpTopics.onScreen(PaneWallPage.TERMINAL,
             controller.measuredTargetIds()).get(0);
         tap(string(entry.titleRes));
@@ -209,7 +261,7 @@ public class HelpControllerTest {
     // ---- back --------------------------------------------------------------------------------
 
     @Test public void backClosesADefinitionThenTextEntryThenThePageThenHelp() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_search_field_hint));
         assertEquals(HelpNavigation.Screen.SEARCH, controller.navigation().screen());
 
@@ -245,7 +297,7 @@ public class HelpControllerTest {
     }
 
     @Test public void openingAResultGivesTheKeyboardBackAndKeepsBackHonest() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_search_field_hint));
         EditText field = (EditText) panel().named(string(R.string.help_search_field_hint));
         assertNotNull(field);
@@ -267,7 +319,7 @@ public class HelpControllerTest {
     }
 
     @Test public void browsingAwayFromTheSearchPageEndsTextEntryToo() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_search_field_hint));
         EditText field = (EditText) panel().named(string(R.string.help_search_field_hint));
         field.requestFocus();
@@ -301,7 +353,7 @@ public class HelpControllerTest {
     }
 
     @Test public void aTopicReachedFromHomeKeepsItsBackControl() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         HelpTopics.Entry entry = HelpTopics.onScreen(PaneWallPage.TERMINAL,
             controller.measuredTargetIds()).get(0);
         tap(string(entry.titleRes));
@@ -312,7 +364,7 @@ public class HelpControllerTest {
     // ---- the explorer ------------------------------------------------------------------------
 
     @Test public void exploreHandsOverAndComesBackThroughItsListener() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_home_explore));
         assertTrue(explorer.isShowing());
         assertEquals(PaneWallPage.TERMINAL, explorer.place);
@@ -341,7 +393,7 @@ public class HelpControllerTest {
     }
 
     @Test public void aCardThatCannotBeSeatedIsReadInstead() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         HelpTopics.Entry entry = HelpTopics.forPlace(PaneWallPage.TERMINAL).get(0);
         tap(string(R.string.help_home_explore));
         explorer.listener.onCardDoesNotFit(entry.id);
@@ -356,18 +408,20 @@ public class HelpControllerTest {
         assertEquals(entry.id, controller.navigation().id());
     }
 
-    @Test public void openingHelpAgainWhileExploringPutsTheExplorerAway() {
-        controller.show(PaneWallPage.TERMINAL);
+    @Test public void openingHelpAgainWhileExploringStartsAtTheOverviewAgain() {
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_home_explore));
         assertTrue(explorer.isShowing());
+        assertFalse(explorer.overviewing);
         assertFalse(panel().isShowing());
 
         // Settings, the palette or a corner tab while the explorer is up: one overlay at a time.
         controller.show(PaneWallPage.TERMINAL);
-        assertFalse(explorer.isShowing());
-        assertTrue(panel().isShowing());
+        assertTrue(explorer.overviewing);
+        assertFalse(panel().isShowing());
         assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
 
+        explorer.listener.onOpenGuide();
         tap(string(R.string.help_home_explore));
         assertTrue(explorer.isShowing());
         controller.showTopic(PaneWallPage.TERMINAL, firstTerminalTopic().id);
@@ -377,7 +431,7 @@ public class HelpControllerTest {
     }
 
     @Test public void backWhileExploringGoesToTheExplorerFirst() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_home_explore));
         explorer.consumeBack = true;
         assertTrue(controller.onBackPressed());
@@ -391,7 +445,7 @@ public class HelpControllerTest {
     // ---- a hidden control -------------------------------------------------------------------
 
     @Test public void aHiddenTargetStillReadsAndSaysHowToBringItBack() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         HelpTopics.Entry entry = hiddenTopic();
         controller.showTopic(PaneWallPage.TERMINAL, entry.id);
         String page = panel().pageText();
@@ -429,7 +483,7 @@ public class HelpControllerTest {
     }
 
     @Test public void helpHomeListsTheFourLessons() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_home_practice));
         assertNotNull(panel().named(string(R.string.help_lesson_find_help_title)));
         assertNotNull(panel().named(string(R.string.help_lesson_keyboard_title)));
@@ -440,7 +494,7 @@ public class HelpControllerTest {
     // ---- search and the glossary -------------------------------------------------------------
 
     @Test public void searchRanksAndOpensButNeverReachesTheTerminal() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_search_field_hint));
         EditText field = (EditText) panel().named(string(R.string.help_search_field_hint));
         assertNotNull(field);
@@ -461,7 +515,7 @@ public class HelpControllerTest {
     }
 
     @Test public void anEmptySearchSaysSoAndOffersAWayOn() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_search_field_hint));
         EditText field = (EditText) panel().named(string(R.string.help_search_field_hint));
         field.setText("zzzzqqq");
@@ -474,7 +528,7 @@ public class HelpControllerTest {
     }
 
     @Test public void theGlossaryIsAReachablePageOfItsOwn() {
-        controller.show(PaneWallPage.TERMINAL);
+        showGuide(PaneWallPage.TERMINAL);
         tap(string(R.string.help_home_glossary));
         assertEquals(HelpNavigation.Screen.GLOSSARY, controller.navigation().screen());
         String page = panel().pageText();

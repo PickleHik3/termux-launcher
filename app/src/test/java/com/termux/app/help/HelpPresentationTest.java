@@ -13,9 +13,11 @@ import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.launcher.widget.WidgetGridView;
 import com.termux.app.terminal.TerminalWindowBar;
+import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,8 +27,10 @@ import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 
 /**
- * Explore this screen, drawn: a marker on every measured control, one card at a time, a toolbar out
- * of the card's way, and an explicit answer when a control goes away or a card will not fit.
+ * Help's overlay, drawn both ways: the curated overview help opens on — a few cards at once, the
+ * launcher's own keys labelled, and the two buttons — and "Explore this screen", with a marker on
+ * every measured control, one card at a time, a toolbar out of the card's way, and an explicit
+ * answer when a control goes away or a card will not fit.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28, application = Application.class, qualifiers = "w400dp-h800dp")
@@ -42,11 +46,15 @@ public class HelpPresentationTest {
     private HelpOverlayView overlay;
     private HelpTargets.ViewFinder finder;
 
+    /** The keyboard's own keys, by the name the targets ask for; empty = the keyboard is down. */
+    private final java.util.Map<String, Rect> keyRects = new java.util.HashMap<>();
+
     private String read;
     private String gone;
     private String noSeat;
     private int backToHelp;
     private int closed;
+    private int openedGuide;
 
     @Before public void setUp() {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -65,12 +73,20 @@ public class HelpPresentationTest {
             }
             @Override public View activePane() { return wall; }
             @Override public int paneCount() { return 1; }
-            @Override public boolean keyRectOnScreen(String name, Rect out) { return false; }
-            @Override public boolean keyCornerRectOnScreen(String name, Rect out) { return false; }
+            @Override public boolean keyRectOnScreen(String name, Rect out) {
+                Rect rect = keyRects.get(name);
+                if (rect == null) return false;
+                out.set(rect);
+                return true;
+            }
+            @Override public boolean keyCornerRectOnScreen(String name, Rect out) {
+                return keyRectOnScreen(name, out);
+            }
         };
         overlay = new HelpOverlayView(activity, finder);
         overlay.setExploreListener(new HelpOverlayView.ExploreListener() {
             @Override public void onReadTopic(String topicId) { read = topicId; }
+            @Override public void onOpenGuide() { openedGuide++; }
             @Override public void onBackToHelp() { backToHelp++; }
             @Override public void onCloseHelp() { closed++; }
             @Override public void onTargetGone(String topicId) { gone = topicId; }
@@ -93,6 +109,20 @@ public class HelpPresentationTest {
             keys.layout(keysBounds.left, keysBounds.top, keysBounds.right, keysBounds.bottom);
         }
         overlay.layout(0, 0, 400, 800);
+    }
+
+    /** The keyboard up, with the two prefix keys and the settings cog where help looks for them. */
+    private void keyboardUp() {
+        keyRects.put("ctrl", new Rect(0, 700, 60, 760));
+        keyRects.put("alt", new Rect(64, 700, 124, 760));
+        keyRects.put("config", new Rect(330, 700, 370, 740));
+    }
+
+    private void overview(PaneWallPage place) {
+        overlay.overview(place);
+        layout();
+        overlay.refresh();
+        layout();
     }
 
     private void explore(PaneWallPage place) {
@@ -165,6 +195,157 @@ public class HelpPresentationTest {
             && card.right <= 400 && card.bottom <= 800);
         for (Rect key : overlay.keyCardBounds())
             assertFalse("the card is on a key card", Rect.intersects(card, key));
+    }
+
+    /** The curated controls this bare harness could measure, whatever else is on screen. */
+    private java.util.SortedSet<String> curatedOnScreen(PaneWallPage place) {
+        java.util.SortedSet<String> ids = new java.util.TreeSet<>();
+        for (String targetId : HelpPresentationModel.OVERVIEW_TARGET_IDS) {
+            if (HelpTopics.forTarget(place, targetId) == null) continue;
+            if (overlay.measuredRect(targetId) != null) ids.add(targetId);
+        }
+        return ids;
+    }
+
+    /** Every card on its own patch: off the other cards, off the boxed controls, off the buttons. */
+    private void assertTheOverviewIsClear() {
+        java.util.List<Rect> seen = new java.util.ArrayList<>();
+        Rect buttons = overlay.buttonsBounds();
+        assertNotNull(buttons);
+        for (String id : overlay.overviewCardIds()) {
+            Rect card = overlay.overviewCardBounds(id);
+            assertNotNull("no card for " + id, card);
+            assertTrue(id + "'s card left the screen", card.left >= 0 && card.top >= 0
+                && card.right <= 400 && card.bottom <= 800);
+            assertFalse(id + "'s card is on the buttons", Rect.intersects(card, buttons));
+            for (Rect other : seen)
+                assertFalse("two cards sit on each other", Rect.intersects(card, other));
+            for (String boxed : overlay.overviewCardIds())
+                assertFalse(id + "'s card covers " + boxed,
+                    Rect.intersects(card, overlay.measuredRect(boxed)));
+            for (Rect key : overlay.keyCardBounds())
+                assertFalse(id + "'s card is on a key label", Rect.intersects(card, key));
+            seen.add(card);
+        }
+    }
+
+    /** A point the overview has put nothing on, for a tap that must do nothing. */
+    private float[] emptyPoint() {
+        for (int y = 20; y < 800; y += 10) for (int x = 20; x < 400; x += 10) {
+            boolean free = overlay.buttonsBounds() == null
+                || !overlay.buttonsBounds().contains(x, y);
+            for (String id : overlay.overviewCardIds())
+                free &= !overlay.overviewCardBounds(id).contains(x, y);
+            for (Rect key : overlay.keyCardBounds()) free &= !key.contains(x, y);
+            if (free) return new float[] {x, y};
+        }
+        throw new AssertionError("the overview covers the whole screen");
+    }
+
+    /**
+     * Help opens on a handful of cards over the reader's own screen: the curated controls that
+     * measured, each with its own card, and nothing else marked at all.
+     */
+    @Test public void theOverviewDrawsTheCuratedCardsAndNothingElse() {
+        keyboardUp();
+        overview(PaneWallPage.TERMINAL);
+        assertTrue(overlay.isShowing());
+        assertTrue("the overview marks nothing", overlay.markerTargetIds().isEmpty());
+        assertNull("the overview has no exploration toolbar", overlay.toolbarBounds());
+        assertNull("no single card is seated", overlay.cardBounds());
+        assertEquals("nothing was left out", java.util.Collections.emptyList(),
+            overlay.unplacedOverviewIds());
+        java.util.SortedSet<String> curated = curatedOnScreen(PaneWallPage.TERMINAL);
+        assertTrue("this test needs the keyboard's own controls", curated.contains("prefix"));
+        assertTrue(curated.contains("settings"));
+        assertEquals(curated, new java.util.TreeSet<>(overlay.overviewCardIds()));
+        for (String id : overlay.overviewCardIds()) {
+            HelpTopics.Entry entry = HelpTopics.forTarget(PaneWallPage.TERMINAL, id);
+            assertNotNull(id + "'s card is not its topic",
+                exactly(string(entry.titleRes) + "\n" + string(entry.actionRes)));
+        }
+        assertTheOverviewIsClear();
+    }
+
+    /** With the keyboard down its own controls are not there, and they get no card. */
+    @Test public void theOverviewDropsTheCardsWhoseControlsAreNotOnScreen() {
+        overview(PaneWallPage.TERMINAL);
+        java.util.SortedSet<String> curated = curatedOnScreen(PaneWallPage.TERMINAL);
+        assertFalse("the keyboard is down in this test", curated.contains("prefix"));
+        assertEquals(curated, new java.util.TreeSet<>(overlay.overviewCardIds()));
+        assertTrue(overlay.overviewCardIds().contains("dock"));
+        assertTheOverviewIsClear();
+    }
+
+    /** Every place opens on its own overview, and every one of them stays on one page. */
+    @Test public void everyPlaceHasAnOverviewOfItsOwn() {
+        for (PaneWallPage place : PaneWallPage.values()) {
+            keyboardUp();
+            overview(place);
+            assertTrue(place.name(), overlay.isShowing());
+            assertEquals(place.name(), java.util.Collections.emptyList(),
+                overlay.unplacedOverviewIds());
+            assertEquals(place.name(), curatedOnScreen(place),
+                new java.util.TreeSet<>(overlay.overviewCardIds()));
+            assertNotNull(place.name(), described(string(R.string.help_close_action)));
+            assertNotNull(place.name(), described(string(R.string.help_overview_guide_action)));
+            assertTheOverviewIsClear();
+            overlay.dismiss();
+        }
+    }
+
+    @Test public void theOverviewsButtonsOpenTheGuideAndCloseHelp() {
+        overview(PaneWallPage.TERMINAL);
+        View guide = described(string(R.string.help_overview_guide_action));
+        assertNotNull("no way into the guide", guide);
+        assertTrue("the Guide button is too small for a thumb", guide.getHeight() >= 48);
+        guide.performClick();
+        assertEquals(1, openedGuide);
+        described(string(R.string.help_close_action)).performClick();
+        assertEquals(1, closed);
+    }
+
+    @Test public void aCardOnTheOverviewOpensItsTopic() {
+        overview(PaneWallPage.TERMINAL);
+        View card = overlay.overviewCardView("dock");
+        assertNotNull(card);
+        card.performClick();
+        assertEquals("dock", read);
+    }
+
+    /** Back on the overview is the launcher's to answer: it is where help opens. */
+    @Test public void backOnTheOverviewIsNotConsumed() {
+        overview(PaneWallPage.TERMINAL);
+        assertFalse(overlay.onBackPressed());
+        assertTrue(overlay.isShowing());
+        assertEquals(0, closed);
+    }
+
+    /** Nothing to put away, so a tap on the washed launcher underneath does nothing at all. */
+    @Test public void tappingEmptySpaceInTheOverviewDoesNothing() {
+        overview(PaneWallPage.TERMINAL);
+        java.util.List<String> before = overlay.overviewCardIds();
+        float[] point = emptyPoint();
+        tap(point[0], point[1]);
+        assertEquals(before, overlay.overviewCardIds());
+        assertTrue(overlay.isShowing());
+        assertNull(read);
+        assertEquals(0, closed);
+    }
+
+    /** A dock that is a rail down one edge is swiped inward, and its card says so. */
+    @Test public void aDockThatIsARailSaysSwipeInward() {
+        overview(PaneWallPage.TERMINAL);
+        assertNotNull(exactly(string(HelpTopics.entry("dock").titleRes) + "\n"
+            + string(R.string.help_topic_dock_action)));
+        // The wall off the left edge, and the dock a column beside it.
+        wall.layout(80, 60, 400, 560);
+        dock.layout(0, 100, 60, 500);
+        overlay.refresh();
+        layout();
+        assertNotNull("the rail still has a card", overlay.overviewCardBounds("dock"));
+        assertNotNull(exactly(string(HelpTopics.entry("dock").titleRes) + "\n"
+            + string(R.string.help_dock_rail_action)));
     }
 
     @Test public void everyPlaceMarksItsControlsAndSeatsNoCard() {
@@ -372,20 +553,69 @@ public class HelpPresentationTest {
     }
 
     /**
+     * A row of the launcher's own keys. Three of them, not the seven a fresh install ships with:
+     * this harness is a 400x800 screen, and seven labels of real words need more room than that.
+     * {@link #onlyTheLaunchersOwnKeysAreLabelled} is where the shipped row is checked.
+     */
+    private void launcherKeys(int height) throws Exception {
+        keys = new ExtraKeysView(activity, null);
+        root.addView(keys, new FrameLayout.LayoutParams(keysBounds.width(), keysBounds.height()));
+        keys.reload(new ExtraKeysInfo("[['tool:wall.widgets','tool:wall.terminal','tool:mouse.toggle']]",
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), height);
+    }
+
+    /**
+     * The rule for what is labelled: the launcher's own keys, and no others. Every key of the row
+     * a fresh install ships with is one; not one key of upstream Termux's row is.
+     */
+    @Test public void onlyTheLaunchersOwnKeysAreLabelled() throws Exception {
+        ExtraKeysInfo launcher = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
+        assertEquals(7, launcher.getMatrix()[0].length);
+        for (ExtraKeyButton key : launcher.getMatrix()[0])
+            assertTrue(key.getKey() + " is the launcher's own", HelpCopy.isLauncherKey(key));
+        ExtraKeysInfo upstream = new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
+        for (ExtraKeyButton key : upstream.getMatrix()[0]) {
+            assertFalse(key.getKey() + " sends what it says it sends", HelpCopy.isLauncherKey(key));
+            assertFalse(HelpCopy.isLauncherKey(key.getPopup()));
+        }
+        assertFalse("nothing to filter", HelpCopy.isLauncherKey(null));
+    }
+
+    /** Upstream's row of plain terminal keys says nothing: there is nothing to explain. */
+    @Test public void aRowOfPlainTerminalKeysIsNotLabelledAtAll() throws Exception {
+        keys = new ExtraKeysView(activity, null);
+        root.addView(keys, new FrameLayout.LayoutParams(400, 60));
+        keys.reload(new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), 60);
+        overview(PaneWallPage.TERMINAL);
+        assertTrue("a plain terminal key was labelled", overlay.keyCardBounds().isEmpty());
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("keys");
+        assertTrue("a plain terminal key was labelled", overlay.keyCardBounds().isEmpty());
+    }
+
+    /** The overview labels the keys without being asked: the row is what the labels are about. */
+    @Test public void theOverviewLabelsEveryLauncherKey() throws Exception {
+        launcherKeys(60);
+        overview(PaneWallPage.TERMINAL);
+        assertEquals("one label per launcher key", 3, overlay.keyCardBounds().size());
+        assertTheOverviewIsClear();
+    }
+
+    /**
      * The extra keys row is the one control that brings more than a card: one label per key, for
      * the reader's own key assignments, and only while the row itself is selected.
      */
     @Test public void theExtraKeysRowBringsALabelForEveryKey() throws Exception {
-        keys = new ExtraKeysView(activity, null);
-        root.addView(keys, new FrameLayout.LayoutParams(400, 60));
-        keys.reload(new ExtraKeysInfo("[['ESC','TAB','CTRL','ALT','-','/','|']]", "default",
-            ExtraKeysConstants.CONTROL_CHARS_ALIASES), 60);
+        launcherKeys(60);
         explore(PaneWallPage.TERMINAL);
         assertTrue("the row was not measured", overlay.markerTargetIds().contains("keys"));
         assertTrue("no key cards until the row is selected", overlay.keyCardBounds().isEmpty());
         tapMarker("keys");
         assertEquals("keys", overlay.selectedTopicId());
-        assertEquals("one label per key", 7, overlay.keyCardBounds().size());
+        assertEquals("one label per key", 3, overlay.keyCardBounds().size());
         assertClearOfEverything();
         for (Rect card : overlay.keyCardBounds())
             assertFalse("a key card is on the row it labels",
@@ -405,7 +635,8 @@ public class HelpPresentationTest {
         // toolbar is, because only the measured controls were obstacles.
         keysBounds = new Rect(0, 150, 200, 620);
         root.addView(keys, new FrameLayout.LayoutParams(keysBounds.width(), keysBounds.height()));
-        keys.reload(new ExtraKeysInfo("[[{key:'ESC',popup:'TAB'},{key:'CTRL',popup:'ALT'}]]",
+        keys.reload(new ExtraKeysInfo("[[{key:'tool:pane.split',popup:'tool:window.new'},"
+            + "{key:'tool:session.browser',popup:'tool:session.new'}]]",
             "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), keysBounds.height());
         dock.setVisibility(View.GONE);
         explore(PaneWallPage.TERMINAL);
