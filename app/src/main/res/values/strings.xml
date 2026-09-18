@@ -2047,7 +2047,7 @@
     <string name="help_topic_size_aliases">text size, font size, bigger, smaller, pinch, zoom</string>
     <string name="help_topic_find_title">Find text and links</string>
     <string name="help_topic_find_summary">The terminal can search what it has printed, and open the links in it.</string>
-    <string name="help_topic_find_action">Hold a pane corner to reach the pane\'s actions, including Find.</string>
+    <string name="help_topic_find_action">Open the command palette and search for Find to look through this pane\'s output.</string>
     <string name="help_topic_find_step1">Tap a link to open it.</string>
     <string name="help_topic_find_step2">Hold a link for more ways to use it.</string>
     <string name="help_topic_find_aliases">find, search output, links, url, terminal actions</string>
@@ -2071,8 +2071,8 @@
     <string name="help_topic_keys_aliases">extra keys, action row, keys, key row</string>
     <string name="help_topic_layouts_title">Keyboard layouts</string>
     <string name="help_topic_layouts_summary">The keyboard can sit at the bottom, float, or split in two.</string>
-    <string name="help_topic_layouts_action">Hold a keyboard corner to reach its layout controls.</string>
-    <string name="help_topic_layouts_back">Pick docked on the same corner to put it back.</string>
+    <string name="help_topic_layouts_action">Swipe up on the Keyboard key to switch between docked, floating and split.</string>
+    <string name="help_topic_layouts_back">Swipe up on the Keyboard key again until it is docked.</string>
     <string name="help_topic_layouts_aliases">docked, floating, split keyboard, keyboard layout</string>
     <string name="help_topic_shortcuts_step2">The keys show what they do while you hold Ctrl and Alt.</string>
     <string name="help_topic_shortcuts_aliases">shortcut, shortcuts, chord, key chord, ctrl, alt, prefix, split</string>
@@ -2085,20 +2085,20 @@
     <!-- Help centre: Multitasking and workspaces. -->
     <string name="help_topic_panes_title">Panes</string>
     <string name="help_topic_panes_summary">A pane is one terminal area, and a window can hold several.</string>
-    <string name="help_topic_panes_action">Hold a pane corner and pick Split to make another one.</string>
+    <string name="help_topic_panes_action">Tap Split on the extra keys row to open another pane.</string>
     <string name="help_topic_panes_step1">Drag the divider between two panes to change their share.</string>
     <string name="help_topic_panes_step2">Tap inside a pane to give it your keystrokes.</string>
     <string name="help_topic_panes_step3">Hold its corner and pick Close to close it.</string>
     <string name="help_topic_panes_aliases">pane, panes, split, divider, resize, close pane</string>
     <string name="help_topic_move_title">Move panes and layouts</string>
     <string name="help_topic_move_summary">Panes can be rearranged, and the launcher can arrange them for you.</string>
-    <string name="help_topic_move_action">Hold a pane corner and pick Move, then choose where it goes.</string>
-    <string name="help_topic_move_step1">Turn automatic layouts on in Settings, under Layout, to have new panes placed for you.</string>
+    <string name="help_topic_move_action">Hold a pane corner and tap Move to swap it with its neighbour.</string>
+    <string name="help_topic_move_step1">Turn on Automatic tiling in Settings, under Terminal, to have new panes placed for you.</string>
     <string name="help_topic_move_aliases">move pane, arrange, layout, automatic, tile</string>
     <string name="help_topic_float_title">Floating panes</string>
     <string name="help_topic_float_summary">A pane can float above the others instead of taking a share of the screen.</string>
-    <string name="help_topic_float_action">Hold a pane corner and pick Float.</string>
-    <string name="help_topic_float_back">Pick Dock on the same corner to put it back in line.</string>
+    <string name="help_topic_float_action">Open the command palette and choose the floating pane action to lift the pane out.</string>
+    <string name="help_topic_float_back">Choose the same action again to put it back in line.</string>
     <string name="help_topic_float_aliases">float, floating, dock pane, on top</string>
     <string name="help_topic_windows_title">Windows and sessions</string>
     <string name="help_topic_windows_step1">Tap a tab again for its × button to close it.</string>
