@@ -404,6 +404,12 @@ public final class HelpController {
         watchingLayout = false;
     }
 
+    /** The target ids the last pass measured. */
+    @VisibleForTesting
+    Set<String> measuredTargetIds() {
+        return measured;
+    }
+
     @VisibleForTesting
     HelpNavigation navigation() {
         return navigation;

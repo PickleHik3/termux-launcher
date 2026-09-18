@@ -147,6 +147,8 @@ public final class HelpPanelView extends FrameLayout {
         setVisibility(VISIBLE);
         bringToFront();
         requestFocus();
+        // Asked for rather than waited on: the keyboard's inset is what the body has to clear.
+        requestApplyInsets();
     }
 
     public void hide() {
@@ -313,7 +315,8 @@ public final class HelpPanelView extends FrameLayout {
         detach(searchField);
         if (!searchField.getText().toString().equals(navigation.query()))
             searchField.setText(navigation.query());
-        body.addView(searchField, style.stacked(style.dp(6)));
+        body.addView(add(string(R.string.help_search_field_hint), searchField),
+            style.stacked(style.dp(6)));
         body.addView(list, style.stacked(style.dp(6)));
         results(navigation.query());
     }
@@ -338,8 +341,8 @@ public final class HelpPanelView extends FrameLayout {
         }
         for (HelpSearch.Result result : found) {
             final HelpSearch.Result found1 = result;
-            list.addView(style.row(result.title, result.excerpt, kindLabel(result.kind), true,
-                () -> open(found1)), style.stacked(style.dp(6)));
+            list.addView(add(result.title, style.row(result.title, result.excerpt,
+                kindLabel(result.kind), true, () -> open(found1))), style.stacked(style.dp(6)));
         }
     }
 
@@ -378,7 +381,8 @@ public final class HelpPanelView extends FrameLayout {
             focusHandOff(filterField);
         }
         detach(filterField);
-        body.addView(filterField, style.stacked(style.dp(6)));
+        body.addView(add(string(R.string.help_glossary_filter_hint), filterField),
+            style.stacked(style.dp(6)));
         body.addView(list, style.stacked(style.dp(6)));
         terms();
     }
@@ -392,9 +396,9 @@ public final class HelpPanelView extends FrameLayout {
                 && !definition.toLowerCase().contains(needle)) continue;
             HelpTopics.Entry topic = term.topicId == null ? null : HelpTopics.entry(term.topicId);
             final String topicId = topic == null ? null : topic.id;
-            list.addView(style.row(title, definition, null, true, () -> {
+            list.addView(add(title, style.row(title, definition, null, true, () -> {
                 if (listener != null && topicId != null) listener.onTopic(topicId);
-            }), style.stacked(style.dp(6)));
+            })), style.stacked(style.dp(6)));
         }
     }
 
