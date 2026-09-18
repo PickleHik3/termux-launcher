@@ -3979,21 +3979,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             + Math.max(0, keyboardHeight);
     }
 
+    /**
+     * The dock's and keyboard's blur radius as the glass draws it. This used to drop to 0 whenever
+     * {@link #isLiveWallpaperActive()} — but some ROMs (One UI, issue #37) serve a plain static
+     * picture through a wallpaper service, so the bands lost their blur on a still image while the
+     * terminal pane, which never had the gate, blurred the very same frame. The bands now follow the
+     * pane: the preference is the radius. Under a real live wallpaper every glass blurs the stored
+     * still, as the pane always has.
+     */
     private int getEffectiveExtraKeysBlurRadius() {
         if (mPreferences == null) {
             return 0;
         }
-        int blurRadiusDp = mPreferences.getExtraKeysBlurRadius();
-        if (blurRadiusDp <= 0 || isLiveWallpaperActive()) {
-            return 0;
-        }
-        return blurRadiusDp;
+        return Math.max(0, mPreferences.getExtraKeysBlurRadius());
     }
 
+    /** @see #getEffectiveExtraKeysBlurRadius() */
     private int getEffectiveStatusBarBlurRadius() {
         if (mPreferences == null) return 0;
-        int blurRadiusDp = mPreferences.getStatusBarBlurRadius();
-        return blurRadiusDp <= 0 || isLiveWallpaperActive() ? 0 : blurRadiusDp;
+        return Math.max(0, mPreferences.getStatusBarBlurRadius());
     }
 
     private boolean isLiveWallpaperActive() {
