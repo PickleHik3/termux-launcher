@@ -322,6 +322,10 @@ public final class HelpOverlayView extends FrameLayout {
         // One page still comes first: on a screen too tight for every card to keep clear of every
         // control, the controls give way rather than a hint leave the guide.
         if (!obstacles.isEmpty() && !onOnePage(routed)) {
+            StringBuilder crowded = new StringBuilder("yielding: controls give way for");
+            for (HelpLeaderRouter.Placement p : routed.placements) if (p.page > 0) crowded.append(' ').append(p.target.id);
+            for (HelpLeaderRouter.Target t : routed.unplaced) crowded.append(' ').append(t.id);
+            HelpLog.d(crowded.toString());
             List<HelpLeaderRouter.Box> yielding = new ArrayList<>(soft);
             yielding.addAll(obstacles);
             routed = HelpLeaderRouter.arrange(box(band), dp(12), dp(12), inputs,
@@ -461,6 +465,16 @@ public final class HelpOverlayView extends FrameLayout {
             }
         }
         int wallLimit = awayIsHigh ? (vertical ? band.left : band.top) : (vertical ? band.right : band.bottom);
+        // Toward the wall the lanes lean on the keys unless another control — the dock, the status
+        // bar — stands between the keys and the wall; then they lean on the far side of that
+        // control instead, and the leaders cross it. A card over a control hides it; a line does not.
+        int wallNear = awayIsHigh ? keysNear : keysFar;
+        for (HelpTargets.Target target : snapshot.targets) {
+            int low = vertical ? target.rect.left : target.rect.top;
+            int high = vertical ? target.rect.right : target.rect.bottom;
+            if (awayIsHigh && high <= keysNear && low >= wallLimit) wallNear = Math.min(wallNear, low - dp(6));
+            if (!awayIsHigh && low >= keysFar && high <= wallLimit) wallNear = Math.max(wallNear, high + dp(6));
+        }
         int[] centers = new int[keys.size()];
         for (int i = 0; i < keys.size(); i++)
             centers[i] = vertical ? keys.get(i).rect.centerY() : keys.get(i).rect.centerX();
@@ -500,8 +514,8 @@ public final class HelpOverlayView extends FrameLayout {
             views.add(card);
             specs.add(spec);
         }
-        int[] lanes = keyCardLanes(keysNear, keysFar, wallLimit, awayLimit, awayIsHigh,
-            thickness, dp(10), dp(14));
+        int[] lanes = keyCardLanes(awayIsHigh ? wallNear : keysNear, awayIsHigh ? keysFar : wallNear,
+            wallLimit, awayLimit, awayIsHigh, thickness, dp(10), dp(14));
         boolean away = lanes[2] == 1;
         boolean cardsHigh = away == awayIsHigh;
         for (int i = 0; i < views.size(); i++) {

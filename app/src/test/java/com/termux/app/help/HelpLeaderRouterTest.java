@@ -484,4 +484,22 @@ public class HelpLeaderRouterTest {
         assertFalse(p.lines.isEmpty());
         for (Box h : hard) assertFalse(p.card.overlaps(h));
     }
+
+    /**
+     * The phone with the dock as a rail down the left: the rail touches the wall and the prefix
+     * keys sit a whole keyboard away, so the rail's card takes the column beside it and the prefix
+     * card, however small its control, finds room elsewhere.
+     */
+    @Test public void aControlTouchingTheWallIsSeatedBeforeOneAKeyboardAway() {
+        Box band = B(160, 140, 1080, 1300);
+        Box rail = B(0, 140, 150, 1300), prefix = B(0, 2225, 250, 2349);
+        Result r = HelpLeaderRouter.arrange(band, 33, 33, Arrays.asList(
+            new Target("dock", rail, Side.LEFT, 316, 200), new Target("prefix", prefix, Side.UNDER, 316, 448)),
+            Arrays.asList(rail, prefix), Collections.emptyList());
+        assertTrue("unplaced " + ids(r.unplaced), r.unplaced.isEmpty());
+        Placement dock = placement(r, "dock");
+        assertEquals(183f, dock.card.left, 0.01f);
+        assertTrue(dock.card.top <= rail.cy() && dock.card.bottom >= rail.cy());
+        assertFalse(placement(r, "prefix").card.overlaps(dock.card));
+    }
 }

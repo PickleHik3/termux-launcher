@@ -170,10 +170,14 @@ public final class HelpLeaderRouter {
         List<Target> targets = new ArrayList<>();
         for (Target t : input) if (t != null && t.box != null
                 && t.box.width() > 0 && t.box.height() > 0) targets.add(t);
-        // The band's own controls in reading order, then the ones outside it, smallest first: a
-        // control the size of a cog has one place its line can leave from, and a row the width of
-        // the screen has the whole width, so the cog picks its shelf before the row does.
+        // The band's own controls in reading order, then the ones outside it, nearest the band
+        // first and smallest first among equals: a control that touches the band — the dock, a
+        // rail, the status bar — gets the shelf that leans on it before a key in the bottom row of
+        // the keyboard, whose card has to come all the way in, takes that shelf for itself; and a
+        // control the size of a cog has one place its line can leave from where a row the width
+        // of the screen has the whole width, so the cog picks before the row.
         targets.sort(Comparator.comparingInt((Target t) -> t.side == Side.INSIDE ? 0 : 1)
+            .thenComparingInt(t -> t.side != Side.INSIDE ? gapToBand(t, band) : 0)
             .thenComparingDouble(t -> t.side != Side.INSIDE
                 ? t.box.width() * (double) t.box.height() : t.box.top)
             .thenComparingDouble(t -> t.box.left).thenComparing(t -> t.id));
@@ -192,6 +196,24 @@ public final class HelpLeaderRouter {
         }
         return new Result(placed, unplaced, pages);
     }
+
+    /**
+     * How far a control outside the band stands from the band's nearest edge, in steps of about a
+     * card, so that the keys of one keyboard row count as equally far and the smaller of them
+     * still goes first.
+     */
+    private static int gapToBand(Target t, Box band) {
+        float gap;
+        switch (t.side) {
+            case ABOVE: gap = band.top - t.box.bottom; break;
+            case LEFT: gap = band.left - t.box.right; break;
+            case RIGHT: gap = t.box.left - band.right; break;
+            default: gap = t.box.top - band.bottom;
+        }
+        return Math.round(Math.max(0, gap) / GAP_STEP);
+    }
+    /** The distance from the band that counts as one step further away, in px. */
+    private static final float GAP_STEP = 200f;
 
     /**
      * Clear of everything first; failing that, clear of the other leaders at least; failing that,
@@ -275,9 +297,11 @@ public final class HelpLeaderRouter {
      * A control outside the band — the dock, a bar along the top, a rail down one side, a key of
      * the keyboard — takes its card on the free spot nearest to straight across from itself, on
      * the shelves between itself and the band: the first shelf leans on the control, the next is a
-     * card's thickness further in, and a spot is as near as its distance along the shelf plus its
-     * distance in. So a card shares its shelf with a neighbour when the next slot along is closer
-     * than the next shelf in, and steps in when it is not; either way the card stays about its
+     * card's thickness further in, and a spot is as near as its distance along the shelf plus
+     * twice its distance in — a step in costs double, because a card that leaves its control's
+     * edge is harder to pair with it than one a slot along it. So a card shares its shelf with a
+     * neighbour when the next slot along is closer than that, and steps in when it is not; either
+     * way the card stays about its
      * control, which is what {@link #SHELVES} bounds. Shelves run parallel to the edge the control
      * is on and are walked toward the band, so the same rule seats a status bar at the top, a dock
      * at the bottom and a column of keys down the right.
@@ -327,7 +351,7 @@ public final class HelpLeaderRouter {
                 Box card = alongX ? new Box(x, a, x + length, b) : new Box(a, x, b, x + length);
                 if (card.overlaps(t.box) || hits(card, blocked)) continue;
                 any = true;
-                float away = Math.abs(x - ideal) + shelf * (thickness + gap);
+                float away = Math.abs(x - ideal) + 2 * shelf * (thickness + gap);
                 // Covering a dimmed control costs up to three shelves, in proportion to how much
                 // of the card lies on it: a whole widget row is worth stepping past, a hairline
                 // divider is not.
@@ -428,8 +452,9 @@ public final class HelpLeaderRouter {
             .comparingDouble((float[] p) -> Math.abs(p[0] - ideal) + Math.abs(p[1] - idealBox))
             .thenComparingDouble(p -> p[0]).thenComparingDouble(p -> p[1]));
         // Halfway first; then a quarter of the way from either end, so two cards on one shelf
-        // whose boxes sit to the side do not both elbow along the same line.
-        for (float at : new float[] {0.5f, 0.25f, 0.75f})
+        // whose boxes sit to the side do not both elbow along the same line; then close to either
+        // end, which is how a line slips past a card that sits between its card and its box.
+        for (float at : new float[] {0.5f, 0.25f, 0.75f, 0.1f, 0.9f})
             for (float[] p : pairs) out.add(connect(p[0], cardEnd, p[1], boxEnd, vertical, at));
         return out;
     }
