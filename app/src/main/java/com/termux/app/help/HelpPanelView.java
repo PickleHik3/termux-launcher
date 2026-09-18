@@ -572,17 +572,37 @@ public final class HelpPanelView extends FrameLayout {
     // ---- geometry ----------------------------------------------------------------------------
 
     @Override public WindowInsets onApplyWindowInsets(WindowInsets windowInsets) {
-        WindowInsetsCompat compat = WindowInsetsCompat.toWindowInsetsCompat(windowInsets, this);
-        androidx.core.graphics.Insets bars =
-            compat.getInsets(WindowInsetsCompat.Type.systemBars());
-        androidx.core.graphics.Insets ime = compat.getInsets(WindowInsetsCompat.Type.ime());
-        insets.set(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
-        panelWidth = -1;
-        requestLayout();
+        takeInsets(WindowInsetsCompat.toWindowInsetsCompat(windowInsets, this));
         return windowInsets;
     }
 
+    private void takeInsets(WindowInsetsCompat compat) {
+        androidx.core.graphics.Insets bars =
+            compat.getInsets(WindowInsetsCompat.Type.systemBars());
+        androidx.core.graphics.Insets cutout =
+            compat.getInsets(WindowInsetsCompat.Type.displayCutout());
+        androidx.core.graphics.Insets ime = compat.getInsets(WindowInsetsCompat.Type.ime());
+        int top = Math.max(bars.top, cutout.top);
+        int bottom = Math.max(Math.max(bars.bottom, cutout.bottom), ime.bottom);
+        if (insets.left == bars.left && insets.top == top && insets.right == bars.right
+            && insets.bottom == bottom) return;
+        insets.set(bars.left, top, bars.right, bottom);
+        panelWidth = -1;
+        requestLayout();
+    }
+
+    /**
+     * The launcher's content consumes the window insets before they reach a sibling on the decor
+     * view, so the sheet reads the window's own: on the phone the dispatched ones never arrive and
+     * the header sat under the status bar.
+     */
+    private void readWindowInsets() {
+        WindowInsets root = getRootWindowInsets();
+        if (root != null) takeInsets(WindowInsetsCompat.toWindowInsetsCompat(root, this));
+    }
+
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
+        readWindowInsets();
         int available = MeasureSpec.getSize(widthSpec) - insets.left - insets.right;
         boolean wide = MeasureSpec.getSize(widthSpec) > MeasureSpec.getSize(heightSpec);
         int margin = style.dp(12);
@@ -594,7 +614,7 @@ public final class HelpPanelView extends FrameLayout {
             panelWidth = width;
             params.width = width;
             params.topMargin = insets.top + margin;
-            params.bottomMargin = insets.bottom + margin;
+            params.bottomMargin = insets.bottom + margin + style.dp(2);
             panel.setLayoutParams(params);
         }
         super.onMeasure(widthSpec, heightSpec);
