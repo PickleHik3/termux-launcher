@@ -316,12 +316,17 @@ public final class HelpLeaderRouter {
         List<Float> distance = new ArrayList<>();
         List<Float> cover = new ArrayList<>();
         float edge = first;
-        for (int shelf = 0; shelf < SHELVES; shelf++, edge += inward * (thickness + gap)) {
+        // Only shelves with a free spot count against the budget: a shelf the key cards or a dock
+        // fill from end to end is walked past, not spent, or a control boxed in by them would have
+        // no card at all.
+        for (int shelf = 0, free = 0; free < SHELVES; shelf++, edge += inward * (thickness + gap)) {
             float a = inward > 0 ? edge : edge - thickness, b = a + thickness;
             if (inward > 0 ? b > limit + 0.5f : a < limit - 0.5f) break;
+            boolean any = false;
             for (float x : shelfSlots(ideal, lo, hi, length, gap)) {
                 Box card = alongX ? new Box(x, a, x + length, b) : new Box(a, x, b, x + length);
                 if (card.overlaps(t.box) || hits(card, blocked)) continue;
+                any = true;
                 float away = Math.abs(x - ideal) + shelf * (thickness + gap);
                 // Covering a dimmed control costs up to three shelves, in proportion to how much
                 // of the card lies on it: a whole widget row is worth stepping past, a hairline
@@ -332,6 +337,7 @@ public final class HelpLeaderRouter {
                 distance.add(away);
                 cover.add(onSoft);
             }
+            if (any) free++;
         }
         Integer[] order = new Integer[spots.size()];
         for (int i = 0; i < order.length; i++) order[i] = i;

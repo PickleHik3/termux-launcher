@@ -485,8 +485,7 @@ public final class HelpOverlayView extends FrameLayout {
                 titleColor, keyColor);
             TextView card = spec.equals(wasSpec.get(i)) ? wasView.get(i) : null;
             if (card == null) card = keyCard(key, titleColor, keyColor);
-            card.measure(MeasureSpec.makeMeasureSpec(vertical ? laneWidth : room, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+            measureKeyCard(card, vertical ? laneWidth : room, key.secondary == null ? 1 : 2);
             if (vertical) {
                 if (card.getMeasuredHeight() > room) {
                     HelpLog.d("key cards: none, key " + i + " needs " + card.getMeasuredHeight()
@@ -608,6 +607,20 @@ public final class HelpOverlayView extends FrameLayout {
         }
         return lines;
     }
+    /**
+     * Measure a key card at {@code width}; when a word has to break to fit — the card at either end
+     * of the row only has the room from the screen's edge to its neighbour — the text steps down a
+     * size at a time, to 10sp, before the word is allowed to break.
+     */
+    private void measureKeyCard(TextView card, int width, int lines) {
+        for (float sp = 12f; ; sp -= 1f) {
+            card.setTextSize(sp);
+            card.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+            if (card.getLineCount() <= lines || sp <= 10f) return;
+        }
+    }
+
     /** One key's card: what it does in the row's colour, and its swipe under it. */
     private TextView keyCard(HelpTargets.KeyLabel key, int titleColor, int borderColor) {
         TextView text = new TextView(getContext());

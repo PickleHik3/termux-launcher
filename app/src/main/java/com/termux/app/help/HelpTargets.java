@@ -239,6 +239,23 @@ public final class HelpTargets {
             }
             HelpLog.d("extra keys: " + row.getChildCount() + " caps, " + measured + " measured, "
                 + defined + " defined, " + s.keys.size() + " labelled");
+            if (measured < row.getChildCount()) {
+                // Which test each unmeasured cap fails, so a phone can say why its key cards are gone.
+                StringBuilder why = new StringBuilder("caps unmeasured:");
+                for (int i = 0; i < row.getChildCount(); i++) {
+                    View cap = row.getChildAt(i);
+                    if (rect(cap) != null) continue;
+                    Rect local = new Rect();
+                    why.append(' ').append(i).append('[').append(cap.getClass().getSimpleName())
+                        .append(" shown=").append(cap.isShown()).append(" vis=").append(cap.getVisibility())
+                        .append(" alpha=").append(cap.getAlpha()).append(" size=").append(cap.getWidth())
+                        .append('x').append(cap.getHeight()).append(" local=")
+                        .append(cap.getLocalVisibleRect(local)).append(local.toShortString()).append(']');
+                    int[] at = new int[2]; cap.getLocationOnScreen(at);
+                    why.append("@").append(at[0]).append(',').append(at[1]);
+                }
+                HelpLog.d(why.toString());
+            }
             return;
         }
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++)
@@ -299,11 +316,29 @@ public final class HelpTargets {
         }
         return null;
     }
+    /**
+     * Where a view is on the overlay, clipped to every ancestor's bounds and to the overlay. Built
+     * from {@link View#getLocationOnScreen} and the view's size rather than from
+     * {@link View#getLocalVisibleRect}: on the phone the caps of the extra keys row answered the
+     * latter with a rectangle half a million pixels to the right while drawing exactly where the
+     * former says, which is how the row and its seven key cards went missing from the guide.
+     */
     Rect rect(View view) {
         if (view == null || !view.isShown() || view.getAlpha() <= 0 || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
-        Rect local = new Rect();
-        if (!view.getLocalVisibleRect(local)) return null;
-        return localRect(view,local);
+        int[] source = new int[2], origin = new int[2];
+        view.getLocationOnScreen(source); overlay.getLocationOnScreen(origin);
+        Rect r = new Rect(source[0] - origin[0], source[1] - origin[1],
+            source[0] - origin[0] + view.getWidth(), source[1] - origin[1] + view.getHeight());
+        // A child scrolled or slid out of an ancestor is not on screen even though it is laid out.
+        for (android.view.ViewParent p = view.getParent(); p instanceof View; p = p.getParent()) {
+            View ancestor = (View) p;
+            if (ancestor == overlay) break;
+            ancestor.getLocationOnScreen(source);
+            Rect bounds = new Rect(source[0] - origin[0], source[1] - origin[1],
+                source[0] - origin[0] + ancestor.getWidth(), source[1] - origin[1] + ancestor.getHeight());
+            if (!r.intersect(bounds)) return null;
+        }
+        return r.intersect(0, 0, overlay.getWidth(), overlay.getHeight()) && !r.isEmpty() ? r : null;
     }
     private Rect localRect(View view, Rect local) {
         if (view == null || local == null || local.isEmpty() || !view.isShown()) return null;

@@ -257,11 +257,11 @@ public class HelpLeaderRouterTest {
         assertTrue(r.pages >= 2);
         assertTrue(r.unplaced.isEmpty());
         assertNoOverlap(r);
-        // Two cards of 200 share each shelf of a 480-wide band and a card walks four shelves at
-        // most: page one holds eight.
+        // Two cards of 200 share each shelf of a 480-wide band, a full shelf is walked past rather
+        // than counted, and six shelves of 100 fit a 640-tall band: page one holds twelve.
         int onFirst = 0;
         for (Placement p : r.placements) if (p.page == 0) onFirst++;
-        assertEquals(8, onFirst);
+        assertEquals(12, onFirst);
     }
 
     // ---- No two leaders may overlap or touch; parallel runs keep the gap. ----
@@ -463,5 +463,25 @@ public class HelpLeaderRouterTest {
         assertTrue(a.card.bottom <= b.card.top && b.card.bottom <= c.card.top);
         assertNoOverlap(r);
         assertLeadersClear(r, 12);
+    }
+
+    /**
+     * The phone again, with the key cards as tall as they really are: two lanes fill everything
+     * between the keys row and the keyboard's bottom row, and the dock and A-Z row fill the strip
+     * under the wall. The cog's card still finds a shelf, at the wall's foot, with a line.
+     */
+    @Test public void aControlBoxedInByFullShelvesStillGetsACardFurtherIn() {
+        Box band = B(0, 232, 1080, 1406);
+        Box cog = B(196, 2236, 254, 2294);
+        List<Box> hard = Arrays.asList(B(0, 1767, 1080, 1923), B(0, 1950, 1080, 2106),
+            B(0, 1631, 1080, 1729), B(0, 1581, 1080, 1631), B(0, 1428, 1080, 1581));
+        Result r = HelpLeaderRouter.arrange(band, 33, 33,
+            Collections.singletonList(new Target("settings", cog, Side.UNDER, 316, 150)),
+            hard, Collections.emptyList());
+        assertTrue("unplaced " + ids(r.unplaced), r.unplaced.isEmpty());
+        Placement p = placement(r, "settings");
+        assertTrue(p.card.bottom <= 1406.5f);
+        assertFalse(p.lines.isEmpty());
+        for (Box h : hard) assertFalse(p.card.overlaps(h));
     }
 }
