@@ -14985,15 +14985,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
                 @Override public boolean isDisplayRunning() { return isEmbeddedDisplayRunning(); }
                 @Override public void startDisplay() { startEmbeddedDisplay(); }
-                @Override @Nullable public com.termux.app.x11.X11LinuxAppRunner.ScriptHandle runScript(@NonNull String script) {
-                    if (mTermuxService == null) return null;
+                @Override public boolean runScript(@NonNull String script,
+                        @NonNull com.termux.app.x11.X11LinuxAppRunner.ScriptExitListener onExit) {
+                    if (mTermuxService == null) return false;
                     com.termux.shared.shell.command.runner.app.AppShell shell =
                         mTermuxService.createTermuxTask(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
                             new String[]{"-c", script}, null, TermuxConstants.TERMUX_HOME_DIR_PATH);
-                    if (shell == null) return null;
-                    // The exit code is set on AppShell's own worker thread once the process ends;
-                    // TermuxService reads the same field the same way from its posted callback.
-                    return () -> shell.getExecutionCommand().resultData.exitCode;
+                    if (shell == null) return false;
+                    // TermuxService already reads the exit code safely inside the onAppShellExited
+                    // callback it posts to its own main-thread handler once AppShell's worker thread
+                    // is done with it; this rides that same happens-before edge instead of polling
+                    // the raw field from an unrelated timer.
+                    mTermuxService.notifyOnAppShellExit(shell, onExit::onExit);
+                    return true;
                 }
                 @Override public void showDisplayPlace() {
                     if (mPaneWallController != null) {

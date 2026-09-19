@@ -49,21 +49,20 @@ public final class X11LinuxAppRunner {
         boolean isDisplayRunning();
         void startDisplay();
         /**
-         * Run a shell script as a background task in the prefix. Returns a handle for reading the
-         * process's exit code once it has one, or {@code null} if the task could not even be
-         * started (nothing to watch then; the caller behaves as it always did when this returned
-         * {@code void}).
+         * Run a shell script as a background task in the prefix. Returns whether the task actually
+         * started; when it did, {@code onExit} is called exactly once, later, on the main thread,
+         * with the process's exit code — pushed across from wherever the host already learns it
+         * with a genuine happens-before edge over the thread that set it, never left to be polled
+         * from a bare field afterwards.
          */
-        @Nullable
-        ScriptHandle runScript(@NonNull String script);
+        boolean runScript(@NonNull String script, @NonNull ScriptExitListener onExit);
         void showDisplayPlace();
         void showNotice(@NonNull String message);
     }
 
-    /** A background script task, running or already finished. */
-    public interface ScriptHandle {
-        /** Null while the process is still running; its exit code once it has one. */
-        @Nullable Integer exitCode();
+    /** Told a background script task's exit code, on the main thread, once it has one. */
+    public interface ScriptExitListener {
+        void onExit(int exitCode);
     }
 
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
@@ -157,29 +156,64 @@ public final class X11LinuxAppRunner {
     }
 
     /**
-     * Runs {@code script} and, once it either keeps running or exits, decides what {@code
-     * noSandbox} taught us (D7). Nothing here holds up the app itself: {@link Host#runScript}
-     * starts the task asynchronously and returns immediately, the same as it always did, and the
-     * script's own last line simply {@code exec}s into the app — this only reads, after a fixed
-     * wait, what that process did in the meantime:
-     * <ul>
-     *   <li>still running, or exited successfully: if this was the flagged command, remember it —
-     *       harmless to repeat if it was already remembered.</li>
-     *   <li>exited quickly and unsuccessfully, plain: one retry with the flag, built from the same
-     *       {@code display}/{@code env} — nothing about the app or the device changed in the last
-     *       few seconds, so there is nothing left to probe again.</li>
-     *   <li>exited quickly and unsuccessfully, flagged: the flag is not helping (or never did for a
-     *       remembered app), so forget it and tell the user, the same way a display that never
-     *       came up does.</li>
-     * </ul>
+     * Runs {@code script} and watches for D7's quick-fail window. Nothing here holds up the app
+     * itself: {@link Host#runScript} starts the task asynchronously and returns immediately, the
+     * same as it always did, and the script's own last line simply {@code exec}s into the app —
+     * this only reacts, afterwards, to whichever of two things happens first, both on the main
+     * thread so a plain flag on {@link Watch} is all that is needed to let only one of them act:
+     * the process exits (pushed straight from {@link ScriptExitListener}, never read back off a
+     * field), or the window elapses with no word of that, which is read as success.
      */
     @VisibleForTesting
     void runAndWatch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String script, boolean noSandbox,
                       @NonNull String display, @NonNull List<String> env) {
-        ScriptHandle handle = host.runScript(script);
-        if (handle == null) return;
-        handler.postDelayed(() -> {
-            if (!isQuickFailure(handle.exitCode())) {
+        new Watch(app, display, env).start(script, noSandbox);
+    }
+
+    /**
+     * One launch's watch. A fresh instance is also what a retry starts, since it is really a new
+     * attempt with its own window, not a continuation of the one that just failed.
+     */
+    private final class Watch {
+        private final LinuxAppCatalog.LinuxApp app;
+        private final String display;
+        private final List<String> env;
+        private final Runnable timeout = () -> resolve(false);
+        private boolean noSandbox;
+        private boolean decided;
+
+        Watch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display, @NonNull List<String> env) {
+            this.app = app;
+            this.display = display;
+            this.env = env;
+        }
+
+        void start(@NonNull String script, boolean noSandbox) {
+            this.noSandbox = noSandbox;
+            boolean started = host.runScript(script, exitCode -> resolve(isQuickFailure(exitCode)));
+            if (started) handler.postDelayed(timeout, QUICK_FAIL_MS);
+        }
+
+        /**
+         * {@code quickFailure} is what actually happened, decided by whichever of the exit callback
+         * or {@link #timeout} got here first — the other is cancelled, or simply finds
+         * {@link #decided} already set and does nothing. Both read {@link #noSandbox} as it was set
+         * by {@link #start}, before either could possibly fire.
+         * <ul>
+         *   <li>not a quick failure: if this attempt was flagged, remember it (harmless to repeat if
+         *       it already was).</li>
+         *   <li>quick failure, plain: one retry with the flag, from the same {@code display}/
+         *       {@code env} — nothing about the app or the device changed in the last few seconds,
+         *       so there is nothing left to probe again.</li>
+         *   <li>quick failure, flagged: the flag is not helping (or never did for a remembered app),
+         *       so forget it and tell the user, the same way a display that never came up does.</li>
+         * </ul>
+         */
+        private void resolve(boolean quickFailure) {
+            if (decided) return;
+            decided = true;
+            handler.removeCallbacks(timeout);
+            if (!quickFailure) {
                 if (noSandbox) sandboxStore.remember(app.id);
                 return;
             }
@@ -189,13 +223,13 @@ public final class X11LinuxAppRunner {
                 return;
             }
             Logger.logInfo(LOG_TAG, "Retrying " + app.id + " on the display with --no-sandbox");
-            runAndWatch(app, script(app, display, env, true), true, display, env);
-        }, QUICK_FAIL_MS);
+            new Watch(app, display, env).start(script(app, display, env, true), true);
+        }
     }
 
     /** A process that has already exited with a non-zero code within the quick-fail window. */
-    static boolean isQuickFailure(@Nullable Integer exitCode) {
-        return exitCode != null && exitCode != 0;
+    static boolean isQuickFailure(int exitCode) {
+        return exitCode != 0;
     }
 
     /** The best profile whose packages are actually installed; nothing when none is. */

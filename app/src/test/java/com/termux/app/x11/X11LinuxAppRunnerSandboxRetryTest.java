@@ -11,7 +11,6 @@ import android.os.Build;
 import android.os.Looper;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.TermuxConstants;
 
@@ -36,6 +35,13 @@ import java.util.concurrent.TimeUnit;
  * {@link X11LinuxAppRunner#shouldStartWithNoSandbox} directly — the seams left for testing this
  * without the real {@code EXECUTOR} background hop that {@link X11LinuxAppRunnerTest} does not
  * exercise either, since {@code runAndWatch} itself never leaves the main thread.
+ *
+ * <p>The exit code is delivered here the same way {@link X11LinuxAppRunner.Host#runScript} promises
+ * it for real — as a plain argument to {@link X11LinuxAppRunner.ScriptExitListener#onExit}, called
+ * synchronously by the fake host, exactly as {@code TermuxService} calls it from inside its own
+ * already-synchronized {@code onAppShellExited} post. Nothing here, or in production, ever reads
+ * a shared exit-code field back off {@code AppShell}; the "success" path below is the one case
+ * that legitimately needs the clock, since it is a timeout with nothing to be pushed.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -65,9 +71,12 @@ public class X11LinuxAppRunnerSandboxRetryTest {
 
     @Test public void aQuickUnsuccessfulExitRetriesOnceWithTheFlag() {
         LinuxAppCatalog.LinuxApp app = app("typora");
-        host.nextExitCode = 133; // SIGABRT-ish, what the sandbox crash looks like as an exit code
         runner.runAndWatch(app, "exec typora\n", false, DISPLAY, ENV);
-        idle();
+        assertEquals(1, host.scripts.size());
+
+        // The exit arrives as a plain pushed value, exactly as the real host promises — nothing is
+        // read back from anywhere else to learn it.
+        host.listeners.get(0).onExit(133); // SIGABRT-ish, what the sandbox crash looks like
 
         assertEquals("the plain command, then the flagged retry", 2, host.scripts.size());
         assertFalse(host.scripts.get(0).contains("--no-sandbox"));
@@ -76,8 +85,8 @@ public class X11LinuxAppRunnerSandboxRetryTest {
 
     @Test public void aSuccessfulLaunchIsNotRetriedAndTeachesNothing() {
         LinuxAppCatalog.LinuxApp app = app("typora");
-        host.nextExitCode = null; // still running when the window checks in
         runner.runAndWatch(app, "exec typora\n", false, DISPLAY, ENV);
+        // No exit callback ever fires — the app just keeps running — so only the timeout settles it.
         idle();
 
         assertEquals("no retry", 1, host.scripts.size());
@@ -86,18 +95,28 @@ public class X11LinuxAppRunnerSandboxRetryTest {
         assertTrue(host.notices.isEmpty());
     }
 
+    @Test public void anExitAfterTheWindowIsTooLateToChangeAnAlreadySettledSuccess() {
+        // A crash minutes into a healthy-looking run is out of scope for D7 — only proves the
+        // timeout and a late exit do not both act.
+        LinuxAppCatalog.LinuxApp app = app("typora");
+        runner.runAndWatch(app, "exec typora\n", false, DISPLAY, ENV);
+        idle();
+        assertEquals(1, host.scripts.size());
+
+        host.listeners.get(0).onExit(1); // arrives after the window already closed
+        assertEquals("no retry triggered by the late exit", 1, host.scripts.size());
+    }
+
     @Test public void aSuccessfulFlaggedRetryIsRemembered() {
         LinuxAppCatalog.LinuxApp app = app("typora");
-        host.nextExitCode = null; // the flag worked, so the process is still running
         runner.runAndWatch(app, "exec typora --no-sandbox\n", true, DISPLAY, ENV);
-        idle();
+        idle(); // the flag worked, so the process is still running when the window closes
 
         assertTrue("remembered for next time", runner.shouldStartWithNoSandbox(app));
     }
 
     @Test public void aRememberedAppStartsWithTheFlagOnTheVeryFirstAttempt() {
         LinuxAppCatalog.LinuxApp app = app("typora");
-        host.nextExitCode = null;
         runner.runAndWatch(app, "exec typora --no-sandbox\n", true, DISPLAY, ENV);
         idle();
 
@@ -113,9 +132,8 @@ public class X11LinuxAppRunnerSandboxRetryTest {
         new X11ElectronSandboxStore(context).remember(app.id);
         assertTrue(runner.shouldStartWithNoSandbox(app));
 
-        host.nextExitCode = 133; // now even the flagged command dies at once
         runner.runAndWatch(app, "exec typora --no-sandbox\n", true, DISPLAY, ENV);
-        idle();
+        host.listeners.get(0).onExit(133); // now even the flagged command dies at once
 
         assertFalse("forgotten so the next tap gets a fresh plain attempt",
             runner.shouldStartWithNoSandbox(app));
@@ -123,16 +141,28 @@ public class X11LinuxAppRunnerSandboxRetryTest {
         assertEquals("no second retry attempted", 1, host.scripts.size());
     }
 
+    @Test public void aTaskThatNeverStartsIsNotWatched() {
+        LinuxAppCatalog.LinuxApp app = app("typora");
+        host.startSucceeds = false;
+        runner.runAndWatch(app, "exec typora\n", false, DISPLAY, ENV);
+        idle();
+
+        assertTrue("nothing to remember or forget from a task that never ran",
+            host.notices.isEmpty());
+        assertFalse(runner.shouldStartWithNoSandbox(app));
+    }
+
     private void idle() {
         Shadows.shadowOf(Looper.getMainLooper())
             .idleFor(X11LinuxAppRunner.QUICK_FAIL_MS, TimeUnit.MILLISECONDS);
     }
 
-    /** A Host whose runScript is answered with a fixed exit code, recording every script it ran. */
+    /** A Host that records every script it was asked to run, and every listener it was handed. */
     private static final class FakeHost implements X11LinuxAppRunner.Host {
         final List<String> scripts = new ArrayList<>();
         final List<String> notices = new ArrayList<>();
-        @Nullable Integer nextExitCode;
+        final List<X11LinuxAppRunner.ScriptExitListener> listeners = new ArrayList<>();
+        boolean startSucceeds = true;
 
         @Override public boolean isDisplayEnabled() { return true; }
         @Override public void turnOnDisplay() { }
@@ -141,10 +171,11 @@ public class X11LinuxAppRunnerSandboxRetryTest {
         @Override public void showDisplayPlace() { }
         @Override public void showNotice(@NonNull String message) { notices.add(message); }
 
-        @Override @Nullable public X11LinuxAppRunner.ScriptHandle runScript(@NonNull String script) {
+        @Override public boolean runScript(@NonNull String script,
+                                           @NonNull X11LinuxAppRunner.ScriptExitListener onExit) {
             scripts.add(script);
-            Integer exitCode = nextExitCode;
-            return () -> exitCode;
+            listeners.add(onExit);
+            return startSucceeds;
         }
     }
 }
