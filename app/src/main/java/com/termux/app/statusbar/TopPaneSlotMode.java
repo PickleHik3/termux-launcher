@@ -6,6 +6,10 @@ package com.termux.app.statusbar;
  *
  * <p>Media only shares the slot with a single pinned card: the contention layout needs 40dp for the
  * card plus a 6dp gap plus the 20dp media strip, so a second card leaves no room for the strip.
+ *
+ * <p>Two cards are as many as the slot ever shows at once. Further matches are not squeezed in:
+ * the cards keep their size and the slot scrolls through them, so the clock never has to shrink
+ * past its compact face however many notifications match.
  */
 public enum TopPaneSlotMode {
     CLOCK_ONLY,
@@ -13,8 +17,14 @@ public enum TopPaneSlotMode {
     NOTIFICATIONS,
     NOTIFICATIONS_AND_MEDIA;
 
-    /** A fourth match evicts the oldest pin rather than growing the stack. */
-    public static final int MAX_PINNED = 3;
+    /** How many full cards the slot shows at once; the rest are a swipe away. */
+    public static final int VISIBLE_PINNED = 2;
+
+    /**
+     * How many matches are kept at all. It is no longer a drawing limit — the cards scroll — only
+     * a ceiling on what one pane holds, so an app posting a run of matches cannot fill it forever.
+     */
+    public static final int MAX_PINNED = 8;
 
     public static TopPaneSlotMode derive(int pinnedCount, boolean mediaActive) {
         int pinned = Math.max(0, Math.min(MAX_PINNED, pinnedCount));
@@ -41,11 +51,13 @@ public enum TopPaneSlotMode {
         return this == MEDIA || this == NOTIFICATIONS_AND_MEDIA;
     }
 
-    /** The full stack of three drops the clock to its mono chip; anything else shares one row. */
+    /**
+     * Anything sharing the slot leaves the clock its compact face. Nothing drops it to the mono
+     * chip any more: that was the three-row stack, which the scrolling cards replaced.
+     */
     public TopPaneClockForm clockForm(int pinnedCount) {
         switch (this) {
             case NOTIFICATIONS:
-                return pinnedCount >= MAX_PINNED ? TopPaneClockForm.MONO_CHIP : TopPaneClockForm.COMPACT;
             case NOTIFICATIONS_AND_MEDIA:
             case MEDIA:
                 return TopPaneClockForm.COMPACT;

@@ -34,7 +34,6 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     private static final float SIDE_MIN_DP = 120f;
     private static final long MEDIA_TRANSITION_MS = 180L;
     private static final long PINNED_TRANSITION_MS = 200L;
-    private static final float STACK_HEIGHT_DP = 66f;
 
     private static final Interpolator INTERPOLATOR = new PathInterpolator(.16f, 1f, .3f, 1f);
 
@@ -169,15 +168,16 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         List<PinnedNotification> pinned = TopPaneFeed.getPinned();
         TopPaneMediaState media = TopPaneFeed.getMedia();
         TopPaneSlotMode mode = TopPaneSlotMode.derive(pinned.size(), media != null);
-        int pinnedCount = mode.showsNotifications()
-            ? Math.min(pinned.size(), TopPaneSlotMode.MAX_PINNED) : 0;
+        // Every match is handed over: two fill the slot and the rest are a swipe away, so the
+        // count here is what matched, not what fits.
+        int pinnedCount = mode.showsNotifications() ? pinned.size() : 0;
 
         // Content is only refreshed while the view is claiming the slot: a view on its way out keeps
         // its last frame so the fade has something to fade.
         if (mNotifications != null && mode.showsNotifications()) {
             mNotifications.setItems(pinned);
             mNotifications.setCompactCard(mode == TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA
-                || pinnedCount == 2);
+                || pinnedCount >= TopPaneSlotMode.VISIBLE_PINNED);
         }
         if (mMedia != null && mode.showsMedia() && media != null) {
             mMedia.setForm(mode == TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA
@@ -309,7 +309,6 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         int contentStart = StatusBarLensView.leadingCellWidthPx(getContext());
         int contentEnd = width - gutter;
         int available = Math.max(0, contentEnd - contentStart);
-        boolean stacked = mMode.showsNotifications() && mPinnedCount >= TopPaneSlotMode.MAX_PINNED;
 
         int clockWidth;
         int clockHeight;
@@ -320,7 +319,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             clockWidth = Math.max(0, span[1] - span[0]);
             clockHeight = height;
         } else {
-            clockHeight = stacked ? Math.round(dp(14f)) : height;
+            clockHeight = height;
             mClock.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
                 MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
             // The clock keeps the width its compact face paints, as long as the media strip or
@@ -331,28 +330,16 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         }
         mClock.measure(MeasureSpec.makeMeasureSpec(clockWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
-        mClockBounds.set(clockStart, stacked ? 0 : (height - clockHeight) / 2,
-            clockStart + clockWidth, (stacked ? 0 : (height - clockHeight) / 2) + clockHeight);
+        mClockBounds.set(clockStart, (height - clockHeight) / 2,
+            clockStart + clockWidth, (height - clockHeight) / 2 + clockHeight);
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) return;
 
-        if (stacked) {
-            int stackHeight = Math.min(height, Math.round(dp(STACK_HEIGHT_DP)));
-            mNotificationBounds.set(contentStart, Math.max(0, (height - stackHeight) / 2),
-                contentEnd, Math.max(0, (height - stackHeight) / 2) + stackHeight);
-            if (mNotifications != null) {
-                mNotifications.setHeaderInsetStart(clockWidth + gap);
-                measureExact(mNotifications, mNotificationBounds);
-            }
-            return;
-        }
-
         int contentLeft = contentStart + clockWidth + gap;
         int contentRight = contentEnd;
         int contentWidth = Math.max(0, contentRight - contentLeft);
-        if (mNotifications != null) mNotifications.setHeaderInsetStart(0f);
 
         switch (mMode) {
             case NOTIFICATIONS_AND_MEDIA: {
@@ -368,7 +355,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
                 break;
             }
             case NOTIFICATIONS: {
-                // One card gets two body lines; two share the slot at one line each.
+                // One card gets two body lines and 48dp; two or more fill the slot at one line
+                // each, and anything past the second scrolls into the same two cards' room.
                 int desired = Math.round(dp(mPinnedCount == 1 ? 48f : 68f));
                 int cardsHeight = Math.min(height, desired);
                 int top = Math.max(0, (height - cardsHeight) / 2);
