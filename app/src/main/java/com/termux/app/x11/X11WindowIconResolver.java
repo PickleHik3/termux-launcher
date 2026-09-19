@@ -24,7 +24,8 @@ import java.util.concurrent.Executors;
 
 /**
  * The app icon a Display-place window chip wears: the window's {@code WM_CLASS} traced back to an
- * installed app's desktop file, its PNG loaded from the prefix, and the artwork reduced to a
+ * installed app's desktop file, its PNG loaded from the prefix or from its container, and the
+ * artwork reduced to a
  * single-colour silhouette small enough to sit behind a chip's label.
  *
  * <p>A window says which app drew it through the class part of its {@code WM_CLASS}; a desktop
@@ -115,9 +116,9 @@ public final class X11WindowIconResolver {
     private Bitmap resolve(@NonNull String wmClass) {
         try {
             LinuxAppCatalog.LinuxApp app = match(
-                LinuxAppCatalog.scan(LinuxAppCatalog.applicationDirs()), wmClass);
+                LinuxAppCatalog.scan(LinuxAppCatalog.roots()), wmClass);
             if (app == null) return null;
-            File file = LinuxAppIcons.find(app.icon, LinuxAppIcons.prefix());
+            File file = LinuxAppIcons.find(app);
             if (file == null) return null;
             Drawable drawable = LinuxAppIcons.load(resources, file);
             Bitmap source = drawable instanceof BitmapDrawable
@@ -141,7 +142,7 @@ public final class X11WindowIconResolver {
         String key = key(wmClass);
         if (key.isEmpty()) return null;
         for (LinuxAppCatalog.LinuxApp app : apps) {
-            if (key.equals(key(app.id))) return app;
+            if (key.equals(key(app.desktopFile))) return app;
         }
         for (LinuxAppCatalog.LinuxApp app : apps) {
             if (key.equals(key(app.startupWmClass))) return app;
@@ -150,7 +151,7 @@ public final class X11WindowIconResolver {
             if (key.equals(execBasename(app.exec))) return app;
         }
         for (LinuxAppCatalog.LinuxApp app : apps) {
-            if (key.equals(tail(key(app.id)))) return app;
+            if (key.equals(tail(key(app.desktopFile)))) return app;
         }
         return null;
     }

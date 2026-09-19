@@ -14961,13 +14961,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Re-list the prefix's Linux apps in the drawer when their desktop files changed — or, forced,
+     * Re-list the Linux apps — the prefix's and every container's — in the drawer when their
+     * desktop files changed, a distro was installed or removed, or, forced,
      * when the display was just switched on or off, which decides whether they are listed at all.
      */
     private void refreshLinuxApps(boolean force) {
         if (!com.termux.BuildConfig.X11_SERVER) return;
         long signature = com.termux.app.x11.LinuxAppCatalog.signature(
-            com.termux.app.x11.LinuxAppCatalog.applicationDirs());
+            com.termux.app.x11.LinuxAppCatalog.roots());
         if (!force && signature == mLinuxAppsSignature) return;
         mLinuxAppsSignature = signature;
         // Apps came or went, so a class that resolved to nothing may resolve now.
@@ -15005,7 +15006,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLinuxAppRunnerHook = entry -> {
             if (mLinuxApps == null) return false;
             java.util.List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
-                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.applicationDirs());
+                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots());
             com.termux.app.x11.LinuxAppCatalog.LinuxApp app = com.termux.app.x11.LinuxAppCatalog.find(
                 apps, com.termux.app.x11.X11Apps.desktopId(entry.appRef));
             if (app == null) {

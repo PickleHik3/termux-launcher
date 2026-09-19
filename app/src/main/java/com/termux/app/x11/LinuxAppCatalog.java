@@ -15,20 +15,43 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The Linux apps installed in the prefix, read from their {@code .desktop} files the way any
- * desktop's menu reads them. The launcher lists these in its app drawer beside Android apps; a
- * tap runs the app on the display.
+ * The Linux apps installed in the prefix and in every {@code proot-distro} container, read from
+ * their {@code .desktop} files the way any desktop's menu reads them. The launcher lists these in
+ * its app drawer beside Android apps; a tap runs the app on the display.
  *
  * <p>Pure file reading, so it is tested against fixture files. Nothing here touches the display.
  */
 public final class LinuxAppCatalog {
 
+    /** One directory of desktop files, and whose it is. */
+    public static final class Root {
+        @NonNull public final File dir;
+        @NonNull public final ProotDistro.Container container;
+
+        public Root(@NonNull File dir, @NonNull ProotDistro.Container container) {
+            this.dir = dir;
+            this.container = container;
+        }
+    }
+
     /** One launchable entry: what to show and what to run. */
     public static final class LinuxApp {
-        /** The desktop file's name without its extension — stable across reinstalls. */
+        /**
+         * The launcher-wide id — the desktop file's name for a prefix app, that name qualified by
+         * its container for one installed in a distro ({@link X11Apps#qualify}). Stable across
+         * reinstalls, and what pins and rankings are keyed on.
+         */
         @NonNull public final String id;
+        /** The desktop file's own name without its extension, unqualified. */
+        @NonNull public final String desktopFile;
+        /** Where this app lives: the prefix, or one distro container. */
+        @NonNull public final ProotDistro.Container container;
+        /** What the app calls itself. The container is never part of it. */
         @NonNull public final String name;
-        /** The Exec line with its field codes ({@code %f %u …}) removed; a shell command line. */
+        /**
+         * The Exec line with its field codes ({@code %f %u …}) removed; a shell command line, in
+         * the app's own world. {@link #command()} is what a host shell runs.
+         */
         @NonNull public final String exec;
         /** The Icon key: a theme icon name or an absolute path, or empty. */
         @NonNull public final String icon;
@@ -40,64 +63,123 @@ public final class LinuxAppCatalog {
          */
         @NonNull public final String startupWmClass;
 
-        LinuxApp(@NonNull String id, @NonNull String name, @NonNull String exec,
+        LinuxApp(@NonNull String desktopFile, @NonNull String name, @NonNull String exec,
                  @NonNull String icon, @NonNull String comment) {
-            this(id, name, exec, icon, comment, "");
+            this(desktopFile, name, exec, icon, comment, "");
         }
 
-        LinuxApp(@NonNull String id, @NonNull String name, @NonNull String exec,
+        LinuxApp(@NonNull String desktopFile, @NonNull String name, @NonNull String exec,
                  @NonNull String icon, @NonNull String comment, @NonNull String startupWmClass) {
-            this.id = id;
+            this(ProotDistro.Container.PREFIX, desktopFile, name, exec, icon, comment, startupWmClass);
+        }
+
+        LinuxApp(@NonNull ProotDistro.Container container, @NonNull String desktopFile,
+                 @NonNull String name, @NonNull String exec, @NonNull String icon,
+                 @NonNull String comment, @NonNull String startupWmClass) {
+            this.container = container;
+            this.desktopFile = desktopFile;
+            this.id = X11Apps.qualify(container.name, desktopFile);
             this.name = name;
             this.exec = exec;
             this.icon = icon;
             this.comment = comment;
             this.startupWmClass = startupWmClass;
         }
+
+        /**
+         * The shell line that runs this app: its own command for a prefix app, that command inside
+         * a {@code proot-distro login} for one in a container.
+         */
+        @NonNull
+        public String command() {
+            return commandWith("");
+        }
+
+        /**
+         * {@link #command()} with {@code extraArgs} appended to the app's own command — the same
+         * wrapping, one more flag, for a caller that has to run the app a second way.
+         */
+        @NonNull
+        public String commandWith(@NonNull String extraArgs) {
+            String command = extraArgs.isEmpty() ? exec : exec + " " + extraArgs;
+            return ProotDistro.loginCommand(container, command);
+        }
     }
 
     private LinuxAppCatalog() {}
 
-    /** Where the prefix keeps desktop files. */
+    /**
+     * Every directory of desktop files worth reading: the prefix's, then each installed
+     * container's. Re-enumerated on every call, so a distro installed a moment ago is simply
+     * there — nothing is watched and nothing is remembered.
+     */
     @NonNull
-    public static List<File> applicationDirs() {
-        String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
-        List<File> dirs = new ArrayList<>(2);
-        dirs.add(new File(prefix + "/share/applications"));
-        dirs.add(new File(prefix + "/local/share/applications"));
-        return dirs;
+    public static List<Root> roots() {
+        List<Root> roots = new ArrayList<>(rootsOf(ProotDistro.Container.PREFIX));
+        for (ProotDistro.Container container : ProotDistro.containers(ProotDistro.containersDir())) {
+            roots.addAll(rootsOf(container));
+        }
+        return roots;
     }
 
-    /** Every launchable app in {@code dirs}, sorted by name; a later dir does not shadow an earlier id. */
+    /** One container's directories, as roots. */
     @NonNull
-    public static List<LinuxApp> scan(@NonNull List<File> dirs) {
+    public static List<Root> rootsOf(@NonNull ProotDistro.Container container) {
+        List<Root> roots = new ArrayList<>(3);
+        for (File dir : container.applicationDirs()) roots.add(new Root(dir, container));
+        return roots;
+    }
+
+    /** Plain directories read as the prefix's, for a caller that has its own list of them. */
+    @NonNull
+    public static List<Root> prefixRoots(@NonNull List<File> dirs) {
+        List<Root> roots = new ArrayList<>(dirs.size());
+        for (File dir : dirs) roots.add(new Root(dir, ProotDistro.Container.PREFIX));
+        return roots;
+    }
+
+    /**
+     * Every launchable app in {@code roots}, sorted by name; a later root does not shadow an
+     * earlier id. Ids carry their container, so the same desktop file in the prefix and in two
+     * distros is three entries, not one.
+     */
+    @NonNull
+    public static List<LinuxApp> scan(@NonNull List<Root> roots) {
         List<LinuxApp> apps = new ArrayList<>();
         List<String> seen = new ArrayList<>();
-        for (File dir : dirs) {
-            File[] files = dir.listFiles((d, name) -> name.endsWith(".desktop"));
+        for (Root root : roots) {
+            File[] files = root.dir.listFiles((d, name) -> name.endsWith(".desktop"));
             if (files == null) continue;
             for (File file : files) {
-                String id = file.getName().substring(0, file.getName().length() - ".desktop".length());
+                String desktopFile =
+                    file.getName().substring(0, file.getName().length() - ".desktop".length());
+                String id = X11Apps.qualify(root.container.name, desktopFile);
                 if (seen.contains(id)) continue;
-                LinuxApp app = parse(id, file);
+                LinuxApp app = parse(root.container, desktopFile, file);
                 if (app == null) continue;
                 seen.add(id);
                 apps.add(app);
             }
         }
-        Collections.sort(apps, (a, b) -> a.name.compareToIgnoreCase(b.name));
+        // Two distros can both call an app Firefox; the id breaks the tie so the order is stable.
+        Collections.sort(apps, (a, b) -> {
+            int byName = a.name.compareToIgnoreCase(b.name);
+            return byName != 0 ? byName : a.id.compareTo(b.id);
+        });
         return apps;
     }
 
     /**
-     * A cheap fingerprint of {@code dirs} — their modification times — so a caller can tell that
-     * something was installed or removed without reading every file.
+     * A cheap fingerprint of {@code roots} — their modification times — so a caller can tell that
+     * something was installed or removed without reading every file. A container that appears or
+     * goes brings its roots with it, so installing a whole distro moves this too.
      */
-    public static long signature(@NonNull List<File> dirs) {
+    public static long signature(@NonNull List<Root> roots) {
         long signature = 0L;
-        for (File dir : dirs) {
-            signature = signature * 31 + dir.lastModified();
-            String[] names = dir.list();
+        for (Root root : roots) {
+            signature = signature * 31 + root.container.name.hashCode();
+            signature = signature * 31 + root.dir.lastModified();
+            String[] names = root.dir.list();
             signature = signature * 31 + (names == null ? -1 : names.length);
         }
         return signature;
@@ -109,7 +191,8 @@ public final class LinuxAppCatalog {
      * not installed.
      */
     @Nullable
-    static LinuxApp parse(@NonNull String id, @NonNull File file) {
+    static LinuxApp parse(@NonNull ProotDistro.Container container, @NonNull String desktopFile,
+                          @NonNull File file) {
         String type = "", name = "", exec = "", icon = "", comment = "", tryExec = "";
         String startupWmClass = "";
         boolean noDisplay = false, hidden = false, terminal = false, inEntry = false;
@@ -146,12 +229,19 @@ public final class LinuxAppCatalog {
         }
         if (!"Application".equals(type) || name.isEmpty() || exec.isEmpty()) return null;
         if (noDisplay || hidden || terminal) return null;
-        if (!tryExec.isEmpty() && !executableExists(tryExec, file)) return null;
-        return new LinuxApp(id, name, stripFieldCodes(exec), icon, comment, startupWmClass);
+        if (!tryExec.isEmpty() && !executableExists(container, tryExec, file)) return null;
+        return new LinuxApp(container, desktopFile, name, stripFieldCodes(exec), icon, comment,
+            startupWmClass);
     }
 
-    private static boolean executableExists(@NonNull String tryExec, @NonNull File desktopFile) {
-        if (tryExec.startsWith("/")) return new File(tryExec).canExecute();
+    private static boolean executableExists(@NonNull ProotDistro.Container container,
+                                            @NonNull String tryExec, @NonNull File desktopFile) {
+        // Absolute inside a container means absolute in the container's world, not Android's.
+        if (tryExec.startsWith("/")) return container.inside(tryExec).canExecute();
+        if (!container.isPrefix()) {
+            return container.inside("/usr/bin/" + tryExec).canExecute()
+                || container.inside("/usr/local/bin/" + tryExec).canExecute();
+        }
         // Relative: the prefix's bin, or — for fixtures — the directory beside the desktop file.
         return new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH, tryExec).canExecute()
             || new File(desktopFile.getParentFile(), tryExec).canExecute();

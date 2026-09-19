@@ -3,6 +3,7 @@ package com.termux.app.x11;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -12,19 +13,42 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
-/** Desktop files in, drawer entries out: what is shown, what is skipped, what gets run. */
+/**
+ * Desktop files in, drawer entries out: what is shown, what is skipped, what gets run — for the
+ * prefix and for the distro containers beside it.
+ */
 public class LinuxAppCatalogTest {
 
     @Rule public TemporaryFolder temp = new TemporaryFolder();
 
     private File write(File dir, String name, String content) throws IOException {
         File file = new File(dir, name);
+        file.getParentFile().mkdirs();
         Files.write(file.toPath(), content.getBytes(StandardCharsets.UTF_8));
         return file;
+    }
+
+    /** Plain fixture directories, read as the prefix's own. */
+    private static List<LinuxAppCatalog.Root> host(File... dirs) {
+        return LinuxAppCatalog.prefixRoots(Arrays.asList(dirs));
+    }
+
+    /**
+     * A container fixture: a {@code containers/<name>/rootfs} tree with a passwd of its own, read
+     * the way the launcher reads a real one.
+     */
+    private ProotDistro.Container container(File containers, String name, String passwd)
+            throws IOException {
+        File rootfs = new File(containers, name + "/rootfs");
+        assertTrue(new File(rootfs, "usr/share/applications").mkdirs());
+        write(rootfs, "etc/passwd", passwd);
+        ProotDistro.Container found = ProotDistro.byName(ProotDistro.containers(containers), name);
+        assertNotNull(found);
+        return found;
     }
 
     @Test public void applicationsAreListedSortedWithTheirExecCleanedUp() throws IOException {
@@ -36,7 +60,7 @@ public class LinuxAppCatalogTest {
         write(dir, "feh.desktop", "[Desktop Entry]\nType=Application\nName=feh\n"
             + "Exec=feh --start-at %f\nIcon=/usr/share/feh.png\n");
 
-        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(Collections.singletonList(dir));
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(dir));
 
         assertEquals(Arrays.asList("feh", "Firefox", "Kate"),
             Arrays.asList(apps.get(0).name, apps.get(1).name, apps.get(2).name));
@@ -56,7 +80,7 @@ public class LinuxAppCatalogTest {
         write(dir, "firefox.desktop", "[Desktop Entry]\nType=Application\nName=Firefox\n"
             + "Exec=firefox %u\nIcon=firefox\n");
 
-        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(Collections.singletonList(dir));
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(dir));
 
         assertEquals("Code", LinuxAppCatalog.find(apps, "code-oss").startupWmClass);
         assertEquals("", LinuxAppCatalog.find(apps, "firefox").startupWmClass);
@@ -72,7 +96,7 @@ public class LinuxAppCatalogTest {
         write(dir, "notes.txt", "[Desktop Entry]\nType=Application\nName=T\nExec=t\n");
         write(dir, "shown.desktop", "[Desktop Entry]\nType=Application\nName=Shown\nExec=shown\n");
 
-        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(Collections.singletonList(dir));
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(dir));
 
         assertEquals(1, apps.size());
         assertEquals("shown", apps.get(0).id);
@@ -86,7 +110,7 @@ public class LinuxAppCatalogTest {
         write(dir, "present.desktop", "[Desktop Entry]\nType=Application\nName=P\nExec=present-bin\nTryExec=present-bin\n");
         write(dir, "missing.desktop", "[Desktop Entry]\nType=Application\nName=M\nExec=m\nTryExec=/nonexistent/m\n");
 
-        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(Collections.singletonList(dir));
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(dir));
 
         assertEquals(1, apps.size());
         assertEquals("present", apps.get(0).id);
@@ -97,7 +121,7 @@ public class LinuxAppCatalogTest {
         write(dir, "a.desktop", "[Desktop Entry]\nType=Application\nName=Real\nExec=real\n"
             + "[Desktop Action new-window]\nName=New Window\nExec=real --new-window\n");
 
-        LinuxAppCatalog.LinuxApp app = LinuxAppCatalog.scan(Collections.singletonList(dir)).get(0);
+        LinuxAppCatalog.LinuxApp app = LinuxAppCatalog.scan(host(dir)).get(0);
 
         assertEquals("Real", app.name);
         assertEquals("real", app.exec);
@@ -109,7 +133,7 @@ public class LinuxAppCatalogTest {
         write(system, "x.desktop", "[Desktop Entry]\nType=Application\nName=System\nExec=x\n");
         write(local, "x.desktop", "[Desktop Entry]\nType=Application\nName=Local\nExec=x\n");
 
-        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(Arrays.asList(system, local));
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(system, local));
 
         assertEquals(1, apps.size());
         assertEquals("System", apps.get(0).name);
@@ -126,12 +150,12 @@ public class LinuxAppCatalogTest {
     @Test public void theSignatureChangesWhenAFileIsAddedAndIsStableOtherwise() throws Exception {
         File dir = temp.newFolder("applications");
         write(dir, "a.desktop", "[Desktop Entry]\nType=Application\nName=A\nExec=a\n");
-        long before = LinuxAppCatalog.signature(Collections.singletonList(dir));
-        assertEquals(before, LinuxAppCatalog.signature(Collections.singletonList(dir)));
+        long before = LinuxAppCatalog.signature(host(dir));
+        assertEquals(before, LinuxAppCatalog.signature(host(dir)));
 
         write(dir, "b.desktop", "[Desktop Entry]\nType=Application\nName=B\nExec=b\n");
 
-        org.junit.Assert.assertNotEquals(before, LinuxAppCatalog.signature(Collections.singletonList(dir)));
+        org.junit.Assert.assertNotEquals(before, LinuxAppCatalog.signature(host(dir)));
     }
 
     @Test public void iconFilesAreFoundInHicolorThenPixmaps() throws IOException {
@@ -151,5 +175,133 @@ public class LinuxAppCatalogTest {
         assertNull(LinuxAppIcons.find("", prefix));
         assertEquals(new File(big, "firefox.png"),
             LinuxAppIcons.find(new File(big, "firefox.png").getPath(), prefix));
+    }
+
+    // --- distro containers -----------------------------------------------------------------
+
+    private static final String PASSWD_WITH_USER =
+        "root:x:0:0:root:/root:/bin/bash\n"
+        + "daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n"
+        + "nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin\n"
+        + "amal:x:1000:1000::/home/amal:/bin/bash\n"
+        + "second:x:1001:1001::/home/second:/bin/bash\n";
+
+    @Test public void aContainerAppIsListedUnderItsOwnNameWithAContainerQualifiedId() throws IOException {
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        write(debian.root, "usr/share/applications/typora.desktop",
+            "[Desktop Entry]\nType=Application\nName=Typora\nExec=typora %U\nIcon=typora\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(debian));
+
+        assertEquals(1, apps.size());
+        // The tile says what the app calls itself; the container lives in the id, not the name.
+        assertEquals("Typora", apps.get(0).name);
+        assertEquals("distro:debian:typora", apps.get(0).id);
+        assertEquals("typora", apps.get(0).desktopFile);
+        assertEquals("debian", apps.get(0).container.name);
+        assertEquals("debian", X11Apps.containerOf(apps.get(0).id));
+        assertEquals("typora", X11Apps.desktopFileOf(apps.get(0).id));
+    }
+
+    @Test public void theSameDesktopFileInThePrefixAndInTwoContainersIsThreeEntries() throws IOException {
+        File prefixApps = temp.newFolder("share", "applications");
+        write(prefixApps, "firefox.desktop",
+            "[Desktop Entry]\nType=Application\nName=Firefox\nExec=firefox\n");
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        ProotDistro.Container arch = container(containers, "archlinux", PASSWD_WITH_USER);
+        write(debian.root, "usr/share/applications/firefox.desktop",
+            "[Desktop Entry]\nType=Application\nName=Firefox\nExec=firefox\n");
+        write(arch.root, "usr/share/applications/firefox.desktop",
+            "[Desktop Entry]\nType=Application\nName=Firefox\nExec=firefox\n");
+
+        List<LinuxAppCatalog.Root> roots = new ArrayList<>(host(prefixApps));
+        roots.addAll(LinuxAppCatalog.rootsOf(debian));
+        roots.addAll(LinuxAppCatalog.rootsOf(arch));
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(roots);
+
+        assertEquals(3, apps.size());
+        // All three are called Firefox, so the id breaks the tie and the order never wobbles.
+        assertEquals(Arrays.asList("distro:archlinux:firefox", "distro:debian:firefox", "firefox"),
+            Arrays.asList(apps.get(0).id, apps.get(1).id, apps.get(2).id));
+        // Each one is still reachable by its own id, which is what a pin stores.
+        assertNotNull(LinuxAppCatalog.find(apps, "firefox"));
+        assertEquals("debian", LinuxAppCatalog.find(apps, "distro:debian:firefox").container.name);
+    }
+
+    @Test public void aContainerAppRunsThroughProotDistroAndKeepsItsOwnQuoting() throws IOException {
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        write(debian.root, "usr/share/applications/greet.desktop",
+            "[Desktop Entry]\nType=Application\nName=Greet\nExec=greet --title 'My App' %f\n");
+
+        LinuxAppCatalog.LinuxApp app = LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(debian)).get(0);
+
+        assertEquals("greet --title 'My App'", app.exec);
+        assertEquals("proot-distro login debian -u amal --shared-x11"
+            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
+            + " -- /bin/sh -c 'greet --title '\\''My App'\\'''", app.command());
+        // What a later phase appends goes to the app, inside the wrapper.
+        assertTrue(app.commandWith("--no-sandbox")
+            .endsWith("-- /bin/sh -c 'greet --title '\\''My App'\\'' --no-sandbox'"));
+    }
+
+    @Test public void aPrefixAppStillRunsItsOwnCommandUnwrapped() throws IOException {
+        File dir = temp.newFolder("applications");
+        write(dir, "feh.desktop", "[Desktop Entry]\nType=Application\nName=feh\nExec=feh --start-at %f\n");
+
+        LinuxAppCatalog.LinuxApp app = LinuxAppCatalog.scan(host(dir)).get(0);
+
+        assertEquals("feh --start-at", app.command());
+        assertEquals("feh --start-at --no-sandbox", app.commandWith("--no-sandbox"));
+    }
+
+    @Test public void theSignatureMovesWhenAContainerIsInstalledOrItsAppsChange() throws IOException {
+        File prefixApps = temp.newFolder("share", "applications");
+        File containers = temp.newFolder("containers");
+        long empty = LinuxAppCatalog.signature(host(prefixApps));
+
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        List<LinuxAppCatalog.Root> withContainer = new ArrayList<>(host(prefixApps));
+        withContainer.addAll(LinuxAppCatalog.rootsOf(debian));
+        long installed = LinuxAppCatalog.signature(withContainer);
+        org.junit.Assert.assertNotEquals(empty, installed);
+
+        write(debian.root, "usr/share/applications/gimp.desktop",
+            "[Desktop Entry]\nType=Application\nName=GIMP\nExec=gimp\n");
+
+        org.junit.Assert.assertNotEquals(installed, LinuxAppCatalog.signature(withContainer));
+    }
+
+    @Test public void aContainerIconIsFoundInsideItsRootfs() throws IOException {
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        write(debian.root, "usr/share/icons/hicolor/128x128/apps/typora.png", "png");
+        write(debian.root, "usr/share/pixmaps/greet.png", "png");
+        write(debian.root, "usr/share/applications/typora.desktop",
+            "[Desktop Entry]\nType=Application\nName=Typora\nExec=typora\nIcon=typora\n");
+        // An Icon= path is absolute in the container's world, so it is read through the rootfs.
+        write(debian.root, "usr/share/applications/greet.desktop",
+            "[Desktop Entry]\nType=Application\nName=Greet\nExec=greet\nIcon=/usr/share/pixmaps/greet.png\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(debian));
+
+        assertEquals(new File(debian.root, "usr/share/icons/hicolor/128x128/apps/typora.png"),
+            LinuxAppIcons.find(LinuxAppCatalog.find(apps, "distro:debian:typora")));
+        assertEquals(new File(debian.root, "usr/share/pixmaps/greet.png"),
+            LinuxAppIcons.find(LinuxAppCatalog.find(apps, "distro:debian:greet")));
+    }
+
+    @Test public void aContainerAlsoOffersItsUsersOwnApplicationsDirectory() throws IOException {
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        write(debian.root, "home/amal/.local/share/applications/mine.desktop",
+            "[Desktop Entry]\nType=Application\nName=Mine\nExec=mine\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(debian));
+
+        assertEquals(1, apps.size());
+        assertEquals("distro:debian:mine", apps.get(0).id);
     }
 }

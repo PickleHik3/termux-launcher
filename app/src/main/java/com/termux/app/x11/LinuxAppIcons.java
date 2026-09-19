@@ -9,15 +9,13 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.shared.termux.TermuxConstants;
-
 import java.io.File;
 
 /**
- * Where a Linux app's icon lives in the prefix, and how it is loaded small enough to sit in the
- * launcher's budgeted icon store. Theme lookup is the freedesktop one cut to what matters: the
- * hicolor theme's PNG sizes, largest useful first, then the pixmaps directory. SVG is not
- * rendered — the drawer falls back to its generic mark for those.
+ * Where a Linux app's icon lives — in the prefix or inside a distro container — and how it is
+ * loaded small enough to sit in the launcher's budgeted icon store. Theme lookup is the
+ * freedesktop one cut to what matters: the hicolor theme's PNG sizes, largest useful first, then
+ * the pixmaps directory. SVG is not rendered — the drawer falls back to its generic mark for those.
  */
 public final class LinuxAppIcons {
 
@@ -29,6 +27,26 @@ public final class LinuxAppIcons {
     };
 
     private LinuxAppIcons() {}
+
+    /**
+     * The icon file for an app, wherever the app lives. A container names its paths in its own
+     * world and keeps its icons under its {@code /usr}, so both are resolved against its rootfs —
+     * which is inside the launcher's own data directory, and so an ordinary readable file.
+     */
+    @Nullable
+    public static File find(@NonNull LinuxAppCatalog.LinuxApp app) {
+        return find(app.icon, app.container);
+    }
+
+    /** The icon file for an {@code Icon=} value belonging to {@code container}, or null. */
+    @Nullable
+    public static File find(@NonNull String iconName, @NonNull ProotDistro.Container container) {
+        if (!iconName.isEmpty() && iconName.startsWith("/")) {
+            File file = container.inside(iconName);
+            return file.isFile() && isPng(file) ? file : null;
+        }
+        return find(iconName, container.iconPrefix());
+    }
 
     /**
      * The icon file for an {@code Icon=} value under {@code prefix}, or null. Absolute paths are
@@ -67,11 +85,5 @@ public final class LinuxAppIcons {
         while (edge / options.inSampleSize > MAX_EDGE_PX) options.inSampleSize *= 2;
         Bitmap bitmap = BitmapFactory.decodeFile(file.getPath(), options);
         return bitmap == null ? null : new BitmapDrawable(resources, bitmap);
-    }
-
-    /** The prefix icons are searched under, for production callers. */
-    @NonNull
-    public static File prefix() {
-        return new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH);
     }
 }
