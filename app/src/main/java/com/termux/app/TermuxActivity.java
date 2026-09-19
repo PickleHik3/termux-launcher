@@ -14985,10 +14985,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
                 @Override public boolean isDisplayRunning() { return isEmbeddedDisplayRunning(); }
                 @Override public void startDisplay() { startEmbeddedDisplay(); }
-                @Override public void runScript(@NonNull String script) {
-                    if (mTermuxService == null) return;
-                    mTermuxService.createTermuxTask(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
-                        new String[]{"-c", script}, null, TermuxConstants.TERMUX_HOME_DIR_PATH);
+                @Override @Nullable public com.termux.app.x11.X11LinuxAppRunner.ScriptHandle runScript(@NonNull String script) {
+                    if (mTermuxService == null) return null;
+                    com.termux.shared.shell.command.runner.app.AppShell shell =
+                        mTermuxService.createTermuxTask(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
+                            new String[]{"-c", script}, null, TermuxConstants.TERMUX_HOME_DIR_PATH);
+                    if (shell == null) return null;
+                    // The exit code is set on AppShell's own worker thread once the process ends;
+                    // TermuxService reads the same field the same way from its posted callback.
+                    return () -> shell.getExecutionCommand().resultData.exitCode;
                 }
                 @Override public void showDisplayPlace() {
                     if (mPaneWallController != null) {
