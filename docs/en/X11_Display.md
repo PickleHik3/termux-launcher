@@ -253,12 +253,20 @@ The display server's socket lives in the launcher's `$TMPDIR`, so a proot needs 
 ```sh
 pkg install proot-distro
 proot-distro install archlinux
-termux-x11 :0 -ac &
-proot-distro login archlinux --shared-tmp -e DISPLAY=:0
+termux-x11 :0 &
+proot-distro login archlinux --shared-x11 -e DISPLAY=:0
 ```
 
+`--shared-x11` hands the container the socket directory and nothing else; `--shared-tmp` shares
+the whole temporary directory and works too. Neither is on by default. `DISPLAY` has to be passed
+in with `-e` — exporting it in your Termux shell does not carry it across. The server needs no
+`-ac` and the container needs no `xauth`.
+
 Inside, install and start any X11 desktop or app as usual (`pacman -S xfce4 && startxfce4`, or a
-single app). GPU profiles work inside the proot too: install the *distro's* Mesa, export the same
+single app). To give one of those apps a tile in the app drawer, see
+[Linux apps from a distro](Linux_Apps_From_A_Distro.md).
+
+GPU profiles work inside the proot too: install the *distro's* Mesa, export the same
 variables in the proot shell, and — for the `virgl` profiles — keep `virgl_test_server_android`
 running in Termux and export `VTEST_SOCKET_NAME=/tmp/.virgl_test` inside the proot.
 

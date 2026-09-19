@@ -51,7 +51,10 @@ ICD_DIR=$PREFIX/share/vulkan/icd.d
 OUT_DIR=$HOME/.config/termux-launcher
 OUT_FILE=$OUT_DIR/x11-gpu.env
 LOG=$TMPDIR/x11-gpu-setup.log
-DISTRO_ROOT=$PREFIX/var/lib/proot-distro/installed-rootfs/debian
+# proot-distro 5.x keeps a container's root under containers/<name>/rootfs; older versions
+# used installed-rootfs/<name>. Take whichever is there.
+DISTRO_ROOT=$PREFIX/var/lib/proot-distro/containers/debian/rootfs
+[ -d "$DISTRO_ROOT" ] || DISTRO_ROOT=$PREFIX/var/lib/proot-distro/installed-rootfs/debian
 TEST_DISPLAY=":$DISPLAY_NO"
 
 # The short 3D test. Off-screen so the display does not pace it, three heavy scenes so software
