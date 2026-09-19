@@ -34,8 +34,8 @@
       "clips": [
         "palette"
       ],
-      "alt": "Swipe up on the space bar, type \"split\", results appear.",
-      "note": "Swipe up on the space bar, type \"split\", results appear."
+      "alt": "Swipe up on the space bar, type \"split\": the palette lists the matching actions.",
+      "note": "Swipe up on the space bar, type \"split\": the palette lists the matching actions."
     },
     {
       "topic": "status",
@@ -1362,26 +1362,26 @@
       "video": "palette.mp4",
       "poster": "palette.jpg",
       "width": 600,
-      "height": 350,
-      "duration": 14.33,
-      "bytes": 93558,
+      "height": 390,
+      "duration": 9.93,
+      "bytes": 132074,
       "bands": [
         [
           0,
-          400,
+          420,
           600,
-          260
+          290
         ],
         [
           0,
-          1160,
+          1150,
           600,
-          90
+          100
         ]
       ],
       "gestures": [
         {
-          "t": 1.29,
+          "t": 1.2,
           "kind": "swipe",
           "points": [
             300,
@@ -2022,50 +2022,41 @@
       "video": "windows.mp4",
       "poster": "windows.jpg",
       "width": 600,
-      "height": 42,
-      "duration": 13.57,
-      "bytes": 25206,
+      "height": 140,
+      "duration": 5.8,
+      "bytes": 130472,
       "bands": [
         [
           0,
           0,
           600,
-          42
+          140
         ]
       ],
       "gestures": [
         {
-          "t": 0.89,
+          "t": 1.2,
           "kind": "tap",
           "points": [
-            74,
+            157,
             18
           ],
           "duration": 0.65
         },
         {
-          "t": 3.56,
+          "t": 2.44,
           "kind": "tap",
           "points": [
-            74,
+            73,
             18
           ],
           "duration": 0.65
         },
         {
-          "t": 6.43,
+          "t": 3.67,
           "kind": "tap",
           "points": [
-            108,
-            18
-          ],
-          "duration": 0.65
-        },
-        {
-          "t": 9.6,
-          "kind": "tap",
-          "points": [
-            111,
+            120,
             18
           ],
           "duration": 0.65
@@ -2077,20 +2068,20 @@
       "video": "workspaces.mp4",
       "poster": "workspaces.jpg",
       "width": 600,
-      "height": 450,
+      "height": 490,
       "duration": 11.33,
-      "bytes": 78822,
+      "bytes": 81555,
       "bands": [
         [
           0,
           380,
           600,
-          450
+          490
         ]
       ],
       "gestures": [
         {
-          "t": 0.89,
+          "t": 0.8,
           "kind": "swipe",
           "points": [
             300,
@@ -2101,7 +2092,7 @@
           "duration": 0.15
         },
         {
-          "t": 6.96,
+          "t": 6.87,
           "kind": "tap",
           "points": [
             150,
