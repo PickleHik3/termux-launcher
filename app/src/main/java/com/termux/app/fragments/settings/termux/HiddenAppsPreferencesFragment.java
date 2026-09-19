@@ -83,8 +83,14 @@ public final class HiddenAppsPreferencesFragment extends MaterialPreferenceFragm
     /** The catalogue walk is blocking; keep it off the fragment-creation thread. */
     private void loadAsync(@NonNull Context appContext) {
         loadExecutor.execute(() -> {
-            List<LauncherAppEntry> apps = new ArrayList<>(LauncherAppDataProvider.getInstance(appContext)
-                .getAllAppsIncludingHiddenBlocking());
+            // Linux apps only: this screen exists to keep a distro's menu out of the drawer, and a
+            // distro with a desktop installed brings dozens of entries at once. Android apps have
+            // the system's own ways of being tidied and are left out of it.
+            List<LauncherAppEntry> apps = new ArrayList<>();
+            for (LauncherAppEntry entry : LauncherAppDataProvider.getInstance(appContext)
+                    .getAllAppsIncludingHiddenBlocking()) {
+                if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) apps.add(entry);
+            }
             apps.sort(Comparator.comparing((LauncherAppEntry entry) -> entry.label,
                 String.CASE_INSENSITIVE_ORDER));
             handler.post(() -> bind(appContext, apps));
