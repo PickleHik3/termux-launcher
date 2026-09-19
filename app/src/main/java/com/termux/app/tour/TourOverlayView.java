@@ -255,6 +255,9 @@ public final class TourOverlayView extends FrameLayout {
         button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         button.setTextColor(mAccent);
         button.setAllCaps(false);
+        // A TextView sits its text at the top; the action buttons are 48dp tall, so without this
+        // the label rides the top edge and the rest of the box hangs empty beneath it.
+        button.setGravity(Gravity.CENTER);
         button.setPadding(dp(8), dp(6), dp(8), dp(6));
         button.setBackground(buttonBackground());
         button.setOnClickListener(onClick);
