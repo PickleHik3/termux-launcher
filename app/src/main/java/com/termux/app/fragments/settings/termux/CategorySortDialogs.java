@@ -34,10 +34,10 @@ import com.termux.ai.TaiModelRegistry;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.data.LauncherCategoryCatalogue;
 import com.termux.app.launcher.data.LauncherCategoryPasteImporter;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
 import com.termux.app.launcher.data.LauncherCategorySortPrompt;
-import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.shared.interact.ShareUtils;
 
 import java.util.ArrayList;
@@ -113,12 +113,9 @@ final class CategorySortDialogs {
      */
     @NonNull
     static List<LauncherCategorySortPrompt.AppEntry> loadApps(@NonNull Context context) {
-        LinkedHashMap<String, String> labelByPackage = new LinkedHashMap<>();
-        for (LauncherAppEntry entry : LauncherAppDataProvider.getInstance(context).getAllAppsBlocking()) {
-            if (entry == null) continue;
-            if (labelByPackage.containsKey(entry.appRef.packageName)) continue;
-            labelByPackage.put(entry.appRef.packageName, entry.label);
-        }
+        // Excludes x11:linux too; see LauncherCategoryCatalogue for why.
+        LinkedHashMap<String, String> labelByPackage = LauncherCategoryCatalogue.labelByPackage(
+            LauncherAppDataProvider.getInstance(context).getAllAppsBlocking());
         List<LauncherCategorySortPrompt.AppEntry> apps = new ArrayList<>();
         for (Map.Entry<String, String> app : labelByPackage.entrySet())
             apps.add(new LauncherCategorySortPrompt.AppEntry(app.getKey(),

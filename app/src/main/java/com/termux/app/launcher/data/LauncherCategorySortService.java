@@ -17,7 +17,6 @@ import androidx.core.app.NotificationCompat;
 import com.termux.R;
 import com.termux.ai.TaiManager;
 import com.termux.app.activities.SettingsActivity;
-import com.termux.app.launcher.model.LauncherAppEntry;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -183,14 +182,10 @@ public final class LauncherCategorySortService extends Service {
 
     private void runSort(@Nullable String modelId) throws Exception {
         LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(this);
-        LinkedHashMap<String, String> labelByPackage = new LinkedHashMap<>();
-        for (LauncherAppEntry entry : provider.getAllAppsBlocking()) {
-            if (entry == null) continue;
-            // The config file is package-keyed, but a package shows up once per work/private
-            // profile, so collapse to the first entry instead of classifying it twice.
-            if (labelByPackage.containsKey(entry.appRef.packageName)) continue;
-            labelByPackage.put(entry.appRef.packageName, entry.label);
-        }
+        // Excludes x11:linux (every Linux app's shared package) as well as work/private twins; see
+        // LauncherCategoryCatalogue for why the categoriser must never see that one as an "app".
+        LinkedHashMap<String, String> labelByPackage =
+            LauncherCategoryCatalogue.labelByPackage(provider.getAllAppsBlocking());
 
         File file = LauncherCategoryFile.defaultFile();
         LauncherCategoryFile existing;

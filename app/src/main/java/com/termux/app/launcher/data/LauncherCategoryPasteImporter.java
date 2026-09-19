@@ -5,7 +5,7 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.x11.X11Apps;
 
 import java.io.File;
 import java.io.StringReader;
@@ -61,12 +61,10 @@ public final class LauncherCategoryPasteImporter {
      */
     @NonNull
     public static LinkedHashSet<String> knownPackages(@NonNull Context context) {
-        LinkedHashSet<String> packages = new LinkedHashSet<>();
-        for (LauncherAppEntry entry : LauncherAppDataProvider.getInstance(context).getAllAppsBlocking()) {
-            if (entry == null) continue;
-            packages.add(entry.appRef.packageName);
-        }
-        return packages;
+        // Excludes x11:linux too (see LauncherCategoryCatalogue); apply() below refuses a line for
+        // it a second time regardless of what this set holds.
+        return new LinkedHashSet<>(LauncherCategoryCatalogue.labelByPackage(
+            LauncherAppDataProvider.getInstance(context).getAllAppsBlocking()).keySet());
     }
 
     /**
@@ -78,8 +76,23 @@ public final class LauncherCategoryPasteImporter {
     public static Result apply(@NonNull Context context,
                                @NonNull Set<String> knownPackages,
                                @NonNull String reply) {
+        return apply(context, LauncherCategoryFile.defaultFile(), knownPackages, reply);
+    }
+
+    /**
+     * Same merge as {@link #apply(Context, Set, String)}, against an injected file instead of the
+     * real drop-in — package-visible so a test can exercise the merge without ever touching
+     * {@link LauncherCategoryFile#defaultFile()}'s real, hardcoded on-device path.
+     */
+    @NonNull
+    static Result apply(@NonNull Context context, @NonNull File file,
+                        @NonNull Set<String> knownPackages, @NonNull String reply) {
         Map<String, String> slugByPackage =
             LauncherCategorySortPrompt.parsePastedReply(reply, knownPackages);
+        // Refuse a line for the reserved Linux-apps package outright, whatever knownPackages held:
+        // an AI reply that mentions x11:linux by name (echoing it back from a prompt, say) must not
+        // be able to reintroduce the single machine-written guess this fix removes elsewhere.
+        slugByPackage.remove(X11Apps.PACKAGE);
         int applied = slugByPackage.size();
         // Every package line the reply's grammar yielded, minus the ones that survived the
         // known-package filter: dropping hallucinated packages silently would read as the feature
@@ -91,7 +104,6 @@ public final class LauncherCategoryPasteImporter {
         for (String packageName : slugByPackage.keySet())
             reassigned.add(packageName.toLowerCase(Locale.US));
 
-        File file = LauncherCategoryFile.defaultFile();
         LauncherCategoryFile existing;
         try {
             existing = LauncherCategoryFile.parse(file);
