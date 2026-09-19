@@ -1963,9 +1963,6 @@
     <string name="help_topic_empty_action">Long-press it to add a widget or another page.</string>
     <string name="help_topic_empty_reveal">Move a widget aside to make room.</string>
     <string name="help_header">Help · %1$s</string>
-    <string name="help_place_home">Home</string>
-    <string name="help_place_terminal">Terminal</string>
-    <string name="help_place_display">Display</string>
     <string name="help_show_gesture">Show gesture</string>
     <string name="help_try_it">Try it</string>
     <string name="help_settings_title">Help</string>
@@ -2222,17 +2219,12 @@
 
     <!-- Help centre, phase B: the reading panel's own words. -->
     <string name="help_centre_title">Help</string>
-    <string name="help_back_glyph">‹</string>
     <string name="help_back_action">Back</string>
-    <string name="help_search_label">Search</string>
     <string name="help_search_field_hint">Search help</string>
-    <string name="help_home_on_this_screen">On this screen · %1$s</string>
     <string name="help_home_explore">Explore this screen</string>
     <string name="help_home_browse">Browse the guide</string>
     <string name="help_home_glossary">Glossary</string>
     <string name="help_home_practice">Practice the basics</string>
-    <string name="help_home_label">Home</string>
-    <string name="help_home_action">Help home</string>
     <string name="help_topic_unavailable">This topic is not part of this screen.</string>
     <string name="help_docs_link">Full documentation ↗</string>
     <string name="help_support_link">Get support ↗</string>
@@ -2243,7 +2235,6 @@
     <string name="help_search_empty">No matching help</string>
     <string name="help_glossary_filter_hint">Find a term</string>
     <string name="help_topic_step">%1$d. %2$s</string>
-    <string name="help_topic_not_visible">Not visible on this screen</string>
     <string name="help_topic_related">Related</string>
     <string name="help_topic_words">Words used here</string>
     <string name="help_topic_open_glossary">Open glossary</string>

@@ -6,14 +6,11 @@ import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * The help centre's whole catalogue, once: home, search, the guide, the glossary's topic links and
@@ -159,29 +156,6 @@ public final class HelpTopics {
         return null;
     }
 
-    /**
-     * The 3–5 topics for "On this screen": the ones whose control was measured on this pass, in
-     * catalogue order. A screen with almost nothing on it is topped up from the rest of the
-     * place's catalogue and then from Find your way, so the section is never one lonely line.
-     */
-    public static List<Entry> onScreen(PaneWallPage place, Collection<String> measuredTargetIds) {
-        Set<String> measured = measuredTargetIds == null ? Collections.<String>emptySet()
-            : new LinkedHashSet<>(measuredTargetIds);
-        List<Entry> out = new ArrayList<>();
-        for (Entry entry : forPlace(place)) {
-            if (measured.contains(entry.targetId) && out.size() < 5) out.add(entry);
-        }
-        for (Entry entry : forPlace(place)) {
-            if (out.size() >= 3) break;
-            if (!out.contains(entry)) out.add(entry);
-        }
-        for (Entry entry : inGroup(Group.FIND_YOUR_WAY)) {
-            if (out.size() >= 3) break;
-            if (!out.contains(entry)) out.add(entry);
-        }
-        return Collections.unmodifiableList(out);
-    }
-
     // ---- per-place views ---------------------------------------------------------------------
 
     /** The topics whose control exists on this place, in catalogue order. */
@@ -208,17 +182,6 @@ public final class HelpTopics {
         Entry entry = entry(place, id);
         int index = entry == null ? -1 : forPlace(place).indexOf(entry);
         return index < 0 ? 0 : index;
-    }
-
-    /** The first related topic whose control is on this place, or null. */
-    public static String relatedIdOn(PaneWallPage place, String id) {
-        Entry entry = entry(place, id);
-        if (entry == null) return null;
-        for (String relatedId : entry.relatedIds) {
-            Entry related = entry(relatedId);
-            if (related != null && related.onPlace(place)) return related.id;
-        }
-        return null;
     }
 
     /**
