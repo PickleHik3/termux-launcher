@@ -31,8 +31,8 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Help read on a screen of its own: what an Intent opens it on, what Back means, what it hands the
- * launcher back, and the two things the sheet used to say about the screen behind it and no longer
- * can — "On this screen", and a topic refusing to read away from its own place.
+ * launcher back, and a thing the sheet used to say about the screen behind it and no longer can —
+ * a topic refusing to read away from its own place.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28, application = Application.class, qualifiers = "w400dp-h800dp")
@@ -136,18 +136,6 @@ public class HelpActivityTest {
         assertFalse(page.contains(string(R.string.help_topic_unavailable)));
         assertTrue(page.contains(string(entry.summaryRes)));
         assertEquals(string(entry.titleRes), activity.title());
-    }
-
-    /** Nothing is measured here, so help home says nothing about what is on any screen. */
-    @Test public void helpHomeHasNoOnThisScreenSection() {
-        open(intent(PaneWallPage.TERMINAL, null, null));
-        String page = activity.panel().pageText();
-        for (int placeRes : new int[] { R.string.help_place_terminal, R.string.help_place_home,
-                                        R.string.help_place_display }) {
-            assertFalse("help home still has an On this screen section",
-                page.contains(activity.getString(R.string.help_home_on_this_screen,
-                    string(placeRes))));
-        }
     }
 
     // ---- moving about ------------------------------------------------------------------------

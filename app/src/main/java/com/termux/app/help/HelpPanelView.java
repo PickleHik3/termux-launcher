@@ -1,7 +1,6 @@
 package com.termux.app.help;
 
 import android.content.Context;
-import android.graphics.Rect;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
@@ -9,7 +8,6 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -17,7 +15,6 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.core.view.WindowInsetsCompat;
 import com.termux.R;
 import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
@@ -27,26 +24,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The help centre the reader reads: a pinned header over a scrolling body. Help home, search, the
- * glossary and one topic are the four pages; which of them is showing, what was typed and where
- * the body is scrolled to are all {@link HelpNavigation}'s, and this draws that frame and reports
- * what was tapped. {@link Chrome} says whether the pages are framed as a sheet over the launcher
- * or as the content of {@link HelpActivity}.
+ * The help centre's pages, as {@link HelpActivity} hosts them under its own toolbar: help home,
+ * search, the glossary and one topic. Which of them is showing, what was typed and where the body
+ * is scrolled to are all {@link HelpNavigation}'s, and this draws that frame and reports what was
+ * tapped.
  *
- * <p>The panel is a document: it may cover launcher controls, a tap outside it changes nothing,
- * and nothing typed into it reaches the terminal underneath. The only thing it measures for itself
- * is its own width — bounded and centred on a wide screen, inset within the system bars on a tall
- * one — and the keyboard's inset, which shortens the body rather than the header.
+ * <p>The only thing it measures for itself is its own width — bounded and centred on a wide
+ * screen, filling a narrow one — and the keyboard's inset, which shortens the body.
  */
 public final class HelpPanelView extends FrameLayout {
-
-    /**
-     * How the pages are framed. As a {@link #SHEET} they are a document over the live launcher:
-     * a scrim, a lifted card, and the page's own header carrying Back, the title and Close. On a
-     * {@link #SCREEN} the activity owns the chrome — a toolbar above the pages — so the header is
-     * not drawn and the surface fills the window.
-     */
-    public enum Chrome { SHEET, SCREEN }
 
     /** Everything the reader can ask for from a page. The controller answers all of it. */
     public interface Listener {
@@ -79,7 +65,6 @@ public final class HelpPanelView extends FrameLayout {
     static final String SUPPORT = "https://github.com/PickleHik3/termux-launcher/issues";
 
     private final LinearLayout panel;
-    private final LinearLayout header;
     private final ScrollView scroll;
     private final LinearLayout body;
     /** The list under a field, rebuilt on every keystroke while the field above it stays put. */
@@ -99,43 +84,31 @@ public final class HelpPanelView extends FrameLayout {
     /** The stack the last render drew, so the page can redraw itself when only it changed. */
     private HelpNavigation navigation;
     private PaneWallPage place = PaneWallPage.TERMINAL;
-    private Chrome chrome = Chrome.SHEET;
     private boolean practiceAvailable;
     /** Help home's practice list, open where it stands; not a page, so not a navigation frame. */
     private boolean practiceListOpen;
     /** The glossary's own filter. It is not the search query and does not outlive the page. */
     private String termFilter = "";
-    private final Rect insets = new Rect();
     private int panelWidth = -1;
 
     public HelpPanelView(Context context) {
         super(context);
         style = HelpStyle.of(context, place);
         text = HelpSearch.text(context);
-        setBackgroundColor(style.scrimColor());
+        setBackgroundColor(style.pageColor());
         setClickable(true);
         setFocusable(true);
         // In touch mode a plain focusable is refused focus, and the strokes of a hardware keyboard
         // would go on reaching the terminal underneath while help is up.
         setFocusableInTouchMode(true);
         setContentDescription(context.getString(R.string.help_accessibility));
-        // Above every control it covers, like the guide it replaces: the dock, the keys row and
-        // the keyboard are all lifted, and a document has to wash over all of them.
-        setElevation(style.dp(56));
-        setTranslationZ(style.dp(56));
-        setOutlineProvider(null);
 
         panel = style.column();
-        panel.setBackground(style.panelBackground());
         panel.setPadding(style.dp(14), style.dp(10), style.dp(14), style.dp(10));
         panel.setClickable(true);
         panel.setFocusable(true);
         addView(panel, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT,
             Gravity.CENTER_HORIZONTAL));
-
-        header = style.row();
-        panel.addView(header, new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         scroll = new ScrollView(context);
         scroll.setFillViewport(true);
@@ -157,25 +130,6 @@ public final class HelpPanelView extends FrameLayout {
 
     public void setListener(Listener listener) {
         this.listener = listener;
-    }
-
-    /**
-     * Sheet or screen. On a screen the pages carry no header and no scrim, the surface is opaque
-     * and the window's own insets are the activity's business, not the panel's.
-     */
-    public void setChrome(Chrome chrome) {
-        this.chrome = chrome == null ? Chrome.SHEET : chrome;
-        boolean sheet = this.chrome == Chrome.SHEET;
-        setElevation(sheet ? style.dp(56) : 0f);
-        setTranslationZ(sheet ? style.dp(56) : 0f);
-        header.setVisibility(sheet ? VISIBLE : GONE);
-        panelWidth = -1;
-        if (navigation != null) render(navigation, practiceAvailable);
-        else requestLayout();
-    }
-
-    public Chrome chrome() {
-        return chrome;
     }
 
     public void show() {
@@ -206,18 +160,14 @@ public final class HelpPanelView extends FrameLayout {
         // Re-read every pass: the dress and the accent move with the theme and the place.
         style = HelpStyle.of(getContext(), place);
         text = HelpSearch.text(getContext());
-        boolean sheet = chrome == Chrome.SHEET;
-        setBackgroundColor(sheet ? style.scrimColor() : style.pageColor());
-        panel.setBackground(sheet ? style.panelBackground() : null);
+        setBackgroundColor(style.pageColor());
         named.clear();
         clearClip();
-        header.removeAllViews();
         body.removeAllViews();
         list.removeAllViews();
         detach(list);
 
         HelpNavigation.Frame frame = navigation.frame();
-        if (sheet) buildHeader(frame);
         switch (frame.screen) {
             case SEARCH:
                 searchPage(navigation);
@@ -244,36 +194,7 @@ public final class HelpPanelView extends FrameLayout {
         else if (navigation.screen() == HelpNavigation.Screen.GLOSSARY) terms();
     }
 
-    private void buildHeader(HelpNavigation.Frame frame) {
-        boolean linkedTopic = frame.screen == HelpNavigation.Screen.TOPIC
-            && navigation != null && navigation.depth() == 1;
-        if (linkedTopic) {
-            // A topic opened by a Learn more link has nothing under it: Back and Close both
-            // return the reader to what they were doing, so the header's own control is the one
-            // that leads further into help.
-            header.addView(add(string(R.string.help_home_action), style.headerButton(
-                string(R.string.help_home_label), string(R.string.help_home_action),
-                () -> { if (listener != null) listener.onHome(); })));
-        } else if (frame.screen != HelpNavigation.Screen.HOME) {
-            header.addView(add(string(R.string.help_back_action), style.headerButton(
-                string(R.string.help_back_glyph), string(R.string.help_back_action),
-                () -> { if (listener != null) listener.onBack(); })));
-        }
-        header.addView(style.title(headerTitle(frame)), style.filling());
-        if (frame.screen == HelpNavigation.Screen.TOPIC
-            || frame.screen == HelpNavigation.Screen.GLOSSARY) {
-            header.addView(add(string(R.string.help_search_field_hint), style.headerButton(
-                string(R.string.help_search_label), string(R.string.help_search_field_hint),
-                () -> { if (listener != null) listener.onSearch(); })),
-                style.beside(style.dp(4)));
-        }
-        header.addView(add(string(R.string.help_close_action), style.headerButton(
-            string(R.string.help_close_glyph), string(R.string.help_close_action),
-            () -> { if (listener != null) listener.onClose(); })),
-            style.beside(style.dp(4)));
-    }
-
-    /** The title of the page showing now — the sheet's own header, or the screen's toolbar. */
+    /** The title of the page showing now, for the screen's own toolbar. */
     public String pageTitle() {
         return navigation == null ? string(R.string.help_centre_title)
             : headerTitle(navigation.frame());
@@ -626,66 +547,15 @@ public final class HelpPanelView extends FrameLayout {
 
     // ---- geometry ----------------------------------------------------------------------------
 
-    @Override public WindowInsets onApplyWindowInsets(WindowInsets windowInsets) {
-        takeInsets(WindowInsetsCompat.toWindowInsetsCompat(windowInsets, this));
-        return windowInsets;
-    }
-
-    private void takeInsets(WindowInsetsCompat compat) {
-        androidx.core.graphics.Insets bars =
-            compat.getInsets(WindowInsetsCompat.Type.systemBars());
-        androidx.core.graphics.Insets cutout =
-            compat.getInsets(WindowInsetsCompat.Type.displayCutout());
-        androidx.core.graphics.Insets ime = compat.getInsets(WindowInsetsCompat.Type.ime());
-        int top = Math.max(bars.top, cutout.top);
-        int bottom = Math.max(Math.max(bars.bottom, cutout.bottom), ime.bottom);
-        if (insets.left == bars.left && insets.top == top && insets.right == bars.right
-            && insets.bottom == bottom) return;
-        insets.set(bars.left, top, bars.right, bottom);
-        panelWidth = -1;
-        requestLayout();
-    }
-
-    /**
-     * The launcher's content consumes the window insets before they reach a sibling on the decor
-     * view, so the sheet reads the window's own: on the phone the dispatched ones never arrive and
-     * the header sat under the status bar.
-     */
-    private void readWindowInsets() {
-        WindowInsets root = getRootWindowInsets();
-        if (root != null) takeInsets(WindowInsetsCompat.toWindowInsetsCompat(root, this));
-    }
-
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
-        if (chrome == Chrome.SCREEN) {
-            // The activity's window already holds the system bars off the content, and its
-            // toolbar sits above these pages: the column is centred and bounded, nothing more.
-            int room = MeasureSpec.getSize(widthSpec);
-            int screenWidth = Math.min(Math.max(style.dp(160), room), style.dp(HelpStyle.MAX_WIDTH_DP));
-            LayoutParams screenParams = (LayoutParams) panel.getLayoutParams();
-            if (panelWidth != screenWidth || screenParams.topMargin != 0) {
-                panelWidth = screenWidth;
-                screenParams.width = screenWidth;
-                screenParams.topMargin = 0;
-                screenParams.bottomMargin = 0;
-                panel.setLayoutParams(screenParams);
-            }
-            super.onMeasure(widthSpec, heightSpec);
-            return;
-        }
-        readWindowInsets();
-        int available = MeasureSpec.getSize(widthSpec) - insets.left - insets.right;
-        boolean wide = MeasureSpec.getSize(widthSpec) > MeasureSpec.getSize(heightSpec);
-        int margin = style.dp(12);
-        int width = wide
-            ? Math.min(Math.max(style.dp(160), available - margin * 2), style.dp(HelpStyle.MAX_WIDTH_DP))
-            : Math.max(style.dp(160), available - margin * 2);
+        // The activity's window already holds the system bars off the content, and its toolbar
+        // sits above these pages: the column is centred and bounded, nothing more.
+        int room = MeasureSpec.getSize(widthSpec);
+        int width = Math.min(Math.max(style.dp(160), room), style.dp(HelpStyle.MAX_WIDTH_DP));
         LayoutParams params = (LayoutParams) panel.getLayoutParams();
-        if (panelWidth != width || params.topMargin != insets.top + margin) {
+        if (panelWidth != width) {
             panelWidth = width;
             params.width = width;
-            params.topMargin = insets.top + margin;
-            params.bottomMargin = insets.bottom + margin + style.dp(2);
             panel.setLayoutParams(params);
         }
         super.onMeasure(widthSpec, heightSpec);
@@ -696,27 +566,17 @@ public final class HelpPanelView extends FrameLayout {
         super.onDetachedFromWindow();
     }
 
-    /** A tap outside the panel changes nothing: the sheet is a document, not a menu. */
-    @Override public boolean onTouchEvent(MotionEvent event) {
-        return chrome == Chrome.SHEET;
-    }
-
     /**
-     * Nothing typed while reading reaches the terminal. Back and Escape are the launcher's to
-     * route — the overlay registry owns the order help closes in.
+     * Nothing typed while reading reaches the terminal. There is nothing underneath to protect on
+     * a screen of its own, so Back, Escape and every other key are the activity's to route.
      */
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
-        if (super.dispatchKeyEvent(event)) return true;
-        // On a screen of its own there is nothing underneath to protect: Back, Escape and every
-        // other key are the activity's to route.
-        if (chrome == Chrome.SCREEN) return false;
-        int code = event.getKeyCode();
-        if (code == KeyEvent.KEYCODE_BACK) return false;
-        if (code == KeyEvent.KEYCODE_ESCAPE) {
-            if (event.getAction() == KeyEvent.ACTION_UP && listener != null) listener.onBack();
-            return true;
-        }
-        return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    /** A touch that lands on nothing clickable is not this view's to consume. */
+    @Override public boolean onTouchEvent(MotionEvent event) {
+        return false;
     }
 
     // ---- for the tests -----------------------------------------------------------------------
