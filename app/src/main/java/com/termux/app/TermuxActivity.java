@@ -10042,25 +10042,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 hostParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
                 host.setLayoutParams(hostParams);
             }
-            // The keys are centred in the column at their preferred height, shrinking only when
-            // the column is too short for all of them. The band, not the container: the column
-            // flanks the canvas and stops where the canvas stops.
-            View band = findViewById(R.id.terminal_canvas_band);
-            View container = band != null && band.getHeight() > 0
-                ? band : findViewById(R.id.terminal_root_container);
-            int availablePx = container == null ? 0
-                : container.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
-            int keyCount = keys.getRowCount();
-            int keyHeightPx = ExtraKeysColumnGeometry.keyHeightPx(availablePx, keyCount,
-                Math.round(dpToPx(ExtraKeysColumnGeometry.KEY_HEIGHT_DP)));
-            int keysHeightPx = keyHeightPx * keyCount;
-            ViewGroup.LayoutParams keysParams = keys.getLayoutParams();
-            if (!(keysParams instanceof FrameLayout.LayoutParams)
-                || keysParams.width != keysThicknessPx || keysParams.height != keysHeightPx
-                || ((FrameLayout.LayoutParams) keysParams).gravity != Gravity.CENTER_VERTICAL) {
-                keys.setLayoutParams(new FrameLayout.LayoutParams(keysThicknessPx, keysHeightPx,
-                    Gravity.CENTER_VERTICAL));
-            }
+            sizeExtraKeysColumnKeys(host, keys, keysThicknessPx);
+            watchBandForExtraKeysColumn();
         } else {
             // Lying along the top: the same band the row claims at the bottom, filled the same way.
             host.setPadding(0, 0, 0, 0);
@@ -10084,6 +10067,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The content root's edge padding is decided from the host, so the insets pass reruns.
         if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         return true;
+    }
+
+    /**
+     * The keys are centred in the column at their preferred height, shrinking only when the column
+     * is too short for all of them. The band, not the container: the column flanks the canvas and
+     * stops where the canvas stops.
+     */
+    private void sizeExtraKeysColumnKeys(@NonNull FrameLayout host, @NonNull ExtraKeysView keys,
+                                         int keysThicknessPx) {
+        View band = findViewById(R.id.terminal_canvas_band);
+        View container = band != null && band.getHeight() > 0
+            ? band : findViewById(R.id.terminal_root_container);
+        int availablePx = container == null ? 0
+            : container.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+        int keyCount = keys.getRowCount();
+        int keyHeightPx = ExtraKeysColumnGeometry.keyHeightPx(availablePx, keyCount,
+            Math.round(dpToPx(ExtraKeysColumnGeometry.KEY_HEIGHT_DP)));
+        int keysHeightPx = keyHeightPx * keyCount;
+        ViewGroup.LayoutParams keysParams = keys.getLayoutParams();
+        if (!(keysParams instanceof FrameLayout.LayoutParams)
+            || keysParams.width != keysThicknessPx || keysParams.height != keysHeightPx
+            || ((FrameLayout.LayoutParams) keysParams).gravity != Gravity.CENTER_VERTICAL) {
+            keys.setLayoutParams(new FrameLayout.LayoutParams(keysThicknessPx, keysHeightPx,
+                Gravity.CENTER_VERTICAL));
+        }
+    }
+
+    /** Re-sizes the keys standing in a side column whenever the band they flank changes height. */
+    @Nullable private View.OnLayoutChangeListener mExtraKeysColumnFollower;
+
+    /**
+     * The column's key height is read off the band, and the band's height moves after the sync
+     * that built the column: the screen turns and lays out again, the in-app keyboard rises or
+     * drops. A column sized once from a transient height kept it — seven keys at a third of their
+     * size, stacked on top of one another down a column with room for all of them. So the band is
+     * watched, and a height change re-sizes the keys from the settled number.
+     */
+    private void watchBandForExtraKeysColumn() {
+        if (mExtraKeysColumnFollower != null) return;
+        View band = findViewById(R.id.terminal_canvas_band);
+        if (band == null) return;
+        mExtraKeysColumnFollower = (v, l, t, r, b, ol, ot, or, ob) -> {
+            if ((b - t) == (ob - ot)) return;
+            // After the pass that reported the change, not inside it.
+            v.post(() -> {
+                FrameLayout host = findViewById(R.id.place_extra_keys_host);
+                if (host == null || host.getVisibility() != View.VISIBLE
+                        || mExtraKeysHostEdge == null || !mExtraKeysHostEdge.isOnSide()) return;
+                ExtraKeysView keys = getExtraKeysView(0);
+                if (keys == null || keys.getParent() != host) return;
+                sizeExtraKeysColumnKeys(host, keys, extraKeysColumnKeysWidthPx());
+            });
+        };
+        band.addOnLayoutChangeListener(mExtraKeysColumnFollower);
     }
 
     /**
