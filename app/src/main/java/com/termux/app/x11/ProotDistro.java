@@ -194,9 +194,32 @@ public final class ProotDistro {
     }
 
     /**
-     * The lowest-numbered ordinary user in a {@code /etc/passwd}, or root when it has none.
-     * Ordinary means a uid of 1000 or more, below the {@code nobody} uid that every distro parks
-     * at 65534; system accounts sit below 1000 and {@code nobody} is not a login.
+     * Shells a distro hands an account that is not meant to be logged into at all. A login that
+     * runs one of these prints its refusal and exits straight away, which is what a container app
+     * looked like when it never opened.
+     */
+    @NonNull
+    private static final List<String> NOT_A_LOGIN_SHELL =
+        Collections.unmodifiableList(Arrays.asList("nologin", "false", "sync", "true"));
+
+    /** Whether {@code shell} is one of {@link #NOT_A_LOGIN_SHELL}, wherever the distro keeps it. */
+    private static boolean isLoginShell(@NonNull String shell) {
+        int slash = shell.lastIndexOf('/');
+        return !NOT_A_LOGIN_SHELL.contains(slash < 0 ? shell : shell.substring(slash + 1));
+    }
+
+    /**
+     * The lowest-numbered ordinary user in a {@code /etc/passwd} that can actually be logged in
+     * as, or root when it has none. Ordinary means a uid of 1000 or more, below the {@code nobody}
+     * uid that every distro parks at 65534; system accounts sit below 1000 and {@code nobody} is
+     * not a login.
+     *
+     * <p>The login shell has to be read too, not just the uid: {@code proot-distro} writes an
+     * {@code aid_u0_aNNN} account into every container for the Android uid the launcher runs as,
+     * so that files show an owner, and that uid is in the ten-thousands — below the real user's on
+     * a phone, and above it nowhere. Its shell is {@code nologin}, so logging in as it does
+     * nothing but print "This account is currently not available." and exit; picking it is why a
+     * container app opened no window at all.
      */
     @NonNull
     public static User parsePasswd(@NonNull String passwd) {
@@ -214,6 +237,7 @@ public final class ProotDistro {
                 continue;
             }
             if (uid < 1000 || uid >= 65534 || uid >= bestUid) continue;
+            if (fields.length > 6 && !isLoginShell(fields[6].trim())) continue;
             bestUid = uid;
             String home = fields[5].trim();
             best = new User(name, home.isEmpty() ? "/home/" + name : home);

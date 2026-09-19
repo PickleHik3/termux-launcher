@@ -191,7 +191,16 @@ public final class X11LinuxAppRunner {
         void start(@NonNull String script, boolean noSandbox) {
             this.noSandbox = noSandbox;
             boolean started = host.runScript(script, exitCode -> resolve(isQuickFailure(exitCode)));
-            if (started) handler.postDelayed(timeout, QUICK_FAIL_MS);
+            if (started) {
+                handler.postDelayed(timeout, QUICK_FAIL_MS);
+                return;
+            }
+            // No shell to run the app in — the service is not bound, or it refused the task. There
+            // is nothing to watch and nothing to learn from it, but a tap that opens no app must
+            // never simply do nothing: this is the one path that used to end in silence.
+            decided = true;
+            Logger.logWarn(LOG_TAG, "No shell to run " + app.id + " in; nothing was started");
+            host.showNotice(context.getString(com.termux.R.string.termux_x11_app_launch_failed));
         }
 
         /**
