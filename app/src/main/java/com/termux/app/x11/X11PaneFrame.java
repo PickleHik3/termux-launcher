@@ -184,6 +184,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         });
         View guide = findViewById(R.id.x11_pane_guide);
         if (guide != null) guide.setOnClickListener(v -> openKeyboardDataGuide());
+        View setup = findViewById(R.id.x11_pane_setup);
+        if (setup != null) setup.setOnClickListener(v -> openDistroSetup());
         // The controls tab sits above everything, drawn only while shown; the frame itself
         // answers the taps, so the view never stands between a finger and X.
         mControls = new PaneControlsView(getContext());
@@ -652,6 +654,34 @@ public final class X11PaneFrame extends PaneContentFrame {
         if (start != null) start.setVisibility(state.startVisible ? VISIBLE : GONE);
         View guide = findViewById(R.id.x11_pane_guide);
         if (guide != null) guide.setVisibility(state.guideVisible() ? VISIBLE : GONE);
+        applySetupOffer(state);
+    }
+
+    /**
+     * D9's offer, decided from the same arrival this method already runs on. The reading behind it
+     * is a directory listing and a handful of stats per container ({@link DistroSetup}), which is
+     * the same order of cost as the keyboard-data probe beside it — and it is deliberately not
+     * cached, because the one moment it must be right is the arrival straight after a setup run
+     * finished in a pane.
+     */
+    private void applySetupOffer(@NonNull DisplayEmptyStatePolicy.State state) {
+        View setup = findViewById(R.id.x11_pane_setup);
+        if (setup == null) return;
+        boolean offer;
+        try {
+            offer = DistroSetupStore.shouldOffer(DistroSetup.read(),
+                new DistroSetupStore(getContext()).dismissed(), state.resting());
+        } catch (RuntimeException e) {
+            // Nothing about a home screen's empty state is worth a crash; no offer is the safe
+            // answer, and the next arrival reads again.
+            offer = false;
+        }
+        setup.setVisibility(offer ? VISIBLE : GONE);
+    }
+
+    /** The offer's own tap: what the launcher would do, and the two answers. */
+    private void openDistroSetup() {
+        DistroSetupDialog.show(getContext(), DistroSetup.read(), true, this::applyEmptyState);
     }
 
     /** The empty state's guide button: the setup section of the Linux display guide. */

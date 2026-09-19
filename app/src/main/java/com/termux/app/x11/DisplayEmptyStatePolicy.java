@@ -38,6 +38,16 @@ public final class DisplayEmptyStatePolicy {
             return messageRes == R.string.termux_x11_needs_keyboard_data;
         }
 
+        /**
+         * True in the state a home screen rests in: the display is switched on, it could start,
+         * and nothing is running on it. It is the only state with room for an offer of its own —
+         * the other two already have one thing for the user to do, and a second call to action
+         * beside it is how a home screen starts to nag (see {@code DistroSetupStore#shouldOffer}).
+         */
+        public boolean resting() {
+            return messageRes == R.string.termux_x11_no_display;
+        }
+
         @Override
         @NonNull
         public String toString() {

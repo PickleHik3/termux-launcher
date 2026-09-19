@@ -61,4 +61,16 @@ public class DisplayEmptyStatePolicyTest {
         assertTrue(after.startVisible);
         assertFalse(after.guideVisible());
     }
+
+    /**
+     * D9's offer hangs off exactly one of the three states: the one a home screen rests in. The
+     * other two already carry the single thing the user has to do, and a second call to action
+     * beside it is a nag.
+     */
+    @Test public void onlyThePlainNoDisplayStateHasRoomForAnOffer() {
+        assertTrue(DisplayEmptyStatePolicy.decide(true, true).resting());
+        assertFalse(DisplayEmptyStatePolicy.decide(true, false).resting());
+        assertFalse(DisplayEmptyStatePolicy.decide(false, true).resting());
+        assertFalse(DisplayEmptyStatePolicy.decide(false, false).resting());
+    }
 }
